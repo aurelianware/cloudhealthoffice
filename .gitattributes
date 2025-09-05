@@ -1,0 +1,6 @@
+# Force all YAML files to use LF
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# General: normalize line endings
+* text=auto
