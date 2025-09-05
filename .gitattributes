@@ -16,8 +16,8 @@
 *.txt  text eol=lf
 
 # --- Scripts ---
-*.ps1  text eol=crlf   # PowerShell scripts typically use CRLF on Windows
-*.sh   text eol=lf     # Shell scripts must use LF
+*.ps1  text eol=crlf
+*.sh   text eol=lf
 
 # --- Ignore binary files ---
 *.zip  -text

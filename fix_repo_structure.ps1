@@ -49,7 +49,7 @@ if (Test-Path $legacyIngest -PathType Leaf) {
 }
 
 # 4) If my package was extracted, copy its workflows into the right spots (only if missing)
-$pkgDir   = "exampleplan_attachments_logicapps_package"
+$pkgDir   = "hipaa_attachments_logicapps_package"
 $pkgIngest = Join-Path $pkgDir "workflow.ingest275.json"
 $pkgRfai   = Join-Path $pkgDir "workflow.rfai277.json"
 

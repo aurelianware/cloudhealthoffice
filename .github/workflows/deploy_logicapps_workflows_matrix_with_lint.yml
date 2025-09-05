@@ -1,4 +1,4 @@
-name: Deploy ExamplePlan Attachments (Matrix: DEV/UAT/PROD + DEV Lint)
+name: Deploy HIPAA Attachments (Matrix: DEV/UAT/PROD + DEV Lint)
 
 "on":
   workflow_dispatch:
@@ -6,7 +6,7 @@ name: Deploy ExamplePlan Attachments (Matrix: DEV/UAT/PROD + DEV Lint)
       baseName:
         description: "Base name prefix for resources (env suffix will be appended)"
         required: true
-        default: "exhp-attachments"
+        default: "hipaa-attachments"
       bicepPath:
         description: "Path to Bicep file"
         required: true
