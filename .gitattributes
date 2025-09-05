@@ -1,6 +1,27 @@
-# Force all YAML files to use LF
-*.yml text eol=lf
+# --- Normalize line endings for consistency ---
+* text=auto
+
+# --- YAML / GitHub Actions ---
+*.yml  text eol=lf
 *.yaml text eol=lf
 
-# General: normalize line endings
-* text=auto
+# --- Bicep templates (Azure infra as code) ---
+*.bicep text eol=lf
+
+# --- JSON (Logic App workflows, ARM templates) ---
+*.json text eol=lf
+
+# --- Markdown / docs ---
+*.md   text eol=lf
+*.txt  text eol=lf
+
+# --- Scripts ---
+*.ps1  text eol=crlf   # PowerShell scripts typically use CRLF on Windows
+*.sh   text eol=lf     # Shell scripts must use LF
+
+# --- Ignore binary files ---
+*.zip  -text
+*.png  -text
+*.jpg  -text
+*.jpeg -text
+*.gif  -text
