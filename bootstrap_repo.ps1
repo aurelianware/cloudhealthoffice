@@ -57,8 +57,8 @@ Copy-Item $ingest "logicapps\workflows\ingest275\workflow.json" -Force
 Copy-Item $rfai   "logicapps\workflows\rfai277\workflow.json" -Force
 
 # Add workflow YAML (from source if present, or create default)
-$srcWorkflow = Join-Path $SourceDir ".github\workflows\deploy_logicapps_workflows.yml"
-$destWorkflow = ".github\workflows\deploy_logicapps_workflows.yml"
+$srcWorkflow = Join-Path $SourceDir ".github\workflows\deploy_logicapps_workflows_matrix_with_lint.yml"
+$destWorkflow = ".github\workflows\deploy_logicapps_workflows_matrix_with_lint.yml"
 
 if (Test-Path $srcWorkflow -PathType Leaf) {
     Copy-Item $srcWorkflow $destWorkflow -Force

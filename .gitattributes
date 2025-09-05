@@ -1,27 +1,23 @@
-# --- Normalize line endings for consistency ---
+# normalize
 * text=auto
 
-# --- YAML / GitHub Actions ---
+# YAML / Actions
 *.yml  text eol=lf
 *.yaml text eol=lf
 
-# --- Bicep templates (Azure infra as code) ---
+# Bicep / JSON / Docs
 *.bicep text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
 
-# --- JSON (Logic App workflows, ARM templates) ---
-*.json text eol=lf
+# Scripts
+*.ps1   text eol=crlf
+*.sh    text eol=lf
 
-# --- Markdown / docs ---
-*.md   text eol=lf
-*.txt  text eol=lf
-
-# --- Scripts ---
-*.ps1  text eol=crlf
-*.sh   text eol=lf
-
-# --- Ignore binary files ---
-*.zip  -text
-*.png  -text
-*.jpg  -text
-*.jpeg -text
-*.gif  -text
+# Binary
+*.zip   -text
+*.png   -text
+*.jpg   -text
+*.jpeg  -text
+*.gif   -text
