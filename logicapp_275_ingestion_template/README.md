@@ -1,10 +1,10 @@
 
-# Logic App Standard – 275 Ingestion Template (ExamplePlan)
+# Logic App Standard – 275 Ingestion Template
 
-This template implements the 275 ingestion pattern described in ExamplePlan's *Electronic Attachment and Correspondence Management Integration Design* (277/275 with QNXT & Availity).
+This template implements the 275 ingestion pattern described in *Electronic Attachment and Correspondence Management Integration Design* (277/275 with QNXT & Availity).
 
 **Key features**
-- Poll SFTP for new/updated files (providers → Availity → ExamplePlan)
+- Poll SFTP for new/updated files (providers → Availity → Health Plan)
 - Store raw 275 file to Blob (`raw/275/`)
 - **Decode X12** 275 via Integration Account connector
 - Extract claim/member metadata (TRN02, NM1 segments, DTM)
@@ -13,7 +13,7 @@ This template implements the 275 ingestion pattern described in ExamplePlan's *E
 - Call QNXT **Claim Linkage** API with retry policy
 - Log custom event to **Application Insights**
 
-> Source design: ExamplePlan Electronic Attachment and Correspondence Management Integration Design. fileciteturn10file0
+> Source design: 275 Electronic Attachment and Correspondence Management Integration Design. fileciteturn10file0
 
 ## Prerequisites
 - Logic Apps **Standard**

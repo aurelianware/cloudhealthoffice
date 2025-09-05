@@ -1,5 +1,5 @@
 
-name: Deploy ExamplePlan Attachments (Bicep + Logic Apps)
+name: Deploy 275 Attachments (Bicep + Logic Apps)
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       resourceGroup:
         description: 'Resource Group name (will be created if missing)'
         required: true
-        default: 'exhp-attachments-rg'
+        default: '275-attachments-rg'
       location:
         description: 'Azure region'
         required: true
@@ -18,7 +18,7 @@ on:
       baseName:
         description: 'Base name prefix for resources'
         required: true
-        default: 'exhp-attachments'
+        default: '275-attachments'
       logicAppName:
         description: 'Logic App Standard app name (optional; defaults to <baseName>-la)'
         required: false
@@ -64,7 +64,7 @@ jobs:
           resourceGroupName: ${{ github.event.inputs.resourceGroup }}
           template: ${{ github.event.inputs.bicepPath }}
           parameters: baseName=${{ github.event.inputs.baseName }}
-          deploymentName: exhp-attachments-infra
+          deploymentName: 275-attachments-infra
 
       - name: Resolve Logic App name
         id: resolvela

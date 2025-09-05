@@ -64,7 +64,7 @@ if (Test-Path $srcWorkflow -PathType Leaf) {
     Copy-Item $srcWorkflow $destWorkflow -Force
 } else {
 @"
-name: Deploy ExamplePlan Attachments (Bicep + Logic Apps)
+name: Deploy HIPAA Attachments (Bicep + Logic Apps)
 
 on:
   workflow_dispatch:
@@ -175,7 +175,7 @@ jobs:
 
 # README
 @"
-# ExamplePlan Attachments – Logic Apps & Infra
+# HIPAAd Attachments – Logic Apps & Infra
 
 This repo contains:
 - infra/main.bicep — Storage, Service Bus topics, App Insights, Logic App Standard plan/app (starter)
@@ -184,7 +184,7 @@ This repo contains:
 - .github/workflows/deploy_logicapps_workflows.yml — GitHub Actions (Bicep + workflows ZIP deploy)
 
 ## Deploy
-Run the **Deploy ExamplePlan Attachments (Bicep + Logic Apps)** workflow from the Actions tab (workflow_dispatch).
+Run the **Deploy HIPAA Attachments (Bicep + Logic Apps)** workflow from the Actions tab (workflow_dispatch).
 "@ | Set-Content -Path "README.md" -Encoding UTF8
 
 # Git push

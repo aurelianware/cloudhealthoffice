@@ -1,6 +1,6 @@
 
 param location string = resourceGroup().location
-param baseName string = 'exhp-attachments'
+param baseName string = 'hipaa-attachments'
 param storageSku string = 'Standard_LRS'
 
 // Storage account
