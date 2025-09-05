@@ -1,24 +1,24 @@
 name: Deploy ExamplePlan Attachments (Matrix: DEV/UAT/PROD + DEV Lint)
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       baseName:
-        description: 'Base name prefix for resources (env suffix will be appended)'
+        description: "Base name prefix for resources (env suffix will be appended)"
         required: true
-        default: 'exhp-attachments'
+        default: "exhp-attachments"
       bicepPath:
-        description: 'Path to Bicep file'
+        description: "Path to Bicep file"
         required: true
-        default: 'infra/main.bicep'
+        default: "infra/main.bicep"
       workflowsPath:
-        description: 'Path to Logic App workflows folder (contains subfolders per workflow with workflow.json inside)'
+        description: "Path to Logic App workflows folder (contains subfolders per workflow with workflow.json inside)"
         required: true
-        default: 'logicapps/workflows'
+        default: "logicapps/workflows"
       logicAppName:
-        description: 'Override Logic App Standard app name (optional). If blank, will be <baseName>-<env>-la'
+        description: "Override Logic App Standard app name (optional). If blank, will be <baseName>-<env>-la"
         required: false
-        default: ''
+        default: ""
 
 jobs:
   lint-dev:
@@ -123,7 +123,11 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            az deployment group what-if               --resource-group "${{ matrix.resourceGroup }}"               --template-file "${{ github.event.inputs.bicepPath }}"               --parameters baseName="${{ github.event.inputs.baseName }}${{ matrix.baseSuffix }}"               --no-pretty-print || true
+            az deployment group what-if \
+              --resource-group "${{ matrix.resourceGroup }}" \
+              --template-file "${{ github.event.inputs.bicepPath }}" \
+              --parameters baseName="${{ github.event.inputs.baseName }}${{ matrix.baseSuffix }}" \
+              --no-pretty-print || true
 
       - name: Deploy Bicep (infra) - ${{ matrix.env }}
         uses: azure/arm-deploy@v2
@@ -150,15 +154,12 @@ jobs:
           WF_PATH="${{ github.event.inputs.workflowsPath }}"
           PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
-
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-
           pushd "$PARENT_DIR" > /dev/null
           zip -r ../workflows.zip "$BASE_NAME"
           popd > /dev/null
-
           echo "Zip created at $(pwd)/workflows.zip"
           unzip -l workflows.zip | sed -n '1,30p'
 
@@ -172,7 +173,11 @@ jobs:
             if [ ! -f "$ZIP_PATH" ]; then
               echo "::error::ZIP $ZIP_PATH not found. Ensure previous step created it."; exit 1
             fi
-            az webapp deploy               --resource-group "$RG"               --name "$APP"               --src-path "$ZIP_PATH"               --type zip
+            az webapp deploy \
+              --resource-group "$RG" \
+              --name "$APP" \
+              --src-path "$ZIP_PATH" \
+              --type zip
 
       - name: Restart Logic App (optional) - ${{ matrix.env }}
         uses: azure/cli@v2
