@@ -1,0 +1,22 @@
+# Build artifacts
+*.zip
+/tmp/
+*.json.tmp
+*.bicep.tmp
+
+# Azure CLI cache
+.azure/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# PowerShell
+*.ps1.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+test-output/
