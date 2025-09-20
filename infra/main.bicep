@@ -3,13 +3,24 @@ param location string = resourceGroup().location
 param baseName string = 'hipaa-attachments'
 param storageSku string = 'Standard_LRS'
 
-// Storage account
+// Storage account (Azure Data Lake Storage Gen2)
 resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: '${baseName}stg'
   location: location
   sku: { name: storageSku }
   kind: 'StorageV2'
-  properties: { minimumTlsVersion: 'TLS1_2' }
+  properties: { 
+    minimumTlsVersion: 'TLS1_2'
+    isHnsEnabled: true  // Enable hierarchical namespace for Data Lake Gen2
+  }
+}
+
+// Data Lake container for HIPAA attachments
+resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  name: '${stg.name}/default/hipaa-attachments'
+  properties: {
+    publicAccess: 'None'
+  }
 }
 
 // Service Bus

@@ -5,7 +5,7 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 
 **Key features**
 - Poll SFTP for new/updated files (providers → Availity → Health Plan)
-- Store raw 275 file to Blob (`raw/275/`)
+- Store raw 275 file to Azure Data Lake Storage Gen2 (`hipaa-attachments/raw/275/yyyy/MM/dd/`)
 - **Decode X12** 275 via Integration Account connector
 - Extract claim/member metadata (TRN02, NM1 segments, DTM)
 - Branch: **Solicited** (has RFAI reference) vs **Unsolicited**
@@ -18,7 +18,7 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 ## Prerequisites
 - Logic Apps **Standard**
 - Connections: `sftp-ssh`, `azureblob`, `servicebus`, `integrationaccount`
-- Azure Storage account + container for raw files
+- Azure Data Lake Storage Gen2 account (Storage account with hierarchical namespace enabled)
 - Service Bus namespace + topic (`attachments-in`) and dead-letter handling
 - QNXT API endpoint to link document → claim
 - Application Insights (optional; adjust `appinsights_custom_events_url`)
@@ -26,7 +26,7 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 ## Parameters to set
 - `sftp_inbound_folder`: e.g., `/inbound/attachments`
 - `blob_storage_account`: connection reference name
-- `blob_raw_folder`: e.g., `raw/275`
+- `blob_raw_folder`: e.g., `hipaa-attachments/raw/275` (will be date-partitioned automatically)
 - `sb_namespace`, `sb_topic`
 - `qnxt_base_url`, `qnxt_api_token`
 - `x12_sender_id`, `x12_receiver_id`
