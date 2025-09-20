@@ -1,0 +1,15 @@
+# Temporary files
+*.zip
+/tmp/
+temp/
+*.tmp
+
+# Build outputs
+arm.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# PowerShell temporary files
+*.ps1~
