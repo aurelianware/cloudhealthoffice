@@ -1,0 +1,69 @@
+name: pr-lint
+on:
+  pull_request:
+    branches: [ main, 'release/*', 'feature/*' ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------- .NET build & tests (no Azure) ----------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Dotnet format (verify no changes)
+        run: |
+          dotnet tool restore || true
+          dotnet format --verify-no-changes || (echo "::error::Run 'dotnet format' locally and commit changes." && exit 1)
+
+      - name: Restore & Build
+        run: |
+          dotnet restore
+          dotnet build --no-restore -c Release
+
+      - name: Unit tests
+        run: dotnet test --no-build -c Release --verbosity normal
+
+      # ---------- GitHub Actions workflow lint ----------
+      - name: Actionlint (workflows linter)
+        uses: reviewdog/action-actionlint@v1
+        with:
+          actionlint_flags: -color
+
+      # ---------- YAML lint (workflows & configs) ----------
+      - name: YAML lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: ".github/workflows *.yml *.yaml"
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              truthy:
+                allowed-values: ['true','false','on','off','yes','no','y','n']  # keep defaults
+
+      # ---------- Bicep syntax check (no Azure login) ----------
+      - name: Setup Bicep CLI
+        uses: Azure/setup-bicep@v1
+        with:
+          bicep-version: v0.27.1
+      - name: Bicep build (syntax only)
+        run: |
+          if [ -f infra/main.bicep ]; then
+            bicep build infra/main.bicep
+          fi
+
+      # ---------- Shell script lint (if you keep scripts/) ----------
+      - name: Shellcheck
+        uses: reviewdog/action-shellcheck@v1
+        with:
+          path: "scripts"
+          level: error
+          reporter: github-pr-check
+        continue-on-error: true  # don’t block PRs if you have no scripts yet
