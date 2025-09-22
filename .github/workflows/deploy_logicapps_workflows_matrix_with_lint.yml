@@ -1,4 +1,4 @@
-name: Deploy HIPAA Attachments (Matrix: DEV/UAT/PROD + DEV Lint)
+name: "Deploy HIPAA Attachments (Matrix: DEV/UAT/PROD + DEV Lint)"
 
 "on":
   workflow_dispatch:
