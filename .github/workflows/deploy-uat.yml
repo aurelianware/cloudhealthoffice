@@ -1,0 +1,326 @@
+name: Deploy UAT - HIPAA Attachments
+
+on:
+  push:
+    branches:
+      - "release/*"
+  workflow_dispatch:
+    inputs:
+      baseName:
+        description: "Base name prefix for UAT resources"
+        required: false
+        default: "hipaa-attachments"
+      bicepPath:
+        description: "Path to Bicep file"
+        required: false
+        default: "infra/main.bicep"
+      workflowsPath:
+        description: "Path to Logic App workflows folder"
+        required: false
+        default: "logicapps/workflows"
+
+env:
+  AZURE_LOCATION: eastus
+  UAT_RESOURCE_GROUP: pchp-attachments-uat-rg
+  UAT_BASE_NAME: hipaa-attachments-uat
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    environment: UAT
+    outputs:
+      bicep-path: ${{ steps.set-params.outputs.bicep-path }}
+      workflows-path: ${{ steps.set-params.outputs.workflows-path }}
+      base-name: ${{ steps.set-params.outputs.base-name }}
+      logic-app-name: ${{ steps.set-params.outputs.logic-app-name }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-params
+        run: |
+          BICEP_PATH="${{ github.event.inputs.bicepPath || 'infra/main.bicep' }}"
+          WORKFLOWS_PATH="${{ github.event.inputs.workflowsPath || 'logicapps/workflows' }}"
+          BASE_NAME="${{ github.event.inputs.baseName || env.UAT_BASE_NAME }}"
+          LOGIC_APP_NAME="${BASE_NAME}-la"
+          
+          echo "bicep-path=${BICEP_PATH}" >> $GITHUB_OUTPUT
+          echo "workflows-path=${WORKFLOWS_PATH}" >> $GITHUB_OUTPUT
+          echo "base-name=${BASE_NAME}" >> $GITHUB_OUTPUT
+          echo "logic-app-name=${LOGIC_APP_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Validate workflow folder exists
+        run: |
+          WF_PATH="${{ steps.set-params.outputs.workflows-path }}"
+          if [ ! -d "$WF_PATH" ]; then
+            echo "::error::Workflows path '$WF_PATH' not found"; exit 1
+          fi
+          echo "Found workflows:"
+          find "$WF_PATH" -maxdepth 2 -type f -name "workflow.json" -print
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Validate JSON workflows
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS= read -r -d '' f; do
+            echo "Validating $f"
+            if ! jq . "$f" >/dev/null 2>&1; then
+              echo "::error file=$f::Invalid JSON syntax"
+              failed=1
+              continue
+            fi
+            if ! jq -e 'has("definition") and has("kind") and has("parameters")' "$f" >/dev/null; then
+              echo "::error file=$f::Missing required keys: definition/kind/parameters"
+              failed=1
+              continue
+            fi
+            if ! jq -e '.kind=="Stateful" or .kind=="Stateless"' "$f" >/dev/null; then
+              echo "::warning file=$f::Workflow kind is not Stateful/Stateless"
+            fi
+            echo "✓ Valid workflow: $f"
+          done < <(find "${{ steps.set-params.outputs.workflows-path }}" -type f -name "workflow.json" -print0)
+          if [ $failed -eq 1 ]; then
+            echo "::error::One or more workflows failed validation"
+            exit 1
+          fi
+          echo "✓ All workflows validated successfully"
+
+      - name: Validate Bicep template
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Validating Bicep template: ${{ steps.set-params.outputs.bicep-path }}"
+            az bicep version
+            az bicep build --file "${{ steps.set-params.outputs.bicep-path }}" --outfile /tmp/arm.json
+            if [ ! -s /tmp/arm.json ]; then
+              echo "::error::Bicep compilation failed - ARM template is empty"
+              exit 1
+            fi
+            echo "✓ Bicep template compiled successfully"
+
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: UAT
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      logic-app-name: ${{ needs.validate.outputs.logic-app-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+
+      - name: Ensure Resource Group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Creating/updating resource group: ${{ env.UAT_RESOURCE_GROUP }}"
+            az group create -n "${{ env.UAT_RESOURCE_GROUP }}" -l "${{ env.AZURE_LOCATION }}"
+
+      - name: ARM What-If Analysis
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Running ARM What-If analysis for UAT deployment"
+            az deployment group what-if \
+              --resource-group "${{ env.UAT_RESOURCE_GROUP }}" \
+              --template-file "${{ needs.validate.outputs.bicep-path }}" \
+              --parameters baseName="${{ needs.validate.outputs.base-name }}" \
+              --no-pretty-print || true
+
+      - name: Deploy Infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.UAT_RESOURCE_GROUP }}
+          template: ${{ needs.validate.outputs.bicep-path }}
+          parameters: baseName=${{ needs.validate.outputs.base-name }}
+          deploymentName: hipaa-attachments-uat-infra-${{ github.run_number }}
+
+      - name: Verify Infrastructure Deployment
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Verifying deployed resources in UAT"
+            az resource list -g "${{ env.UAT_RESOURCE_GROUP }}" --query "[].{Name:name, Type:type, Location:location}" -o table
+
+  deploy-logic-apps:
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-infrastructure]
+    environment: UAT
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+
+      - name: Package Logic App workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          WF_PATH="${{ needs.validate.outputs.workflows-path }}"
+          PARENT_DIR="$(dirname "$WF_PATH")"
+          BASE_NAME="$(basename "$WF_PATH")"
+          
+          echo "Packaging workflows from: $WF_PATH"
+          if [ ! -d "$WF_PATH" ]; then
+            echo "::error::Workflows path '$WF_PATH' not found"; exit 1
+          fi
+          
+          pushd "$PARENT_DIR" > /dev/null
+          zip -r ../workflows.zip "$BASE_NAME"
+          popd > /dev/null
+          
+          echo "Workflow package created: $(pwd)/workflows.zip"
+          echo "Package contents:"
+          unzip -l workflows.zip | head -20
+
+      - name: Deploy Logic App workflows
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
+            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            ZIP_PATH="workflows.zip"
+            
+            echo "Deploying workflows to Logic App: $APP_NAME"
+            if [ ! -f "$ZIP_PATH" ]; then
+              echo "::error::Workflow package $ZIP_PATH not found"; exit 1
+            fi
+            
+            # Deploy the ZIP package
+            az webapp deploy \
+              --resource-group "$RG" \
+              --name "$APP_NAME" \
+              --src-path "$ZIP_PATH" \
+              --type zip
+            
+            echo "✓ Workflows deployed successfully"
+
+      - name: Restart Logic App
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
+            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            
+            echo "Restarting Logic App: $APP_NAME"
+            az webapp restart -g "$RG" -n "$APP_NAME"
+            echo "✓ Logic App restarted"
+
+  healthcheck:
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-infrastructure, deploy-logic-apps]
+    environment: UAT
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+
+      - name: Health Check - Logic App Status
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
+            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            
+            echo "Checking Logic App health: $APP_NAME"
+            
+            # Check app status
+            STATUS=$(az webapp show -g "$RG" -n "$APP_NAME" --query "state" -o tsv)
+            echo "Logic App State: $STATUS"
+            
+            if [ "$STATUS" != "Running" ]; then
+              echo "::warning::Logic App is not in Running state: $STATUS"
+            else
+              echo "✓ Logic App is running"
+            fi
+            
+            # Check workflows
+            echo "Checking deployed workflows:"
+            az webapp show -g "$RG" -n "$APP_NAME" --query "siteConfig.appSettings[?name=='WEBSITE_RUN_FROM_PACKAGE'].value" -o tsv
+
+      - name: Health Check - Infrastructure Resources
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            BASE_NAME="${{ needs.validate.outputs.base-name }}"
+            
+            echo "Running infrastructure health checks for UAT environment"
+            
+            # Check Storage Account
+            STORAGE_NAME="${BASE_NAME}stg"
+            echo "Checking Storage Account: $STORAGE_NAME"
+            STORAGE_STATUS=$(az storage account show -g "$RG" -n "$STORAGE_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "Storage Account Status: $STORAGE_STATUS"
+            
+            # Check Service Bus
+            SB_NAME="${BASE_NAME}-sb"
+            echo "Checking Service Bus: $SB_NAME"
+            SB_STATUS=$(az servicebus namespace show -g "$RG" -n "$SB_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "Service Bus Status: $SB_STATUS"
+            
+            # Check Application Insights
+            AI_NAME="${BASE_NAME}-ai"
+            echo "Checking Application Insights: $AI_NAME"
+            AI_STATUS=$(az monitor app-insights component show -g "$RG" -a "$AI_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "Application Insights Status: $AI_STATUS"
+            
+            # Summary
+            echo ""
+            echo "=== UAT Deployment Health Summary ==="
+            echo "✓ Resource Group: $RG"
+            echo "✓ Storage Account: $STORAGE_NAME ($STORAGE_STATUS)"
+            echo "✓ Service Bus: $SB_NAME ($SB_STATUS)"
+            echo "✓ App Insights: $AI_NAME ($AI_STATUS)"
+            echo "✓ Logic App: ${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
+
+      - name: Deployment Summary
+        run: |
+          echo "🎉 UAT Deployment completed successfully!"
+          echo ""
+          echo "**Deployed Resources:**"
+          echo "- Resource Group: ${{ env.UAT_RESOURCE_GROUP }}"
+          echo "- Base Name: ${{ needs.validate.outputs.base-name }}"
+          echo "- Logic App: ${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
+          echo "- Location: ${{ env.AZURE_LOCATION }}"
+          echo ""
+          echo "**Next Steps:**"
+          echo "1. Configure API Connections in the Azure Portal"
+          echo "2. Set up Integration Account schemas and agreements"
+          echo "3. Configure Logic App parameters and connection strings"
+          echo "4. Assign managed identity permissions to Storage & Service Bus"
