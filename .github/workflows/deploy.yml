@@ -51,14 +51,45 @@ jobs:
           # Get the Logic App name from the deployment
           LOGIC_APP_NAME=$(az deployment group show -g "$RG_NAME" -n main --query "properties.outputs.logicAppName.value" -o tsv)
           
-          # Deploy the workflow definitions
           echo "Deploying Logic App workflows to: $LOGIC_APP_NAME"
           
-          # Note: For Logic Apps Standard, you typically deploy workflows via:
-          # 1. ZIP deployment of the entire logicapps folder, or
-          # 2. Individual workflow deployment via ARM/REST API
-          # 3. Using VS Code Logic Apps extension deployment
+          # Create temporary directory for deployment
+          TEMP_DIR=$(mktemp -d)
           
-          # For now, we'll use a simple approach - this may need refinement based on your Logic App structure
-          echo "Logic App workflows deployment - manual setup required"
-          echo "Logic App URL: https://$LOGIC_APP_NAME.azurewebsites.net"
+          # Copy workflows and create required files for Logic Apps Standard
+          cp -r logicapps "$TEMP_DIR/"
+          
+          # Create host.json
+          cat > "$TEMP_DIR/host.json" << EOF
+          {
+            "version": "2.0",
+            "extensionBundle": {
+              "id": "Microsoft.Azure.Functions.ExtensionBundle.Workflows",
+              "version": "[1.*, 2.0.0)"
+            }
+          }
+          EOF
+          
+          # Create local.settings.json
+          cat > "$TEMP_DIR/local.settings.json" << EOF
+          {
+            "IsEncrypted": false,
+            "Values": {
+              "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+              "FUNCTIONS_WORKER_RUNTIME": "node"
+            }
+          }
+          EOF
+          
+          # Create ZIP for deployment
+          cd "$TEMP_DIR"
+          zip -r deployment.zip . -x "deployment.zip"
+          
+          # Deploy to Logic App Standard
+          az webapp deploy --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME" --src-path deployment.zip --type zip
+          
+          echo "✅ Successfully deployed workflows to Logic App: $LOGIC_APP_NAME"
+          echo "🌐 Logic App URL: https://$LOGIC_APP_NAME.azurewebsites.net"
+          
+          # Clean up
+          rm -rf "$TEMP_DIR"
