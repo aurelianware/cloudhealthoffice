@@ -94,6 +94,8 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
+            echo "Installing Bicep CLI..."
+            az bicep install
             echo "Validating Bicep template: ${{ steps.set-params.outputs.bicep-path }}"
             az bicep version
             az bicep build --file "${{ steps.set-params.outputs.bicep-path }}" --outfile /tmp/arm.json
