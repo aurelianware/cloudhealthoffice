@@ -42,6 +42,11 @@ resource sbTopicRfai 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview'
   name: 'rfai-requests'
   properties: {}
 }
+resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'edi-278'
+  properties: {}
+}
 
 // App Insights (for telemetry)
 resource insights 'Microsoft.Insights/components@2020-02-02' = {
