@@ -20,8 +20,8 @@ on:
         default: "logicapps/workflows"
 
 env:
-  AZURE_LOCATION: eastus
-  UAT_RESOURCE_GROUP: exhp-attachments-uat-rg
+  AZURE_LOCATION: westus
+  UAT_RESOURCE_GROUP: hipaa-attachments-uat-rg
   UAT_BASE_NAME: hipaa-attachments-uat
 
 jobs:
