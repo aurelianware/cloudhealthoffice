@@ -39,6 +39,26 @@ jobs:
       - name: Ensure resource group
         run: az group create -n "$RG_NAME" -l "$LOCATION"
 
-      # TODO: your actual deploy steps go here (Bicep/ACA/Logic Apps)
-      # - name: Deploy infra
-      #   run: az deployment group create -g "$RG_NAME" -f infra/main.bicep -p environment=PROD location="$LOCATION"
+      - name: Deploy infrastructure (Bicep)
+        run: |
+          az deployment group create \
+            --resource-group "$RG_NAME" \
+            --template-file infra/main.bicep \
+            --parameters location="$LOCATION" baseName="hipaa-attachments-prod"
+
+      - name: Deploy Logic App workflows
+        run: |
+          # Get the Logic App name from the deployment
+          LOGIC_APP_NAME=$(az deployment group show -g "$RG_NAME" -n main --query "properties.outputs.logicAppName.value" -o tsv)
+          
+          # Deploy the workflow definitions
+          echo "Deploying Logic App workflows to: $LOGIC_APP_NAME"
+          
+          # Note: For Logic Apps Standard, you typically deploy workflows via:
+          # 1. ZIP deployment of the entire logicapps folder, or
+          # 2. Individual workflow deployment via ARM/REST API
+          # 3. Using VS Code Logic Apps extension deployment
+          
+          # For now, we'll use a simple approach - this may need refinement based on your Logic App structure
+          echo "Logic App workflows deployment - manual setup required"
+          echo "Logic App URL: https://$LOGIC_APP_NAME.azurewebsites.net"
