@@ -1,0 +1,230 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "ServiceBus_Edi278_Messages": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['servicebus']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_edi278'))}/messages/head"
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerBody()"
+      }
+    },
+    "actions": {
+      "Parse_Edi278_Message": {
+        "type": "ParseJson",
+        "runAfter": {},
+        "inputs": {
+          "content": "@triggerBody()?['contentData']",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "blobUrl": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Get_Blob_Content": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['azureblob']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files/@{encodeURIComponent(body('Parse_Edi278_Message')?['blobUrl'])}/content"
+        },
+        "runAfter": {
+          "Parse_Edi278_Message": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Store_Raw_in_Blob_278": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['azureblob']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+          "queries": {
+            "folderPath": "@concat(parameters('blob_raw_folder_278'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+            "name": "@{body('Parse_Edi278_Message')?['fileName']}-278-@{utcNow()}.edi"
+          },
+          "body": "@outputs('Get_Blob_Content')?['body']"
+        },
+        "runAfter": {
+          "Get_Blob_Content": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Decode_X12_278": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/decode/edi",
+          "body": {
+            "content": "@base64(outputs('Get_Blob_Content')?['body'])",
+            "contentType": "application/edi-x12",
+            "agreementType": "X12",
+            "messageType": "@parameters('x12_278_messagetype')",
+            "senderId": "@parameters('x12_sender_id')",
+            "receiverId": "@parameters('x12_receiver_id')"
+          }
+        },
+        "runAfter": {
+          "Store_Raw_in_Blob_278": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Extract_278_Metadata": {
+        "type": "Compose",
+        "inputs": {
+          "claimNumber": "@{coalesce(body('Decode_X12_278')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'],'')}",
+          "memberId": "@{coalesce(body('Decode_X12_278')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='IL')][0]?['NM109'],'')}",
+          "providerNpi": "@{coalesce(body('Decode_X12_278')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='PR')][0]?['NM109'],'')}",
+          "serviceFromDate": "@{coalesce(body('Decode_X12_278')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTM']?[?(@['DTM01']=='472')][0]?['DTM02'],'')}",
+          "reviewDecision": "@{coalesce(body('Decode_X12_278')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HCR']?[0]?['HCR01'],'')}"
+        },
+        "runAfter": {
+          "Decode_X12_278": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Call_QNXT_278_API": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{parameters('qnxt_base_url')}/claims/process-278",
+          "headers": {
+            "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "claimNumber": "@outputs('Extract_278_Metadata')?['claimNumber']",
+            "memberId": "@outputs('Extract_278_Metadata')?['memberId']",
+            "providerNpi": "@outputs('Extract_278_Metadata')?['providerNpi']",
+            "reviewDecision": "@outputs('Extract_278_Metadata')?['reviewDecision']",
+            "dataLakePath": "@concat(parameters('blob_raw_folder_278'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+            "fileName": "@{body('Parse_Edi278_Message')?['fileName']}-278-@{utcNow()}.edi",
+            "processedAt": "@utcNow()"
+          }
+        },
+        "runtimeConfiguration": {
+          "retry": {
+            "count": 4,
+            "type": "fixed",
+            "interval": "PT15S"
+          }
+        },
+        "runAfter": {
+          "Extract_278_Metadata": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Log_Custom_Event": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/events/customEvent",
+          "body": {
+            "eventName": "X12_278_Processed",
+            "properties": {
+              "claimNumber": "@outputs('Extract_278_Metadata')?['claimNumber']",
+              "memberId": "@outputs('Extract_278_Metadata')?['memberId']",
+              "reviewDecision": "@outputs('Extract_278_Metadata')?['reviewDecision']",
+              "fileName": "@{body('Parse_Edi278_Message')?['fileName']}-278-@{utcNow()}.edi"
+            }
+          }
+        },
+        "runAfter": {
+          "Call_QNXT_278_API": [
+            "Succeeded",
+            "Failed"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "blob_storage_account": {
+      "type": "String",
+      "defaultValue": "default"
+    },
+    "blob_raw_folder_278": {
+      "type": "String",
+      "defaultValue": "hipaa-attachments/raw/278"
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "attachments-bus"
+    },
+    "sb_topic_edi278": {
+      "type": "String",
+      "defaultValue": "edi-278"
+    },
+    "qnxt_base_url": {
+      "type": "String",
+      "defaultValue": "https://qnxt.api.local"
+    },
+    "qnxt_api_token": {
+      "type": "String",
+      "defaultValue": "<token>"
+    },
+    "x12_sender_id": {
+      "type": "String",
+      "defaultValue": "030240928"
+    },
+    "x12_receiver_id": {
+      "type": "String",
+      "defaultValue": "66917"
+    },
+    "x12_278_messagetype": {
+      "type": "String",
+      "defaultValue": "X12_005010X217_278"
+    }
+  }
+}

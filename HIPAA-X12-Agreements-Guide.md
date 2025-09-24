@@ -1,11 +1,12 @@
-# HIPAA X12 275/277 Agreements Configuration Guide
+# HIPAA X12 275/277/278 Agreements Configuration Guide
 # Availity ↔ Parkland Community Health Plan (PCHP) / QNXT System
 
 ## 🏥 Healthcare EDI Workflow Overview
 
 **Business Process**: HIPAA Attachment Processing
 - **275 Message**: Attachment Request (Availity → PCHP)
-- **277 Message**: Attachment Response (PCHP → Availity)
+- **277 Message**: Attachment Response (PCHP → Availity)  
+- **278 Message**: Health Care Services Review Information (Processing & Replay)
 - **Backend System**: QNXT (Parkland's claims processing system)
 
 ## 🤝 Trading Partners Configuration ✅ COMPLETED
@@ -56,6 +57,30 @@
 - **Version**: 005010X212 (HIPAA version)
 
 **Message Flow**: QNXT Response → Logic App → Encode X12 277 → Send to Availity
+
+### 3️⃣ X12 278 RECEIVE Agreement
+**Purpose**: Process health care services review information and support replay functionality
+
+**Configuration**:
+- **Agreement Name**: `PCHP-278-Processing`
+- **Host Partner**: PCHP-QNXT (you/receiver)
+- **Guest Partner**: PCHP-QNXT (internal processing)
+- **Protocol**: X12
+- **Direction**: Receive (Internal Processing)
+
+**Key Settings**:
+- **ISA Sender ID**: 66917 (PCHP)
+- **ISA Receiver ID**: 66917 (PCHP - internal)
+- **GS Sender ID**: PCHP or QNXT
+- **GS Receiver ID**: PCHP or QNXT
+- **Transaction Type**: 278 (Health Care Services Review Information)
+- **Version**: 005010X217 (HIPAA version)
+
+**Message Flow**: Service Bus edi-278 Topic → Logic App → Decode X12 278 → Process Review → QNXT API
+
+**📋 Integration Account Schema Requirements**:
+- Upload X12 278 schema (005010X217_278.xsd)
+- Configure agreement for internal processing and replay scenarios
 
 ## 🔧 Azure Portal Configuration Steps
 
@@ -126,6 +151,10 @@ You'll need to upload these standard HIPAA schemas:
 - **277.xsd**: Healthcare Information Status Notification  
 - **Common schemas**: HIPAA-Common, X12-Common
 
+### For 278 Processing (Internal):
+- **278.xsd**: Health Care Services Review Information (005010X217)
+- **Common schemas**: HIPAA-Common, X12-Common
+
 **Schema Sources**:
 - Microsoft HIPAA Accelerator
 - Washington Publishing Company (WPC)
@@ -139,6 +168,12 @@ You'll need to upload these standard HIPAA schemas:
 
 2. 277 Outbound (Status Response):  
    QNXT Processing → Logic App → X12 Encode (277) → Send to Availity
+
+3. 278 Processing (Review Information):
+   Service Bus edi-278 Topic → Logic App Trigger → X12 Decode (278) → Extract Review Data → QNXT API
+
+4. 278 Replay (Deterministic):
+   HTTP Request → Validate Blob URL → Queue to edi-278 Topic → Process via ingest278 workflow
 ```
 
 ## ⚠️ Important HIPAA Compliance Notes
