@@ -31,9 +31,9 @@ jobs:
         shell: bash
         run: |
           case "${{ matrix.env }}" in
-            DEV)  echo "RG_NAME=rg-hipaa-attachments-dev"  >> $GITHUB_ENV; echo "LOCATION=eastus" >> $GITHUB_ENV ;;
-            UAT)  echo "RG_NAME=rg-hipaa-attachments-uat"  >> $GITHUB_ENV; echo "LOCATION=eastus" >> $GITHUB_ENV ;;
-            PROD) echo "RG_NAME=rg-hipaa-attachments-prod" >> $GITHUB_ENV; echo "LOCATION=eastus" >> $GITHUB_ENV ;;
+            DEV)  echo "RG_NAME=rg-hipaa-attachments-dev"  >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
+            UAT)  echo "RG_NAME=rg-hipaa-attachments-uat"  >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
+            PROD) echo "RG_NAME=rg-hipaa-attachments-prod" >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
           esac
 
       - name: Sanity check who we are

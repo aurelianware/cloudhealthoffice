@@ -1,13 +1,13 @@
-name: Deploy UAT - HIPAA Attachments
+name: Deploy DEV - HIPAA Attachments
 
 on:
   push:
     branches:
-      - "release/*"
+      - "main/*"
   workflow_dispatch:
     inputs:
       baseName:
-        description: "Base name prefix for UAT resources"
+        description: "Base name prefix for DEV resources"
         required: false
         default: "hipaa-attachments"
       bicepPath:
@@ -21,13 +21,13 @@ on:
 
 env:
   AZURE_LOCATION: westus
-  UAT_RESOURCE_GROUP: hipaa-attachments-uat-rg
-  UAT_BASE_NAME: hipaa-attachments-uat
+  DEV_RESOURCE_GROUP: rg-hipaa-attachments-dev
+  DEV_BASE_NAME: hipaa-attachments-dev
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    environment: UAT
+    environment: DEV
     outputs:
       bicep-path: ${{ steps.set-params.outputs.bicep-path }}
       workflows-path: ${{ steps.set-params.outputs.workflows-path }}
@@ -43,7 +43,7 @@ jobs:
         run: |
           BICEP_PATH="${{ github.event.inputs.bicepPath || 'infra/main.bicep' }}"
           WORKFLOWS_PATH="${{ github.event.inputs.workflowsPath || 'logicapps/workflows' }}"
-          BASE_NAME="${{ github.event.inputs.baseName || env.UAT_BASE_NAME }}"
+          BASE_NAME="${{ github.event.inputs.baseName || env.DEV_BASE_NAME }}"
           LOGIC_APP_NAME="${BASE_NAME}-la"
           
           echo "bicep-path=${BICEP_PATH}" >> $GITHUB_OUTPUT
@@ -106,7 +106,7 @@ jobs:
   deploy-infrastructure:
     runs-on: ubuntu-latest
     needs: validate
-    environment: UAT
+    environment: DEV
     permissions:
       id-token: write
       contents: read
@@ -120,24 +120,24 @@ jobs:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Ensure Resource Group
         uses: azure/cli@v2
         with:
           inlineScript: |
-            echo "Creating/updating resource group: ${{ env.UAT_RESOURCE_GROUP }}"
-            az group create -n "${{ env.UAT_RESOURCE_GROUP }}" -l "${{ env.AZURE_LOCATION }}"
+            echo "Creating/updating resource group: ${{ env.DEV_RESOURCE_GROUP }}"
+            az group create -n "${{ env.DEV_RESOURCE_GROUP }}" -l "${{ env.AZURE_LOCATION }}"
 
       - name: ARM What-If Analysis
         uses: azure/cli@v2
         with:
           inlineScript: |
-            echo "Running ARM What-If analysis for UAT deployment"
+            echo "Running ARM What-If analysis for DEV deployment"
             az deployment group what-if \
-              --resource-group "${{ env.UAT_RESOURCE_GROUP }}" \
+              --resource-group "${{ env.DEV_RESOURCE_GROUP }}" \
               --template-file "${{ needs.validate.outputs.bicep-path }}" \
               --parameters baseName="${{ needs.validate.outputs.base-name }}" \
               --no-pretty-print || true
@@ -146,22 +146,22 @@ jobs:
         uses: azure/arm-deploy@v2
         with:
           scope: resourcegroup
-          resourceGroupName: ${{ env.UAT_RESOURCE_GROUP }}
+          resourceGroupName: ${{ env.DEV_RESOURCE_GROUP }}
           template: ${{ needs.validate.outputs.bicep-path }}
           parameters: baseName=${{ needs.validate.outputs.base-name }}
-          deploymentName: hipaa-attachments-uat-infra-${{ github.run_number }}
+          deploymentName: hipaa-attachments-dev-infra-${{ github.run_number }}
 
       - name: Verify Infrastructure Deployment
         uses: azure/cli@v2
         with:
           inlineScript: |
-            echo "Verifying deployed resources in UAT"
-            az resource list -g "${{ env.UAT_RESOURCE_GROUP }}" --query "[].{Name:name, Type:type, Location:location}" -o table
+            echo "Verifying deployed resources in DEV"
+            az resource list -g "${{ env.DEV_RESOURCE_GROUP }}" --query "[].{Name:name, Type:type, Location:location}" -o table
 
   deploy-logic-apps:
     runs-on: ubuntu-latest
     needs: [validate, deploy-infrastructure]
-    environment: UAT
+    environment: DEV
     permissions:
       id-token: write
       contents: read
@@ -173,9 +173,9 @@ jobs:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Package Logic App workflows
         shell: bash
@@ -203,7 +203,7 @@ jobs:
         with:
           inlineScript: |
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
-            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            RG="${{ env.DEV_RESOURCE_GROUP }}"
             ZIP_PATH="workflows.zip"
             
             echo "Deploying workflows to Logic App: $APP_NAME"
@@ -225,7 +225,7 @@ jobs:
         with:
           inlineScript: |
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
-            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            RG="${{ env.DEV_RESOURCE_GROUP }}"
             
             echo "Restarting Logic App: $APP_NAME"
             az webapp restart -g "$RG" -n "$APP_NAME"
@@ -234,7 +234,7 @@ jobs:
   healthcheck:
     runs-on: ubuntu-latest
     needs: [validate, deploy-infrastructure, deploy-logic-apps]
-    environment: UAT
+    environment: DEV
     permissions:
       id-token: write
       contents: read
@@ -246,16 +246,16 @@ jobs:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Health Check - Logic App Status
         uses: azure/cli@v2
         with:
           inlineScript: |
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
-            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            RG="${{ env.DEV_RESOURCE_GROUP }}"
             
             echo "Checking Logic App health: $APP_NAME"
             
@@ -277,10 +277,10 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            RG="${{ env.UAT_RESOURCE_GROUP }}"
+            RG="${{ env.DEV_RESOURCE_GROUP }}"
             BASE_NAME="${{ needs.validate.outputs.base-name }}"
             
-            echo "Running infrastructure health checks for UAT environment"
+            echo "Running infrastructure health checks for DEV environment"
             
             # Check Storage Account
             STORAGE_NAME="${BASE_NAME}stg"
@@ -302,7 +302,7 @@ jobs:
             
             # Summary
             echo ""
-            echo "=== UAT Deployment Health Summary ==="
+            echo "=== DEV Deployment Health Summary ==="
             echo "✓ Resource Group: $RG"
             echo "✓ Storage Account: $STORAGE_NAME ($STORAGE_STATUS)"
             echo "✓ Service Bus: $SB_NAME ($SB_STATUS)"
@@ -311,10 +311,10 @@ jobs:
 
       - name: Deployment Summary
         run: |
-          echo "🎉 UAT Deployment completed successfully!"
+          echo "🎉 DEV Deployment completed successfully!"
           echo ""
           echo "**Deployed Resources:**"
-          echo "- Resource Group: ${{ env.UAT_RESOURCE_GROUP }}"
+          echo "- Resource Group: ${{ env.DEV_RESOURCE_GROUP }}"
           echo "- Base Name: ${{ needs.validate.outputs.base-name }}"
           echo "- Logic App: ${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
           echo "- Location: ${{ env.AZURE_LOCATION }}"
