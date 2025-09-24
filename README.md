@@ -1,23 +1,33 @@
-# HIPAA Attachments - Logic Apps & Infrastructure
+# HIPAA Attachments Processing System 🏥
 
-This repository contains the implementation for processing HIPAA 275 Attachments from Availity, archiving them in Azure Data Lake Storage Gen2, and linking them to claims in QNXT.
+A complete Azure Logic Apps solution for processing HIPAA-compliant medical attachments with secure file handling, message queuing, and monitoring capabilities.
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
-The solution implements the following process:
-1. **SFTP Polling**: Monitors Availity SFTP for new 275 attachment files
+This solution implements the following process:
+1. **SFTP Polling**: Monitors Availity SFTP for new 275 attachment files (ingest275 workflow)
 2. **Data Lake Archive**: Stores raw files in Azure Data Lake Storage Gen2 with date-based partitioning
 3. **X12 Decoding**: Processes 275 messages via Integration Account
 4. **Metadata Extraction**: Extracts claim, member, and provider information
 5. **QNXT Integration**: Links attachments to claims via QNXT API
 6. **Service Bus**: Publishes events for downstream processing
+7. **RFAI Processing**: Handles Request for Additional Information via rfai277 workflow
 
-## Components
+## 📦 Current Production Deployment
 
-### Infrastructure (`infra/main.bicep`)
-- **Azure Data Lake Storage Gen2**: Storage account with hierarchical namespace enabled
-- **Service Bus**: Topics for attachment processing and RFAI requests
-- **Logic App Standard**: Serverless workflow execution
+### ✅ Successfully Deployed Infrastructure
+- **Resource Group**: `rg-hipaa-logic-apps` (West US)
+- **Logic App Standard**: `hipaa-logic-la` ✅ RUNNING
+- **Storage Account**: `hipaa7v2rrsoo6tac2` (Data Lake Gen2 enabled) ✅
+- **Service Bus Namespace**: `hipaa-logic-svc` (Standard tier) ✅
+  - Topics: `attachments-in`, `rfai-requests` ✅
+- **Application Insights**: `hipaa-logic-ai` ✅
+
+### 🌐 Resource URLs
+- **Logic App Portal**: https://hipaa-logic-la.azurewebsites.net
+- **Azure Management**: [Logic App Designer](https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/sites/hipaa-logic-la/logicApp)
+
+## 🔧 Components
 - **Application Insights**: Telemetry and monitoring
 
 ### Workflows
