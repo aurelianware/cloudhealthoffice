@@ -3,9 +3,12 @@ param location string = resourceGroup().location
 param baseName string = 'hipaa-attachments'
 param storageSku string = 'Standard_LRS'
 
+// Generate a unique storage account name (lowercase, no hyphens, max 24 chars)
+var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
+
 // Storage account (Azure Data Lake Storage Gen2)
 resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: '${baseName}stg'
+  name: storageAccountName
   location: location
   sku: { name: storageSku }
   kind: 'StorageV2'
@@ -30,11 +33,13 @@ resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   sku: { name: 'Basic', tier: 'Basic' }
 }
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
-  name: '${sb.name}/attachments-in'
+  parent: sb
+  name: 'attachments-in'
   properties: {}
 }
 resource sbTopicRfai 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
-  name: '${sb.name}/rfai-requests'
+  parent: sb
+  name: 'rfai-requests'
   properties: {}
 }
 
@@ -60,9 +65,11 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
     serverFarmId: plan.id
     siteConfig: {
       appSettings: [
-        { name: 'AzureWebJobsStorage', value: stg.properties.primaryEndpoints.blob }
-        { name: 'WORKFLOWS_TENANT_ID', value: '' } // fill in if needed
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        { name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        { name: 'WEBSITE_CONTENTSHARE', value: '${baseName}-la' }
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
       ]
     }
   }
