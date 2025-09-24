@@ -26,11 +26,11 @@ resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
   }
 }
 
-// Service Bus
+// Service Bus (using 'svc' suffix instead of reserved 'sb', Standard tier for Topics)
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: '${baseName}-sb'
+  name: '${baseName}-svc'
   location: location
-  sku: { name: 'Basic', tier: 'Basic' }
+  sku: { name: 'Standard', tier: 'Standard' }
 }
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
@@ -51,25 +51,32 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
   properties: { Application_Type: 'web' }
 }
 
-// Logic App Standard (plan + app)
+// Logic App Standard (plan + app) - use proper Logic Apps configuration
 resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: '${baseName}-wfplan'
+  name: '${baseName}-plan'
   location: location
   sku: { name: 'WS1', tier: 'WorkflowStandard' }
+  kind: 'elastic'
+  properties: {
+    elasticScaleEnabled: false
+  }
 }
 resource la 'Microsoft.Web/sites@2022-03-01' = {
   name: '${baseName}-la'
   location: location
-  kind: 'workflowapp'
+  kind: 'functionapp,workflowapp'
   properties: {
     serverFarmId: plan.id
     siteConfig: {
+      netFrameworkVersion: 'v6.0'
       appSettings: [
         { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
         { name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
         { name: 'WEBSITE_CONTENTSHARE', value: '${baseName}-la' }
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
+        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
+        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
       ]
     }
   }
