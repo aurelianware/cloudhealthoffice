@@ -83,8 +83,19 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
   identity: { type: 'SystemAssigned' }
 }
 
+// Integration Account (Free tier)
+resource integrationAccount 'Microsoft.Logic/integrationAccounts@2019-05-01' = {
+  name: '${baseName}-ia'
+  location: location
+  sku: { 
+    name: 'Free' 
+  }
+  properties: {}
+}
+
 // Outputs
 output storageAccountName string = stg.name
 output serviceBusNamespace string = sb.name
 output logicAppName string = la.name
 output appInsightsName string = insights.name
+output integrationAccountName string = integrationAccount.name
