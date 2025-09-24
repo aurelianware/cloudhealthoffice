@@ -9,10 +9,7 @@ jobs:
   deploy:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: { env: [DEV, UAT, PROD] }
-    environment: ${{ matrix.env }}
+    environment: PROD
     permissions:
       id-token: write
       contents: read
@@ -27,14 +24,14 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Resolve env-specific settings
+      - name: Set environment variables
         shell: bash
         run: |
-          case "${{ matrix.env }}" in
-            DEV)  echo "RG_NAME=rg-hipaa-attachments-dev"  >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
-            UAT)  echo "RG_NAME=rg-hipaa-attachments-uat"  >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
-            PROD) echo "RG_NAME=rg-hipaa-attachments-prod" >> $GITHUB_ENV; echo "LOCATION=westus" >> $GITHUB_ENV ;;
-          esac
+          echo "RG_NAME=rg-hipaa-attachments-prod" >> $GITHUB_ENV
+          echo "LOCATION=westus" >> $GITHUB_ENV
+
+      - name: Install Bicep CLI
+        run: az bicep install
 
       - name: Sanity check who we are
         run: az account show
@@ -44,4 +41,4 @@ jobs:
 
       # TODO: your actual deploy steps go here (Bicep/ACA/Logic Apps)
       # - name: Deploy infra
-      #   run: az deployment group create -g "$RG_NAME" -f infra/main.bicep -p environment=${{ matrix.env }} location="$LOCATION"
+      #   run: az deployment group create -g "$RG_NAME" -f infra/main.bicep -p environment=PROD location="$LOCATION"
