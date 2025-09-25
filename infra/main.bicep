@@ -240,6 +240,7 @@ output logicAppName string = la.name
 output appInsightsName string = insights.name
 output integrationAccountName string = effectiveIaName
 
+
 output sftpConnectionId string = connSftp.id
 output blobConnectionId string = connBlob.id
 output serviceBusConnectionId string = connSb.id
