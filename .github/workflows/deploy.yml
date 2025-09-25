@@ -48,77 +48,104 @@ jobs:
       - name: Ensure resource group
         run: az group create -n "$RG_NAME" -l "$LOCATION"
 
-      - name: Deploy infrastructure (Bicep)
-        shell: bash
-        run: |
-          set -euo pipefail
-          set -x
-      
-          # Optional: quiet CLI noise
-          az config set core.only_show_errors=true
-      
-          # Compile quickly to catch syntax errors
-          az bicep build --file infra/main.bicep --outfile /tmp/main.json
-      
-          # Validate (non-blocking due to CLI quirk)
-          az deployment group validate \
-            --resource-group "$RG_NAME" \
-            --template-file infra/main.bicep \
-            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            || echo "validate returned non-zero; proceeding to deploy"
-      
-          # Deploy with unique name
-          DEPLOY_NAME="main-$(date +%s)"
-          az deployment group create \
-            --resource-group "$RG_NAME" \
-            --name "$DEPLOY_NAME" \
-            --template-file infra/main.bicep \
-            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            --only-show-errors -o json
-      
-          # Export Logic App name for next step
-          LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
-          echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
-          echo "Deployment succeeded. Logic App: $LA_NAME"
+      - name: Validate Bicep template
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Installing Bicep CLI..."
+            az bicep install
+            echo "Validating Bicep template: infra/main.bicep"
+            az bicep version
+            az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+            if [ ! -s /tmp/arm.json ]; then
+              echo "::error::Bicep compilation failed - ARM template is empty"
+              exit 1
+            fi
+            echo "✓ Bicep template compiled successfully"
+
+      - name: ARM What-If Analysis
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Running ARM What-If analysis"
+            az deployment group what-if \
+              --resource-group "$RG_NAME" \
+              --template-file infra/main.bicep \
+              --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
+              --no-pretty-print || true
+
+      - name: Deploy Infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.RG_NAME }}
+          template: infra/main.bicep
+          parameters: location=${{ env.LOCATION }} baseName=hipaa-logic connectorLocation=${{ env.CONNECTOR_LOCATION }}
+          deploymentName: hipaa-logic-infra-${{ github.run_number }}
+
+      - name: Get Logic App name
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            LA_NAME=$(az resource list -g "$RG_NAME" --resource-type "Microsoft.Web/sites" --query "[?contains(name, 'hipaa-logic')].name" -o tsv | head -1)
+            if [ -z "$LA_NAME" ]; then
+              echo "::error::Logic App not found in resource group $RG_NAME"
+              exit 1
+            fi
+            echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
+            echo "Found Logic App: $LA_NAME"
          
-      - name: Deploy Logic App workflows
+      - name: Package Logic App workflows
         shell: bash
         run: |
           set -euo pipefail
-          echo "Deploying Logic App workflows to: $LOGIC_APP_NAME"
-
-          TEMP_DIR=$(mktemp -d)
-
-          # Ensure correct structure in the zip
-          cp -r logicapps/workflows "$TEMP_DIR/workflows"
-
-          # host.json: use repo version if present, otherwise create a minimal one
-          if [ -f logicapps/host.json ]; then
-            cp logicapps/host.json "$TEMP_DIR/host.json"
-          else
-            cat > "$TEMP_DIR/host.json" << 'EOF'
-            {
-              "version": "2.0",
-              "extensionBundle": {
-                "id": "Microsoft.Azure.Functions.ExtensionBundle.Workflows",
-                "version": "[1.*, 2.0.0)"
-              }
-            }
-            EOF
+          WF_PATH="logicapps/workflows"
+          PARENT_DIR="$(dirname "$WF_PATH")"
+          BASE_NAME="$(basename "$WF_PATH")"
+          
+          echo "Packaging workflows from: $WF_PATH"
+          if [ ! -d "$WF_PATH" ]; then
+            echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
+          
+          pushd "$PARENT_DIR" > /dev/null
+          zip -r ../workflows.zip "$BASE_NAME"
+          popd > /dev/null
+          
+          echo "Workflow package created: $(pwd)/workflows.zip"
+          echo "Package contents:"
+          unzip -l workflows.zip | head -20
 
-          # Connections files (must be at package root)
-          cp logicapps/connections.json "$TEMP_DIR/"
-          cp logicapps/connections.parameters.json "$TEMP_DIR/"
+      - name: Deploy Logic App workflows
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="$LOGIC_APP_NAME"
+            RG="$RG_NAME"
+            ZIP_PATH="workflows.zip"
+            
+            echo "Deploying workflows to Logic App: $APP_NAME"
+            if [ ! -f "$ZIP_PATH" ]; then
+              echo "::error::Workflow package $ZIP_PATH not found"; exit 1
+            fi
+            
+            # Deploy the ZIP package
+            az webapp deploy \
+              --resource-group "$RG" \
+              --name "$APP_NAME" \
+              --src-path "$ZIP_PATH" \
+              --type zip
+            
+            echo "✓ Workflows deployed successfully"
 
-          # Create package and deploy
-          (cd "$TEMP_DIR" && zip -r deployment.zip . -x "deployment.zip")
-          az webapp deploy \
-            --resource-group "$RG_NAME" \
-            --name "$LOGIC_APP_NAME" \
-            --src-path "$TEMP_DIR/deployment.zip" \
-            --type zip
-
-          echo "✅ Successfully deployed workflows to Logic App: $LOGIC_APP_NAME"
-          echo "🌐 https://$LOGIC_APP_NAME.azurewebsites.net"
-          rm -rf "$TEMP_DIR"
+      - name: Restart Logic App
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            APP_NAME="$LOGIC_APP_NAME"
+            RG="$RG_NAME"
+            
+            echo "Restarting Logic App: $APP_NAME"
+            az webapp restart -g "$RG" -n "$APP_NAME"
+            echo "✓ Logic App restarted"
+            echo "🌐 https://$APP_NAME.azurewebsites.net"
