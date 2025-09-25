@@ -17,7 +17,7 @@ param iaName string = '${baseName}-ia'
 
 // SFTP connection params
 param sftpHost string = 'sftp.example.com'
-param sftpPort int = 22
+param sftpPort string = '22'
 param sftpUsername string = 'logicapp'
 @secure()
 param sftpPassword string = ''        // or leave empty if you switch to key auth
@@ -31,6 +31,8 @@ param blobAccountKey string = ''      // defaulted later to stg.listKeys()[0] if
 @secure()
 param serviceBusConnectionString string = ''
 
+// Add near your other params
+param connectorLocation string = 'weatus2' // change to a region that has the connectors (try 'westus2' or 'westus3') 
 
 // =========================
 // Variables
@@ -169,19 +171,18 @@ var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 */
 // =========================
 
-// SFTP-SSH connection
 resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
   name: 'sftp-ssh'
-  location: location
+  location: connectorLocation
   properties: {
     displayName: 'sftp-ssh'
     api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'sftp-ssh')
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'sftp-ssh')
     }
     parameterValues: {
       serverAddress: sftpHost
-      port: sftpPort
-      authenticationType: 'Basic'   // or SSHPublicKey
+      port: sftpPort                // string
+      authenticationType: 'Basic'
       username: sftpUsername
       password: sftpPassword
     }
@@ -190,11 +191,11 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
 
 resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
   name: 'azureblob'
-  location: location
+  location: connectorLocation
   properties: {
     displayName: 'azureblob'
     api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'azureblob')
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'azureblob')
     }
     parameterValues: {
       accountName: effectiveBlobAccountName
@@ -205,11 +206,11 @@ resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
 
 resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   name: 'servicebus'
-  location: location
+  location: connectorLocation
   properties: {
     displayName: 'servicebus'
     api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'servicebus')
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'servicebus')
     }
     parameterValues: {
       connectionString: serviceBusConnectionString
@@ -219,11 +220,11 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
 
 resource connIa 'Microsoft.Web/connections@2016-06-01' = {
   name: 'integrationaccount'
-  location: location
+  location: connectorLocation
   properties: {
     displayName: 'integrationaccount'
     api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'integrationaccount')
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'integrationaccount')
     }
     parameterValues: {
       integrationAccountName: effectiveIaName
