@@ -71,7 +71,7 @@ resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   name: '${baseName}-svc'
   location: location
   sku: {
-    name: 'Standard',
+    name: 'Standard'
     tier: 'Standard'
   }
 }
@@ -115,7 +115,7 @@ resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: '${baseName}-plan'
   location: location
   sku: {
-    name: 'WS1',
+    name: 'WS1'
     tier: 'WorkflowStandard'
   }
   kind: 'elastic'
@@ -180,7 +180,7 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
     parameterValues: {
       serverAddress: sftpHost
       port: sftpPort
-      authenticationType: 'Basic'   // change to 'SSHPublicKey' if using key auth
+      authenticationType: 'Basic'
       username: sftpUsername
       password: sftpPassword
     }
