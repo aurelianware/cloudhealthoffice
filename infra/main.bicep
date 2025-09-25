@@ -170,7 +170,7 @@ var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 // =========================
 
 // SFTP-SSH connection
-resource connSftp 'Microsoft.Web/connections@2021-08-01' = {
+resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
   name: 'sftp-ssh'
   location: location
   properties: {
@@ -181,15 +181,14 @@ resource connSftp 'Microsoft.Web/connections@2021-08-01' = {
     parameterValues: {
       serverAddress: sftpHost
       port: sftpPort
-      authenticationType: 'Basic'      // change to 'SSHPublicKey' if you prefer key auth
+      authenticationType: 'Basic'   // or SSHPublicKey
       username: sftpUsername
-      password: sftpPassword           // or provide sshKey / passphrase fields for key auth
+      password: sftpPassword
     }
   }
 }
 
-// Azure Blob connection
-resource connBlob 'Microsoft.Web/connections@2021-08-01' = {
+resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
   name: 'azureblob'
   location: location
   properties: {
@@ -204,8 +203,7 @@ resource connBlob 'Microsoft.Web/connections@2021-08-01' = {
   }
 }
 
-// Service Bus connection
-resource connSb 'Microsoft.Web/connections@2021-08-01' = {
+resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   name: 'servicebus'
   location: location
   properties: {
@@ -219,8 +217,7 @@ resource connSb 'Microsoft.Web/connections@2021-08-01' = {
   }
 }
 
-// Integration Account connection
-resource connIa 'Microsoft.Web/connections@2021-08-01' = {
+resource connIa 'Microsoft.Web/connections@2016-06-01' = {
   name: 'integrationaccount'
   location: location
   properties: {
@@ -230,8 +227,6 @@ resource connIa 'Microsoft.Web/connections@2021-08-01' = {
     }
     parameterValues: {
       integrationAccountName: effectiveIaName
-      // If IA is in another RG/sub, switch to subscription-scope deployment
-      // and pass integrationAccountResourceId as needed.
     }
   }
 }
