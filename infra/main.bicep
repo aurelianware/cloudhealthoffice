@@ -26,7 +26,7 @@ param blobAccountName string = ''       // if empty, will use stg.name
 @secure()
 param blobAccountKey string = ''        // if empty, will use stg.listKeys().keys[0].value
 
-// Service Bus connection string (SAS)
+// Service Bus connection string (SAS) - will be generated dynamically from created Service Bus
 @secure()
 param serviceBusConnectionString string = ''
 
@@ -38,6 +38,7 @@ var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
 var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
+var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
 
 
 // =========================
@@ -204,7 +205,7 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'servicebus')
     }
     parameterValues: {
-      connectionString: serviceBusConnectionString
+      connectionString: serviceBusConnectionStringGenerated
     }
   }
 }
