@@ -7,11 +7,13 @@ A complete Azure Logic Apps solution for processing HIPAA-compliant medical atta
 This solution implements the following process:
 1. **SFTP Polling**: Monitors Availity SFTP for new 275 attachment files (ingest275 workflow)
 2. **Data Lake Archive**: Stores raw files in Azure Data Lake Storage Gen2 with date-based partitioning
-3. **X12 Decoding**: Processes 275 messages via Integration Account
+3. **X12 Decoding**: Processes 275/278 messages via Integration Account
 4. **Metadata Extraction**: Extracts claim, member, and provider information
 5. **QNXT Integration**: Links attachments to claims via QNXT API
 6. **Service Bus**: Publishes events for downstream processing
 7. **RFAI Processing**: Handles Request for Additional Information via rfai277 workflow
+8. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
+9. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 
 ## 📦 Current Production Deployment
 
@@ -20,7 +22,7 @@ This solution implements the following process:
 - **Logic App Standard**: `hipaa-logic-la` ✅ RUNNING
 - **Storage Account**: `hipaa7v2rrsoo6tac2` (Data Lake Gen2 enabled) ✅
 - **Service Bus Namespace**: `hipaa-logic-svc` (Standard tier) ✅
-  - Topics: `attachments-in`, `rfai-requests` ✅
+  - Topics: `attachments-in`, `rfai-requests`, `edi-278` ✅
 - **Application Insights**: `hipaa-logic-ai` ✅
 
 ### 🌐 Resource URLs
@@ -33,12 +35,15 @@ This solution implements the following process:
 ### Workflows
 - `logicapps/workflows/ingest275/workflow.json`: Main 275 ingestion workflow
 - `logicapps/workflows/rfai277/workflow.json`: Outbound 277 RFAI workflow
+- `logicapps/workflows/ingest278/workflow.json`: X12 278 transaction processing workflow
+- `logicapps/workflows/replay278/workflow.json`: HTTP endpoint for deterministic 278 replay
 
 ### Key Features
-- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/275/yyyy/MM/dd/` partitioning
+- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278}/yyyy/MM/dd/` partitioning
 - **Retry Logic**: 4 retries with 15-second intervals for QNXT API calls
 - **Error Handling**: Service Bus dead-letter support
 - **Monitoring**: Application Insights integration
+- **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
 
 ## Build & Deployment
 
@@ -165,17 +170,19 @@ After deployment, configure:
    ```
 
 2. **Set up Integration Account**
-   - Import X12 schemas for 275 and 277 message types
+   - Import X12 schemas for 275, 277, and 278 message types
    - Configure trading partner agreements
-   - Update workflow parameters: `x12_275_messagetype`, `x12_277_messagetype`
+   - Update workflow parameters: `x12_275_messagetype`, `x12_277_messagetype`, `x12_278_messagetype`
 
 3. **Configure Logic App Parameters**
    ```json
    {
      "sftp_inbound_folder": "/inbound/attachments",
      "blob_raw_folder": "hipaa-attachments/raw/275",
+     "blob_raw_folder_278": "hipaa-attachments/raw/278",
      "sb_namespace": "hipaa-attachments-uat-sb",
      "sb_topic": "attachments-in",
+     "sb_topic_edi278": "edi-278",
      "qnxt_base_url": "https://qnxt-api-uat.example.com",
      "x12_sender_id": "AVAILITY",
      "x12_receiver_id": "PCHP"
@@ -200,7 +207,7 @@ After deployment, configure:
 **UAT Environment:**
 - SFTP Endpoint: Configure for UAT Availity environment
 - QNXT API: Point to UAT QNXT instance
-- Service Bus Topics: `attachments-in`, `rfai-requests`
+- Service Bus Topics: `attachments-in`, `rfai-requests`, `edi-278`
 - Storage Container: `hipaa-attachments`
 
 **Production Considerations:**
@@ -215,11 +222,64 @@ Files are organized in Azure Data Lake Storage Gen2 as:
 ```
 hipaa-attachments/
 ├── raw/
-│   └── 275/
+│   ├── 275/
+│   │   └── yyyy/
+│   │       └── MM/
+│   │           └── dd/
+│   │               └── filename_timestamp.edi
+│   └── 278/
 │       └── yyyy/
 │           └── MM/
 │               └── dd/
-│                   └── filename_timestamp.edi
+│                   └── filename_278_timestamp.edi
 ```
 
 This partitioning structure supports efficient querying and data management in the data lake.
+
+## 278 Replay Endpoint
+
+The `replay278` workflow provides a deterministic HTTP endpoint for replaying X12 278 transactions. This allows for debugging and reprocessing of specific messages.
+
+### Endpoint Usage
+
+**POST** `/api/replay278/triggers/HTTP_Replay_278_Request/invoke`
+
+**Request Body:**
+```json
+{
+  "blobUrl": "hipaa-attachments/raw/278/2024/01/15/review-request-20240115.edi",
+  "fileName": "custom-replay-name" // Optional
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "278 replay message queued successfully",
+  "data": {
+    "blobUrl": "hipaa-attachments/raw/278/2024/01/15/review-request-20240115.edi",
+    "fileName": "custom-replay-name",
+    "queueTimestamp": "2024-01-15T10:30:00Z",
+    "topicName": "edi-278"
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "status": "error",
+  "message": "Invalid blobUrl provided. Must be non-empty and contain 'hipaa-attachments' path.",
+  "data": {
+    "providedBlobUrl": "invalid-path",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Features
+- **Validation**: Ensures blobUrl contains 'hipaa-attachments' path
+- **Queueing**: Enqueues message to `edi-278` Service Bus topic for processing
+- **Logging**: Records replay events in Application Insights
+- **Deterministic**: Consistent replay behavior for troubleshooting
