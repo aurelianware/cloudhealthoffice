@@ -39,12 +39,35 @@ jobs:
       - name: Ensure resource group
         run: az group create -n "$RG_NAME" -l "$LOCATION"
 
-      - name: Deploy infrastructure (Bicep)
+        - name: Deploy infrastructure (Bicep)
+        shell: bash
         run: |
-          az deployment group create \
+          set -euo pipefail
+          DEPLOY_NAME="main-$(date +%s)"
+      
+          # optional: pass connectorLocation if you added that param in bicep
+          PARAMS=( --parameters location="$LOCATION" baseName="hipaa-logic" )
+          # PARAMS+=( connectorLocation="westus2" )  # uncomment if your bicep expects it
+      
+          echo "Starting deployment: $DEPLOY_NAME"
+          if ! az deployment group create \
             --resource-group "$RG_NAME" \
+            --name "$DEPLOY_NAME" \
             --template-file infra/main.bicep \
-            --parameters location="$LOCATION" baseName="hipaa-logic"
+            "${PARAMS[@]}" \
+            --output jsonc \
+            --only-show-errors
+          then
+            echo "Deployment failed. Fetching details..."
+            az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.error" -o json || true
+            az deployment operation group list -g "$RG_NAME" -n "$DEPLOY_NAME" -o table || true
+            exit 1
+          fi
+      
+          echo "Deployment succeeded."
+          # Surface outputs for later steps if needed:
+          az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs" -o jsonc
+      
       - name: Deploy Logic App workflows
         run: |
           # Get the Logic App name from infra outputs
