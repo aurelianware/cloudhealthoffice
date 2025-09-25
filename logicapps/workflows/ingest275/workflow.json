@@ -59,18 +59,18 @@
         },
         "runAfter": { "Store_Raw_in_Blob": [ "Succeeded" ] }
       },
-      "Extract_Metadata": {
-        "type": "Compose",
-        "inputs": {
-          "claimNumber": "@{coalesce(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'], '')}",
-          "memberId": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1'], equals(item()?['NM101'],'IL')))?['NM109'], '')}",
-          "providerNpi": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1'], equals(item()?['NM101'],'PR')))?['NM109'], '')}",
-          "serviceFromDate": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTM'], equals(item()?['DTM01'],'472')))?['DTM02'], '')}",
-          "rfaiReference": "@{coalesce(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[0]?['REF02'], '')}"
-        },
-        "runAfter": { "Decode_X12_275": [ "Succeeded" ] }
-      },
-      "Branch_Solicited": {
+   "Extract_Metadata": {
+  "type": "Compose",
+  "inputs": {
+    "claimNumber": "@{coalesce(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'], '')}",
+    "memberId": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1'], equals(item()?['NM101'],'IL')))?['NM109'], '')}",
+    "providerNpi": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1'], equals(item()?['NM101'],'PR')))?['NM109'], '')}",
+    "serviceFromDate": "@{coalesce(first(where(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTM'], equals(item()?['DTM01'],'472')))?['DTM02'], '')}",
+    "rfaiReference": "@{coalesce(body('Decode_X12_275')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[0]?['REF02'], '')}"
+  },
+  "runAfter": { "Decode_X12_275": [ "Succeeded" ] }
+  },
+  "Branch_Solicited": {
         "type": "If",
         "expression": {
           "not": [
