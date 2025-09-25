@@ -48,39 +48,39 @@ jobs:
       - name: Ensure resource group
         run: az group create -n "$RG_NAME" -l "$LOCATION"
 
-      - name: Deploy infrastructure (Bicep)
-        shell: bash
-        run: |
-          set -euo pipefail
-          set -x
+- name: Deploy infrastructure (Bicep)
+  shell: bash
+  run: |
+    set -euo pipefail
+    set -x
 
-          # Sanity: template exists
-          ls -la infra
-          test -f infra/main.bicep
+    # Sanity: template exists
+    ls -la infra
+    test -f infra/main.bicep
 
-          # Compile to catch syntax issues early
-          az bicep build --file infra/main.bicep -o /tmp/main.json
+    # Compile to catch syntax issues early (use --outfile, not -o)
+    az bicep build --file infra/main.bicep --outfile /tmp/main.json
 
-          # Validate first (prints real ARM errors)
-          az deployment group validate \
-            --resource-group "$RG_NAME" \
-            --template-file infra/main.bicep \
-            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            -o jsonc
+    # Validate first (prints real ARM errors)
+    az deployment group validate \
+      --resource-group "$RG_NAME" \
+      --template-file infra/main.bicep \
+      --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
+      -o jsonc
 
-          # Deploy with unique name
-          DEPLOY_NAME="main-$(date +%s)"
-          az deployment group create \
-            --resource-group "$RG_NAME" \
-            --name "$DEPLOY_NAME" \
-            --template-file infra/main.bicep \
-            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            -o jsonc --only-show-errors
+    # Deploy with unique name
+    DEPLOY_NAME="main-$(date +%s)"
+    az deployment group create \
+      --resource-group "$RG_NAME" \
+      --name "$DEPLOY_NAME" \
+      --template-file infra/main.bicep \
+      --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
+      -o jsonc --only-show-errors
 
-          # Export Logic App name for next step
-          LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
-          echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
-          echo "Deployment succeeded. Logic App: $LA_NAME"
+    # Export Logic App name for next step
+    LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
+    echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
+    echo "Deployment succeeded. Logic App: $LA_NAME"
 
       - name: Deploy Logic App workflows
         shell: bash
