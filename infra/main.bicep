@@ -89,12 +89,54 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
 }
 
 // Integration Account (Free tier)
-resource integrationAccount 'Microsoft.Logic/integrationAccounts@2019-05-01' = {
-  name: '${baseName}-ia'
+@allowed([
+  'Free'
+  'Basic'
+  'Standard'
+])
+param iaSku string = 'Free'          // Free by default
+param useExistingIa bool = true      // true = reuse, false = create
+param iaName string = '${baseName}-ia'
+param iaResourceGroup string = resourceGroup().name  // change if IA is elsewhere
+
+// scope to the RG that holds your existing IA
+resource iaRg 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
+  name: iaResourceGroup
+}
+
+// Reference existing
+resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = if (useExistingIa) {
+  scope: iaRg
+  name: iaName
+}
+
+// Create new
+@allowed([
+  'Free'
+  'Basic'
+  'Standard'
+])
+param iaSku string = 'Free'          // Free by default
+param useExistingIa bool = true      // true = reuse, false = create
+param iaName string = '${baseName}-ia'
+param iaResourceGroup string = resourceGroup().name  // change if IA is elsewhere
+
+// scope to the RG that holds your existing IA
+resource iaRg 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
+  name: iaResourceGroup
+}
+
+// Reference existing
+resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = if (useExistingIa) {
+  scope: iaRg
+  name: iaName
+}
+
+// Create new
+resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExistingIa) {
+  name: iaName
   location: location
-  sku: { 
-    name: 'Free' 
-  }
+  sku: { name: iaSku }
   properties: {}
 }
 
@@ -104,3 +146,4 @@ output serviceBusNamespace string = sb.name
 output logicAppName string = la.name
 output appInsightsName string = insights.name
 output integrationAccountName string = integrationAccount.name
+output integrationAccountName string = useExistingIa ? iaExisting.name : iaNew.name
