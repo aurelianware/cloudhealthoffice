@@ -1,13 +1,17 @@
 // =========================
 // Parameters
 // =========================
-param location string = resourceGroup().location        // core resources region (westus via workflow)
+param location string = resourceGroup().location        // core resources region
 param connectorLocation string = 'westus2'              // managed API connections region
 param baseName string = 'hipaa-logic'
 param storageSku string = 'Standard_LRS'
 
 // Integration Account controls (create or reuse in THIS RG)
-@allowed([ 'Free', 'Basic', 'Standard' ])
+@allowed([
+  'Free',
+  'Basic',
+  'Standard'
+])
 param iaSku string = 'Free'
 param useExistingIa bool = true
 param iaName string = '${baseName}-ia'
@@ -39,7 +43,7 @@ var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 
 
 // =========================
-/* Storage (ADLS Gen2) */
+// Storage (ADLS Gen2)
 // =========================
 resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
@@ -54,17 +58,22 @@ resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 
 resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   name: '${stg.name}/default/hipaa-attachments'
-  properties: { publicAccess: 'None' }
+  properties: {
+    publicAccess: 'None'
+  }
 }
 
 
 // =========================
-/* Service Bus (Standard) */
+// Service Bus (Standard)
 // =========================
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   name: '${baseName}-svc'
   location: location
-  sku: { name: 'Standard', tier: 'Standard' }
+  sku: {
+    name: 'Standard',
+    tier: 'Standard'
+  }
 }
 
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
@@ -87,23 +96,28 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
 
 
 // =========================
-/* Application Insights */
+// Application Insights
 // =========================
 resource insights 'Microsoft.Insights/components@2020-02-02' = {
   name: '${baseName}-ai'
   location: location
   kind: 'web'
-  properties: { Application_Type: 'web' }
+  properties: {
+    Application_Type: 'web'
+  }
 }
 
 
 // =========================
-/* Logic App Standard (Plan + App) */
+// Logic App Standard (Plan + App)
 // =========================
 resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: '${baseName}-plan'
   location: location
-  sku: { name: 'WS1', tier: 'WorkflowStandard' }
+  sku: {
+    name: 'WS1',
+    tier: 'WorkflowStandard'
+  }
   kind: 'elastic'
   properties: {
     elasticScaleEnabled: false
@@ -119,39 +133,23 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
     siteConfig: {
       netFrameworkVersion: 'v6.0'
       appSettings: [
-        {
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
-        },
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        },
-        {
-          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: insights.properties.InstrumentationKey
-        },
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: insights.properties.ConnectionString
-        },
-        {
-          name: 'FUNCTIONS_EXTENSION_VERSION'
-          value: '~4'
-        },
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'node'
-        }
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' },
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' },
+        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey },
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString },
+        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' },
+        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
       ]
     }
   }
-  identity: { type: 'SystemAssigned' }
+  identity: {
+    type: 'SystemAssigned'
+  }
 }
 
 
 // =========================
-/* Integration Account (reuse or create in THIS RG) */
+// Integration Account (reuse or create in THIS RG)
 // =========================
 resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = if (useExistingIa) {
   name: iaName
@@ -160,15 +158,16 @@ resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = 
 resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExistingIa) {
   name: iaName
   location: location
-  sku: { name: iaSku }
+  sku: {
+    name: iaSku
+  }
   properties: {}
 }
 
 
 // =========================
-/* Managed API Connections (2016-06-01) in connectorLocation
-   Names MUST match connections.json in repo
-*/
+// Managed API Connections (2016-06-01) in connectorLocation
+// Names MUST match connections.json in repo
 // =========================
 resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
   name: 'sftp-ssh'
@@ -181,7 +180,7 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
     parameterValues: {
       serverAddress: sftpHost
       port: sftpPort
-      authenticationType: 'Basic'     // change to 'SSHPublicKey' if using key auth
+      authenticationType: 'Basic'   // change to 'SSHPublicKey' if using key auth
       username: sftpUsername
       password: sftpPassword
     }
@@ -233,7 +232,7 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
 
 
 // =========================
-/* Outputs */
+// Outputs
 // =========================
 output storageAccountName string = stg.name
 output serviceBusNamespace string = sb.name
