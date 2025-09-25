@@ -1,33 +1,125 @@
-- name: Deploy infrastructure (Bicep)
-  shell: bash
-  run: |
-    set -euo pipefail
-    set -x
+name: Deploy
 
-    # Sanity: make sure the template exists
-    ls -la infra
-    test -f infra/main.bicep
+on:
+  push:
+    branches: [ "main", "release/*", "feature/*" ]
+  workflow_dispatch:
 
-    # Compile to ARM JSON (catches syntax)
-    az bicep build --file infra/main.bicep -o /tmp/main.json
+jobs:
+  deploy:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: PROD
+    permissions:
+      id-token: write
+      contents: read
 
-    # VALIDATE first – this returns the real ARM error body if anything is wrong
-    az deployment group validate \
-      --resource-group "$RG_NAME" \
-      --template-file infra/main.bicep \
-      --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-      -o jsonc
+    steps:
+      - uses: actions/checkout@v4
 
-    # If validate passes, deploy with a unique name
-    DEPLOY_NAME="main-$(date +%s)"
-    az deployment group create \
-      --resource-group "$RG_NAME" \
-      --name "$DEPLOY_NAME" \
-      --template-file infra/main.bicep \
-      --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-      -o jsonc --only-show-errors
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    # Capture outputs for the next step
-    LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
-    echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
-    echo "Deployment succeeded. Logic App: $LA_NAME"
+      - name: Set environment variables
+        shell: bash
+        run: |
+          echo "RG_NAME=rg-hipaa-logic-apps" >> $GITHUB_ENV
+          echo "LOCATION=westus" >> $GITHUB_ENV
+          echo "CONNECTOR_LOCATION=westus2" >> $GITHUB_ENV
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Sanity check who we are
+        run: az account show
+
+      # (Optional) one-time provider registration is safe to keep
+      - name: Ensure providers registered
+        run: |
+          az provider register --namespace Microsoft.Web
+          az provider register --namespace Microsoft.Logic
+          az provider register --namespace Microsoft.Storage
+          az provider register --namespace Microsoft.ServiceBus
+
+      - name: Ensure resource group
+        run: az group create -n "$RG_NAME" -l "$LOCATION"
+
+      - name: Deploy infrastructure (Bicep)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -x
+
+          # Sanity: template exists
+          ls -la infra
+          test -f infra/main.bicep
+
+          # Compile to catch syntax issues early
+          az bicep build --file infra/main.bicep -o /tmp/main.json
+
+          # Validate first (prints real ARM errors)
+          az deployment group validate \
+            --resource-group "$RG_NAME" \
+            --template-file infra/main.bicep \
+            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
+            -o jsonc
+
+          # Deploy with unique name
+          DEPLOY_NAME="main-$(date +%s)"
+          az deployment group create \
+            --resource-group "$RG_NAME" \
+            --name "$DEPLOY_NAME" \
+            --template-file infra/main.bicep \
+            --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
+            -o jsonc --only-show-errors
+
+          # Export Logic App name for next step
+          LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
+          echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
+          echo "Deployment succeeded. Logic App: $LA_NAME"
+
+      - name: Deploy Logic App workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Deploying Logic App workflows to: $LOGIC_APP_NAME"
+
+          TEMP_DIR=$(mktemp -d)
+
+          # Ensure correct structure in the zip
+          cp -r logicapps/workflows "$TEMP_DIR/workflows"
+
+          # host.json: use repo version if present, otherwise create a minimal one
+          if [ -f logicapps/host.json ]; then
+            cp logicapps/host.json "$TEMP_DIR/host.json"
+          else
+            cat > "$TEMP_DIR/host.json" << 'EOF'
+            {
+              "version": "2.0",
+              "extensionBundle": {
+                "id": "Microsoft.Azure.Functions.ExtensionBundle.Workflows",
+                "version": "[1.*, 2.0.0)"
+              }
+            }
+            EOF
+          fi
+
+          # Connections files (must be at package root)
+          cp logicapps/connections.json "$TEMP_DIR/"
+          cp logicapps/connections.parameters.json "$TEMP_DIR/"
+
+          # Create package and deploy
+          (cd "$TEMP_DIR" && zip -r deployment.zip . -x "deployment.zip")
+          az webapp deploy \
+            --resource-group "$RG_NAME" \
+            --name "$LOGIC_APP_NAME" \
+            --src-path "$TEMP_DIR/deployment.zip" \
+            --type zip
+
+          echo "✅ Successfully deployed workflows to Logic App: $LOGIC_APP_NAME"
+          echo "🌐 https://$LOGIC_APP_NAME.azurewebsites.net"
+          rm -rf "$TEMP_DIR"
