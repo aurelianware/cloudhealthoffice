@@ -88,30 +88,7 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
   identity: { type: 'SystemAssigned' }
 }
 
-// Integration Account (Free tier)
-@allowed([
-  'Free'
-  'Basic'
-  'Standard'
-])
-param iaSku string = 'Free'          // Free by default
-param useExistingIa bool = true      // true = reuse, false = create
-param iaName string = '${baseName}-ia'
-param iaResourceGroup string = resourceGroup().name  // change if IA is elsewhere
-
-// scope to the RG that holds your existing IA
-resource iaRg 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
-  name: iaResourceGroup
-}
-
-// Reference existing
-resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = if (useExistingIa) {
-  scope: iaRg
-  name: iaName
-}
-
-// Create new
-@allowed([
+ @allowed([
   'Free'
   'Basic'
   'Standard'
@@ -139,6 +116,9 @@ resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExisti
   sku: { name: iaSku }
   properties: {}
 }
+
+// Output whichever one is active
+output integrationAccountName string = useExistingIa ? iaExisting.name : iaNew.name
 
 // Outputs
 output storageAccountName string = stg.name
