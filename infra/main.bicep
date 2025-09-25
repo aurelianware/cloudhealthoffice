@@ -117,8 +117,6 @@ resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExisti
   properties: {}
 }
 
-// Output whichever one is active
-output integrationAccountName string = useExistingIa ? iaExisting.name : iaNew.name
 
 // Outputs
 output storageAccountName string = stg.name
