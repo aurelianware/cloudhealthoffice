@@ -32,7 +32,7 @@ param blobAccountKey string = ''      // defaulted later to stg.listKeys()[0] if
 param serviceBusConnectionString string = ''
 
 // Add near your other params
-param connectorLocation string = 'weatus2' // change to a region that has the connectors (try 'westus2' or 'westus3') 
+param connectorLocation string = 'westus2' // change to a region that has the connectors (try 'westus2' or 'westus3') 
 
 // =========================
 // Variables
