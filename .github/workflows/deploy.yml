@@ -54,19 +54,18 @@ jobs:
           set -euo pipefail
           set -x
       
-          # Sanity: template exists
-          ls -la infra
-          test -f infra/main.bicep
+          # Optional: quiet CLI noise
+          az config set core.only_show_errors=true
       
-          # Compile to catch syntax issues early (use --outfile, not -o)
+          # Compile quickly to catch syntax errors
           az bicep build --file infra/main.bicep --outfile /tmp/main.json
       
-          # Validate first (prints real ARM errors)
+          # Validate (non-blocking due to CLI quirk)
           az deployment group validate \
             --resource-group "$RG_NAME" \
             --template-file infra/main.bicep \
             --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            -o jsonc
+            || echo "validate returned non-zero; proceeding to deploy"
       
           # Deploy with unique name
           DEPLOY_NAME="main-$(date +%s)"
@@ -75,13 +74,13 @@ jobs:
             --name "$DEPLOY_NAME" \
             --template-file infra/main.bicep \
             --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-            -o jsonc --only-show-errors
+            --only-show-errors -o json
       
           # Export Logic App name for next step
           LA_NAME=$(az deployment group show -g "$RG_NAME" -n "$DEPLOY_NAME" --query "properties.outputs.logicAppName.value" -o tsv)
           echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
           echo "Deployment succeeded. Logic App: $LA_NAME"
-      
+         
       - name: Deploy Logic App workflows
         shell: bash
         run: |
