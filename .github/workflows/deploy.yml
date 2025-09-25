@@ -45,22 +45,21 @@ jobs:
             --resource-group "$RG_NAME" \
             --template-file infra/main.bicep \
             --parameters location="$LOCATION" baseName="hipaa-logic"
-
       - name: Deploy Logic App workflows
         run: |
-          # Get the Logic App name from the deployment
+          # Get the Logic App name from infra outputs
           LOGIC_APP_NAME=$(az deployment group show -g "$RG_NAME" -n main --query "properties.outputs.logicAppName.value" -o tsv)
-          
+      
           echo "Deploying Logic App workflows to: $LOGIC_APP_NAME"
-          
-          # Create temporary directory for deployment
+      
+          # Create temporary directory
           TEMP_DIR=$(mktemp -d)
-          
-          # Copy workflows and create required files for Logic Apps Standard
-          cp -r logicapps "$TEMP_DIR/"
-          
+      
+          # Copy workflows (correct depth: put under /workflows)
+          cp -r logicapps/workflows "$TEMP_DIR/workflows"
+      
           # Create host.json
-          cat > "$TEMP_DIR/host.json" << EOF
+          cat > "$TEMP_DIR/host.json" << 'EOF'
           {
             "version": "2.0",
             "extensionBundle": {
@@ -69,27 +68,24 @@ jobs:
             }
           }
           EOF
-          
-          # Create local.settings.json
-          cat > "$TEMP_DIR/local.settings.json" << EOF
-          {
-            "IsEncrypted": false,
-            "Values": {
-              "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-              "FUNCTIONS_WORKER_RUNTIME": "node"
-            }
-          }
-          EOF
-          
+      
+          # Copy connection files from repo root (adjust paths if different)
+          cp connections.json "$TEMP_DIR/"
+          cp connections.parameters.json "$TEMP_DIR/"
+      
           # Create ZIP for deployment
           cd "$TEMP_DIR"
           zip -r deployment.zip . -x "deployment.zip"
-          
+      
           # Deploy to Logic App Standard
-          az webapp deploy --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME" --src-path deployment.zip --type zip
-          
+          az webapp deploy \
+            --resource-group "$RG_NAME" \
+            --name "$LOGIC_APP_NAME" \
+            --src-path deployment.zip \
+            --type zip
+      
           echo "✅ Successfully deployed workflows to Logic App: $LOGIC_APP_NAME"
           echo "🌐 Logic App URL: https://$LOGIC_APP_NAME.azurewebsites.net"
-          
+      
           # Clean up
           rm -rf "$TEMP_DIR"
