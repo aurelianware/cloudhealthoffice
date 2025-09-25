@@ -8,9 +8,7 @@ param storageSku string = 'Standard_LRS'
 
 // Integration Account controls (create or reuse in THIS RG)
 @allowed([
-  'Free',
-  'Basic',
-  'Standard'
+  'Free','Basic','Standard'
 ])
 param iaSku string = 'Free'
 param useExistingIa bool = true
