@@ -131,12 +131,7 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
     siteConfig: {
       netFrameworkVersion: 'v6.0'
       appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' },
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' },
-        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey },
-        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString },
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' },
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' },{ name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' },{ name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey },{ name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString },{ name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' },{ name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
       ]
     }
   }
