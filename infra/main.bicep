@@ -99,7 +99,7 @@ param iaName string = '${baseName}-ia'
 param iaResourceGroup string = resourceGroup().name  // change if IA is elsewhere
 
 // scope to the RG that holds your existing IA
-resource iaResourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
+resource iaRg 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
   name: iaResourceGroup
 }
 
