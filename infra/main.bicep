@@ -1,50 +1,15 @@
-// =========================
-// Parameters
-// =========================
+param subscriptionId string = 'caf68aff-3bee-40e3-bf26-c4166efa952b'
 param location string = resourceGroup().location
-param baseName string = 'hipaa-attachments'
+param connectorLocation string = 'westus2'
+param baseName string = 'hipaa-logic'
 param storageSku string = 'Standard_LRS'
 
-// Integration Account controls (same RG only in group-scope)
-@allowed([
-  'Free'
-  'Basic'
-  'Standard'
-])
-param iaSku string = 'Free'           // keep Free to save credits (watch regional quota)
-param useExistingIa bool = true       // true=reuse IA; false=create IA in this RG
-param iaName string = '${baseName}-ia'
-
-// SFTP connection params
-param sftpHost string = 'sftp.example.com'
-param sftpPort string = '22'
-param sftpUsername string = 'logicapp'
-@secure()
-param sftpPassword string = ''        // or leave empty if you switch to key auth
-
-// Blob connection params (you can let these come from the stg we create below)
-param blobAccountName string = ''     // defaulted later to stg.name if empty
-@secure()
-param blobAccountKey string = ''      // defaulted later to stg.listKeys()[0] if empty
-
-// Service Bus connection string (SAS)
-@secure()
-param serviceBusConnectionString string = ''
-
-// Add near your other params
-param connectorLocation string = 'westus2' // change to a region that has the connectors (try 'westus2' or 'westus3') 
-
-// =========================
-// Variables
-// =========================
+// Unique storage account name
 var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
-var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
-var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
 
-
-// =========================
-// Storage (Data Lake Gen2)
-// =========================
+// ----------------------
+// Storage
+// ----------------------
 resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
   location: location
@@ -61,10 +26,9 @@ resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
   properties: { publicAccess: 'None' }
 }
 
-
-// =========================
-// Service Bus (Standard)
-// =========================
+// ----------------------
+// Service Bus
+// ----------------------
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   name: '${baseName}-svc'
   location: location
@@ -89,10 +53,9 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
   properties: {}
 }
 
-
-// =========================
-// Application Insights
-// =========================
+// ----------------------
+// App Insights
+// ----------------------
 resource insights 'Microsoft.Insights/components@2020-02-02' = {
   name: '${baseName}-ai'
   location: location
@@ -100,18 +63,15 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
   properties: { Application_Type: 'web' }
 }
 
-
-// =========================
-// Logic App Standard (Plan + App)
-// =========================
+// ----------------------
+// Logic App Standard
+// ----------------------
 resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: '${baseName}-plan'
   location: location
   sku: { name: 'WS1', tier: 'WorkflowStandard' }
   kind: 'elastic'
-  properties: {
-    elasticScaleEnabled: false
-  }
+  properties: { elasticScaleEnabled: false }
 }
 
 resource la 'Microsoft.Web/sites@2022-03-01' = {
@@ -123,30 +83,33 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
     siteConfig: {
       netFrameworkVersion: 'v6.0'
       appSettings: [
-        // Storage for runtime
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
-
-        // App Insights
+        {
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+        }
+        {
+          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+        }
+        { name: 'WEBSITE_CONTENTSHARE', value: '${baseName}-la' }
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
-
-        // Functions/LA runtime
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }  // LA Standard uses the Functions host
-
-        // Zip deploy friendliness
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
+        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
       ]
     }
   }
   identity: { type: 'SystemAssigned' }
 }
 
-
-// =========================
+// ----------------------
 // Integration Account
-// (reuse or create in THIS RG)
-// =========================
+// ----------------------
+@allowed([ 'Free' 'Basic' 'Standard' ])
+param iaSku string = 'Free'
+param useExistingIa bool = true
+param iaName string = '${baseName}-ia'
+
 resource iaExisting 'Microsoft.Logic/integrationAccounts@2019-05-01' existing = if (useExistingIa) {
   name: iaName
 }
@@ -158,91 +121,38 @@ resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExisti
   properties: {}
 }
 
-var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
-
-
-// =========================
-/* Managed API Connections
-   Names MUST match your connections.json:
-   - sftp-ssh
-   - azureblob
-   - servicebus
-   - integrationaccount
-*/
-// =========================
-
-resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
+// ----------------------
+// Connections (managed APIs for Logic Apps Standard)
+// ----------------------
+resource conn_sftp 'Microsoft.Web/connections@2016-06-01' = {
   name: 'sftp-ssh'
   location: connectorLocation
-  properties: {
-    displayName: 'sftp-ssh'
-    api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'sftp-ssh')
-    }
-    parameterValues: {
-      serverAddress: sftpHost
-      port: sftpPort                // string
-      authenticationType: 'Basic'
-      username: sftpUsername
-      password: sftpPassword
-    }
-  }
+  properties: { displayName: 'sftp-ssh' }
 }
 
-resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
+resource conn_blob 'Microsoft.Web/connections@2016-06-01' = {
   name: 'azureblob'
   location: connectorLocation
-  properties: {
-    displayName: 'azureblob'
-    api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'azureblob')
-    }
-    parameterValues: {
-      accountName: effectiveBlobAccountName
-      accessKey:  effectiveBlobAccountKey
-    }
-  }
+  properties: { displayName: 'azureblob' }
 }
 
-resource connSb 'Microsoft.Web/connections@2016-06-01' = {
+resource conn_sb 'Microsoft.Web/connections@2016-06-01' = {
   name: 'servicebus'
   location: connectorLocation
-  properties: {
-    displayName: 'servicebus'
-    api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'servicebus')
-    }
-    parameterValues: {
-      connectionString: serviceBusConnectionString
-    }
-  }
+  properties: { displayName: 'servicebus' }
 }
 
-resource connIa 'Microsoft.Web/connections@2016-06-01' = {
+resource conn_ia 'Microsoft.Web/connections@2016-06-01' = {
   name: 'integrationaccount'
   location: connectorLocation
-  properties: {
-    displayName: 'integrationaccount'
-    api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'integrationaccount')
-    }
-    parameterValues: {
-      integrationAccountName: effectiveIaName
-    }
-  }
+  properties: { displayName: 'integrationaccount' }
 }
 
-
-// =========================
+// ----------------------
 // Outputs
-// =========================
+// ----------------------
 output storageAccountName string = stg.name
 output serviceBusNamespace string = sb.name
 output logicAppName string = la.name
 output appInsightsName string = insights.name
-output integrationAccountName string = effectiveIaName
-
-output sftpConnectionId string = connSftp.id
-output blobConnectionId string = connBlob.id
-output serviceBusConnectionId string = connSb.id
-output integrationAccountConnectionId string = connIa.id
+output integrationAccountName string = useExistingIa ? iaExisting.name : iaNew.name
