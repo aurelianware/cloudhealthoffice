@@ -164,12 +164,12 @@ resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExisti
 // Names MUST match connections.json in repo
 // =========================
 resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
-  name: 'sftp-ssh'
+  name: 'sftpwithssh'
   location: connectorLocation
   properties: {
     displayName: 'sftp-ssh'
     api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'sftp-ssh')
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'sftpwithssh')
     }
     parameterValues: {
       serverAddress: sftpHost
