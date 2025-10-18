@@ -2,7 +2,7 @@
 // Parameters
 // =========================
 param location string = resourceGroup().location        // core resources region
-param connectorLocation string = 'westus2'              // managed API connections region
+param connectorLocation string = 'westus'              // managed API connections region
 param baseName string = 'hipaa-logic'
 param storageSku string = 'Standard_LRS'
 
