@@ -33,9 +33,9 @@ param serviceBusConnectionString string = ''
 // @description('Existing Integration Account name (in this RG)')
 // param integrationAccountName string = iaName
 
-@secure()
-@description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
-param integrationAccountCallbackUrl string
+// @secure()
+// @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
+// param integrationAccountCallbackUrl string
 
 // =========================
 // Variables
