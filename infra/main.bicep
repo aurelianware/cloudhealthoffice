@@ -173,7 +173,6 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
     }
     parameterValues: {
       hostName: sftpHost
-      port: sftpPort
       authenticationType: 'Basic'
       username: sftpUsername
       password: sftpPassword
