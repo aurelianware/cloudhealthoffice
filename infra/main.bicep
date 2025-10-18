@@ -30,8 +30,8 @@ param blobAccountKey string = ''        // if empty, will use stg.listKeys().key
 @secure()
 param serviceBusConnectionString string = ''
 
-@description('Existing Integration Account name (in this RG)')
-param integrationAccountName string = iaName
+// @description('Existing Integration Account name (in this RG)')
+// param integrationAccountName string = iaName
 
 @secure()
 @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
@@ -214,8 +214,9 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
+// Keep your api.id -> 'x12' (or 'as2' if you switch later)
 resource connIa 'Microsoft.Web/connections@2016-06-01' = {
-  name: 'integrationaccount'     // keep this name to match connections.json
+  name: 'integrationaccount'
   location: connectorLocation
   properties: {
     displayName: 'integrationaccount'
@@ -223,12 +224,13 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      integrationAccountId: resourceId('Microsoft.Logic/integrationAccounts', integrationAccountName)
-      integrationAccountSasUrl: integrationAccountCallbackUrl
+      // ✅ Correct for managed X12/AS2 connector:
+      integrationAccount: {
+        id: resourceId('Microsoft.Logic/integrationAccounts', integrationAccountName)
+      }
     }
   }
 }
-
 
 // =========================
 // Outputs
