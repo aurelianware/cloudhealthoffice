@@ -16,7 +16,7 @@ param iaName string = '${baseName}-ia'
 
 // SFTP connection params
 param sftpHost string = 'sftp.example.com'
-param sftpPort string = '22'            // NOTE: string for 2016-06-01 API
+// param sftpPort string = '22'            // NOTE: string for 2016-06-01 API
 param sftpUsername string = 'logicapp'
 @secure()
 param sftpPassword string = ''          // if key-based auth, change parameterValues below
