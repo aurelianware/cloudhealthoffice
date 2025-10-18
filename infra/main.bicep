@@ -5,7 +5,7 @@ param location string = resourceGroup().location        // core resources region
 param connectorLocation string = 'westus'              // managed API connections region
 param baseName string = 'hipaa-logic'
 param storageSku string = 'Standard_LRS'
-a at an
+
 // Integration Account controls (create or reuse in THIS RG)
 @allowed([
   'Free','Basic','Standard'
