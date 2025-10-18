@@ -71,7 +71,7 @@ jobs:
             az deployment group what-if \
               --resource-group "$RG_NAME" \
               --template-file infra/main.bicep \
-              --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" integrationAccountCallbackUrl="$INTEGRATION_ACCOUNT_CALLBACK_URL" \
+              --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
               --no-pretty-print || true
       - name: Deploy Infrastructure
         uses: azure/arm-deploy@v2
@@ -79,7 +79,7 @@ jobs:
           scope: resourcegroup
           resourceGroupName: ${{ env.RG_NAME }}
           template: infra/main.bicep
-          parameters: location=${{ env.LOCATION }} baseName=hipaa-logic connectorLocation=${{ env.CONNECTOR_LOCATION }} integrationAccountCallbackUrl='${{ secrets.INTEGRATION_ACCOUNT_CALLBACK_URL }}'
+          parameters: location=${{ env.LOCATION }} baseName=hipaa-logic connectorLocation=${{ env.CONNECTOR_LOCATION }}
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
 
       - name: Get Logic App name
