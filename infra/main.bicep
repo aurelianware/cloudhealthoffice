@@ -214,7 +214,6 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
-// Keep your api.id -> 'x12' (or 'as2' if you switch later)
 resource connIa 'Microsoft.Web/connections@2016-06-01' = {
   name: 'integrationaccount'
   location: connectorLocation
@@ -224,9 +223,8 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      // ✅ Correct for managed X12/AS2 connector:
       integrationAccount: {
-        id: resourceId('Microsoft.Logic/integrationAccounts', integrationAccountName)
+        id: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)  // <-- use effectiveIaName
       }
     }
   }
