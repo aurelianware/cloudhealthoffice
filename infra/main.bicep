@@ -223,12 +223,6 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      // ❌ remove this:
-      // integrationAccount: {
-      //   id: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
-      // }
-
-      // ✅ use this instead:
       integrationAccountId: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
     }
   }
