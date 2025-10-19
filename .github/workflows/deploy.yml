@@ -86,7 +86,8 @@ jobs:
             baseName=hipaa-logic
             connectorLocation=${{ env.CONNECTOR_LOCATION }}
             enableB2B=true
-            integrationAccountCallbackUrl='${{ secrets.INTEGRATION_ACCOUNT_CALLBACK_URL }}'
+            useExisting=true
+            iaName=hipaa-attachments-ia
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
                   
 
