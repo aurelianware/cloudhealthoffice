@@ -8,51 +8,42 @@ param storageSku string = 'Standard_LRS'
 
 // Integration Account controls (create or reuse in THIS RG)
 @allowed([
-  'Free','Basic','Standard'
+  'Free'
+  'Basic'
+  'Standard'
 ])
 param iaSku string = 'Free'
 param useExistingIa bool = true
 param iaName string = '${baseName}-ia'
-var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 
+// Toggle B2B (X12) managed connection
+param enableB2B bool = true
 
 // SFTP connection params
 param sftpHost string = 'sftp.example.com'
-// param sftpPort string = '22'            // NOTE: string for 2016-06-01 API
 param sftpUsername string = 'logicapp'
 @secure()
-param sftpPassword string = ''          // if key-based auth, change parameterValues below
+param sftpPassword string = ''          // if key-based auth, change connection param block
 
 // Blob connection params (defaults resolved from storage created here)
-param blobAccountName string = ''       // if empty, will use stg.name
+param blobAccountName string = ''       // if empty, uses stg.name
 @secure()
-param blobAccountKey string = ''        // if empty, will use stg.listKeys().keys[0].value
+param blobAccountKey string = ''        // if empty, uses stg.listKeys().keys[0].value
 
-// Service Bus connection string (SAS) - will be generated dynamically from created Service Bus
+// Service Bus connection string (SAS) - optional; if empty, we generate from auth rule
 @secure()
 param serviceBusConnectionString string = ''
 
-// @description('Existing Integration Account name (in this RG)')
-// param integrationAccountName string = iaName
-
-// @secure()
-// @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
-// param integrationAccountCallbackUrl string
-
-// ---- params (add these) ----
-@description('Enable B2B (X12/AS2) managed connection')
-param enableB2B bool = true
-
-// @secure()
-// @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
-// param integrationAccountCallbackUrl string
 
 // =========================
-// Variables
+ // Variables
 // =========================
 var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
+
+// IA name resolved whether creating new or reusing existing
+var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 
 
 // =========================
@@ -78,7 +69,7 @@ resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
 
 
 // =========================
-// Service Bus (Standard)
+ // Service Bus (Standard)
 // =========================
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   name: '${baseName}-svc'
@@ -89,7 +80,7 @@ resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   }
 }
 
-// Authorization rule on the namespace (needed to get keys)
+// Authorization rule (needed to get keys)
 resource sbAuth 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10-01-preview' = {
   name: '${sb.name}/RootManageSharedAccessKey'
   parent: sb
@@ -101,8 +92,6 @@ resource sbAuth 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10-01-p
     ]
   }
 }
-
-
 
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
@@ -121,7 +110,8 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
   name: 'edi-278'
   properties: {}
 }
-// Build the SB connection string from the rule (fallback only)
+
+// Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
   : serviceBusConnectionString
@@ -165,7 +155,12 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
     siteConfig: {
       netFrameworkVersion: 'v6.0'
       appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' },{ name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' },{ name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey },{ name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString },{ name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' },{ name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
+        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
+        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
+        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
       ]
     }
   }
@@ -208,6 +203,9 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
       hostName: sftpHost
       username: sftpUsername
       password: sftpPassword
+      // Optional hardening:
+      // acceptAnySshHostKey: true
+      // sshHostKeyFingerprint: 'SHA256:...'
     }
   }
 }
@@ -241,10 +239,8 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
-// handy var for the IA resource id (works for existing or newly created)
 var iaResourceId = resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
 
-// X12 managed connection that uses the IA resource id string
 resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
   name: 'integrationaccount'
   location: connectorLocation
@@ -254,10 +250,12 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      integrationAccountId: iaResourceId   // ✅ correct key + string value
+      // Managed X12 needs the IA ARM ID as a STRING. No SAS/Callback URL.
+      integrationAccountId: iaResourceId
     }
   }
 }
+
 
 // =========================
 // Outputs
@@ -267,9 +265,7 @@ output serviceBusNamespace string = sb.name
 output logicAppName string = la.name
 output appInsightsName string = insights.name
 output integrationAccountName string = effectiveIaName
-
-
 output sftpConnectionId string = connSftp.id
 output blobConnectionId string = connBlob.id
 output serviceBusConnectionId string = connSb.id
-output integrationAccountConnectionId string = connIa.id
+output integrationAccountConnectionId string = enableB2B ? connIa.id : 'disabled'
