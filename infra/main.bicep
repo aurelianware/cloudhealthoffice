@@ -56,9 +56,7 @@ var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].v
 // var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 // var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
 // Use the rule's connection string if none was passed in
-var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
-  ? sbAuth.listKeys().primaryConnectionString
-  : serviceBusConnectionString
+
 
 // =========================
 // Storage (ADLS Gen2)
@@ -93,6 +91,25 @@ resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
     tier: 'Standard'
   }
 }
+
+// Authorization rule on the namespace (needed to get keys)
+resource sbAuth 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10-01-preview' = {
+  name: '${sb.name}/RootManageSharedAccessKey'
+  parent: sb
+  properties: {
+    rights: [
+      'Listen'
+      'Send'
+      'Manage'
+    ]
+  }
+}
+
+// Build the SB connection string from the rule (fallback only)
+var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
+  ? sbAuth.listKeys().primaryConnectionString
+  : serviceBusConnectionString
+
 
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
