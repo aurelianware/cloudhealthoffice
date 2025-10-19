@@ -53,7 +53,7 @@ param integrationAccountCallbackUrl string
 var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
-var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
+// var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
 
 
