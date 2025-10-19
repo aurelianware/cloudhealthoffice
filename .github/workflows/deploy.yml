@@ -63,16 +63,22 @@ jobs:
             fi
             echo "✓ Bicep template compiled successfully"
 
-      - name: ARM What-If Analysis
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            echo "Running ARM What-If analysis"
-            az deployment group what-if \
-              --resource-group "$RG_NAME" \
-              --template-file infra/main.bicep \
-              --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" \
-              --no-pretty-print || true
+     # What-If
+- name: ARM What-If Analysis
+  uses: azure/cli@v2
+  with:
+    inlineScript: |
+      echo "Running ARM What-If analysis"
+      az deployment group what-if \
+        --resource-group "$RG_NAME" \
+        --template-file infra/main.bicep \
+        --parameters \
+          location="$LOCATION" \
+          baseName="hipaa-logic" \
+          connectorLocation="$CONNECTOR_LOCATION" \
+          useExistingIa=false \
+        --no-pretty-print || true
+
       - name: Deploy Infrastructure
         uses: azure/arm-deploy@v2
         with:
