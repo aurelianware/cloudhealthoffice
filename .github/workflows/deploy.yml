@@ -67,18 +67,14 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
+            echo "Running ARM What-If analysis"
             az deployment group what-if \
               --resource-group "$RG_NAME" \
               --template-file infra/main.bicep \
-              --parameters \
-                location="$LOCATION" \
-                baseName="hipaa-logic" \
-                connectorLocation="$CONNECTOR_LOCATION" \
-                useExistingIa=true \
-                iaName="hipaa-attachments-ia" \
+              --parameters location="$LOCATION" baseName="hipaa-logic" connectorLocation="$CONNECTOR_LOCATION" enableB2B=true \
               --no-pretty-print || true
       
-      # Deploy
+            # Deploy
       - name: Deploy Infrastructure
         uses: azure/arm-deploy@v2
         with:
@@ -89,8 +85,8 @@ jobs:
             location=${{ env.LOCATION }}
             baseName=hipaa-logic
             connectorLocation=${{ env.CONNECTOR_LOCATION }}
-            useExistingIa=true
-            iaName=hipaa-attachments-ia
+            enableB2B=true
+            integrationAccountCallbackUrl='${{ secrets.INTEGRATION_ACCOUNT_CALLBACK_URL }}'
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
                   
 
