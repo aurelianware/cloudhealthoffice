@@ -43,9 +43,9 @@ param serviceBusConnectionString string = ''
 @description('Enable B2B (X12/AS2) managed connection')
 param enableB2B bool = true
 
-@secure()
-@description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
-param integrationAccountCallbackUrl string
+// @secure()
+// @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
+// param integrationAccountCallbackUrl string
 
 // =========================
 // Variables
