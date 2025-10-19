@@ -91,18 +91,28 @@ jobs:
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
                   
 
-     # What-If
-      - name: Show last deployment error (if any)
-        if: failure()
+      - name: Show failing operation (full)
         uses: azure/cli@v2
         with:
           inlineScript: |
+            DEPLOY_NAME="hipaa-logic-infra-91"   # or ${{ github.run_number }} for current run
+            echo "Listing failed ops..."
             az deployment operation group list \
               --resource-group "$RG_NAME" \
-              --name "hipaa-logic-infra-${{ github.run_number }}" \
-              --query "[?properties.provisioningState=='Failed'].{op:id,code:properties.statusCode,msg:properties.statusMessage}" \
-              -o json | jq .
-
+              --name "$DEPLOY_NAME" \
+              --query "[?properties.provisioningState=='Failed']" -o jsonc
+      
+            echo "Showing full statusMessage for each failed op..."
+            for OP in $(az deployment operation group list \
+              --resource-group "$RG_NAME" \
+              --name "$DEPLOY_NAME" \
+              --query "[?properties.provisioningState=='Failed'].name" -o tsv); do
+              az deployment operation group show \
+                --resource-group "$RG_NAME" \
+                --name "$DEPLOY_NAME" \
+                --operation-ids "$OP" -o jsonc
+            done
+      
       - name: Get Logic App name
         uses: azure/cli@v2
         with:
