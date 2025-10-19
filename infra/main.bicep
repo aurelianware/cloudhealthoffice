@@ -214,6 +214,7 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
+// Effective IA name already picked via your vars (effectiveIaName)
 resource connIa 'Microsoft.Web/connections@2016-06-01' = {
   name: 'integrationaccount'
   location: connectorLocation
@@ -223,7 +224,8 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      integrationAccountId: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
+      // 👇 MUST be a string, and this is the correct value
+      integrationAccount: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
     }
   }
 }
