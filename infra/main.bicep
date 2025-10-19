@@ -53,9 +53,6 @@ param enableB2B bool = true
 var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
-// var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
-// var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
-// Use the rule's connection string if none was passed in
 
 
 // =========================
@@ -105,10 +102,6 @@ resource sbAuth 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10-01-p
   }
 }
 
-// Build the SB connection string from the rule (fallback only)
-var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
-  ? sbAuth.listKeys().primaryConnectionString
-  : serviceBusConnectionString
 
 
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
@@ -128,6 +121,10 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
   name: 'edi-278'
   properties: {}
 }
+// Build the SB connection string from the rule (fallback only)
+var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
+  ? sbAuth.listKeys().primaryConnectionString
+  : serviceBusConnectionString
 
 
 // =========================
