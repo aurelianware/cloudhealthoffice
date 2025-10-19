@@ -37,6 +37,14 @@ param serviceBusConnectionString string = ''
 // @description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
 // param integrationAccountCallbackUrl string
 
+// ---- params (add these) ----
+@description('Enable B2B (X12/AS2) managed connection')
+param enableB2B bool = true
+
+@secure()
+@description('Integration Account Callback/SAS URL (IA -> Settings -> Callback URL)')
+param integrationAccountCallbackUrl string
+
 // =========================
 // Variables
 // =========================
@@ -214,8 +222,8 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
-// Effective IA name already picked via your vars (effectiveIaName)
-resource connIa 'Microsoft.Web/connections@2016-06-01' = {
+// X12 managed connection that uses the IA callback URL
+resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
   name: 'integrationaccount'
   location: connectorLocation
   properties: {
@@ -224,8 +232,7 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      // 👇 MUST be a string, and this is the correct value
-      integrationAccount: resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
+      integrationAccountCallbackUrl: integrationAccountCallbackUrl
     }
   }
 }
