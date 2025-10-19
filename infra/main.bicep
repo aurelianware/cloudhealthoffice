@@ -80,9 +80,8 @@ resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   }
 }
 
-// Authorization rule (needed to get keys)
 resource sbAuth 'Microsoft.ServiceBus/namespaces/AuthorizationRules@2022-10-01-preview' = {
-  name: '${sb.name}/RootManageSharedAccessKey'
+  name: 'RootManageSharedAccessKey'   // ✅ leaf name only
   parent: sb
   properties: {
     rights: [
