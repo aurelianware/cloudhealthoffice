@@ -54,8 +54,11 @@ var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
 // var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
-var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
-
+// var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString) ? 'Endpoint=sb://${sb.name}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=${sb.listKeys().primaryKey}' : serviceBusConnectionString
+// Use the rule's connection string if none was passed in
+var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
+  ? sbAuth.listKeys().primaryConnectionString
+  : serviceBusConnectionString
 
 // =========================
 // Storage (ADLS Gen2)
@@ -223,6 +226,7 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
     }
   }
 }
+
 // handy var for the IA resource id (works for existing or newly created)
 var iaResourceId = resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
 
