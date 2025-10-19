@@ -226,7 +226,7 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
 // handy var for the IA resource id (works for existing or newly created)
 var iaResourceId = resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
 
-// X12 managed connection that uses the IA *resource id string*
+// X12 managed connection that uses the IA resource id string
 resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
   name: 'integrationaccount'
   location: connectorLocation
@@ -236,8 +236,7 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      // MUST be a plain string, not { id: ... } and not a callback URL
-      integrationAccount: iaResourceId
+      integrationAccountId: iaResourceId   // ✅ correct key + string value
     }
   }
 }
