@@ -129,27 +129,26 @@ jobs:
             fi
             echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
             echo "Found Logic App: $LA_NAME"
-         
+            
       - name: Package Logic App workflows
         shell: bash
         run: |
           set -euo pipefail
           WF_PATH="logicapps"
-          PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
-          
+      
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-          
-          pushd "$PARENT_DIR" > /dev/null
-          zip -r ../workflows.zip "$BASE_NAME"
-          popd > /dev/null
-          
+      
+          # Create ZIP in the current (repo root) directory
+          zip -r workflows.zip "$BASE_NAME"
+      
           echo "Workflow package created: $(pwd)/workflows.zip"
+          ls -lh workflows.zip
           echo "Package contents:"
-          unzip -l workflows.zip | head -20
+          unzip -l workflows.zip | head -40
 
       - name: Deploy Logic App workflows
         uses: azure/cli@v2
