@@ -1,6 +1,6 @@
 {
   "definition": {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/workflowdefinition.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "triggers": {
       "ServiceBus_Edi278_Messages": {
@@ -200,7 +200,7 @@
     },
     "sb_namespace": {
       "type": "String",
-      "defaultValue": "attachments-bus"
+      "defaultValue": "hipaa-logic-svc"
     },
     "sb_topic_edi278": {
       "type": "String",
