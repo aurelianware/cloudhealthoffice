@@ -54,10 +54,9 @@ jobs:
                 allowed-values: ['true','false','on','off','yes','no','y','n']  # keep defaults
 
       # ---------- Bicep syntax check (no Azure login) ----------
-      - name: Setup Bicep CLI
-        uses: Azure/setup-bicep@v1
-        with:
-          bicep-version: v0.27.1
+      - name: Install Bicep CLI       
+        run: az bicep install
+
       - name: Bicep build (syntax only)
         run: |
           echo "Validating Bicep templates..."
