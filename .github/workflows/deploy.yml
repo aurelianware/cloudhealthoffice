@@ -134,7 +134,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          WF_PATH="logicapps/workflows"
+          WF_PATH="logicapps"
           PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
           
