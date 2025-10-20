@@ -154,7 +154,7 @@
     "sftp_inbound_folder": { "type": "String", "defaultValue": "/inbound/attachments" },
     "blob_storage_account": { "type": "String", "defaultValue": "default" },
     "blob_raw_folder": { "type": "String", "defaultValue": "hipaa-attachments/raw/275" },
-    "sb_namespace": { "type": "String", "defaultValue": "attachments-bus" },
+    "sb_namespace": { "type": "String", "defaultValue": "hipaa-logic-svc" },
     "sb_topic": { "type": "String", "defaultValue": "attachments-in" },
     "qnxt_base_url": { "type": "String", "defaultValue": "https://qnxt.api.local" },
     "qnxt_api_token": { "type": "String", "defaultValue": "<token>" },
