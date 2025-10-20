@@ -1,0 +1,207 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_Replay_278_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "blobUrl": {
+                "type": "string",
+                "description": "URL path to the blob file to replay"
+              },
+              "fileName": {
+                "type": "string",
+                "description": "Optional custom file name for replay"
+              }
+            },
+            "required": [
+              "blobUrl"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Parse_Replay_Request": {
+        "type": "ParseJson",
+        "runAfter": {},
+        "inputs": {
+          "content": "@triggerBody()",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "blobUrl": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "blobUrl"
+            ]
+          }
+        }
+      },
+      "Validate_Blob_Url": {
+        "type": "If",
+        "expression": {
+          "and": [
+            {
+              "not": [
+                {
+                  "equals": [
+                    "@body('Parse_Replay_Request')?['blobUrl']",
+                    ""
+                  ]
+                }
+              ]
+            },
+            {
+              "contains": [
+                "@body('Parse_Replay_Request')?['blobUrl']",
+                "hipaa-attachments"
+              ]
+            }
+          ]
+        },
+        "actions": {
+          "Compose_278_Message": {
+            "type": "Compose",
+            "inputs": {
+              "blobUrl": "@body('Parse_Replay_Request')?['blobUrl']",
+              "fileName": "@{coalesce(body('Parse_Replay_Request')?['fileName'], concat('replay-278-', utcNow()))}",
+              "timestamp": "@utcNow()",
+              "replayedBy": "replay278-workflow",
+              "originalRequest": "@triggerBody()"
+            }
+          },
+          "Send_to_Edi278_Topic": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_edi278'))}/messages",
+              "body": {
+                "contentData": "@base64(string(outputs('Compose_278_Message')))",
+                "userProperties": {
+                  "messageType": "replay278",
+                  "blobUrl": "@body('Parse_Replay_Request')?['blobUrl']",
+                  "fileName": "@{coalesce(body('Parse_Replay_Request')?['fileName'], concat('replay-278-', utcNow()))}",
+                  "replayTimestamp": "@utcNow()"
+                }
+              }
+            },
+            "runAfter": {
+              "Compose_278_Message": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Replay_Event": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "X12_278_Replay_Initiated",
+                "properties": {
+                  "blobUrl": "@body('Parse_Replay_Request')?['blobUrl']",
+                  "fileName": "@{coalesce(body('Parse_Replay_Request')?['fileName'], concat('replay-278-', utcNow()))}",
+                  "replayTimestamp": "@utcNow()",
+                  "workflowName": "replay278"
+                }
+              }
+            },
+            "runAfter": {
+              "Send_to_Edi278_Topic": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Response_Success": {
+            "type": "Response",
+            "inputs": {
+              "statusCode": 200,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "status": "success",
+                "message": "278 replay message queued successfully",
+                "data": {
+                  "blobUrl": "@body('Parse_Replay_Request')?['blobUrl']",
+                  "fileName": "@{coalesce(body('Parse_Replay_Request')?['fileName'], concat('replay-278-', utcNow()))}",
+                  "queueTimestamp": "@utcNow()",
+                  "topicName": "@parameters('sb_topic_edi278')"
+                }
+              }
+            },
+            "runAfter": {
+              "Log_Replay_Event": [
+                "Succeeded",
+                "Failed"
+              ]
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Response_Error": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "status": "error",
+                  "message": "Invalid blobUrl provided. Must be non-empty and contain 'hipaa-attachments' path.",
+                  "data": {
+                    "providedBlobUrl": "@body('Parse_Replay_Request')?['blobUrl']",
+                    "timestamp": "@utcNow()"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {
+          "Parse_Replay_Request": [
+            "Succeeded"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "attachments-bus"
+    },
+    "sb_topic_edi278": {
+      "type": "String",
+      "defaultValue": "edi-278"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "sftp-ssh": {
+    "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/sftp-ssh",
+    "connectionName": "sftp-ssh",
+    "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/sftp-ssh"
+  },
+  "azureblob": {
+    "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/azureblob",
+    "connectionName": "azureblob",
+    "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/azureblob"
+  },
+  "servicebus": {
+    "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/servicebus",
+    "connectionName": "servicebus",
+    "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/servicebus"
+  },
+  "integrationaccount": {
+    "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/integrationaccount",
+    "connectionName": "integrationaccount",
+    "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/integrationaccount"
+  }
+}
