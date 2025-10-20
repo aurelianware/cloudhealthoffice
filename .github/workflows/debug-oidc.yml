@@ -1,0 +1,40 @@
+name: Debug OIDC Token
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug-token:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { env: [DEV, UAT, PROD] }
+    environment: ${{ matrix.env }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug JWT Token Content
+        run: |
+          echo "Environment from matrix: ${{ matrix.env }}"
+          echo "GitHub environment: $GITHUB_ENVIRONMENT"
+          echo "Repository: $GITHUB_REPOSITORY"
+          
+      - name: Azure Login (OIDC) 
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        continue-on-error: true
+
+      - name: Check Login Status
+        run: |
+          if az account show > /dev/null 2>&1; then
+            echo "✅ Authentication successful for ${{ matrix.env }}"
+            az account show --query "{Environment: name, Subscription: id, User: user.name}"
+          else
+            echo "❌ Authentication failed for ${{ matrix.env }}"
+          fi

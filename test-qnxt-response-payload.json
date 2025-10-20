@@ -1,0 +1,21 @@
+{
+  "claimNumber": "CLM20250924001",
+  "memberId": "123456789", 
+  "memberName": "SMITH, JOHN A",
+  "providerNpi": "1234567890",
+  "providerName": "PARKLAND MEDICAL CENTER",
+  "serviceFromDate": "20250901",
+  "serviceToDate": "20250930", 
+  "rfaiReasonCode": "A7",
+  "rfaiDescription": "Additional clinical information needed",
+  "rfaiReference": "RFAI20250924001",
+  "traceNumber": "TRACE20250924001",
+  "status": "received",
+  "processingDate": "2025-09-24T14:25:00Z",
+  "attachmentPath": "/processed/275/2025/09/24/attachment001.pdf",
+  "qnxtClaimId": "QNX20250924001",
+  "pchpMemberId": "PCHP123456",
+  "attachmentRequested": "Chest X-Ray",
+  "responseRequired": true,
+  "dueDate": "2025-10-08T23:59:59Z"
+}

@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  targetNamespace="urn:companion:pchp:hipaa5010:ts275:envelope:v1"
+  xmlns="urn:companion:pchp:hipaa5010:ts275:envelope:v1"
+  elementFormDefault="qualified"
+  attributeFormDefault="unqualified">
+
+  <!-- Root -->
+  <xs:element name="AttachmentEnvelope" type="AttachmentEnvelopeType"/>
+
+  <!-- ===== Types ===== -->
+
+  <xs:complexType name="AttachmentEnvelopeType">
+    <xs:sequence>
+      <xs:element name="DocumentInfo" type="DocumentInfoType"/>
+      <xs:element name="TradingPartner" type="TradingPartnerType"/>
+      <xs:element name="TransactionContext" type="TransactionContextType"/>
+      <xs:element name="Patient" type="PatientType" minOccurs="0"/>
+      <xs:element name="Subscriber" type="PersonType" minOccurs="0"/>
+      <xs:element name="Provider" type="ProviderType" minOccurs="0"/>
+      <xs:element name="Payer" type="PayerType" minOccurs="0"/>
+      <xs:element name="Claim" type="ClaimType" minOccurs="0"/>
+      <xs:element name="ServiceReview" type="ServiceReviewType" minOccurs="0"/>
+      <xs:element name="Attachments" type="AttachmentsType"/>
+      <xs:element name="Notes" type="xs:string" minOccurs="0"/>
+      <xs:element name="Custom" type="KeyValueListType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Meta about this envelope instance -->
+  <xs:complexType name="DocumentInfoType">
+    <xs:sequence>
+      <xs:element name="ControlNumber" type="xs:string"/>
+      <xs:element name="CreationDateTime" type="xs:dateTime"/>
+      <xs:element name="PurposeCode" type="xs:string" minOccurs="0"/> <!-- mirrors BGN01/CLM purpose if desired -->
+      <xs:element name="ReferenceId" type="xs:string" minOccurs="0"/>
+      <xs:element name="CorrelationId" type="xs:string" minOccurs="0"/> <!-- tie to 837/278 if applicable -->
+      <xs:element name="Version" type="xs:string" minOccurs="0"/> <!-- e.g., 005010X210A1 or 005010X211A1 -->
+      <xs:element name="SourceSystem" type="xs:string" minOccurs="0"/>
+      <xs:element name="ReceivingSystem" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Trading partners -->
+  <xs:complexType name="TradingPartnerType">
+    <xs:sequence>
+      <xs:element name="SenderId" type="xs:string"/>
+      <xs:element name="ReceiverId" type="xs:string"/>
+      <xs:element name="InterchangeDateTime" type="xs:dateTime" minOccurs="0"/>
+      <xs:element name="GroupControlNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="InterchangeControlNumber" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Transaction context (Claim or UM/PA) -->
+  <xs:complexType name="TransactionContextType">
+    <xs:sequence>
+      <xs:element name="TransactionSet" type="xs:string"/> <!-- "275" -->
+      <xs:element name="ContextType" type="xs:string"/>   <!-- "CLAIM" or "SERVICEREVIEW" -->
+      <xs:element name="ParentTransaction" type="ParentTransactionType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ParentTransactionType">
+    <xs:sequence>
+      <xs:element name="Type" type="xs:string"/> <!-- e.g., "837" or "278" -->
+      <xs:element name="ControlNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="TraceNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="PayerClaimControlNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="AuthRefNumber" type="xs:string" minOccurs="0"/> <!-- for 278 tie-in -->
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- People/entities -->
+  <xs:complexType name="PersonType">
+    <xs:sequence>
+      <xs:element name="FirstName" type="xs:string" minOccurs="0"/>
+      <xs:element name="MiddleName" type="xs:string" minOccurs="0"/>
+      <xs:element name="LastName" type="xs:string" minOccurs="0"/>
+      <xs:element name="DateOfBirth" type="xs:date" minOccurs="0"/>
+      <xs:element name="MemberId" type="xs:string" minOccurs="0"/>
+      <xs:element name="Gender" type="xs:string" minOccurs="0"/>
+      <xs:element name="Address" type="PostalAddressType" minOccurs="0"/>
+      <xs:element name="Phone" type="xs:string" minOccurs="0"/>
+      <xs:element name="Email" type="xs:string" minOccurs="0"/>
+      <xs:element name="Identifiers" type="IdentifierListType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PatientType">
+    <xs:complexContent>
+      <xs:extension base="PersonType">
+        <xs:sequence>
+          <xs:element name="RelationshipToSubscriber" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="ProviderType">
+    <xs:sequence>
+      <xs:element name="Name" type="xs:string" minOccurs="0"/>
+      <xs:element name="NPI" type="xs:string" minOccurs="0"/>
+      <xs:element name="TaxId" type="xs:string" minOccurs="0"/>
+      <xs:element name="Address" type="PostalAddressType" minOccurs="0"/>
+      <xs:element name="Phone" type="xs:string" minOccurs="0"/>
+      <xs:element name="Identifiers" type="IdentifierListType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PayerType">
+    <xs:sequence>
+      <xs:element name="Name" type="xs:string" minOccurs="0"/>
+      <xs:element name="PayerId" type="xs:string" minOccurs="0"/> <!-- e.g., 837 Payer ID -->
+      <xs:element name="NAIC" type="xs:string" minOccurs="0"/>
+      <xs:element name="Address" type="PostalAddressType" minOccurs="0"/>
+      <xs:element name="Phone" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Claim context (for X210A1) -->
+  <xs:complexType name="ClaimType">
+    <xs:sequence>
+      <xs:element name="ClaimNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="PatientAccountNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="ClaimType" type="xs:string" minOccurs="0"/> <!-- prof/institutional/dental -->
+      <xs:element name="ServiceDateFrom" type="xs:date" minOccurs="0"/>
+      <xs:element name="ServiceDateTo" type="xs:date" minOccurs="0"/>
+      <xs:element name="TotalChargeAmount" type="xs:decimal" minOccurs="0"/>
+      <xs:element name="DiagnosisCodes" type="CodeListType" minOccurs="0"/>
+      <xs:element name="ProcedureCodes" type="CodeListType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Service review context (for X211A1 tie-in to 278) -->
+  <xs:complexType name="ServiceReviewType">
+    <xs:sequence>
+      <xs:element name="AuthorizationNumber" type="xs:string" minOccurs="0"/>
+      <xs:element name="RequestCategory" type="xs:string" minOccurs="0"/>
+      <xs:element name="ServiceTypeCodes" type="CodeListType" minOccurs="0"/> <!-- 278 SVT codes -->
+      <xs:element name="PlaceOfService" type="xs:string" minOccurs="0"/>
+      <xs:element name="StartDate" type="xs:date" minOccurs="0"/>
+      <xs:element name="EndDate" type="xs:date" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Attachments -->
+  <xs:complexType name="AttachmentsType">
+    <xs:sequence>
+      <xs:element name="Attachment" type="AttachmentType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AttachmentType">
+    <xs:sequence>
+      <xs:element name="AttachmentControlNumber" type="xs:string"/>  <!-- aligns to PWK / REF -->
+      <xs:element name="ReportTypeCode" type="xs:string" minOccurs="0"/> <!-- LOINC/ELC codes if used -->
+      <xs:element name="MimeType" type="xs:string"/> <!-- e.g., application/pdf, image/jpeg -->
+      <xs:element name="ContentTransferEncoding" type="xs:string" minOccurs="0"/> <!-- base64, binary, etc. -->
+      <xs:element name="FileName" type="xs:string" minOccurs="0"/>
+      <xs:element name="Description" type="xs:string" minOccurs="0"/>
+      <xs:element name="InlineData" type="xs:base64Binary" minOccurs="0"/>
+      <xs:element name="ExternalReference" type="ExternalReferenceType" minOccurs="0"/>
+      <xs:element name="LengthBytes" type="xs:long" minOccurs="0"/>
+      <xs:element name="Hash" type="HashType" minOccurs="0"/>
+      <xs:element name="Metadata" type="KeyValueListType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ExternalReferenceType">
+    <xs:sequence>
+      <xs:element name="Uri" type="xs:anyURI"/>
+      <xs:element name="AuthType" type="xs:string" minOccurs="0"/> <!-- SAS, OAuth2, etc. -->
+      <xs:element name="ExpiresOn" type="xs:dateTime" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="HashType">
+    <xs:sequence>
+      <xs:element name="Algorithm" type="xs:string"/> <!-- SHA-256, etc. -->
+      <xs:element name="Value" type="xs:base64Binary"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Shared simple structures -->
+  <xs:complexType name="PostalAddressType">
+    <xs:sequence>
+      <xs:element name="Line1" type="xs:string" minOccurs="0"/>
+      <xs:element name="Line2" type="xs:string" minOccurs="0"/>
+      <xs:element name="City" type="xs:string" minOccurs="0"/>
+      <xs:element name="State" type="xs:string" minOccurs="0"/>
+      <xs:element name="PostalCode" type="xs:string" minOccurs="0"/>
+      <xs:element name="Country" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="IdentifierListType">
+    <xs:sequence>
+      <xs:element name="Identifier" type="IdentifierType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="IdentifierType">
+    <xs:sequence>
+      <xs:element name="Type" type="xs:string"/> <!-- e.g., NPI, TIN, MRN -->
+      <xs:element name="Value" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CodeListType">
+    <xs:sequence>
+      <xs:element name="Code" type="xs:string" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="KeyValueListType">
+    <xs:sequence>
+      <xs:element name="Item" type="KeyValueType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="KeyValueType">
+    <xs:sequence>
+      <xs:element name="Key" type="xs:string"/>
+      <xs:element name="Value" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>

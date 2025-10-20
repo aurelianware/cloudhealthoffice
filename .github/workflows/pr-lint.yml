@@ -1,0 +1,115 @@
+name: pr-lint
+on:
+  pull_request:
+    branches: [ main, 'release/*', 'feature/*' ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------- JSON validation for Logic App workflows ----------
+      - name: Validate JSON workflows
+        run: |
+          echo "Validating Logic App workflow JSON files..."
+          failed=0
+          while IFS= read -r -d '' f; do
+            echo "Checking $f"
+            if ! jq . "$f" >/dev/null 2>&1; then
+              echo "::error file=$f::Invalid JSON syntax"
+              failed=1
+            elif ! jq -e 'has("definition") and has("kind") and has("parameters")' "$f" >/dev/null; then
+              echo "::error file=$f::Missing required keys (definition/kind/parameters)"
+              failed=1
+            else
+              echo "✓ Valid workflow JSON: $f"
+            fi
+          done < <(find logicapps/workflows -type f -name "workflow.json" -print0 2>/dev/null || true)
+          
+          if [ $failed -eq 1 ]; then
+            echo "::error::JSON validation failed"
+            exit 1
+          fi
+          echo "✓ All workflow JSON files are valid"
+
+      # ---------- GitHub Actions workflow lint ----------
+      - name: Actionlint (workflows linter)
+        uses: reviewdog/action-actionlint@v1
+        with:
+          actionlint_flags: -color
+
+      # ---------- YAML lint (workflows & configs) ----------
+      - name: YAML lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: ".github/workflows *.yml *.yaml"
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              truthy:
+                allowed-values: ['true','false','on','off','yes','no','y','n']  # keep defaults
+
+      # ---------- Bicep syntax check (no Azure login) ----------
+      - name: Setup Bicep CLI
+        uses: Azure/setup-bicep@v1
+        with:
+          bicep-version: v0.27.1
+      - name: Bicep build (syntax only)
+        run: |
+          echo "Validating Bicep templates..."
+          failed=0
+          
+          if [ -f infra/main.bicep ]; then
+            echo "Building infra/main.bicep..."
+            if ! bicep build infra/main.bicep --outfile /tmp/main-arm.json; then
+              echo "::error file=infra/main.bicep::Bicep build failed"
+              failed=1
+            else
+              echo "✓ infra/main.bicep compiled successfully"
+            fi
+          fi
+          
+          if [ -f parkland_attachments_logicapps_package/main.bicep ]; then
+            echo "Building parkland_attachments_logicapps_package/main.bicep..."
+            if ! bicep build parkland_attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
+              echo "::error file=parkland_attachments_logicapps_package/main.bicep::Bicep build failed"
+              failed=1
+            else
+              echo "✓ parkland_attachments_logicapps_package/main.bicep compiled successfully"
+            fi
+          fi
+          
+          if [ $failed -eq 1 ]; then
+            echo "::error::Bicep validation failed"
+            exit 1
+          fi
+          echo "✓ All Bicep templates are valid"
+
+      # ---------- PowerShell script lint ----------
+      - name: PowerShell script validation
+        run: |
+          echo "Validating PowerShell scripts..."
+          if command -v pwsh >/dev/null 2>&1; then
+            failed=0
+            while IFS= read -r -d '' f; do
+              echo "Checking $f"
+              if ! pwsh -Command "Get-Content '$f' | Out-Null" 2>/dev/null; then
+                echo "::error file=$f::PowerShell script has syntax errors"
+                failed=1
+              else
+                echo "✓ Valid PowerShell script: $f"
+              fi
+            done < <(find . -name "*.ps1" -print0 2>/dev/null || true)
+            
+            if [ $failed -eq 1 ]; then
+              echo "::error::PowerShell script validation failed"
+              exit 1
+            fi
+            echo "✓ All PowerShell scripts are valid"
+          else
+            echo "PowerShell not available, skipping PowerShell script validation"
+          fi

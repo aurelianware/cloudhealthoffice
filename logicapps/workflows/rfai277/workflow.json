@@ -1,6 +1,6 @@
 {
   "definition": {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/workflowdefinition.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "triggers": {
       "ServiceBus_RFAI_Requests": {
@@ -12,116 +12,56 @@
             }
           },
           "method": "get",
-          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/subscriptions/@{encodeURIComponent(parameters('sb_topic_rfai'))}/messages/head"
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_rfai'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_rfai'))}/messages/head"
         },
-        "recurrence": {
-          "frequency": "Minute",
-          "interval": 1
-        },
+        "recurrence": { "frequency": "Minute", "interval": 1 },
         "splitOn": "@triggerBody()"
       }
     },
     "actions": {
       "Parse_RFAI_Payload": {
         "type": "ParseJson",
-        "runAfter": {},
         "inputs": {
           "content": "@triggerBody()",
           "schema": {
             "type": "object",
             "properties": {
-              "claimNumber": {
-                "type": "string"
-              },
-              "memberId": {
-                "type": "string"
-              },
-              "providerNpi": {
-                "type": "string"
-              },
-              "serviceFromDate": {
-                "type": "string"
-              },
-              "rfaiReasonCode": {
-                "type": "string"
-              },
-              "rfaiReference": {
-                "type": "string"
-              }
+              "claimNumber": { "type": "string" },
+              "memberId": { "type": "string" },
+              "providerNpi": { "type": "string" },
+              "serviceFromDate": { "type": "string" },
+              "rfaiReasonCode": { "type": "string" },
+              "rfaiReference": { "type": "string" }
             },
-            "required": [
-              "claimNumber",
-              "memberId",
-              "rfaiReasonCode"
-            ]
+            "required": ["claimNumber","memberId","rfaiReasonCode"]
           }
-        }
+        },
+        "runAfter": {}
       },
       "Compose_277_JSON": {
         "type": "Compose",
-        "runAfter": {
-          "Parse_RFAI_Payload": [
-            "Succeeded"
-          ]
-        },
+        "runAfter": { "Parse_RFAI_Payload": ["Succeeded"] },
         "inputs": {
           "interchange": {
-            "ISA": {
-              "ISA05": "ZZ",
-              "ISA06": "@parameters('x12_sender_id')",
-              "ISA07": "ZZ",
-              "ISA08": "@parameters('x12_receiver_id')"
-            },
-            "GS": {
-              "GS02": "@parameters('x12_sender_id')",
-              "GS03": "@parameters('x12_receiver_id')"
-            }
+            "ISA": { "ISA05": "ZZ", "ISA06": "@parameters('x12_sender_id')", "ISA07": "ZZ", "ISA08": "@parameters('x12_receiver_id')" },
+            "GS": { "GS02": "@parameters('x12_sender_id')", "GS03": "@parameters('x12_receiver_id')" }
           },
           "transaction": {
-            "ST": {
-              "ST01": "277"
-            },
-            "BHT": {
-              "BHT02": "08",
-              "BHT06": "@{utcNow()}"
-            },
+            "ST": { "ST01": "277" },
+            "BHT": { "BHT02": "08", "BHT06": "@{utcNow()}" },
             "HLs": [
-              {
-                "TRN": {
-                  "TRN01": "1",
-                  "TRN02": "@{body('Parse_RFAI_Payload')?['claimNumber']}"
-                }
-              },
-              {
-                "STC": {
-                  "STC01_1": "A",
-                  "STC01_2": "@{body('Parse_RFAI_Payload')?['rfaiReasonCode']}",
-                  "STC02": "@{utcNow()}"
-                }
-              },
-              {
-                "REF": {
-                  "REF01": "EJ",
-                  "REF02": "@{body('Parse_RFAI_Payload')?['rfaiReference']}"
-                }
-              }
+              { "TRN": { "TRN01": "1", "TRN02": "@{body('Parse_RFAI_Payload')?['claimNumber']}" } },
+              { "STC": { "STC01_1": "A", "STC01_2": "@{body('Parse_RFAI_Payload')?['rfaiReasonCode']}", "STC02": "@{utcNow()}" } },
+              { "REF": { "REF01": "EJ", "REF02": "@{body('Parse_RFAI_Payload')?['rfaiReference']}" } }
             ]
           }
         }
       },
       "Encode_X12_277": {
         "type": "ApiConnection",
-        "runAfter": {
-          "Compose_277_JSON": [
-            "Succeeded"
-          ]
-        },
+        "runAfter": { "Compose_277_JSON": ["Succeeded"] },
         "inputs": {
-          "host": {
-            "connection": {
-              "name": "@parameters('$connections')['integrationaccount']['connectionId']"
-            }
-          },
+          "host": { "connection": { "name": "@parameters('$connections')['integrationaccount']['connectionId']" } },
           "method": "post",
           "path": "/encode/edi",
           "body": {
@@ -136,17 +76,9 @@
       },
       "Drop_to_SFTP_Outbound": {
         "type": "ApiConnection",
-        "runAfter": {
-          "Encode_X12_277": [
-            "Succeeded"
-          ]
-        },
+        "runAfter": { "Encode_X12_277": ["Succeeded"] },
         "inputs": {
-          "host": {
-            "connection": {
-              "name": "@parameters('$connections')['sftp-ssh']['connectionId']"
-            }
-          },
+          "host": { "connection": { "name": "@parameters('$connections')['sftp-ssh']['connectionId']" } },
           "method": "post",
           "path": "/datasets/default/files",
           "queries": {
@@ -161,33 +93,13 @@
   },
   "kind": "Stateful",
   "parameters": {
-    "$connections": {
-      "type": "Object",
-      "defaultValue": {}
-    },
-    "sb_namespace": {
-      "type": "String",
-      "defaultValue": "attachments-bus"
-    },
-    "sb_topic_rfai": {
-      "type": "String",
-      "defaultValue": "rfai-requests"
-    },
-    "sftp_outbound_folder": {
-      "type": "String",
-      "defaultValue": "/outbound/277"
-    },
-    "x12_sender_id": {
-      "type": "String",
-      "defaultValue": "66917"
-    },
-    "x12_receiver_id": {
-      "type": "String",
-      "defaultValue": "030240928"
-    },
-    "x12_277_messagetype": {
-      "type": "String",
-      "defaultValue": "X12_005010X212_277"
-    }
+    "$connections": { "type": "Object", "defaultValue": {} },
+    "sb_namespace": { "type": "String", "defaultValue": "hipaa-logic-svc" },
+    "sb_topic_rfai": { "type": "String", "defaultValue": "rfai-requests" },
+    "sb_subscription_rfai": { "type": "String", "defaultValue": "rfai-processor" },
+    "sftp_outbound_folder": { "type": "String", "defaultValue": "/outbound/277" },
+    "x12_sender_id": { "type": "String", "defaultValue": "66917" },
+    "x12_receiver_id": { "type": "String", "defaultValue": "030240928" },
+    "x12_277_messagetype": { "type": "String", "defaultValue": "X12_005010X212_277" }
   }
 }
