@@ -27,9 +27,9 @@ jobs:
       - name: Set environment variables
         shell: bash
         run: |
-          echo "RG_NAME=rg-hipaa-integration" >> $GITHUB_ENV
-          echo "LOCATION=eastus" >> $GITHUB_ENV
-          echo "CONNECTOR_LOCATION=eastus" >> $GITHUB_ENV
+          echo "RG_NAME=${{ vars.AZURE_RG_NAME }}" >> $GITHUB_ENV
+          echo "LOCATION=${{ vars.AZURE_LOCATION }}" >> $GITHUB_ENV
+          echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}" >> $GITHUB_ENV
 
       - name: Install Bicep CLI
         run: az bicep install
@@ -46,7 +46,7 @@ jobs:
           az provider register --namespace Microsoft.ServiceBus
 
       - name: Ensure resource group
-        run: az group create -n "$RG_NAME" -l "$LOCATION"
+        run: az group create -n "${{ vars.AZURE_RG_NAME }}" -l "${{ vars.AZURE_LOCATION }}"
 
       - name: Validate Bicep template
         uses: azure/cli@v2
@@ -72,12 +72,12 @@ jobs:
               --resource-group "$RG_NAME" \
               --template-file infra/main.bicep \
               --parameters \
-                location="$LOCATION" \
+                location="${{ vars.AZURE_LOCATION }}" \
                 baseName="hipaa-logic" \
-                connectorLocation="$CONNECTOR_LOCATION" \
+                connectorLocation="${{ vars.AZURE_CONNECTOR_LOCATION }}" \
                 enableB2B=true \
                 useExistingIa=false \
-                iaName="hipaa-attachments-ia-wus" \
+                iaName="prod-integration-account" \
               --no-pretty-print || true
 
       - name: Deploy Infrastructure
@@ -92,8 +92,8 @@ jobs:
             connectorLocation=${{ env.CONNECTOR_LOCATION }}
             enableB2B=true
             useExistingIa=false
-            iaName=hipaa-attachments-ia-wus
-          deploymentName: hipaa-logic-infra-${{ github.run_number }}
+            iaName=prod-integration-account
+          deploymentName: integration-infra-${{ github.run_number }}
 
       - name: Show failing operation (full)
         uses: azure/cli@v2
@@ -118,13 +118,13 @@ jobs:
             done
 
       - name: Configure Integration Account (trading partners, schemas, agreements)
-        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName hipaa-integrattion-ia -Location ${{ env.LOCATION }}
+        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ env.LOCATION }}
 
       - name: Get Logic App name
         uses: azure/cli@v2
         with:
           inlineScript: |
-            LA_NAME=$(az resource list -g "$RG_NAME" --resource-type "Microsoft.Web/sites" --query "[?contains(name, 'hipaa-logic')].name" -o tsv | head -1)
+            LA_NAME=$(az resource list -g "${{ vars.AZURE_RG_NAME }}" --resource-type "Microsoft.Web/sites" --query "[?contains(name, 'prod-integration-workflows')].name" -o tsv | head -1)
             if [ -z "$LA_NAME" ]; then
               echo "::error::Logic App not found in resource group $RG_NAME"
               exit 1
@@ -156,8 +156,8 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            APP_NAME="$LOGIC_APP_NAME"
-            RG="$RG_NAME"
+            APP_NAME="prod-integration-workflows"
+            RG="${{ vars.AZURE_RG_NAME}}"
             ZIP_PATH="workflows.zip"
 
             echo "Deploying workflows to Logic App: $APP_NAME"
@@ -179,7 +179,7 @@ jobs:
         with:
           inlineScript: |
             APP_NAME="$LOGIC_APP_NAME"
-            RG="$RG_NAME"
+            RG="${{ vars.AZURE_RG_NAME }}"
 
             echo "Restarting Logic App: $APP_NAME"
             az webapp restart -g "$RG" -n "$APP_NAME"
