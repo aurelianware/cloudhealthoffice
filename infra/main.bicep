@@ -13,8 +13,8 @@ param storageSku string = 'Standard_LRS'
   'Standard'
 ])
 param iaSku string = 'Free'
-param useExistingIa bool = true
-param iaName string = 'hipaa-integration-ia-eus'
+param useExistingIa bool = false
+param iaName string = 'prod-integration-account'
 
 
 
@@ -39,8 +39,7 @@ param serviceBusConnectionString string = ''
 
 // =========================
  // Variables
-// =========================
-var storageAccountName = 'hipaa${uniqueString(resourceGroup().id)}'
+var storageAccountName = 'staging${uniqueString(resourceGroup().id)}'
 var effectiveBlobAccountName = empty(blobAccountName) ? stg.name : blobAccountName
 var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].value : blobAccountKey
 
@@ -74,7 +73,7 @@ resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
  // Service Bus (Standard)
 // =========================
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: '${baseName}-svc'
+  name: 'prod-pchp-integration-sb'
   location: location
   sku: {
     name: 'Standard'
@@ -135,7 +134,7 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 // Logic App Standard (Plan + App)
 // =========================
 resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: '${baseName}-plan'
+  name: 'prod-integration-plan'
   location: location
   sku: {
     name: 'WS1'
