@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [ "main", "release/*", "feature/*" ]
+    branches: ["main", "release/*", "feature/*"]
   workflow_dispatch:
 
 jobs:
@@ -27,9 +27,9 @@ jobs:
       - name: Set environment variables
         shell: bash
         run: |
-          echo "RG_NAME=rg-hipaa-logic-apps" >> $GITHUB_ENV
-          echo "LOCATION=westus" >> $GITHUB_ENV
-          echo "CONNECTOR_LOCATION=westus" >> $GITHUB_ENV
+          echo "RG_NAME=rg-hipaa-integration" >> $GITHUB_ENV
+          echo "LOCATION=eastus" >> $GITHUB_ENV
+          echo "CONNECTOR_LOCATION=eastus" >> $GITHUB_ENV
 
       - name: Install Bicep CLI
         run: az bicep install
@@ -62,7 +62,7 @@ jobs:
               exit 1
             fi
             echo "✓ Bicep template compiled successfully"
-        
+
       - name: ARM What-If Analysis
         uses: azure/cli@v2
         with:
@@ -95,7 +95,6 @@ jobs:
             iaName=hipaa-attachments-ia-wus
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
 
-
       - name: Show failing operation (full)
         uses: azure/cli@v2
         with:
@@ -106,7 +105,7 @@ jobs:
               --resource-group "$RG_NAME" \
               --name "$DEPLOY_NAME" \
               --query "[?properties.provisioningState=='Failed']" -o jsonc
-      
+
             echo "Showing full statusMessage for each failed op..."
             for OP in $(az deployment operation group list \
               --resource-group "$RG_NAME" \
@@ -117,7 +116,10 @@ jobs:
                 --name "$DEPLOY_NAME" \
                 --operation-ids "$OP" -o jsonc
             done
-      
+
+      - name: Configure Integration Account (trading partners, schemas, agreements)
+        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName hipaa-integrattion-ia -Location ${{ env.LOCATION }}
+
       - name: Get Logic App name
         uses: azure/cli@v2
         with:
@@ -129,22 +131,22 @@ jobs:
             fi
             echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
             echo "Found Logic App: $LA_NAME"
-            
+
       - name: Package Logic App workflows
         shell: bash
         run: |
           set -euo pipefail
           WF_PATH="logicapps"
           BASE_NAME="$(basename "$WF_PATH")"
-      
+
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-      
+
           # Create ZIP in the current (repo root) directory
           zip -r workflows.zip "$BASE_NAME"
-      
+
           echo "Workflow package created: $(pwd)/workflows.zip"
           ls -lh workflows.zip
           echo "Package contents:"
@@ -157,19 +159,19 @@ jobs:
             APP_NAME="$LOGIC_APP_NAME"
             RG="$RG_NAME"
             ZIP_PATH="workflows.zip"
-            
+
             echo "Deploying workflows to Logic App: $APP_NAME"
             if [ ! -f "$ZIP_PATH" ]; then
               echo "::error::Workflow package $ZIP_PATH not found"; exit 1
             fi
-            
+
             # Deploy the ZIP package
             az webapp deploy \
               --resource-group "$RG" \
               --name "$APP_NAME" \
               --src-path "$ZIP_PATH" \
               --type zip
-            
+
             echo "✓ Workflows deployed successfully"
 
       - name: Restart Logic App
@@ -178,7 +180,7 @@ jobs:
           inlineScript: |
             APP_NAME="$LOGIC_APP_NAME"
             RG="$RG_NAME"
-            
+
             echo "Restarting Logic App: $APP_NAME"
             az webapp restart -g "$RG" -n "$APP_NAME"
             echo "✓ Logic App restarted"

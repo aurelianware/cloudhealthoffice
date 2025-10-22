@@ -12,8 +12,10 @@ param(
 Write-Host "Deploying Logic App workflows to $LogicAppName..."
 
 # Create a temporary directory for deployment
-$tempDir = "$env:TEMP\logicapp-deploy-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+$tempDir = "$PSScriptRoot/logicapp-deploy-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+#$tempDir = "$env:TEMP\logicapp-deploy-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+
 
 try {
     # Copy the workflows folder structure
@@ -54,16 +56,17 @@ try {
     Write-Host "Creating deployment package..."
     
     # Use PowerShell's Compress-Archive
-    $itemsToZip = Get-ChildItem -Path $tempDir -Exclude "*.zip"
-    Compress-Archive -Path $itemsToZip.FullName -DestinationPath $zipPath -Force
+    $zipPath = "$tempDir/deployment.zip"
+    Compress-Archive -Path "$tempDir/*" -DestinationPath $zipPath -Force
     
+    if (-Not (Test-Path $zipPath)) {
+        Write-Error "❌ ZIP file not found: $zipPath"
+        exit 1
+    }
     Write-Host "Uploading to Logic App Standard..."
     
     # Deploy using Azure CLI
-    az webapp deployment source config-zip `
-        --resource-group $ResourceGroupName `
-        --name $LogicAppName `
-        --src $zipPath
+    az webapp deploy --resource-group $ResourceGroupName --name $LogicAppName --src-path $zipPath --type zip       
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Successfully deployed workflows to Logic App: $LogicAppName" -ForegroundColor Green

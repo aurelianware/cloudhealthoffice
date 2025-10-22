@@ -1,41 +1,14 @@
 {
-  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowapp.connections.json",
-  "managedApiConnections": {
-    "sftp-ssh": {
-      "api": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus/managedApis/sftpwithssh"
-      },
-      "connection": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/hipaa-logic-sftp"
-      },
-      "connectionRuntimeUrl": ""
-    },
-    "azureblob": {
-      "api": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus/managedApis/azureblob"
-      },
-      "connection": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/azureblob"
-      },
-      "connectionRuntimeUrl": ""
-    },
-    "servicebus": {
-      "api": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus/managedApis/servicebus"
-      },
-      "connection": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/servicebus"
-      },
-      "connectionRuntimeUrl": ""
-    },
-    "integrationaccount": {
-      "api": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus/managedApis/x12"
-      },
-      "connection": {
-        "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/integrationaccount"
-      },
-      "connectionRuntimeUrl": ""
-    }
+  "servicebus": {
+    "connectionId": "[resourceId('Microsoft.Web/connections', 'servicebus')]"
+  },
+  "azureblob": {
+    "connectionId": "[resourceId('Microsoft.Web/connections', 'azureblob')]"
+  },
+  "integrationaccount": {
+    "connectionId": "[resourceId('Microsoft.Web/connections', 'integrationaccount')]"
+  },
+  "sftpwithssh": {
+    "connectionId": "[resourceId('Microsoft.Web/connections', 'sftpwithssh')]"
   }
 }
