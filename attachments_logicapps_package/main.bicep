@@ -1,11 +1,11 @@
 
 param location string = resourceGroup().location
-param baseName string = 'hipaa-attachments'
+// param baseName string = 'hipaa-integration'
 param storageSku string = 'Standard_LRS'
 
 // Storage account
 resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: '${baseName}stg'
+  name: 'sftp'
   location: location
   sku: { name: storageSku }
   kind: 'StorageV2'
@@ -14,26 +14,26 @@ resource stg 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 
 // Service Bus
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: '${baseName}-sb'
+  name: 'servicebus'
   location: location
   sku: { name: 'Basic', tier: 'Basic' }
 }
 resource sbTopicIn 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
-  name: '${sb.name}/attachments-in'
+  name: 'servicebus/attachments-in'
   properties: {}
 }
 resource sbTopicRfai 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
-  name: '${sb.name}/rfai-requests'
+  name: 'servicebus/rfai-requests'
   properties: {}
 }
 resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
-  name: '${sb.name}/edi-278'
+  name: 'servicebus/edi-278'
   properties: {}
 }
 
 // App Insights (for telemetry)
 resource insights 'Microsoft.Insights/components@2020-02-02' = {
-  name: '${baseName}-ai'
+  name: 'appinsights'
   location: location
   kind: 'web'
   properties: { Application_Type: 'web' }
@@ -41,12 +41,12 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 
 // Logic App Standard (plan + app)
 resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: '${baseName}-wfplan'
+  name: 'hipaa-integration-wfplan'
   location: location
   sku: { name: 'WS1', tier: 'WorkflowStandard' }
 }
 resource la 'Microsoft.Web/sites@2022-03-01' = {
-  name: '${baseName}-la'
+  name: 'hipaa-integration-la'
   location: location
   kind: 'workflowapp'
   properties: {

@@ -13,16 +13,16 @@ param(
     [string]$Location = "westus",
     
     [Parameter(Mandatory=$false)]
-    [string]$IntegrationAccountName = "hipaa-attachments-ia"
+    [string]$IntegrationAccountName = "hipaa-attachments-ia-wus"
 )
 
 Write-Host "🔧 Integration Account Setup for HIPAA Processing" -ForegroundColor Cyan
 Write-Host ""
 
 if ($DeleteExisting) {
-    Write-Host "⚠️ Deleting existing Integration Account: dev-integration" -ForegroundColor Yellow
+    Write-Host "⚠️ Deleting existing Integration Account: $IntegrationAccountName" -ForegroundColor Yellow
     try {
-        az logic integration-account delete --name "dev-integration" --resource-group "development" --yes
+        az logic integration-account delete --name $IntegrationAccountName --resource-group $ResourceGroup --yes
         Write-Host "✅ Existing Integration Account deleted" -ForegroundColor Green
     }
     catch {
@@ -52,56 +52,42 @@ Write-Host "✅ Integration Account created successfully" -ForegroundColor Green
 Write-Host "🤝 Creating Trading Partners..." -ForegroundColor Cyan
 
 # Availity Partner
-$availityPartner = @{
-    name = "Availity"
-    properties = @{
-        partnerType = "B2B"
-        content = @{
-            b2b = @{
-                businessIdentities = @(
-                    @{
-                        qualifier = "ZZ"
-                        value = "030240928"
-                    }
-                )
+$availityContent = @{
+    b2b = @{
+        businessIdentities = @(
+            @{
+                qualifier = "ZZ"
+                value = "030240928"
             }
-        }
+        )
     }
 } | ConvertTo-Json -Depth 10
-
-$availityPartner | Out-File -FilePath "availity-partner.json" -Encoding UTF8
 
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
     --name "Availity" `
-    --partner-content "@availity-partner.json"
+    --partner-type "B2B" `
+    --content $availityContent
 
-# Your Organization Partner  
-$orgPartner = @{
-    name = "YourOrganization"
-    properties = @{
-        partnerType = "B2B"
-        content = @{
-            b2b = @{
-                businessIdentities = @(
-                    @{
-                        qualifier = "ZZ"
-                        value = "66917"
-                    }
-                )
+# Your Organization Partner
+$orgContent = @{
+    b2b = @{
+        businessIdentities = @(
+            @{
+                qualifier = "ZZ"
+                value = "66917"
             }
-        }
+        )
     }
 } | ConvertTo-Json -Depth 10
-
-$orgPartner | Out-File -FilePath "org-partner.json" -Encoding UTF8
 
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
-    --name "YourOrganization" `
-    --partner-content "@org-partner.json"
+    --name "PCHP" `
+    --partner-type "B2B" `
+    --content $orgContent
 
 Write-Host "✅ Trading Partners created" -ForegroundColor Green
 
@@ -121,9 +107,17 @@ Write-Host ""
 Write-Host "🌐 Integration Account URL:" -ForegroundColor Cyan
 Write-Host "https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/integrationAccounts/$IntegrationAccountName" -ForegroundColor Blue
 
-# Clean up temporary files
-Remove-Item "availity-partner.json" -ErrorAction SilentlyContinue
-Remove-Item "org-partner.json" -ErrorAction SilentlyContinue
-
 Write-Host ""
 Write-Host "🎯 Integration Account setup complete!" -ForegroundColor Green
+
+
+#$SchemaName = "Companion_275AttachmentEnvelope"
+#$SchemaType = "Xml"
+#$SchemaFile = "Companion_275AttachmentEnvelope.xsd"
+
+#az logic integration-account schema create `
+#    --resource-group $ResourceGroup `
+#    --integration-account-name $IntegrationAccountName `
+#    --name $SchemaName `
+#    --schema-type $SchemaType `
+#    --content @$SchemaFile

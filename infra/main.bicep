@@ -2,8 +2,8 @@
 // Parameters
 // =========================
 param location string = resourceGroup().location        // core resources region
-param connectorLocation string = 'westus'              // managed API connections region
-param baseName string = 'hipaa-logic'
+param connectorLocation string = 'eastus'              // managed API connections region
+param baseName string = 'hipaa-integration'
 param storageSku string = 'Standard_LRS'
 
 // Integration Account controls (create or reuse in THIS RG)
@@ -14,7 +14,9 @@ param storageSku string = 'Standard_LRS'
 ])
 param iaSku string = 'Free'
 param useExistingIa bool = true
-param iaName string = '${baseName}-ia'
+param iaName string = 'hipaa-integration-ia-eus'
+
+
 
 // Toggle B2B (X12) managed connection
 param enableB2B bool = true
@@ -246,6 +248,7 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
   properties: {
     displayName: 'integrationaccount'
     api: {
+      
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {

@@ -59,7 +59,7 @@ jobs:
 
       - name: Bicep build (syntax only)
         run: |
-          echo "Validating Bicep templates..."
+          echo "ValiFdating Bicep templates..."
           failed=0
           
           if [ -f infra/main.bicep ]; then
@@ -72,13 +72,13 @@ jobs:
             fi
           fi
           
-          if [ -f parkland_attachments_logicapps_package/main.bicep ]; then
-            echo "Building parkland_attachments_logicapps_package/main.bicep..."
-            if ! bicep build parkland_attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
-              echo "::error file=parkland_attachments_logicapps_package/main.bicep::Bicep build failed"
+          if [ -f attachments_logicapps_package/main.bicep ]; then
+            echo "Building pattachments_logicapps_package/main.bicep..."
+            if ! bicep build pattachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
+              echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
               failed=1
             else
-              echo "✓ parkland_attachments_logicapps_package/main.bicep compiled successfully"
+              echo "✓ attachments_logicapps_package/main.bicep compiled successfully"
             fi
           fi
           
