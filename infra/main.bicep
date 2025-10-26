@@ -3,7 +3,11 @@
 // =========================
 param location string = resourceGroup().location        // core resources region
 param connectorLocation string = 'eastus'              // managed API connections region
-param baseName string = 'hipaa-integration'
+param baseName string
+param sftpHost string
+param sftpUsername string
+@secure()
+param sftpPassword string
 param storageSku string = 'Standard_LRS'
 
 // Integration Account controls (create or reuse in THIS RG)
@@ -14,18 +18,18 @@ param storageSku string = 'Standard_LRS'
 ])
 param iaSku string = 'Free'
 param useExistingIa bool = false
-param iaName string = 'prod-integration-account'
+param iaName string //= 'prod-integration-account'
 
 
 
 // Toggle B2B (X12) managed connection
 param enableB2B bool = true
-
-// SFTP connection params
-param sftpHost string = 'sftp.example.com'
-param sftpUsername string = 'logicapp'
-@secure()
-param sftpPassword string = ''          // if key-based auth, change connection param block
+ 
+// SFTPconnection params
+//param sftpHost string = 'sftp.example.com'
+// param sftpUsername string = 'logicapp'
+//@secure()
+//param sftpPassword string = ''          // if key-based auth, change connection param block
 
 // Blob connection params (defaults resolved from storage created here)
 param blobAccountName string = ''       // if empty, uses stg.name
@@ -35,7 +39,8 @@ param blobAccountKey string = ''        // if empty, uses stg.listKeys().keys[0]
 // Service Bus connection string (SAS) - optional; if empty, we generate from auth rule
 @secure()
 param serviceBusConnectionString string = ''
-
+param appServicePlanName string = ''
+param serviceBusName string
 
 // =========================
  // Variables
@@ -73,7 +78,7 @@ resource stgContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
  // Service Bus (Standard)
 // =========================
 resource sb 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: 'prod-pchp-integration-sb'
+  name: serviceBusName
   location: location
   sku: {
     name: 'Standard'
@@ -133,8 +138,8 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 // =========================
 // Logic App Standard (Plan + App)
 // =========================
-resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: 'prod-integration-plan'
+  resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
+  name: appServicePlanName
   location: location
   sku: {
     name: 'WS1'
