@@ -91,18 +91,17 @@ jobs:
           resourceGroupName: ${{ env.RG_NAME }}
           template: infra/main.bicep
           parameters: >
-            location=${{ env.LOCATION }}
-            baseName=${{ vars.BASE_NAME }}
-            sftpHost="${{ vars.SFTP_HOST }}" \
+            location='${{ env.LOCATION }}' \
+            baseName='${{ vars.BASE_NAME }}' \
+            sftpHost='${{ vars.SFTP_HOST }}' \
             sftpUsername="${{ vars.SFTP_USERNAME }}" \
             sftpPassword="${{ vars.SFTP_PASSWORD }}" \           
             connectorLocation=${{ env.CONNECTOR_LOCATION }} \
-            storageSku=${{ vars.STORAGE_SKU }} \
-            appServicePlanName=${{ vars.APP_SERVICE_PLAN_NAME }} \
-
-            enableB2B=true
-            useExistingIa=false
-            iaName="${{ vars.IA_NAME }}"
+            storageSku='${{ vars.STORAGE_SKU }}' \
+            appServicePlanName='${{ vars.APP_SERVICE_PLAN_NAME }}' \
+            enableB2B='true' \
+            useExistingIa='false' \
+            iaName='${{ vars.IA_NAME }}'
           deploymentName: integration-infra-${{ github.run_number }}
 
       - name: Show failing operation (full)
