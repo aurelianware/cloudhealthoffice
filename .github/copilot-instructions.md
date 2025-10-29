@@ -99,6 +99,57 @@ ls -l workflows.zip
 - **ALWAYS validate all workflows**: Run complete lint process
 - **Check for YAML syntax in GitHub Actions**: Use basic YAML validation if modifying .github/workflows/
 
+## Testing
+
+### Workflow Testing Script
+Use `test-workflows.ps1` for comprehensive workflow testing:
+
+```powershell
+# Test inbound 275 processing (Availity → PCHP)
+pwsh -c "./test-workflows.ps1 -TestInbound275"
+
+# Test outbound 277 RFAI generation (PCHP → Availity)
+pwsh -c "./test-workflows.ps1 -TestOutbound277"
+
+# Test complete end-to-end workflow
+pwsh -c "./test-workflows.ps1 -TestFullWorkflow"
+
+# Specify custom resource group and Logic App
+pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppName 'my-la'"
+```
+
+**Trading Partners**:
+- Sender: Availity (030240928)
+- Receiver: PCHP-QNXT (66917)
+
+**Test Files**:
+- `test-x12-275-availity-to-pchp.edi`: Sample 275 EDI file for testing
+- `test-qnxt-response-payload.json`: Sample QNXT API response
+- `test-plan-trading-partners.md`: Detailed test plan
+- `testing-status-report.md`: Testing status and results
+
+### CI/CD Automated Checks (pr-lint.yml)
+
+All pull requests trigger automated validation:
+
+1. **JSON Workflow Validation**: Validates all `workflow.json` files for syntax and required keys
+2. **GitHub Actions Lint** (actionlint): Validates workflow YAML syntax and best practices
+3. **YAML Lint** (yamllint): Validates YAML files in `.github/workflows/`
+4. **Bicep Build**: Compiles all `.bicep` files to verify syntax (infra/main.bicep and attachments_logicapps_package/main.bicep)
+5. **PowerShell Script Validation**: Checks all `.ps1` files for syntax errors
+
+**To run locally before pushing**:
+```bash
+# JSON validation
+find logicapps/workflows -name "workflow.json" -exec jq . {} \;
+
+# Bicep validation
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+
+# PowerShell syntax check
+pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
+```
+
 ## Deployment
 
 ### Manual Deployment Commands
@@ -196,3 +247,36 @@ After successful deployment, manual configuration required:
 3. **Logic App Parameters**: Set SFTP folders, QNXT endpoints, X12 identifiers  
 4. **Role Assignments**: Grant Logic App managed identity access to Storage & Service Bus
 5. **Replay278 Endpoint**: Configure HTTP trigger authentication and test with blobUrl parameter
+
+## Conventions and Best Practices
+
+### File Naming and Structure
+- **Workflow files**: Always named `workflow.json` within their workflow directory
+- **Bicep files**: Use `main.bicep` for primary templates
+- **PowerShell scripts**: Use kebab-case with `.ps1` extension (e.g., `fix-repo-structure.ps1`, `test-workflows.ps1`)
+- **Data Lake paths**: Use date partitioning `hipaa-attachments/raw/{type}/yyyy/MM/dd/`
+
+### Code Style
+- **JSON**: All workflow.json files must have `definition`, `kind`, and `parameters` keys
+- **Bicep**: Accept warnings about Service Bus topic parent properties (known issue)
+- **PowerShell**: Follow standard PowerShell conventions with approved verbs
+- **YAML**: Line length restrictions disabled for workflow files, truthy values follow GitHub Actions standards
+
+### Common Pitfalls
+- **Timeouts**: Always set appropriate timeouts for Azure operations (30+ seconds for Bicep, 30+ minutes for deployments)
+- **ZIP Structure**: Workflow ZIP must contain `workflows/` as top-level directory, not individual workflow folders
+- **Stateful Workflows**: All 4 workflows MUST be `"kind": "Stateful"` - Logic Apps Standard requirement
+- **Service Bus Topics**: Remember to include all 3 topics: `attachments-in`, `rfai-requests`, `edi-278`
+- **X12 Schemas**: Each transaction type needs its own schema version (275: X210, 277: X212, 278: X217)
+
+### Environment-Specific Notes
+- **DEV**: Uses `deploy-dev.yml` workflow, eastus region
+- **UAT**: Auto-deploys on `release/*` branches via `deploy-uat.yml`, eastus region
+- **PROD**: Uses `deploy.yml` workflow, manual trigger only
+- **Resource Naming**: Pattern is `{baseName}-{resource-type}` (e.g., `hipaa-attachments-la`, `hipaa-attachments-svc`)
+
+### Security and Compliance
+- **HIPAA Compliance**: All storage uses encryption at rest, SFTP connections use SSH keys
+- **Managed Identity**: Logic Apps use system-assigned managed identity for Azure resource access
+- **OIDC Authentication**: GitHub Actions use OpenID Connect for Azure authentication (no secrets stored)
+- **Secrets Management**: Never commit API keys, connection strings, or credentials to repository
