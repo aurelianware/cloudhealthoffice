@@ -30,6 +30,11 @@ jobs:
           echo "RG_NAME=${{ vars.AZURE_RG_NAME }}" >> $GITHUB_ENV
           echo "LOCATION=${{ vars.AZURE_LOCATION }}" >> $GITHUB_ENV
           echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}" >> $GITHUB_ENV
+          echo "BASE_NAME=${{ vars.BASE_NAME }}" >> $GITHUB_ENV
+          echo "IA_NAME=${{ vars.IA_NAME }}" >> $GITHUB_ENV
+          echo "SERVICE_BUS_NAME=${{ vars.SERVICE_BUS_NAME }}" >> $GITHUB_ENV
+          echo "STORAGE_SKU=${{ vars.STORAGE_SKU }}" >> $GITHUB_ENV
+          echo "LOGIC_APP_NAME=${{ vars.BASE_NAME }}-la" >> $GITHUB_ENV
 
       - name: Egress / DNS check
         id: egress-check
@@ -94,8 +99,8 @@ jobs:
               --parameters \
                 location="${{ vars.AZURE_LOCATION }}" \
                 baseName="${{ vars.BASE_NAME }}" \
-                iaName=${{ env.IA_NAME }}
-                serviceBusName=${{ env.SERVICE_BUS_NAME }}
+                iaName="${{ vars.IA_NAME }}" \
+                serviceBusName="${{ vars.SERVICE_BUS_NAME }}" \
                 sftpHost="${{ secrets.SFTP_HOST }}" \
                 sftpUsername="${{ secrets.SFTP_USERNAME }}" \
                 sftpPassword="${{ secrets.SFTP_PASSWORD }}" \
@@ -103,7 +108,6 @@ jobs:
                 connectorLocation="${{ vars.AZURE_CONNECTOR_LOCATION }}" \
                 enableB2B=true \
                 useExistingIa=false \
-                iaName="${{ vars.IA_NAME }}" \
               --no-pretty-print || true
 
       - name: Deploy Infrastructure
@@ -127,10 +131,11 @@ jobs:
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
 
       - name: Show failing operation (full)
+        if: failure()
         uses: azure/cli@v2
         with:
           inlineScript: |
-            DEPLOY_NAME="hipaa-logic-infra-91"   # or ${{ github.run_number }} for current run
+            DEPLOY_NAME="hipaa-logic-infra-${{ github.run_number }}"
             echo "Listing failed ops..."
             az deployment operation group list \
               --resource-group "$RG_NAME" \
@@ -151,29 +156,23 @@ jobs:
       - name: Configure Integration Account (trading partners, schemas, agreements)
         run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ vars.AZURE_LOCATION }}
 
-      - name: Get Logic App name
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            LA_NAME=$(az resource list -g "${{ vars.AZURE_RG_NAME }}" --resource-type "Microsoft.Web/sites" --query "[?contains(name, 'prod-integration-workflows')].name" -o tsv | head -1)
-            if [ -z "$LA_NAME" ]; then
-              echo "::error::Logic App not found in resource group $RG_NAME"
-              exit 1
-            fi
-            echo "LOGIC_APP_NAME=$LA_NAME" >> $GITHUB_ENV
-            echo "Found Logic App: $LA_NAME"
-
       - name: Package Logic App workflows
         shell: bash
         run: |
           set -euo pipefail
-          WF_PATH="logicapps"
+          WF_PATH="logicapps/workflows"
+          PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
+          
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-          zip -r workflows.zip "$BASE_NAME"
+          
+          pushd "$PARENT_DIR" > /dev/null
+          zip -r ../workflows.zip "$BASE_NAME"
+          popd > /dev/null
+          
           echo "Workflow package created: $(pwd)/workflows.zip"
           ls -lh workflows.zip
           echo "Package contents:"
@@ -183,8 +182,8 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            APP_NAME="prod-integration-workflows"
-            RG="${{ vars.AZURE_RG_NAME}}"
+            APP_NAME="${{ env.LOGIC_APP_NAME }}"
+            RG="${{ vars.AZURE_RG_NAME }}"
             ZIP_PATH="workflows.zip"
 
             echo "Deploying workflows to Logic App: $APP_NAME"
@@ -205,7 +204,7 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            APP_NAME="$LOGIC_APP_NAME"
+            APP_NAME="${{ env.LOGIC_APP_NAME }}"
             RG="${{ vars.AZURE_RG_NAME }}"
 
             echo "Restarting Logic App: $APP_NAME"
