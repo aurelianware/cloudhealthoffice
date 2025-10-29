@@ -1,5 +1,15 @@
 # HIPAA Attachments - Logic Apps & Infrastructure
 
+## Project Overview
+
+This repository implements an Azure Logic Apps solution for processing HIPAA-compliant medical attachments:
+- **HIPAA 275 Ingestion**: Polls Availity SFTP for 275 attachment files, archives to Data Lake, processes X12, publishes to Service Bus, updates QNXT
+- **HIPAA 277 RFAI**: Consumes RFAI requests from Service Bus, generates X12 277, sends via SFTP
+- **HIPAA 278 Processing**: Processes Health Care Services Review Information transactions
+- **278 Replay Endpoint**: HTTP endpoint for deterministic replay of 278 transactions for debugging
+
+**Infrastructure**: Azure Data Lake Storage Gen2 (hierarchical namespace), Service Bus (topics: attachments-in, rfai-requests, edi-278), Logic App Standard (WS1 SKU), Application Insights
+
 Always reference these instructions first and only fallback to search or bash commands when you encounter unexpected information that does not match the info here.
 
 ## Working Effectively
@@ -19,7 +29,7 @@ Always reference these instructions first and only fallback to search or bash co
 
 - **Logic Apps Workflow Validation**: `find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;`
   - **TIMING**: Takes <1 second.
-  - SUCCESS: Both ingest275 and rfai277 workflows return `true`.
+  - SUCCESS: All 4 workflows (ingest275, ingest278, replay278, rfai277) return `true`.
 
 - **GitHub Actions Lint Process** (exactly as CI runs):
 ```bash
@@ -60,7 +70,7 @@ popd > /dev/null
 ls -l workflows.zip
 ```
   - **TIMING**: Takes <1 second.
-  - Creates workflows.zip (~14KB) containing ingest275 and rfai277 workflows.
+  - Creates workflows.zip (~14KB) containing all 4 workflows (ingest275, ingest278, replay278, rfai277).
 
 - **Bicep What-If Analysis**: `az deployment group what-if --resource-group <rg> --template-file infra/main.bicep --parameters baseName=<name> --no-pretty-print`
   - **TIMING**: Takes ~4 seconds with valid Azure credentials.
@@ -75,12 +85,14 @@ ls -l workflows.zip
 ### After Making Logic Apps Workflow Changes  
 1. **ALWAYS validate JSON syntax**: `jq . logicapps/workflows/*/workflow.json`
 2. **ALWAYS validate workflow structure**: Run the complete lint process above
-3. **Test ZIP creation**: Ensure workflows.zip contains both workflow subdirectories
+3. **Test ZIP creation**: Ensure workflows.zip contains all 4 workflow subdirectories
 4. **Manual validation scenarios**:
-   - Verify both workflows are `"kind": "Stateful"`
+   - Verify all workflows are `"kind": "Stateful"`
    - Check that `definition`, `kind`, and `parameters` keys exist
    - Validate SFTP trigger configuration in ingest275/workflow.json
    - Validate Service Bus trigger configuration in rfai277/workflow.json
+   - Validate SFTP trigger configuration in ingest278/workflow.json
+   - Validate HTTP trigger configuration in replay278/workflow.json
 
 ### Before Committing Changes
 - **ALWAYS run repository structure check**: `pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."`
@@ -132,6 +144,8 @@ az webapp restart -g pchp-attachments-rg -n pchp-attachments-la
 │   └── main.bicep            # Azure infrastructure template
 ├── logicapps/workflows/
 │   ├── ingest275/workflow.json    # HIPAA 275 ingestion (SFTP→Data Lake→QNXT)
+│   ├── ingest278/workflow.json    # HIPAA 278 Health Care Services Review processing
+│   ├── replay278/workflow.json    # HTTP endpoint for deterministic 278 replay
 │   └── rfai277/workflow.json      # HIPAA 277 RFAI outbound (SB→X12→SFTP)  
 ├── bootstrap_repo.ps1        # Creates new repo from template
 ├── fix_repo_structure.ps1    # Normalizes repo structure for deployment
@@ -140,15 +154,17 @@ az webapp restart -g pchp-attachments-rg -n pchp-attachments-la
 
 ### Infrastructure Components (infra/main.bicep)
 - **Azure Data Lake Storage Gen2**: Hierarchical namespace enabled for HIPAA attachments
-- **Service Bus Namespace**: Topics for `attachments-in` and `rfai-requests`  
+- **Service Bus Namespace**: Topics for `attachments-in`, `rfai-requests`, and `edi-278`  
 - **Logic App Standard**: Workflow runtime with WS1 SKU
 - **Application Insights**: Telemetry and monitoring
 - **Expected warnings**: Service Bus topic parent property linting warnings (safe to ignore)
 
 ### Workflow Details
 - **ingest275**: Monitors SFTP → Archives to Data Lake → Processes X12 275 → Publishes to Service Bus → Updates QNXT
+- **ingest278**: Processes X12 278 Health Care Services Review Information → Archives to Data Lake → Publishes to Service Bus topic `edi-278`
+- **replay278**: HTTP endpoint for deterministic replay of 278 transactions (accepts blobUrl, queues message to `edi-278` topic)
 - **rfai277**: Consumes RFAI requests from Service Bus → Generates X12 277 → Sends via SFTP
-- **Both are Stateful workflows** requiring Logic Apps Standard runtime
+- **All workflows are Stateful** requiring Logic Apps Standard runtime
 
 ### Common File Outputs Reference
 
@@ -168,12 +184,15 @@ parkland_attachments_logicapps_package/
 #### Workflow Files (`find logicapps/workflows -name "workflow.json"`)
 ```
 logicapps/workflows/ingest275/workflow.json
+logicapps/workflows/ingest278/workflow.json
+logicapps/workflows/replay278/workflow.json
 logicapps/workflows/rfai277/workflow.json
 ```
 
 ### Post-Deployment Configuration Requirements
 After successful deployment, manual configuration required:
 1. **API Connections**: Create connections for sftp-ssh, azureblob, servicebus, integrationaccount
-2. **Integration Account**: Configure X12 schemas and agreements (275: X12_005010X210_275, 277: X12_005010X212_277)
+2. **Integration Account**: Configure X12 schemas and agreements (275: X12_005010X210_275, 277: X12_005010X212_277, 278: X12_005010X217_278)
 3. **Logic App Parameters**: Set SFTP folders, QNXT endpoints, X12 identifiers  
 4. **Role Assignments**: Grant Logic App managed identity access to Storage & Service Bus
+5. **Replay278 Endpoint**: Configure HTTP trigger authentication and test with blobUrl parameter
