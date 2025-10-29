@@ -31,6 +31,26 @@ jobs:
           echo "LOCATION=${{ vars.AZURE_LOCATION }}" >> $GITHUB_ENV
           echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}" >> $GITHUB_ENV
 
+      - name: Egress / DNS check
+        id: egress-check
+        run: |
+          set -euo pipefail
+          echo "=== /etc/resolv.conf ==="
+          cat /etc/resolv.conf || true
+          echo "=== Resolve downloads.bicep.azure.com ==="
+          dig +short downloads.bicep.azure.com || nslookup downloads.bicep.azure.com || host downloads.bicep.azure.com || true
+          echo "=== HTTP HEAD to releases/latest ==="
+          curl -fsS --max-time 10 -I https://downloads.bicep.azure.com/releases/latest
+          echo "=== External IP ==="
+          curl -fsS --max-time 10 https://ifconfig.co || curl -fsS --max-time 10 https://ipinfo.io/ip
+          echo "=== TCP 443 check ==="
+          addr=$(getent hosts downloads.bicep.azure.com | awk '{print $1}' | head -n1)
+          if [ -n "$addr" ]; then
+            timeout 5 bash -c "</dev/tcp/$addr/443" && echo "TCP 443 OK" || (echo "TCP 443 FAILED" && exit 2)
+          else
+            echo "Could not resolve address for downloads.bicep.azure.com" && exit 2
+          fi
+
       - name: Install Bicep CLI
         run: az bicep install
 
