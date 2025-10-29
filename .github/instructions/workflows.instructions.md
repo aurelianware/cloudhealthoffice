@@ -33,7 +33,8 @@ This directory contains GitHub Actions workflow files for CI/CD automation of th
 
 ### YAML Conventions
 - Line length restrictions are disabled (long parameter lines are acceptable)
-- Use standard GitHub Actions truthy values: `true`, `false`, `on`, `off`, `yes`, `no`
+- For boolean fields, use only `true` and `false` (do not use `on`, `off`, `yes`, or `no`).  
+  - Note: `on` and `off` are reserved for workflow trigger events and should not be used as boolean values.
 - Always include descriptive `name` fields for steps
 - Use `reviewdog/action-actionlint` for workflow validation
 
