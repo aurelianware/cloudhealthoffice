@@ -98,11 +98,6 @@ jobs:
             useExistingIa=false
             iaName=hipaa-attachments-ia-wus
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
-            appServicePlanName='${{ vars.APP_SERVICE_PLAN_NAME }}' \
-            enableB2B='true' \
-            useExistingIa='false' \
-            iaName='${{ vars.IA_NAME }}'
-          deploymentName: integration-infra-${{ github.run_number }}
 
       - name: Show failing operation (full)
         uses: azure/cli@v2
@@ -127,7 +122,7 @@ jobs:
             done
 
       - name: Configure Integration Account (trading partners, schemas, agreements)
-        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ env.LOCATION }}
+        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ vars.AZURE_LOCATION }}
 
       - name: Get Logic App name
         uses: azure/cli@v2
@@ -147,15 +142,11 @@ jobs:
           set -euo pipefail
           WF_PATH="logicapps"
           BASE_NAME="$(basename "$WF_PATH")"
-
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-
-          # Create ZIP in the current (repo root) directory
           zip -r workflows.zip "$BASE_NAME"
-
           echo "Workflow package created: $(pwd)/workflows.zip"
           ls -lh workflows.zip
           echo "Package contents:"
