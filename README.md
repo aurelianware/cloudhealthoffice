@@ -283,3 +283,20 @@ The `replay278` workflow provides a deterministic HTTP endpoint for replaying X1
 - **Queueing**: Enqueues message to `edi-278` Service Bus topic for processing
 - **Logging**: Records replay events in Application Insights
 - **Deterministic**: Consistent replay behavior for troubleshooting
+
+## 🤖 GitHub Copilot Instructions
+
+This repository includes comprehensive instructions for GitHub Copilot to assist with development:
+
+### Repository-Wide Instructions
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: Complete guidance for working with this repository including build commands, validation steps, deployment processes, and common scenarios.
+
+### Path-Specific Instructions
+The repository includes context-aware instructions that automatically activate when working on specific parts of the codebase:
+
+- **[GitHub Actions Workflows](.github/instructions/workflows.instructions.md)**: Guidance for `.github/workflows/*.yml` files
+- **[Infrastructure (Bicep)](.github/instructions/infrastructure.instructions.md)**: Guidance for `infra/*.bicep` templates
+- **[Logic Apps Workflows](.github/instructions/logicapps.instructions.md)**: Guidance for `logicapps/workflows/*/workflow.json` files
+- **[PowerShell Scripts](.github/instructions/scripts.instructions.md)**: Guidance for `*.ps1` scripts
+
+These instructions help Copilot understand the project structure, conventions, and best practices, providing more accurate and context-aware assistance throughout development.
