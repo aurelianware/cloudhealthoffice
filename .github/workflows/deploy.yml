@@ -93,17 +93,17 @@ jobs:
           resourceGroupName: ${{ env.RG_NAME }}
           template: infra/main.bicep
           parameters: |
-            location='${{ env.LOCATION }}'
-            baseName='${{ env.BASE_NAME }}'
-            iaName='${{ env.IA_NAME }}'
-            serviceBusName='${{ env.SERVICE_BUS_NAME }}'
-            sftpHost='${{ secrets.SFTP_HOST }}'
-            sftpUsername='${{ secrets.SFTP_USERNAME }}'
-            sftpPassword='${{ secrets.SFTP_PASSWORD }}'
-            connectorLocation='${{ env.CONNECTOR_LOCATION }}'
+            location="${{ env.LOCATION }}"
+            baseName="${{ env.BASE_NAME }}"
+            iaName="${{ env.IA_NAME }}"
+            serviceBusName="${{ env.SERVICE_BUS_NAME }}"
+            sftpHost="${{ secrets.SFTP_HOST }}"
+            sftpUsername="${{ secrets.SFTP_USERNAME }}"
+            sftpPassword="${{ secrets.SFTP_PASSWORD }}"
+            connectorLocation="${{ env.CONNECTOR_LOCATION }}"
             enableB2B=true
             useExistingIa=false
-            storageSku='${{ env.STORAGE_SKU }}'
+            storageSku="${{ env.STORAGE_SKU }}"
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
 
       - name: Show failing operation (full)
