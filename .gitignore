@@ -1,22 +1,15 @@
-# Build artifacts
+# Temporary files
 *.zip
 /tmp/
-*.json.tmp
-*.bicep.tmp
+temp/
+*.tmp
 
-# Azure CLI cache
-.azure/
+# Build outputs
+arm.json
 
-# VS Code
-.vscode/
-*.code-workspace
-
-# PowerShell
-*.ps1.bak
-
-# OS files
+# OS generated files
 .DS_Store
 Thumbs.db
 
-# Test outputs
-test-output/
+# PowerShell temporary files
+*.ps1~
