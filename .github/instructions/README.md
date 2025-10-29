@@ -66,4 +66,4 @@ To add instructions for a new area:
 
 - [GitHub Copilot Custom Instructions Documentation](https://docs.github.com/en/copilot/customizing-copilot/adding-custom-instructions-for-github-copilot)
 - [Repository-wide instructions](../copilot-instructions.md)
-- [Best practices for Copilot coding agent](https://gh.io/copilot-coding-agent-tips)
+- [Best practices for Copilot coding agent](https://docs.github.com/en/copilot/best-practices-for-coding-agents)
