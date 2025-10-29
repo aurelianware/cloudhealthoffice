@@ -260,9 +260,10 @@ param(
     [SecureString]$ApiKey
 )
 
-# Convert for use
-$apiKeyPlainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ApiKey))
+# Convert for use (securely zero BSTR after use)
+$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ApiKey)
+$apiKeyPlainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
 # Clear when done
 Clear-Variable apiKeyPlainText
