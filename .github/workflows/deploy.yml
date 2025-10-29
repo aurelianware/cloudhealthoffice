@@ -90,14 +90,14 @@ jobs:
           scope: resourcegroup
           resourceGroupName: ${{ env.RG_NAME }}
           template: infra/main.bicep
-          parameters: >
-            location='${{ env.LOCATION }}' \
-            baseName='${{ vars.BASE_NAME }}' \
-            sftpHost='${{ vars.SFTP_HOST }}' \
-            sftpUsername="${{ vars.SFTP_USERNAME }}" \
-            sftpPassword="${{ vars.SFTP_PASSWORD }}" \           
-            connectorLocation=${{ env.CONNECTOR_LOCATION }} \
-            storageSku='${{ vars.STORAGE_SKU }}' \
+          parameters: |
+            location=${{ env.LOCATION }}
+            baseName=hipaa-logic
+            connectorLocation=${{ env.CONNECTOR_LOCATION }}
+            enableB2B=true
+            useExistingIa=false
+            iaName=hipaa-attachments-ia-wus
+          deploymentName: hipaa-logic-infra-${{ github.run_number }}
             appServicePlanName='${{ vars.APP_SERVICE_PLAN_NAME }}' \
             enableB2B='true' \
             useExistingIa='false' \
