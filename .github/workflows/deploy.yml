@@ -163,16 +163,16 @@ jobs:
           WF_PATH="logicapps/workflows"
           PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
-          
+
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-          
+
           pushd "$PARENT_DIR" > /dev/null
           zip -r ../workflows.zip "$BASE_NAME"
           popd > /dev/null
-          
+
           echo "Workflow package created: $(pwd)/workflows.zip"
           ls -lh workflows.zip
           echo "Package contents:"
