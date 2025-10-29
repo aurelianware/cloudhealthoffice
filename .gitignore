@@ -13,3 +13,6 @@ Thumbs.db
 
 # PowerShell temporary files
 *.ps1~
+
+# Downloaded tools
+actionlint
