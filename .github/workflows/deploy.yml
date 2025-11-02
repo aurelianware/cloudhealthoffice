@@ -27,14 +27,16 @@ jobs:
       - name: Set environment variables
         shell: bash
         run: |
-          echo "RG_NAME=${{ vars.AZURE_RG_NAME }}" >> $GITHUB_ENV
-          echo "LOCATION=${{ vars.AZURE_LOCATION }}" >> $GITHUB_ENV
-          echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}" >> $GITHUB_ENV
-          echo "BASE_NAME=${{ vars.BASE_NAME }}" >> $GITHUB_ENV
-          echo "IA_NAME=${{ vars.IA_NAME }}" >> $GITHUB_ENV
-          echo "SERVICE_BUS_NAME=${{ vars.SERVICE_BUS_NAME }}" >> $GITHUB_ENV
-          echo "STORAGE_SKU=${{ vars.STORAGE_SKU }}" >> $GITHUB_ENV
-          echo "LOGIC_APP_NAME=${{ vars.BASE_NAME }}-la" >> $GITHUB_ENV
+          {
+            echo "RG_NAME=${{ vars.AZURE_RG_NAME }}"
+            echo "LOCATION=${{ vars.AZURE_LOCATION }}"
+            echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}"
+            echo "BASE_NAME=${{ vars.BASE_NAME }}"
+            echo "IA_NAME=${{ vars.IA_NAME }}"
+            echo "SERVICE_BUS_NAME=${{ vars.SERVICE_BUS_NAME }}"
+            echo "STORAGE_SKU=${{ vars.STORAGE_SKU }}"
+            echo "LOGIC_APP_NAME=${{ vars.BASE_NAME }}-la"
+          } >> "$GITHUB_ENV"
 
       - name: Egress / DNS check
         id: egress-check
@@ -51,9 +53,15 @@ jobs:
           echo "=== TCP 443 check ==="
           addr=$(getent hosts downloads.bicep.azure.com | awk '{print $1}' | head -n1)
           if [ -n "$addr" ]; then
-            timeout 5 bash -c "</dev/tcp/$addr/443" && echo "TCP 443 OK" || (echo "TCP 443 FAILED" && exit 2)
+            if timeout 5 bash -c "</dev/tcp/$addr/443"; then
+              echo "TCP 443 OK"
+            else
+              echo "TCP 443 FAILED"
+              exit 2
+            fi
           else
-            echo "Could not resolve address for downloads.bicep.azure.com" && exit 2
+            echo "Could not resolve address for downloads.bicep.azure.com"
+            exit 2
           fi
 
       - name: Install Bicep CLI
