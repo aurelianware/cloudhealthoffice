@@ -39,7 +39,7 @@ param blobAccountKey string = ''        // if empty, uses stg.listKeys().keys[0]
 // Service Bus connection string (SAS) - optional; if empty, we generate from auth rule
 @secure()
 param serviceBusConnectionString string = ''
-param appServicePlanName string = ''
+param appServicePlanName string = '${baseName}-plan'
 param serviceBusName string
 
 // =========================
