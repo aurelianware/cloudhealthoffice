@@ -33,7 +33,7 @@ jobs:
       workflows-path: ${{ steps.set-params.outputs.workflows-path }}
       base-name: ${{ steps.set-params.outputs.base-name }}
       logic-app-name: ${{ steps.set-params.outputs.logic-app-name }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
           WORKFLOWS_PATH="${{ github.event.inputs.workflowsPath || 'logicapps/workflows' }}"
           BASE_NAME="${{ github.event.inputs.baseName || env.DEV_BASE_NAME }}"
           LOGIC_APP_NAME="${BASE_NAME}-la"
-          
+
           echo "bicep-path=${BICEP_PATH}" >> $GITHUB_OUTPUT
           echo "workflows-path=${WORKFLOWS_PATH}" >> $GITHUB_OUTPUT
           echo "base-name=${BASE_NAME}" >> $GITHUB_OUTPUT
@@ -186,16 +186,16 @@ jobs:
           WF_PATH="${{ needs.validate.outputs.workflows-path }}"
           PARENT_DIR="$(dirname "$WF_PATH")"
           BASE_NAME="$(basename "$WF_PATH")"
-          
+
           echo "Packaging workflows from: $WF_PATH"
           if [ ! -d "$WF_PATH" ]; then
             echo "::error::Workflows path '$WF_PATH' not found"; exit 1
           fi
-          
+
           pushd "$PARENT_DIR" > /dev/null
           zip -r ../workflows.zip "$BASE_NAME"
           popd > /dev/null
-          
+
           echo "Workflow package created: $(pwd)/workflows.zip"
           echo "Package contents:"
           unzip -l workflows.zip | head -20
@@ -207,19 +207,19 @@ jobs:
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
             RG="${{ env.DEV_RESOURCE_GROUP }}"
             ZIP_PATH="workflows.zip"
-            
+
             echo "Deploying workflows to Logic App: $APP_NAME"
             if [ ! -f "$ZIP_PATH" ]; then
               echo "::error::Workflow package $ZIP_PATH not found"; exit 1
             fi
-            
+
             # Deploy the ZIP package
             az webapp deploy \
               --resource-group "$RG" \
               --name "$APP_NAME" \
               --src-path "$ZIP_PATH" \
               --type zip
-            
+
             echo "✓ Workflows deployed successfully"
 
       - name: Restart Logic App
@@ -228,7 +228,7 @@ jobs:
           inlineScript: |
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
             RG="${{ env.DEV_RESOURCE_GROUP }}"
-            
+
             echo "Restarting Logic App: $APP_NAME"
             az webapp restart -g "$RG" -n "$APP_NAME"
             echo "✓ Logic App restarted"
@@ -258,19 +258,19 @@ jobs:
           inlineScript: |
             APP_NAME="${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
             RG="${{ env.DEV_RESOURCE_GROUP }}"
-            
+
             echo "Checking Logic App health: $APP_NAME"
-            
+
             # Check app status
             STATUS=$(az webapp show -g "$RG" -n "$APP_NAME" --query "state" -o tsv)
             echo "Logic App State: $STATUS"
-            
+
             if [ "$STATUS" != "Running" ]; then
               echo "::warning::Logic App is not in Running state: $STATUS"
             else
               echo "✓ Logic App is running"
             fi
-            
+
             # Check workflows
             echo "Checking deployed workflows:"
             az webapp show -g "$RG" -n "$APP_NAME" --query "siteConfig.appSettings[?name=='WEBSITE_RUN_FROM_PACKAGE'].value" -o tsv
@@ -281,27 +281,27 @@ jobs:
           inlineScript: |
             RG="${{ env.DEV_RESOURCE_GROUP }}"
             BASE_NAME="${{ needs.validate.outputs.base-name }}"
-            
+
             echo "Running infrastructure health checks for DEV environment"
-            
+
             # Check Storage Account
             STORAGE_NAME="${BASE_NAME}stg"
             echo "Checking Storage Account: $STORAGE_NAME"
             STORAGE_STATUS=$(az storage account show -g "$RG" -n "$STORAGE_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
             echo "Storage Account Status: $STORAGE_STATUS"
-            
+
             # Check Service Bus
             SB_NAME="${BASE_NAME}-sb"
             echo "Checking Service Bus: $SB_NAME"
             SB_STATUS=$(az servicebus namespace show -g "$RG" -n "$SB_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
             echo "Service Bus Status: $SB_STATUS"
-            
+
             # Check Application Insights
             AI_NAME="${BASE_NAME}-ai"
             echo "Checking Application Insights: $AI_NAME"
             AI_STATUS=$(az monitor app-insights component show -g "$RG" -a "$AI_NAME" --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
             echo "Application Insights Status: $AI_STATUS"
-            
+
             # Summary
             echo ""
             echo "=== DEV Deployment Health Summary ==="
