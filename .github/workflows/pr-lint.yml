@@ -28,7 +28,7 @@ jobs:
               echo "✓ Valid workflow JSON: $f"
             fi
           done < <(find logicapps/workflows -type f -name "workflow.json" -print0 2>/dev/null || true)
-          
+
           if [ $failed -eq 1 ]; then
             echo "::error::JSON validation failed"
             exit 1
@@ -59,9 +59,9 @@ jobs:
 
       - name: Bicep build (syntax only)
         run: |
-          echo "ValiFdating Bicep templates..."
+          echo "Validating Bicep templates..."
           failed=0
-          
+
           if [ -f infra/main.bicep ]; then
             echo "Building infra/main.bicep..."
             if ! bicep build infra/main.bicep --outfile /tmp/main-arm.json; then
@@ -71,17 +71,17 @@ jobs:
               echo "✓ infra/main.bicep compiled successfully"
             fi
           fi
-          
+
           if [ -f attachments_logicapps_package/main.bicep ]; then
-            echo "Building pattachments_logicapps_package/main.bicep..."
-            if ! bicep build pattachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
+            echo "Building attachments_logicapps_package/main.bicep..."
+            if ! bicep build attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
               echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
               failed=1
             else
               echo "✓ attachments_logicapps_package/main.bicep compiled successfully"
             fi
           fi
-          
+
           if [ $failed -eq 1 ]; then
             echo "::error::Bicep validation failed"
             exit 1
@@ -103,7 +103,7 @@ jobs:
                 echo "✓ Valid PowerShell script: $f"
               fi
             done < <(find . -name "*.ps1" -print0 2>/dev/null || true)
-            
+
             if [ $failed -eq 1 ]; then
               echo "::error::PowerShell script validation failed"
               exit 1
