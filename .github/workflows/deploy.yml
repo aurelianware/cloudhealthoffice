@@ -118,7 +118,7 @@ jobs:
           template: infra/main.bicep
           parameters: |
             location="${{ env.LOCATION }}" \
-            baseName="${{ env.BASE_NAME }}"\
+            baseName="${{ env.BASE_NAME }}" \
             iaName="${{ env.IA_NAME }}" \
             serviceBusName="${{ env.SERVICE_BUS_NAME }}" \
             sftpHost="${{ secrets.SFTP_HOST }}" \
