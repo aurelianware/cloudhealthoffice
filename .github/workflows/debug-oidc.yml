@@ -21,8 +21,8 @@ jobs:
           echo "Environment from matrix: ${{ matrix.env }}"
           echo "GitHub environment: $GITHUB_ENVIRONMENT"
           echo "Repository: $GITHUB_REPOSITORY"
-          
-      - name: Azure Login (OIDC) 
+
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
