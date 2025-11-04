@@ -147,8 +147,8 @@ jobs:
             baseName="${{ env.BASE_NAME }}"
             iaName="${{ env.IA_NAME }}"
             serviceBusName="${{ env.SERVICE_BUS_NAME }}"
-            sftpHost="${{ env.SFTP_HOST }}"
-            sftpUsername="${{ env.SFTP_USERNAME }}"
+            sftpHost="${{ secrets.SFTP_HOST }}"
+            sftpUsername="${{ secrets.SFTP_USERNAME }}"
             sftpPassword="${{ secrets.SFTP_PASSWORD }}"
             connectorLocation="${{ env.CONNECTOR_LOCATION }}"
             enableB2B=true
