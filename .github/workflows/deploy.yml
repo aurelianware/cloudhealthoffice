@@ -47,39 +47,21 @@ jobs:
           echo "=== Resolve downloads.bicep.azure.com ==="
           dig +short downloads.bicep.azure.com || nslookup downloads.bicep.azure.com || host downloads.bicep.azure.com || true
           echo "=== HTTP HEAD to releases/latest ==="
-          curl -fsS --max-time 10 -I https://downloads.bicep.azure.com/releases/latest || true
+          curl -fsS --max-time 10 -I https://downloads.bicep.azure.com/releases/latest
           echo "=== External IP ==="
-          curl -fsS --max-time 10 https://ifconfig.co || curl -fsS --max-time 10 https://ipinfo.io/ip || true
-          echo "=== TCP 443 check (prefer IPv4) ==="
-
-          # Prefer an IPv4 address explicitly, fall back to other methods if needed
-          addr=$(dig +short A downloads.bicep.azure.com | head -n1)
-          if [ -z "$addr" ]; then
-            # try getent but ensure we pick an IPv4 address (grep for dotted-decimal)
-            addr=$(getent hosts downloads.bicep.azure.com | awk '{print $1}' | grep -E '^[0-9]+\.' | head -n1 || true)
-          fi
-
+          curl -fsS --max-time 10 https://ifconfig.co || curl -fsS --max-time 10 https://ipinfo.io/ip
+          echo "=== TCP 443 check ==="
+          addr=$(getent hosts downloads.bicep.azure.com | awk '{print $1}' | head -n1)
           if [ -n "$addr" ]; then
-            echo "Using IPv4 address: $addr"
-            if timeout 5 bash -c "</dev/tcp/$addr/443" 2>/dev/null; then
-              echo "TCP 443 OK (IPv4 $addr)"
+            if timeout 5 bash -c "</dev/tcp/$addr/443"; then
+              echo "TCP 443 OK"
             else
-              echo "TCP probe failed for $addr; trying HTTPS via curl forcing IPv4..."
-              if curl -fsS --ipv4 --max-time 10 https://downloads.bicep.azure.com/releases/latest >/dev/null; then
-                echo "HTTPS OK via IPv4 using curl"
-              else
-                echo "TCP 443 FAILED (and curl --ipv4 failed)"
-                exit 2
-              fi
-            fi
-          else
-            echo "Could not resolve IPv4 address for downloads.bicep.azure.com; trying HTTPS via curl..."
-            if curl -fsS --max-time 10 https://downloads.bicep.azure.com/releases/latest >/dev/null; then
-              echo "HTTPS OK"
-            else
-              echo "Could not resolve address for downloads.bicep.azure.com and curl failed"
+              echo "TCP 443 FAILED"
               exit 2
             fi
+          else
+            echo "Could not resolve address for downloads.bicep.azure.com"
+            exit 2
           fi
 
       - name: Install Bicep CLI
