@@ -7,7 +7,8 @@ jobs:
   debug-token:
     runs-on: ubuntu-latest
     strategy:
-      matrix: { env: [DEV, UAT, PROD] }
+      matrix:
+        env: [DEV, UAT, PROD]
     environment: ${{ matrix.env }}
     permissions:
       id-token: write

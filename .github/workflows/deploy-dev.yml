@@ -46,10 +46,12 @@ jobs:
           BASE_NAME="${{ github.event.inputs.baseName || env.DEV_BASE_NAME }}"
           LOGIC_APP_NAME="${BASE_NAME}-la"
 
-          echo "bicep-path=${BICEP_PATH}" >> $GITHUB_OUTPUT
-          echo "workflows-path=${WORKFLOWS_PATH}" >> $GITHUB_OUTPUT
-          echo "base-name=${BASE_NAME}" >> $GITHUB_OUTPUT
-          echo "logic-app-name=${LOGIC_APP_NAME}" >> $GITHUB_OUTPUT
+          {
+            echo "bicep-path=${BICEP_PATH}"
+            echo "workflows-path=${WORKFLOWS_PATH}"
+            echo "base-name=${BASE_NAME}"
+            echo "logic-app-name=${LOGIC_APP_NAME}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Validate workflow folder exists
         run: |
