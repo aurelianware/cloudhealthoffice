@@ -169,8 +169,17 @@ jobs:
                 --operation-ids "$OP" -o jsonc
             done
 
+      - name: Allow az preview extension installs & ensure logic extension
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Configuring az to allow preview extension install (helpful for 'logic' extension)..."
+            az config set extension.dynamic_install_allow_preview=true
+            echo "Attempting to add 'logic' extension..."
+            az extension add --name logic --yes || true
+
       - name: Configure Integration Account (trading partners, schemas, agreements)
-        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ vars.AZURE_LOCATION }}
+        run: pwsh ./scripts/setup-integration-account-complete.ps1 -ResourceGroup "$RG_NAME" -IntegrationAccountName prod-integration-account -Location ${{ vars.AZURE_LOCATION }} -SchemaFolder "./"
 
       - name: Package Logic App workflows
         shell: bash
