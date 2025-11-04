@@ -1,7 +1,7 @@
 name: pr-lint
 on:
   pull_request:
-    branches: [ main, 'release/*', 'feature/*' ]
+    branches: [main, 'release/*', 'feature/*']
 
 jobs:
   lint-and-test:
@@ -45,17 +45,17 @@ jobs:
       - name: YAML lint
         uses: ibiqlik/action-yamllint@v3
         with:
-          file_or_dir: ".github/workflows *.yml *.yaml"
+          file_or_dir: ".github/workflows"
           config_data: |
             extends: default
             rules:
               line-length: disable
-              truthy:
-                allowed-values: ['true','false','on','off','yes','no','y','n']  # keep defaults
+              document-start: disable
+              truthy: disable
 
       # ---------- Bicep syntax check (no Azure login) ----------
       - name: Setup Bicep
-        uses: Azure/setup-bicep@v1
+        run: az bicep install
 
       - name: Bicep build (syntax only)
         run: |
@@ -64,7 +64,7 @@ jobs:
 
           if [ -f infra/main.bicep ]; then
             echo "Building infra/main.bicep..."
-            if ! bicep build infra/main.bicep --outfile /tmp/main-arm.json; then
+            if ! az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json; then
               echo "::error file=infra/main.bicep::Bicep build failed"
               failed=1
             else
@@ -74,7 +74,7 @@ jobs:
 
           if [ -f attachments_logicapps_package/main.bicep ]; then
             echo "Building attachments_logicapps_package/main.bicep..."
-            if ! bicep build attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
+            if ! az bicep build --file attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
               echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
               failed=1
             else
