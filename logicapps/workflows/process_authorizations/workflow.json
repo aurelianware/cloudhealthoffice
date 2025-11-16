@@ -465,7 +465,7 @@
                       "NM109": "@{outputs('Extract_Authorization_Metadata')?['providerNpi']}"
                     },
                     "STC": {
-                      "STC01_1": "@{if(outputs('Determine_Authorization_Decision')?['isApproved'], 'A1', 'A4')}",
+                      "STC01_1": "@{if(equals(outputs('Determine_Authorization_Decision')?['authorizationStatus'], 'approved'), 'A1', if(equals(outputs('Determine_Authorization_Decision')?['authorizationStatus'], 'modified'), 'A2', if(equals(outputs('Determine_Authorization_Decision')?['authorizationStatus'], 'denied'), 'A3', if(equals(outputs('Determine_Authorization_Decision')?['authorizationStatus'], 'pended'), 'A4', if(equals(outputs('Determine_Authorization_Decision')?['authorizationStatus'], 'partial_approval'), 'A6', 'A4'))))))}",
                       "STC01_2": "@{outputs('Determine_Authorization_Decision')?['authorizationStatus']}",
                       "STC02": "@{formatDateTime(utcNow(), 'yyyyMMdd')}"
                     },
