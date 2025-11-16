@@ -6,30 +6,106 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Manual approval gate before production deployment
+  # Pre-deployment approval gate
   approval-gate:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: 
-      name: PROD-approval
-      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    environment: PROD-approval
+    outputs:
+      approved: ${{ steps.approval.outputs.approved }}
+    
     steps:
-      - name: Deployment Approval Required
+      - name: Manual Approval Required
+        id: approval
         run: |
-          echo "🔒 Manual approval required for PROD deployment"
-          echo "✅ Approval granted - proceeding with deployment"
-          echo "📝 Deployment triggered by: ${{ github.actor }}"
-          echo "📝 Ref: ${{ github.ref }}"
-          echo "📝 SHA: ${{ github.sha }}"
+          echo "✅ Deployment to PROD environment approved"
+          echo "approved=true" >> "$GITHUB_OUTPUT"
 
-  deploy:
+  # Validate before deployment
+  validate:
     needs: approval-gate
-    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      base-name: ${{ steps.set-params.outputs.base-name }}
+      logic-app-name: ${{ steps.set-params.outputs.logic-app-name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-params
+        run: |
+          BASE_NAME="${{ vars.BASE_NAME }}"
+          LOGIC_APP_NAME="${BASE_NAME}-la"
+          
+          {
+            echo "base-name=${BASE_NAME}"
+            echo "logic-app-name=${LOGIC_APP_NAME}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate workflow folder exists
+        run: |
+          WF_PATH="logicapps/workflows"
+          if [ ! -d "$WF_PATH" ]; then
+            echo "::error::Workflows path '$WF_PATH' not found"; exit 1
+          fi
+          echo "Found workflows:"
+          find "$WF_PATH" -maxdepth 2 -type f -name "workflow.json" -print
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Validate JSON workflows
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS= read -r -d '' f; do
+            echo "Validating $f"
+            if ! jq . "$f" >/dev/null 2>&1; then
+              echo "::error file=$f::Invalid JSON syntax"
+              failed=1
+              continue
+            fi
+            if ! jq -e 'has("definition") and has("kind") and has("parameters")' "$f" >/dev/null; then
+              echo "::error file=$f::Missing required keys: definition/kind/parameters"
+              failed=1
+              continue
+            fi
+            echo "✓ Valid workflow: $f"
+          done < <(find logicapps/workflows -type f -name "workflow.json" -print0)
+          if [ $failed -eq 1 ]; then
+            echo "::error::One or more workflows failed validation"
+            exit 1
+          fi
+          echo "✓ All workflows validated successfully"
+
+      - name: Validate Bicep template
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "Installing Bicep CLI..."
+            az bicep install
+            echo "Validating Bicep template: infra/main.bicep"
+            az bicep version
+            az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+            if [ ! -s /tmp/arm.json ]; then
+              echo "::error::Bicep compilation failed - ARM template is empty"
+              exit 1
+            fi
+            echo "✓ Bicep template compiled successfully"
+
+  # Deploy infrastructure
+  deploy-infrastructure:
+    needs: [approval-gate, validate]
     runs-on: ubuntu-latest
     environment: PROD
     permissions:
       id-token: write
       contents: read
+    outputs:
+      logic-app-name: ${{ needs.validate.outputs.logic-app-name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -306,15 +382,6 @@ jobs:
 
             # Check workflows
             echo "Checking deployed workflows..."
-            WORKFLOW_COUNT=$(az rest --method GET \
-              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
-              --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
-            
-            echo "Found $WORKFLOW_COUNT workflows"
-            if [ "$WORKFLOW_COUNT" -lt 4 ]; then
-              echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
-            fi
-            
             az rest --method GET \
               --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
               --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows (may need permissions)"
@@ -387,29 +454,14 @@ jobs:
             echo "=== Rollback Summary ==="
             echo "❌ Deployment failed. Please review the errors above."
             echo "📋 Diagnostic information has been collected."
-            echo ""
-            echo "🔧 Automated Rollback Options:"
-            echo "   Option 1: Re-run a previous successful deployment"
-            echo "   - Go to Actions tab → Select successful run → Re-run jobs"
-            echo ""
-            echo "   Option 2: Deploy from last known good commit"
-            echo "   - git checkout <last-good-commit>"
-            echo "   - git push --force-with-lease (only if necessary)"
-            echo ""
-            echo "🔍 Manual Investigation Steps:"
+            echo "🔧 To manually rollback:"
             echo "   1. Review the deployment errors above"
             echo "   2. Check Logic App configuration in Azure Portal"
             echo "   3. Verify API connections are properly configured"
             echo "   4. Review Application Insights for runtime errors"
-            echo "   5. Check Service Bus topic message queues"
-            echo "   6. Verify Storage Account blob containers"
             echo ""
             echo "⚠️  IMPORTANT: The infrastructure may be partially deployed."
             echo "   Please verify resource state before retrying deployment."
-            echo ""
-            echo "📞 Escalation: If rollback is required, contact:"
-            echo "   - DevOps team for infrastructure issues"
-            echo "   - Application team for workflow issues"
 
       - name: Deployment Success Summary
         if: success()

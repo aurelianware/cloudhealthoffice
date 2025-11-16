@@ -25,7 +25,23 @@ env:
   UAT_BASE_NAME: hipaa-attachments-uat
 
 jobs:
+  # Manual approval gate before UAT deployment
+  approval-gate:
+    runs-on: ubuntu-latest
+    environment: 
+      name: UAT-approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Deployment Approval Required
+        run: |
+          echo "🔒 Manual approval required for UAT deployment"
+          echo "✅ Approval granted - proceeding with deployment"
+          echo "📝 Deployment triggered by: ${{ github.actor }}"
+          echo "📝 Ref: ${{ github.ref }}"
+          echo "📝 SHA: ${{ github.sha }}"
+
   validate:
+    needs: approval-gate
     runs-on: ubuntu-latest
     environment: UAT
     outputs:
@@ -275,7 +291,18 @@ jobs:
 
             # Check workflows
             echo "Checking deployed workflows:"
-            az webapp show -g "$RG" -n "$APP_NAME" --query "siteConfig.appSettings[?name=='WEBSITE_RUN_FROM_PACKAGE'].value" -o tsv
+            WORKFLOW_COUNT=$(az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
+            
+            echo "Found $WORKFLOW_COUNT workflows"
+            if [ "$WORKFLOW_COUNT" -lt 4 ]; then
+              echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
+            fi
+            
+            az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows"
 
       - name: Health Check - Infrastructure Resources
         uses: azure/cli@v2
@@ -388,14 +415,27 @@ jobs:
             echo "=== Diagnostic Summary ==="
             echo "❌ UAT deployment failed. Please review the errors above."
             echo "📋 Resource state has been captured."
-            echo "🔧 Recommended actions:"
+            echo ""
+            echo "🔧 Automated Rollback Options:"
+            echo "   Option 1: Re-run a previous successful deployment"
+            echo "   - Go to Actions tab → Select successful UAT run → Re-run jobs"
+            echo ""
+            echo "   Option 2: Deploy from last known good release branch"
+            echo "   - git checkout release/<last-good-version>"
+            echo "   - git push origin release/<last-good-version>"
+            echo ""
+            echo "🔍 Manual Investigation Steps:"
             echo "   1. Review deployment errors above"
             echo "   2. Check resource quotas and limits"
             echo "   3. Verify OIDC authentication is configured"
             echo "   4. Check for naming conflicts"
             echo "   5. Validate UAT-specific secrets are set"
+            echo "   6. Verify Service Bus topics exist"
+            echo "   7. Check Storage Account configuration"
             echo ""
             echo "⚠️  Resources may be partially deployed. Verify before retrying."
+            echo ""
+            echo "📞 Escalation: Contact DevOps team for UAT environment issues"
       - name: Rollback on Failure
         if: failure()
         runs-on: ubuntu-latest

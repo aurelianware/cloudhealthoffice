@@ -5,6 +5,7 @@ This guide provides step-by-step instructions for deploying the HIPAA Attachment
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [GitHub Configuration](#github-configuration)
+- [Environment Protection Rules and Approval Gates](#environment-protection-rules-and-approval-gates)
 - [Pre-Deployment Validation](#pre-deployment-validation)
 - [Environment Deployment](#environment-deployment)
 - [Post-Deployment Configuration](#post-deployment-configuration)
@@ -159,6 +160,276 @@ BASE_NAME_DEV      = hipaa-attachments-dev
 BASE_NAME_UAT      = hipaa-attachments-uat
 BASE_NAME_PROD     = hipaa-attachments-prod
 ```
+
+## Environment Protection Rules and Approval Gates
+
+This section describes how to configure GitHub Environment protection rules to require manual approvals before deployments to UAT and PROD environments.
+
+### Overview
+
+The deployment workflows use GitHub Environments with protection rules to implement a gated release strategy:
+
+- **UAT-approval**: Approval gate before UAT deployment
+- **UAT**: Actual UAT environment for resource deployment
+- **PROD-approval**: Approval gate before PROD deployment
+- **PROD**: Actual PROD environment for resource deployment
+
+### Why Use Approval Gates?
+
+Approval gates provide:
+- ✅ **Risk Mitigation**: Prevent accidental deployments to production
+- ✅ **Compliance**: Meet audit requirements for change management
+- ✅ **Quality Control**: Ensure proper testing before production release
+- ✅ **Accountability**: Track who approved each deployment
+
+### Step-by-Step Configuration
+
+#### Step 1: Create GitHub Environments
+
+1. Navigate to your GitHub repository
+2. Click **Settings** → **Environments**
+3. Create the following environments (click "New environment" for each):
+
+   **For UAT:**
+   - Environment name: `UAT-approval`
+   - Environment name: `UAT`
+
+   **For PROD:**
+   - Environment name: `PROD-approval`
+   - Environment name: `PROD`
+
+#### Step 2: Configure UAT-approval Environment
+
+1. Click on **UAT-approval** environment
+2. Under "Deployment protection rules":
+   - ✅ Check **Required reviewers**
+   - Add reviewers (UAT leads, QA team members)
+   - Minimum: 1-2 reviewers recommended
+3. Optional settings:
+   - **Wait timer**: Set to 0 minutes (approval required immediately)
+   - **Deployment branches**: Select "Selected branches" → Add `release/*` pattern
+4. Click **Save protection rules**
+
+#### Step 3: Configure UAT Environment
+
+1. Click on **UAT** environment
+2. Under "Environment secrets", add UAT-specific secrets:
+   - `AZURE_CLIENT_ID_UAT`
+   - `AZURE_TENANT_ID_UAT`
+   - `AZURE_SUBSCRIPTION_ID_UAT`
+3. Under "Environment variables", add UAT-specific variables:
+   - `AZURE_RG_NAME` = `hipaa-attachments-uat-rg`
+   - `AZURE_LOCATION` = `eastus`
+   - `BASE_NAME` = `hipaa-attachments-uat`
+4. Optional protection rules:
+   - **Deployment branches**: Select "Selected branches" → Add `release/*` pattern
+5. Click **Save protection rules**
+
+#### Step 4: Configure PROD-approval Environment
+
+1. Click on **PROD-approval** environment
+2. Under "Deployment protection rules":
+   - ✅ Check **Required reviewers**
+   - Add reviewers (Production approvers, DevOps leads, Compliance team)
+   - Minimum: 2-3 reviewers recommended for production
+3. Optional settings:
+   - **Wait timer**: Set to 0 minutes (or add a delay if needed)
+   - **Deployment branches**: Select "Protected branches only" (main branch)
+4. Click **Save protection rules**
+
+#### Step 5: Configure PROD Environment
+
+1. Click on **PROD** environment
+2. Under "Environment secrets", add PROD-specific secrets:
+   - `AZURE_CLIENT_ID` (or `AZURE_CLIENT_ID_PROD`)
+   - `AZURE_TENANT_ID` (or `AZURE_TENANT_ID_PROD`)
+   - `AZURE_SUBSCRIPTION_ID` (or `AZURE_SUBSCRIPTION_ID_PROD`)
+   - `SFTP_HOST`
+   - `SFTP_USERNAME`
+   - `SFTP_PASSWORD`
+3. Under "Environment variables", add PROD-specific variables:
+   - `AZURE_RG_NAME` = `pchp-attachments-prod-rg`
+   - `AZURE_LOCATION` = `eastus`
+   - `BASE_NAME` = `hipaa-attachments-prod`
+   - `IA_NAME` = `prod-integration-account`
+   - `SERVICE_BUS_NAME` = `hipaa-attachments-prod-sb`
+   - `STORAGE_SKU` = `Standard_GRS`
+   - `AZURE_CONNECTOR_LOCATION` = `eastus`
+4. Protection rules:
+   - ✅ **Deployment branches**: Select "Protected branches only"
+5. Click **Save protection rules**
+
+### Approval Workflow
+
+#### UAT Deployment Approval
+
+When a deployment to UAT is triggered (push to `release/*` branch):
+
+1. **Workflow starts** and reaches `approval-gate` job
+2. **GitHub sends notification** to configured reviewers
+3. **Reviewers receive email/notification** with deployment details:
+   - Branch name
+   - Commit SHA
+   - Triggered by (GitHub user)
+   - Link to workflow run
+4. **Reviewer clicks "Review pending deployments"**
+5. **Reviewer reviews**:
+   - Code changes (via commit link)
+   - Branch name and author
+   - Previous test results
+6. **Reviewer approves or rejects**:
+   - ✅ **Approve**: Deployment proceeds to UAT
+   - ❌ **Reject**: Deployment is cancelled
+7. **If approved**: Workflow continues with infrastructure and Logic App deployment
+8. **If rejected**: Workflow stops, no changes deployed
+
+#### PROD Deployment Approval
+
+When a deployment to PROD is triggered (manual workflow dispatch or push to main):
+
+1. **Workflow starts** and reaches `approval-gate` job
+2. **GitHub sends notification** to configured reviewers (typically 2-3 people)
+3. **ALL required reviewers must approve** (if configured)
+4. **Reviewer reviews**:
+   - UAT test results
+   - Change management ticket
+   - Release notes
+   - Stakeholder sign-off
+5. **Reviewer approves or rejects**:
+   - ✅ **Approve**: Deployment proceeds to PROD
+   - ❌ **Reject**: Deployment is cancelled, issue must be investigated
+6. **If approved**: Workflow continues with production deployment
+7. **Post-deployment**: Health checks run automatically
+
+### Best Practices
+
+#### Reviewer Selection
+
+**UAT Reviewers:**
+- QA Team Lead
+- Application Owner
+- Senior Developer
+
+**PROD Reviewers:**
+- DevOps Manager
+- Application Owner
+- Compliance Officer
+- Operations Manager
+
+#### Approval Guidelines
+
+Before approving a deployment, reviewers should verify:
+
+**For UAT:**
+- ✅ All PR checks passed
+- ✅ Code review completed
+- ✅ Unit tests pass
+- ✅ DEV environment tested successfully
+- ✅ No high-severity issues in PR
+
+**For PROD:**
+- ✅ UAT deployment successful
+- ✅ UAT testing completed and signed off
+- ✅ Change management ticket approved
+- ✅ Rollback plan documented
+- ✅ Deployment window scheduled
+- ✅ Stakeholders notified
+- ✅ No open critical bugs
+- ✅ Backup verified
+
+#### Emergency Deployments
+
+For urgent production hotfixes:
+
+1. Create emergency change ticket
+2. Get expedited approval from on-call manager
+3. Document reason for emergency deployment
+4. Follow standard approval process (but expedited)
+5. Conduct post-deployment review
+
+### Monitoring Approvals
+
+#### View Pending Approvals
+
+1. Go to repository → **Actions** tab
+2. Look for runs with "Waiting" status
+3. Click on the run
+4. You'll see "Review pending deployments" button
+
+#### Approval History
+
+1. Go to repository → **Settings** → **Environments**
+2. Click on environment (e.g., PROD-approval)
+3. Click **Deployment history**
+4. View all deployments with approval status and reviewer names
+
+### Troubleshooting
+
+#### Issue: No reviewers are notified
+
+**Solutions:**
+1. Verify reviewers are added in Environment settings
+2. Check reviewers have notification enabled in GitHub settings
+3. Ensure reviewers have repository access
+4. Check GitHub email delivery settings
+
+#### Issue: Approval button not showing
+
+**Solutions:**
+1. Verify you are a configured reviewer for the environment
+2. Check if deployment is waiting on a different gate
+3. Refresh the page
+4. Verify environment protection rules are saved
+
+#### Issue: Deployment proceeds without approval
+
+**Solutions:**
+1. Check if "Required reviewers" is enabled for the environment
+2. Verify environment name matches workflow YAML
+3. Check if user has bypass permission (repository admins)
+4. Review environment protection rule configuration
+
+### Security Considerations
+
+#### Access Control
+
+- Limit reviewers to trusted team members
+- Use teams instead of individuals for better management
+- Regularly review and update reviewer list
+- Audit approval logs monthly
+
+#### Bypass Protection
+
+Repository administrators can bypass environment protection rules. To prevent accidental bypass:
+
+1. Limit admin access to repository
+2. Use branch protection rules in addition to environment rules
+3. Enable audit logging
+4. Review deployment history regularly
+
+### Example Approval Notification
+
+When a reviewer receives an approval request:
+
+```
+📧 Pending deployments for aurelianware/hipaa-attachments
+
+Deployment to PROD-approval is waiting for your review
+
+Details:
+- Workflow: Deploy
+- Branch: main
+- Triggered by: john.doe
+- Commit: abc1234 - "Fix HIPAA 275 processing issue"
+
+Review deployment: [Review pending deployments]
+```
+
+Reviewer clicks the link and sees:
+- Commit details
+- Changed files
+- Test results
+- Option to Approve or Reject with comment
 
 ## Pre-Deployment Validation
 
