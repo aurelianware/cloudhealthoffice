@@ -18,5 +18,10 @@
     "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/integrationaccount",
     "connectionName": "integrationaccount",
     "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/integrationaccount"
+  },
+  "applicationinsights": {
+    "connectionId": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/applicationinsights",
+    "connectionName": "applicationinsights",
+    "id": "/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/providers/Microsoft.Web/locations/westus2/managedApis/applicationinsights"
   }
 }
