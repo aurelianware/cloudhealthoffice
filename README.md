@@ -69,6 +69,8 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 - `AZURE_TENANT_ID_{ENV}`: Azure AD tenant ID
 - `AZURE_SUBSCRIPTION_ID_{ENV}`: Target Azure subscription ID
 
+**📚 For detailed setup instructions, see [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md)**
+
 ### Deployment Options
 
 #### 1. Automated UAT Deployment (Recommended)
