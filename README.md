@@ -452,6 +452,22 @@ If QNXT response indicates `requiresRFAI: true`, the workflow:
 - Track appeal registration success rate
 - Monitor QNXT API latency and retry rates
 
+## 📚 Documentation
+
+Comprehensive documentation is available to guide development, deployment, and maintenance:
+
+### Core Documentation
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development workflow, prerequisites, and setup guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, components, and data flows
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Step-by-step deployment procedures for all environments
+- **[BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md)** - Branch conventions, merge requirements, and workflows
+- **[SECURITY.md](SECURITY.md)** - HIPAA compliance, security practices, and encryption
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues, solutions, and debugging guides
+
+### Additional Resources
+- **[HIPAA-X12-Agreements-Guide.md](HIPAA-X12-Agreements-Guide.md)** - X12 EDI agreement configuration
+- **[test-plan-trading-partners.md](test-plan-trading-partners.md)** - Testing procedures and trading partner details
+
 ## 🤖 GitHub Copilot Instructions
 
 This repository includes comprehensive instructions for GitHub Copilot to assist with development:
