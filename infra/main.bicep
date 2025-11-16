@@ -116,6 +116,15 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
   properties: {}
 }
 
+resource sbTopicEdi278SubAuth 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
+  parent: sbTopicEdi278
+  name: 'auth-processor'
+  properties: {
+    maxDeliveryCount: 10
+    lockDuration: 'PT5M'
+  }
+}
+
 resource sbTopicAppealsAuth 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
   name: 'appeals-auth'
@@ -125,6 +134,12 @@ resource sbTopicAppealsAuth 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-p
 resource sbTopicAuthStatuses 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
   name: 'auth-statuses'
+  properties: {}
+}
+
+resource sbTopicDeadLetter 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'dead-letter'
   properties: {}
 }
 
