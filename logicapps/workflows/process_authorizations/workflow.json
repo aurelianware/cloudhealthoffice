@@ -685,6 +685,7 @@
                   "errorMessage": "@{result('Try_Process_Authorization')?[0]?['error']?['message']}",
                   "errorCode": "@{result('Try_Process_Authorization')?[0]?['error']?['code']}",
                   "failedAction": "@{result('Try_Process_Authorization')?[0]?['name']}",
+                  "failureStage": "@{if(equals(actions('Parse_278_Message')?['status'], 'Failed'), 'Message Parsing', if(equals(actions('Get_278_Blob_Content')?['status'], 'Failed'), 'Blob Retrieval', if(equals(actions('Decode_X12_278_Authorization')?['status'], 'Failed'), 'X12 Decode', if(equals(actions('Call_QNXT_Eligibility_API')?['status'], 'Failed'), 'QNXT Eligibility API', if(equals(actions('Call_QNXT_Claims_Verification_API')?['status'], 'Failed'), 'QNXT Claims Verification', if(equals(actions('Call_QNXT_Authorization_API')?['status'], 'Failed'), 'QNXT Authorization API', if(equals(actions('Encode_X12_277_Response')?['status'], 'Failed'), 'X12 277 Encode', if(equals(actions('Publish_to_Auth_Statuses_Topic')?['status'], 'Failed'), 'Service Bus Publish', 'Unknown')))))))))}",
                   "fileName": "@{body('Parse_278_Message')?['fileName']}"
                 }
               }
