@@ -1,0 +1,713 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "ServiceBus_Authorization_278_Messages": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['servicebus']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_edi278'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_auth'))}/messages/head"
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerBody()"
+      }
+    },
+    "actions": {
+      "Try_Process_Authorization": {
+        "type": "Scope",
+        "actions": {
+          "Parse_278_Message": {
+            "type": "ParseJson",
+            "runAfter": {},
+            "inputs": {
+              "content": "@triggerBody()?['contentData']",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "blobUrl": {
+                    "type": "string"
+                  },
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Get_278_Blob_Content": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['azureblob']['connectionId']"
+                }
+              },
+              "method": "get",
+              "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files/@{encodeURIComponent(body('Parse_278_Message')?['blobUrl'])}/content"
+            },
+            "runAfter": {
+              "Parse_278_Message": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Archive_278_to_Authorizations_Folder": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['azureblob']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+              "queries": {
+                "folderPath": "@concat(parameters('blob_authorizations_folder'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                "name": "@{body('Parse_278_Message')?['fileName']}-auth-@{utcNow()}.edi"
+              },
+              "body": "@outputs('Get_278_Blob_Content')?['body']"
+            },
+            "runAfter": {
+              "Get_278_Blob_Content": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Decode_X12_278_Authorization": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/decode/edi",
+              "body": {
+                "content": "@base64(outputs('Get_278_Blob_Content')?['body'])",
+                "contentType": "application/edi-x12",
+                "agreementType": "X12",
+                "messageType": "@parameters('x12_278_messagetype')",
+                "senderId": "@parameters('x12_sender_id')",
+                "receiverId": "@parameters('x12_receiver_id')"
+              }
+            },
+            "runAfter": {
+              "Archive_278_to_Authorizations_Folder": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_Authorization_Metadata": {
+            "type": "Compose",
+            "inputs": {
+              "claimNumber": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'],'')}",
+              "memberId": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='IL')][0]?['NM109'],'')}",
+              "providerNpi": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='PR')][0]?['NM109'],'')}",
+              "serviceFromDate": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='472')][0]?['DTP03'],'')}",
+              "serviceToDate": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='473')][0]?['DTP03'],'')}",
+              "reviewDecision": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HCR']?[0]?['HCR01'],'')}",
+              "authorizationReference": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='D9')][0]?['REF02'],'')}",
+              "serviceType": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HI']?[0]?['HI01_1'],'')}",
+              "appealReference": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='EJ')][0]?['REF02'],'')}"
+            },
+            "runAfter": {
+              "Decode_X12_278_Authorization": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Authorization_Request_Received": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Authorization_Request_Received",
+                "properties": {
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                  "providerNpi": "@outputs('Extract_Authorization_Metadata')?['providerNpi']",
+                  "authorizationReference": "@outputs('Extract_Authorization_Metadata')?['authorizationReference']",
+                  "appealReference": "@outputs('Extract_Authorization_Metadata')?['appealReference']",
+                  "fileName": "@{body('Parse_278_Message')?['fileName']}"
+                }
+              }
+            },
+            "runAfter": {
+              "Extract_Authorization_Metadata": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Call_QNXT_Eligibility_API": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('qnxt_base_url')}/members/check-eligibility",
+              "headers": {
+                "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                "serviceFromDate": "@outputs('Extract_Authorization_Metadata')?['serviceFromDate']",
+                "serviceToDate": "@outputs('Extract_Authorization_Metadata')?['serviceToDate']",
+                "requestedAt": "@utcNow()"
+              }
+            },
+            "runtimeConfiguration": {
+              "retry": {
+                "count": 4,
+                "type": "fixed",
+                "interval": "PT15S"
+              }
+            },
+            "runAfter": {
+              "Log_Authorization_Request_Received": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Eligibility_Check_Result": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Member_Eligibility_Checked",
+                "properties": {
+                  "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                  "eligible": "@{body('Call_QNXT_Eligibility_API')?['eligible']}",
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']"
+                }
+              }
+            },
+            "runAfter": {
+              "Call_QNXT_Eligibility_API": [
+                "Succeeded",
+                "Failed"
+              ]
+            }
+          },
+          "Call_QNXT_Claims_Verification_API": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('qnxt_base_url')}/claims/verify",
+              "headers": {
+                "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                "providerNpi": "@outputs('Extract_Authorization_Metadata')?['providerNpi']",
+                "serviceFromDate": "@outputs('Extract_Authorization_Metadata')?['serviceFromDate']",
+                "verifiedAt": "@utcNow()"
+              }
+            },
+            "runtimeConfiguration": {
+              "retry": {
+                "count": 4,
+                "type": "fixed",
+                "interval": "PT15S"
+              }
+            },
+            "runAfter": {
+              "Log_Eligibility_Check_Result": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Call_QNXT_Authorization_API": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('qnxt_base_url')}/authorizations/process",
+              "headers": {
+                "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                "providerNpi": "@outputs('Extract_Authorization_Metadata')?['providerNpi']",
+                "serviceFromDate": "@outputs('Extract_Authorization_Metadata')?['serviceFromDate']",
+                "serviceToDate": "@outputs('Extract_Authorization_Metadata')?['serviceToDate']",
+                "serviceType": "@outputs('Extract_Authorization_Metadata')?['serviceType']",
+                "reviewDecision": "@outputs('Extract_Authorization_Metadata')?['reviewDecision']",
+                "authorizationReference": "@outputs('Extract_Authorization_Metadata')?['authorizationReference']",
+                "appealReference": "@outputs('Extract_Authorization_Metadata')?['appealReference']",
+                "eligibilityStatus": "@{body('Call_QNXT_Eligibility_API')?['eligible']}",
+                "claimVerified": "@{body('Call_QNXT_Claims_Verification_API')?['verified']}",
+                "dataLakePath": "@concat(parameters('blob_authorizations_folder'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                "fileName": "@{body('Parse_278_Message')?['fileName']}-auth-@{utcNow()}.edi",
+                "processedAt": "@utcNow()"
+              }
+            },
+            "runtimeConfiguration": {
+              "retry": {
+                "count": 4,
+                "type": "fixed",
+                "interval": "PT15S"
+              }
+            },
+            "runAfter": {
+              "Call_QNXT_Claims_Verification_API": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Determine_Authorization_Decision": {
+            "type": "Compose",
+            "inputs": {
+              "authorizationNumber": "@{coalesce(body('Call_QNXT_Authorization_API')?['authorizationNumber'], '')}",
+              "authorizationStatus": "@{coalesce(body('Call_QNXT_Authorization_API')?['status'], 'pending')}",
+              "effectiveStartDate": "@{coalesce(body('Call_QNXT_Authorization_API')?['effectiveStartDate'], '')}",
+              "effectiveEndDate": "@{coalesce(body('Call_QNXT_Authorization_API')?['effectiveEndDate'], '')}",
+              "authorizationLimits": "@{coalesce(body('Call_QNXT_Authorization_API')?['limits'], '')}",
+              "authorizationConditions": "@{coalesce(body('Call_QNXT_Authorization_API')?['conditions'], '')}",
+              "denialReason": "@{coalesce(body('Call_QNXT_Authorization_API')?['denialReason'], '')}",
+              "isApproved": "@{equals(coalesce(body('Call_QNXT_Authorization_API')?['status'], 'pending'), 'approved')}"
+            },
+            "runAfter": {
+              "Call_QNXT_Authorization_API": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Authorization_Decision": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Authorization_Decision_Made",
+                "properties": {
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                  "authorizationNumber": "@outputs('Determine_Authorization_Decision')?['authorizationNumber']",
+                  "authorizationStatus": "@outputs('Determine_Authorization_Decision')?['authorizationStatus']",
+                  "isApproved": "@outputs('Determine_Authorization_Decision')?['isApproved']",
+                  "effectiveStartDate": "@outputs('Determine_Authorization_Decision')?['effectiveStartDate']",
+                  "effectiveEndDate": "@outputs('Determine_Authorization_Decision')?['effectiveEndDate']"
+                }
+              }
+            },
+            "runAfter": {
+              "Determine_Authorization_Decision": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Compose_277_Response_JSON": {
+            "type": "Compose",
+            "inputs": {
+              "interchange": {
+                "ISA": {
+                  "ISA05": "ZZ",
+                  "ISA06": "@parameters('x12_sender_id')",
+                  "ISA07": "ZZ",
+                  "ISA08": "@parameters('x12_receiver_id')"
+                },
+                "GS": {
+                  "GS02": "@parameters('x12_sender_id')",
+                  "GS03": "@parameters('x12_receiver_id')"
+                }
+              },
+              "transaction": {
+                "ST": {
+                  "ST01": "277"
+                },
+                "BHT": {
+                  "BHT02": "08",
+                  "BHT03": "@{outputs('Extract_Authorization_Metadata')?['authorizationReference']}",
+                  "BHT04": "@{formatDateTime(utcNow(), 'yyyyMMdd')}",
+                  "BHT05": "@{formatDateTime(utcNow(), 'HHmm')}",
+                  "BHT06": "RU"
+                },
+                "HLs": [
+                  {
+                    "HL": {
+                      "HL01": "1"
+                    },
+                    "TRN": {
+                      "TRN01": "2",
+                      "TRN02": "@{outputs('Extract_Authorization_Metadata')?['claimNumber']}"
+                    }
+                  },
+                  {
+                    "HL": {
+                      "HL01": "2",
+                      "HL02": "1"
+                    },
+                    "NM1": {
+                      "NM101": "IL",
+                      "NM109": "@{outputs('Extract_Authorization_Metadata')?['memberId']}"
+                    }
+                  },
+                  {
+                    "HL": {
+                      "HL01": "3",
+                      "HL02": "2"
+                    },
+                    "NM1": {
+                      "NM101": "PR",
+                      "NM109": "@{outputs('Extract_Authorization_Metadata')?['providerNpi']}"
+                    },
+                    "STC": {
+                      "STC01_1": "@{if(outputs('Determine_Authorization_Decision')?['isApproved'], 'A1', 'A4')}",
+                      "STC01_2": "@{outputs('Determine_Authorization_Decision')?['authorizationStatus']}",
+                      "STC02": "@{formatDateTime(utcNow(), 'yyyyMMdd')}"
+                    },
+                    "REF": [
+                      {
+                        "REF01": "D9",
+                        "REF02": "@{outputs('Determine_Authorization_Decision')?['authorizationNumber']}"
+                      },
+                      {
+                        "REF01": "EJ",
+                        "REF02": "@{outputs('Extract_Authorization_Metadata')?['appealReference']}"
+                      }
+                    ],
+                    "DTP": [
+                      {
+                        "DTP01": "472",
+                        "DTP02": "D8",
+                        "DTP03": "@{outputs('Determine_Authorization_Decision')?['effectiveStartDate']}"
+                      },
+                      {
+                        "DTP01": "473",
+                        "DTP02": "D8",
+                        "DTP03": "@{outputs('Determine_Authorization_Decision')?['effectiveEndDate']}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "runAfter": {
+              "Log_Authorization_Decision": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Encode_X12_277_Response": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/encode/edi",
+              "body": {
+                "content": "@outputs('Compose_277_Response_JSON')",
+                "contentType": "application/edi-x12",
+                "agreementType": "X12",
+                "messageType": "@parameters('x12_277_messagetype')",
+                "senderId": "@parameters('x12_sender_id')",
+                "receiverId": "@parameters('x12_receiver_id')"
+              }
+            },
+            "runAfter": {
+              "Compose_277_Response_JSON": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Archive_277_Response": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['azureblob']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+              "queries": {
+                "folderPath": "@concat(parameters('blob_authorizations_folder'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                "name": "277-response-@{outputs('Extract_Authorization_Metadata')?['claimNumber']}-@{utcNow()}.edi"
+              },
+              "body": "@body('Encode_X12_277_Response')"
+            },
+            "runAfter": {
+              "Encode_X12_277_Response": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_277_Response_Generated": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "277_Response_Generated",
+                "properties": {
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "authorizationNumber": "@outputs('Determine_Authorization_Decision')?['authorizationNumber']",
+                  "authorizationStatus": "@outputs('Determine_Authorization_Decision')?['authorizationStatus']",
+                  "responseFileName": "277-response-@{outputs('Extract_Authorization_Metadata')?['claimNumber']}-@{utcNow()}.edi"
+                }
+              }
+            },
+            "runAfter": {
+              "Archive_277_Response": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Publish_to_Auth_Statuses_Topic": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_auth_statuses'))}/messages",
+              "body": {
+                "contentData": "@{base64(string(outputs('Determine_Authorization_Decision')))}",
+                "contentType": "application/json",
+                "properties": {
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                  "authorizationNumber": "@outputs('Determine_Authorization_Decision')?['authorizationNumber']",
+                  "authorizationStatus": "@outputs('Determine_Authorization_Decision')?['authorizationStatus']",
+                  "isApproved": "@outputs('Determine_Authorization_Decision')?['isApproved']",
+                  "effectiveStartDate": "@outputs('Determine_Authorization_Decision')?['effectiveStartDate']",
+                  "effectiveEndDate": "@outputs('Determine_Authorization_Decision')?['effectiveEndDate']",
+                  "appealReference": "@outputs('Extract_Authorization_Metadata')?['appealReference']",
+                  "processedAt": "@utcNow()"
+                }
+              }
+            },
+            "runAfter": {
+              "Log_277_Response_Generated": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Publish_277_to_EDI_278_Topic": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_edi278'))}/messages",
+              "body": {
+                "contentData": "@{base64(body('Encode_X12_277_Response'))}",
+                "contentType": "application/edi-x12",
+                "properties": {
+                  "messageType": "277",
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "authorizationNumber": "@outputs('Determine_Authorization_Decision')?['authorizationNumber']",
+                  "authorizationStatus": "@outputs('Determine_Authorization_Decision')?['authorizationStatus']",
+                  "isResponse": "true",
+                  "responseFileName": "277-response-@{outputs('Extract_Authorization_Metadata')?['claimNumber']}-@{utcNow()}.edi"
+                }
+              }
+            },
+            "runAfter": {
+              "Publish_to_Auth_Statuses_Topic": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Authorization_Processing_Complete": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Authorization_Processing_Complete",
+                "properties": {
+                  "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']",
+                  "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
+                  "authorizationNumber": "@outputs('Determine_Authorization_Decision')?['authorizationNumber']",
+                  "authorizationStatus": "@outputs('Determine_Authorization_Decision')?['authorizationStatus']",
+                  "isApproved": "@outputs('Determine_Authorization_Decision')?['isApproved']",
+                  "processingDuration": "@{div(sub(ticks(utcNow()), ticks(body('Parse_278_Message')?['timestamp'])), 10000000)}"
+                }
+              }
+            },
+            "runAfter": {
+              "Publish_277_to_EDI_278_Topic": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch_Authorization_Processing_Error": {
+        "type": "Scope",
+        "actions": {
+          "Log_Authorization_Error": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Authorization_Processing_Error",
+                "properties": {
+                  "errorMessage": "@{result('Try_Process_Authorization')?[0]?['error']?['message']}",
+                  "errorCode": "@{result('Try_Process_Authorization')?[0]?['error']?['code']}",
+                  "failedAction": "@{result('Try_Process_Authorization')?[0]?['name']}",
+                  "fileName": "@{body('Parse_278_Message')?['fileName']}"
+                }
+              }
+            },
+            "runAfter": {}
+          },
+          "Dead_Letter_Failed_Authorization": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_dead_letter'))}/messages",
+              "body": {
+                "contentData": "@triggerBody()?['contentData']",
+                "contentType": "application/json",
+                "properties": {
+                  "errorType": "authorization_processing_failure",
+                  "errorMessage": "@{result('Try_Process_Authorization')?[0]?['error']?['message']}",
+                  "errorCode": "@{result('Try_Process_Authorization')?[0]?['error']?['code']}",
+                  "failedAction": "@{result('Try_Process_Authorization')?[0]?['name']}",
+                  "originalFileName": "@{body('Parse_278_Message')?['fileName']}",
+                  "failedAt": "@utcNow()"
+                }
+              }
+            },
+            "runAfter": {
+              "Log_Authorization_Error": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try_Process_Authorization": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "blob_storage_account": {
+      "type": "String",
+      "defaultValue": "default"
+    },
+    "blob_authorizations_folder": {
+      "type": "String",
+      "defaultValue": "hipaa-attachments/raw/authorizations"
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "hipaa-logic-svc"
+    },
+    "sb_topic_edi278": {
+      "type": "String",
+      "defaultValue": "edi-278"
+    },
+    "sb_subscription_auth": {
+      "type": "String",
+      "defaultValue": "auth-processor"
+    },
+    "sb_topic_auth_statuses": {
+      "type": "String",
+      "defaultValue": "auth-statuses"
+    },
+    "sb_topic_dead_letter": {
+      "type": "String",
+      "defaultValue": "dead-letter"
+    },
+    "qnxt_base_url": {
+      "type": "String",
+      "defaultValue": "https://qnxt.api.local"
+    },
+    "qnxt_api_token": {
+      "type": "String",
+      "defaultValue": "<token>"
+    },
+    "x12_sender_id": {
+      "type": "String",
+      "defaultValue": "66917"
+    },
+    "x12_receiver_id": {
+      "type": "String",
+      "defaultValue": "030240928"
+    },
+    "x12_278_messagetype": {
+      "type": "String",
+      "defaultValue": "X12_005010X217_278"
+    },
+    "x12_277_messagetype": {
+      "type": "String",
+      "defaultValue": "X12_005010X212_277"
+    }
+  }
+}
