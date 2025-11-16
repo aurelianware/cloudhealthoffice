@@ -16,6 +16,7 @@ This solution implements the following process:
 9. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
 10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
 11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
+10. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 
 ## 📦 Current Production Deployment
 

@@ -396,3 +396,58 @@ jobs:
             echo "   5. Validate UAT-specific secrets are set"
             echo ""
             echo "⚠️  Resources may be partially deployed. Verify before retrying."
+      - name: Rollback on Failure
+        if: failure()
+        runs-on: ubuntu-latest
+        needs: [validate, deploy-infrastructure, deploy-logic-apps]
+        environment: UAT
+        permissions:
+          id-token: write
+          contents: read
+
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+
+          - name: Azure Login (OIDC)
+            uses: azure/login@v2
+            with:
+              client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+              tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+              subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+
+          - name: Gather Diagnostic Information
+            uses: azure/cli@v2
+            with:
+              inlineScript: |
+                set +e  # Continue on error
+                RG="${{ env.UAT_RESOURCE_GROUP }}"
+                DEPLOY_NAME="hipaa-attachments-uat-infra-${{ github.run_number }}"
+
+                echo "=== Deployment Failed - Gathering Diagnostics ==="
+                echo "⚠️  UAT deployment failed. Collecting diagnostic information..."
+
+                # Show failed operations
+                echo "Listing failed deployment operations..."
+                az deployment operation group list \
+                  --resource-group "$RG" \
+                  --name "$DEPLOY_NAME" \
+                  --query "[?properties.provisioningState=='Failed'].{Operation:properties.targetResource.resourceName, Error:properties.statusMessage.error.message}" \
+                  -o table || echo "Unable to list operations"
+
+                # Show resource group state
+                echo "Current resource group state..."
+                az resource list -g "$RG" --query "[].{Name:name, Type:type, State:properties.provisioningState}" -o table || echo "Unable to list resources"
+
+                echo ""
+                echo "=== Diagnostic Summary ==="
+                echo "❌ UAT deployment failed. Please review the errors above."
+                echo "📋 Resource state has been captured."
+                echo "🔧 Recommended actions:"
+                echo "   1. Review deployment errors above"
+                echo "   2. Check resource quotas and limits"
+                echo "   3. Verify OIDC authentication is configured"
+                echo "   4. Check for naming conflicts"
+                echo "   5. Validate UAT-specific secrets are set"
+                echo ""
+                echo "⚠️  Resources may be partially deployed. Verify before retrying."
