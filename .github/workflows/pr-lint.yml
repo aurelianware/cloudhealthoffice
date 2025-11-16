@@ -46,12 +46,7 @@ jobs:
         uses: ibiqlik/action-yamllint@v3
         with:
           file_or_dir: ".github/workflows"
-          config_data: |
-            extends: default
-            rules:
-              line-length: false
-              document-start: false
-              truthy: false
+          config_data: "extends: default\nrules:\n  line-length: false\n  document-start: false\n  truthy: false"
       # ---------- Bicep syntax check (no Azure login) ----------
       - name: Setup Bicep
         run: az bicep install
