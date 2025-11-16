@@ -11,16 +11,16 @@ jobs:
   smoke-tests:
     runs-on: ubuntu-latest
     name: Run comprehensive smoke tests
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       # ---------- Repository structure validation ----------
       - name: Validate repository structure
         run: |
           echo "🔍 Validating repository structure..."
-          
+
           # Check for required directories
           required_dirs=("logicapps/workflows" "infra" "scripts" ".github/workflows")
           for dir in "${required_dirs[@]}"; do
@@ -30,7 +30,7 @@ jobs:
             fi
             echo "✓ Found: $dir"
           done
-          
+
           # Check for required files
           required_files=("README.md" "ARCHITECTURE.md" "SECURITY.md" "DEPLOYMENT.md" "CONTRIBUTING.md")
           for file in "${required_files[@]}"; do
@@ -40,21 +40,21 @@ jobs:
             fi
             echo "✓ Found: $file"
           done
-          
+
           echo "✅ Repository structure validated"
-      
+
       # ---------- Logic Apps workflow validation ----------
       - name: Validate Logic Apps workflows
         run: |
           echo "🔍 Validating Logic Apps workflow files..."
-          
+
           workflows=(
             "logicapps/workflows/ingest275/workflow.json"
             "logicapps/workflows/ingest278/workflow.json"
             "logicapps/workflows/replay278/workflow.json"
             "logicapps/workflows/rfai277/workflow.json"
           )
-          
+
           failed=0
           for workflow in "${workflows[@]}"; do
             if [ ! -f "$workflow" ]; then
@@ -62,73 +62,73 @@ jobs:
               failed=1
               continue
             fi
-            
+
             echo "Checking: $workflow"
-            
+
             # Validate JSON syntax
             if ! jq . "$workflow" >/dev/null 2>&1; then
               echo "::error file=$workflow::Invalid JSON syntax"
               failed=1
               continue
             fi
-            
+
             # Validate required keys
             if ! jq -e 'has("definition") and has("kind") and has("parameters")' "$workflow" >/dev/null; then
               echo "::error file=$workflow::Missing required keys (definition/kind/parameters)"
               failed=1
               continue
             fi
-            
+
             # Validate workflow kind
             kind=$(jq -r '.kind' "$workflow")
             if [ "$kind" != "Stateful" ] && [ "$kind" != "Stateless" ]; then
               echo "::warning file=$workflow::Workflow kind is '$kind' (expected Stateful or Stateless)"
             fi
-            
+
             echo "✓ Valid: $workflow (kind: $kind)"
           done
-          
+
           if [ $failed -eq 1 ]; then
             echo "::error::Workflow validation failed"
             exit 1
           fi
-          
+
           echo "✅ All workflow files validated"
-      
+
       # ---------- Bicep template validation ----------
       - name: Setup Bicep
         run: |
           az bicep install
           az bicep version
-      
+
       - name: Validate Bicep templates
         run: |
           echo "🔍 Validating Bicep templates..."
-          
+
           if [ -f "infra/main.bicep" ]; then
             echo "Building infra/main.bicep..."
             if ! az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json; then
               echo "::error::Bicep build failed for infra/main.bicep"
               exit 1
             fi
-            
+
             size=$(stat -c%s /tmp/main-arm.json 2>/dev/null || stat -f%z /tmp/main-arm.json 2>/dev/null)
             echo "✓ infra/main.bicep compiled successfully ($size bytes)"
           else
             echo "::warning::infra/main.bicep not found"
           fi
-          
+
           echo "✅ Bicep templates validated"
-      
+
       # ---------- Service Bus configuration validation ----------
       - name: Validate Service Bus configuration
         run: |
           echo "🔍 Validating Service Bus topic configuration..."
-          
+
           # Check if Service Bus topics are defined in Bicep
           if [ -f "infra/main.bicep" ]; then
             required_topics=("attachments-in" "rfai-requests" "edi-278")
-            
+
             for topic in "${required_topics[@]}"; do
               if grep -q "$topic" infra/main.bicep; then
                 echo "✓ Found topic: $topic"
@@ -137,19 +137,19 @@ jobs:
               fi
             done
           fi
-          
+
           echo "✅ Service Bus configuration validated"
-      
+
       # ---------- X12 schema verification ----------
       - name: Validate X12 schemas
         run: |
           echo "🔍 Validating X12 schema files..."
-          
+
           schemas=(
             "X12_005010X212_277.xsd:277 RFAI"
             "X12_005010X217_278.xsd:278 Review"
           )
-          
+
           for schema_info in "${schemas[@]}"; do
             IFS=':' read -r file desc <<< "$schema_info"
             if [ -f "$file" ]; then
@@ -158,20 +158,20 @@ jobs:
               echo "::warning::Schema file not found: $file ($desc)"
             fi
           done
-          
+
           echo "✅ X12 schema validation complete"
-      
+
       # ---------- PowerShell script validation ----------
       - name: Validate PowerShell scripts
         shell: pwsh
         run: |
           Write-Host "🔍 Validating PowerShell scripts..."
-          
-          $scripts = Get-ChildItem -Path . -Filter "*.ps1" -Recurse | 
+
+          $scripts = Get-ChildItem -Path . -Filter "*.ps1" -Recurse |
             Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
-          
+
           Write-Host "Found $($scripts.Count) PowerShell scripts"
-          
+
           $failed = $false
           foreach ($script in $scripts) {
             try {
@@ -183,32 +183,32 @@ jobs:
               $failed = $true
             }
           }
-          
+
           if ($failed) {
             Write-Host "::error::PowerShell script validation failed"
             exit 1
           }
-          
+
           Write-Host "✅ All PowerShell scripts validated"
-      
+
       # ---------- EDI file validation ----------
       - name: Validate EDI test files
         shell: pwsh
         run: |
           Write-Host "🔍 Validating EDI test files..."
-          
+
           if (Test-Path "scripts/validate-edi-x12.ps1") {
             $ediFiles = Get-ChildItem -Filter "*.edi" -File
-            
+
             if ($ediFiles.Count -eq 0) {
               Write-Host "⚠️  No EDI files found to validate"
             } else {
               Write-Host "Found $($ediFiles.Count) EDI file(s)"
-              
+
               foreach ($file in $ediFiles) {
                 Write-Host "Validating: $($file.Name)"
                 & ./scripts/validate-edi-x12.ps1 -Path $file.FullName
-                
+
                 if ($LASTEXITCODE -ne 0) {
                   Write-Host "::warning::EDI validation had issues for $($file.Name)"
                 }
@@ -217,18 +217,18 @@ jobs:
           } else {
             Write-Host "⚠️  EDI validation script not found"
           }
-          
+
           Write-Host "✅ EDI validation complete"
-      
+
       # ---------- Security scan ----------
       - name: Security scan for PII/PHI
         shell: pwsh
         run: |
           Write-Host "🔍 Running security scan..."
-          
+
           if (Test-Path "scripts/scan-for-phi-pii.ps1") {
             & ./scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules",".terraform"
-            
+
             # Allow warnings but fail on critical issues
             if ($LASTEXITCODE -eq 1) {
               Write-Host "::warning::Security scan found critical issues"
@@ -236,24 +236,24 @@ jobs:
           } else {
             Write-Host "⚠️  Security scan script not found"
           }
-          
+
           Write-Host "✅ Security scan complete"
-      
+
       # ---------- Test data validation ----------
       - name: Validate test data files
         run: |
           echo "🔍 Validating test data files..."
-          
+
           test_files=(
             "test-x12-275-availity-to-pchp.edi:275 test data"
             "test-qnxt-response-payload.json:QNXT response"
           )
-          
+
           for test_info in "${test_files[@]}"; do
             IFS=':' read -r file desc <<< "$test_info"
             if [ -f "$file" ]; then
               echo "✓ Found: $file ($desc)"
-              
+
               # Validate JSON files
               if [[ "$file" == *.json ]]; then
                 if ! jq . "$file" >/dev/null 2>&1; then
@@ -265,9 +265,9 @@ jobs:
               echo "::warning::Test file not found: $file"
             fi
           done
-          
+
           echo "✅ Test data validation complete"
-      
+
       # ---------- Summary ----------
       - name: Test summary
         run: |

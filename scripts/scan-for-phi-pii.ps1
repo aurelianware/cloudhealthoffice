@@ -133,7 +133,7 @@ $HIPAA_PATTERNS = @{
         Pattern = '(?:http://|ftp://).*(?:patient|phi|medical|health).*'
         Description = 'Unencrypted PHI transmission (should use HTTPS)'
         Severity = 'Critical'
-        AllowedFiles = @('*.md')
+        AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1')
     }
     'LoggingPHI' = @{
         Pattern = 'console\.log|Write-Host.*(?:ssn|dob|patient|medical)'
@@ -363,10 +363,10 @@ Write-Host "Issues found: $script:IssuesFound"
 
 if ($script:Findings.Count -gt 0) {
     # Group by severity
-    $critical = $script:Findings | Where-Object { $_.Severity -eq 'Critical' }
-    $high = $script:Findings | Where-Object { $_.Severity -eq 'High' }
-    $medium = $script:Findings | Where-Object { $_.Severity -eq 'Medium' }
-    $low = $script:Findings | Where-Object { $_.Severity -eq 'Low' }
+    $critical = @($script:Findings | Where-Object { $_.Severity -eq 'Critical' })
+    $high = @($script:Findings | Where-Object { $_.Severity -eq 'High' })
+    $medium = @($script:Findings | Where-Object { $_.Severity -eq 'Medium' })
+    $low = @($script:Findings | Where-Object { $_.Severity -eq 'Low' })
     
     if ($critical.Count -gt 0) {
         Write-Host "`n🔴 Critical Issues ($($critical.Count)):"
