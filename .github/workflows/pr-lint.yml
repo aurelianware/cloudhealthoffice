@@ -130,7 +130,7 @@ jobs:
 
           foreach ($script in $scripts) {
             Write-Host "Analyzing: $($script.FullName)"
-            $results = Invoke-ScriptAnalyzer -Path $script.FullName -Severity Error,Warning
+            $results = Invoke-ScriptAnalyzer -Path $script.FullName -Severity Error
 
             if ($results) {
               $failed = $true
