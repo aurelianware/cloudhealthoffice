@@ -1,0 +1,583 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "ServiceBus_Attachments_In": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['servicebus']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_attachments'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_appeals'))}/messages/head"
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerBody()"
+      }
+    },
+    "actions": {
+      "Try_Process_Appeal": {
+        "type": "Scope",
+        "actions": {
+          "Parse_Attachment_Event": {
+            "type": "ParseJson",
+            "inputs": {
+              "content": "@triggerBody()?['ContentData']",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "claimNumber": {
+                    "type": "string"
+                  },
+                  "memberId": {
+                    "type": "string"
+                  },
+                  "providerNpi": {
+                    "type": "string"
+                  },
+                  "serviceFromDate": {
+                    "type": "string"
+                  },
+                  "serviceToDate": {
+                    "type": "string"
+                  },
+                  "attachmentType": {
+                    "type": "string"
+                  },
+                  "dataLakePath": {
+                    "type": "string"
+                  },
+                  "fileName": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "claimNumber",
+                  "memberId"
+                ]
+              }
+            },
+            "runAfter": {}
+          },
+          "Extract_Appeal_Metadata": {
+            "type": "Compose",
+            "inputs": {
+              "claimNumber": "@body('Parse_Attachment_Event')?['claimNumber']",
+              "memberId": "@body('Parse_Attachment_Event')?['memberId']",
+              "providerNpi": "@coalesce(body('Parse_Attachment_Event')?['providerNpi'], '')",
+              "serviceFromDate": "@coalesce(body('Parse_Attachment_Event')?['serviceFromDate'], '')",
+              "serviceToDate": "@coalesce(body('Parse_Attachment_Event')?['serviceToDate'], '')",
+              "attachmentType": "@coalesce(body('Parse_Attachment_Event')?['attachmentType'], '')",
+              "dataLakePath": "@coalesce(body('Parse_Attachment_Event')?['dataLakePath'], '')",
+              "fileName": "@coalesce(body('Parse_Attachment_Event')?['fileName'], '')",
+              "appealIndicator": "@coalesce(triggerBody()?['UserProperties']?['appealIndicator'], '')",
+              "appealReasonCode": "@coalesce(triggerBody()?['UserProperties']?['appealReasonCode'], '')",
+              "appealReference": "@coalesce(triggerBody()?['UserProperties']?['appealReference'], '')",
+              "processingTimestamp": "@utcNow()"
+            },
+            "runAfter": {
+              "Parse_Attachment_Event": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Check_Appeal_Indicator": {
+            "type": "If",
+            "expression": {
+              "or": [
+                {
+                  "not": [
+                    {
+                      "equals": [
+                        "@outputs('Extract_Appeal_Metadata')?['appealIndicator']",
+                        ""
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "not": [
+                    {
+                      "equals": [
+                        "@outputs('Extract_Appeal_Metadata')?['appealReasonCode']",
+                        ""
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "contains": [
+                    "@toLower(outputs('Extract_Appeal_Metadata')?['attachmentType'])",
+                    "appeal"
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Log_Appeal_Detected": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "name": "Microsoft.ApplicationInsights.Event",
+                    "time": "@{utcNow()}",
+                    "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                    "data": {
+                      "baseType": "EventData",
+                      "baseData": {
+                        "name": "AppealDetected",
+                        "properties": {
+                          "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
+                          "memberId": "@{outputs('Extract_Appeal_Metadata')?['memberId']}",
+                          "appealIndicator": "@{outputs('Extract_Appeal_Metadata')?['appealIndicator']}",
+                          "appealReasonCode": "@{outputs('Extract_Appeal_Metadata')?['appealReasonCode']}",
+                          "timestamp": "@{outputs('Extract_Appeal_Metadata')?['processingTimestamp']}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "runAfter": {}
+              },
+              "Correlate_Appeal_With_Claim": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{parameters('qnxt_base_url')}/claims/correlate-appeal",
+                  "headers": {
+                    "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "claimNumber": "@outputs('Extract_Appeal_Metadata')?['claimNumber']",
+                    "memberId": "@outputs('Extract_Appeal_Metadata')?['memberId']",
+                    "providerNpi": "@outputs('Extract_Appeal_Metadata')?['providerNpi']",
+                    "serviceFromDate": "@outputs('Extract_Appeal_Metadata')?['serviceFromDate']",
+                    "dataLakePath": "@outputs('Extract_Appeal_Metadata')?['dataLakePath']",
+                    "fileName": "@outputs('Extract_Appeal_Metadata')?['fileName']"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 4,
+                    "type": "fixed",
+                    "interval": "PT15S"
+                  }
+                },
+                "runAfter": {
+                  "Log_Appeal_Detected": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Call_QNXT_Appeals_API": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{parameters('qnxt_base_url')}/appeals/register",
+                  "headers": {
+                    "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "claimNumber": "@outputs('Extract_Appeal_Metadata')?['claimNumber']",
+                    "memberId": "@outputs('Extract_Appeal_Metadata')?['memberId']",
+                    "providerNpi": "@outputs('Extract_Appeal_Metadata')?['providerNpi']",
+                    "serviceFromDate": "@outputs('Extract_Appeal_Metadata')?['serviceFromDate']",
+                    "serviceToDate": "@outputs('Extract_Appeal_Metadata')?['serviceToDate']",
+                    "appealReasonCode": "@outputs('Extract_Appeal_Metadata')?['appealReasonCode']",
+                    "appealReference": "@outputs('Extract_Appeal_Metadata')?['appealReference']",
+                    "attachmentDataLakePath": "@outputs('Extract_Appeal_Metadata')?['dataLakePath']",
+                    "attachmentFileName": "@outputs('Extract_Appeal_Metadata')?['fileName']",
+                    "correlationData": "@body('Correlate_Appeal_With_Claim')"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 4,
+                    "type": "fixed",
+                    "interval": "PT15S"
+                  }
+                },
+                "runAfter": {
+                  "Correlate_Appeal_With_Claim": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Parse_QNXT_Response": {
+                "type": "ParseJson",
+                "inputs": {
+                  "content": "@body('Call_QNXT_Appeals_API')",
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "appealId": {
+                        "type": "string"
+                      },
+                      "appealTrackingNumber": {
+                        "type": "string"
+                      },
+                      "appealStatus": {
+                        "type": "string"
+                      },
+                      "registrationTimestamp": {
+                        "type": "string"
+                      },
+                      "requiresRFAI": {
+                        "type": "boolean"
+                      },
+                      "rfaiReasonCode": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Call_QNXT_Appeals_API": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Log_Appeal_Registered": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "name": "Microsoft.ApplicationInsights.Event",
+                    "time": "@{utcNow()}",
+                    "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                    "data": {
+                      "baseType": "EventData",
+                      "baseData": {
+                        "name": "AppealRegistered",
+                        "properties": {
+                          "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
+                          "memberId": "@{outputs('Extract_Appeal_Metadata')?['memberId']}",
+                          "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
+                          "appealTrackingNumber": "@{body('Parse_QNXT_Response')?['appealTrackingNumber']}",
+                          "appealStatus": "@{body('Parse_QNXT_Response')?['appealStatus']}",
+                          "timestamp": "@{utcNow()}"
+                        }
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Parse_QNXT_Response": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Check_RFAI_Required": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@body('Parse_QNXT_Response')?['requiresRFAI']",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Compose_RFAI_Event": {
+                    "type": "Compose",
+                    "inputs": {
+                      "claimNumber": "@outputs('Extract_Appeal_Metadata')?['claimNumber']",
+                      "memberId": "@outputs('Extract_Appeal_Metadata')?['memberId']",
+                      "providerNpi": "@outputs('Extract_Appeal_Metadata')?['providerNpi']",
+                      "serviceFromDate": "@outputs('Extract_Appeal_Metadata')?['serviceFromDate']",
+                      "appealId": "@body('Parse_QNXT_Response')?['appealId']",
+                      "appealTrackingNumber": "@body('Parse_QNXT_Response')?['appealTrackingNumber']",
+                      "rfaiReasonCode": "@body('Parse_QNXT_Response')?['rfaiReasonCode']",
+                      "rfaiReference": "@concat('APPEAL-', body('Parse_QNXT_Response')?['appealTrackingNumber'])",
+                      "eventType": "appeal-rfai",
+                      "eventTimestamp": "@utcNow()"
+                    },
+                    "runAfter": {}
+                  },
+                  "Publish_to_RFAI_Topic": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_rfai'))}/messages",
+                      "body": {
+                        "contentData": "@base64(string(outputs('Compose_RFAI_Event')))",
+                        "contentType": "application/json",
+                        "userProperties": {
+                          "eventType": "appeal-rfai",
+                          "claimNumber": "@outputs('Extract_Appeal_Metadata')?['claimNumber']",
+                          "appealId": "@body('Parse_QNXT_Response')?['appealId']",
+                          "appealTrackingNumber": "@body('Parse_QNXT_Response')?['appealTrackingNumber']"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Compose_RFAI_Event": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Log_RFAI_Published": {
+                    "type": "Http",
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+                      "headers": {
+                        "Content-Type": "application/json"
+                      },
+                      "body": {
+                        "name": "Microsoft.ApplicationInsights.Event",
+                        "time": "@{utcNow()}",
+                        "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                        "data": {
+                          "baseType": "EventData",
+                          "baseData": {
+                            "name": "AppealRFAIPublished",
+                            "properties": {
+                              "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
+                              "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
+                              "appealTrackingNumber": "@{body('Parse_QNXT_Response')?['appealTrackingNumber']}",
+                              "rfaiReasonCode": "@{body('Parse_QNXT_Response')?['rfaiReasonCode']}",
+                              "timestamp": "@{utcNow()}"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Publish_to_RFAI_Topic": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Log_No_RFAI_Required": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "name": "Microsoft.ApplicationInsights.Event",
+                          "time": "@{utcNow()}",
+                          "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                          "data": {
+                            "baseType": "EventData",
+                            "baseData": {
+                              "name": "AppealNoRFAI",
+                              "properties": {
+                                "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
+                                "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
+                                "appealStatus": "@{body('Parse_QNXT_Response')?['appealStatus']}",
+                                "timestamp": "@{utcNow()}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Log_Appeal_Registered": [
+                    "Succeeded"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Log_No_Appeal_Detected": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "name": "Microsoft.ApplicationInsights.Event",
+                      "time": "@{utcNow()}",
+                      "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                      "data": {
+                        "baseType": "EventData",
+                        "baseData": {
+                          "name": "NoAppealDetected",
+                          "properties": {
+                            "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
+                            "memberId": "@{outputs('Extract_Appeal_Metadata')?['memberId']}",
+                            "attachmentType": "@{outputs('Extract_Appeal_Metadata')?['attachmentType']}",
+                            "timestamp": "@{utcNow()}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "Extract_Appeal_Metadata": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch_Appeal_Processing_Error": {
+        "type": "Scope",
+        "actions": {
+          "Compose_Error_Details": {
+            "type": "Compose",
+            "inputs": {
+              "errorType": "AppealProcessingError",
+              "errorMessage": "@{result('Try_Process_Appeal')?['error']?['message']}",
+              "errorCode": "@{result('Try_Process_Appeal')?['error']?['code']}",
+              "claimNumber": "@{coalesce(body('Parse_Attachment_Event')?['claimNumber'], 'Unknown')}",
+              "memberId": "@{coalesce(body('Parse_Attachment_Event')?['memberId'], 'Unknown')}",
+              "triggerBody": "@triggerBody()",
+              "timestamp": "@utcNow()"
+            },
+            "runAfter": {}
+          },
+          "Log_Error_to_AppInsights": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('appinsights_endpoint')}/v2/track",
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "name": "Microsoft.ApplicationInsights.Exception",
+                "time": "@{utcNow()}",
+                "iKey": "@{parameters('appinsights_instrumentation_key')}",
+                "data": {
+                  "baseType": "ExceptionData",
+                  "baseData": {
+                    "exceptions": [
+                      {
+                        "typeName": "@{outputs('Compose_Error_Details')?['errorType']}",
+                        "message": "@{outputs('Compose_Error_Details')?['errorMessage']}",
+                        "hasFullStack": false,
+                        "parsedStack": []
+                      }
+                    ],
+                    "properties": {
+                      "errorCode": "@{outputs('Compose_Error_Details')?['errorCode']}",
+                      "claimNumber": "@{outputs('Compose_Error_Details')?['claimNumber']}",
+                      "memberId": "@{outputs('Compose_Error_Details')?['memberId']}",
+                      "workflowName": "process_appeals",
+                      "timestamp": "@{outputs('Compose_Error_Details')?['timestamp']}"
+                    }
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "Compose_Error_Details": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Abandon_Message_to_DLQ": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_attachments'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_appeals'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/abandon",
+              "queries": {
+                "deadLetterReason": "AppealProcessingError",
+                "deadLetterErrorDescription": "@{outputs('Compose_Error_Details')?['errorMessage']}"
+              }
+            },
+            "runAfter": {
+              "Log_Error_to_AppInsights": [
+                "Succeeded",
+                "Failed"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try_Process_Appeal": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "hipaa-logic-svc"
+    },
+    "sb_topic_attachments": {
+      "type": "String",
+      "defaultValue": "attachments-in"
+    },
+    "sb_topic_rfai": {
+      "type": "String",
+      "defaultValue": "rfai-requests"
+    },
+    "sb_subscription_appeals": {
+      "type": "String",
+      "defaultValue": "appeals-processor"
+    },
+    "qnxt_base_url": {
+      "type": "String",
+      "defaultValue": "https://qnxt.api.local"
+    },
+    "qnxt_api_token": {
+      "type": "String",
+      "defaultValue": "<token>"
+    },
+    "appinsights_endpoint": {
+      "type": "String",
+      "defaultValue": "https://dc.services.visualstudio.com"
+    },
+    "appinsights_instrumentation_key": {
+      "type": "String",
+      "defaultValue": "<instrumentation-key>"
+    }
+  }
+}
