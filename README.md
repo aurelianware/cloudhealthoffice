@@ -1,5 +1,7 @@
 # HIPAA Attachments Processing System 🏥
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A complete Azure Logic Apps solution for processing HIPAA-compliant medical attachments with secure file handling, message queuing, and monitoring capabilities.
 
 ## 🏗️ Architecture Overview
@@ -468,3 +470,32 @@ The repository includes context-aware instructions that automatically activate w
 - **[PowerShell Scripts](.github/instructions/scripts.instructions.md)**: Guidance for `*.ps1` scripts
 
 These instructions help Copilot understand the project structure, conventions, and best practices, providing more accurate and context-aware assistance throughout development.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for full details.
+
+### Why Apache 2.0?
+
+Apache 2.0 was selected for this healthcare-focused project because it provides:
+
+- **Healthcare Compatibility**: Widely accepted in healthcare and enterprise environments
+- **Patent Protection**: Express patent grant protects both contributors and users from patent litigation
+- **Commercial-Friendly**: Permissive terms suitable for HIPAA-regulated commercial use
+- **Clear Contribution Guidelines**: Well-defined terms for contributions and derivative works
+- **Enterprise Adoption**: Trusted by major healthcare technology organizations
+
+### HIPAA Compliance Notice
+
+This software includes features for handling Protected Health Information (PHI) in HIPAA-regulated environments. **Important considerations:**
+
+- **Compliance Responsibility**: Ultimate responsibility for HIPAA compliance rests with the implementing organization
+- **Security Requirements**: Organizations must implement appropriate administrative, physical, and technical safeguards
+- **No Warranty**: Software is provided "AS IS" without warranties regarding HIPAA compliance
+- **Security Guidelines**: Refer to [SECURITY.md](SECURITY.md) for detailed compliance requirements
+
+Users must perform their own compliance assessments and implement necessary safeguards according to their specific requirements and risk analysis.
+
+### Contributing
+
+By contributing to this project, you agree that your contributions will be licensed under the Apache License 2.0. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process and how to submit contributions.
