@@ -14,6 +14,8 @@ This solution implements the following process:
 7. **Appeals Processing**: Consumes attachment events, detects appeals, registers with QNXT (process_appeals workflow)
 8. **RFAI Processing**: Handles Request for Additional Information via rfai277 workflow
 9. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
+10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
+11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 10. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 
 ## 📦 Current Production Deployment
@@ -23,7 +25,7 @@ This solution implements the following process:
 - **Logic App Standard**: `hipaa-logic-la` ✅ RUNNING
 - **Storage Account**: `hipaa7v2rrsoo6tac2` (Data Lake Gen2 enabled) ✅
 - **Service Bus Namespace**: `hipaa-logic-svc` (Standard tier) ✅
-  - Topics: `attachments-in`, `rfai-requests`, `edi-278` ✅
+  - Topics: `attachments-in`, `rfai-requests`, `edi-278`, `appeals-auth`, `auth-statuses`, `dead-letter` ✅
 - **Application Insights**: `hipaa-logic-ai` ✅
 
 ### 🌐 Resource URLs
@@ -38,14 +40,16 @@ This solution implements the following process:
 - `logicapps/workflows/process_appeals/workflow.json`: Appeals processing workflow (consumes from attachments-in topic)
 - `logicapps/workflows/rfai277/workflow.json`: Outbound 277 RFAI workflow
 - `logicapps/workflows/ingest278/workflow.json`: X12 278 transaction processing workflow
+- `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing workflow
 - `logicapps/workflows/replay278/workflow.json`: HTTP endpoint for deterministic 278 replay
 
 ### Key Features
-- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278}/yyyy/MM/dd/` partitioning
+- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations}/yyyy/MM/dd/` partitioning
 - **Retry Logic**: 4 retries with 15-second intervals for QNXT API calls
 - **Error Handling**: Service Bus dead-letter support
 - **Monitoring**: Application Insights integration
 - **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
+- **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
 
 ## Build & Deployment
 
@@ -237,6 +241,62 @@ hipaa-attachments/
 ```
 
 This partitioning structure supports efficient querying and data management in the data lake.
+
+## Authorization Processing Workflow
+
+The `process_authorizations` workflow processes X12 278 Health Care Services Review transactions (authorization requests and responses) and generates X12 277 authorization response messages.
+
+### Key Features
+
+- **Service Bus Trigger**: Consumes 278 authorization messages from `edi-278` topic via `auth-processor` subscription
+- **X12 Processing**: Decodes 278 messages and encodes 277 responses via Integration Account
+- **QNXT Integration**: 
+  - Validates member eligibility
+  - Verifies claim and provider information
+  - Processes authorization requests with retry logic (4 retries @ 15s intervals)
+- **Authorization Decision Tracking**:
+  - Determines approval/denial status
+  - Tracks authorization numbers and effective dates
+  - Manages authorization limits and conditions
+  - Links authorizations to appeals (if applicable)
+- **277 Response Generation**: Creates properly formatted X12 277 authorization response messages
+- **Service Bus Publishing**:
+  - `auth-statuses` topic: Authorization status events for downstream tracking
+  - `edi-278` topic: 277 responses for outbound processing via rfai277 workflow
+- **Data Lake Archiving**: Archives both 278 requests and 277 responses to `hipaa-attachments/raw/authorizations/yyyy/MM/dd/`
+- **Error Handling**: Comprehensive try-catch with dead-letter queue routing
+- **Application Insights**: Logs all key events (request received, eligibility check, decision, 277 generation, completion, errors)
+
+### Workflow Flow
+
+1. Consume 278 authorization message from Service Bus (`edi-278` topic, `auth-processor` subscription)
+2. Parse message and retrieve blob content from Data Lake
+3. Archive 278 message to authorizations folder
+4. Decode X12 278 message via Integration Account
+5. Extract authorization metadata (claim, member, provider, authorization reference, service dates, service type, appeal reference)
+6. Call QNXT APIs:
+   - Check member eligibility
+   - Verify claim and provider information
+   - Process authorization request
+7. Determine authorization decision (approval/denial, authorization number, effective dates, limits, conditions)
+8. Generate and encode X12 277 authorization response
+9. Archive 277 response to Data Lake
+10. Publish authorization status to `auth-statuses` topic
+11. Publish 277 response to `edi-278` topic for outbound processing
+12. Log completion metrics to Application Insights
+
+### Parameters
+
+All configuration is externalized for DEV/UAT/PROD environments:
+- `sb_topic_edi278`: Source topic for 278 messages (default: `edi-278`)
+- `sb_subscription_auth`: Subscription name (default: `auth-processor`)
+- `sb_topic_auth_statuses`: Target topic for authorization status events (default: `auth-statuses`)
+- `sb_topic_dead_letter`: Dead-letter queue topic (default: `dead-letter`)
+- `blob_authorizations_folder`: Data Lake folder path (default: `hipaa-attachments/raw/authorizations`)
+- `qnxt_base_url`: QNXT API base URL
+- `qnxt_api_token`: QNXT API authentication token
+- `x12_278_messagetype`: X12 278 message type (default: `X12_005010X217_278`)
+- `x12_277_messagetype`: X12 277 message type (default: `X12_005010X212_277`)
 
 ## 278 Replay Endpoint
 
