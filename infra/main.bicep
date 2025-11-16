@@ -143,7 +143,6 @@ resource sbTopicDeadLetter 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-pr
   properties: {}
 }
 
-
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
