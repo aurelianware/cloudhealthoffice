@@ -4,6 +4,37 @@ on:
     branches: [main, 'release/*', 'feature/*']
 
 jobs:
+  # CodeQL security scanning job
+  codeql-analysis:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
   lint-and-test:
     runs-on: ubuntu-latest
 
@@ -55,60 +86,127 @@ jobs:
 
       # ---------- Bicep syntax check (no Azure login) ----------
       - name: Setup Bicep
-        run: az bicep install
-
-      - name: Bicep build (syntax only)
         run: |
+          echo "Installing Bicep CLI..."
+          az bicep install
+          az bicep version
+
+      - name: Bicep build (syntax validation)
+        run: |
+          set -euo pipefail
           echo "Validating Bicep templates..."
           failed=0
 
           if [ -f infra/main.bicep ]; then
             echo "Building infra/main.bicep..."
-            if ! az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json; then
-              echo "::error file=infra/main.bicep::Bicep build failed"
-              failed=1
+            if az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json 2>&1 | tee /tmp/bicep-main.log; then
+              if [ ! -s /tmp/main-arm.json ]; then
+                echo "::error file=infra/main.bicep::Bicep compilation produced empty ARM template"
+                failed=1
+              else
+                SIZE=$(stat -f%z /tmp/main-arm.json 2>/dev/null || stat -c%s /tmp/main-arm.json 2>/dev/null)
+                echo "✓ infra/main.bicep compiled successfully (ARM template: ${SIZE} bytes)"
+                echo "ARM template preview (first 20 lines):"
+                head -20 /tmp/main-arm.json
+              fi
             else
-              echo "✓ infra/main.bicep compiled successfully"
+              echo "::error file=infra/main.bicep::Bicep build failed"
+              cat /tmp/bicep-main.log
+              failed=1
             fi
+          else
+            echo "::warning::infra/main.bicep not found"
           fi
 
           if [ -f attachments_logicapps_package/main.bicep ]; then
             echo "Building attachments_logicapps_package/main.bicep..."
-            if ! az bicep build --file attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json; then
-              echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
-              failed=1
+            if az bicep build --file attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json 2>&1 | tee /tmp/bicep-package.log; then
+              if [ ! -s /tmp/package-arm.json ]; then
+                echo "::error file=attachments_logicapps_package/main.bicep::Bicep compilation produced empty ARM template"
+                failed=1
+              else
+                SIZE=$(stat -f%z /tmp/package-arm.json 2>/dev/null || stat -c%s /tmp/package-arm.json 2>/dev/null)
+                echo "✓ attachments_logicapps_package/main.bicep compiled successfully (ARM template: ${SIZE} bytes)"
+              fi
             else
-              echo "✓ attachments_logicapps_package/main.bicep compiled successfully"
+              echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
+              cat /tmp/bicep-package.log
+              failed=1
             fi
           fi
 
           if [ $failed -eq 1 ]; then
-            echo "::error::Bicep validation failed"
+            echo "::error::Bicep validation failed - see errors above"
             exit 1
           fi
-          echo "✓ All Bicep templates are valid"
+          echo "✓ All Bicep templates validated successfully"
+
+      - name: Bicep parameter validation
+        run: |
+          echo "Validating Bicep parameters..."
+          if [ -f infra/main.bicep ]; then
+            echo "Analyzing required parameters in infra/main.bicep..."
+            grep "^param " infra/main.bicep | head -20
+            echo "✓ Parameter analysis complete"
+          fi
 
       # ---------- PowerShell script lint ----------
-      - name: PowerShell script validation
+      - name: Install PowerShell Script Analyzer
+        shell: pwsh
         run: |
-          echo "Validating PowerShell scripts..."
+          Write-Host "Installing PSScriptAnalyzer module..."
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          Write-Host "✓ PSScriptAnalyzer installed successfully"
+
+      - name: PowerShell Script Analyzer
+        shell: pwsh
+        run: |
+          Write-Host "Running PSScriptAnalyzer on PowerShell scripts..."
+          $scripts = Get-ChildItem -Path . -Filter "*.ps1" -Recurse | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
+          $failed = $false
+          
+          foreach ($script in $scripts) {
+            Write-Host "Analyzing: $($script.FullName)"
+            $results = Invoke-ScriptAnalyzer -Path $script.FullName -Severity Error,Warning
+            
+            if ($results) {
+              $failed = $true
+              foreach ($result in $results) {
+                $severity = $result.Severity.ToString().ToLower()
+                $message = "$($result.RuleName): $($result.Message)"
+                Write-Host "::$severity file=$($script.FullName),line=$($result.Line),col=$($result.Column)::$message"
+              }
+            } else {
+              Write-Host "✓ No issues found in: $($script.Name)"
+            }
+          }
+          
+          if ($failed) {
+            Write-Host "::error::PSScriptAnalyzer found issues in one or more scripts"
+            exit 1
+          }
+          Write-Host "✓ All PowerShell scripts passed analysis"
+
+      - name: PowerShell script syntax validation
+        run: |
+          echo "Validating PowerShell script syntax..."
           if command -v pwsh >/dev/null 2>&1; then
             failed=0
             while IFS= read -r -d '' f; do
-              echo "Checking $f"
+              echo "Checking syntax: $f"
               if ! pwsh -Command "Get-Content '$f' | Out-Null" 2>/dev/null; then
                 echo "::error file=$f::PowerShell script has syntax errors"
                 failed=1
               else
-                echo "✓ Valid PowerShell script: $f"
+                echo "✓ Valid syntax: $f"
               fi
             done < <(find . -name "*.ps1" -print0 2>/dev/null || true)
 
             if [ $failed -eq 1 ]; then
-              echo "::error::PowerShell script validation failed"
+              echo "::error::PowerShell syntax validation failed"
               exit 1
             fi
-            echo "✓ All PowerShell scripts are valid"
+            echo "✓ All PowerShell scripts have valid syntax"
           else
-            echo "PowerShell not available, skipping PowerShell script validation"
+            echo "PowerShell not available, skipping syntax validation"
           fi

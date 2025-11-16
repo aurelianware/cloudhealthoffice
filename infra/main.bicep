@@ -116,6 +116,18 @@ resource sbTopicEdi278 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-previe
   properties: {}
 }
 
+resource sbTopicAppealsAuth 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'appeals-auth'
+  properties: {}
+}
+
+resource sbTopicAuthStatuses 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'auth-statuses'
+  properties: {}
+}
+
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
