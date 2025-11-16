@@ -110,21 +110,102 @@
               ]
             }
           },
-          "Extract_Authorization_Metadata": {
+          "Extract_ClaimNumber": {
             "type": "Compose",
-            "inputs": {
-              "claimNumber": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'],'')}",
-              "memberId": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='IL')][0]?['NM109'],'')}",
-              "providerNpi": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='PR')][0]?['NM109'],'')}",
-              "serviceFromDate": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='472')][0]?['DTP03'],'')}",
-              "serviceToDate": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='473')][0]?['DTP03'],'')}",
-              "reviewDecision": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HCR']?[0]?['HCR01'],'')}",
-              "authorizationReference": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='D9')][0]?['REF02'],'')}",
-              "serviceType": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HI']?[0]?['HI01_1'],'')}",
-              "appealReference": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='EJ')][0]?['REF02'],'')}"
-            },
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['TRN']?[0]?['TRN02'],'')}",
             "runAfter": {
               "Decode_X12_278_Authorization": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_MemberId": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='IL')][0]?['NM109'],'')}",
+            "runAfter": {
+              "Extract_ClaimNumber": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_ProviderNpi": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['NM1']?[?(@['NM101']=='PR')][0]?['NM109'],'')}",
+            "runAfter": {
+              "Extract_MemberId": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_ServiceFromDate": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='472')][0]?['DTP03'],'')}",
+            "runAfter": {
+              "Extract_ProviderNpi": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_ServiceToDate": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='473')][0]?['DTP03'],'')}",
+            "runAfter": {
+              "Extract_ServiceFromDate": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_ReviewDecision": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HCR']?[0]?['HCR01'],'')}",
+            "runAfter": {
+              "Extract_ServiceToDate": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_AuthorizationReference": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='D9')][0]?['REF02'],'')}",
+            "runAfter": {
+              "Extract_ReviewDecision": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_ServiceType": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['HI']?[0]?['HI01_1'],'')}",
+            "runAfter": {
+              "Extract_AuthorizationReference": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Extract_AppealReference": {
+            "type": "Compose",
+            "inputs": "@{coalesce(body('Decode_X12_278_Authorization')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='EJ')][0]?['REF02'],'')}",
+            "runAfter": {
+              "Extract_ServiceType": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Aggregate_Authorization_Metadata": {
+            "type": "Compose",
+            "inputs": {
+              "claimNumber": "@outputs('Extract_ClaimNumber')",
+              "memberId": "@outputs('Extract_MemberId')",
+              "providerNpi": "@outputs('Extract_ProviderNpi')",
+              "serviceFromDate": "@outputs('Extract_ServiceFromDate')",
+              "serviceToDate": "@outputs('Extract_ServiceToDate')",
+              "reviewDecision": "@outputs('Extract_ReviewDecision')",
+              "authorizationReference": "@outputs('Extract_AuthorizationReference')",
+              "serviceType": "@outputs('Extract_ServiceType')",
+              "appealReference": "@outputs('Extract_AppealReference')"
+            },
+            "runAfter": {
+              "Extract_AppealReference": [
                 "Succeeded"
               ]
             }
