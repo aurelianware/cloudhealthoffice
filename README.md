@@ -27,7 +27,7 @@ This solution implements the following process:
 - **Application Insights**: `hipaa-logic-ai` ✅
 
 ### 🌐 Resource URLs
-- **Logic App Portal**: https://hipaa-logic-la.azurewebsites.net
+- **Logic App Portal**: <https://hipaa-logic-la.azurewebsites.net>
 - **Azure Management**: [Logic App Designer](https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/sites/hipaa-logic-la/logicApp)
 
 ## 🔧 Components
