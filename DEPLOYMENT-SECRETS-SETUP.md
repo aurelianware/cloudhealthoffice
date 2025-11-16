@@ -2,6 +2,8 @@
 
 This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the HIPAA Attachments Logic Apps solution.
 
+> **🚀 Quick Validation:** Run `./validate-github-secrets.sh` to verify your configuration!
+
 ## Table of Contents
 - [Overview](#overview)
 - [Quick Reference](#quick-reference)
@@ -340,12 +342,31 @@ Follow this checklist when setting up a new team member or environment:
 
 ## Validation
 
-### Validate Secrets Exist
+### Quick Validation Script
 
-Use this script to validate that all required secrets are configured:
+The repository includes a ready-to-use validation script that checks all secrets and variables:
 
 ```bash
-# Save as validate-github-secrets.sh
+# Run the validation script
+./validate-github-secrets.sh
+```
+
+**Prerequisites:**
+- GitHub CLI (`gh`) installed and authenticated
+- Read access to the repository
+
+**Script Output:**
+- ✅ Lists all configured secrets and variables
+- ❌ Identifies missing configuration items
+- 📊 Provides validation summary
+- 🔗 Links to setup documentation if issues found
+
+### Manual Validation
+
+If you prefer to validate manually or need to create a custom validation script, here's the basic approach:
+
+```bash
+# Example validation script (also available as validate-github-secrets.sh)
 #!/bin/bash
 
 REPO_OWNER="aurelianware"
