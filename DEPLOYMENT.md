@@ -2,6 +2,8 @@
 
 This guide provides step-by-step instructions for deploying the HIPAA Attachments system to Azure environments (DEV/UAT/PROD).
 
+> **📚 For comprehensive secrets and environment configuration, see [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md)**
+
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [GitHub Configuration](#github-configuration)
