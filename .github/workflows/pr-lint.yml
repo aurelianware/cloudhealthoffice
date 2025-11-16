@@ -52,7 +52,6 @@ jobs:
               line-length: false
               document-start: false
               truthy: false
-
       # ---------- Bicep syntax check (no Azure login) ----------
       - name: Setup Bicep
         run: az bicep install
