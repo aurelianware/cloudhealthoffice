@@ -315,7 +315,9 @@ jobs:
 
       - name: Deployment Summary
         run: |
-          echo "🎉 UAT Deployment completed successfully!"
+          echo "🎉 ====================================="
+          echo "🎉  UAT Deployment Completed Successfully!"
+          echo "🎉 ====================================="
           echo ""
           echo "**Deployed Resources:**"
           echo "- Resource Group: ${{ env.UAT_RESOURCE_GROUP }}"
@@ -323,8 +325,74 @@ jobs:
           echo "- Logic App: ${{ needs.deploy-infrastructure.outputs.logic-app-name }}"
           echo "- Location: ${{ env.AZURE_LOCATION }}"
           echo ""
+          echo "**Deployed Workflows:**"
+          echo "- ingest275: HIPAA 275 Attachment Ingestion"
+          echo "- ingest278: HIPAA 278 Health Care Services Review"
+          echo "- replay278: HTTP endpoint for 278 replay"
+          echo "- rfai277: HIPAA 277 RFAI Outbound"
+          echo ""
           echo "**Next Steps:**"
           echo "1. Configure API Connections in the Azure Portal"
           echo "2. Set up Integration Account schemas and agreements"
           echo "3. Configure Logic App parameters and connection strings"
           echo "4. Assign managed identity permissions to Storage & Service Bus"
+          echo "5. Run UAT test suite"
+          echo "6. Validate with trading partners"
+          echo ""
+          echo "🌐 Logic App URL: https://${{ needs.deploy-infrastructure.outputs.logic-app-name }}.azurewebsites.net"
+
+      - name: Rollback on Failure
+        if: failure()
+        runs-on: ubuntu-latest
+        needs: [validate, deploy-infrastructure, deploy-logic-apps]
+        environment: UAT
+        permissions:
+          id-token: write
+          contents: read
+
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+
+          - name: Azure Login (OIDC)
+            uses: azure/login@v2
+            with:
+              client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+              tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+              subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+
+          - name: Gather Diagnostic Information
+            uses: azure/cli@v2
+            with:
+              inlineScript: |
+                set +e  # Continue on error
+                RG="${{ env.UAT_RESOURCE_GROUP }}"
+                DEPLOY_NAME="hipaa-attachments-uat-infra-${{ github.run_number }}"
+
+                echo "=== Deployment Failed - Gathering Diagnostics ==="
+                echo "⚠️  UAT deployment failed. Collecting diagnostic information..."
+
+                # Show failed operations
+                echo "Listing failed deployment operations..."
+                az deployment operation group list \
+                  --resource-group "$RG" \
+                  --name "$DEPLOY_NAME" \
+                  --query "[?properties.provisioningState=='Failed'].{Operation:properties.targetResource.resourceName, Error:properties.statusMessage.error.message}" \
+                  -o table || echo "Unable to list operations"
+
+                # Show resource group state
+                echo "Current resource group state..."
+                az resource list -g "$RG" --query "[].{Name:name, Type:type, State:properties.provisioningState}" -o table || echo "Unable to list resources"
+
+                echo ""
+                echo "=== Diagnostic Summary ==="
+                echo "❌ UAT deployment failed. Please review the errors above."
+                echo "📋 Resource state has been captured."
+                echo "🔧 Recommended actions:"
+                echo "   1. Review deployment errors above"
+                echo "   2. Check resource quotas and limits"
+                echo "   3. Verify OIDC authentication is configured"
+                echo "   4. Check for naming conflicts"
+                echo "   5. Validate UAT-specific secrets are set"
+                echo ""
+                echo "⚠️  Resources may be partially deployed. Verify before retrying."
