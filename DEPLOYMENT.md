@@ -174,6 +174,22 @@ The deployment workflows use GitHub Environments with protection rules to implem
 - **PROD-approval**: Approval gate before PROD deployment
 - **PROD**: Actual PROD environment for resource deployment
 
+### Quick Reference
+
+**For Approvers:**
+1. You'll receive a GitHub notification when approval is needed
+2. Click "Review pending deployments" in the notification or workflow run
+3. Review the deployment details (branch, commit, changes)
+4. Click "Approve and deploy" or "Reject" with optional comment
+5. Deployment proceeds if approved, stops if rejected
+
+**For Deployers:**
+1. Push to `release/*` branch (UAT) or trigger manual workflow (PROD)
+2. Workflow starts and waits at approval gate
+3. Configured reviewers are notified automatically
+4. Monitor workflow run in Actions tab
+5. Once approved, deployment continues automatically
+
 ### Why Use Approval Gates?
 
 Approval gates provide:
