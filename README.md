@@ -68,7 +68,7 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 ### Deployment Options
 
 #### 1. Automated UAT Deployment (Recommended)
-**Trigger**: Push to `release/*` branches  
+**Trigger**: Push to `release/*` branches
 **Workflow**: `.github/workflows/deploy-uat.yml`
 
 The UAT deployment runs automatically when you push to any `release/*` branch:
@@ -197,7 +197,7 @@ After deployment, configure:
    az role assignment create --assignee <logic-app-principal-id> \
      --role "Storage Blob Data Contributor" \
      --scope "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<storage-name>"
-   
+
    # Service Bus Data Sender
    az role assignment create --assignee <logic-app-principal-id> \
      --role "Azure Service Bus Data Sender" \
@@ -366,7 +366,7 @@ If QNXT response indicates `requiresRFAI: true`, the workflow:
 
 ### Integration Points
 
-**Upstream**: 
+**Upstream**:
 - `ingest275` workflow publishes attachment events to `attachments-in` topic
 - Service Bus subscription `appeals-processor` filters for appeal-related messages
 
