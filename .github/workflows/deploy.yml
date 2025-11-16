@@ -17,6 +17,83 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate Required Secrets and Variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets and Variables"
+          echo "=========================================="
+          echo ""
+          
+          # Track validation failures
+          FAILED=0
+          
+          # Validate required secrets (check if they're not empty)
+          echo "Checking required secrets..."
+          
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
+            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
+            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+            "SFTP_HOST:${{ secrets.SFTP_HOST }}"
+            "SFTP_USERNAME:${{ secrets.SFTP_USERNAME }}"
+            "SFTP_PASSWORD:${{ secrets.SFTP_PASSWORD }}"
+          )
+          
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+          
+          echo ""
+          echo "Checking required repository variables..."
+          
+          REQUIRED_VARS=(
+            "AZURE_RG_NAME:${{ vars.AZURE_RG_NAME }}"
+            "AZURE_LOCATION:${{ vars.AZURE_LOCATION }}"
+            "AZURE_CONNECTOR_LOCATION:${{ vars.AZURE_CONNECTOR_LOCATION }}"
+            "BASE_NAME:${{ vars.BASE_NAME }}"
+            "IA_NAME:${{ vars.IA_NAME }}"
+            "SERVICE_BUS_NAME:${{ vars.SERVICE_BUS_NAME }}"
+            "STORAGE_SKU:${{ vars.STORAGE_SKU }}"
+          )
+          
+          for item in "${REQUIRED_VARS[@]}"; do
+            VAR_NAME="${item%%:*}"
+            VAR_VALUE="${item#*:}"
+            if [ -z "$VAR_VALUE" ]; then
+              echo "❌ $VAR_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $VAR_NAME = $VAR_VALUE"
+            fi
+          done
+          
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Missing secrets or variables detected!"
+            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
+            echo ""
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Validation PASSED"
+            echo "=========================================="
+            echo ""
+            echo "All required secrets and variables are configured."
+          fi
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
