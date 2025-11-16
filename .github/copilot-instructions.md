@@ -12,6 +12,23 @@ This repository implements an Azure Logic Apps solution for processing HIPAA-com
 
 Always reference these instructions first and only fallback to search or bash commands when you encounter unexpected information that does not match the info here.
 
+## Documentation
+
+**For detailed guidance, always consult these comprehensive documentation files:**
+
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Development workflow, setup instructions, validation procedures, and code review standards
+- **[ARCHITECTURE.md](../ARCHITECTURE.md)** - System architecture, component details, data flows (275/277/278), and design decisions
+- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Step-by-step deployment procedures for DEV/UAT/PROD environments
+- **[TROUBLESHOOTING.md](../TROUBLESHOOTING.md)** - Common issues and solutions for development, deployment, and runtime problems
+- **[SECURITY.md](../SECURITY.md)** - HIPAA compliance requirements, encryption, access control, and secure development practices
+
+**Quick References:**
+- New developer onboarding: Start with [CONTRIBUTING.md](../CONTRIBUTING.md)
+- Understanding system design: See [ARCHITECTURE.md](../ARCHITECTURE.md)
+- Deploying changes: Follow [DEPLOYMENT.md](../DEPLOYMENT.md)
+- Fixing issues: Check [TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
+- Security questions: Review [SECURITY.md](../SECURITY.md)
+
 ## Working Effectively
 
 ### Prerequisites and Setup
@@ -280,3 +297,180 @@ After successful deployment, manual configuration required:
 - **Managed Identity**: Logic Apps use system-assigned managed identity for Azure resource access
 - **OIDC Authentication**: GitHub Actions use OpenID Connect for Azure authentication (no secrets stored)
 - **Secrets Management**: Never commit API keys, connection strings, or credentials to repository
+- **For detailed security guidelines**: See [SECURITY.md](../SECURITY.md)
+
+## Common Development Tasks and Copilot Prompts
+
+### Getting Started
+**"I'm new to this repository. How do I get started?"**
+- Response should reference [CONTRIBUTING.md](../CONTRIBUTING.md) for prerequisites, setup, and workflow
+
+**"What does this system do?"**
+- Response should reference [ARCHITECTURE.md](../ARCHITECTURE.md) for high-level overview and component descriptions
+
+### Validation Tasks
+**"Validate all workflow JSON files"**
+```bash
+find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
+```
+
+**"Validate Bicep templates"**
+```bash
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+```
+
+**"Run all validation checks before committing"**
+```bash
+# JSON validation
+find logicapps/workflows -name "workflow.json" -exec jq . {} \;
+# Bicep validation
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+# PowerShell validation
+pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
+```
+
+### Deployment Tasks
+**"How do I deploy to DEV/UAT/PROD?"**
+- Response should reference [DEPLOYMENT.md](../DEPLOYMENT.md) for environment-specific procedures
+
+**"Create a workflow deployment package"**
+```bash
+cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
+unzip -l workflows.zip  # Verify structure
+```
+
+**"Deploy infrastructure to UAT"**
+```bash
+az deployment group create \
+  --resource-group "pchp-attachments-uat-rg" \
+  --template-file infra/main.bicep \
+  --parameters baseName="hipaa-attachments-uat"
+```
+
+### Troubleshooting Tasks
+**"Workflow is failing, how do I debug?"**
+- Response should reference [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for debugging steps
+- Check workflow run history in Azure Portal
+- Query Application Insights for errors
+- Review action inputs/outputs
+
+**"X12 decode is failing"**
+- Check Integration Account trading partner configuration
+- Verify ISA/GS identifiers match (Availity: 030240928, PCHP: 66917)
+- Ensure correct schema is uploaded (275: X12_005010X210_275)
+- See [TROUBLESHOOTING.md](../TROUBLESHOOTING.md#x12-decode-failures)
+
+**"OIDC authentication is failing in GitHub Actions"**
+- Verify federated credentials are configured correctly
+- Check subject matches repo/branch pattern
+- Ensure service principal has Contributor role
+- See [TROUBLESHOOTING.md](../TROUBLESHOOTING.md#oidc-authentication-failures)
+
+### Architecture Questions
+**"How does the 275 attachment ingestion flow work?"**
+- Reference [ARCHITECTURE.md](../ARCHITECTURE.md#275-attachment-ingestion-flow)
+- Flow: SFTP → Data Lake → X12 Decode → Extract Metadata → QNXT API → Service Bus
+
+**"What are the Service Bus topics and what are they used for?"**
+- `attachments-in`: Processed 275 attachment events
+- `rfai-requests`: 277 RFAI outbound requests
+- `edi-278`: 278 Health Care Services Review transactions
+- See [ARCHITECTURE.md](../ARCHITECTURE.md#service-bus-namespace)
+
+**"What's the data partitioning structure in Data Lake?"**
+- Path: `hipaa-attachments/raw/{type}/yyyy/MM/dd/`
+- Example: `hipaa-attachments/raw/275/2024/01/15/file.edi`
+- See [ARCHITECTURE.md](../ARCHITECTURE.md#azure-data-lake-storage-gen2)
+
+### Security Questions
+**"How do I handle secrets and credentials?"**
+- Never commit secrets to code
+- Use Azure Key Vault for secret storage
+- Use GitHub Secrets for CI/CD
+- Use managed identity instead of connection strings
+- See [SECURITY.md](../SECURITY.md#secrets-management)
+
+**"What are the HIPAA compliance requirements?"**
+- Encryption at rest and in transit (TLS 1.2+)
+- Access logging and monitoring
+- Minimum necessary principle
+- See [SECURITY.md](../SECURITY.md#hipaa-compliance-overview)
+
+**"How do I configure managed identity permissions?"**
+```bash
+# Get principal ID
+PRINCIPAL_ID=$(az webapp identity show --resource-group "rg" --name "la" --query principalId -o tsv)
+# Assign Storage Blob Data Contributor role
+az role assignment create --assignee "$PRINCIPAL_ID" --role "Storage Blob Data Contributor" --scope "{storage-scope}"
+```
+
+### Testing Tasks
+**"How do I test workflows?"**
+```powershell
+# Test 275 ingestion
+pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'rg' -LogicAppName 'la'"
+# Test 277 RFAI
+pwsh -c "./test-workflows.ps1 -TestOutbound277 -ResourceGroup 'rg' -LogicAppName 'la'"
+```
+
+**"How do I test the 278 replay endpoint?"**
+```bash
+curl -X POST "https://{logic-app}.azurewebsites.net/api/replay278/..." \
+  -H "Content-Type: application/json" \
+  -d '{"blobUrl": "hipaa-attachments/raw/278/2024/01/15/test.edi"}'
+```
+
+### Code Review Tasks
+**"Review this workflow JSON for issues"**
+- Check for required keys: `definition`, `kind`, `parameters`
+- Verify `kind` is `"Stateful"`
+- Validate JSON syntax with `jq`
+- Review action names are descriptive
+- Check error handling and retry policies
+- See [CONTRIBUTING.md](../CONTRIBUTING.md#code-review-standards)
+
+**"Security review checklist for this PR"**
+- No hardcoded secrets or credentials
+- No PHI logged in plain text
+- Input validation present
+- Error messages don't expose sensitive information
+- Managed identity used (not connection strings)
+- See [SECURITY.md](../SECURITY.md#code-review-checklist)
+
+### Workflow Modifications
+**"Add a new Logic Apps workflow"**
+1. Create directory under `logicapps/workflows/`
+2. Create `workflow.json` with required structure
+3. Set `"kind": "Stateful"`
+4. Define trigger and actions
+5. Validate JSON syntax
+6. Test and deploy
+- See [CONTRIBUTING.md](../CONTRIBUTING.md#making-changes)
+
+**"Update Service Bus topic configuration"**
+1. Update topic in `infra/main.bicep`
+2. Update workflow parameters
+3. Test message publishing/consumption
+4. See [ARCHITECTURE.md](../ARCHITECTURE.md#service-bus-namespace)
+
+### Performance and Monitoring
+**"Query Application Insights for failed workflows"**
+```kusto
+traces
+| where timestamp > ago(24h)
+| where severityLevel >= 3
+| where message contains "workflow"
+| project timestamp, message, severityLevel
+```
+
+**"Check QNXT API performance"**
+```kusto
+dependencies
+| where name contains "QNXT"
+| summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
+```
+
+**"Monitor Service Bus queue depth"**
+```bash
+az servicebus topic show --resource-group "rg" --namespace-name "ns" --name "topic" --query "messageCount"
+```
