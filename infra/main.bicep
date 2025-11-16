@@ -125,6 +125,12 @@ resource sbTopicEdi278SubAuth 'Microsoft.ServiceBus/namespaces/topics/subscripti
   }
 }
 
+resource sbTopicAppealsAuth 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'appeals-auth'
+  properties: {}
+}
+
 resource sbTopicAuthStatuses 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: sb
   name: 'auth-statuses'
@@ -136,6 +142,7 @@ resource sbTopicDeadLetter 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-pr
   name: 'dead-letter'
   properties: {}
 }
+
 
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)

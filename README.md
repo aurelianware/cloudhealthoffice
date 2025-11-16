@@ -11,10 +11,11 @@ This solution implements the following process:
 4. **Metadata Extraction**: Extracts claim, member, and provider information
 5. **QNXT Integration**: Links attachments to claims via QNXT API
 6. **Service Bus**: Publishes events for downstream processing
-7. **RFAI Processing**: Handles Request for Additional Information via rfai277 workflow
-8. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
-9. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
-10. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
+7. **Appeals Processing**: Consumes attachment events, detects appeals, registers with QNXT (process_appeals workflow)
+8. **RFAI Processing**: Handles Request for Additional Information via rfai277 workflow
+9. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
+10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
+11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 
 ## 📦 Current Production Deployment
 
@@ -23,11 +24,11 @@ This solution implements the following process:
 - **Logic App Standard**: `hipaa-logic-la` ✅ RUNNING
 - **Storage Account**: `hipaa7v2rrsoo6tac2` (Data Lake Gen2 enabled) ✅
 - **Service Bus Namespace**: `hipaa-logic-svc` (Standard tier) ✅
-  - Topics: `attachments-in`, `rfai-requests`, `edi-278`, `auth-statuses`, `dead-letter` ✅
+  - Topics: `attachments-in`, `rfai-requests`, `edi-278`, `appeals-auth`, `auth-statuses`, `dead-letter` ✅
 - **Application Insights**: `hipaa-logic-ai` ✅
 
 ### 🌐 Resource URLs
-- **Logic App Portal**: https://hipaa-logic-la.azurewebsites.net
+- **Logic App Portal**: <https://hipaa-logic-la.azurewebsites.net>
 - **Azure Management**: [Logic App Designer](https://portal.azure.com/#@/resource/subscriptions/caf68aff-3bee-40e3-bf26-c4166efa952b/resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/sites/hipaa-logic-la/logicApp)
 
 ## 🔧 Components
@@ -35,6 +36,7 @@ This solution implements the following process:
 
 ### Workflows
 - `logicapps/workflows/ingest275/workflow.json`: Main 275 ingestion workflow
+- `logicapps/workflows/process_appeals/workflow.json`: Appeals processing workflow (consumes from attachments-in topic)
 - `logicapps/workflows/rfai277/workflow.json`: Outbound 277 RFAI workflow
 - `logicapps/workflows/ingest278/workflow.json`: X12 278 transaction processing workflow
 - `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing workflow
@@ -69,7 +71,7 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 ### Deployment Options
 
 #### 1. Automated UAT Deployment (Recommended)
-**Trigger**: Push to `release/*` branches  
+**Trigger**: Push to `release/*` branches
 **Workflow**: `.github/workflows/deploy-uat.yml`
 
 The UAT deployment runs automatically when you push to any `release/*` branch:
@@ -198,7 +200,7 @@ After deployment, configure:
    az role assignment create --assignee <logic-app-principal-id> \
      --role "Storage Blob Data Contributor" \
      --scope "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<storage-name>"
-   
+
    # Service Bus Data Sender
    az role assignment create --assignee <logic-app-principal-id> \
      --role "Azure Service Bus Data Sender" \
@@ -342,6 +344,112 @@ The `replay278` workflow provides a deterministic HTTP endpoint for replaying X1
 - **Queueing**: Enqueues message to `edi-278` Service Bus topic for processing
 - **Logging**: Records replay events in Application Insights
 - **Deterministic**: Consistent replay behavior for troubleshooting
+
+## Appeals Processing Workflow
+
+The `process_appeals` workflow provides comprehensive appeals handling based on attachment events from the 275 ingestion workflow.
+
+### Workflow Overview
+
+**Trigger**: Service Bus topic `attachments-in` via `appeals-processor` subscription
+
+**Process Flow**:
+1. Consume attachment event from Service Bus
+2. Parse attachment metadata (claim number, member ID, provider NPI, service dates)
+3. Extract appeal indicators from message properties
+4. Identify appeals via indicator flag, reason code, or attachment type
+5. Correlate appeal with existing claim via QNXT API
+6. Register appeal with QNXT Appeals API
+7. Conditionally publish RFAI event to `rfai-requests` topic if required
+8. Log all events to Application Insights
+
+### Appeal Detection
+
+Appeals are detected when any of the following conditions are met:
+- **Appeal Indicator**: UserProperty `appealIndicator` is present and non-empty
+- **Reason Code**: UserProperty `appealReasonCode` is present and non-empty
+- **Attachment Type**: Content data `attachmentType` contains "appeal"
+
+### QNXT Integration
+
+**Two API Calls with Retry Logic**:
+1. **Correlate Appeal** (`/claims/correlate-appeal`): Links appeal to existing claim
+   - 4 retries @ 15-second intervals
+   - Returns correlation data for appeal registration
+
+2. **Register Appeal** (`/appeals/register`): Registers appeal in QNXT system
+   - 4 retries @ 15-second intervals
+   - Returns appeal ID, tracking number, status, and RFAI requirements
+
+### RFAI Publishing
+
+If QNXT response indicates `requiresRFAI: true`, the workflow:
+- Composes RFAI event with appeal metadata
+- Publishes to `rfai-requests` Service Bus topic
+- Includes appeal tracking number as RFAI reference
+- Logs RFAI publication to Application Insights
+
+### Error Handling
+
+**Try-Catch Scope Pattern**:
+- Main processing in `Try_Process_Appeal` scope
+- Error handling in `Catch_Appeal_Processing_Error` scope
+- Failed messages abandoned to dead-letter queue
+- Error details logged to Application Insights
+- Dead-letter reason: "AppealProcessingError"
+
+### Application Insights Events
+
+**Logged Events**:
+- `AppealDetected`: When appeal indicator found
+- `AppealRegistered`: Upon successful QNXT registration
+- `AppealRFAIPublished`: When RFAI event published
+- `AppealNoRFAI`: When appeal doesn't require RFAI
+- `NoAppealDetected`: When no appeal indicators present
+- `AppealProcessingError`: On any processing failure
+
+### Configuration Parameters
+
+```json
+{
+  "sb_namespace": "hipaa-logic-svc",
+  "sb_topic_attachments": "attachments-in",
+  "sb_topic_rfai": "rfai-requests",
+  "sb_subscription_appeals": "appeals-processor",
+  "qnxt_base_url": "https://qnxt-api.example.com",
+  "qnxt_api_token": "<secure-token>",
+  "appinsights_endpoint": "https://dc.services.visualstudio.com",
+  "appinsights_instrumentation_key": "<instrumentation-key>"
+}
+```
+
+### Integration Points
+
+**Upstream**:
+- `ingest275` workflow publishes attachment events to `attachments-in` topic
+- Service Bus subscription `appeals-processor` filters for appeal-related messages
+
+**Downstream**:
+- `rfai277` workflow consumes from `rfai-requests` topic for RFAI processing
+- QNXT Appeals system maintains appeal lifecycle and status
+
+### Deployment Considerations
+
+**Service Bus Configuration**:
+- Ensure subscription `appeals-processor` exists on `attachments-in` topic
+- Configure subscription filters if needed to target appeal-specific messages
+- Set appropriate message lock duration and max delivery count
+
+**QNXT API Configuration**:
+- Verify appeal endpoints are available: `/claims/correlate-appeal`, `/appeals/register`
+- Ensure API token has appropriate permissions
+- Test retry behavior with non-production endpoints
+
+**Monitoring**:
+- Set up Application Insights alerts for `AppealProcessingError` events
+- Monitor dead-letter queue for failed appeal processing
+- Track appeal registration success rate
+- Monitor QNXT API latency and retry rates
 
 ## 🤖 GitHub Copilot Instructions
 

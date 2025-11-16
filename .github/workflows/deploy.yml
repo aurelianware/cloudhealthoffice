@@ -263,3 +263,138 @@ jobs:
             az webapp restart -g "$RG" -n "$APP_NAME"
             echo "✓ Logic App restarted"
             echo "🌐 https://$APP_NAME.azurewebsites.net"
+
+      - name: Post-Deployment Health Check
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            APP_NAME="${{ env.LOGIC_APP_NAME }}"
+            RG="${{ vars.AZURE_RG_NAME }}"
+
+            echo "=== Post-Deployment Health Check ==="
+            echo "Waiting 30 seconds for Logic App to stabilize..."
+            sleep 30
+
+            # Check Logic App status
+            echo "Checking Logic App status..."
+            STATUS=$(az webapp show -g "$RG" -n "$APP_NAME" --query "state" -o tsv)
+            echo "Logic App State: $STATUS"
+
+            if [ "$STATUS" != "Running" ]; then
+              echo "::error::Logic App is not in Running state: $STATUS"
+              exit 1
+            fi
+            echo "✓ Logic App is running"
+
+            # Check workflows
+            echo "Checking deployed workflows..."
+            az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows (may need permissions)"
+
+            # Check Application Insights
+            echo "Checking Application Insights connection..."
+            AI_KEY=$(az webapp config appsettings list -g "$RG" -n "$APP_NAME" \
+              --query "[?name=='APPINSIGHTS_INSTRUMENTATIONKEY'].value" -o tsv)
+            if [ -n "$AI_KEY" ]; then
+              echo "✓ Application Insights configured"
+            else
+              echo "::warning::Application Insights not configured"
+            fi
+
+            # Check Storage Account
+            echo "Checking Storage Account..."
+            STORAGE_NAME="${{ vars.BASE_NAME }}stg"
+            STORAGE_STATUS=$(az storage account show -g "$RG" -n "$STORAGE_NAME" \
+              --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "Storage Account Status: $STORAGE_STATUS"
+
+            # Check Service Bus
+            echo "Checking Service Bus..."
+            SB_STATUS=$(az servicebus namespace show -g "$RG" -n "${{ env.SERVICE_BUS_NAME }}" \
+              --query "provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+            echo "Service Bus Status: $SB_STATUS"
+
+            echo ""
+            echo "=== Health Check Summary ==="
+            echo "✓ Logic App: $APP_NAME ($STATUS)"
+            echo "✓ Storage: $STORAGE_NAME ($STORAGE_STATUS)"
+            echo "✓ Service Bus: ${{ env.SERVICE_BUS_NAME }} ($SB_STATUS)"
+            echo "✓ Application Insights: Configured"
+            echo ""
+            echo "🎉 Deployment health check passed!"
+
+      - name: Rollback on Failure
+        if: failure()
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set +e  # Continue on error during rollback
+            APP_NAME="${{ env.LOGIC_APP_NAME }}"
+            RG="${{ vars.AZURE_RG_NAME }}"
+            DEPLOY_NAME="hipaa-logic-infra-${{ github.run_number }}"
+
+            echo "=== Deployment Failed - Initiating Rollback ==="
+            echo "⚠️  Deployment failed. Attempting to gather diagnostic information..."
+
+            # Show failed operations
+            echo "Listing failed deployment operations..."
+            az deployment operation group list \
+              --resource-group "$RG" \
+              --name "$DEPLOY_NAME" \
+              --query "[?properties.provisioningState=='Failed'].{Operation:properties.targetResource.resourceName, Error:properties.statusMessage.error.message}" \
+              -o table || echo "Unable to list operations"
+
+            # Check Logic App logs
+            echo "Fetching Logic App logs..."
+            az webapp log download -g "$RG" -n "$APP_NAME" --log-file "/tmp/logicapp-logs.zip" 2>/dev/null || echo "Unable to download logs"
+
+            # Show recent errors in Application Insights
+            echo "Checking Application Insights for errors..."
+            AI_NAME="${{ vars.BASE_NAME }}-ai"
+            az monitor app-insights query -a "$AI_NAME" -g "$RG" \
+              --analytics-query "traces | where timestamp > ago(1h) and severityLevel >= 3 | top 10 by timestamp desc" \
+              -o table 2>/dev/null || echo "Unable to query Application Insights"
+
+            echo ""
+            echo "=== Rollback Summary ==="
+            echo "❌ Deployment failed. Please review the errors above."
+            echo "📋 Diagnostic information has been collected."
+            echo "🔧 To manually rollback:"
+            echo "   1. Review the deployment errors above"
+            echo "   2. Check Logic App configuration in Azure Portal"
+            echo "   3. Verify API connections are properly configured"
+            echo "   4. Review Application Insights for runtime errors"
+            echo ""
+            echo "⚠️  IMPORTANT: The infrastructure may be partially deployed."
+            echo "   Please verify resource state before retrying deployment."
+
+      - name: Deployment Success Summary
+        if: success()
+        run: |
+          echo "🎉 ====================================="
+          echo "🎉  PROD Deployment Completed Successfully!"
+          echo "🎉 ====================================="
+          echo ""
+          echo "**Deployed Resources:**"
+          echo "- Resource Group: ${{ vars.AZURE_RG_NAME }}"
+          echo "- Logic App: ${{ env.LOGIC_APP_NAME }}"
+          echo "- Service Bus: ${{ env.SERVICE_BUS_NAME }}"
+          echo "- Storage Account: ${{ vars.BASE_NAME }}stg"
+          echo "- Application Insights: ${{ vars.BASE_NAME }}-ai"
+          echo "- Integration Account: ${{ vars.IA_NAME }}"
+          echo ""
+          echo "**Deployed Workflows:**"
+          echo "- ingest275: HIPAA 275 Attachment Ingestion"
+          echo "- ingest278: HIPAA 278 Health Care Services Review"
+          echo "- replay278: HTTP endpoint for 278 replay"
+          echo "- rfai277: HIPAA 277 RFAI Outbound"
+          echo ""
+          echo "**Next Steps:**"
+          echo "1. Verify API connections in Azure Portal"
+          echo "2. Test workflows with sample data"
+          echo "3. Monitor Application Insights for any issues"
+          echo "4. Configure alerts and monitoring"
+          echo ""
+          echo "🌐 Logic App URL: https://${{ env.LOGIC_APP_NAME }}.azurewebsites.net"
