@@ -1,0 +1,495 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:b="http://schemas.microsoft.com/BizTalk/2003"
+           targetNamespace="http://schemas.microsoft.com/BizTalk/EDI/X12/2006"
+           xmlns="http://schemas.microsoft.com/BizTalk/EDI/X12/2006"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <xs:annotation>
+    <xs:appinfo>
+      <b:schemaInfo standard="X12" version="005010" document_type="278" root_reference="X12_00501_278"/>
+      <b:references>
+        <b:reference targetNamespace="http://schemas.microsoft.com/BizTalk/EDI/X12/2006" />
+      </b:references>
+    </xs:appinfo>
+  </xs:annotation>
+
+  <!-- Root Element -->
+  <xs:element name="X12_00501_278" type="X12_278_Type"/>
+
+  <!-- Main Transaction Set -->
+  <xs:complexType name="X12_278_Type">
+    <xs:sequence>
+      <xs:element name="ST" type="ST_Type" minOccurs="1" maxOccurs="1">
+        <xs:annotation>
+          <xs:appinfo>
+            <b:recordInfo structure="delimited" delimiter_type="inherit_record"/>
+          </xs:appinfo>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT" type="BHT_Type" minOccurs="1" maxOccurs="1">
+        <xs:annotation>
+          <xs:appinfo>
+            <b:recordInfo structure="delimited" delimiter_type="inherit_record"/>
+          </xs:appinfo>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="Loop2000A" type="Loop2000A_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Loop2000B" type="Loop2000B_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Loop2000C" type="Loop2000C_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Loop2000D" type="Loop2000D_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Loop2000E" type="Loop2000E_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Loop2000F" type="Loop2000F_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="SE" type="SE_Type" minOccurs="1" maxOccurs="1">
+        <xs:annotation>
+          <xs:appinfo>
+            <b:recordInfo structure="delimited" delimiter_type="inherit_record"/>
+          </xs:appinfo>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ST - Transaction Set Header -->
+  <xs:complexType name="ST_Type">
+    <xs:sequence>
+      <xs:element name="ST01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Identifier Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="ST02" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Control Number</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="ST03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Implementation Convention Reference</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- BHT - Beginning of Hierarchical Transaction -->
+  <xs:complexType name="BHT_Type">
+    <xs:sequence>
+      <xs:element name="BHT01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Hierarchical Structure Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT02" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Purpose Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Originator Application Transaction Identifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT04" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Creation Date</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT05" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Creation Time</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="BHT06" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Transaction Type Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000A - Utilization Management Organization (UMO) Level -->
+  <xs:complexType name="Loop2000A_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="NM1" type="NM1_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="REF" type="REF_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PER" type="PER_Type" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000B - Requester Level -->
+  <xs:complexType name="Loop2000B_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="NM1" type="NM1_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="REF" type="REF_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PER" type="PER_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PRV" type="PRV_Type" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000C - Subscriber Level -->
+  <xs:complexType name="Loop2000C_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="TRN" type="TRN_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="NM1" type="NM1_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="REF" type="REF_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="DMG" type="DMG_Type" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DTP" type="DTP_Type" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000D - Dependent Level -->
+  <xs:complexType name="Loop2000D_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="TRN" type="TRN_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="NM1" type="NM1_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="REF" type="REF_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="DMG" type="DMG_Type" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DTP" type="DTP_Type" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000E - Service Provider Level -->
+  <xs:complexType name="Loop2000E_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="NM1" type="NM1_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="REF" type="REF_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PER" type="PER_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PRV" type="PRV_Type" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Loop 2000F - Service Level -->
+  <xs:complexType name="Loop2000F_Type">
+    <xs:sequence>
+      <xs:element name="HL" type="HL_Type" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="TRN" type="TRN_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="UM" type="UM_Type" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HSD" type="HSD_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="DTP" type="DTP_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="HI" type="HI_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PWK" type="PWK_Type" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="MSG" type="MSG_Type" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- HL - Hierarchical Level -->
+  <xs:complexType name="HL_Type">
+    <xs:sequence>
+      <xs:element name="HL01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Hierarchical ID Number</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HL02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Hierarchical Parent ID Number</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HL03" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Hierarchical Level Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HL04" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Hierarchical Child Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- NM1 - Individual or Organizational Name -->
+  <xs:complexType name="NM1_Type">
+    <xs:sequence>
+      <xs:element name="NM101" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Entity Identifier Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM102" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Entity Type Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM103" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Name Last or Organization Name</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM104" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Name First</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM105" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Name Middle</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM108" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Identification Code Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="NM109" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Identification Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- TRN - Trace -->
+  <xs:complexType name="TRN_Type">
+    <xs:sequence>
+      <xs:element name="TRN01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Trace Type Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="TRN02" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Reference Identification</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="TRN03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Originating Company Identifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="TRN04" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Reference Identification</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- REF - Reference Information -->
+  <xs:complexType name="REF_Type">
+    <xs:sequence>
+      <xs:element name="REF01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Reference Identification Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="REF02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Reference Identification</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="REF03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Description</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- PER - Administrative Communications Contact -->
+  <xs:complexType name="PER_Type">
+    <xs:sequence>
+      <xs:element name="PER01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Contact Function Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PER02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Name</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PER03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Communication Number Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PER04" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Communication Number</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- PRV - Provider Information -->
+  <xs:complexType name="PRV_Type">
+    <xs:sequence>
+      <xs:element name="PRV01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Provider Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PRV02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Reference Identification Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PRV03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Provider Taxonomy Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- DMG - Demographic Information -->
+  <xs:complexType name="DMG_Type">
+    <xs:sequence>
+      <xs:element name="DMG01" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Date Time Period Format Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="DMG02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Date of Birth</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="DMG03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Gender Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- DTP - Date or Time or Period -->
+  <xs:complexType name="DTP_Type">
+    <xs:sequence>
+      <xs:element name="DTP01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Date/Time Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="DTP02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Date Time Period Format Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="DTP03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Date Time Period</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- UM - Health Care Services Review Information -->
+  <xs:complexType name="UM_Type">
+    <xs:sequence>
+      <xs:element name="UM01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Request Category Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="UM02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Certification Type Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="UM03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Service Type Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- HSD - Health Care Services Delivery -->
+  <xs:complexType name="HSD_Type">
+    <xs:sequence>
+      <xs:element name="HSD01" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Quantity Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HSD02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Quantity</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HSD03" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Unit or Basis for Measurement Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- HI - Health Care Information Codes -->
+  <xs:complexType name="HI_Type">
+    <xs:sequence>
+      <xs:element name="HI01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Health Care Code Information</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="HI02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Health Care Code Information</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- PWK - Paperwork -->
+  <xs:complexType name="PWK_Type">
+    <xs:sequence>
+      <xs:element name="PWK01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Report Type Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PWK02" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Report Transmission Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PWK05" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Identification Code Qualifier</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="PWK06" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Identification Code</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- MSG - Message Text -->
+  <xs:complexType name="MSG_Type">
+    <xs:sequence>
+      <xs:element name="MSG01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Free-Form Message Text</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- SE - Transaction Set Trailer -->
+  <xs:complexType name="SE_Type">
+    <xs:sequence>
+      <xs:element name="SE01" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Number of Included Segments</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="SE02" type="xs:string" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Transaction Set Control Number</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>
