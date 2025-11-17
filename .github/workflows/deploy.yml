@@ -17,7 +17,7 @@ jobs:
       - name: Deployment Approval Required
         run: |
           echo "🔒 Manual approval required for PROD deployment"
-          echo "✅ Approval granted - proceeding with deployment"
+          echo "⏳ Waiting for approval from configured reviewers..."
           echo "📝 Deployment triggered by: ${{ github.actor }}"
           echo "📝 Ref: ${{ github.ref }}"
           echo "📝 SHA: ${{ github.sha }}"
@@ -392,9 +392,10 @@ jobs:
             echo "   Option 1: Re-run a previous successful deployment"
             echo "   - Go to Actions tab → Select successful run → Re-run jobs"
             echo ""
-            echo "   Option 2: Deploy from last known good commit"
-            echo "   - git checkout <last-good-commit>"
-            echo "   - git push --force-with-lease (only if necessary)"
+            echo "   Option 2: Revert to last known good commit"
+            echo "   - git revert <bad-commit>"
+            echo "   - git push origin main"
+            echo "   Or use workflow_dispatch to redeploy a specific commit"
             echo ""
             echo "🔍 Manual Investigation Steps:"
             echo "   1. Review the deployment errors above"
