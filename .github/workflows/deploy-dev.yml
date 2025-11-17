@@ -38,6 +38,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Required Secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets (DEV)"
+          echo "=========================================="
+          echo ""
+
+          # Track validation failures
+          FAILED=0
+
+          # Validate required secrets for DEV environment
+          echo "Checking required DEV secrets..."
+
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
+            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
+            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          )
+
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Missing secrets detected for DEV environment!"
+            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
+            echo ""
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Validation PASSED"
+            echo "=========================================="
+            echo ""
+            echo "All required DEV secrets are configured."
+            echo "Note: DEV environment uses hardcoded values for resource naming."
+          fi
+
       - name: Set deployment parameters
         id: set-params
         run: |

@@ -99,7 +99,9 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 - `AZURE_TENANT_ID_{ENV}`: Azure AD tenant ID
 - `AZURE_SUBSCRIPTION_ID_{ENV}`: Target Azure subscription ID
 
-**See [GITHUB-ACTIONS-SETUP.md § GitHub Secrets Configuration](GITHUB-ACTIONS-SETUP.md#github-secrets-configuration) for step-by-step setup.**
+**📚 Setup Guides:**
+- [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) - Complete GitHub Actions and OIDC setup
+- [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) - Detailed secrets configuration and validation
 
 ### Deployment Options
 

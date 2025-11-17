@@ -6,9 +6,10 @@ This guide provides step-by-step instructions for deploying the HIPAA Attachment
 
 **New to deployment?** Start here:
 1. **GitHub Actions Setup**: See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) for complete OIDC authentication and secrets configuration
-2. **Validate Prerequisites**: Ensure all tools are installed (see [Prerequisites](#prerequisites))
-3. **Follow Environment Deployment**: Choose your target environment (DEV/UAT/PROD)
-4. **Run Post-Deployment Steps**: Configure API connections and Integration Account
+2. **Secrets & Environment Configuration**: See [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) for detailed secrets setup and validation
+3. **Validate Prerequisites**: Ensure all tools are installed (see [Prerequisites](#prerequisites))
+4. **Follow Environment Deployment**: Choose your target environment (DEV/UAT/PROD)
+5. **Run Post-Deployment Steps**: Configure API connections and Integration Account
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)

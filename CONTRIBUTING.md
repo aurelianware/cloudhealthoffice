@@ -41,6 +41,7 @@ This repository implements an Azure Logic Apps solution for processing HIPAA-com
 ### Quick Links
 - 📖 **[Architecture Documentation](ARCHITECTURE.md)** - System design and data flows
 - 🚀 **[Deployment Guide](DEPLOYMENT.md)** - Step-by-step deployment procedures
+- 🔐 **[Secrets Setup Guide](DEPLOYMENT-SECRETS-SETUP.md)** - GitHub Secrets and environment configuration
 - 🔧 **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
 - 🔒 **[Security Guide](SECURITY.md)** - HIPAA compliance and secure development
 
