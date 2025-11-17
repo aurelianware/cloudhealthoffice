@@ -428,7 +428,7 @@ Repository administrators can bypass environment protection rules. To prevent ac
 When a reviewer receives an approval request:
 
 ```
-📧 Pending deployments for aurelianware/hipaa-attachments
+📧 Pending deployments for {owner}/hipaa-attachments
 
 Deployment to PROD-approval is waiting for your review
 

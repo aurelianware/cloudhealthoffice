@@ -35,7 +35,7 @@ jobs:
       - name: Deployment Approval Required
         run: |
           echo "🔒 Manual approval required for UAT deployment"
-          echo "✅ Approval granted - proceeding with deployment"
+          echo "⏳ Waiting for approval from configured reviewers..."
           echo "📝 Deployment triggered by: ${{ github.actor }}"
           echo "📝 Ref: ${{ github.ref }}"
           echo "📝 SHA: ${{ github.sha }}"
@@ -420,9 +420,10 @@ jobs:
             echo "   Option 1: Re-run a previous successful deployment"
             echo "   - Go to Actions tab → Select successful UAT run → Re-run jobs"
             echo ""
-            echo "   Option 2: Deploy from last known good release branch"
-            echo "   - git checkout release/<last-good-version>"
-            echo "   - git push origin release/<last-good-version>"
+            echo "   Option 2: Revert to last known good release"
+            echo "   - Create a new release branch from the last good commit"
+            echo "   - git checkout -b release/rollback-v1.x <last-good-commit>"
+            echo "   - git push origin release/rollback-v1.x"
             echo ""
             echo "🔍 Manual Investigation Steps:"
             echo "   1. Review deployment errors above"
