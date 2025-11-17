@@ -1,0 +1,1058 @@
+# HIPAA Attachments - Copilot Instructions
+
+## Repository Context
+
+This repository implements a HIPAA-compliant Azure Logic Apps solution for processing healthcare EDI attachments between Availity (clearinghouse) and PCHP-QNXT (claims system). The system processes X12 275 (attachment requests), 277 (status notifications), and 278 (services review) transactions with complete audit trails and encryption.
+
+**Trading Partners:**
+- Availity (Sender ID: 030240928) - EDI clearinghouse
+- PCHP-QNXT (Receiver ID: 66917) - Parkland Community Health Plan
+
+**Key Infrastructure:**
+- Azure Logic Apps Standard (WS1 SKU) - Stateful workflow orchestration
+- Azure Data Lake Storage Gen2 - HIPAA-compliant file storage with hierarchical namespace
+- Azure Service Bus (Standard) - Message queuing with topics: `attachments-in`, `rfai-requests`, `edi-278`, `appeals-auth`, `auth-statuses`, `dead-letter`
+- Integration Account - X12 EDI encoding/decoding
+- Application Insights - Monitoring and telemetry
+
+**Current Workflows:**
+1. **ingest275** - SFTP polling → Data Lake archive → X12 decode → QNXT API → Service Bus
+2. **ingest278** - 278 transaction processing → Data Lake → Service Bus topic `edi-278`
+3. **replay278** - HTTP endpoint for deterministic transaction replay
+4. **rfai277** - Service Bus consumer → X12 encode → SFTP outbound
+5. **process_appeals** - Appeals detection and registration from attachments
+6. **process_authorizations** - Authorization request/response with 277 generation
+
+## Naming Conventions
+
+### File and Script Naming
+
+**PowerShell Scripts:**
+- Use kebab-case: `deploy-workflows.ps1`, `fix-repo-structure.ps1`, `test-workflows.ps1`
+- Approved verbs: Get, Set, New, Remove, Invoke, Test, Deploy, Configure
+- Parameters in PascalCase: `-ResourceGroup`, `-LogicAppName`, `-RepoRoot`
+
+**Bicep Templates:**
+- Use `main.bicep` for primary templates
+- Module files: `<component>-module.bicep` (e.g., `storage-module.bicep`)
+
+**Workflow Files:**
+- Always `workflow.json` within workflow directory
+- Directory names: lowercase with underscores (e.g., `ingest275`, `process_appeals`)
+
+**GitHub Actions:**
+- Use kebab-case: `deploy-dev.yml`, `pr-lint.yml`
+- Descriptive names: `deploy_logicapps_workflows_matrix_with_lint.yml`
+
+### Branch Naming
+
+```
+main                          # Production-ready code
+├── release/*                # UAT auto-deploy (e.g., release/v1.0.0)
+├── feature/*                # New features (e.g., feature/add-278-replay)
+└── bugfix/*                 # Bug fixes (e.g., bugfix/fix-x12-decode)
+```
+
+### Azure Resource Naming
+
+Pattern: `{baseName}-{resource-type}`
+
+Examples:
+- Logic App: `hipaa-attachments-la`
+- Storage: `hipaaattachmentsstorage` (no hyphens for storage accounts)
+- Service Bus: `hipaa-attachments-svc`
+- Integration Account: `hipaa-attachments-ia`
+- Application Insights: `hipaa-attachments-ai`
+
+### Data Lake Paths
+
+Date-partitioned structure:
+```
+hipaa-attachments/
+├── raw/{type}/yyyy/MM/dd/      # Inbound files (275, 278, authorizations)
+├── sent/{type}/yyyy/MM/dd/     # Outbound files (277)
+└── processed/{type}/yyyy/MM/dd/  # Processing artifacts
+```
+
+## Code Standards
+
+### PowerShell
+
+**Structure:**
+```powershell
+<#
+.SYNOPSIS
+    Brief description
+.DESCRIPTION
+    Detailed description
+.PARAMETER ParamName
+    Parameter description
+.EXAMPLE
+    Usage example
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, HelpMessage="Description")]
+    [ValidateNotNullOrEmpty()]
+    [string]$ResourceGroup,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$WhatIf
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+try {
+    # Main logic
+} catch {
+    Write-Error "Operation failed: $_"
+    exit 1
+} finally {
+    # Cleanup
+}
+```
+
+**Conventions:**
+- Use `[CmdletBinding()]` for advanced functions
+- Implement try/catch/finally error handling
+- Use `Set-StrictMode -Version Latest`
+- Clear sensitive variables: `Clear-Variable apiKey`
+- Cross-platform paths: `Join-Path` or `[System.IO.Path]::Combine()`
+
+### Bicep
+
+**Structure:**
+```bicep
+@description('Base name for all resources')
+@minLength(3)
+@maxLength(20)
+param baseName string
+
+@description('Azure region for deployment')
+@allowed(['eastus', 'westus', 'centralus'])
+param location string = 'eastus'
+
+resource logicApp 'Microsoft.Web/sites@2023-01-01' = {
+  name: '${baseName}-la'
+  location: location
+  kind: 'functionapp,workflowapp'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    httpsOnly: true
+    siteConfig: {
+      minTlsVersion: '1.2'
+    }
+  }
+}
+
+output logicAppName string = logicApp.name
+output principalId string = logicApp.identity.principalId
+```
+
+**Conventions:**
+- Use `@description` for all parameters
+- Use `@allowed` for constrained values
+- Enable managed identity: `type: 'SystemAssigned'`
+- HTTPS only: `httpsOnly: true`
+- Minimum TLS 1.2: `minTlsVersion: '1.2'`
+- **Expected warnings:** "use-parent-property" for Service Bus topics (safe to ignore)
+
+### JSON (Logic Apps Workflows)
+
+**Required Structure:**
+```json
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {},
+    "triggers": {},
+    "parameters": {}
+  },
+  "kind": "Stateful",
+  "parameters": {}
+}
+```
+
+**Required Keys:**
+- `definition` - Complete workflow definition
+- `kind` - MUST be "Stateful" (all workflows require Logic Apps Standard)
+- `parameters` - Workflow parameter definitions
+
+**Action Naming:**
+- Use descriptive names: `Store_Raw_in_Blob`, `Decode_X12_275`, `Call_QNXT_API`
+- PascalCase with underscores
+- Verb-Object pattern
+
+**Error Handling:**
+```json
+{
+  "type": "Scope",
+  "actions": {
+    "Try_Process_275": {
+      "actions": {
+        // Main processing actions
+      },
+      "runAfter": {}
+    },
+    "Catch_Processing_Error": {
+      "actions": {
+        // Error handling
+      },
+      "runAfter": {
+        "Try_Process_275": ["Failed", "Skipped", "TimedOut"]
+      }
+    }
+  }
+}
+```
+
+### YAML (GitHub Actions)
+
+**Conventions:**
+```yaml
+name: Deploy UAT Environment
+
+on:
+  push:
+    branches:
+      - 'release/*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
+```
+
+**Important Rules:**
+- Boolean values: Use only `true` or `false` (NOT `on`, `off`, `yes`, `no`)
+- Note: `on` is reserved for workflow trigger events
+- Descriptive step names with action description
+- Set appropriate timeouts: 30+ minutes for deployments
+- Use OIDC authentication (never store credentials)
+- Line length restrictions disabled for long parameter lines
+
+## HIPAA Compliance Requirements
+
+### No PII/PHI in Logs
+
+**Prohibited:**
+```javascript
+// ❌ WRONG
+console.log(`Processing claim: ${claimNumber} for member: ${memberId}`);
+logger.info(`Patient SSN: ${ssn}`);
+```
+
+**Required:**
+```javascript
+// ✅ CORRECT
+console.log(`Processing claim: ${claimNumber.substring(0, 3)}*** for member: ***${memberId.slice(-4)}`);
+logger.info(`Processing record`, { correlationId, recordType: 'claim' });
+```
+
+**PHI Elements (Must Mask):**
+- Member/Patient IDs
+- Social Security Numbers
+- Claim numbers (mask when logging)
+- Provider NPIs (when linked to patients)
+- Medical record numbers
+- Attachment file contents
+
+### Secret Management
+
+**Never commit secrets:**
+```powershell
+# ❌ WRONG
+$apiKey = "abc123-secret-key-456def"
+
+# ✅ CORRECT - Use Key Vault
+$apiKey = az keyvault secret show --vault-name "hipaa-keyvault" --name "api-key" --query "value" -o tsv
+```
+
+**Use Managed Identity:**
+```bash
+# ✅ Assign roles to managed identity
+az role assignment create \
+  --assignee $PRINCIPAL_ID \
+  --role "Storage Blob Data Contributor" \
+  --scope $STORAGE_ID
+```
+
+**GitHub Secrets:**
+- Store in GitHub Settings → Secrets → Actions
+- Environment-specific: `AZURE_CLIENT_ID_DEV`, `AZURE_CLIENT_ID_UAT`, `AZURE_CLIENT_ID_PROD`
+- Never print in logs: secrets are automatically masked by GitHub
+
+### Encryption Requirements
+
+**Data in Transit:**
+- SFTP: SSH-2 with AES-256, minimum 2048-bit RSA keys
+- HTTPS: TLS 1.2+ only, strong cipher suites
+- Service Bus: AMQP over TLS
+
+**Data at Rest:**
+- Data Lake: Azure SSE with Microsoft-managed keys (automatic)
+- Service Bus: Encrypted at rest (automatic)
+- Application Insights: Encrypted logs
+
+**Enforcement:**
+```bash
+# Enable HTTPS only
+az webapp update --resource-group $RG --name $LA --https-only true
+
+# Set minimum TLS
+az webapp config set --resource-group $RG --name $LA --min-tls-version "1.2"
+```
+
+### Audit Logging
+
+**Required Logging:**
+- All PHI access (who, what, when, why)
+- Authentication attempts
+- Role assignments
+- Resource changes
+- Workflow runs
+
+**Retention:**
+- Application Insights: 90 days minimum (365 recommended)
+- Activity Log: 90 days default (extend for compliance)
+- Storage audit logs: 365 days
+- HIPAA requirement: 6 years
+
+### Access Control
+
+**Principle of Least Privilege:**
+```bash
+# ❌ Too permissive
+az role assignment create --assignee $ID --role "Contributor" --scope "/subscriptions/$SUB"
+
+# ✅ Specific role on specific resource
+az role assignment create --assignee $ID --role "Storage Blob Data Contributor" --scope "$STORAGE_SCOPE"
+```
+
+**Required Roles:**
+- Storage Blob Data Contributor (Data Lake)
+- Azure Service Bus Data Sender (Service Bus)
+- Integration Account Contributor (X12 processing)
+
+## Gated Deployments
+
+### Environment Flow
+
+```
+DEV → UAT → PROD
+ ↓     ↓     ↓
+auto  auto  manual + approval
+```
+
+### DEV Environment
+
+- **Trigger:** Manual or push to `main`
+- **Workflow:** `deploy-dev.yml`
+- **Resource Group:** `pchp-attachments-dev-rg`
+- **Auto-approval:** Yes
+- **Purpose:** Development and testing
+
+### UAT Environment
+
+- **Trigger:** Push to `release/*` branches (automatic)
+- **Workflow:** `deploy-uat.yml`
+- **Resource Group:** `pchp-attachments-uat-rg`
+- **Auto-approval:** Yes
+- **Purpose:** User acceptance testing, pre-production validation
+
+### PROD Environment
+
+- **Trigger:** Manual workflow dispatch only
+- **Workflow:** `deploy.yml`
+- **Resource Group:** `pchp-attachments-prod-rg`
+- **Approval Required:** Yes (designated approvers)
+- **Purpose:** Production system
+
+**Pre-PROD Checklist:**
+- [ ] UAT deployment successful and tested
+- [ ] All validation checks pass
+- [ ] Security review completed
+- [ ] Change management ticket approved
+- [ ] Backup verified
+- [ ] Rollback plan documented
+- [ ] Stakeholders notified
+
+## Deployment Processes
+
+### Pre-Deployment Validation
+
+**Always run before deploying:**
+```bash
+# 1. Validate JSON workflows
+find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
+
+# 2. Validate Bicep
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+
+# 3. Validate PowerShell
+pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
+
+# 4. Fix repo structure
+pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
+
+# 5. Create workflow package
+cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
+```
+
+### Deployment Sequence
+
+**Infrastructure First:**
+```bash
+# 1. Create resource group
+az group create -n $RG_NAME -l $LOCATION
+
+# 2. Deploy infrastructure
+az deployment group create \
+  -g $RG_NAME \
+  -f infra/main.bicep \
+  -p baseName=$BASE_NAME
+
+# 3. Verify resources
+az resource list -g $RG_NAME --output table
+```
+
+**Then Workflows:**
+```bash
+# 4. Deploy Logic App workflows
+az webapp deploy \
+  --resource-group $RG_NAME \
+  --name $LOGIC_APP_NAME \
+  --src-path workflows.zip \
+  --type zip
+
+# 5. Restart Logic App
+az webapp restart -g $RG_NAME -n $LOGIC_APP_NAME
+
+# 6. Verify deployment
+az webapp show -g $RG_NAME -n $LOGIC_APP_NAME --query "state"
+```
+
+**Post-Deployment Configuration:**
+1. Configure API connections (sftp-ssh, azureblob, servicebus, integrationaccount)
+2. Upload X12 schemas to Integration Account
+3. Configure trading partners and agreements
+4. Assign managed identity permissions
+5. Set Logic App parameters
+6. Test workflows with sample data
+
+### GitHub Actions Deployment
+
+**Workflow Dispatch:**
+1. Navigate to GitHub → Actions
+2. Select appropriate workflow (deploy-dev, deploy-uat, or deploy)
+3. Click "Run workflow"
+4. Provide parameters (or use defaults)
+5. Monitor deployment (5-15 minutes per environment)
+
+**Automatic Triggers:**
+- UAT: Push to `release/*` branches
+- DEV: Can be configured for `main` branch
+
+**OIDC Authentication:**
+- Uses federated credentials (no secrets stored)
+- Environment-specific service principals
+- Secrets: `AZURE_CLIENT_ID_*`, `AZURE_TENANT_ID_*`, `AZURE_SUBSCRIPTION_ID_*`
+
+## Key Files and Purposes
+
+### Documentation Files
+
+| File | Purpose | When to Consult |
+|------|---------|-----------------|
+| `README.md` | Architecture overview, deployment guide | Getting started, understanding system |
+| `ARCHITECTURE.md` | Detailed system design, data flows, components | Understanding how system works |
+| `CONTRIBUTING.md` | Development workflow, validation, code review | Contributing to repository |
+| `DEPLOYMENT.md` | Step-by-step deployment procedures | Deploying to environments |
+| `SECURITY.md` | HIPAA compliance, encryption, access control | Security questions |
+| `TROUBLESHOOTING.md` | Common issues and solutions | Debugging problems |
+
+### Infrastructure Files
+
+| File | Purpose | Contains |
+|------|---------|----------|
+| `infra/main.bicep` | Primary infrastructure template | All Azure resources (Storage, Service Bus, Logic App, App Insights) |
+| `attachments_logicapps_package/main.bicep` | Alternative package-based template | Similar to infra/main.bicep |
+
+### Workflow Files
+
+| File | Purpose | Trigger | Flow |
+|------|---------|---------|------|
+| `logicapps/workflows/ingest275/workflow.json` | 275 attachment ingestion | SFTP poll | SFTP → Data Lake → X12 → QNXT → Service Bus |
+| `logicapps/workflows/ingest278/workflow.json` | 278 services review | SFTP poll | SFTP → Data Lake → X12 → Service Bus |
+| `logicapps/workflows/replay278/workflow.json` | 278 replay endpoint | HTTP POST | Validate → Queue to Service Bus |
+| `logicapps/workflows/rfai277/workflow.json` | 277 RFAI outbound | Service Bus | Consume → X12 encode → SFTP send |
+| `logicapps/workflows/process_appeals/workflow.json` | Appeals processing | Service Bus | Detect appeals → QNXT API → RFAI publish |
+| `logicapps/workflows/process_authorizations/workflow.json` | Authorization processing | Service Bus | 278 decode → QNXT → 277 encode |
+
+### Script Files
+
+| File | Purpose | Usage |
+|------|---------|-------|
+| `fix_repo_structure.ps1` | Normalize repository layout | `pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."` |
+| `test-workflows.ps1` | Comprehensive workflow testing | `pwsh -c "./test-workflows.ps1 -TestInbound275"` |
+| `deploy-workflows.ps1` | Deploy Logic App workflows | `pwsh -c "./deploy-workflows.ps1 -ResourceGroup $RG"` |
+| `configure-hipaa-trading-partners.ps1` | Configure X12 trading partners | Manual setup post-deployment |
+| `configure-x12-agreements.ps1` | Configure X12 agreements | Manual setup post-deployment |
+
+### GitHub Actions Workflows
+
+| File | Purpose | Trigger |
+|------|---------|---------|
+| `.github/workflows/deploy-dev.yml` | DEV deployment | Manual/push to main |
+| `.github/workflows/deploy-uat.yml` | UAT deployment | Push to release/* |
+| `.github/workflows/deploy.yml` | PROD deployment | Manual with approval |
+| `.github/workflows/pr-lint.yml` | PR validation | Pull request |
+| `.github/workflows/sanity.yml` | Health checks | Manual |
+
+## API Development Standards
+
+### HTTP Endpoints
+
+**Current API Endpoints:**
+- **Replay278:** `POST /api/replay278/triggers/HTTP_Replay_278_Request/invoke`
+
+**Request Format:**
+```json
+{
+  "blobUrl": "hipaa-attachments/raw/278/2024/01/15/file.edi",
+  "fileName": "optional-custom-name"
+}
+```
+
+**Response Format:**
+```json
+{
+  "status": "success|error",
+  "message": "Description of result",
+  "data": {
+    "blobUrl": "...",
+    "fileName": "...",
+    "queueTimestamp": "2024-01-15T10:30:00Z",
+    "topicName": "edi-278"
+  }
+}
+```
+
+**Input Validation:**
+```javascript
+// Always validate inputs
+if (!blobUrl || !blobUrl.includes('hipaa-attachments')) {
+  return {
+    status: 'error',
+    message: 'Invalid blobUrl provided',
+    data: { providedBlobUrl: blobUrl, timestamp: new Date().toISOString() }
+  };
+}
+```
+
+**Error Handling:**
+- 200: Success
+- 400: Bad request (validation failure)
+- 401: Unauthorized (authentication required)
+- 500: Internal server error (log details, return generic message)
+
+### QNXT API Integration
+
+**Base URL:** Environment-specific (DEV/UAT/PROD)
+
+**Authentication:** Bearer token (OAuth 2.0)
+
+**Endpoints:**
+- `POST /api/claims/attachments/link` - Link attachment to claim
+- `POST /claims/correlate-appeal` - Correlate appeal with claim
+- `POST /appeals/register` - Register appeal in QNXT
+
+**Retry Policy:**
+```json
+{
+  "type": "Http",
+  "inputs": {
+    "method": "POST",
+    "uri": "@{parameters('qnxt_base_url')}/api/claims/attachments/link",
+    "headers": {
+      "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+      "Content-Type": "application/json"
+    },
+    "body": "@body('Extract_Metadata')",
+    "retryPolicy": {
+      "type": "exponential",
+      "count": 4,
+      "interval": "PT15S",
+      "maximumInterval": "PT1M",
+      "minimumInterval": "PT10S"
+    }
+  }
+}
+```
+
+**Timeout:** 30 seconds per request
+
+## Container Readiness
+
+### Current State
+- Deployed as Logic Apps Standard (App Service-based)
+- Infrastructure as Code (Bicep)
+- Stateful workflows with state persistence
+
+### Azure Container Apps Migration Path
+
+**Prerequisites:**
+- All workflows must be containerizable
+- State management strategy (Azure Storage for state)
+- Environment configuration externalized
+- Secrets in Key Vault
+
+**Container Image Requirements:**
+```dockerfile
+FROM mcr.microsoft.com/azure-functions/dotnet:4-dotnet6
+
+# Copy workflow definitions
+COPY logicapps /home/site/wwwroot
+
+# Set environment
+ENV AzureWebJobsStorage=UseDevelopmentStorage=true
+ENV FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
+ENV WEBSITE_HOSTNAME=0.0.0.0
+
+EXPOSE 80
+```
+
+**Migration Checklist:**
+- [ ] Containerize Logic Apps workflows
+- [ ] Test locally with Docker
+- [ ] Configure Container Apps environment
+- [ ] Migrate state storage
+- [ ] Update VNET integration
+- [ ] Test Service Bus connectivity
+- [ ] Update monitoring (Application Insights)
+- [ ] Performance testing
+- [ ] Cutover plan
+
+**Benefits of Container Apps:**
+- Better scaling (scale to zero)
+- Consistent deployment across environments
+- CI/CD integration with container registries
+- Support for Dapr (future service mesh)
+
+## Common Tasks and Patterns
+
+### Validating Changes
+
+**Before Committing:**
+```bash
+# Complete validation
+./validate-all.sh  # If available
+
+# Or manually:
+find logicapps/workflows -name "workflow.json" -exec jq . {} \;
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
+```
+
+### Creating a New Workflow
+
+```bash
+# 1. Create directory
+mkdir -p logicapps/workflows/new_workflow
+
+# 2. Create workflow.json
+cat > logicapps/workflows/new_workflow/workflow.json <<'EOF'
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {},
+    "triggers": {},
+    "parameters": {}
+  },
+  "kind": "Stateful",
+  "parameters": {}
+}
+EOF
+
+# 3. Validate
+jq . logicapps/workflows/new_workflow/workflow.json
+
+# 4. Test and deploy
+```
+
+### Debugging Workflow Failures
+
+```bash
+# 1. Check workflow runs in Azure Portal
+# Navigate to Logic App → Workflows → workflow_name → Runs
+
+# 2. Query Application Insights
+# Portal → App Insights → Logs
+traces
+| where timestamp > ago(1h)
+| where severityLevel >= 3
+| where message contains "workflow_name"
+| project timestamp, message, severityLevel
+
+# 3. Check dead-letter queue
+az servicebus topic subscription dead-letter list \
+  --resource-group $RG \
+  --namespace-name $NS \
+  --topic-name attachments-in \
+  --subscription-name default
+```
+
+### Testing Workflows
+
+```powershell
+# Test 275 ingestion
+pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'pchp-attachments-uat-rg' -LogicAppName 'hipaa-attachments-uat-la'"
+
+# Test 278 replay
+curl -X POST "https://hipaa-attachments-uat-la.azurewebsites.net/api/replay278/..." \
+  -H "Content-Type: application/json" \
+  -d '{"blobUrl": "hipaa-attachments/raw/278/2024/01/15/test.edi"}'
+```
+
+### Adding a Service Bus Topic
+
+```bicep
+// In infra/main.bicep
+resource newTopic 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: serviceBusNamespace
+  name: 'new-topic-name'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+    enableBatchedOperations: true
+    requiresDuplicateDetection: true
+    duplicateDetectionHistoryTimeWindow: 'PT10M'
+  }
+}
+```
+
+### Querying Application Insights
+
+```kusto
+// Failed workflows
+traces
+| where timestamp > ago(24h)
+| where severityLevel >= 3
+| where message contains "workflow"
+| project timestamp, message, severityLevel
+
+// QNXT API performance
+dependencies
+| where name contains "QNXT"
+| summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
+
+// PHI access audit
+customEvents
+| where name in ("file_accessed", "claim_linked", "attachment_processed")
+| extend userId = tostring(customDimensions["userId"])
+| project timestamp, userId, name
+| order by timestamp desc
+```
+
+## Frequently Used Commands
+
+### Azure CLI
+
+```bash
+# Login
+az login
+
+# Set subscription
+az account set --subscription $SUBSCRIPTION_ID
+
+# List resources
+az resource list --resource-group $RG --output table
+
+# Deploy infrastructure
+az deployment group create -g $RG -f infra/main.bicep -p baseName=$BASE_NAME
+
+# Deploy workflows
+az webapp deploy --resource-group $RG --name $LA --src-path workflows.zip --type zip
+
+# Restart Logic App
+az webapp restart -g $RG -n $LA
+
+# Get Logic App status
+az webapp show -g $RG -n $LA --query "{name:name, state:state}" -o table
+
+# Assign managed identity role
+az role assignment create --assignee $PRINCIPAL_ID --role "Storage Blob Data Contributor" --scope $SCOPE
+
+# Query Activity Log
+az monitor activity-log list --resource-group $RG --start-time "2024-01-01" --query "[?level=='Error']"
+```
+
+### PowerShell
+
+```powershell
+# Test workflows
+pwsh -c "./test-workflows.ps1 -TestInbound275"
+
+# Fix repository structure
+pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
+
+# Deploy workflows
+pwsh -c "./deploy-workflows.ps1 -ResourceGroup 'rg-name' -LogicAppName 'la-name'"
+
+# Configure trading partners
+pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'rg-name' -IntegrationAccountName 'ia-name'"
+```
+
+### Validation Commands
+
+```bash
+# JSON validation
+find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
+
+# Bicep validation
+az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+
+# PowerShell syntax
+pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
+
+# Create workflow package
+cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
+
+# Verify package
+unzip -l workflows.zip | grep workflow.json
+```
+
+### Git Commands
+
+```bash
+# Create feature branch
+git checkout -b feature/new-feature
+
+# Commit changes
+git add .
+git commit -m "feat: Add new feature"
+
+# Push branch
+git push origin feature/new-feature
+
+# Create release branch for UAT
+git checkout -b release/v1.0.0
+git push origin release/v1.0.0  # Triggers UAT deployment
+```
+
+## Security Considerations for Copilot
+
+### What Copilot Should Know
+
+1. **This is HIPAA-regulated code** - Extra care required for PHI handling
+2. **All workflows must be Stateful** - Logic Apps Standard requirement
+3. **Never hardcode secrets** - Use Key Vault or managed identity
+4. **Mask PHI in logs** - Never log full member IDs, SSNs, or claim details
+5. **Validate all inputs** - Especially for HTTP endpoints
+6. **Use retry policies** - QNXT API and SFTP can have transient failures
+7. **Encryption everywhere** - TLS 1.2+ for transit, SSE for rest
+8. **Audit everything** - Log PHI access with correlation IDs
+
+### What Copilot Should Not Do
+
+1. **❌ Don't suggest storing credentials in code**
+2. **❌ Don't log PHI without masking**
+3. **❌ Don't create Stateless workflows** (all must be Stateful)
+4. **❌ Don't suggest anonymous HTTP endpoints**
+5. **❌ Don't bypass input validation**
+6. **❌ Don't suggest direct connection strings** (use managed identity)
+7. **❌ Don't suggest plain HTTP** (HTTPS only)
+8. **❌ Don't recommend disabling encryption**
+
+### Secure Code Review Checklist
+
+When reviewing code, Copilot should verify:
+- [ ] No hardcoded secrets or credentials
+- [ ] No PHI logged in plain text
+- [ ] Input validation present for all user inputs
+- [ ] Error messages don't expose sensitive information
+- [ ] Managed identity used (not connection strings)
+- [ ] Encryption enabled (TLS 1.2+, HTTPS only)
+- [ ] Retry policies implemented for external calls
+- [ ] Audit logging for PHI access
+- [ ] Workflow kind is "Stateful"
+- [ ] Required workflow keys present (definition, kind, parameters)
+
+### Example: Secure vs Insecure
+
+**Insecure:**
+```powershell
+# ❌ WRONG
+$apiKey = "abc123-secret-key"
+$connectionString = "DefaultEndpointsProtocol=https;AccountName=storage;AccountKey=key123=="
+Write-Host "Processing claim $claimNumber for member $memberId"
+Invoke-RestMethod -Uri $url -Headers @{ "X-API-Key" = $apiKey }
+```
+
+**Secure:**
+```powershell
+# ✅ CORRECT
+$apiKey = az keyvault secret show --vault-name "hipaa-kv" --name "api-key" --query "value" -o tsv
+# Use managed identity for storage (no connection string needed)
+Write-Host "Processing claim $(($claimNumber).Substring(0,3))*** for member ***$(($memberId).Substring($memberId.Length-4))"
+Invoke-RestMethod -Uri $url -Authentication Bearer -Token $(ConvertTo-SecureString $apiKey -AsPlainText)
+```
+
+## Working with Copilot Chat
+
+### Effective Prompts
+
+**Good:**
+- "How do I add a new Service Bus topic to the infrastructure?"
+- "Create a Stateful Logic Apps workflow for processing 999 transactions"
+- "Show me how to mask PHI in Application Insights logs"
+- "What's the retry policy configuration for QNXT API calls?"
+
+**Better:**
+- "Add a new Service Bus topic called 'auth-responses' to infra/main.bicep with 14-day TTL and duplicate detection"
+- "Create a Stateful workflow in logicapps/workflows/ingest999/ that polls SFTP, archives to Data Lake, and publishes to Service Bus"
+- "Update the logging in ingest275 workflow to mask claim numbers (show first 3 chars) and member IDs (show last 4 chars)"
+- "Show the retry policy we use for QNXT API in ingest275 workflow and explain why we use 4 retries with 15-second intervals"
+
+### Context to Provide
+
+When asking Copilot for help, include:
+1. **Environment:** DEV, UAT, or PROD
+2. **Component:** Workflow name, Bicep file, script name
+3. **Error message:** Full error text if available
+4. **What you've tried:** Validation steps, troubleshooting done
+5. **Expected behavior:** What should happen
+6. **Actual behavior:** What actually happens
+
+### Example Interaction
+
+**User:** "The ingest275 workflow is failing with an X12 decode error in UAT. I've verified the trading partners are configured correctly (Availity: 030240928, PCHP: 66917). The error says 'Schema not found for transaction set 275'."
+
+**Copilot should respond with:**
+1. Check if X12_005010X210_275 schema is uploaded to Integration Account
+2. Verify agreement Availity-to-PCHP-275-Receive is active
+3. Check ISA/GS identifiers in the actual EDI file
+4. Review Application Insights for detailed error
+5. Provide commands to verify schema and agreement configuration
+
+## Timing and Performance Expectations
+
+### Validation Commands
+
+- **JSON validation:** <1 second (set timeout: 10+ seconds)
+- **Bicep validation:** ~4 seconds (set timeout: 30+ seconds)
+- **PowerShell validation:** <1 second (set timeout: 10+ seconds)
+- **Repo structure fix:** ~1 second (set timeout: 30+ seconds)
+- **ZIP creation:** <1 second (set timeout: 10+ seconds)
+
+### Deployment Operations
+
+- **Bicep deployment:** 5-10 minutes (set timeout: 30+ minutes)
+- **Workflow ZIP deployment:** 2-5 minutes (set timeout: 15+ minutes)
+- **Complete CI pipeline:** 10-20 minutes per environment (set timeout: 60+ minutes)
+- **Logic App restart:** 1-2 minutes
+
+### Workflow Execution
+
+- **ingest275:** 5-15 seconds per file
+- **ingest278:** 5-15 seconds per file
+- **rfai277:** 3-8 seconds per message
+- **replay278:** 1-2 seconds (just queueing)
+- **process_appeals:** 10-20 seconds (includes QNXT API calls)
+- **process_authorizations:** 15-30 seconds (includes QNXT API and 277 generation)
+
+### NEVER CANCEL
+
+- Azure deployments (may leave resources in inconsistent state)
+- Logic App restarts (may corrupt state)
+- Long-running validation commands (they're just slow, not hung)
+- CI/CD pipelines (will break deployment)
+
+## Additional Context
+
+### Integration Account Setup
+
+**Required Schemas:**
+- X12_005010X210_275 (Attachment Request)
+- X12_005010X212_277 (Status Notification)
+- X12_005010X217_278 (Services Review)
+
+**Trading Partners:**
+- Availity: Qualifier=ZZ, Value=030240928
+- PCHP-QNXT: Qualifier=ZZ, Value=66917
+
+**Agreements:**
+1. Availity-to-PCHP-275-Receive (Inbound 275)
+2. PCHP-to-Availity-277-Send (Outbound 277)
+3. PCHP-278-Processing (Internal 278)
+
+### Data Lake Structure
+
+```
+hipaa-attachments/
+├── raw/
+│   ├── 275/yyyy/MM/dd/           # Inbound attachment requests
+│   ├── 278/yyyy/MM/dd/           # Inbound services review
+│   └── authorizations/yyyy/MM/dd/ # Authorization transactions
+├── sent/
+│   └── 277/yyyy/MM/dd/           # Outbound status notifications
+└── processed/
+    └── {type}/yyyy/MM/dd/        # Processing artifacts
+```
+
+### Service Bus Topics
+
+| Topic | Purpose | Publishers | Subscribers |
+|-------|---------|------------|-------------|
+| `attachments-in` | Processed 275 events | ingest275 | process_appeals, analytics |
+| `rfai-requests` | RFAI generation requests | QNXT, process_appeals | rfai277 |
+| `edi-278` | 278 transaction queue | ingest278, replay278 | process_authorizations |
+| `appeals-auth` | Appeals and auth events | process_appeals | Downstream systems |
+| `auth-statuses` | Authorization status events | process_authorizations | Tracking systems |
+| `dead-letter` | Failed messages | All topics | Monitoring, replay |
+
+### Error Codes
+
+**QNXT API:**
+- 400: Invalid request (check payload)
+- 401: Authentication failure (check token)
+- 404: Claim not found (verify claim number)
+- 409: Duplicate attachment (already linked)
+- 500: Internal error (retry with backoff)
+- 503: Service unavailable (retry with backoff)
+
+**X12 Decode:**
+- Schema not found: Upload schema to Integration Account
+- Trading partner not found: Configure partner in Integration Account
+- Invalid ISA/GS: Check sender/receiver identifiers
+- Segment error: Validate EDI file format
+
+## References
+
+For more detailed information, consult:
+- **[README.md](../README.md)** - Architecture overview and quick start
+- **[ARCHITECTURE.md](../ARCHITECTURE.md)** - Detailed system design and data flows
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Development workflow and standards
+- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Step-by-step deployment procedures
+- **[SECURITY.md](../SECURITY.md)** - HIPAA compliance and security practices
+- **[TROUBLESHOOTING.md](../TROUBLESHOOTING.md)** - Common issues and solutions
+
+---
+
+**Last Updated:** 2024-11-16  
+**Maintained By:** Development Team  
+**Version:** 1.0
