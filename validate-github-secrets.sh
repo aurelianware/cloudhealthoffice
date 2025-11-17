@@ -10,13 +10,19 @@
 # - Access to the repository with read permissions
 #
 # Usage:
+#   ./validate-github-secrets.sh [repo-owner] [repo-name]
+#
+# Examples:
 #   ./validate-github-secrets.sh
+#   ./validate-github-secrets.sh myorg myrepo
+#   REPO_OWNER=myorg REPO_NAME=myrepo ./validate-github-secrets.sh
 #
 
 set -euo pipefail
 
-REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+# Allow REPO_OWNER and REPO_NAME to be set via environment variables or command-line arguments
+REPO_OWNER="${REPO_OWNER:-${1:-aurelianware}}"
+REPO_NAME="${REPO_NAME:-${2:-hipaa-attachments}}"
 
 echo "=========================================="
 echo "GitHub Secrets & Variables Validation"
@@ -55,13 +61,20 @@ OVERALL_STATUS=0
 echo "=========================================="
 echo "Checking DEV Environment Secrets"
 echo "=========================================="
+echo ""
+echo "Note: Checking environment-scoped secrets for DEV environment"
+echo ""
 
 REQUIRED_DEV_SECRETS=("AZURE_CLIENT_ID" "AZURE_TENANT_ID" "AZURE_SUBSCRIPTION_ID")
 DEV_FAILED=0
 
 for secret in "${REQUIRED_DEV_SECRETS[@]}"; do
-    if gh secret list -R "$REPO_OWNER/$REPO_NAME" | grep -q "^$secret"; then
-        echo "✅ $secret"
+    # Check environment-scoped secrets first (preferred)
+    if gh secret list -R "$REPO_OWNER/$REPO_NAME" --env DEV 2>/dev/null | grep -q "^$secret"; then
+        echo "✅ $secret (environment: DEV)"
+    # Fallback to repository-level secrets
+    elif gh secret list -R "$REPO_OWNER/$REPO_NAME" 2>/dev/null | grep -q "^$secret"; then
+        echo "⚠️  $secret (repository-level, but DEV environment preferred)"
     else
         echo "❌ $secret (missing)"
         DEV_FAILED=1
@@ -81,13 +94,20 @@ echo ""
 echo "=========================================="
 echo "Checking UAT Environment Secrets"
 echo "=========================================="
+echo ""
+echo "Note: Checking environment-scoped secrets for UAT environment"
+echo ""
 
 REQUIRED_UAT_SECRETS=("AZURE_CLIENT_ID_UAT" "AZURE_TENANT_ID_UAT" "AZURE_SUBSCRIPTION_ID_UAT")
 UAT_FAILED=0
 
 for secret in "${REQUIRED_UAT_SECRETS[@]}"; do
-    if gh secret list -R "$REPO_OWNER/$REPO_NAME" | grep -q "^$secret"; then
-        echo "✅ $secret"
+    # Check environment-scoped secrets first (preferred)
+    if gh secret list -R "$REPO_OWNER/$REPO_NAME" --env UAT 2>/dev/null | grep -q "^$secret"; then
+        echo "✅ $secret (environment: UAT)"
+    # Fallback to repository-level secrets
+    elif gh secret list -R "$REPO_OWNER/$REPO_NAME" 2>/dev/null | grep -q "^$secret"; then
+        echo "⚠️  $secret (repository-level, but UAT environment preferred)"
     else
         echo "❌ $secret (missing)"
         UAT_FAILED=1
@@ -107,13 +127,20 @@ echo ""
 echo "=========================================="
 echo "Checking PROD Environment Secrets"
 echo "=========================================="
+echo ""
+echo "Note: Checking environment-scoped secrets for PROD environment"
+echo ""
 
 REQUIRED_PROD_SECRETS=("AZURE_CLIENT_ID" "AZURE_TENANT_ID" "AZURE_SUBSCRIPTION_ID" "SFTP_HOST" "SFTP_USERNAME" "SFTP_PASSWORD")
 PROD_FAILED=0
 
 for secret in "${REQUIRED_PROD_SECRETS[@]}"; do
-    if gh secret list -R "$REPO_OWNER/$REPO_NAME" | grep -q "^$secret"; then
-        echo "✅ $secret"
+    # Check environment-scoped secrets first (preferred)
+    if gh secret list -R "$REPO_OWNER/$REPO_NAME" --env PROD 2>/dev/null | grep -q "^$secret"; then
+        echo "✅ $secret (environment: PROD)"
+    # Fallback to repository-level secrets
+    elif gh secret list -R "$REPO_OWNER/$REPO_NAME" 2>/dev/null | grep -q "^$secret"; then
+        echo "⚠️  $secret (repository-level, but PROD environment preferred)"
     else
         echo "❌ $secret (missing)"
         PROD_FAILED=1
@@ -160,6 +187,14 @@ echo ""
 echo "=========================================="
 echo "Validation Summary"
 echo "=========================================="
+echo ""
+echo "ℹ️  About GitHub Secrets Scopes:"
+echo "   - Environment-scoped secrets (preferred): Set per environment (DEV/UAT/PROD)"
+echo "   - Repository-level secrets: Shared across all workflows"
+echo "   - Environment secrets override repository secrets with the same name"
+echo ""
+echo "   This script checks environment-scoped secrets first, then falls back to"
+echo "   repository-level secrets. For best security, use environment-scoped secrets."
 echo ""
 
 if [ $OVERALL_STATUS -eq 0 ]; then

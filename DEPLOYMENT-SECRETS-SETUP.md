@@ -27,14 +27,11 @@ The HIPAA Attachments deployment uses GitHub Actions workflows with OIDC (OpenID
 
 ### Required Secrets by Environment
 
-| Secret Name | DEV | UAT | PROD | Purpose |
-|-------------|-----|-----|------|---------|
-| `AZURE_CLIENT_ID` | ✅ | `AZURE_CLIENT_ID_UAT` | ✅ | Azure AD Application (Client) ID |
-| `AZURE_TENANT_ID` | ✅ | `AZURE_TENANT_ID_UAT` | ✅ | Azure AD Tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | ✅ | `AZURE_SUBSCRIPTION_ID_UAT` | ✅ | Azure Subscription ID |
-| `SFTP_HOST` | ❌ | ❌ | ✅ | Availity SFTP server hostname |
-| `SFTP_USERNAME` | ❌ | ❌ | ✅ | Availity SFTP username |
-| `SFTP_PASSWORD` | ❌ | ❌ | ✅ | Availity SFTP password |
+| Environment | Azure Client ID Secret Name | Azure Tenant ID Secret Name | Azure Subscription ID Secret Name | SFTP Host | SFTP Username | SFTP Password |
+|-------------|----------------------------|-----------------------------|-----------------------------------|-----------|---------------|---------------|
+| DEV         | `AZURE_CLIENT_ID`          | `AZURE_TENANT_ID`           | `AZURE_SUBSCRIPTION_ID`           | -         | -             | -             |
+| UAT         | `AZURE_CLIENT_ID_UAT`      | `AZURE_TENANT_ID_UAT`       | `AZURE_SUBSCRIPTION_ID_UAT`       | -         | -             | -             |
+| PROD        | `AZURE_CLIENT_ID`          | `AZURE_TENANT_ID`           | `AZURE_SUBSCRIPTION_ID`           | `SFTP_HOST` | `SFTP_USERNAME` | `SFTP_PASSWORD` |
 
 ### Required Repository Variables (PROD)
 
@@ -67,8 +64,8 @@ Run this script for each environment (DEV, UAT, PROD):
 # Set variables for your environment
 ENV="prod"  # Change to: dev, uat, or prod
 APP_NAME="hipaa-attachments-$ENV-github"
-REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_OWNER="aurelianware"  # TODO: Update to your GitHub organization/username
+REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
 SUBSCRIPTION_ID="<your-azure-subscription-id>"
 
 # Login to Azure
@@ -162,12 +159,39 @@ echo "⚠️  Save these values securely. You'll need them for GitHub configurat
 
 ### Step 2: Configure GitHub Secrets
 
+#### Understanding GitHub Secrets Scopes
+
+**IMPORTANT:** GitHub allows secrets to be configured at two levels:
+
+1. **Environment-Level Secrets (RECOMMENDED)** - Scoped to specific environments (DEV/UAT/PROD)
+   - More secure: Different values per environment
+   - Better access control: Can require approvals for PROD
+   - Follows security best practices
+   - **This is the recommended approach for this project**
+
+2. **Repository-Level Secrets** - Shared across all workflows
+   - Less secure: Same values used everywhere
+   - No environment-specific protection
+   - Only use if you need the same value in all environments
+
+**Why Environment-Level Secrets?**
+
+Since the workflows use `environment: DEV`, `environment: UAT`, and `environment: PROD` (see workflow files), and each environment should have different Azure credentials for security isolation, you **MUST** configure secrets at the environment level.
+
+**Navigation:**
+- **Environment secrets**: Settings → Environments → [Select DEV/UAT/PROD] → Add secret
+- **Repository secrets**: Settings → Secrets and variables → Actions → New repository secret
+
+⚠️ **Environment secrets override repository secrets with the same name.** If you configure both, the environment-scoped value will be used.
+
 #### For DEV Environment
 
 1. Navigate to your GitHub repository
-2. Go to **Settings** → **Secrets and variables** → **Actions**
-3. Click **"New repository secret"**
-4. Add the following secrets one by one:
+2. Go to **Settings** → **Environments** → **DEV**
+   - If the DEV environment doesn't exist, create it first: Settings → Environments → New environment
+3. Scroll to **Environment secrets** section
+4. Click **"Add secret"**
+5. Add the following secrets one by one:
 
 ```
 Name: AZURE_CLIENT_ID
@@ -182,7 +206,12 @@ Value: <subscription-id-from-azure>
 
 #### For UAT Environment
 
-Add these secrets with UAT suffix:
+1. Navigate to your GitHub repository
+2. Go to **Settings** → **Environments** → **UAT**
+   - If the UAT environment doesn't exist, create it first: Settings → Environments → New environment
+3. Scroll to **Environment secrets** section
+4. Click **"Add secret"**
+5. Add these secrets with UAT suffix:
 
 ```
 Name: AZURE_CLIENT_ID_UAT
@@ -197,7 +226,12 @@ Value: <uat-subscription-id-from-azure>
 
 #### For PROD Environment
 
-Add these secrets for production:
+1. Navigate to your GitHub repository
+2. Go to **Settings** → **Environments** → **PROD**
+   - If the PROD environment doesn't exist, create it first: Settings → Environments → New environment
+3. Scroll to **Environment secrets** section
+4. Click **"Add secret"**
+5. Add these secrets for production:
 
 ```
 Name: AZURE_CLIENT_ID
@@ -220,8 +254,11 @@ Value: <availity-sftp-password>
 ```
 
 **Important Notes:**
+- ✅ **Use environment-level secrets** (Settings → Environments → [ENV] → Add secret)
+- ❌ **Do NOT use repository-level secrets** for environment-specific values
 - SFTP credentials are only required for PROD environment
 - DEV and UAT environments use mock/test SFTP endpoints or skip SFTP configuration
+- Each environment (DEV/UAT/PROD) should have different Azure AD applications for security isolation
 - Never commit these values to source control
 - Keep a secure backup in your organization's password vault
 
