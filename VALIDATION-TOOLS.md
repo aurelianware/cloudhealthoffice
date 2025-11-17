@@ -237,8 +237,8 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 
 ### EDI Validator Issues
 
-**Problem**: "Invalid JSON" error  
-**Solution**: File has line breaks. The validator removes them automatically.
+**Problem**: "Invalid X12 structure" or "ISA segment format error"  
+**Solution**: Ensure the EDI file starts with a valid ISA segment and contains proper envelope structure (ISA/GS/ST/SE/GE/IEA).
 
 **Problem**: "Trading partners not validated"  
 **Solution**: Check that ISA segment has correct sender/receiver IDs (030240928/66917)

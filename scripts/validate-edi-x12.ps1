@@ -302,8 +302,11 @@ function Test-EdiFile {
     $seElements = $lastSegments[0] -split '\*'
     if ($seElements.Count -ge 2) {
         $segmentCount = [int]$seElements[1]
-        # ST to SE inclusive count
-        $actualCount = $segments.Count - 4  # Exclude ISA, GS, GE, IEA
+        # SE01 should equal the number of segments from ST to SE (inclusive)
+        # Find the index of ST and SE segments
+        $stIndex = 2  # ST is always the 3rd segment (index 2)
+        $seIndex = $segments.Count - 3  # SE is 3rd from the end
+        $actualCount = $seIndex - $stIndex + 1
         if ($segmentCount -ne $actualCount) {
             Write-ValidationWarning "SE segment count mismatch: claims $segmentCount segments, but found $actualCount" $FilePath ($segments.Count - 2)
         }

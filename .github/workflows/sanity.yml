@@ -278,7 +278,7 @@ jobs:
           echo ""
           echo "Validated:"
           echo "  - Repository structure"
-          echo "  - Logic Apps workflows (4 workflows)"
+          echo "  - Logic Apps workflows (6 workflows)"
           echo "  - Bicep templates"
           echo "  - Service Bus configuration"
           echo "  - X12 schemas"
