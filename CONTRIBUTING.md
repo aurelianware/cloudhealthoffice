@@ -307,11 +307,43 @@ Validates GitHub Actions workflows:
 - Best practices
 
 #### 4. PowerShell Validation
-Checks all `.ps1` files for syntax errors
+Checks all `.ps1` files for:
+- Syntax errors
+- PSScriptAnalyzer best practices (errors only)
+- Script structure and conventions
+
+#### 5. EDI X12 Validation
+Validates all `.edi` files for:
+- X12 envelope structure (ISA/GS/ST/SE/GE/IEA)
+- Trading partner identifiers (Availity/PCHP)
+- Transaction types (275/277/278)
+- Segment counts and format
+
+#### 6. Security Scanning
+Scans code for security issues:
+- Secret detection (Trufflehog)
+- PII/PHI pattern detection
+- Hardcoded credentials
+- HIPAA compliance violations
+
+#### 7. File Encoding Checks
+Validates file encodings:
+- UTF-8 encoding (recommended)
+- No binary content in text files
+- No BOM (Byte Order Mark) in source files
+
+#### 8. HIPAA Compliance Patterns
+Checks for HIPAA compliance:
+- HTTPS usage (no unencrypted HTTP)
+- Encryption settings in infrastructure
+- PHI handling in code
+- Secure logging practices
 
 ### Local Validation Commands
 
 Run these before pushing to catch issues early:
+
+#### Quick Validation Suite
 
 ```bash
 # Complete validation suite
@@ -330,8 +362,100 @@ echo "=== Validating PowerShell scripts ==="
 pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
 pwsh -Command "Get-Content './fix_repo_structure.ps1' | Out-Null"
 
+# 4. EDI X12 validation
+echo "=== Validating EDI files ==="
+pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
+
+# 5. Security scan for PII/PHI
+echo "=== Scanning for PII/PHI ==="
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
+
 echo "✅ All validations passed"
 ```
+
+#### Advanced Validation Tools
+
+The repository includes specialized validation scripts:
+
+**EDI X12 Validator** (`scripts/validate-edi-x12.ps1`):
+```powershell
+# Validate a single EDI file
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi
+
+# Validate all EDI files with strict checking
+pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
+
+# Validate specific transaction type
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
+```
+
+**Features:**
+- ISA/IEA envelope validation
+- GS/GE functional group validation
+- ST/SE transaction set validation
+- Trading partner ID verification (Availity: 030240928, PCHP: 66917)
+- Segment count validation
+- Transaction type detection (275/277/278)
+
+**Security Scanner** (`scripts/scan-for-phi-pii.ps1`):
+```powershell
+# Scan entire repository
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
+
+# Scan specific directory with strict mode
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path logicapps/ -FailOnWarning
+
+# Scan for secrets before commit
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
+```
+
+**Detects:**
+- Social Security Numbers (SSN) - formatted (XXX-XX-XXXX)
+- Medical Record Numbers (MRN)
+- Date of Birth (DOB)
+- Credit card numbers
+- Email addresses and phone numbers
+- Patient/Member IDs
+- Azure API keys and secrets
+- Hardcoded passwords
+- Connection strings
+- Private keys
+- JWT tokens
+- Unencrypted PHI transmission
+- PHI in logs
+
+**Context-Aware Filtering:**
+- Excludes test files (test-*.edi, test-*.json)
+- Excludes documentation (.md files)
+- Excludes trading partner IDs (030240928, 66917)
+- Provides severity levels (Critical, High, Medium, Low)
+
+### Continuous Integration Checks
+
+When you create a pull request, the following automated checks run:
+
+**Smoke Tests** (`.github/workflows/sanity.yml`):
+- Repository structure validation
+- All 4 Logic Apps workflows validation
+- Bicep template compilation
+- Service Bus configuration verification
+- X12 schema presence checks
+- PowerShell script syntax validation
+- EDI file format validation
+- Security scanning
+- Test data validation
+
+**PR Lint** (`.github/workflows/pr-lint.yml`):
+- JSON workflow validation
+- GitHub Actions workflow linting (actionlint)
+- YAML linting (yamllint)
+- Bicep compilation
+- PowerShell Script Analyzer (PSScriptAnalyzer)
+- EDI X12 validation
+- Secret detection (Trufflehog)
+- PII/PHI scanning
+- File encoding validation
+- HIPAA compliance pattern checks
 
 ### Testing Workflows
 

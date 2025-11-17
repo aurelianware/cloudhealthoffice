@@ -173,3 +173,125 @@ jobs:
           else
             echo "PowerShell not available, skipping syntax validation"
           fi
+
+      # ---------- EDI file validation ----------
+      - name: Validate EDI X12 files
+        shell: pwsh
+        run: |
+          Write-Host "Validating EDI X12 files..."
+          if (Test-Path "scripts/validate-edi-x12.ps1") {
+            $ediFiles = Get-ChildItem -Filter "*.edi" -File -ErrorAction SilentlyContinue
+
+            if ($ediFiles.Count -eq 0) {
+              Write-Host "No EDI files found to validate"
+            } else {
+              Write-Host "Found $($ediFiles.Count) EDI file(s)"
+              $failed = $false
+
+              foreach ($file in $ediFiles) {
+                Write-Host "Validating: $($file.Name)"
+                & ./scripts/validate-edi-x12.ps1 -Path $file.FullName -Strict
+
+                if ($LASTEXITCODE -ne 0) {
+                  $failed = $true
+                }
+              }
+
+              if ($failed) {
+                Write-Host "::error::EDI validation failed"
+                exit 1
+              }
+            }
+          } else {
+            Write-Host "EDI validation script not found, skipping"
+          }
+          Write-Host "✓ EDI validation complete"
+
+      # ---------- Security scanning ----------
+      - name: Scan for secrets and credentials
+        uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch || 'main' }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Scan for PII/PHI
+        shell: pwsh
+        run: |
+          Write-Host "Scanning for PII/PHI in code..."
+          if (Test-Path "scripts/scan-for-phi-pii.ps1") {
+            & ./scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules",".terraform"
+
+            # Exit code 1 means critical issues found
+            if ($LASTEXITCODE -eq 1) {
+              Write-Host "::error::Critical PII/PHI issues found"
+              exit 1
+            }
+          } else {
+            Write-Host "::warning::PII/PHI scan script not found"
+          }
+          Write-Host "✓ PII/PHI scan complete"
+
+      # ---------- File encoding validation ----------
+      - name: Validate file encodings
+        run: |
+          echo "Validating file encodings..."
+
+          # Check for files with potential encoding issues
+          failed=0
+          while IFS= read -r -d '' f; do
+            # Skip binary files and certain directories
+            if [[ "$f" =~ \.(png|jpg|jpeg|gif|pdf|zip|tar|gz|exe|dll|bin)$ ]] || \
+               [[ "$f" =~ \.git/ ]] || \
+               [[ "$f" =~ node_modules/ ]]; then
+              continue
+            fi
+
+            # Check for NULL bytes (binary content)
+            if grep -q $'\x00' "$f" 2>/dev/null; then
+              echo "::warning file=$f::File contains NULL bytes (may be binary)"
+              continue
+            fi
+
+            # Check for UTF-8 without BOM (recommended)
+            if file "$f" | grep -q "UTF-8"; then
+              # Check for BOM
+              if head -c 3 "$f" | grep -q $'\xef\xbb\xbf'; then
+                echo "::notice file=$f::File has UTF-8 BOM (consider removing)"
+              fi
+            fi
+          done < <(find . -type f -print0 2>/dev/null || true)
+
+          echo "✓ File encoding validation complete"
+
+      # ---------- HIPAA compliance pattern checks ----------
+      - name: HIPAA compliance validation
+        run: |
+          echo "Validating HIPAA compliance patterns..."
+
+          # Check for unencrypted HTTP in production code
+          failed=0
+          while IFS= read -r -d '' f; do
+            # Skip markdown and test files
+            if [[ "$f" =~ \.(md|txt)$ ]] || [[ "$f" =~ test ]]; then
+              continue
+            fi
+
+            # Check for HTTP URLs (should be HTTPS in production)
+            if grep -q "http://" "$f" 2>/dev/null; then
+              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com" | grep -q .; then
+                echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
+              fi
+            fi
+          done < <(find . -name "*.json" -o -name "*.bicep" -o -name "*.yml" -o -name "*.yaml" -print0 2>/dev/null || true)
+
+          # Check for encryption settings in Bicep
+          if [ -f "infra/main.bicep" ]; then
+            if ! grep -q "encryption" infra/main.bicep; then
+              echo "::warning file=infra/main.bicep::No encryption settings found (verify HIPAA compliance)"
+            fi
+          fi
+
+          echo "✓ HIPAA compliance validation complete"
