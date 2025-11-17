@@ -280,8 +280,10 @@ jobs:
             fi
 
             # Check for HTTP URLs (should be HTTPS in production)
-            if grep -n "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com"; then
-              echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
+            if grep -q "http://" "$f" 2>/dev/null; then
+              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com" | grep -q .; then
+                echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
+              fi
             fi
           done < <(find . -name "*.json" -o -name "*.bicep" -o -name "*.yml" -o -name "*.yaml" -print0 2>/dev/null || true)
 

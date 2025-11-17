@@ -388,7 +388,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 ```
 
 **Detects:**
-- Social Security Numbers (SSN) - formatted or unformatted
+- Social Security Numbers (SSN) - formatted (XXX-XX-XXXX)
 - Medical Record Numbers (MRN)
 - Date of Birth (DOB)
 - Credit card numbers

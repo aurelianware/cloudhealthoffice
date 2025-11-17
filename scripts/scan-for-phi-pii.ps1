@@ -235,25 +235,56 @@ function Scan-FileContent {
         $lines = $content -split "`r?`n"
         $script:FilesScanned++
         
-        # Scan for PHI/PII patterns
+        # Pre-compile all regex patterns for better performance
+        $compiledPatterns = @{}
         foreach ($patternName in $PHI_PII_PATTERNS.Keys) {
-            $pattern = $PHI_PII_PATTERNS[$patternName]
-            $regex = [regex]::new($pattern.Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            $compiledPatterns[$patternName] = @{
+                Regex = [regex]::new($PHI_PII_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+                Config = $PHI_PII_PATTERNS[$patternName]
+                Category = 'PHI_PII'
+            }
+        }
+        foreach ($patternName in $SECRET_PATTERNS.Keys) {
+            $compiledPatterns[$patternName] = @{
+                Regex = [regex]::new($SECRET_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+                Config = $SECRET_PATTERNS[$patternName]
+                Category = 'SECRET'
+            }
+        }
+        foreach ($patternName in $HIPAA_PATTERNS.Keys) {
+            $compiledPatterns[$patternName] = @{
+                Regex = [regex]::new($HIPAA_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+                Config = $HIPAA_PATTERNS[$patternName]
+                Category = 'HIPAA'
+            }
+        }
+        
+        # Single pass through lines, checking all patterns
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
             
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                $line = $lines[$i]
+            # Skip empty lines
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                continue
+            }
+            
+            foreach ($patternName in $compiledPatterns.Keys) {
+                $patternInfo = $compiledPatterns[$patternName]
+                $pattern = $patternInfo.Config
+                $regex = $patternInfo.Regex
+                
+                # Check if file is in allowed list (do this before regex matching)
+                if (Test-FileAllowed $FilePath $pattern.AllowedFiles) {
+                    continue
+                }
+                
                 $matches = $regex.Matches($line)
                 
                 if ($matches.Count -gt 0) {
-                    # Check if file is in allowed list
-                    if (Test-FileAllowed $FilePath $pattern.AllowedFiles) {
-                        continue
-                    }
-                    
                     foreach ($match in $matches) {
-                        # Check for excluded context
+                        # Check for excluded context (only for PHI/PII patterns)
                         $skipMatch = $false
-                        if ($pattern.ContainsKey('ExcludeContext')) {
+                        if ($patternInfo.Category -eq 'PHI_PII' -and $pattern.ContainsKey('ExcludeContext')) {
                             foreach ($excludeWord in $pattern.ExcludeContext) {
                                 if ($line -match $excludeWord) {
                                     $skipMatch = $true
@@ -267,52 +298,6 @@ function Scan-FileContent {
                                 -Description $pattern.Description -Severity $pattern.Severity `
                                 -Match $match.Value
                         }
-                    }
-                }
-            }
-        }
-        
-        # Scan for secrets
-        foreach ($patternName in $SECRET_PATTERNS.Keys) {
-            $pattern = $SECRET_PATTERNS[$patternName]
-            $regex = [regex]::new($pattern.Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-            
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                $line = $lines[$i]
-                $matches = $regex.Matches($line)
-                
-                if ($matches.Count -gt 0) {
-                    if (Test-FileAllowed $FilePath $pattern.AllowedFiles) {
-                        continue
-                    }
-                    
-                    foreach ($match in $matches) {
-                        Add-Finding -File $FilePath -Line ($i + 1) -Type $patternName `
-                            -Description $pattern.Description -Severity $pattern.Severity `
-                            -Match $match.Value
-                    }
-                }
-            }
-        }
-        
-        # Scan for HIPAA compliance issues
-        foreach ($patternName in $HIPAA_PATTERNS.Keys) {
-            $pattern = $HIPAA_PATTERNS[$patternName]
-            $regex = [regex]::new($pattern.Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-            
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                $line = $lines[$i]
-                $matches = $regex.Matches($line)
-                
-                if ($matches.Count -gt 0) {
-                    if (Test-FileAllowed $FilePath $pattern.AllowedFiles) {
-                        continue
-                    }
-                    
-                    foreach ($match in $matches) {
-                        Add-Finding -File $FilePath -Line ($i + 1) -Type $patternName `
-                            -Description $pattern.Description -Severity $pattern.Severity `
-                            -Match $match.Value
                     }
                 }
             }
