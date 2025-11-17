@@ -6,7 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Manual approval gate before production deployment
+  approval-gate:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: PROD-approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Deployment Approval Required
+        run: |
+          echo "🔒 Manual approval required for PROD deployment"
+          echo "⏳ Waiting for approval from configured reviewers..."
+          echo "📝 Deployment triggered by: ${{ github.actor }}"
+          echo "📝 Ref: ${{ github.ref }}"
+          echo "📝 SHA: ${{ github.sha }}"
+
   deploy:
+    needs: approval-gate
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: PROD
@@ -16,6 +33,83 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate Required Secrets and Variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets and Variables"
+          echo "=========================================="
+          echo ""
+
+          # Track validation failures
+          FAILED=0
+
+          # Validate required secrets (check if they're not empty)
+          echo "Checking required secrets..."
+
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
+            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
+            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+            "SFTP_HOST:${{ secrets.SFTP_HOST }}"
+            "SFTP_USERNAME:${{ secrets.SFTP_USERNAME }}"
+            "SFTP_PASSWORD:${{ secrets.SFTP_PASSWORD }}"
+          )
+
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+
+          echo ""
+          echo "Checking required repository variables..."
+
+          REQUIRED_VARS=(
+            "AZURE_RG_NAME:${{ vars.AZURE_RG_NAME }}"
+            "AZURE_LOCATION:${{ vars.AZURE_LOCATION }}"
+            "AZURE_CONNECTOR_LOCATION:${{ vars.AZURE_CONNECTOR_LOCATION }}"
+            "BASE_NAME:${{ vars.BASE_NAME }}"
+            "IA_NAME:${{ vars.IA_NAME }}"
+            "SERVICE_BUS_NAME:${{ vars.SERVICE_BUS_NAME }}"
+            "STORAGE_SKU:${{ vars.STORAGE_SKU }}"
+          )
+
+          for item in "${REQUIRED_VARS[@]}"; do
+            VAR_NAME="${item%%:*}"
+            VAR_VALUE="${item#*:}"
+            if [ -z "$VAR_VALUE" ]; then
+              echo "❌ $VAR_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $VAR_NAME = $VAR_VALUE"
+            fi
+          done
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Missing secrets or variables detected!"
+            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
+            echo ""
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Validation PASSED"
+            echo "=========================================="
+            echo ""
+            echo "All required secrets and variables are configured."
+          fi
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -289,6 +383,15 @@ jobs:
 
             # Check workflows
             echo "Checking deployed workflows..."
+            WORKFLOW_COUNT=$(az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
+
+            echo "Found $WORKFLOW_COUNT workflows"
+            if [ "$WORKFLOW_COUNT" -lt 4 ]; then
+              echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
+            fi
+
             az rest --method GET \
               --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
               --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows (may need permissions)"
@@ -361,14 +464,30 @@ jobs:
             echo "=== Rollback Summary ==="
             echo "❌ Deployment failed. Please review the errors above."
             echo "📋 Diagnostic information has been collected."
-            echo "🔧 To manually rollback:"
+            echo ""
+            echo "🔧 Automated Rollback Options:"
+            echo "   Option 1: Re-run a previous successful deployment"
+            echo "   - Go to Actions tab → Select successful run → Re-run jobs"
+            echo ""
+            echo "   Option 2: Revert to last known good commit"
+            echo "   - git revert <bad-commit>"
+            echo "   - git push origin main"
+            echo "   Or use workflow_dispatch to redeploy a specific commit"
+            echo ""
+            echo "🔍 Manual Investigation Steps:"
             echo "   1. Review the deployment errors above"
             echo "   2. Check Logic App configuration in Azure Portal"
             echo "   3. Verify API connections are properly configured"
             echo "   4. Review Application Insights for runtime errors"
+            echo "   5. Check Service Bus topic message queues"
+            echo "   6. Verify Storage Account blob containers"
             echo ""
             echo "⚠️  IMPORTANT: The infrastructure may be partially deployed."
             echo "   Please verify resource state before retrying deployment."
+            echo ""
+            echo "📞 Escalation: If rollback is required, contact:"
+            echo "   - DevOps team for infrastructure issues"
+            echo "   - Application team for workflow issues"
 
       - name: Deployment Success Summary
         if: success()

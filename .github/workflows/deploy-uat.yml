@@ -25,7 +25,23 @@ env:
   UAT_BASE_NAME: hipaa-attachments-uat
 
 jobs:
+  # Manual approval gate before UAT deployment
+  approval-gate:
+    runs-on: ubuntu-latest
+    environment:
+      name: UAT-approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Deployment Approval Required
+        run: |
+          echo "🔒 Manual approval required for UAT deployment"
+          echo "⏳ Waiting for approval from configured reviewers..."
+          echo "📝 Deployment triggered by: ${{ github.actor }}"
+          echo "📝 Ref: ${{ github.ref }}"
+          echo "📝 SHA: ${{ github.sha }}"
+
   validate:
+    needs: approval-gate
     runs-on: ubuntu-latest
     environment: UAT
     outputs:
@@ -37,6 +53,57 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate Required Secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets (UAT)"
+          echo "=========================================="
+          echo ""
+
+          # Track validation failures
+          FAILED=0
+
+          # Validate required secrets for UAT environment
+          echo "Checking required UAT secrets..."
+
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID_UAT:${{ secrets.AZURE_CLIENT_ID_UAT }}"
+            "AZURE_TENANT_ID_UAT:${{ secrets.AZURE_TENANT_ID_UAT }}"
+            "AZURE_SUBSCRIPTION_ID_UAT:${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}"
+          )
+
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Missing secrets detected for UAT environment!"
+            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
+            echo ""
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Validation PASSED"
+            echo "=========================================="
+            echo ""
+            echo "All required UAT secrets are configured."
+            echo "Note: UAT environment uses hardcoded values for resource naming."
+          fi
 
       - name: Set deployment parameters
         id: set-params
@@ -275,7 +342,18 @@ jobs:
 
             # Check workflows
             echo "Checking deployed workflows:"
-            az webapp show -g "$RG" -n "$APP_NAME" --query "siteConfig.appSettings[?name=='WEBSITE_RUN_FROM_PACKAGE'].value" -o tsv
+            WORKFLOW_COUNT=$(az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
+
+            echo "Found $WORKFLOW_COUNT workflows"
+            if [ "$WORKFLOW_COUNT" -lt 4 ]; then
+              echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
+            fi
+
+            az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows"
 
       - name: Health Check - Infrastructure Resources
         uses: azure/cli@v2
@@ -388,66 +466,25 @@ jobs:
             echo "=== Diagnostic Summary ==="
             echo "❌ UAT deployment failed. Please review the errors above."
             echo "📋 Resource state has been captured."
-            echo "🔧 Recommended actions:"
+            echo ""
+            echo "🔧 Automated Rollback Options:"
+            echo "   Option 1: Re-run a previous successful deployment"
+            echo "   - Go to Actions tab → Select successful UAT run → Re-run jobs"
+            echo ""
+            echo "   Option 2: Revert to last known good release"
+            echo "   - Create a new release branch from the last good commit"
+            echo "   - git checkout -b release/rollback-v1.x <last-good-commit>"
+            echo "   - git push origin release/rollback-v1.x"
+            echo ""
+            echo "🔍 Manual Investigation Steps:"
             echo "   1. Review deployment errors above"
             echo "   2. Check resource quotas and limits"
             echo "   3. Verify OIDC authentication is configured"
             echo "   4. Check for naming conflicts"
             echo "   5. Validate UAT-specific secrets are set"
+            echo "   6. Verify Service Bus topics exist"
+            echo "   7. Check Storage Account configuration"
             echo ""
             echo "⚠️  Resources may be partially deployed. Verify before retrying."
-      - name: Rollback on Failure
-        if: failure()
-        runs-on: ubuntu-latest
-        needs: [validate, deploy-infrastructure, deploy-logic-apps]
-        environment: UAT
-        permissions:
-          id-token: write
-          contents: read
-
-        steps:
-          - name: Checkout
-            uses: actions/checkout@v4
-
-          - name: Azure Login (OIDC)
-            uses: azure/login@v2
-            with:
-              client-id: ${{ secrets.AZURE_CLIENT_ID_UAT }}
-              tenant-id: ${{ secrets.AZURE_TENANT_ID_UAT }}
-              subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}
-
-          - name: Gather Diagnostic Information
-            uses: azure/cli@v2
-            with:
-              inlineScript: |
-                set +e  # Continue on error
-                RG="${{ env.UAT_RESOURCE_GROUP }}"
-                DEPLOY_NAME="hipaa-attachments-uat-infra-${{ github.run_number }}"
-
-                echo "=== Deployment Failed - Gathering Diagnostics ==="
-                echo "⚠️  UAT deployment failed. Collecting diagnostic information..."
-
-                # Show failed operations
-                echo "Listing failed deployment operations..."
-                az deployment operation group list \
-                  --resource-group "$RG" \
-                  --name "$DEPLOY_NAME" \
-                  --query "[?properties.provisioningState=='Failed'].{Operation:properties.targetResource.resourceName, Error:properties.statusMessage.error.message}" \
-                  -o table || echo "Unable to list operations"
-
-                # Show resource group state
-                echo "Current resource group state..."
-                az resource list -g "$RG" --query "[].{Name:name, Type:type, State:properties.provisioningState}" -o table || echo "Unable to list resources"
-
-                echo ""
-                echo "=== Diagnostic Summary ==="
-                echo "❌ UAT deployment failed. Please review the errors above."
-                echo "📋 Resource state has been captured."
-                echo "🔧 Recommended actions:"
-                echo "   1. Review deployment errors above"
-                echo "   2. Check resource quotas and limits"
-                echo "   3. Verify OIDC authentication is configured"
-                echo "   4. Check for naming conflicts"
-                echo "   5. Validate UAT-specific secrets are set"
-                echo ""
-                echo "⚠️  Resources may be partially deployed. Verify before retrying."
+            echo ""
+            echo "📞 Escalation: Contact DevOps team for UAT environment issues"

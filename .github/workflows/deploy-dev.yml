@@ -38,6 +38,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Required Secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets (DEV)"
+          echo "=========================================="
+          echo ""
+
+          # Track validation failures
+          FAILED=0
+
+          # Validate required secrets for DEV environment
+          echo "Checking required DEV secrets..."
+
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
+            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
+            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          )
+
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Missing secrets detected for DEV environment!"
+            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
+            echo ""
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Validation PASSED"
+            echo "=========================================="
+            echo ""
+            echo "All required DEV secrets are configured."
+            echo "Note: DEV environment uses hardcoded values for resource naming."
+          fi
+
       - name: Set deployment parameters
         id: set-params
         run: |
@@ -339,58 +390,3 @@ jobs:
           echo "5. Test workflows with sample data"
           echo ""
           echo "🌐 Logic App URL: https://${{ needs.deploy-infrastructure.outputs.logic-app-name }}.azurewebsites.net"
-
-      - name: Rollback on Failure
-        if: failure()
-        runs-on: ubuntu-latest
-        needs: [validate, deploy-infrastructure, deploy-logic-apps]
-        environment: DEV
-        permissions:
-          id-token: write
-          contents: read
-
-        steps:
-          - name: Checkout
-            uses: actions/checkout@v4
-
-          - name: Azure Login (OIDC)
-            uses: azure/login@v2
-            with:
-              client-id: ${{ secrets.AZURE_CLIENT_ID }}
-              tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-              subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-          - name: Gather Diagnostic Information
-            uses: azure/cli@v2
-            with:
-              inlineScript: |
-                set +e  # Continue on error
-                RG="${{ env.DEV_RESOURCE_GROUP }}"
-                DEPLOY_NAME="hipaa-attachments-dev-infra-${{ github.run_number }}"
-
-                echo "=== Deployment Failed - Gathering Diagnostics ==="
-                echo "⚠️  DEV deployment failed. Collecting diagnostic information..."
-
-                # Show failed operations
-                echo "Listing failed deployment operations..."
-                az deployment operation group list \
-                  --resource-group "$RG" \
-                  --name "$DEPLOY_NAME" \
-                  --query "[?properties.provisioningState=='Failed'].{Operation:properties.targetResource.resourceName, Error:properties.statusMessage.error.message}" \
-                  -o table || echo "Unable to list operations"
-
-                # Show resource group state
-                echo "Current resource group state..."
-                az resource list -g "$RG" --query "[].{Name:name, Type:type, State:properties.provisioningState}" -o table || echo "Unable to list resources"
-
-                echo ""
-                echo "=== Diagnostic Summary ==="
-                echo "❌ DEV deployment failed. Please review the errors above."
-                echo "📋 Resource state has been captured."
-                echo "🔧 Recommended actions:"
-                echo "   1. Review deployment errors above"
-                echo "   2. Check resource quotas and limits"
-                echo "   3. Verify OIDC authentication is configured"
-                echo "   4. Check for naming conflicts"
-                echo ""
-                echo "⚠️  Resources may be partially deployed. Verify before retrying."
