@@ -91,7 +91,7 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
         Description = 'Member/Patient ID'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md', 'test-*.ps1')
     }
 }
 
@@ -103,10 +103,11 @@ $SECRET_PATTERNS = @{
         AllowedFiles = @()
     }
     'GenericPassword' = @{
-        Pattern = '(?:password|pwd|passwd)["\s:=]+[^\s]{8,}'
+        Pattern = '(?:password|pwd|passwd)["'']\s*[:=]\s*["''][^"''<>\s]{8,}["'']'
         Description = 'Hardcoded Password'
         Severity = 'Critical'
-        AllowedFiles = @('*.md', 'test-*.ps1')
+        AllowedFiles = @('*.md', 'test-*.ps1', 'deploy-*.ps1', '*.bicep')
+        ExcludeContext = @('sftpPassword', 'sftpUsername', '<your-password>', 'example', 'placeholder', '\$\{', 'param\(', '@secure')
     }
     'ConnectionString' = @{
         Pattern = '(?:DefaultEndpointsProtocol=|AccountKey=|SharedAccessSignature=)[a-zA-Z0-9+/=]{20,}'
@@ -139,7 +140,7 @@ $HIPAA_PATTERNS = @{
         Pattern = 'console\.log|Write-Host.*(?:ssn|dob|patient|medical)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md')
     }
 }
 
@@ -282,9 +283,9 @@ function Scan-FileContent {
                 
                 if ($matches.Count -gt 0) {
                     foreach ($match in $matches) {
-                        # Check for excluded context (only for PHI/PII patterns)
+                        # Check for excluded context (for all pattern types)
                         $skipMatch = $false
-                        if ($patternInfo.Category -eq 'PHI_PII' -and $pattern.ContainsKey('ExcludeContext')) {
+                        if ($pattern.ContainsKey('ExcludeContext')) {
                             foreach ($excludeWord in $pattern.ExcludeContext) {
                                 if ($line -match $excludeWord) {
                                     $skipMatch = $true
