@@ -71,19 +71,21 @@ jobs:
 
       - name: Pre-Approval Summary
         run: |
-          echo "### 🔒 Pre-Approval Security Checks Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Security Validations:**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ No secrets or credentials detected" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ No PII/PHI in code" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Deployment artifacts validated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Deployment Details:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Ready for UAT approval review. ✅" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### 🔒 Pre-Approval Security Checks Passed"
+            echo ""
+            echo "**Security Validations:**"
+            echo "- ✅ No secrets or credentials detected"
+            echo "- ✅ No PII/PHI in code"
+            echo "- ✅ Deployment artifacts validated"
+            echo ""
+            echo "**Deployment Details:**"
+            echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Triggered by: @${{ github.actor }}"
+            echo ""
+            echo "Ready for UAT approval review. ✅"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Manual approval gate before UAT deployment
   approval-gate:
