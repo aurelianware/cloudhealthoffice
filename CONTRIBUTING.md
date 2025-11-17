@@ -41,6 +41,7 @@ This repository implements an Azure Logic Apps solution for processing HIPAA-com
 ### Quick Links
 - 📖 **[Architecture Documentation](ARCHITECTURE.md)** - System design and data flows
 - 🚀 **[Deployment Guide](DEPLOYMENT.md)** - Step-by-step deployment procedures
+- 🌿 **[Branching Strategy](BRANCHING-STRATEGY.md)** - Branch conventions and merge requirements
 - 🔐 **[Secrets Setup Guide](DEPLOYMENT-SECRETS-SETUP.md)** - GitHub Secrets and environment configuration
 - 🔧 **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
 - 🔒 **[Security Guide](SECURITY.md)** - HIPAA compliance and secure development
@@ -129,19 +130,31 @@ All validation commands should complete without errors.
 
 ### Branching Strategy
 
-We follow a structured branching strategy:
+We follow a structured branching strategy aligned with semantic versioning and automated deployments.
+
+**For complete branching guidelines, see [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md)**
+
+**Quick Reference:**
 
 ```
-main                    # Production-ready code
+main (protected)                    # Production-ready code, deploys to PROD
 ├── release/*          # UAT deployments (auto-deploys)
-└── feature/*          # Feature development
-    └── bugfix/*       # Bug fixes
+├── feature/*          # Feature development
+├── bugfix/*           # Bug fixes
+└── hotfix/*           # Critical production fixes
 ```
 
 **Branch Naming Conventions:**
-- Features: `feature/description-of-feature`
-- Bug fixes: `bugfix/issue-description`
-- Releases: `release/v1.0.0`
+- Features: `feature/{issue-number}-{description}` or `feature/{description}`
+- Bug fixes: `bugfix/{issue-number}-{description}` or `bugfix/{description}`
+- Releases: `release/v{MAJOR}.{MINOR}.{PATCH}`
+- Hotfixes: `hotfix/v{MAJOR}.{MINOR}.{PATCH+1}-{description}`
+
+**Key Points:**
+- All merges to `main` require PR approval and passing checks
+- `release/*` branches auto-deploy to UAT
+- Use conventional commits for semantic versioning
+- See [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md) for detailed workflows
 
 ### Making Changes
 
@@ -235,11 +248,11 @@ pwsh -c "./test-workflows.ps1 -TestInbound275"
 
 #### 5. Commit Your Changes
 
-Use clear, descriptive commit messages:
+Use clear, descriptive commit messages following [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```bash
 git add .
-git commit -m "feat: Add replay endpoint for 278 transactions
+git commit -m "feat(workflows): Add replay endpoint for 278 transactions
 
 - Implemented HTTP trigger for deterministic replay
 - Added blobUrl validation
@@ -248,12 +261,16 @@ git commit -m "feat: Add replay endpoint for 278 transactions
 ```
 
 **Commit Message Format:**
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `docs:` - Documentation changes
-- `refactor:` - Code refactoring
-- `test:` - Test additions or modifications
-- `chore:` - Maintenance tasks
+- `feat:` - New features (MINOR version bump)
+- `fix:` - Bug fixes (PATCH version bump)
+- `docs:` - Documentation changes (no version bump)
+- `refactor:` - Code refactoring (no version bump)
+- `test:` - Test additions or modifications (no version bump)
+- `chore:` - Maintenance tasks (no version bump)
+- `perf:` - Performance improvements (PATCH version bump)
+- `ci:` - CI/CD changes (no version bump)
+
+**For detailed commit conventions and semantic versioning, see [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md#commit-message-conventions)**
 
 #### 6. Push and Create Pull Request
 
