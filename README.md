@@ -102,7 +102,7 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 ### Deployment Options
 
 #### 1. Automated UAT Deployment (Recommended)
-**Trigger**: Push to `release/*` branches  
+**Trigger**: Push to `release/*` branches
 **Workflow**: `.github/workflows/deploy-uat.yml`
 
 The UAT deployment runs automatically when you push to any `release/*` branch:
@@ -120,7 +120,7 @@ git push origin release/v1.0.0
 **See [DEPLOYMENT.md § UAT Environment](DEPLOYMENT.md#uat-environment) for detailed procedures.**
 
 #### 2. Manual Production Deployment
-**Trigger**: Manual workflow dispatch  
+**Trigger**: Manual workflow dispatch
 **Workflow**: `.github/workflows/deploy.yml`
 
 Production deployment requires approval:
@@ -132,7 +132,7 @@ Production deployment requires approval:
 **See [DEPLOYMENT.md § PROD Environment](DEPLOYMENT.md#prod-environment) for production checklist.**
 
 #### 3. DEV Environment Deployment
-**Trigger**: Manual or push to `main/*` branches  
+**Trigger**: Manual or push to `main/*` branches
 **Workflow**: `.github/workflows/deploy-dev.yml`
 
 **See [DEPLOYMENT.md § DEV Environment](DEPLOYMENT.md#dev-environment) for DEV deployment procedures.**
