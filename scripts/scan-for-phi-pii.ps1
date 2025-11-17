@@ -149,6 +149,30 @@ $script:Findings = @()
 $script:FilesScanned = 0
 $script:IssuesFound = 0
 
+# Pre-compile all regex patterns at script scope for better performance
+$script:CompiledPatterns = @{}
+foreach ($patternName in $PHI_PII_PATTERNS.Keys) {
+    $script:CompiledPatterns[$patternName] = @{
+        Regex = [regex]::new($PHI_PII_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+        Config = $PHI_PII_PATTERNS[$patternName]
+        Category = 'PHI_PII'
+    }
+}
+foreach ($patternName in $SECRET_PATTERNS.Keys) {
+    $script:CompiledPatterns[$patternName] = @{
+        Regex = [regex]::new($SECRET_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+        Config = $SECRET_PATTERNS[$patternName]
+        Category = 'SECRET'
+    }
+}
+foreach ($patternName in $HIPAA_PATTERNS.Keys) {
+    $script:CompiledPatterns[$patternName] = @{
+        Regex = [regex]::new($HIPAA_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
+        Config = $HIPAA_PATTERNS[$patternName]
+        Category = 'HIPAA'
+    }
+}
+
 function Test-FileExcluded {
     param([string]$FilePath)
     
@@ -236,31 +260,7 @@ function Scan-FileContent {
         $lines = $content -split "`r?`n"
         $script:FilesScanned++
         
-        # Pre-compile all regex patterns for better performance
-        $compiledPatterns = @{}
-        foreach ($patternName in $PHI_PII_PATTERNS.Keys) {
-            $compiledPatterns[$patternName] = @{
-                Regex = [regex]::new($PHI_PII_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
-                Config = $PHI_PII_PATTERNS[$patternName]
-                Category = 'PHI_PII'
-            }
-        }
-        foreach ($patternName in $SECRET_PATTERNS.Keys) {
-            $compiledPatterns[$patternName] = @{
-                Regex = [regex]::new($SECRET_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
-                Config = $SECRET_PATTERNS[$patternName]
-                Category = 'SECRET'
-            }
-        }
-        foreach ($patternName in $HIPAA_PATTERNS.Keys) {
-            $compiledPatterns[$patternName] = @{
-                Regex = [regex]::new($HIPAA_PATTERNS[$patternName].Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Compiled)
-                Config = $HIPAA_PATTERNS[$patternName]
-                Category = 'HIPAA'
-            }
-        }
-        
-        # Single pass through lines, checking all patterns
+        # Single pass through lines, checking all patterns (using pre-compiled patterns from script scope)
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $line = $lines[$i]
             
@@ -269,8 +269,8 @@ function Scan-FileContent {
                 continue
             }
             
-            foreach ($patternName in $compiledPatterns.Keys) {
-                $patternInfo = $compiledPatterns[$patternName]
+            foreach ($patternName in $script:CompiledPatterns.Keys) {
+                $patternInfo = $script:CompiledPatterns[$patternName]
                 $pattern = $patternInfo.Config
                 $regex = $patternInfo.Regex
                 

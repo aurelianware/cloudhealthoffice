@@ -199,9 +199,11 @@ az bicep build --file infra/main.bicep --outfile /tmp/arm.json > /dev/null
 
 # PowerShell validation
 echo "3. Validating PowerShell scripts..."
+shopt -s nullglob
 for script in *.ps1; do
   pwsh -Command "Get-Content './$script' | Out-Null"
 done
+shopt -u nullglob
 
 # EDI validation
 echo "4. Validating EDI files..."

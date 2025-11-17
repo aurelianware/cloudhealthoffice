@@ -226,6 +226,11 @@ function Test-EdiFile {
     
     Write-Host "`n📄 Validating: $FilePath"
     
+    # Reset validation arrays for this file to prevent accumulation across multiple files
+    $script:ValidationErrors = @()
+    $script:ValidationWarnings = @()
+    $script:ValidationInfo = @()
+    
     if (-not (Test-Path $FilePath)) {
         Write-ValidationError "File not found: $FilePath" $FilePath 0
         return $false
