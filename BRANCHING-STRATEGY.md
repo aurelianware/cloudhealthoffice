@@ -531,7 +531,7 @@ git push origin v1.2.1
 git checkout release/v1.3.0  # Current release in progress
 git cherry-pick <hotfix-commit-sha>
 git push origin release/v1.3.0
-# Verifies in UAT automatically
+# Deploys to UAT automatically
 ```
 
 ## Semantic Versioning
