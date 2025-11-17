@@ -733,4 +733,4 @@ gh variable list --repo "aurelianware/hipaa-attachments"
 
 ---
 
-**Next Steps**: After completing this setup, proceed to [DEPLOYMENT.md](DEPLOYMENT.md) for deployment procedures.
+**Next Steps**: After completing this setup, proceed to [DEPLOYMENT.md § Quick Start](DEPLOYMENT.md#quick-start) for deployment procedures.
