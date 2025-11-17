@@ -406,8 +406,8 @@ If you prefer to validate manually or need to create a custom validation script,
 # Example validation script (also available as validate-github-secrets.sh)
 #!/bin/bash
 
-REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_OWNER="aurelianware"      # TODO: Update to your GitHub organization/username
+REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
 
 echo "Validating GitHub Secrets Configuration"
 echo "========================================"
@@ -528,7 +528,7 @@ The best validation is to run a test deployment:
 1. **Test DEV Deployment:**
    ```bash
    # Trigger via GitHub CLI
-   gh workflow run deploy-dev.yml -R aurelianware/hipaa-attachments
+   gh workflow run deploy-dev.yml -R <owner>/<repo>  # TODO: Replace <owner>/<repo> with your repository
    ```
 
 2. **Test UAT Deployment:**
@@ -608,8 +608,9 @@ Error: Required secret AZURE_CLIENT_ID not found
 
 **Validation:**
 ```bash
-gh secret list -R aurelianware/hipaa-attachments
-gh variable list -R aurelianware/hipaa-attachments
+# TODO: Replace <owner>/<repo> with your repository name
+gh secret list -R <owner>/<repo>
+gh variable list -R <owner>/<repo>
 ```
 
 #### 4. SFTP Connection Failure (PROD)
@@ -647,8 +648,8 @@ Error: Unable to connect to SFTP server
 **Fix:**
 ```bash
 APP_ID="<your-app-id>"
-REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_OWNER="aurelianware"  # TODO: Update to your GitHub organization/username
+REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
 
 # Add workflow_dispatch credential
 az ad app federated-credential create \
