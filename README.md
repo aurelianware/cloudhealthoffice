@@ -1,5 +1,7 @@
 # HIPAA Attachments Processing System 🏥
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A complete Azure Logic Apps solution for processing HIPAA-compliant medical attachments with secure file handling, message queuing, and monitoring capabilities.
 
 ## 🏗️ Architecture Overview
@@ -53,6 +55,32 @@ This solution implements the following process:
 
 ## Build & Deployment
 
+### 📚 Complete Deployment Documentation
+
+**New to deployment? Start here:**
+
+1. **[GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md)** - Complete guide to GitHub Actions configuration
+   - Azure OIDC authentication setup
+   - GitHub Secrets and Variables configuration
+   - Environment setup and workflow permissions
+   - Troubleshooting and testing procedures
+
+2. **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive deployment guide
+   - Prerequisites and tool installation
+   - Bicep compilation and ARM deployment
+   - Logic App workflow deployment
+   - Post-deployment configuration
+   - Verification and testing
+   - Rollback procedures (6 detailed scenarios)
+
+3. **[DEPLOYMENT-WORKFLOW-REFERENCE.md](DEPLOYMENT-WORKFLOW-REFERENCE.md)** - Quick reference
+   - Deployment flow diagram
+   - Documentation map
+   - Required secrets and variables
+   - Quick start commands
+   - Common issues and solutions
+   - Rollback quick reference
+
 ### Prerequisites
 
 Before deploying, ensure you have:
@@ -62,12 +90,18 @@ Before deploying, ensure you have:
 - **PowerShell** 7.4+ for scripts
 - **GitHub repository secrets** configured for target environments
 
+**See [DEPLOYMENT.md § Prerequisites](DEPLOYMENT.md#prerequisites) for detailed setup instructions.**
+
 ### Required GitHub Secrets
 
 For each environment (DEV/UAT/PROD), configure these secrets:
 - `AZURE_CLIENT_ID_{ENV}`: OIDC application client ID
 - `AZURE_TENANT_ID_{ENV}`: Azure AD tenant ID
 - `AZURE_SUBSCRIPTION_ID_{ENV}`: Target Azure subscription ID
+
+**📚 Setup Guides:**
+- [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) - Complete GitHub Actions and OIDC setup
+- [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) - Detailed secrets configuration and validation
 
 ### Deployment Options
 
@@ -87,14 +121,35 @@ git push origin release/v1.0.0
 - Location: `eastus`
 - Logic App: `hipaa-attachments-uat-la`
 
-#### 2. Manual Multi-Environment Deployment
-**Workflow**: `.github/workflows/deploy_logicapps_workflows_matrix_with_lint.yml`
+**See [DEPLOYMENT.md § UAT Environment](DEPLOYMENT.md#uat-environment) for detailed procedures.**
 
-Run from GitHub Actions tab with parameters:
-- Azure Subscription ID
-- Resource Group name
-- Azure region
-- Base name for resources
+#### 2. Manual Production Deployment
+**Trigger**: Manual workflow dispatch
+**Workflow**: `.github/workflows/deploy.yml`
+
+Production deployment requires approval:
+1. Go to **Actions** → **Deploy (PROD)**
+2. Click **Run workflow**
+3. Wait for reviewer approval
+4. Monitor deployment progress
+
+**See [DEPLOYMENT.md § PROD Environment](DEPLOYMENT.md#prod-environment) for production checklist.**
+
+#### 3. DEV Environment Deployment
+**Trigger**: Manual or push to `main/*` branches
+**Workflow**: `.github/workflows/deploy-dev.yml`
+
+**See [DEPLOYMENT.md § DEV Environment](DEPLOYMENT.md#dev-environment) for DEV deployment procedures.**
+
+### Deployment Timeline
+
+| Environment | Validation | Infrastructure | Workflows | Total |
+|-------------|-----------|----------------|-----------|-------|
+| **DEV** | 30 sec | 5-8 min | 2 min | **7-10 min** |
+| **UAT** | 30 sec | 8-12 min | 2 min | **10-14 min** |
+| **PROD** | 30 sec | 10-15 min | 3 min | **13-18 min** |
+
+**See [DEPLOYMENT-WORKFLOW-REFERENCE.md § Deployment Timeline](DEPLOYMENT-WORKFLOW-REFERENCE.md#deployment-timeline) for detailed breakdown.**
 
 ### Validation Checklist
 
@@ -484,3 +539,32 @@ The repository includes context-aware instructions that automatically activate w
 - **[PowerShell Scripts](.github/instructions/scripts.instructions.md)**: Guidance for `*.ps1` scripts
 
 These instructions help Copilot understand the project structure, conventions, and best practices, providing more accurate and context-aware assistance throughout development.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for full details.
+
+### Why Apache 2.0?
+
+Apache 2.0 was selected for this healthcare-focused project because it provides:
+
+- **Healthcare Compatibility**: Widely accepted in healthcare and enterprise environments
+- **Patent Protection**: Express patent grant protects both contributors and users from patent litigation
+- **Commercial-Friendly**: Permissive terms suitable for HIPAA-regulated commercial use
+- **Clear Contribution Guidelines**: Well-defined terms for contributions and derivative works
+- **Enterprise Adoption**: Trusted by major healthcare technology organizations
+
+### HIPAA Compliance Notice
+
+This software includes features for handling Protected Health Information (PHI) in HIPAA-regulated environments. **Important considerations:**
+
+- **Compliance Responsibility**: Ultimate responsibility for HIPAA compliance rests with the implementing organization
+- **Security Requirements**: Organizations must implement appropriate administrative, physical, and technical safeguards
+- **No Warranty**: Software is provided "AS IS" without warranties regarding HIPAA compliance
+- **Security Guidelines**: Refer to [SECURITY.md](SECURITY.md) for detailed compliance requirements
+
+Users must perform their own compliance assessments and implement necessary safeguards according to their specific requirements and risk analysis.
+
+### Contributing
+
+By contributing to this project, you agree that your contributions will be licensed under the Apache License 2.0. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process and how to submit contributions.
