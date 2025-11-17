@@ -2,12 +2,22 @@
 
 This guide provides step-by-step instructions for deploying the HIPAA Attachments system to Azure environments (DEV/UAT/PROD).
 
+## 🚀 Quick Start
+
+**New to deployment?** Start here:
+1. **GitHub Actions Setup**: See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) for complete OIDC authentication and secrets configuration
+2. **Validate Prerequisites**: Ensure all tools are installed (see [Prerequisites](#prerequisites))
+3. **Follow Environment Deployment**: Choose your target environment (DEV/UAT/PROD)
+4. **Run Post-Deployment Steps**: Configure API connections and Integration Account
+
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [GitHub Configuration](#github-configuration)
+- [Bicep Compilation and ARM Deployment](#bicep-compilation-and-arm-deployment)
 - [Environment Protection Rules and Approval Gates](#environment-protection-rules-and-approval-gates)
 - [Pre-Deployment Validation](#pre-deployment-validation)
 - [Environment Deployment](#environment-deployment)
+- [Logic App Workflow Deployment](#logic-app-workflow-deployment)
 - [Post-Deployment Configuration](#post-deployment-configuration)
 - [Verification and Testing](#verification-and-testing)
 - [Rollback Procedures](#rollback-procedures)
@@ -114,7 +124,11 @@ The deployment identity needs these permissions:
 
 ## GitHub Configuration
 
-### Repository Secrets
+**📘 For complete GitHub Actions setup including OIDC authentication, secrets, and variables, see [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md).**
+
+This section provides a quick reference. For detailed instructions, federated credentials setup, and troubleshooting, refer to the comprehensive guide.
+
+### Repository Secrets (Quick Reference)
 
 Configure these secrets for each environment in GitHub Settings → Secrets and variables → Actions:
 
@@ -147,7 +161,13 @@ AZURE_SUBSCRIPTION_ID_PROD  = <subscription-id>
 5. Click "Add secret"
 6. Repeat for all secrets
 
-### Repository Variables (Optional)
+**Need help?** See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md#github-secrets-configuration) for:
+- Step-by-step instructions with screenshots
+- GitHub CLI automation scripts
+- Verification procedures
+- Troubleshooting common issues
+
+### Repository Variables (Quick Reference)
 
 Configure environment-specific variables:
 
@@ -161,6 +181,316 @@ BASE_NAME_UAT      = hipaa-attachments-uat
 BASE_NAME_PROD     = hipaa-attachments-prod
 ```
 
+**For complete variable setup**, see [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md#github-variables-configuration).
+
+## Bicep Compilation and ARM Deployment
+
+This section covers the complete Bicep-to-ARM deployment workflow used by the GitHub Actions pipelines.
+
+### Bicep Template Structure
+
+The infrastructure is defined in `infra/main.bicep` which creates:
+
+**Core Resources:**
+- Azure Storage Account (Data Lake Gen2 with hierarchical namespace)
+- Service Bus Namespace (Standard tier)
+  - Topics: `attachments-in`, `rfai-requests`, `edi-278`, `appeals-auth`, `auth-statuses`, `dead-letter`
+- Logic App Standard (WS1 SKU with Function App runtime)
+- Application Insights (monitoring and telemetry)
+- Integration Account (X12 processing)
+
+**Managed API Connections:**
+- SFTP with SSH (`sftpwithssh` connector)
+- Azure Blob Storage (`azureblob` connector)
+- Service Bus (`servicebus` connector)
+- Integration Account X12 (`x12` connector)
+
+### Bicep Compilation Process
+
+#### Step 1: Install Bicep CLI
+
+```bash
+# Install or update Bicep CLI
+az bicep install
+
+# Verify version (minimum 0.37.0 required)
+az bicep version
+```
+
+**Expected output:**
+```
+Bicep CLI version 0.37.4 (...)
+```
+
+#### Step 2: Compile Bicep to ARM Template
+
+```bash
+# Compile main infrastructure template
+az bicep build \
+  --file infra/main.bicep \
+  --outfile /tmp/arm-template.json
+
+# Check compilation success
+if [ -s /tmp/arm-template.json ]; then
+  echo "✓ Bicep compilation successful"
+  echo "ARM template size: $(wc -c < /tmp/arm-template.json) bytes"
+else
+  echo "✗ Bicep compilation failed"
+  exit 1
+fi
+```
+
+**Expected output:**
+```
+✓ Bicep compilation successful
+ARM template size: 14237 bytes
+```
+
+**Common warnings (safe to ignore):**
+```
+Warning use-parent-property: Use a reference to the parent resource instead of repeating name/type
+  → This warning appears for Service Bus topics and is cosmetic only
+  → Does not affect deployment or runtime behavior
+```
+
+#### Step 3: Validate ARM Template Syntax
+
+```bash
+# Validate template structure
+az deployment group validate \
+  --resource-group <resource-group-name> \
+  --template-file infra/main.bicep \
+  --parameters baseName=<base-name> \
+               location=<azure-region> \
+               sftpHost=<sftp-host> \
+               sftpUsername=<username> \
+               sftpPassword=<password> \
+               serviceBusName=<service-bus-name> \
+               iaName=<integration-account-name> \
+               connectorLocation=<connector-region>
+```
+
+**Note**: This command requires authentication and validates against Azure API schemas, but does not deploy resources.
+
+### ARM What-If Analysis
+
+ARM What-If provides a **preview of changes** before actual deployment.
+
+#### Purpose
+
+- Shows what resources will be **created**, **modified**, or **deleted**
+- Identifies configuration changes
+- Helps prevent accidental resource deletions
+- Required for production deployments (best practice)
+
+#### Running What-If Analysis
+
+```bash
+# Run What-If analysis
+az deployment group what-if \
+  --resource-group <resource-group-name> \
+  --template-file infra/main.bicep \
+  --parameters baseName=<base-name> \
+               location=<azure-region> \
+               sftpHost=<sftp-host> \
+               sftpUsername=<username> \
+               sftpPassword=<password> \
+               serviceBusName=<service-bus-name> \
+               iaName=<integration-account-name> \
+               connectorLocation=<connector-region> \
+  --no-pretty-print
+```
+
+#### Interpreting What-If Output
+
+**Resource will be created** (first deployment):
+```
++ Resource Microsoft.Storage/storageAccounts
+  Location: eastus
+  SKU: Standard_LRS
+```
+
+**Resource will be modified** (configuration change):
+```
+~ Resource Microsoft.Web/sites 'hipaa-attachments-la'
+  - properties.siteConfig.appSettings[0].value: "old-value"
+  + properties.siteConfig.appSettings[0].value: "new-value"
+```
+
+**Resource will be deleted** (⚠️ WARNING):
+```
+- Resource Microsoft.Web/connections 'old-connection'
+```
+
+**No changes detected**:
+```
+Resource changes: 0 to create, 0 to modify, 0 to delete
+```
+
+#### What-If Best Practices
+
+✅ **Always run What-If before production deployments**  
+✅ **Review changes carefully**, especially deletions  
+✅ **Save What-If output** for deployment records  
+✅ **Use `--no-pretty-print`** for CI/CD logging  
+❌ **Never skip What-If for PROD** environments  
+
+### ARM Template Deployment
+
+#### Deployment Methods
+
+**Method 1: Azure CLI Direct Deployment**
+
+```bash
+# Deploy infrastructure
+az deployment group create \
+  --resource-group <resource-group-name> \
+  --template-file infra/main.bicep \
+  --parameters baseName=<base-name> \
+               location=<azure-region> \
+               sftpHost=<sftp-host> \
+               sftpUsername=<username> \
+               sftpPassword=<password> \
+               serviceBusName=<service-bus-name> \
+               iaName=<integration-account-name> \
+               connectorLocation=<connector-region> \
+  --name "hipaa-infra-deployment-$(date +%Y%m%d-%H%M%S)" \
+  --verbose
+```
+
+**Method 2: GitHub Actions with azure/arm-deploy**
+
+```yaml
+- name: Deploy Infrastructure
+  uses: azure/arm-deploy@v2
+  with:
+    scope: resourcegroup
+    resourceGroupName: ${{ env.RESOURCE_GROUP }}
+    template: infra/main.bicep
+    parameters: >
+      baseName=${{ env.BASE_NAME }}
+      location=${{ env.LOCATION }}
+      sftpHost=${{ secrets.SFTP_HOST }}
+      sftpUsername=${{ secrets.SFTP_USERNAME }}
+      sftpPassword=${{ secrets.SFTP_PASSWORD }}
+      serviceBusName=${{ env.SERVICE_BUS_NAME }}
+      iaName=${{ env.IA_NAME }}
+      connectorLocation=${{ env.CONNECTOR_LOCATION }}
+    deploymentName: hipaa-infra-${{ github.run_number }}
+    failOnStdErr: true
+```
+
+#### Deployment Parameters
+
+| Parameter | Required | Description | Example |
+|-----------|----------|-------------|---------|
+| `baseName` | Yes | Resource name prefix | `hipaa-attachments-prod` |
+| `location` | Yes | Azure region for core resources | `eastus` |
+| `connectorLocation` | Yes | Region for API connections | `eastus` |
+| `serviceBusName` | Yes | Service Bus namespace name | `hipaa-attachments-prod-svc` |
+| `iaName` | Yes | Integration Account name | `prod-integration-account` |
+| `sftpHost` | Yes | SFTP server hostname | `sftp.availity.com` |
+| `sftpUsername` | Yes | SFTP username | `service-account` |
+| `sftpPassword` | Yes (secure) | SFTP password | `<secret-value>` |
+| `storageSku` | No | Storage account SKU | `Standard_LRS` (default) |
+| `iaSku` | No | Integration Account SKU | `Free` (default) |
+| `useExistingIa` | No | Use existing Integration Account | `false` (default) |
+| `enableB2B` | No | Enable X12 connector | `true` (default) |
+
+**🔒 Security Note**: Always pass sensitive parameters as secrets, never hardcode in templates or commit to version control.
+
+#### Monitoring Deployment Progress
+
+```bash
+# List active deployments
+az deployment group list \
+  --resource-group <resource-group-name> \
+  --query "[].{Name:name, State:properties.provisioningState, Timestamp:properties.timestamp}" \
+  --output table
+
+# Show deployment details
+az deployment group show \
+  --resource-group <resource-group-name> \
+  --name <deployment-name> \
+  --output jsonc
+```
+
+#### Deployment Timeline
+
+| Stage | Estimated Time | Description |
+|-------|----------------|-------------|
+| **Validation** | 5-10 seconds | Template syntax and parameter validation |
+| **What-If Analysis** | 10-20 seconds | Calculate deployment changes |
+| **Resource Creation** | 5-10 minutes | Deploy Azure resources |
+| **Connection Setup** | 1-2 minutes | Configure API connections |
+| **Total** | **6-13 minutes** | Complete infrastructure deployment |
+
+### Handling Deployment Failures
+
+#### View Failed Operations
+
+```bash
+# List failed operations in deployment
+DEPLOY_NAME="hipaa-infra-deployment-20241116"
+RG_NAME="pchp-attachments-prod-rg"
+
+az deployment operation group list \
+  --resource-group "$RG_NAME" \
+  --name "$DEPLOY_NAME" \
+  --query "[?properties.provisioningState=='Failed']" \
+  --output table
+
+# Show detailed error for specific operation
+az deployment operation group show \
+  --resource-group "$RG_NAME" \
+  --name "$DEPLOY_NAME" \
+  --operation-ids <operation-id> \
+  --output jsonc
+```
+
+#### Common Deployment Errors
+
+**Error: InvalidTemplateDeployment**
+- **Cause**: Missing required parameter or invalid parameter value
+- **Solution**: Check parameter names and types match template definition
+
+**Error: ResourceQuotaExceeded**
+- **Cause**: Subscription resource quota limit reached
+- **Solution**: Request quota increase or delete unused resources
+
+**Error: ResourceNameAlreadyExists**
+- **Cause**: Resource name conflict (storage accounts must be globally unique)
+- **Solution**: Use different `baseName` or delete existing conflicting resource
+
+**Error: AuthorizationFailed**
+- **Cause**: Insufficient permissions for deployment identity
+- **Solution**: Grant Contributor role to service principal/managed identity
+
+### Post-Deployment Verification
+
+```bash
+# List deployed resources
+az resource list \
+  --resource-group <resource-group-name> \
+  --query "[].{Name:name, Type:type, State:provisioningState, Location:location}" \
+  --output table
+
+# Verify specific resources
+az storage account show --name <storage-account> --query provisioningState
+az servicebus namespace show --name <service-bus> --query provisioningState
+az webapp show --name <logic-app> --query state
+```
+
+**Expected output (successful deployment):**
+```
+Name                          Type                                   State      Location
+----------------------------  -------------------------------------  ---------  ----------
+staging...                    Microsoft.Storage/storageAccounts      Succeeded  eastus
+hipaa-attachments-prod-svc    Microsoft.ServiceBus/namespaces        Succeeded  eastus
+hipaa-attachments-prod-la     Microsoft.Web/sites                    Succeeded  eastus
+hipaa-attachments-prod-ai     Microsoft.Insights/components          Succeeded  eastus
+prod-integration-account      Microsoft.Logic/integrationAccounts    Succeeded  eastus
+```
 ## Environment Protection Rules and Approval Gates
 
 This section describes how to configure GitHub Environment protection rules to require manual approvals before deployments to UAT and PROD environments.
@@ -598,6 +928,342 @@ pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
 # Verify output
 echo "✅ Repository structure validated"
 ```
+
+## Logic App Workflow Deployment
+
+This section details the complete process for packaging and deploying Logic App workflows after infrastructure is in place.
+
+### Workflow Package Structure
+
+Logic App Standard requires workflows in a specific ZIP structure:
+
+```
+workflows.zip
+└── workflows/
+    ├── ingest275/
+    │   └── workflow.json
+    ├── ingest278/
+    │   └── workflow.json
+    ├── replay278/
+    │   └── workflow.json
+    ├── rfai277/
+    │   └── workflow.json
+    ├── process_appeals/
+    │   └── workflow.json
+    └── process_authorizations/
+        └── workflow.json
+```
+
+**Critical Requirements:**
+- ✅ Top-level directory must be named `workflows/`
+- ✅ Each workflow in its own subdirectory
+- ✅ Each subdirectory contains `workflow.json`
+- ✅ All workflows must have `kind: "Stateful"` (requirement for Logic Apps Standard)
+- ❌ Do NOT include `host.json`, `connections.json`, or `local.settings.json` from local development
+
+### Creating Workflow Package
+
+#### Method 1: Using Bash Script
+
+```bash
+# Navigate to logicapps directory
+cd logicapps
+
+# Create ZIP package with correct structure
+zip -r ../workflows.zip workflows/
+
+# Return to root
+cd ..
+
+# Verify package structure
+echo "Verifying workflows.zip structure..."
+unzip -l workflows.zip | head -30
+
+# Count workflows (should see 6 workflow.json files)
+WORKFLOW_COUNT=$(unzip -l workflows.zip | grep -c "workflow.json")
+echo "Found $WORKFLOW_COUNT workflows"
+
+if [ "$WORKFLOW_COUNT" -eq 6 ]; then
+  echo "✅ Workflow package validated (6 workflows)"
+else
+  echo "⚠️  Expected 6 workflows, found $WORKFLOW_COUNT"
+fi
+
+# Check package size (should be ~15-20 KB)
+ls -lh workflows.zip
+```
+
+**Expected output:**
+```
+Archive:  workflows.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+        0  11-16-2024 14:23   workflows/
+        0  11-16-2024 14:23   workflows/ingest275/
+     5432  11-16-2024 14:23   workflows/ingest275/workflow.json
+        0  11-16-2024 14:23   workflows/ingest278/
+     4876  11-16-2024 14:23   workflows/ingest278/workflow.json
+...
+Found 6 workflows
+✅ Workflow package validated (6 workflows)
+-rw-r--r-- 1 user user 16K Nov 16 14:23 workflows.zip
+```
+
+#### Method 2: Using PowerShell
+
+```powershell
+# Create workflow package
+$workflowPath = "logicapps/workflows"
+$zipPath = "workflows.zip"
+
+# Ensure we're in the right directory
+Push-Location (Split-Path $workflowPath -Parent)
+
+# Create ZIP
+Compress-Archive -Path (Split-Path $workflowPath -Leaf) -DestinationPath "../$zipPath" -Force
+
+Pop-Location
+
+# Verify
+if (Test-Path $zipPath) {
+    Write-Host "✅ Workflow package created: $zipPath"
+    Write-Host "Package size: $((Get-Item $zipPath).Length / 1KB) KB"
+} else {
+    Write-Error "❌ Failed to create workflow package"
+    exit 1
+}
+```
+
+### Deploying Workflows to Logic App
+
+#### Prerequisites
+
+Before deploying workflows:
+
+- [ ] Infrastructure deployed successfully
+- [ ] Logic App Standard is in "Running" state
+- [ ] Logic App name is known (format: `{baseName}-la`)
+- [ ] Resource group exists
+- [ ] Azure CLI authenticated
+- [ ] Workflow package (`workflows.zip`) created and validated
+
+#### Deployment Process
+
+**Step 1: Verify Logic App Status**
+
+```bash
+RG_NAME="pchp-attachments-prod-rg"
+LOGIC_APP_NAME="hipaa-attachments-prod-la"
+
+# Check Logic App state
+STATUS=$(az webapp show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query "state" -o tsv)
+
+echo "Logic App Status: $STATUS"
+
+if [ "$STATUS" != "Running" ]; then
+  echo "⚠️  Warning: Logic App is not running. Current state: $STATUS"
+  echo "Attempting to start..."
+  az webapp start --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
+  sleep 30
+fi
+```
+
+**Step 2: Deploy Workflow Package**
+
+```bash
+# Deploy workflows ZIP to Logic App
+az webapp deploy \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --src-path workflows.zip \
+  --type zip \
+  --async false
+
+# Check deployment status
+if [ $? -eq 0 ]; then
+  echo "✅ Workflows deployed successfully"
+else
+  echo "❌ Workflow deployment failed"
+  exit 1
+fi
+```
+
+**Deployment Parameters:**
+- `--src-path`: Path to workflows.zip file
+- `--type zip`: Deployment type (must be "zip" for Logic Apps)
+- `--async false`: Wait for deployment to complete (recommended)
+
+**Step 3: Restart Logic App**
+
+```bash
+# Restart Logic App to ensure workflows are loaded
+echo "Restarting Logic App to load new workflows..."
+az webapp restart \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME"
+
+# Wait for restart
+echo "Waiting 30 seconds for Logic App to restart..."
+sleep 30
+
+# Verify restart completed
+STATUS=$(az webapp show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query "state" -o tsv)
+
+echo "Logic App Status after restart: $STATUS"
+```
+
+**Step 4: Verify Workflow Deployment**
+
+```bash
+# List deployed workflows using REST API
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+az rest --method GET \
+  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01" \
+  --query "value[].{Name:name, State:properties.state, Kind:kind}" \
+  --output table
+
+# Expected output:
+# Name                       State      Kind
+# -------------------------  ---------  ---------
+# ingest275                  Enabled    Stateful
+# ingest278                  Enabled    Stateful
+# replay278                  Enabled    Stateful
+# rfai277                    Enabled    Stateful
+# process_appeals            Enabled    Stateful
+# process_authorizations     Enabled    Stateful
+```
+
+### Workflow Deployment via GitHub Actions
+
+The deployment workflows automatically handle workflow packaging and deployment:
+
+```yaml
+- name: Package Logic App workflows
+  shell: bash
+  run: |
+    set -euo pipefail
+    WF_PATH="logicapps/workflows"
+    PARENT_DIR="$(dirname "$WF_PATH")"
+    BASE_NAME="$(basename "$WF_PATH")"
+
+    echo "Packaging workflows from: $WF_PATH"
+    pushd "$PARENT_DIR" > /dev/null
+    zip -r ../workflows.zip "$BASE_NAME"
+    popd > /dev/null
+
+    echo "✓ Workflow package created"
+    unzip -l workflows.zip | head -20
+
+- name: Deploy Logic App workflows
+  uses: azure/cli@v2
+  with:
+    inlineScript: |
+      az webapp deploy \
+        --resource-group "${{ env.RESOURCE_GROUP }}" \
+        --name "${{ env.LOGIC_APP_NAME }}" \
+        --src-path workflows.zip \
+        --type zip
+      echo "✓ Workflows deployed"
+
+- name: Restart Logic App
+  uses: azure/cli@v2
+  with:
+    inlineScript: |
+      az webapp restart \
+        --resource-group "${{ env.RESOURCE_GROUP }}" \
+        --name "${{ env.LOGIC_APP_NAME }}"
+      echo "✓ Logic App restarted"
+```
+
+### Troubleshooting Workflow Deployment
+
+#### Issue: "Could not find workflows.zip"
+
+**Cause**: Package not created or incorrect path
+
+**Solution**:
+```bash
+# Verify package exists
+ls -l workflows.zip
+
+# Check current directory
+pwd
+
+# Recreate package if needed
+cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
+```
+
+#### Issue: "Deployment timed out"
+
+**Cause**: Large workflow package or slow network
+
+**Solution**:
+```bash
+# Check package size (should be < 50 MB)
+ls -lh workflows.zip
+
+# Deploy with increased timeout
+az webapp deploy \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --src-path workflows.zip \
+  --type zip \
+  --timeout 600  # 10 minutes
+```
+
+#### Issue: "Workflows not appearing in portal"
+
+**Cause**: Logic App cache not refreshed
+
+**Solution**:
+```bash
+# Force restart Logic App
+az webapp stop --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
+sleep 10
+az webapp start --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
+sleep 30
+
+# Verify workflows via API
+az rest --method GET \
+  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01"
+```
+
+#### Issue: "Workflows show as 'Disabled'"
+
+**Cause**: Workflow trigger configuration missing or API connections not authenticated
+
+**Solution**:
+1. Check API connections are authenticated (see [Post-Deployment Configuration](#post-deployment-configuration))
+2. Enable workflow manually in portal
+3. Review workflow run history for errors
+
+### Workflow Deployment Timeline
+
+| Step | Duration | Description |
+|------|----------|-------------|
+| **Package Creation** | 5-10 seconds | Create workflows.zip |
+| **Upload to Logic App** | 30-60 seconds | Transfer and extract ZIP |
+| **Logic App Restart** | 30-45 seconds | Reload workflow definitions |
+| **Workflow Initialization** | 15-30 seconds | Initialize triggers and connections |
+| **Total** | **~2-3 minutes** | Complete workflow deployment |
+
+### Best Practices
+
+✅ **Always validate workflow JSON** before packaging  
+✅ **Test package structure** with `unzip -l`  
+✅ **Restart Logic App** after deployment  
+✅ **Verify workflow state** via API or portal  
+✅ **Check Application Insights** for deployment errors  
+✅ **Keep deployment packages** for rollback  
+❌ **Never deploy during peak hours** without testing  
+❌ **Never skip validation** steps  
 
 ## Environment Deployment
 
@@ -1217,85 +1883,458 @@ curl -X POST "$REPLAY_URL" \
 
 ## Rollback Procedures
 
-### Workflow Rollback
+This section provides comprehensive rollback procedures for different failure scenarios.
 
-If a workflow deployment fails or causes issues:
+### Rollback Strategy Overview
 
-#### Option 1: Redeploy Previous Version
+| Failure Type | Severity | Rollback Method | Estimated Time | Data Loss Risk |
+|--------------|----------|-----------------|----------------|----------------|
+| **Workflow Deployment** | Low | Redeploy previous workflows | 2-3 minutes | None |
+| **Single Workflow Issue** | Low | Disable problematic workflow | < 1 minute | None |
+| **Infrastructure Config** | Medium | Redeploy previous Bicep | 5-10 minutes | None |
+| **Infrastructure Breaking** | High | ARM deployment rollback | 10-15 minutes | Low |
+| **Complete Failure** | Critical | Full resource group restore | 15-30 minutes | Medium |
+
+### Pre-Rollback Checklist
+
+Before initiating rollback:
+
+- [ ] **Identify the failure scope**: Workflow-only vs. infrastructure
+- [ ] **Document the error**: Capture error messages and logs
+- [ ] **Check recent changes**: Review what was deployed
+- [ ] **Assess data risk**: Check if data/messages are in flight
+- [ ] **Notify stakeholders**: Inform team of rollback action
+- [ ] **Have known-good version**: Identify working commit SHA
+
+### Workflow Rollback Procedures
+
+#### Scenario 1: Workflow Deployment Failed (Safest)
+
+**When to use:** Workflow ZIP deployment failed, infrastructure is intact
 
 ```bash
-# Get previous deployment
-PREVIOUS_COMMIT="<previous-git-commit-sha>"
+# Set variables
+RG_NAME="pchp-attachments-prod-rg"
+LOGIC_APP_NAME="hipaa-attachments-prod-la"
 
-# Checkout previous version
+# Step 1: Verify infrastructure is healthy
+echo "Checking Logic App status..."
+az webapp show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query "{Name:name, State:state, HealthCheckStatus:healthCheckStatus}" \
+  --output table
+
+# Step 2: Review deployment history
+echo "Checking recent deployments..."
+az webapp deployment list \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --output table
+
+# Step 3: No action needed - previous workflows still active
+echo "✓ Infrastructure intact, previous workflows still running"
+echo "Fix workflow issues and redeploy when ready"
+```
+
+#### Scenario 2: Workflow Causing Runtime Errors
+
+**When to use:** New workflows deployed successfully but causing errors
+
+**Step 1: Identify Previous Working Version**
+
+```bash
+# List recent commits
+git log --oneline -10 logicapps/workflows/
+
+# Example output:
+# a1b2c3d (HEAD) Update ingest275 trigger config
+# d4e5f6g Add retry logic to QNXT calls
+# g7h8i9j Working version before changes  ← Use this one
+
+PREVIOUS_COMMIT="g7h8i9j"  # Last known good commit
+```
+
+**Step 2: Checkout Previous Workflows**
+
+```bash
+# Create rollback branch for tracking
+git checkout -b rollback/workflows-$(date +%Y%m%d-%H%M%S)
+
+# Restore previous workflow versions
 git checkout "$PREVIOUS_COMMIT" -- logicapps/workflows/
 
-# Package workflows
-cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
+# Verify files were restored
+git status
+# Should show modified files in logicapps/workflows/
+```
 
-# Redeploy
+**Step 3: Package and Deploy Previous Version**
+
+```bash
+# Package workflows
+cd logicapps
+zip -r ../workflows-rollback.zip workflows/
+cd ..
+
+# Verify package
+unzip -l workflows-rollback.zip | grep workflow.json
+# Should show 6 workflow.json files
+
+# Deploy rollback package
+echo "Deploying previous workflow version..."
 az webapp deploy \
   --resource-group "$RG_NAME" \
   --name "$LOGIC_APP_NAME" \
-  --src-path workflows.zip \
-  --type zip
+  --src-path workflows-rollback.zip \
+  --type zip \
+  --async false
 
-# Restart
+# Restart Logic App
+echo "Restarting Logic App..."
 az webapp restart \
   --resource-group "$RG_NAME" \
   --name "$LOGIC_APP_NAME"
+
+# Wait for restart
+sleep 30
+
+echo "✅ Workflow rollback complete"
 ```
 
-#### Option 2: Disable Problem Workflow
+**Step 4: Verify Rollback Success**
 
 ```bash
-# Navigate to Azure Portal → Logic App → Workflows
-# Select problematic workflow
-# Click "Disable"
-# This prevents the workflow from triggering while you investigate
+# Check Logic App status
+STATUS=$(az webapp show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query "state" -o tsv)
+
+echo "Logic App Status: $STATUS"
+
+# List workflows and their state
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+az rest --method GET \
+  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01" \
+  --query "value[].{Name:name, State:properties.state}" \
+  --output table
+
+# Check Application Insights for recent errors
+echo "Checking for errors in last 5 minutes..."
+AI_NAME="${LOGIC_APP_NAME%-la}-ai"
+az monitor app-insights query \
+  --app "$AI_NAME" \
+  --resource-group "$RG_NAME" \
+  --analytics-query "traces | where timestamp > ago(5m) and severityLevel >= 3 | summarize count()" \
+  --output table
 ```
 
-### Infrastructure Rollback
+#### Scenario 3: Disable Single Problematic Workflow
 
-If infrastructure deployment causes issues:
-
-#### Option 1: Redeploy Previous Template
+**When to use:** Only one workflow is problematic, others working fine
 
 ```bash
-# Checkout previous Bicep template
-git checkout "$PREVIOUS_COMMIT" -- infra/main.bicep
+WORKFLOW_NAME="ingest275"  # Problem workflow
 
-# Review changes
+# Option A: Via Azure Portal
+# 1. Navigate to Logic App → Workflows
+# 2. Click on problematic workflow (e.g., "ingest275")
+# 3. Click "Disable" button
+# 4. Confirm disabling
+
+# Option B: Via Azure CLI (requires REST API)
+# Note: Direct disable via CLI is limited; portal is recommended
+
+echo "Manual steps:"
+echo "1. Open Azure Portal"
+echo "2. Navigate to: $LOGIC_APP_NAME → Workflows → $WORKFLOW_NAME"
+echo "3. Click 'Disable'"
+echo "4. Review run history for root cause"
+```
+
+### Infrastructure Rollback Procedures
+
+#### Scenario 4: Infrastructure Configuration Change Rollback
+
+**When to use:** Bicep deployment changed configuration but didn't break resources
+
+**Step 1: Identify Previous Working Template**
+
+```bash
+# List recent changes to infrastructure
+git log --oneline -10 infra/
+
+# Example output:
+# x1y2z3a Update Service Bus topic config
+# a2b3c4d Add new storage container
+# d5e6f7g Stable infrastructure  ← Use this one
+
+PREVIOUS_COMMIT="d5e6f7g"
+```
+
+**Step 2: Review What-If for Rollback**
+
+```bash
+# Checkout previous template to temp location
+git show "$PREVIOUS_COMMIT:infra/main.bicep" > /tmp/previous-main.bicep
+
+# Run What-If to see rollback changes
 az deployment group what-if \
   --resource-group "$RG_NAME" \
-  --template-file infra/main.bicep \
-  --parameters baseName="$BASE_NAME"
+  --template-file /tmp/previous-main.bicep \
+  --parameters baseName="$BASE_NAME" \
+               location="$LOCATION" \
+               sftpHost="$SFTP_HOST" \
+               sftpUsername="$SFTP_USERNAME" \
+               sftpPassword="$SFTP_PASSWORD" \
+               serviceBusName="$SERVICE_BUS_NAME" \
+               iaName="$IA_NAME" \
+               connectorLocation="$CONNECTOR_LOCATION" \
+  --no-pretty-print
 
-# Deploy previous version
-az deployment group create \
-  --resource-group "$RG_NAME" \
-  --template-file infra/main.bicep \
-  --parameters baseName="$BASE_NAME"
+# Review output carefully!
+# Look for any resource deletions (-)
 ```
 
-#### Option 2: Delete and Recreate Resource Group (DRASTIC)
-
-**WARNING: This deletes ALL resources. Only use in non-production or as last resort.**
+**Step 3: Deploy Previous Infrastructure Version**
 
 ```bash
-# Export data first (if needed)
-# ...
+# Create rollback deployment
+DEPLOY_NAME="rollback-infra-$(date +%Y%m%d-%H%M%S)"
+
+az deployment group create \
+  --resource-group "$RG_NAME" \
+  --template-file /tmp/previous-main.bicep \
+  --parameters baseName="$BASE_NAME" \
+               location="$LOCATION" \
+               sftpHost="$SFTP_HOST" \
+               sftpUsername="$SFTP_USERNAME" \
+               sftpPassword="$SFTP_PASSWORD" \
+               serviceBusName="$SERVICE_BUS_NAME" \
+               iaName="$IA_NAME" \
+               connectorLocation="$CONNECTOR_LOCATION" \
+  --name "$DEPLOY_NAME" \
+  --verbose
+
+# Monitor deployment
+az deployment group show \
+  --resource-group "$RG_NAME" \
+  --name "$DEPLOY_NAME" \
+  --query "{Name:name, State:properties.provisioningState, Timestamp:properties.timestamp}"
+```
+
+**Step 4: Restart Logic App After Infrastructure Rollback**
+
+```bash
+# Restart to pick up infrastructure changes
+az webapp restart \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME"
+
+sleep 30
+
+echo "✅ Infrastructure rollback complete"
+```
+
+#### Scenario 5: Complete Infrastructure Failure (Advanced)
+
+**When to use:** Infrastructure deployment broke critical resources
+
+**⚠️ WARNING: This is a complex rollback. Use only for critical failures.**
+
+**Step 1: Export Current Resource State (if possible)**
+
+```bash
+# Export current deployment for reference
+az group export \
+  --resource-group "$RG_NAME" \
+  --output json > "/tmp/failed-deployment-$(date +%Y%m%d-%H%M%S).json"
+
+# Export Logic App configuration
+az webapp config show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --output json > "/tmp/logic-app-config-backup.json"
+```
+
+**Step 2: List Deployment History**
+
+```bash
+# Show recent deployments
+az deployment group list \
+  --resource-group "$RG_NAME" \
+  --query "reverse(sort_by([].{Name:name, State:properties.provisioningState, Time:properties.timestamp}, &Time))" \
+  --output table
+
+# Identify last successful deployment
+LAST_SUCCESS_DEPLOY="hipaa-infra-deployment-20241115"  # Example
+```
+
+**Step 3: Rollback to Last Successful Deployment**
+
+```bash
+# Get deployment details
+az deployment group show \
+  --resource-group "$RG_NAME" \
+  --name "$LAST_SUCCESS_DEPLOY" \
+  --query "{Template:properties.templateLink, Parameters:properties.parameters}" \
+  --output jsonc > /tmp/last-success-deployment.json
+
+# Export template from successful deployment
+az deployment group export \
+  --resource-group "$RG_NAME" \
+  --name "$LAST_SUCCESS_DEPLOY" \
+  --output json > /tmp/success-template.json
+
+# Redeploy using successful template
+az deployment group create \
+  --resource-group "$RG_NAME" \
+  --template-file /tmp/success-template.json \
+  --name "rollback-to-$LAST_SUCCESS_DEPLOY-$(date +%Y%m%d-%H%M%S)"
+```
+
+#### Scenario 6: Complete Resource Group Restore (NUCLEAR OPTION)
+
+**When to use:** Everything is broken, need clean slate
+
+**⚠️ EXTREME WARNING:**
+- This **DELETES ALL RESOURCES** in the resource group
+- This **LOSES ALL DATA** that isn't backed up
+- **ONLY USE IN DEV/UAT** environments
+- **NEVER USE IN PRODUCTION** without explicit approval and backup verification
+
+```bash
+# FINAL CONFIRMATION
+read -p "⚠️  This will DELETE ALL resources. Type 'DELETE-EVERYTHING' to confirm: " CONFIRM
+if [ "$CONFIRM" != "DELETE-EVERYTHING" ]; then
+  echo "Cancelled. Confirmation text did not match."
+  exit 1
+fi
+
+# Backup before destruction
+echo "Creating final backups..."
+
+# Export resource group
+az group export \
+  --resource-group "$RG_NAME" \
+  --output json > "/tmp/pre-delete-export-$(date +%Y%m%d-%H%M%S).json"
+
+# List resources for record
+az resource list \
+  --resource-group "$RG_NAME" \
+  --output table > "/tmp/pre-delete-resources-$(date +%Y%m%d-%H%M%S).txt"
 
 # Delete resource group
-az group delete --name "$RG_NAME" --yes
+echo "Deleting resource group: $RG_NAME"
+az group delete \
+  --name "$RG_NAME" \
+  --yes \
+  --no-wait
 
-# Wait for deletion to complete
+# Monitor deletion
+echo "Monitoring deletion progress..."
+while az group exists --name "$RG_NAME" | grep -q "true"; do
+  echo "Still deleting... (waiting 30s)"
+  sleep 30
+done
+
+echo "✅ Resource group deleted"
 
 # Redeploy from known good state
+echo "Redeploying from known good configuration..."
+KNOWN_GOOD_COMMIT="<insert-commit-sha>"
+
 git checkout "$KNOWN_GOOD_COMMIT"
 
-# Run full deployment
-# (follow deployment steps above)
+# Run full deployment (follow Environment Deployment section)
+az group create --name "$RG_NAME" --location "$LOCATION"
+
+# Deploy infrastructure...
+# Deploy workflows...
+# Configure post-deployment...
+```
+
+### Rollback Verification Checklist
+
+After any rollback, verify:
+
+- [ ] **Infrastructure Resources**
+  ```bash
+  az resource list --resource-group "$RG_NAME" --output table
+  ```
+
+- [ ] **Logic App Running**
+  ```bash
+  az webapp show --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME" --query state
+  ```
+
+- [ ] **Workflows Enabled**
+  ```bash
+  # Check via API or portal
+  ```
+
+- [ ] **No Recent Errors in App Insights**
+  ```bash
+  az monitor app-insights query --app "$AI_NAME" --analytics-query "traces | where timestamp > ago(10m) and severityLevel >= 3"
+  ```
+
+- [ ] **Service Bus Topics Exist**
+  ```bash
+  az servicebus topic list --resource-group "$RG_NAME" --namespace-name "$SB_NAME"
+  ```
+
+- [ ] **Storage Account Accessible**
+  ```bash
+  az storage account show --name "$STORAGE_NAME" --query provisioningState
+  ```
+
+### Post-Rollback Actions
+
+1. **Document the Incident**
+   - What failed
+   - What was rolled back
+   - Root cause (if known)
+   - Time to resolution
+
+2. **Review Logs**
+   - Application Insights
+   - Azure Activity Log
+   - GitHub Actions logs
+
+3. **Notify Stakeholders**
+   - Inform team of rollback completion
+   - Provide incident summary
+   - Outline plan to prevent recurrence
+
+4. **Plan Forward**
+   - Fix root cause in dev/test
+   - Add validation checks
+   - Update deployment procedures if needed
+
+### Emergency Contacts
+
+**Deployment Issues:**
+- GitHub Actions: Check repository settings → Actions
+- Azure Support: Create support ticket in portal
+- Team Lead: [Contact information]
+
+**Data Recovery:**
+- Backup verification: Check storage account archives
+- Point-in-time restore: Available for critical data
+
+### Rollback Testing
+
+**Regularly test rollback procedures** in DEV environment:
+
+```bash
+# Monthly rollback drill
+# 1. Deploy test change to DEV
+# 2. Immediately roll back
+# 3. Verify system functionality
+# 4. Document any issues with procedure
+# 5. Update this guide based on findings
 ```
 
 ## Troubleshooting
