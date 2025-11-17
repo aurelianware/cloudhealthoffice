@@ -6,7 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Manual approval gate before production deployment
+  approval-gate:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: PROD-approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Deployment Approval Required
+        run: |
+          echo "🔒 Manual approval required for PROD deployment"
+          echo "⏳ Waiting for approval from configured reviewers..."
+          echo "📝 Deployment triggered by: ${{ github.actor }}"
+          echo "📝 Ref: ${{ github.ref }}"
+          echo "📝 SHA: ${{ github.sha }}"
+
   deploy:
+    needs: approval-gate
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: PROD
@@ -289,6 +306,15 @@ jobs:
 
             # Check workflows
             echo "Checking deployed workflows..."
+            WORKFLOW_COUNT=$(az rest --method GET \
+              --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
+              --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
+
+            echo "Found $WORKFLOW_COUNT workflows"
+            if [ "$WORKFLOW_COUNT" -lt 4 ]; then
+              echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
+            fi
+
             az rest --method GET \
               --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
               --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows (may need permissions)"
@@ -361,14 +387,30 @@ jobs:
             echo "=== Rollback Summary ==="
             echo "❌ Deployment failed. Please review the errors above."
             echo "📋 Diagnostic information has been collected."
-            echo "🔧 To manually rollback:"
+            echo ""
+            echo "🔧 Automated Rollback Options:"
+            echo "   Option 1: Re-run a previous successful deployment"
+            echo "   - Go to Actions tab → Select successful run → Re-run jobs"
+            echo ""
+            echo "   Option 2: Revert to last known good commit"
+            echo "   - git revert <bad-commit>"
+            echo "   - git push origin main"
+            echo "   Or use workflow_dispatch to redeploy a specific commit"
+            echo ""
+            echo "🔍 Manual Investigation Steps:"
             echo "   1. Review the deployment errors above"
             echo "   2. Check Logic App configuration in Azure Portal"
             echo "   3. Verify API connections are properly configured"
             echo "   4. Review Application Insights for runtime errors"
+            echo "   5. Check Service Bus topic message queues"
+            echo "   6. Verify Storage Account blob containers"
             echo ""
             echo "⚠️  IMPORTANT: The infrastructure may be partially deployed."
             echo "   Please verify resource state before retrying deployment."
+            echo ""
+            echo "📞 Escalation: If rollback is required, contact:"
+            echo "   - DevOps team for infrastructure issues"
+            echo "   - Application team for workflow issues"
 
       - name: Deployment Success Summary
         if: success()
