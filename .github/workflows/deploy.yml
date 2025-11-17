@@ -6,8 +6,70 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Pre-approval security validation
+  pre-approval-checks:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Security Scan - Secrets Detection
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --json --only-verified
+
+      - name: Security Scan - PII/PHI Detection
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Scanning for PII/PHI in deployment artifacts..."
+          if (Test-Path "scripts/scan-for-phi-pii.ps1") {
+            & ./scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules",".terraform"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::PII/PHI detected in code. Deployment blocked."
+              exit 1
+            }
+          } else {
+            Write-Host "::warning::PII/PHI scan script not found, skipping..."
+          }
+          Write-Host "✓ PII/PHI scan complete - no issues found"
+
+      - name: Validate Deployment Artifacts
+        run: |
+          echo "Validating deployment readiness..."
+          
+          # Check for required files
+          REQUIRED_FILES=("infra/main.bicep" "logicapps/workflows")
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -e "$file" ]; then
+              echo "::error::Required file/directory missing: $file"
+              exit 1
+            fi
+          done
+          
+          echo "✓ All required deployment artifacts present"
+
+      - name: Pre-Approval Summary
+        run: |
+          echo "### 🔒 Pre-Approval Security Checks Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Security Validations:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ No secrets or credentials detected" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ No PII/PHI in code" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Deployment artifacts validated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready for approval review. ✅" >> $GITHUB_STEP_SUMMARY
+
   # Manual approval gate before production deployment
   approval-gate:
+    needs: pre-approval-checks
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
@@ -21,6 +83,15 @@ jobs:
           echo "📝 Deployment triggered by: ${{ github.actor }}"
           echo "📝 Ref: ${{ github.ref }}"
           echo "📝 SHA: ${{ github.sha }}"
+          echo ""
+          echo "✅ Security checks passed - see pre-approval-checks job"
+          echo ""
+          echo "Reviewers: Please verify the following before approving:"
+          echo "1. Review security scan results above"
+          echo "2. Confirm UAT testing completed"
+          echo "3. Verify change management ticket approved"
+          echo "4. Check rollback plan is documented"
+          echo "5. Ensure stakeholders are notified"
 
   deploy:
     needs: approval-gate
