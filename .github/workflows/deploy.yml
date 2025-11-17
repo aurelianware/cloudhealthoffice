@@ -42,13 +42,13 @@ jobs:
           echo "Validating Required Secrets and Variables"
           echo "=========================================="
           echo ""
-          
+
           # Track validation failures
           FAILED=0
-          
+
           # Validate required secrets (check if they're not empty)
           echo "Checking required secrets..."
-          
+
           REQUIRED_SECRETS=(
             "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
             "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
@@ -57,7 +57,7 @@ jobs:
             "SFTP_USERNAME:${{ secrets.SFTP_USERNAME }}"
             "SFTP_PASSWORD:${{ secrets.SFTP_PASSWORD }}"
           )
-          
+
           for item in "${REQUIRED_SECRETS[@]}"; do
             SECRET_NAME="${item%%:*}"
             SECRET_VALUE="${item#*:}"
@@ -68,10 +68,10 @@ jobs:
               echo "✅ $SECRET_NAME is configured"
             fi
           done
-          
+
           echo ""
           echo "Checking required repository variables..."
-          
+
           REQUIRED_VARS=(
             "AZURE_RG_NAME:${{ vars.AZURE_RG_NAME }}"
             "AZURE_LOCATION:${{ vars.AZURE_LOCATION }}"
@@ -81,7 +81,7 @@ jobs:
             "SERVICE_BUS_NAME:${{ vars.SERVICE_BUS_NAME }}"
             "STORAGE_SKU:${{ vars.STORAGE_SKU }}"
           )
-          
+
           for item in "${REQUIRED_VARS[@]}"; do
             VAR_NAME="${item%%:*}"
             VAR_VALUE="${item#*:}"
@@ -92,7 +92,7 @@ jobs:
               echo "✅ $VAR_NAME = $VAR_VALUE"
             fi
           done
-          
+
           echo ""
           if [ $FAILED -eq 1 ]; then
             echo "=========================================="

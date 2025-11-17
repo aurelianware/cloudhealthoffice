@@ -62,19 +62,19 @@ jobs:
           echo "Validating Required Secrets (UAT)"
           echo "=========================================="
           echo ""
-          
+
           # Track validation failures
           FAILED=0
-          
+
           # Validate required secrets for UAT environment
           echo "Checking required UAT secrets..."
-          
+
           REQUIRED_SECRETS=(
             "AZURE_CLIENT_ID_UAT:${{ secrets.AZURE_CLIENT_ID_UAT }}"
             "AZURE_TENANT_ID_UAT:${{ secrets.AZURE_TENANT_ID_UAT }}"
             "AZURE_SUBSCRIPTION_ID_UAT:${{ secrets.AZURE_SUBSCRIPTION_ID_UAT }}"
           )
-          
+
           for item in "${REQUIRED_SECRETS[@]}"; do
             SECRET_NAME="${item%%:*}"
             SECRET_VALUE="${item#*:}"
@@ -85,7 +85,7 @@ jobs:
               echo "✅ $SECRET_NAME is configured"
             fi
           done
-          
+
           echo ""
           if [ $FAILED -eq 1 ]; then
             echo "=========================================="
