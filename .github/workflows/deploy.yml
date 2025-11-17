@@ -10,7 +10,7 @@ jobs:
   approval-gate:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: 
+    environment:
       name: PROD-approval
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -309,12 +309,12 @@ jobs:
             WORKFLOW_COUNT=$(az rest --method GET \
               --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
               --query "value | length(@)" -o tsv 2>/dev/null || echo "0")
-            
+
             echo "Found $WORKFLOW_COUNT workflows"
             if [ "$WORKFLOW_COUNT" -lt 4 ]; then
               echo "::warning::Expected 4 workflows (ingest275, ingest278, replay278, rfai277), found $WORKFLOW_COUNT"
             fi
-            
+
             az rest --method GET \
               --uri "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.Web/sites/$APP_NAME/workflows?api-version=2022-03-01" \
               --query "value[].{Name:name, State:properties.state}" -o table || echo "Unable to list workflows (may need permissions)"
