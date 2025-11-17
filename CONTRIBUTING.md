@@ -3,6 +3,7 @@
 Welcome to the HIPAA Attachments repository! This guide will help you get started with development and contributions.
 
 ## Table of Contents
+- [License and Contribution Agreement](#license-and-contribution-agreement)
 - [Getting Started](#getting-started)
 - [Prerequisites](#prerequisites)
 - [Development Setup](#development-setup)
@@ -11,6 +12,27 @@ Welcome to the HIPAA Attachments repository! This guide will help you get starte
 - [Code Review Standards](#code-review-standards)
 - [Troubleshooting](#troubleshooting)
 - [Best Practices](#best-practices)
+
+## License and Contribution Agreement
+
+This project is licensed under the **Apache License 2.0**. By contributing to this project, you agree that your contributions will be licensed under the same license.
+
+### Key Points About Contributing
+
+- **License Grant**: All contributions are subject to the Apache License 2.0
+- **Patent Grant**: Contributors grant a patent license for their contributions as defined in the Apache License 2.0
+- **Copyright**: Contributors retain copyright to their contributions while granting the project rights under Apache 2.0
+- **HIPAA Compliance**: Contributors should be aware this project handles PHI; review [SECURITY.md](SECURITY.md) for compliance guidelines
+
+For the full license text, see [LICENSE](LICENSE).
+
+### Why Apache 2.0?
+
+We chose Apache 2.0 because it:
+- Is widely accepted in healthcare and enterprise environments
+- Provides patent protection for contributors and users
+- Supports commercial use in HIPAA-regulated environments
+- Has clear, well-understood terms for contributions
 
 ## Getting Started
 
@@ -286,11 +308,43 @@ Validates GitHub Actions workflows:
 - Best practices
 
 #### 4. PowerShell Validation
-Checks all `.ps1` files for syntax errors
+Checks all `.ps1` files for:
+- Syntax errors
+- PSScriptAnalyzer best practices (errors only)
+- Script structure and conventions
+
+#### 5. EDI X12 Validation
+Validates all `.edi` files for:
+- X12 envelope structure (ISA/GS/ST/SE/GE/IEA)
+- Trading partner identifiers (Availity/PCHP)
+- Transaction types (275/277/278)
+- Segment counts and format
+
+#### 6. Security Scanning
+Scans code for security issues:
+- Secret detection (Trufflehog)
+- PII/PHI pattern detection
+- Hardcoded credentials
+- HIPAA compliance violations
+
+#### 7. File Encoding Checks
+Validates file encodings:
+- UTF-8 encoding (recommended)
+- No binary content in text files
+- No BOM (Byte Order Mark) in source files
+
+#### 8. HIPAA Compliance Patterns
+Checks for HIPAA compliance:
+- HTTPS usage (no unencrypted HTTP)
+- Encryption settings in infrastructure
+- PHI handling in code
+- Secure logging practices
 
 ### Local Validation Commands
 
 Run these before pushing to catch issues early:
+
+#### Quick Validation Suite
 
 ```bash
 # Complete validation suite
@@ -309,8 +363,100 @@ echo "=== Validating PowerShell scripts ==="
 pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
 pwsh -Command "Get-Content './fix_repo_structure.ps1' | Out-Null"
 
+# 4. EDI X12 validation
+echo "=== Validating EDI files ==="
+pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
+
+# 5. Security scan for PII/PHI
+echo "=== Scanning for PII/PHI ==="
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
+
 echo "✅ All validations passed"
 ```
+
+#### Advanced Validation Tools
+
+The repository includes specialized validation scripts:
+
+**EDI X12 Validator** (`scripts/validate-edi-x12.ps1`):
+```powershell
+# Validate a single EDI file
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi
+
+# Validate all EDI files with strict checking
+pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
+
+# Validate specific transaction type
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
+```
+
+**Features:**
+- ISA/IEA envelope validation
+- GS/GE functional group validation
+- ST/SE transaction set validation
+- Trading partner ID verification (Availity: 030240928, PCHP: 66917)
+- Segment count validation
+- Transaction type detection (275/277/278)
+
+**Security Scanner** (`scripts/scan-for-phi-pii.ps1`):
+```powershell
+# Scan entire repository
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
+
+# Scan specific directory with strict mode
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path logicapps/ -FailOnWarning
+
+# Scan for secrets before commit
+pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
+```
+
+**Detects:**
+- Social Security Numbers (SSN) - formatted (XXX-XX-XXXX)
+- Medical Record Numbers (MRN)
+- Date of Birth (DOB)
+- Credit card numbers
+- Email addresses and phone numbers
+- Patient/Member IDs
+- Azure API keys and secrets
+- Hardcoded passwords
+- Connection strings
+- Private keys
+- JWT tokens
+- Unencrypted PHI transmission
+- PHI in logs
+
+**Context-Aware Filtering:**
+- Excludes test files (test-*.edi, test-*.json)
+- Excludes documentation (.md files)
+- Excludes trading partner IDs (030240928, 66917)
+- Provides severity levels (Critical, High, Medium, Low)
+
+### Continuous Integration Checks
+
+When you create a pull request, the following automated checks run:
+
+**Smoke Tests** (`.github/workflows/sanity.yml`):
+- Repository structure validation
+- All 4 Logic Apps workflows validation
+- Bicep template compilation
+- Service Bus configuration verification
+- X12 schema presence checks
+- PowerShell script syntax validation
+- EDI file format validation
+- Security scanning
+- Test data validation
+
+**PR Lint** (`.github/workflows/pr-lint.yml`):
+- JSON workflow validation
+- GitHub Actions workflow linting (actionlint)
+- YAML linting (yamllint)
+- Bicep compilation
+- PowerShell Script Analyzer (PSScriptAnalyzer)
+- EDI X12 validation
+- Secret detection (Trufflehog)
+- PII/PHI scanning
+- File encoding validation
+- HIPAA compliance pattern checks
 
 ### Testing Workflows
 
@@ -609,6 +755,36 @@ For questions or clarifications:
 - Open a [GitHub Discussion](https://github.com/aurelianware/hipaa-attachments/discussions)
 - Review existing documentation
 - Check GitHub Copilot instructions for guidance
+
+---
+
+## Legal and Licensing
+
+### Contributor License Agreement
+
+By submitting a pull request or contribution to this project, you certify that:
+
+1. **Original Work**: Your contribution is your original work or you have rights to submit it
+2. **License Agreement**: You agree to license your contribution under the Apache License 2.0
+3. **Patent Grant**: You grant a patent license as specified in the Apache License 2.0
+4. **No Conflicts**: Your contribution does not violate any third-party rights or licenses
+5. **Compliance Awareness**: You understand this project handles PHI and have reviewed security guidelines
+
+### Third-Party Code
+
+If your contribution includes third-party code or dependencies:
+- Ensure compatibility with Apache 2.0 license
+- Document the source, license, and any required attribution
+- Update dependency documentation as needed
+- For healthcare dependencies, verify HIPAA compliance considerations
+
+### Security and Compliance
+
+Contributors working on HIPAA-related features must:
+- Review [SECURITY.md](SECURITY.md) for compliance requirements
+- Never commit PHI or test data containing real patient information
+- Follow secure coding practices and encryption requirements
+- Report security vulnerabilities responsibly (see SECURITY.md)
 
 ---
 
