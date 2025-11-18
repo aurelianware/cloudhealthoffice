@@ -25,8 +25,15 @@ env:
   UAT_BASE_NAME: hipaa-attachments-uat
 
 jobs:
+  # Pre-approval security validation
+  pre-approval-checks:
+    uses: ./.github/workflows/pre-approval-checks.yml
+    with:
+      environment: UAT
+
   # Manual approval gate before UAT deployment
   approval-gate:
+    needs: pre-approval-checks
     runs-on: ubuntu-latest
     environment:
       name: UAT-approval
@@ -39,6 +46,15 @@ jobs:
           echo "📝 Deployment triggered by: ${{ github.actor }}"
           echo "📝 Ref: ${{ github.ref }}"
           echo "📝 SHA: ${{ github.sha }}"
+          echo ""
+          echo "✅ Security checks passed - see pre-approval-checks job"
+          echo ""
+          echo "Reviewers: Please verify the following before approving:"
+          echo "1. Review security scan results above"
+          echo "2. Confirm all PR checks passed"
+          echo "3. Verify code review completed"
+          echo "4. Check DEV testing completed"
+          echo "5. Ensure no high-severity issues"
 
   validate:
     needs: approval-gate

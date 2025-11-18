@@ -673,6 +673,9 @@ Before approving a deployment, reviewers should verify:
 - ✅ Unit tests pass
 - ✅ DEV environment tested successfully
 - ✅ No high-severity issues in PR
+- ✅ Security scans completed (TruffleHog, PII/PHI scan)
+- ✅ No secrets or credentials in code
+- ✅ Bicep validation passed
 
 **For PROD:**
 - ✅ UAT deployment successful
@@ -683,6 +686,10 @@ Before approving a deployment, reviewers should verify:
 - ✅ Stakeholders notified
 - ✅ No open critical bugs
 - ✅ Backup verified
+- ✅ Security scans passed (no critical vulnerabilities)
+- ✅ ARM What-If analysis reviewed
+- ✅ No unexpected resource deletions
+- ✅ Compliance requirements met
 
 #### Emergency Deployments
 
@@ -777,6 +784,420 @@ Reviewer clicks the link and sees:
 - Changed files
 - Test results
 - Option to Approve or Reject with comment
+
+### Deployment Audit Logging and Compliance
+
+All deployments are automatically logged for compliance and audit purposes.
+
+#### Automated Audit Trails
+
+**GitHub Actions Audit:**
+- Every deployment run is logged with:
+  - Timestamp and duration
+  - Triggered by (user/system)
+  - Branch and commit SHA
+  - Approval decisions with reviewer names
+  - Deployment outcome (success/failure)
+  - All job logs and outputs
+
+**Access GitHub Deployment History:**
+```bash
+# Using GitHub CLI
+gh run list --workflow=deploy.yml --limit 50
+
+# View specific run details
+gh run view <run-id> --log
+
+# List all approvals
+gh api /repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[] | select(.conclusion != null) | {id: .id, status: .status, conclusion: .conclusion, created_at: .created_at, actor: .actor.login}'
+```
+
+**Azure Activity Log:**
+```bash
+# Query deployment activities
+az monitor activity-log list \
+  --resource-group "pchp-attachments-prod-rg" \
+  --start-time "2024-01-01T00:00:00Z" \
+  --query "[?contains(operationName.value, 'deployments')].{Time:eventTimestamp, Caller:caller, Operation:operationName.localizedValue, Status:status.localizedValue}" \
+  --output table
+
+# Query resource changes
+az monitor activity-log list \
+  --resource-group "pchp-attachments-prod-rg" \
+  --start-time "2024-01-01T00:00:00Z" \
+  --query "[?level=='Warning' || level=='Error'].{Time:eventTimestamp, Level:level, Operation:operationName.localizedValue, Status:status.localizedValue}" \
+  --output table
+
+# Export audit logs for compliance
+az monitor activity-log list \
+  --resource-group "pchp-attachments-prod-rg" \
+  --start-time "2024-01-01T00:00:00Z" \
+  --output json > deployment-audit-$(date +%Y%m%d).json
+```
+
+#### Deployment Metrics and Tracking
+
+**Key Metrics to Monitor:**
+
+1. **Approval Time**: Time from deployment trigger to approval
+2. **Deployment Duration**: Time from approval to completion
+3. **Deployment Frequency**: Number of deployments per environment per week
+4. **Rollback Rate**: Percentage of deployments requiring rollback
+5. **Approval Rejection Rate**: Percentage of rejected deployments
+
+**Query Deployment Metrics:**
+```bash
+# GitHub CLI - Deployment frequency (last 30 days)
+gh api /repos/{owner}/{repo}/actions/runs \
+  --jq '.workflow_runs[] | select(.created_at > (now - 2592000 | strftime("%Y-%m-%dT%H:%M:%SZ"))) | {workflow: .name, status: .status, conclusion: .conclusion, created_at: .created_at}' | \
+  jq -s 'group_by(.workflow) | map({workflow: .[0].workflow, count: length})'
+
+# Average deployment duration
+gh api /repos/{owner}/{repo}/actions/runs \
+  --jq '.workflow_runs[] | select(.conclusion == "success") | {duration: (.updated_at | fromdateiso8601) - (.created_at | fromdateiso8601)}' | \
+  jq -s 'add/length | . / 60 | "Average deployment time: \(.) minutes"'
+```
+
+**Application Insights - Deployment Correlation:**
+```kusto
+// Query deployments and correlate with errors
+customEvents
+| where timestamp > ago(30d)
+| where name == "deployment_started" or name == "deployment_completed"
+| extend 
+    deploymentId = tostring(customDimensions["deploymentId"]),
+    environment = tostring(customDimensions["environment"]),
+    status = tostring(customDimensions["status"])
+| summarize 
+    DeploymentCount = count(),
+    SuccessCount = countif(status == "success"),
+    FailureCount = countif(status == "failed")
+    by environment
+| extend SuccessRate = (SuccessCount * 100.0) / DeploymentCount
+```
+
+#### Compliance Reporting
+
+**Monthly Deployment Report:**
+
+Create a monthly report including:
+- Total deployments by environment
+- Approval metrics (approved/rejected/time-to-approve)
+- Rollback incidents and root causes
+- Security scan results
+- Incident response activities
+- Change management tickets linked to deployments
+
+**Generate Compliance Report:**
+```bash
+#!/bin/bash
+# deployment-compliance-report.sh
+
+MONTH=$(date -d "last month" +%Y-%m)
+OUTPUT_DIR="compliance-reports"
+mkdir -p "$OUTPUT_DIR"
+
+echo "Generating deployment compliance report for $MONTH"
+
+# GitHub deployment data
+gh api "/repos/{owner}/{repo}/actions/runs?created=$MONTH-01..$MONTH-31" \
+  --jq '.workflow_runs[] | {id, name, status, conclusion, created_at, actor: .actor.login}' \
+  > "$OUTPUT_DIR/github-deployments-$MONTH.json"
+
+# Azure activity logs
+az monitor activity-log list \
+  --resource-group "pchp-attachments-prod-rg" \
+  --start-time "${MONTH}-01T00:00:00Z" \
+  --end-time "${MONTH}-31T23:59:59Z" \
+  --output json \
+  > "$OUTPUT_DIR/azure-activity-$MONTH.json"
+
+# Application Insights deployment events
+az monitor app-insights query \
+  --app "hipaa-attachments-prod-ai" \
+  --analytics-query "customEvents | where timestamp between(datetime('${MONTH}-01') .. datetime('${MONTH}-31')) | where name startswith 'deployment'" \
+  --output json \
+  > "$OUTPUT_DIR/app-insights-deployments-$MONTH.json"
+
+echo "✓ Compliance report generated in $OUTPUT_DIR/"
+echo "  - GitHub deployments: github-deployments-$MONTH.json"
+echo "  - Azure activity: azure-activity-$MONTH.json"
+echo "  - App Insights: app-insights-deployments-$MONTH.json"
+```
+
+#### Audit Log Retention
+
+**Retention Requirements:**
+- **GitHub Actions logs**: 90 days (default), download for long-term storage
+- **Azure Activity Logs**: 90 days (default), configure Log Analytics for extended retention
+- **Application Insights**: 90 days (default), configure 365+ days for compliance
+- **Deployment artifacts**: Retain indefinitely in artifact storage
+
+**Configure Extended Retention:**
+```bash
+# Application Insights - Set 2 year retention
+az monitor app-insights component update \
+  --app "hipaa-attachments-prod-ai" \
+  --resource-group "pchp-attachments-prod-rg" \
+  --retention-time 730
+
+# Log Analytics Workspace - Set 2 year retention
+az monitor log-analytics workspace update \
+  --resource-group "pchp-attachments-prod-rg" \
+  --workspace-name "hipaa-logs-workspace" \
+  --retention-time 730
+```
+
+### Communication and Notification Strategy
+
+Effective communication is critical for successful gated deployments.
+
+#### Stakeholder Notification Matrix
+
+| Event | DEV | UAT | PROD | Notification Method |
+|-------|-----|-----|------|---------------------|
+| **Deployment Started** | DevOps team | QA team, DevOps | All stakeholders | Slack/Teams, GitHub |
+| **Approval Needed** | N/A | UAT approvers | PROD approvers | Email, Slack/Teams |
+| **Deployment Complete** | DevOps team | QA team, DevOps | All stakeholders | Slack/Teams |
+| **Deployment Failed** | DevOps team | QA team, DevOps, Manager | All stakeholders, Exec | Email, Slack/Teams, SMS |
+| **Rollback Initiated** | DevOps team | QA team, DevOps, Manager | All stakeholders, Exec | Email, Slack/Teams, SMS |
+
+#### Pre-Deployment Communication Template
+
+**UAT Deployment Notification:**
+```markdown
+Subject: UAT Deployment Scheduled - HIPAA Attachments Release X.Y.Z
+
+Team,
+
+A UAT deployment has been triggered and is awaiting approval.
+
+**Details:**
+- Release Version: X.Y.Z
+- Triggered by: [Developer Name]
+- Branch: release/vX.Y.Z
+- Commit: [Short SHA] - [Commit Message]
+- Scheduled Time: [Timestamp]
+
+**Changes:**
+- [Brief description of changes]
+- [Link to release notes]
+- [Link to PR]
+
+**Approval Required:**
+UAT approvers, please review and approve/reject the deployment:
+[Link to GitHub Actions approval page]
+
+**Testing Plan:**
+After deployment, QA team will execute:
+- [Test scenario 1]
+- [Test scenario 2]
+- [Test scenario 3]
+
+Questions? Contact: [DevOps Team]
+```
+
+**PROD Deployment Notification:**
+```markdown
+Subject: PROD Deployment Scheduled - HIPAA Attachments Release X.Y.Z
+
+Team,
+
+A production deployment has been triggered and requires approval.
+
+**Details:**
+- Release Version: X.Y.Z
+- Triggered by: [Release Manager]
+- Branch: main
+- Commit: [Short SHA] - [Commit Message]
+- Deployment Window: [Start Time] - [End Time]
+
+**Changes:**
+[Detailed description of all changes included]
+
+**UAT Validation:**
+- UAT deployment: [Date/Time]
+- UAT testing: Completed [Date]
+- Issues found: [None / List of issues and resolutions]
+
+**Approval Required:**
+Production approvers must review and approve:
+[Link to GitHub Actions approval page]
+
+**Approval Checklist:**
+- [ ] UAT testing completed successfully
+- [ ] Change management ticket approved
+- [ ] Rollback plan documented
+- [ ] Stakeholders notified
+- [ ] No critical open issues
+
+**Rollback Plan:**
+[Brief description of rollback procedure]
+[Link to rollback documentation]
+
+**Post-Deployment:**
+- Health checks will run automatically
+- Monitoring alerts configured
+- On-call team notified
+
+Questions? Contact: [Release Manager / DevOps Lead]
+```
+
+#### Post-Deployment Communication Template
+
+**Successful Deployment:**
+```markdown
+Subject: ✅ [ENV] Deployment Complete - HIPAA Attachments Release X.Y.Z
+
+Team,
+
+The [ENV] deployment has completed successfully.
+
+**Deployment Summary:**
+- Release Version: X.Y.Z
+- Environment: [UAT/PROD]
+- Completed: [Timestamp]
+- Duration: [X minutes]
+- Approved by: [Approver Names]
+
+**Resources Deployed:**
+- Logic App: [Name]
+- Workflows: [List]
+- Infrastructure changes: [Summary]
+
+**Health Check Results:**
+✓ All health checks passed
+✓ Logic App running
+✓ Workflows enabled
+✓ API connections active
+✓ No errors in Application Insights
+
+**Next Steps:**
+[Environment-specific next steps]
+
+**Monitoring:**
+Application Insights: [Link]
+Azure Portal: [Link]
+
+Questions? Contact: [DevOps Team]
+```
+
+**Failed Deployment:**
+```markdown
+Subject: ⚠️ [ENV] Deployment FAILED - HIPAA Attachments Release X.Y.Z
+
+Team,
+
+The [ENV] deployment has failed. Rollback procedures have been initiated.
+
+**Deployment Summary:**
+- Release Version: X.Y.Z
+- Environment: [UAT/PROD]
+- Failed at: [Timestamp]
+- Error: [Brief error description]
+
+**Immediate Actions Taken:**
+- [ ] Rollback initiated
+- [ ] Incident created: [Incident ID]
+- [ ] On-call team notified
+- [ ] Previous version restored
+
+**Impact:**
+[Description of any service impact]
+
+**Root Cause:**
+[Under investigation / Known issue description]
+
+**Resolution Plan:**
+[Plan to fix and redeploy]
+
+**Status:**
+Current environment status: [Online/Degraded]
+Expected resolution: [Timeframe]
+
+For real-time updates: [Slack channel / Status page]
+
+Questions? Contact: [Incident Commander / DevOps Lead]
+```
+
+#### Emergency Deployment Procedures
+
+For critical hotfixes requiring expedited approval:
+
+**Emergency Deployment Criteria:**
+- Production system is down or severely degraded
+- Security vulnerability requiring immediate patching
+- Data integrity issue causing incorrect results
+- HIPAA compliance violation
+
+**Emergency Approval Process:**
+
+1. **Initiate Emergency Deployment:**
+   ```bash
+   # Tag commit as emergency
+   git tag -a emergency-vX.Y.Z-hotfix -m "Emergency: [Brief description]"
+   git push origin emergency-vX.Y.Z-hotfix
+   ```
+
+2. **Notify Emergency Contacts:**
+   - On-call DevOps Lead
+   - Application Owner
+   - Compliance Officer (if HIPAA-related)
+
+3. **Expedited Approval:**
+   - Requires 2 approvers from emergency contact list
+   - Must document reason in approval comment
+   - Maximum approval time: 30 minutes
+
+4. **Post-Deployment:**
+   - Immediate health check verification
+   - Create post-mortem within 24 hours
+   - Document lessons learned
+   - Update runbooks if needed
+
+**Emergency Contact List:**
+```
+Primary On-Call: [Name] - [Phone] - [Email]
+Secondary On-Call: [Name] - [Phone] - [Email]
+DevOps Manager: [Name] - [Phone] - [Email]
+Application Owner: [Name] - [Phone] - [Email]
+Compliance Officer: [Name] - [Phone] - [Email]
+```
+
+#### Integration with Ticketing Systems
+
+**Link Deployments to Change Management:**
+
+> **Note:** The following change ticket validation is a recommended enhancement not currently implemented in the workflows. Teams can add this validation as needed based on their change management requirements.
+
+**Optional Workflow Enhancement:**
+
+```yaml
+# Example: Add to deployment workflow as a validation step
+- name: Validate Change Ticket
+  run: |
+    TICKET_NUMBER="${{ github.event.head_commit.message }}" | grep -oP 'CHG\d+' || true
+    if [ -z "$TICKET_NUMBER" ]; then
+      echo "::error::No change ticket found in commit message"
+      echo "Format: 'CHG12345: Description'"
+      exit 1
+    fi
+    echo "Change ticket: $TICKET_NUMBER"
+    # Optional: Validate ticket is approved
+    # Call ticketing system API to verify status
+```
+
+**Recommended Commit Message Format:**
+```
+CHG12345: Deploy HIPAA 275 processing enhancements
+
+- Added retry logic for QNXT API calls
+- Updated X12 schema validation
+- Fixed Service Bus connection handling
+
+Approved-by: [Approver Name]
+Tested-in: UAT
+```
 
 ## Pre-Deployment Validation
 
