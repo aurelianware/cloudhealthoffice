@@ -8,7 +8,6 @@ on:
 jobs:
   # Pre-approval security validation
   pre-approval-checks:
-    if: github.event_name != 'pull_request'
     uses: ./.github/workflows/pre-approval-checks.yml
     with:
       environment: PROD
