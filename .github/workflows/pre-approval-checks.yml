@@ -51,7 +51,7 @@ jobs:
         id: artifacts-check
         run: |
           echo "Validating deployment readiness..."
-          
+
           # Check for required files
           REQUIRED_FILES=("infra/main.bicep" "logicapps/workflows")
           for file in "${REQUIRED_FILES[@]}"; do
@@ -60,7 +60,7 @@ jobs:
               exit 1
             fi
           done
-          
+
           echo "✓ All required deployment artifacts present"
 
       - name: Pre-Approval Summary
