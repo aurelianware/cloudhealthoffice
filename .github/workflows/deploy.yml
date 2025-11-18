@@ -6,8 +6,15 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Pre-approval security validation
+  pre-approval-checks:
+    uses: ./.github/workflows/pre-approval-checks.yml
+    with:
+      environment: PROD
+
   # Manual approval gate before production deployment
   approval-gate:
+    needs: pre-approval-checks
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
@@ -21,6 +28,15 @@ jobs:
           echo "📝 Deployment triggered by: ${{ github.actor }}"
           echo "📝 Ref: ${{ github.ref }}"
           echo "📝 SHA: ${{ github.sha }}"
+          echo ""
+          echo "✅ Security checks passed - see pre-approval-checks job"
+          echo ""
+          echo "Reviewers: Please verify the following before approving:"
+          echo "1. Review security scan results above"
+          echo "2. Confirm UAT testing completed"
+          echo "3. Verify change management ticket approved"
+          echo "4. Check rollback plan is documented"
+          echo "5. Ensure stakeholders are notified"
 
   deploy:
     needs: approval-gate

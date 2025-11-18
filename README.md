@@ -68,12 +68,31 @@ This solution implements the following process:
 2. **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive deployment guide
    - Prerequisites and tool installation
    - Bicep compilation and ARM deployment
+   - Environment protection rules and approval gates
    - Logic App workflow deployment
    - Post-deployment configuration
    - Verification and testing
    - Rollback procedures (6 detailed scenarios)
+   - Audit logging and compliance reporting
+   - Communication and notification strategy
 
-3. **[DEPLOYMENT-WORKFLOW-REFERENCE.md](DEPLOYMENT-WORKFLOW-REFERENCE.md)** - Quick reference
+3. **[DEPLOYMENT-GATES-GUIDE.md](DEPLOYMENT-GATES-GUIDE.md)** - ✨ Gated release strategy guide
+   - Quick start for approvers and developers
+   - Approval gate architecture
+   - Pre-approval security validation
+   - Team roles and responsibilities
+   - Communication guidelines
+   - Metrics and reporting procedures
+   - Troubleshooting and configuration
+
+4. **[GATED-RELEASE-IMPLEMENTATION-SUMMARY.md](GATED-RELEASE-IMPLEMENTATION-SUMMARY.md)** - ✨ Implementation status
+   - Executive summary of gated release strategy
+   - What's implemented and enhanced
+   - Configuration checklist
+   - Testing procedures
+   - Success criteria and next steps
+
+5. **[DEPLOYMENT-WORKFLOW-REFERENCE.md](DEPLOYMENT-WORKFLOW-REFERENCE.md)** - Quick reference
    - Deployment flow diagram
    - Documentation map
    - Required secrets and variables
@@ -103,16 +122,38 @@ For each environment (DEV/UAT/PROD), configure these secrets:
 - [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) - Complete GitHub Actions and OIDC setup
 - [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) - Detailed secrets configuration and validation
 
+### 🔒 Gated Release Strategy
+
+**All UAT and PROD deployments require manual approval** to ensure safety and compliance.
+
+**What happens during deployment:**
+1. 🔍 **Pre-approval security checks** (automatic)
+   - TruffleHog secret detection
+   - PII/PHI scanning
+   - Artifact validation
+2. ⏸️ **Approval gate** (manual review required)
+   - Configured reviewers notified
+   - Security scan results visible
+   - Approval checklist provided
+3. ✅ **Deployment proceeds** (after approval)
+   - Infrastructure deployment
+   - Logic App workflow deployment
+   - Health checks and validation
+
+**📚 Learn more:** See [DEPLOYMENT-GATES-GUIDE.md](DEPLOYMENT-GATES-GUIDE.md) for complete approval workflow details.
+
 ### Deployment Options
 
 #### 1. Automated UAT Deployment (Recommended)
-**Trigger**: Push to `release/*` branches
-**Workflow**: `.github/workflows/deploy-uat.yml`
+**Trigger**: Push to `release/*` branches  
+**Workflow**: `.github/workflows/deploy-uat.yml`  
+**Requires**: UAT approver review
 
 The UAT deployment runs automatically when you push to any `release/*` branch:
 ```bash
 git checkout -b release/v1.0.0
 git push origin release/v1.0.0
+# → Triggers pre-approval checks → Waits for UAT approval → Deploys
 ```
 
 **UAT Environment Details:**
