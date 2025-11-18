@@ -240,7 +240,6 @@ jobs:
           echo "Validating file encodings..."
 
           # Check for files with potential encoding issues
-          failed=0
           while IFS= read -r -d '' f; do
             # Skip binary files and certain directories
             if [[ "$f" =~ \.(png|jpg|jpeg|gif|pdf|zip|tar|gz|exe|dll|bin)$ ]] || \
@@ -272,7 +271,6 @@ jobs:
           echo "Validating HIPAA compliance patterns..."
 
           # Check for unencrypted HTTP in production code
-          failed=0
           while IFS= read -r -d '' f; do
             # Skip markdown and test files
             if [[ "$f" =~ \.(md|txt)$ ]] || [[ "$f" =~ test ]]; then
@@ -285,7 +283,7 @@ jobs:
                 echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
               fi
             fi
-          done < <(find . -name "*.json" -o -name "*.bicep" -o -name "*.yml" -o -name "*.yaml" -print0 2>/dev/null || true)
+          done < <(find . \( -name "*.json" -o -name "*.bicep" -o -name "*.yml" -o -name "*.yaml" \) -print0 2>/dev/null || true)
 
           # Check for encryption settings in Bicep
           if [ -f "infra/main.bicep" ]; then
