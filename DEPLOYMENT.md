@@ -1168,8 +1168,12 @@ Compliance Officer: [Name] - [Phone] - [Email]
 
 **Link Deployments to Change Management:**
 
+> **Note:** The following change ticket validation is a recommended enhancement not currently implemented in the workflows. Teams can add this validation as needed based on their change management requirements.
+
+**Optional Workflow Enhancement:**
+
 ```yaml
-# In workflow file
+# Example: Add to deployment workflow as a validation step
 - name: Validate Change Ticket
   run: |
     TICKET_NUMBER="${{ github.event.head_commit.message }}" | grep -oP 'CHG\d+' || true
@@ -1183,7 +1187,7 @@ Compliance Officer: [Name] - [Phone] - [Email]
     # Call ticketing system API to verify status
 ```
 
-**Commit Message Format:**
+**Recommended Commit Message Format:**
 ```
 CHG12345: Deploy HIPAA 275 processing enhancements
 
