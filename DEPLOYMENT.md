@@ -2186,6 +2186,119 @@ az servicebus topic show \
   --name "attachments-in"
 ```
 
+### 7. Configure ECS (Enhanced Claim Status) Integration
+
+**Note**: This step is only required if ECS is enabled in your deployment (`enableEcs: true`).
+
+#### 7.1 Store QNXT API Token in Key Vault
+
+**Security Best Practice**: Always store API tokens in Azure Key Vault.
+
+```bash
+# Environment variables
+RG_NAME="pchp-attachments-uat-rg"
+BASE_NAME="hipaa-attachments-uat"
+LOGIC_APP_NAME="${BASE_NAME}-la"
+KV_NAME="${BASE_NAME}-kv"
+QNXT_API_TOKEN="<your-qnxt-token>"  # Obtain from QNXT administrator
+
+# Create Key Vault (if not exists)
+az keyvault create \
+  --name "$KV_NAME" \
+  --resource-group "$RG_NAME" \
+  --location eastus
+
+# Store QNXT API token
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-token" \
+  --value "$QNXT_API_TOKEN"
+
+# Grant Logic App access to Key Vault
+PRINCIPAL_ID=$(az webapp identity show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query principalId -o tsv)
+
+az keyvault set-policy \
+  --name "$KV_NAME" \
+  --object-id "$PRINCIPAL_ID" \
+  --secret-permissions get list
+
+echo "✓ ECS Key Vault configuration complete"
+```
+
+#### 7.2 Configure ECS App Settings
+
+```bash
+# Get Key Vault secret URI
+SECRET_URI=$(az keyvault secret show \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-token" \
+  --query id -o tsv)
+
+# Set environment-specific QNXT base URL
+QNXT_BASE_URL="https://qnxt-api-uat.example.com"  # Adjust for DEV/UAT/PROD
+
+# Update Logic App settings
+az webapp config appsettings set \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --settings \
+    "ECS_QNXT_BASE_URL=$QNXT_BASE_URL" \
+    "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})" \
+    "ECS_WORKFLOW_ENABLED=true"
+
+echo "✓ ECS application settings configured"
+```
+
+#### 7.3 Test ECS Endpoint
+
+```bash
+# Get ECS endpoint URL
+LOGIC_APP_URL=$(az webapp show \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --query defaultHostName -o tsv)
+
+ECS_ENDPOINT="https://${LOGIC_APP_URL}/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke"
+
+echo "ECS Endpoint: $ECS_ENDPOINT"
+
+# Test with sample request (requires valid Bearer token)
+curl -X POST \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "searchMethod": "ServiceDate",
+    "requestId": "TEST-001",
+    "serviceDateSearch": {
+      "serviceFromDate": "20240101",
+      "serviceToDate": "20240131",
+      "providerId": "1234567890",
+      "providerIdQualifier": "NPI"
+    }
+  }' \
+  "$ECS_ENDPOINT"
+```
+
+**Expected Response**:
+```json
+{
+  "requestId": "TEST-001",
+  "status": "success",
+  "timestamp": "2024-01-15T10:30:45.123Z",
+  "searchMethod": "ServiceDate",
+  "totalResults": 0,
+  "claims": []
+}
+```
+
+**See also**:
+- [ECS-INTEGRATION.md](docs/ECS-INTEGRATION.md) - Complete ECS integration guide
+- [BACKEND-INTERFACE.md](docs/BACKEND-INTERFACE.md) - Backend interface specification
+- [ECS-OPENAPI.yaml](docs/api/ECS-OPENAPI.yaml) - OpenAPI specification
+
 ## Verification and Testing
 
 ### Post-Deployment Health Checks

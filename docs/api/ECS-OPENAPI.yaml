@@ -1,0 +1,640 @@
+openapi: 3.0.3
+info:
+  title: Enhanced Claim Status (ECS) API
+  description: |
+    API for querying claim status information from QNXT claims adjudication system.
+    Supports four search methods: Service Date, Member, Check Number, and Claim History.
+    
+    ## Authentication
+    All endpoints require Bearer token authentication via the Authorization header.
+    
+    ## Rate Limits
+    - 100 requests per minute per API key
+    - 1000 requests per hour per API key
+    
+    ## HIPAA Compliance
+    This API handles Protected Health Information (PHI). All requests and responses
+    must be transmitted over encrypted channels (TLS 1.2+).
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@example.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://{environment}-logic-la.azurewebsites.net/api/ecs_summary_search
+    description: Logic App endpoint
+    variables:
+      environment:
+        default: prod
+        enum:
+          - dev
+          - uat
+          - prod
+        description: Deployment environment
+
+tags:
+  - name: Search
+    description: Claim status search operations
+
+paths:
+  /triggers/HTTP_ECS_Summary_Search_Request/invoke:
+    post:
+      tags:
+        - Search
+      summary: ECS Summary Search
+      description: |
+        Perform an Enhanced Claim Status summary search using one of four methods:
+        - Service Date: Search by provider and service date range
+        - Member: Search by member ID and service date range
+        - Check Number: Search by check/EFT number
+        - Claim History: Search for specific claim details
+      operationId: ecsSearchClaims
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ECSSearchRequest'
+            examples:
+              serviceDateSearch:
+                summary: Service Date Search
+                value:
+                  searchMethod: ServiceDate
+                  requestId: REQ-2024-001
+                  submitterId: PROV-12345
+                  serviceDateSearch:
+                    serviceFromDate: "20240101"
+                    serviceToDate: "20240131"
+                    providerId: "1234567890"
+                    providerIdQualifier: NPI
+              memberSearch:
+                summary: Member Search
+                value:
+                  searchMethod: Member
+                  requestId: REQ-2024-002
+                  submitterId: PROV-12345
+                  memberSearch:
+                    memberId: M123456
+                    firstName: John
+                    lastName: Doe
+                    dateOfBirth: "19850315"
+                    serviceFromDate: "20240101"
+                    serviceToDate: "20240331"
+              checkNumberSearch:
+                summary: Check Number Search
+                value:
+                  searchMethod: CheckNumber
+                  requestId: REQ-2024-003
+                  submitterId: PROV-12345
+                  checkNumberSearch:
+                    checkNumber: CHK789456
+                    payerId: UNITED
+                    checkDate: "20240215"
+              claimHistorySearch:
+                summary: Claim History Search
+                value:
+                  searchMethod: ClaimHistory
+                  requestId: REQ-2024-004
+                  submitterId: PROV-12345
+                  claimHistorySearch:
+                    claimNumber: CLM987654321
+                    patientAccountNumber: PAT-9876
+                    memberId: M123456
+      responses:
+        '200':
+          description: Successful search (may return empty results)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ECSSearchResponse'
+              examples:
+                successWithResults:
+                  summary: Successful search with results
+                  value:
+                    requestId: REQ-2024-001
+                    status: success
+                    timestamp: "2024-01-15T10:30:45.123Z"
+                    searchMethod: ServiceDate
+                    totalResults: 2
+                    claims:
+                      - claimNumber: CLM123456789
+                        patientAccountNumber: PAT-1001
+                        claimStatus: Paid
+                        claimStatusCode: F2
+                        serviceFromDate: "20240110"
+                        serviceToDate: "20240110"
+                        billedAmount: 250.00
+                        paidAmount: 200.00
+                        providerId: "1234567890"
+                        memberId: M123456
+                successNoResults:
+                  summary: Successful search with no results
+                  value:
+                    requestId: REQ-2024-005
+                    status: success
+                    timestamp: "2024-01-15T11:00:00.000Z"
+                    searchMethod: ServiceDate
+                    totalResults: 0
+                    claims: []
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-006
+                status: error
+                timestamp: "2024-01-15T11:15:30.456Z"
+                searchMethod: ServiceDate
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: INVALID_REQUEST
+                    errorMessage: Missing required field 'serviceFromDate'
+                    errorDetails: The serviceDateSearch object must include serviceFromDate
+        '401':
+          description: Unauthorized - invalid or missing authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-007
+                status: error
+                timestamp: "2024-01-15T11:20:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: AUTHENTICATION_FAILED
+                    errorMessage: Invalid or expired authentication token
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-008
+                status: error
+                timestamp: "2024-01-15T11:25:00.000Z"
+                searchMethod: ClaimHistory
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: CLAIM_NOT_FOUND
+                    errorMessage: The specified claim number was not found
+                    errorDetails: Claim CLM999999999 does not exist in the system
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-009
+                status: error
+                timestamp: "2024-01-15T11:30:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: RATE_LIMIT_EXCEEDED
+                    errorMessage: Too many requests. Please retry after 60 seconds.
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-010
+                status: error
+                timestamp: "2024-01-15T11:35:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: INTERNAL_ERROR
+                    errorMessage: An unexpected error occurred while processing the request
+        '503':
+          description: Service unavailable - backend system unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-011
+                status: error
+                timestamp: "2024-01-15T11:40:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: QNXT_UNAVAILABLE
+                    errorMessage: QNXT backend system is temporarily unavailable
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT bearer token for authentication.
+        Obtain token from Azure AD OAuth 2.0 endpoint.
+
+  schemas:
+    ECSSearchRequest:
+      type: object
+      required:
+        - searchMethod
+        - requestId
+      properties:
+        searchMethod:
+          type: string
+          enum:
+            - ServiceDate
+            - Member
+            - CheckNumber
+            - ClaimHistory
+          description: The type of search to perform
+        requestId:
+          type: string
+          pattern: '^[A-Z0-9-]+$'
+          minLength: 1
+          maxLength: 50
+          description: Unique identifier for tracking the request
+          example: REQ-2024-001
+        submitterId:
+          type: string
+          description: Identifier of the submitter (provider, clearinghouse)
+          example: PROV-12345
+        serviceDateSearch:
+          $ref: '#/components/schemas/ServiceDateSearch'
+        memberSearch:
+          $ref: '#/components/schemas/MemberSearch'
+        checkNumberSearch:
+          $ref: '#/components/schemas/CheckNumberSearch'
+        claimHistorySearch:
+          $ref: '#/components/schemas/ClaimHistorySearch'
+      oneOf:
+        - required: [serviceDateSearch]
+        - required: [memberSearch]
+        - required: [checkNumberSearch]
+        - required: [claimHistorySearch]
+
+    ServiceDateSearch:
+      type: object
+      required:
+        - serviceFromDate
+        - serviceToDate
+        - providerId
+      properties:
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date in CCYYMMDD format
+          example: "20240101"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date in CCYYMMDD format
+          example: "20240131"
+        providerId:
+          type: string
+          description: Provider NPI or Tax ID
+          example: "1234567890"
+        providerIdQualifier:
+          type: string
+          enum:
+            - NPI
+            - XX
+            - EI
+          default: NPI
+          description: Qualifier for provider identifier
+
+    MemberSearch:
+      type: object
+      required:
+        - memberId
+        - serviceFromDate
+        - serviceToDate
+      properties:
+        memberId:
+          type: string
+          description: Member ID or Subscriber ID
+          example: M123456
+        firstName:
+          type: string
+          description: Member first name
+          example: John
+        lastName:
+          type: string
+          description: Member last name
+          example: Doe
+        dateOfBirth:
+          type: string
+          pattern: '^\d{8}$'
+          description: Member date of birth in CCYYMMDD format
+          example: "19850315"
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date in CCYYMMDD format
+          example: "20240101"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date in CCYYMMDD format
+          example: "20240331"
+
+    CheckNumberSearch:
+      type: object
+      required:
+        - checkNumber
+        - payerId
+      properties:
+        checkNumber:
+          type: string
+          description: Check or EFT trace number
+          example: CHK789456
+        payerId:
+          type: string
+          description: Payer identifier
+          example: UNITED
+        checkDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Check issue date in CCYYMMDD format
+          example: "20240215"
+
+    ClaimHistorySearch:
+      type: object
+      required:
+        - claimNumber
+      properties:
+        claimNumber:
+          type: string
+          description: Payer claim control number
+          example: CLM987654321
+        patientAccountNumber:
+          type: string
+          description: Provider's patient account number
+          example: PAT-9876
+        memberId:
+          type: string
+          description: Member ID or Subscriber ID
+          example: M123456
+
+    ECSSearchResponse:
+      type: object
+      required:
+        - requestId
+        - status
+        - timestamp
+      properties:
+        requestId:
+          type: string
+          description: Original request identifier
+          example: REQ-2024-001
+        status:
+          type: string
+          enum:
+            - success
+            - error
+            - partial
+          description: Overall status of the search operation
+        timestamp:
+          type: string
+          format: date-time
+          description: Response generation timestamp (ISO 8601)
+          example: "2024-01-15T10:30:45.123Z"
+        searchMethod:
+          type: string
+          enum:
+            - ServiceDate
+            - Member
+            - CheckNumber
+            - ClaimHistory
+          description: The search method that was executed
+        totalResults:
+          type: integer
+          minimum: 0
+          description: Total number of claims found
+          example: 2
+        claims:
+          type: array
+          description: Array of claim status results
+          items:
+            $ref: '#/components/schemas/Claim'
+        errors:
+          type: array
+          description: Array of error messages (if status is error or partial)
+          items:
+            $ref: '#/components/schemas/Error'
+        warnings:
+          type: array
+          description: Array of warning messages
+          items:
+            type: string
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Claim:
+      type: object
+      required:
+        - claimNumber
+        - claimStatus
+      properties:
+        claimNumber:
+          type: string
+          description: Payer claim control number
+          example: CLM123456789
+        patientAccountNumber:
+          type: string
+          description: Provider's patient account number
+          example: PAT-1001
+        claimStatus:
+          type: string
+          enum:
+            - Pending
+            - Paid
+            - Denied
+            - Partially Paid
+            - In Process
+            - Suspended
+            - Forwarded
+            - Adjusted
+          description: Current status of the claim
+        claimStatusCode:
+          type: string
+          description: X12 status code (e.g., F0, F1, F2, F3)
+          example: F2
+        claimStatusCategory:
+          type: string
+          description: Status category code
+          example: Finalized
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date (CCYYMMDD)
+          example: "20240110"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date (CCYYMMDD)
+          example: "20240110"
+        receivedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was received by payer
+          example: "20240112"
+        processedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was processed
+          example: "20240113"
+        paidDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was paid (if applicable)
+          example: "20240115"
+        billedAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount billed
+          example: 250.00
+        allowedAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount allowed by payer
+          example: 200.00
+        paidAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount paid
+          example: 160.00
+        patientResponsibility:
+          type: number
+          format: double
+          minimum: 0
+          description: Amount patient is responsible for
+          example: 40.00
+        adjustmentAmount:
+          type: number
+          format: double
+          description: Total adjustment amount
+          example: -50.00
+        payerId:
+          type: string
+          description: Payer identifier
+          example: PCHP
+        payerName:
+          type: string
+          description: Payer name
+          example: Parkland Community Health Plan
+        providerId:
+          type: string
+          description: Provider NPI or identifier
+          example: "1234567890"
+        providerName:
+          type: string
+          description: Provider name
+          example: Dr. John Smith
+        memberId:
+          type: string
+          description: Member/subscriber ID
+          example: M123456
+        memberName:
+          type: string
+          description: Member/patient name
+          example: Jane Doe
+        checkNumber:
+          type: string
+          description: Check or EFT trace number (if paid)
+          example: CHK789456
+        checkDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Check issue date (if paid)
+          example: "20240115"
+        remarkCodes:
+          type: array
+          description: Claim adjustment remark codes
+          items:
+            type: string
+          example: ["M80"]
+        reasonCodes:
+          type: array
+          description: Claim adjustment reason codes
+          items:
+            type: string
+          example: ["CO-45"]
+        statusDetails:
+          type: string
+          description: Additional status details or messages
+          example: Claim processed and paid
+
+    Error:
+      type: object
+      required:
+        - errorCode
+        - errorMessage
+      properties:
+        errorCode:
+          type: string
+          description: Error code identifier
+          example: MEMBER_NOT_FOUND
+        errorMessage:
+          type: string
+          description: Human-readable error message
+          example: The specified member ID was not found in the system
+        errorDetails:
+          type: string
+          description: Additional error details
+          example: Member ID M999999 does not exist in the claims database
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ECSSearchResponse'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum:
+                - error
+            totalResults:
+              type: integer
+              enum:
+                - 0
+            claims:
+              type: array
+              maxItems: 0
+          required:
+            - errors
+
+    Pagination:
+      type: object
+      description: Pagination information for large result sets
+      properties:
+        currentPage:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          example: 50
+        totalPages:
+          type: integer
+          minimum: 1
+          example: 3
+        hasNextPage:
+          type: boolean
+          example: true

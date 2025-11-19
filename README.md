@@ -44,6 +44,7 @@ This solution implements the following process:
 - `logicapps/workflows/ingest278/workflow.json`: X12 278 transaction processing workflow
 - `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing workflow
 - `logicapps/workflows/replay278/workflow.json`: HTTP endpoint for deterministic 278 replay
+- `logicapps/workflows/ecs_summary_search/workflow.json`: Enhanced Claim Status (ECS) summary search workflow
 
 ### Key Features
 - **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations}/yyyy/MM/dd/` partitioning
@@ -52,6 +53,7 @@ This solution implements the following process:
 - **Monitoring**: Application Insights integration
 - **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
 - **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
+- **ECS Summary Search**: Enhanced Claim Status queries via HTTP endpoint with four search methods (Service Date, Member, Check Number, Claim History)
 
 ## Build & Deployment
 
@@ -548,6 +550,117 @@ If QNXT response indicates `requiresRFAI: true`, the workflow:
 - Track appeal registration success rate
 - Monitor QNXT API latency and retry rates
 
+## Enhanced Claim Status (ECS) Integration
+
+The ECS Summary Search workflow enables real-time claim status queries through a RESTful HTTP endpoint. This feature provides integration with the QNXT claims adjudication system for enhanced claim visibility.
+
+### ECS Features
+
+- **Four Search Methods**:
+  - **Service Date**: Query claims by provider and service date range
+  - **Member**: Query claims by member/subscriber ID and date range
+  - **Check Number**: Query claims paid via specific check or EFT
+  - **Claim History**: Retrieve detailed history for a specific claim
+
+- **QNXT Integration**: Direct API integration with retry logic (4 retries @ 15s intervals)
+- **Request Validation**: Schema-based validation using JSON Schema
+- **Response Transformation**: Converts QNXT responses to Availity ECS format
+- **Comprehensive Error Handling**: Detailed error messages with troubleshooting guidance
+- **Audit Logging**: All searches logged to Application Insights
+
+### ECS Endpoint
+
+**HTTP POST**: `https://{logic-app-name}.azurewebsites.net/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke`
+
+**Authentication**: Bearer token (JWT) via Authorization header
+
+### Example Request
+
+```json
+{
+  "searchMethod": "ServiceDate",
+  "requestId": "REQ-2024-001",
+  "submitterId": "PROV-12345",
+  "serviceDateSearch": {
+    "serviceFromDate": "20240101",
+    "serviceToDate": "20240131",
+    "providerId": "1234567890",
+    "providerIdQualifier": "NPI"
+  }
+}
+```
+
+### Example Response
+
+```json
+{
+  "requestId": "REQ-2024-001",
+  "status": "success",
+  "timestamp": "2024-01-15T10:30:45.123Z",
+  "searchMethod": "ServiceDate",
+  "totalResults": 2,
+  "claims": [
+    {
+      "claimNumber": "CLM123456789",
+      "claimStatus": "Paid",
+      "claimStatusCode": "F2",
+      "billedAmount": 250.00,
+      "paidAmount": 200.00,
+      "providerId": "1234567890",
+      "memberId": "M123456"
+    }
+  ]
+}
+```
+
+### ECS Documentation
+
+Complete documentation for the ECS integration:
+
+- **[docs/ECS-INTEGRATION.md](docs/ECS-INTEGRATION.md)** - Comprehensive integration guide with request/response examples, error handling, and API mappings
+- **[docs/BACKEND-INTERFACE.md](docs/BACKEND-INTERFACE.md)** - Backend-agnostic interface definition for extensibility
+- **[docs/api/ECS-OPENAPI.yaml](docs/api/ECS-OPENAPI.yaml)** - OpenAPI 3.0 specification for API documentation
+
+### ECS Schemas
+
+Request and response validation schemas:
+
+- **[schemas/ECS-SummarySearch-Request.json](schemas/ECS-SummarySearch-Request.json)** - JSON Schema for request validation
+- **[schemas/ECS-SummarySearch-Response.json](schemas/ECS-SummarySearch-Response.json)** - JSON Schema for response validation
+
+### Configuration
+
+ECS-specific configuration in Logic App parameters:
+
+```json
+{
+  "qnxt_base_url": "https://qnxt-api.example.com",
+  "qnxt_api_token": "<secure-token>",
+  "enableEcs": true
+}
+```
+
+### Testing ECS
+
+Test the ECS endpoint using curl:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "searchMethod": "ServiceDate",
+    "requestId": "TEST-001",
+    "serviceDateSearch": {
+      "serviceFromDate": "20240101",
+      "serviceToDate": "20240131",
+      "providerId": "1234567890",
+      "providerIdQualifier": "NPI"
+    }
+  }' \
+  https://{logic-app}.azurewebsites.net/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke
+```
+
 ## 📚 Documentation
 
 Comprehensive documentation is available to guide development, deployment, and maintenance:
@@ -559,6 +672,11 @@ Comprehensive documentation is available to guide development, deployment, and m
 - **[BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md)** - Branch conventions, merge requirements, and workflows
 - **[SECURITY.md](SECURITY.md)** - HIPAA compliance, security practices, and encryption
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues, solutions, and debugging guides
+
+### ECS Documentation
+- **[docs/ECS-INTEGRATION.md](docs/ECS-INTEGRATION.md)** - Enhanced Claim Status integration guide
+- **[docs/BACKEND-INTERFACE.md](docs/BACKEND-INTERFACE.md)** - Backend-agnostic interface specification
+- **[docs/api/ECS-OPENAPI.yaml](docs/api/ECS-OPENAPI.yaml)** - OpenAPI 3.0 API specification
 
 ### Additional Resources
 - **[HIPAA-X12-Agreements-Guide.md](HIPAA-X12-Agreements-Guide.md)** - X12 EDI agreement configuration
