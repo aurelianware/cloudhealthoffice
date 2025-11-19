@@ -148,7 +148,7 @@ Store these secrets in Key Vault:
 | `sftp-host` | Availity SFTP hostname | `sftp.availity.com` | N/A (non-secret) |
 | `sftp-username` | SFTP service account username | `pchp-hipaa-prod` | Annually |
 | `sftp-password` | SFTP service account password | `<secure-password>` | Quarterly |
-| `sftp-private-key` | SSH private key for SFTP | `-----BEGIN RSA PRIVATE KEY-----` | Annually |
+| `sftp-private-key` | SSH private key for SFTP | `<PEM-formatted-private-key>` | Annually |
 | `qnxt-api-base-url` | QNXT API endpoint | `https://qnxt-api.example.com` | N/A (non-secret) |
 | `qnxt-api-client-id` | QNXT OAuth client ID | `pchp-hipaa-client` | As needed |
 | `qnxt-api-client-secret` | QNXT OAuth client secret | `<secure-secret>` | Quarterly |
