@@ -27,7 +27,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Private endpoint only access (public disabled)
 - Diagnostic settings with 365-day log retention
 
-#### `infra/modules/networking.bicep` (164 lines)
+#### `infra/modules/networking.bicep` (179 lines)
 **VNet and Private DNS infrastructure**
 - Virtual Network (10.0.0.0/16)
 - Logic Apps subnet (10.0.1.0/24) with delegation
