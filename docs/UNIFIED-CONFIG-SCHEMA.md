@@ -632,7 +632,7 @@ Each transaction mode has:
 
 #### Additional Properties
 
-- **`additionalProperties`** (array): Additional ECS properties to include
+- **`includeProperties`** (array): Additional ECS properties to include in responses
   - Valid values:
     - `"claimStatus"` - Claim status information
     - `"paymentAmount"` - Payment amount

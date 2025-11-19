@@ -602,7 +602,7 @@ export enum ECSQueryMethod {
 /**
  * Additional ECS properties
  */
-export enum ECSAdditionalProperty {
+export enum ECSIncludeProperty {
   CLAIM_STATUS = "claimStatus",
   PAYMENT_AMOUNT = "paymentAmount",
   PAYMENT_DATE = "paymentDate",
@@ -625,7 +625,7 @@ export interface ECSModule {
   /** Supported query methods */
   queryMethods?: ECSQueryMethod[];
   /** Additional ECS properties to include in responses */
-  additionalProperties?: ECSAdditionalProperty[];
+  includeProperties?: ECSIncludeProperty[];
   /** Whether caching is enabled for ECS responses */
   cacheEnabled?: boolean;
   /** Cache time-to-live in seconds (60-86400) */

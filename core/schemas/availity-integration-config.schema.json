@@ -991,7 +991,7 @@
           "minItems": 1,
           "uniqueItems": true
         },
-        "additionalProperties": {
+        "includeProperties": {
           "type": "array",
           "description": "Additional ECS properties to include in responses",
           "items": {
