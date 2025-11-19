@@ -17,7 +17,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 
 ### 1. Infrastructure Modules (4 Bicep files)
 
-#### `infra/modules/keyvault.bicep` (166 lines)
+#### `infra/modules/keyvault.bicep` (165 lines)
 **Premium Key Vault with full HIPAA compliance**
 - Premium SKU with HSM-backed keys (FIPS 140-2 Level 2)
 - Soft delete with 90-day retention
@@ -27,7 +27,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Private endpoint only access (public disabled)
 - Diagnostic settings with 365-day log retention
 
-#### `infra/modules/networking.bicep` (179 lines)
+#### `infra/modules/networking.bicep` (178 lines)
 **VNet and Private DNS infrastructure**
 - Virtual Network (10.0.0.0/16)
 - Logic Apps subnet (10.0.1.0/24) with delegation
@@ -38,7 +38,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
   - Service Bus: `privatelink.servicebus.windows.net`
   - Key Vault: `privatelink.vaultcore.azure.net`
 
-#### `infra/modules/private-endpoints.bicep` (178 lines)
+#### `infra/modules/private-endpoints.bicep` (177 lines)
 **Private endpoints for all PHI resources**
 - Storage Account (blob) private endpoint
 - Service Bus namespace private endpoint
@@ -46,7 +46,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - DNS zone group configurations for name resolution
 - Complete network isolation from public internet
 
-#### `infra/modules/cmk.bicep` (130 lines)
+#### `infra/modules/cmk.bicep` (129 lines)
 **Optional customer-managed keys (BYOK)**
 - RSA-HSM keys (4096-bit) in Premium Key Vault
 - Automatic key rotation every 90 days
@@ -54,7 +54,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Storage account encryption configuration
 - RBAC role assignments for key access
 
-**Total Infrastructure Code**: 653 lines of production-ready Bicep
+**Total Infrastructure Code**: 649 lines of production-ready Bicep
 
 ---
 

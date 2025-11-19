@@ -87,7 +87,7 @@ resource storageDnsGroupBlob 'Microsoft.Network/privateEndpoints/privateDnsZoneG
 // =========================
 // Private Endpoint for Service Bus
 // =========================
-resource serviceBusPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource serviceBusPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
   name: '${serviceBusName}-pe'
   location: location
   tags: tags
@@ -127,7 +127,7 @@ resource serviceBusDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGr
 // =========================
 // Private Endpoint for Key Vault
 // =========================
-resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
   name: '${keyVaultName}-pe'
   location: location
   tags: tags
