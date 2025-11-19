@@ -47,7 +47,7 @@ param tags object = {
 // =========================
 // Private Endpoint for Storage Account (blob)
 // =========================
-resource storagePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource storagePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
   name: '${storageAccountName}-blob-pe'
   location: location
   tags: tags
