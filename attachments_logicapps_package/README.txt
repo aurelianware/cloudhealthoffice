@@ -7,7 +7,7 @@ json
 {
   "claimNumber": "EXHP-12345",
   "memberId": "DExxxxxx",
-  "providerNpi": "1234567890",
+  "providerNpi": "<NPI-NUMBER>",
   "serviceFromDate": "2025-01-01",
   "rfaiReasonCode": "A7",
   "rfaiReference": "RFAI-001"
