@@ -38,7 +38,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
   - Service Bus: `privatelink.servicebus.windows.net`
   - Key Vault: `privatelink.vaultcore.azure.net`
 
-#### `infra/modules/private-endpoints.bicep` (152 lines)
+#### `infra/modules/private-endpoints.bicep` (178 lines)
 **Private endpoints for all PHI resources**
 - Storage Account (blob) private endpoint
 - Service Bus namespace private endpoint
