@@ -456,8 +456,7 @@
         "defaultValue": "https://qnxt-api.example.com"
       },
       "qnxt_api_token": {
-        "type": "SecureString",
-        "defaultValue": ""
+        "type": "SecureString"
       }
     },
     "variables": {

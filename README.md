@@ -632,12 +632,23 @@ Request and response validation schemas:
 
 ECS-specific configuration in Logic App parameters:
 
-```json
-{
-  "qnxt_base_url": "https://qnxt-api.example.com",
-  "qnxt_api_token": "<secure-token>",
-  "enableEcs": true
-}
+**⚠️ SECURITY NOTE**: Never hardcode tokens in configuration files. Always use Azure Key Vault.
+
+```bash
+# Store QNXT API token in Key Vault
+az keyvault secret set \
+  --vault-name "${KV_NAME}" \
+  --name "qnxt-api-token" \
+  --value "${QNXT_TOKEN}"
+
+# Configure Logic App app settings
+az webapp config appsettings set \
+  --resource-group "${RG_NAME}" \
+  --name "${LOGIC_APP_NAME}" \
+  --settings \
+    "ECS_QNXT_BASE_URL=https://qnxt-api.example.com" \
+    "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=https://${KV_NAME}.vault.azure.net/secrets/qnxt-api-token/)" \
+    "ECS_WORKFLOW_ENABLED=true"
 ```
 
 ### Testing ECS
