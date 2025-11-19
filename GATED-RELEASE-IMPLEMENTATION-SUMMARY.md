@@ -412,7 +412,7 @@ Update these in DEPLOYMENT-GATES-GUIDE.md:
 # Application Insights - 2 year retention
 az monitor app-insights component update \
   --app "hipaa-attachments-prod-ai" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --retention-time 730
 ```
 

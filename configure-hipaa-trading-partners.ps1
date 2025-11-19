@@ -1,5 +1,5 @@
 # Configure Trading Partners for HIPAA X12 275/277 EDI Processing
-# Availity (sender) → Parkland Community Health Plan (PCHP) / QNXT (receiver)
+# Availity (sender) → Health Plan (Health Plan) / QNXT (receiver)
 
 param(
     [Parameter(Mandatory=$false)]
@@ -12,14 +12,14 @@ param(
     [string]$AvailityID = "030240928",
     
     [Parameter(Mandatory=$false)]
-    [string]$PCHPID = "66917"
+    [string]$PCHPID = "{config.payerId}"
 )
 
 Write-Host "🏥 Configuring HIPAA Trading Partners for X12 275/277 Processing" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📋 Configuration Details:" -ForegroundColor White
 Write-Host "  • Sender: Availity (ID: $AvailityID)" -ForegroundColor Green
-Write-Host "  • Receiver: Parkland Community Health Plan - QNXT (ID: $PCHPID)" -ForegroundColor Green
+Write-Host "  • Receiver: Health Plan - QNXT (ID: $PCHPID)" -ForegroundColor Green
 Write-Host "  • Message Types: X12 275 (Attachment Request), X12 277 (Response)" -ForegroundColor Blue
 Write-Host ""
 
@@ -91,15 +91,15 @@ catch {
     Write-Host "    ❌ Failed to create Availity partner: $_" -ForegroundColor Red
 }
 
-# 2. Create PCHP/QNXT Trading Partner (Receiver)
-Write-Host "  Creating PCHP/QNXT partner..." -ForegroundColor White
+# 2. Create Health Plan/QNXT Trading Partner (Receiver)
+Write-Host "  Creating Health Plan/QNXT partner..." -ForegroundColor White
 
 $pchpPartner = @{
-    name = "PCHP-QNXT"
+    name = "Health Plan-QNXT"
     properties = @{
         partnerType = "B2B"
         metadata = @{
-            description = "Parkland Community Health Plan - QNXT Backend System"
+            description = "Health Plan - QNXT Backend System"
             role = "Receiver"
             messageTypes = "X12 277 (Response to Attachment Request)"
             system = "QNXT"
@@ -117,19 +117,19 @@ $pchpPartner = @{
     }
 } | ConvertTo-Json -Depth 10 -Compress
 
-$pchpPartner | Out-File -FilePath "temp-pchp-partner.json" -Encoding UTF8
+$pchpPartner | Out-File -FilePath "temp-payer-partner.json" -Encoding UTF8
 
 try {
     az logic integration-account partner create `
         --resource-group $ResourceGroup `
         --integration-account $IntegrationAccountName `
-        --name "PCHP-QNXT" `
-        --partner-content "@temp-pchp-partner.json" | Out-Null
+        --name "Health Plan-QNXT" `
+        --partner-content "@temp-payer-partner.json" | Out-Null
     
-    Write-Host "    ✅ PCHP-QNXT partner created (ID: $PCHPID)" -ForegroundColor Green
+    Write-Host "    ✅ Health Plan-QNXT partner created (ID: $PCHPID)" -ForegroundColor Green
 }
 catch {
-    Write-Host "    ❌ Failed to create PCHP-QNXT partner: $_" -ForegroundColor Red
+    Write-Host "    ❌ Failed to create Health Plan-QNXT partner: $_" -ForegroundColor Red
 }
 
 Write-Host ""
@@ -147,17 +147,17 @@ Write-Host ""
 Write-Host "You now need to create TWO X12 agreements in the Azure Portal:" -ForegroundColor White
 Write-Host ""
 
-Write-Host "1️⃣ X12 275 RECEIVE Agreement (Availity → PCHP):" -ForegroundColor Yellow
-Write-Host "   • Name: 'Availity-to-PCHP-275-Receive'" -ForegroundColor White
-Write-Host "   • Host Partner: PCHP-QNXT" -ForegroundColor White
+Write-Host "1️⃣ X12 275 RECEIVE Agreement (Availity → Health Plan):" -ForegroundColor Yellow
+Write-Host "   • Name: 'Availity-to-Health Plan-275-Receive'" -ForegroundColor White
+Write-Host "   • Host Partner: Health Plan-QNXT" -ForegroundColor White
 Write-Host "   • Guest Partner: Availity" -ForegroundColor White
 Write-Host "   • Message Type: X12 275 (Attachment Request)" -ForegroundColor White
 Write-Host "   • Direction: Receive (Inbound from Availity)" -ForegroundColor White
 Write-Host ""
 
-Write-Host "2️⃣ X12 277 SEND Agreement (PCHP → Availity):" -ForegroundColor Yellow
-Write-Host "   • Name: 'PCHP-to-Availity-277-Send'" -ForegroundColor White
-Write-Host "   • Host Partner: PCHP-QNXT" -ForegroundColor White
+Write-Host "2️⃣ X12 277 SEND Agreement (Health Plan → Availity):" -ForegroundColor Yellow
+Write-Host "   • Name: 'Health Plan-to-Availity-277-Send'" -ForegroundColor White
+Write-Host "   • Host Partner: Health Plan-QNXT" -ForegroundColor White
 Write-Host "   • Guest Partner: Availity" -ForegroundColor White
 Write-Host "   • Message Type: X12 277 (Response)" -ForegroundColor White
 Write-Host "   • Direction: Send (Outbound to Availity)" -ForegroundColor White
@@ -171,11 +171,11 @@ Write-Host "💡 Key Configuration Notes:" -ForegroundColor Yellow
 Write-Host "   • Use ZZ qualifier for both partners (mutually defined)" -ForegroundColor White
 Write-Host "   • 275 messages contain attachment requests from Availity" -ForegroundColor White
 Write-Host "   • 277 messages contain responses back to Availity" -ForegroundColor White
-Write-Host "   • QNXT system processes the attachments behind PCHP" -ForegroundColor White
+Write-Host "   • QNXT system processes the attachments behind Health Plan" -ForegroundColor White
 
 # Clean up temporary files
 Remove-Item "temp-availity-partner.json" -ErrorAction SilentlyContinue
-Remove-Item "temp-pchp-partner.json" -ErrorAction SilentlyContinue
+Remove-Item "temp-payer-partner.json" -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "✅ Trading Partners configuration complete!" -ForegroundColor Green

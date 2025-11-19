@@ -1,0 +1,660 @@
+# Appeals Backend Interface Specification
+
+## Overview
+
+This document defines the interface contract between the Appeals Integration Layer and the Health Plan Backend System (e.g., claims processing system). This specification is payer-agnostic and designed for multi-payer platformization.
+
+## Purpose
+
+The Appeals Backend Interface enables:
+1. **Appeal Registration**: Register new appeals in the backend system
+2. **Status Updates**: Synchronize appeal status between frontend and backend
+3. **Authorization**: Validate user access to appeals and documents
+4. **Notification**: Trigger backend workflows when appeal events occur
+
+## Interface Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│   Appeals Integration Layer                 │
+│   (Logic Apps + REST APIs)                  │
+└─────────────────┬───────────────────────────┘
+                  │
+                  │ Backend Interface Contract
+                  │
+┌─────────────────▼───────────────────────────┐
+│   Health Plan Backend System                │
+│   (Claims Processing / Core System)         │
+└─────────────────────────────────────────────┘
+```
+
+## Interface Endpoints
+
+The Health Plan Backend System must implement the following endpoints:
+
+### 1. Register Appeal
+
+**Endpoint**: `POST /api/backend/appeals/register`
+
+**Purpose**: Register a new appeal in the backend claims processing system.
+
+**Request Body**:
+```json
+{
+  "appealId": "APP-2024-001234",
+  "caseNumber": "CASE-2024-5678",
+  "claimNumber": "CLM-2024-001234",
+  "additionalClaims": ["CLM-2024-001235"],
+  "providerNpi": "1234567890",
+  "memberId": "MBR-987654321",
+  "patientFirstName": "John",
+  "patientLastName": "Smith",
+  "patientDateOfBirth": "1985-03-15",
+  "requestReason": "MEDICAL_NECESSITY",
+  "supportingRationale": "Medical records demonstrate medical necessity...",
+  "submissionDate": "2024-01-15T14:35:00Z",
+  "attachments": [
+    {
+      "fileName": "medical_records.pdf",
+      "documentType": "MEDICAL_RECORDS",
+      "blobPath": "hipaa-attachments/appeals/APP-2024-001234/PROVIDER_UPLOAD/medical_records.pdf",
+      "fileSizeBytes": 2097152
+    }
+  ],
+  "availityTraceId": "AVL-2024-abc123",
+  "ecsAdditionalProperties": {
+    "appealType": "FIRST_LEVEL",
+    "providerParticipationStatus": "IN_NETWORK",
+    "programId": "{config.payerId}"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "status": "RECEIVED",
+  "subStatus": "REQUEST_RECEIVED",
+  "assignedReviewer": null,
+  "estimatedCompletionDate": "2024-03-15",
+  "registrationTimestamp": "2024-01-15T14:35:30Z"
+}
+```
+
+**Error Response** (400):
+```json
+{
+  "success": false,
+  "error": "ValidationError",
+  "message": "Claim number does not exist in system",
+  "claimNumber": "CLM-2024-001234"
+}
+```
+
+---
+
+### 2. Update Appeal Status
+
+**Endpoint**: `POST /api/backend/appeals/update-status`
+
+**Purpose**: Update the status of an existing appeal in the backend system.
+
+**Request Body**:
+```json
+{
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "status": "IN_REVIEW",
+  "subStatus": "IN_CLINICAL_REVIEW",
+  "assignedReviewer": "REV-123",
+  "reviewerNotes": "Clinical documentation review in progress",
+  "updatedBy": "SYSTEM",
+  "updateTimestamp": "2024-02-01T10:30:00Z"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "previousStatus": "SUBMITTED",
+  "newStatus": "IN_REVIEW",
+  "updateTimestamp": "2024-02-01T10:30:15Z"
+}
+```
+
+---
+
+### 3. Finalize Appeal Decision
+
+**Endpoint**: `POST /api/backend/appeals/finalize`
+
+**Purpose**: Record final decision on an appeal and trigger payment/notification workflows.
+
+**Request Body**:
+```json
+{
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "decision": "APPROVED",
+  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
+  "decisionDate": "2024-03-10T16:45:00Z",
+  "approvedAmount": 1500.00,
+  "deniedAmount": 0,
+  "reviewerNotes": "All clinical criteria met per policy section 4.2",
+  "decisionMadeBy": "REV-123",
+  "decisionLetterPath": "hipaa-attachments/appeals/APP-2024-001234/DECISION_LETTER/decision_2024-03-10.pdf"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "decision": "APPROVED",
+  "paymentReferenceId": "PAY-2024-7890",
+  "providerNotificationSent": true,
+  "memberNotificationSent": true,
+  "finalizedTimestamp": "2024-03-10T16:45:30Z"
+}
+```
+
+---
+
+### 4. Validate Appeal Access (Authorization)
+
+**Endpoint**: `POST /api/backend/authorization/validate-appeal-access`
+
+**Purpose**: Validate whether a user has permission to access an appeal or document.
+
+**Request Body**:
+```json
+{
+  "appealId": "APP-2024-001234",
+  "documentId": "DOC-2024-5678",
+  "requestedBy": "provider",
+  "userId": "USER-123",
+  "providerNpi": "1234567890",
+  "operation": "READ_DOCUMENT"
+}
+```
+
+**Response** (200 - Authorized):
+```json
+{
+  "authorized": true,
+  "appealId": "APP-2024-001234",
+  "userId": "USER-123",
+  "accessLevel": "FULL",
+  "validUntil": "2024-06-10T23:59:59Z",
+  "validationTimestamp": "2024-03-15T10:00:00Z"
+}
+```
+
+**Response** (403 - Not Authorized):
+```json
+{
+  "authorized": false,
+  "appealId": "APP-2024-001234",
+  "userId": "USER-123",
+  "reason": "User does not have access to this appeal",
+  "validationTimestamp": "2024-03-15T10:00:00Z"
+}
+```
+
+---
+
+### 5. Get Appeal Details
+
+**Endpoint**: `GET /api/backend/appeals/{appealId}`
+
+**Purpose**: Retrieve full appeal details from backend system.
+
+**Query Parameters**:
+- `appealId` (required): Health plan appeal identifier
+
+**Response**:
+```json
+{
+  "success": true,
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "caseNumber": "CASE-2024-5678",
+  "status": "FINALIZED",
+  "subStatus": "PENDING_PAYMENT",
+  "claimNumber": "CLM-2024-001234",
+  "providerNpi": "1234567890",
+  "memberId": "MBR-987654321",
+  "decision": "APPROVED",
+  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
+  "decisionDate": "2024-03-10T16:45:00Z",
+  "approvedAmount": 1500.00,
+  "assignedReviewer": "REV-123",
+  "receivedDate": "2024-01-15T14:35:00Z",
+  "lastUpdatedDate": "2024-03-10T16:45:00Z",
+  "attachments": [
+    {
+      "documentId": "DOC-2024-5678",
+      "fileName": "medical_records.pdf",
+      "documentType": "MEDICAL_RECORDS",
+      "uploadedDate": "2024-01-15T14:35:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 6. Correlate Appeal with Claim
+
+**Endpoint**: `POST /api/backend/claims/correlate-appeal`
+
+**Purpose**: Link an appeal to the original claim in the claims processing system.
+
+**Request Body**:
+```json
+{
+  "claimNumber": "CLM-2024-001234",
+  "memberId": "MBR-987654321",
+  "providerNpi": "1234567890",
+  "appealId": "APP-2024-001234",
+  "serviceFromDate": "2024-01-01",
+  "serviceToDate": "2024-01-01"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "claimNumber": "CLM-2024-001234",
+  "claimId": "CLAIM-INTERNAL-5678",
+  "appealId": "APP-2024-001234",
+  "originalClaimAmount": 2000.00,
+  "paidAmount": 500.00,
+  "deniedAmount": 1500.00,
+  "denialReasonCode": "CO-50",
+  "denialReasonDescription": "Non-covered service",
+  "correlationTimestamp": "2024-01-15T14:36:00Z"
+}
+```
+
+---
+
+### 7. Request Additional Information (RFAI)
+
+**Endpoint**: `POST /api/backend/appeals/request-additional-info`
+
+**Purpose**: Request additional information from provider for appeal processing.
+
+**Request Body**:
+```json
+{
+  "appealId": "APP-2024-001234",
+  "backendAppealId": "BACKEND-5678",
+  "requiredDocuments": [
+    "Updated physician notes",
+    "Lab results from 2024-01-20"
+  ],
+  "rfaiReasonCode": "INCOMPLETE_DOCUMENTATION",
+  "rfaiMessage": "Please provide updated physician notes to support medical necessity determination",
+  "dueDate": "2024-02-15",
+  "requestedBy": "REV-123"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "appealId": "APP-2024-001234",
+  "rfaiId": "RFAI-2024-123",
+  "status": "NEED_ADDITIONAL_INFO",
+  "dueDate": "2024-02-15",
+  "providerNotificationSent": true,
+  "rfaiTimestamp": "2024-01-20T09:00:00Z"
+}
+```
+
+---
+
+## Event Notifications
+
+The backend system should publish events to Service Bus topics to enable real-time synchronization:
+
+### Topic: `payer-appeal-status-updates`
+
+Published when appeal status changes in backend system. Consumed by `appeal_update_from_payer_to_availity` workflow.
+
+**Message Format**:
+```json
+{
+  "availityTraceId": "AVL-2024-abc123",
+  "payerTraceId": "PAY-2024-001234",
+  "appealId": "APP-2024-001234",
+  "caseNumber": "CASE-2024-5678",
+  "status": "FINALIZED",
+  "subStatus": "PENDING_PAYMENT",
+  "decision": "APPROVED",
+  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
+  "decisionDate": "2024-03-10T16:45:00Z",
+  "approvedAmount": 1500.00,
+  "deniedAmount": 0,
+  "claimNumber": "CLM-2024-001234",
+  "memberId": "MBR-987654321",
+  "providerNpi": "1234567890",
+  "eventTimestamp": "2024-03-10T16:45:30Z"
+}
+```
+
+**User Properties**:
+```json
+{
+  "eventType": "appeal-status-update",
+  "appealId": "APP-2024-001234",
+  "status": "FINALIZED",
+  "priority": "normal"
+}
+```
+
+---
+
+## Data Model
+
+### Appeal Entity
+
+Backend system should store the following core appeal attributes:
+
+```
+appealId (PK)           - Health plan appeal identifier
+backendAppealId         - Backend system internal ID
+caseNumber              - External tracking/case number
+claimNumber             - Original claim number
+additionalClaims[]      - Additional claims (for consolidated appeals)
+status                  - Current status (RECEIVED, SUBMITTED, IN_REVIEW, FINALIZED, REJECTED)
+subStatus               - Detailed sub-status (8 values per QRE)
+decision                - Final decision (APPROVED, PARTIALLY_APPROVED, DENIED, WITHDRAWN)
+decisionReason          - Explanation for decision
+decisionDate            - Date decision was made
+approvedAmount          - Approved amount in dollars
+deniedAmount            - Denied amount in dollars
+providerNpi             - Provider National Provider Identifier
+memberId                - Member identifier
+patientFirstName        - Patient first name
+patientLastName         - Patient last name
+patientDateOfBirth      - Patient date of birth
+requestReason           - Reason for appeal
+supportingRationale     - Detailed rationale
+assignedReviewer        - Reviewer/case manager assigned
+reviewerNotes           - Internal reviewer notes
+receivedDate            - Date appeal was received
+submissionDate          - Date submitted to backend
+estimatedCompletionDate - Estimated completion date
+actualCompletionDate    - Actual completion date
+availityTraceId         - Availity trace identifier
+payerTraceId            - Backend trace identifier
+lastUpdatedDate         - Last update timestamp
+createdBy               - User who created record
+updatedBy               - User who last updated record
+```
+
+### Document Reference Entity
+
+```
+documentId (PK)         - Unique document identifier
+appealId (FK)           - Associated appeal
+documentType            - Type (PROVIDER_UPLOAD, DECISION_LETTER)
+fileName                - Original file name
+fileType                - File extension (.pdf, .jpg, etc.)
+fileSizeBytes           - File size in bytes
+blobPath                - Azure Blob Storage path
+uploadedDate            - Date uploaded
+uploadedBy              - User who uploaded
+description             - Document description
+contentType             - MIME type
+availableUntil          - Date document is available until
+```
+
+---
+
+## Integration Patterns
+
+### Pattern 1: Synchronous Appeal Registration
+
+```
+1. Provider submits appeal via Availity
+2. Appeals API receives request
+3. Appeals API calls /api/backend/appeals/register (synchronous)
+4. Backend validates and registers appeal
+5. Backend returns success with appealId
+6. Appeals API returns response to Availity/provider
+```
+
+**Pros**: Immediate feedback, simple error handling
+**Cons**: Timeout risk for long-running operations
+
+---
+
+### Pattern 2: Asynchronous Appeal Processing
+
+```
+1. Provider submits appeal via Availity
+2. Appeals API receives request
+3. Appeals API publishes message to Service Bus topic
+4. Appeals API returns acknowledgment immediately
+5. Backend processor consumes message asynchronously
+6. Backend registers appeal and publishes status update
+7. Status update triggers notification to Availity
+```
+
+**Pros**: Better resilience, no timeout risk
+**Cons**: Eventual consistency, more complex error handling
+
+---
+
+## Security Requirements
+
+### Authentication
+
+All backend endpoints must:
+- Require authentication via OAuth 2.0 Bearer tokens OR Azure Managed Identity
+- Validate token audience and scopes
+- Return 401 for missing/invalid tokens
+
+### Authorization
+
+All backend endpoints must:
+- Implement role-based access control (RBAC)
+- Verify user has permission for requested operation
+- Log all access attempts (success and failure)
+- Return 403 for unauthorized access
+
+### Data Protection
+
+All backend APIs must:
+- Use TLS 1.2+ for transport encryption
+- Mask PHI in logs and error messages
+- Implement rate limiting to prevent abuse
+- Validate all input data to prevent injection attacks
+
+---
+
+## Error Handling
+
+### Standard Error Response Format
+
+```json
+{
+  "success": false,
+  "error": "ErrorCode",
+  "message": "Human-readable error message",
+  "details": {
+    "field": "value",
+    "additionalInfo": "..."
+  },
+  "timestamp": "2024-01-15T14:35:00Z",
+  "requestId": "REQ-123-456"
+}
+```
+
+### Common Error Codes
+
+- `ValidationError`: Invalid request data
+- `NotFoundError`: Appeal/claim not found
+- `AuthorizationError`: User not authorized
+- `DuplicateError`: Appeal already exists
+- `StateTransitionError`: Invalid status transition
+- `TimeoutError`: Operation timed out
+- `SystemError`: Internal system error
+
+---
+
+## Performance Requirements
+
+### Response Time SLAs
+
+- Register Appeal: < 2 seconds (p95)
+- Update Status: < 1 second (p95)
+- Validate Access: < 500ms (p95)
+- Get Appeal Details: < 1 second (p95)
+
+### Throughput Requirements
+
+- Support 100 concurrent appeal registrations
+- Support 1,000 status updates per minute
+- Support 500 authorization checks per second
+
+### Availability
+
+- Target: 99.9% uptime
+- Planned maintenance windows: Communicate 48 hours in advance
+
+---
+
+## Testing
+
+### Integration Test Scenarios
+
+1. **Register valid appeal** → Should return success with appealId
+2. **Register appeal with non-existent claim** → Should return 400 ValidationError
+3. **Update appeal status** → Should return success with new status
+4. **Finalize appeal with decision** → Should trigger payment and notifications
+5. **Validate access (authorized user)** → Should return authorized=true
+6. **Validate access (unauthorized user)** → Should return authorized=false
+7. **Get appeal details** → Should return complete appeal information
+8. **Request additional information** → Should update status and notify provider
+
+### Mock Backend Implementation
+
+For testing, a mock backend service should implement all endpoints with:
+- Configurable response delays
+- Configurable error injection
+- In-memory data store
+- Validation of request schemas
+
+---
+
+## Monitoring and Observability
+
+### Required Metrics
+
+Backend system should expose:
+- Appeal registration success rate
+- Average appeal processing time (received → finalized)
+- Status update latency
+- Authorization check latency
+- API error rate (by endpoint and error type)
+
+### Required Logs
+
+Backend system should log:
+- All API requests (method, endpoint, status code, duration)
+- All authorization checks (user, appealId, authorized, reason)
+- All status transitions (appealId, from status, to status, timestamp)
+- All errors (with stack traces for 500 errors)
+
+### Health Check Endpoint
+
+Backend must implement: `GET /api/backend/health`
+
+Response:
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "database": "connected",
+  "servicebus": "connected",
+  "timestamp": "2024-01-15T14:35:00Z"
+}
+```
+
+---
+
+## Configuration
+
+### Required Configuration Parameters
+
+```json
+{
+  "payerId": "{config.payerId}",
+  "backendApiBaseUrl": "https://backend.healthplan.local/api",
+  "backendApiTimeout": "30s",
+  "backendAuthType": "ManagedIdentity",
+  "serviceBusTopic": "payer-appeal-status-updates",
+  "retryPolicy": {
+    "maxRetries": 3,
+    "retryInterval": "10s",
+    "retryOn": ["500", "502", "503", "504"]
+  }
+}
+```
+
+---
+
+## Versioning
+
+Backend APIs should implement versioning via:
+- URL path versioning: `/api/v1/backend/appeals/...`
+- Support for multiple versions simultaneously
+- Deprecation notices 6 months before version removal
+
+---
+
+## Migration Guide
+
+For health plans implementing this interface:
+
+1. **Phase 1**: Implement core endpoints (register, update status, get details)
+2. **Phase 2**: Implement authorization endpoint
+3. **Phase 3**: Implement event publishing to Service Bus
+4. **Phase 4**: Implement RFAI and finalization endpoints
+
+Each phase should be tested in DEV → UAT → PROD environments.
+
+---
+
+## Support
+
+For questions about this interface specification:
+- Technical Documentation: See this file and related schemas
+- Implementation Examples: See test-workflows.ps1
+- API Specifications: See docs/api/APPEALS-OPENAPI.yaml
+- Issue Tracking: GitHub Issues
+
+---
+
+## Changelog
+
+### Version 1.0.0 (2024-01-15)
+- Initial specification
+- All 7 core endpoints defined
+- Event notification pattern specified
+- Security requirements documented
+- Payer-agnostic design (generic {config.payerId} placeholders)

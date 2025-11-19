@@ -27,7 +27,7 @@ The HIPAA Attachments system is a cloud-native solution built on Azure Logic App
 
 **Trading Partners:**
 - **Availity** (ID: 030240928) - EDI clearinghouse sending attachment requests
-- **PCHP-QNXT** (ID: 66917) - Parkland Community Health Plan claims processing system
+- **Health Plan-QNXT** (ID: {config.payerId}) - Health Plan claims processing system
 
 **Use Cases:**
 1. Attachment requests from providers via Availity
@@ -188,7 +188,7 @@ Service Bus Message Received
   │
   ├─▶ Encode X12 277 Message
   │   (Integration Account)
-  │   Sender: PCHP (66917)
+  │   Sender: Health Plan ({config.payerId})
   │   Receiver: Availity (030240928)
   │
   ├─▶ Send to Availity via SFTP
@@ -421,7 +421,7 @@ hipaa-attachments/
 | Partner | ID | Qualifier | Role |
 |---------|-----|-----------|------|
 | Availity | 030240928 | ZZ | Sender (275/278), Receiver (277) |
-| PCHP-QNXT | 66917 | ZZ | Receiver (275/278), Sender (277) |
+| Health Plan-QNXT | {config.payerId} | ZZ | Receiver (275/278), Sender (277) |
 
 #### X12 Schemas
 | Transaction | Version | Schema Name | Purpose |
@@ -431,22 +431,22 @@ hipaa-attachments/
 | 278 | 005010X217 | X12_005010X217_278 | Health Care Services Review Information |
 
 #### X12 Agreements
-1. **Availity-to-PCHP-275-Receive**
+1. **Availity-to-Health Plan-275-Receive**
    - Direction: Receive (Inbound)
-   - Host: PCHP-QNXT
+   - Host: Health Plan-QNXT
    - Guest: Availity
    - Transaction: 275
 
-2. **PCHP-to-Availity-277-Send**
+2. **Health Plan-to-Availity-277-Send**
    - Direction: Send (Outbound)
-   - Host: PCHP-QNXT
+   - Host: Health Plan-QNXT
    - Guest: Availity
    - Transaction: 277
 
-3. **PCHP-278-Processing**
+3. **Health Plan-278-Processing**
    - Direction: Receive (Internal)
-   - Host: PCHP-QNXT
-   - Guest: PCHP-QNXT
+   - Host: Health Plan-QNXT
+   - Guest: Health Plan-QNXT
    - Transaction: 278
 
 ### Application Insights
@@ -524,7 +524,7 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Decode X12 275         │
-│  Agreement: Availity→PCHP
+│  Agreement: Availity→Health Plan
 └──────┬──────────────────┘
        │ 4. Decoded JSON
        ▼
@@ -587,7 +587,7 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Encode X12 277         │
-│  Agreement: PCHP→Availity│
+│  Agreement: Health Plan→Availity│
 └──────┬──────────────────┘
        │ 4. X12 277 created
        ▼
@@ -762,7 +762,7 @@ Response:
 **ISA/GS Identifiers:**
 ```
 ISA Header:
-- ISA06: Sender ID (Availity: 030240928, PCHP: 66917)
+- ISA06: Sender ID (Availity: 030240928, Health Plan: {config.payerId})
 - ISA08: Receiver ID
 - ISA11: Usage Indicator (T=Test, P=Production)
 

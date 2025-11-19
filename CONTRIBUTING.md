@@ -333,7 +333,7 @@ Checks all `.ps1` files for:
 #### 5. EDI X12 Validation
 Validates all `.edi` files for:
 - X12 envelope structure (ISA/GS/ST/SE/GE/IEA)
-- Trading partner identifiers (Availity/PCHP)
+- Trading partner identifiers (Availity/Health Plan)
 - Transaction types (275/277/278)
 - Segment counts and format
 
@@ -411,7 +411,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
 - ISA/IEA envelope validation
 - GS/GE functional group validation
 - ST/SE transaction set validation
-- Trading partner ID verification (Availity: 030240928, PCHP: 66917)
+- Trading partner ID verification (Availity: 030240928, Health Plan: {config.payerId})
 - Segment count validation
 - Transaction type detection (275/277/278)
 
@@ -445,7 +445,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 **Context-Aware Filtering:**
 - Excludes test files (test-*.edi, test-*.json)
 - Excludes documentation (.md files)
-- Excludes trading partner IDs (030240928, 66917)
+- Excludes trading partner IDs (030240928, {config.payerId})
 - Provides severity levels (Critical, High, Medium, Low)
 
 ### Continuous Integration Checks

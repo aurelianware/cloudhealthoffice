@@ -752,11 +752,11 @@ components:
         payerId:
           type: string
           description: Payer identifier
-          example: PCHP
+          example: Health Plan
         payerName:
           type: string
           description: Payer name
-          example: Parkland Community Health Plan
+          example: Health Plan
         providerId:
           type: string
           description: Provider NPI or identifier

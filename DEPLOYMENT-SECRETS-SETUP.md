@@ -760,7 +760,7 @@ For production PHI workloads, migrate from GitHub Secrets to Azure Key Vault for
 ```bash
 # Deploy Key Vault module
 az deployment group create \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/keyvault.bicep \
   --parameters keyVaultName="hipaa-attachments-prod-kv" \
                 location="eastus" \
@@ -820,7 +820,7 @@ az keyvault secret list --vault-name "$KV_NAME" --output table
 # Get Logic App managed identity principal ID
 LOGIC_APP_NAME="hipaa-attachments-prod-la"
 PRINCIPAL_ID=$(az webapp identity show \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "$LOGIC_APP_NAME" \
   --query principalId -o tsv)
 
@@ -828,12 +828,12 @@ PRINCIPAL_ID=$(az webapp identity show \
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
   --role "Key Vault Secrets User" \
-  --scope "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME"
+  --scope "/subscriptions/{subscription-id}/resourceGroups/payer-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME"
 
 # Verify role assignment
 az role assignment list \
   --assignee "$PRINCIPAL_ID" \
-  --scope "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME" \
+  --scope "/subscriptions/{subscription-id}/resourceGroups/payer-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME" \
   --output table
 ```
 
@@ -878,7 +878,7 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 # Check Application Insights for Key Vault access
 az monitor app-insights query \
   --app "hipaa-attachments-prod-ai" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --analytics-query "dependencies | where timestamp > ago(1h) | where target contains 'vault.azure.net' | project timestamp, name, target, resultCode | order by timestamp desc" \
   --output table
 
@@ -985,7 +985,7 @@ AzureDiagnostics
 ```bash
 # Verify managed identity
 az webapp identity show \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "hipaa-attachments-prod-la"
 
 # Check role assignments

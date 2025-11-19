@@ -800,7 +800,7 @@ customEvents
 ```bash
 # Last 30 days deployment activities
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --start-time $(date -u -d '30 days ago' '+%Y-%m-%dT%H:%M:%SZ') \
   --query "[?contains(operationName.value, 'deployments')].{Time:eventTimestamp, Caller:caller, Operation:operationName.localizedValue, Status:status.localizedValue}" \
   --output table

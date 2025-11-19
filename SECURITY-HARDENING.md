@@ -146,11 +146,11 @@ Store these secrets in Key Vault:
 | Secret Name | Description | Example Value | Rotation Frequency |
 |-------------|-------------|---------------|-------------------|
 | `sftp-host` | Availity SFTP hostname | `sftp.availity.com` | N/A (non-secret) |
-| `sftp-username` | SFTP service account username | `pchp-hipaa-prod` | Annually |
+| `sftp-username` | SFTP service account username | `payer-hipaa-prod` | Annually |
 | `sftp-password` | SFTP service account password | `<secure-password>` | Quarterly |
 | `sftp-private-key` | SSH private key for SFTP | `<PEM-formatted-private-key>` | Annually |
 | `qnxt-api-base-url` | QNXT API endpoint | `https://qnxt-api.example.com` | N/A (non-secret) |
-| `qnxt-api-client-id` | QNXT OAuth client ID | `pchp-hipaa-client` | As needed |
+| `qnxt-api-client-id` | QNXT OAuth client ID | `payer-hipaa-client` | As needed |
 | `qnxt-api-client-secret` | QNXT OAuth client secret | `<secure-secret>` | Quarterly |
 | `service-bus-connection-string` | Service Bus connection string (if not using MI) | `Endpoint=sb://...` | N/A (prefer MI) |
 | `storage-account-key` | Storage account key (if not using MI) | `<account-key>` | N/A (prefer MI) |
@@ -159,7 +159,7 @@ Store these secrets in Key Vault:
 
 ```bash
 # Set variables
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 KV_NAME="hipaa-attachments-prod-kv"
 
 # Add SFTP credentials
@@ -171,7 +171,7 @@ az keyvault secret set \
 az keyvault secret set \
   --vault-name "$KV_NAME" \
   --name "sftp-username" \
-  --value "pchp-hipaa-prod"
+  --value "payer-hipaa-prod"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
@@ -187,7 +187,7 @@ az keyvault secret set \
 az keyvault secret set \
   --vault-name "$KV_NAME" \
   --name "qnxt-api-client-id" \
-  --value "pchp-hipaa-client"
+  --value "payer-hipaa-client"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
@@ -261,7 +261,7 @@ cat > rotate-secrets.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 KV_NAME="hipaa-attachments-prod-kv"
 
 # Rotate SFTP password
@@ -1326,7 +1326,7 @@ AzureDiagnostics
 
 ```bash
 # Set variables
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 LOCATION="eastus"
 BASE_NAME="hipaa-attachments-prod"
 
