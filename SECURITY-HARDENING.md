@@ -1131,27 +1131,14 @@ az storage account management-policy show \
 
 #### Storage Cost Comparison
 
-| Scenario | Hot (30 days) | Cool (60 days) | Archive (2375 days) | Total | Savings |
-|----------|---------------|----------------|---------------------|-------|---------|
-| **All Hot** | $460 | $920 | $56,775 | $58,155 | Baseline |
-| **With Lifecycle** | $460 | $276 | $5,678 | $6,414 | **89%** |
+| Scenario           | Hot (30 days) | Cool (60 days) | Archive (7 years) | Total   | Savings |
+|--------------------|---------------|----------------|-------------------|---------|---------|
+| **All Hot**        | $11,520       | $0             | $0                | $11,520 | Baseline |
+| **With Lifecycle** | $154          | $193           | $2,096            | $2,443  | **79%**  |
 
-*Example: 100 GB/month ingestion rate*
+*Example: 100 GB/month ingestion rate, 7-year retention*
 
 #### Monthly Cost Breakdown
-
-```
-Hot Tier (0-30 days):
-  Storage: 100 GB × $0.0184/GB = $1.84/month
-  
-Cool Tier (31-90 days):
-  Storage: 200 GB × $0.0115/GB = $2.30/month
-  
-Archive Tier (91 days - 7 years):
-  Storage: 25,200 GB × $0.00099/GB = $24.95/month
-
-Total Monthly Cost: ~$29/month
-vs. All Hot: ~$463/month (94% savings)
 ```
 
 ### Monitoring and Reporting
