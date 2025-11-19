@@ -41,7 +41,7 @@
       "pattern": "^[0-9]{10}$",
       "minLength": 10,
       "maxLength": 10,
-      "examples": ["1234567890"]
+      "examples": ["0000000000"]
     },
     "submittingProviderType": {
       "type": "string",
@@ -89,28 +89,28 @@
           "type": "string",
           "description": "Contact phone number (10 digits, no formatting)",
           "pattern": "^[0-9]{10}$",
-          "examples": ["2145551234"]
+          "examples": ["5555555555"]
         },
         "fax": {
           "type": "string",
           "description": "Fax number (10 digits, no formatting)",
           "pattern": "^[0-9]{10}$",
-          "examples": ["2145555678"]
+          "examples": ["5555555556"]
         },
         "email": {
           "type": "string",
           "format": "email",
           "maxLength": 254,
-          "examples": ["appeals@providerclinic.com"]
+          "examples": ["appeals@example.com"]
         }
       }
     },
     "memberId": {
       "type": "string",
-      "description": "Health plan member identifier for the patient",
+      "description": "Health plan member ID for the patient",
       "minLength": 1,
       "maxLength": 50,
-      "examples": ["MBR-987654321", "H1234567890"]
+      "examples": ["MBR-000000000", "H0000000000"]
     },
     "patientFirstName": {
       "type": "string",
@@ -302,7 +302,7 @@
   "examples": [
     {
       "claimNumber": "CLM-2024-001234",
-      "providerNpi": "1234567890",
+      "providerNpi": "0000000000",
       "submittingProviderType": "RENDERING",
       "providerAddress": {
         "addressLine1": "123 Medical Plaza Dr",
@@ -312,11 +312,11 @@
         "zipCode": "75201"
       },
       "contactInfo": {
-        "phone": "2145551234",
-        "fax": "2145555678",
-        "email": "appeals@providerclinic.com"
+        "phone": "5555555555",
+        "fax": "5555555556",
+        "email": "appeals@example.com"
       },
-      "memberId": "MBR-987654321",
+      "memberId": "MBR-000000000",
       "patientFirstName": "John",
       "patientLastName": "Smith",
       "patientDateOfBirth": "1985-03-15",
