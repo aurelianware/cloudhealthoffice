@@ -429,17 +429,21 @@ The ECS workflow uses Bearer token authentication:
 
 ```http
 POST /api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke
-Authorization: Bearer {jwt-token}
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
 Content-Type: application/json
 ```
+
+**Note**: Replace `YOUR_JWT_TOKEN_HERE` with your actual JWT token obtained from Azure AD OAuth 2.0.
 
 ### QNXT API Authentication
 
 QNXT API calls use a separate Bearer token:
 
 ```http
-Authorization: Bearer {qnxt-api-token}
+Authorization: Bearer YOUR_QNXT_TOKEN_HERE
 ```
+
+**Note**: The QNXT token is stored securely in Azure Key Vault and referenced via Logic App parameters.
 
 **Token Management**:
 - Tokens are stored as secure parameters in Logic App configuration
@@ -487,8 +491,9 @@ Test end-to-end workflow:
 
 1. **Service Date Search Test**
    ```bash
+   # Replace YOUR_JWT_TOKEN with your actual Azure AD JWT token
    curl -X POST \
-     -H "Authorization: Bearer {token}" \
+     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
      -H "Content-Type: application/json" \
      -d @test-service-date-request.json \
      https://{logic-app}.azurewebsites.net/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke
