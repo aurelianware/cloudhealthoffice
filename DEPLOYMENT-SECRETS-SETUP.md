@@ -742,6 +742,282 @@ For HIPAA compliance:
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2024-11-16  
+## Azure Key Vault Secret Migration
+
+### Overview
+
+For production PHI workloads, migrate from GitHub Secrets to Azure Key Vault for centralized secret management with enhanced security features:
+- HSM-backed keys (FIPS 140-2 Level 2)
+- Soft delete and purge protection
+- RBAC authorization with managed identities
+- Comprehensive audit logging
+- Private endpoint network isolation
+
+### Migration Strategy
+
+#### Phase 1: Deploy Key Vault Infrastructure
+
+```bash
+# Deploy Key Vault module
+az deployment group create \
+  --resource-group "pchp-attachments-prod-rg" \
+  --template-file infra/modules/keyvault.bicep \
+  --parameters keyVaultName="hipaa-attachments-prod-kv" \
+                location="eastus" \
+                skuName="premium" \
+                enableRbacAuthorization=true \
+                enableSoftDelete=true \
+                softDeleteRetentionInDays=90 \
+                enablePurgeProtection=true \
+                publicNetworkAccess="Disabled"
+```
+
+#### Phase 2: Migrate Secrets to Key Vault
+
+```bash
+# Set variables
+KV_NAME="hipaa-attachments-prod-kv"
+
+# Add SFTP credentials
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "sftp-host" \
+  --value "${SFTP_HOST}"
+
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "sftp-username" \
+  --value "${SFTP_USERNAME}"
+
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "sftp-password" \
+  --value "${SFTP_PASSWORD}"
+
+# Add QNXT API credentials
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-base-url" \
+  --value "https://qnxt-api-prod.example.com"
+
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-client-id" \
+  --value "${QNXT_CLIENT_ID}"
+
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-client-secret" \
+  --value "${QNXT_CLIENT_SECRET}"
+
+# Verify secrets
+az keyvault secret list --vault-name "$KV_NAME" --output table
+```
+
+#### Phase 3: Configure Logic App Access
+
+```bash
+# Get Logic App managed identity principal ID
+LOGIC_APP_NAME="hipaa-attachments-prod-la"
+PRINCIPAL_ID=$(az webapp identity show \
+  --resource-group "pchp-attachments-prod-rg" \
+  --name "$LOGIC_APP_NAME" \
+  --query principalId -o tsv)
+
+# Assign "Key Vault Secrets User" role
+az role assignment create \
+  --assignee "$PRINCIPAL_ID" \
+  --role "Key Vault Secrets User" \
+  --scope "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME"
+
+# Verify role assignment
+az role assignment list \
+  --assignee "$PRINCIPAL_ID" \
+  --scope "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.KeyVault/vaults/$KV_NAME" \
+  --output table
+```
+
+#### Phase 4: Update Logic App Workflows
+
+Update workflow JSON files to reference Key Vault secrets using `@keyvault()` expression:
+
+**Before (GitHub Secret):**
+```json
+{
+  "type": "Http",
+  "inputs": {
+    "uri": "@parameters('qnxt_base_url')/api/claims",
+    "authentication": {
+      "type": "ClientCredentials",
+      "secret": "@parameters('qnxt_client_secret')"
+    }
+  }
+}
+```
+
+**After (Key Vault):**
+```json
+{
+  "type": "Http",
+  "inputs": {
+    "uri": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-base-url')/api/claims",
+    "authentication": {
+      "type": "ClientCredentials",
+      "secret": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-client-secret')"
+    }
+  }
+}
+```
+
+#### Phase 5: Validation and Testing
+
+```bash
+# Test Key Vault access from Logic App
+# Trigger a workflow and verify it retrieves secrets successfully
+
+# Check Application Insights for Key Vault access
+az monitor app-insights query \
+  --app "hipaa-attachments-prod-ai" \
+  --resource-group "pchp-attachments-prod-rg" \
+  --analytics-query "dependencies | where timestamp > ago(1h) | where target contains 'vault.azure.net' | project timestamp, name, target, resultCode | order by timestamp desc" \
+  --output table
+
+# Expected: All Key Vault calls return 200 OK
+```
+
+#### Phase 6: Cleanup (After Validation)
+
+```bash
+# Remove secrets from GitHub (keep OIDC secrets for deployment)
+# Navigate to: Repository → Settings → Secrets and variables → Actions
+# Delete: SFTP_HOST, SFTP_USERNAME, SFTP_PASSWORD
+# Keep: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+
+# Update deployment workflows to remove secret parameters
+# Remove from workflow YAML files:
+# - SFTP_HOST: ${{ secrets.SFTP_HOST }}
+# - SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+# - SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+```
+
+### Secret Rotation Procedures
+
+#### Automated Rotation (Recommended)
+
+```bash
+# Create rotation script
+cat > rotate-secrets.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+KV_NAME="hipaa-attachments-prod-kv"
+
+# Rotate SFTP password
+NEW_SFTP_PASSWORD=$(openssl rand -base64 32)
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "sftp-password" \
+  --value "$NEW_SFTP_PASSWORD"
+
+# Update SFTP server with new password (implementation specific)
+
+# Rotate QNXT API client secret
+NEW_CLIENT_SECRET=$(openssl rand -base64 32)
+az keyvault secret set \
+  --vault-name "$KV_NAME" \
+  --name "qnxt-api-client-secret" \
+  --value "$NEW_CLIENT_SECRET"
+
+# Update QNXT API OAuth client (implementation specific)
+
+echo "✅ Secrets rotated successfully"
+EOF
+
+chmod +x rotate-secrets.sh
+```
+
+#### Rotation Schedule
+
+| Secret Type | Frequency | Owner | Automation |
+|-------------|-----------|-------|------------|
+| SFTP Password | Quarterly | Security Team | Automated script |
+| QNXT API Client Secret | Quarterly | Integration Team | Automated script |
+| OAuth Tokens | Daily (automatic) | Azure AD | Built-in Azure AD |
+
+### Monitoring and Compliance
+
+#### Audit Log Queries
+
+```kusto
+// Query Key Vault secret access
+AzureDiagnostics
+| where ResourceType == "VAULTS"
+| where OperationName == "SecretGet"
+| where TimeGenerated > ago(30d)
+| project TimeGenerated, CallerIPAddress, identity_claim_appid_g, ResultType
+| order by TimeGenerated desc
+
+// Alert on failed access attempts
+AzureDiagnostics
+| where ResourceType == "VAULTS"
+| where ResultType != "Success"
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, OperationName, CallerIPAddress, ResultType, ResultSignature
+```
+
+#### Compliance Reporting
+
+- **Audit Logs**: 365-day retention in Log Analytics
+- **Secret Versions**: All versions retained indefinitely
+- **Access Reviews**: Quarterly review of RBAC permissions
+- **Rotation History**: Tracked via Key Vault secret versions
+
+### Troubleshooting
+
+#### Issue: Logic App cannot access Key Vault
+
+**Solutions:**
+1. Verify managed identity is enabled on Logic App
+2. Check RBAC role assignment exists
+3. Ensure Key Vault network settings allow Logic App access
+4. Verify Key Vault secret names match workflow references
+
+```bash
+# Verify managed identity
+az webapp identity show \
+  --resource-group "pchp-attachments-prod-rg" \
+  --name "hipaa-attachments-prod-la"
+
+# Check role assignments
+az role assignment list \
+  --assignee "$PRINCIPAL_ID" \
+  --output table
+```
+
+#### Issue: Key Vault reference not resolving
+
+**Solutions:**
+1. Verify Key Vault URI format: `@keyvault('https://{vault}.vault.azure.net/secrets/{secret-name}')`
+2. Check secret exists: `az keyvault secret show --vault-name "{vault}" --name "{secret}"`
+3. Ensure no typos in secret name
+4. Verify Logic App has network access to Key Vault (private endpoint configuration)
+
+### Security Best Practices
+
+1. **Use Private Endpoints**: Isolate Key Vault from public internet
+2. **Enable Soft Delete**: 90-day recovery window for deleted secrets
+3. **Enable Purge Protection**: Prevent permanent deletion during retention
+4. **Use RBAC Authorization**: Prefer RBAC over access policies
+5. **Rotate Secrets Regularly**: Implement automated rotation procedures
+6. **Monitor Access**: Set up alerts for failed authentication attempts
+7. **Audit Regularly**: Review access logs monthly
+
+For comprehensive security guidance, see:
+- **[SECURITY-HARDENING.md](SECURITY-HARDENING.md)** - Complete security implementation guide
+- **[docs/HIPAA-COMPLIANCE-MATRIX.md](docs/HIPAA-COMPLIANCE-MATRIX.md)** - Regulatory compliance mapping
+
+---
+
+**Document Version:** 1.1  
+**Last Updated:** 2024-11-19  
 **Maintained By:** HIPAA Attachments Team
