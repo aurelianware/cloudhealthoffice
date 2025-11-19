@@ -54,7 +54,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Storage account encryption configuration
 - RBAC role assignments for key access
 
-**Total Infrastructure Code**: 593 lines of production-ready Bicep
+**Total Infrastructure Code**: 653 lines of production-ready Bicep
 
 ---
 
