@@ -42,6 +42,12 @@ param serviceBusConnectionString string = ''
 param appServicePlanName string = '${baseName}-plan'
 param serviceBusName string
 
+// ECS (Enhanced Claim Status) parameters
+param enableEcs bool = true
+param qnxtBaseUrl string = 'https://qnxt-api.example.com'
+@secure()
+param qnxtApiToken string = ''
+
 // =========================
  // Variables
 var storageAccountName = 'staging${uniqueString(resourceGroup().id)}'
@@ -291,6 +297,22 @@ resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
 
 
 // =========================
+// ECS Module
+// =========================
+module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
+  name: 'ecs-api-module'
+  params: {
+    baseName: baseName
+    logicAppName: la.name
+    appInsightsKey: insights.properties.InstrumentationKey
+    appInsightsConnectionString: insights.properties.ConnectionString
+    qnxtBaseUrl: qnxtBaseUrl
+    qnxtApiToken: qnxtApiToken
+    enableEcs: enableEcs
+  }
+}
+
+// =========================
 // Outputs
 // =========================
 output storageAccountName string = stg.name
@@ -302,3 +324,5 @@ output sftpConnectionId string = connSftp.id
 output blobConnectionId string = connBlob.id
 output serviceBusConnectionId string = connSb.id
 output integrationAccountConnectionId string = enableB2B ? connIa.id : 'disabled'
+output ecsEndpointUrl string = enableEcs && ecs != null ? ecs.outputs.ecsEndpointInfo.fullUrl : 'disabled'
+output ecsWorkflowName string = enableEcs && ecs != null ? ecs.outputs.ecsWorkflowConfig.workflowName : 'disabled'

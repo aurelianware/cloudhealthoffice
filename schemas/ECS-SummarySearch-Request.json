@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ECS Summary Search Request",
+  "description": "Schema for Enhanced Claim Status (ECS) Summary Search requests supporting four search methods",
+  "type": "object",
+  "required": ["searchMethod", "requestId"],
+  "properties": {
+    "searchMethod": {
+      "type": "string",
+      "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"],
+      "description": "The type of search to perform"
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[A-Z0-9-]+$",
+      "minLength": 1,
+      "maxLength": 50,
+      "description": "Unique identifier for tracking the request"
+    },
+    "submitterId": {
+      "type": "string",
+      "description": "Identifier of the submitter (e.g., provider, clearinghouse)"
+    },
+    "serviceDateSearch": {
+      "type": "object",
+      "description": "Parameters for Service Date search method",
+      "required": ["serviceFromDate", "serviceToDate", "providerId"],
+      "properties": {
+        "serviceFromDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Service start date (CCYYMMDD format)"
+        },
+        "serviceToDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Service end date (CCYYMMDD format)"
+        },
+        "providerId": {
+          "type": "string",
+          "description": "Provider NPI or Tax ID"
+        },
+        "providerIdQualifier": {
+          "type": "string",
+          "enum": ["XX", "EI", "NPI"],
+          "default": "NPI",
+          "description": "Qualifier for provider identifier"
+        }
+      }
+    },
+    "memberSearch": {
+      "type": "object",
+      "description": "Parameters for Member search method",
+      "required": ["memberId", "serviceFromDate", "serviceToDate"],
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "description": "Member ID or Subscriber ID"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Member first name"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Member last name"
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "format": "date",
+          "description": "Member date of birth (CCYYMMDD format)"
+        },
+        "serviceFromDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Service start date (CCYYMMDD format)"
+        },
+        "serviceToDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Service end date (CCYYMMDD format)"
+        }
+      }
+    },
+    "checkNumberSearch": {
+      "type": "object",
+      "description": "Parameters for Check Number search method",
+      "required": ["checkNumber", "payerId"],
+      "properties": {
+        "checkNumber": {
+          "type": "string",
+          "description": "Check or EFT trace number"
+        },
+        "payerId": {
+          "type": "string",
+          "description": "Payer identifier"
+        },
+        "checkDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Check issue date (CCYYMMDD format)"
+        }
+      }
+    },
+    "claimHistorySearch": {
+      "type": "object",
+      "description": "Parameters for Claim History search method",
+      "required": ["claimNumber"],
+      "properties": {
+        "claimNumber": {
+          "type": "string",
+          "description": "Payer claim control number"
+        },
+        "patientAccountNumber": {
+          "type": "string",
+          "description": "Provider's patient account number"
+        },
+        "memberId": {
+          "type": "string",
+          "description": "Member ID or Subscriber ID"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["serviceDateSearch"],
+      "not": {
+        "anyOf": [
+          { "required": ["memberSearch"] },
+          { "required": ["checkNumberSearch"] },
+          { "required": ["claimHistorySearch"] }
+        ]
+      }
+    },
+    {
+      "required": ["memberSearch"],
+      "not": {
+        "anyOf": [
+          { "required": ["serviceDateSearch"] },
+          { "required": ["checkNumberSearch"] },
+          { "required": ["claimHistorySearch"] }
+        ]
+      }
+    },
+    {
+      "required": ["checkNumberSearch"],
+      "not": {
+        "anyOf": [
+          { "required": ["serviceDateSearch"] },
+          { "required": ["memberSearch"] },
+          { "required": ["claimHistorySearch"] }
+        ]
+      }
+    },
+    {
+      "required": ["claimHistorySearch"],
+      "not": {
+        "anyOf": [
+          { "required": ["serviceDateSearch"] },
+          { "required": ["memberSearch"] },
+          { "required": ["checkNumberSearch"] }
+        ]
+      }
+    }
+  ]
+}

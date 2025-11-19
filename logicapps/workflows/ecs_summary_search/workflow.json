@@ -1,0 +1,485 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_ECS_Summary_Search_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "required": ["searchMethod", "requestId"],
+            "properties": {
+              "searchMethod": {
+                "type": "string",
+                "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "submitterId": {
+                "type": "string"
+              },
+              "serviceDateSearch": {
+                "type": "object"
+              },
+              "memberSearch": {
+                "type": "object"
+              },
+              "checkNumberSearch": {
+                "type": "object"
+              },
+              "claimHistorySearch": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try_Process_ECS_Search": {
+        "type": "Scope",
+        "actions": {
+          "Log_ECS_Request_Received": {
+            "type": "ApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "ECSSearchRequestReceived",
+                "properties": {
+                  "requestId": "@triggerBody()?['requestId']",
+                  "searchMethod": "@triggerBody()?['searchMethod']",
+                  "submitterId": "@triggerBody()?['submitterId']",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Validate_Request_Schema": {
+            "type": "Compose",
+            "runAfter": {
+              "Log_ECS_Request_Received": [
+                "Succeeded"
+              ]
+            },
+            "inputs": "@triggerBody()"
+          },
+          "Determine_Search_Method": {
+            "type": "Switch",
+            "runAfter": {
+              "Validate_Request_Schema": [
+                "Succeeded"
+              ]
+            },
+            "expression": "@triggerBody()?['searchMethod']",
+            "cases": {
+              "ServiceDate": {
+                "case": "ServiceDate",
+                "actions": {
+                  "Extract_ServiceDate_Parameters": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "serviceFromDate": "@triggerBody()?['serviceDateSearch']?['serviceFromDate']",
+                      "serviceToDate": "@triggerBody()?['serviceDateSearch']?['serviceToDate']",
+                      "providerId": "@triggerBody()?['serviceDateSearch']?['providerId']",
+                      "providerIdQualifier": "@coalesce(triggerBody()?['serviceDateSearch']?['providerIdQualifier'], 'NPI')"
+                    }
+                  },
+                  "Query_QNXT_by_ServiceDate": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Extract_ServiceDate_Parameters": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/service-date",
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                      },
+                      "body": {
+                        "serviceFromDate": "@outputs('Extract_ServiceDate_Parameters')?['serviceFromDate']",
+                        "serviceToDate": "@outputs('Extract_ServiceDate_Parameters')?['serviceToDate']",
+                        "providerId": "@outputs('Extract_ServiceDate_Parameters')?['providerId']",
+                        "providerIdQualifier": "@outputs('Extract_ServiceDate_Parameters')?['providerIdQualifier']"
+                      },
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 4,
+                        "interval": "PT15S"
+                      }
+                    }
+                  },
+                  "Set_ServiceDate_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Query_QNXT_by_ServiceDate": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "qnxtResults",
+                      "value": "@body('Query_QNXT_by_ServiceDate')"
+                    }
+                  }
+                }
+              },
+              "Member": {
+                "case": "Member",
+                "actions": {
+                  "Extract_Member_Parameters": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "memberId": "@triggerBody()?['memberSearch']?['memberId']",
+                      "firstName": "@triggerBody()?['memberSearch']?['firstName']",
+                      "lastName": "@triggerBody()?['memberSearch']?['lastName']",
+                      "dateOfBirth": "@triggerBody()?['memberSearch']?['dateOfBirth']",
+                      "serviceFromDate": "@triggerBody()?['memberSearch']?['serviceFromDate']",
+                      "serviceToDate": "@triggerBody()?['memberSearch']?['serviceToDate']"
+                    }
+                  },
+                  "Query_QNXT_by_Member": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Extract_Member_Parameters": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/member",
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                      },
+                      "body": {
+                        "memberId": "@outputs('Extract_Member_Parameters')?['memberId']",
+                        "firstName": "@outputs('Extract_Member_Parameters')?['firstName']",
+                        "lastName": "@outputs('Extract_Member_Parameters')?['lastName']",
+                        "dateOfBirth": "@outputs('Extract_Member_Parameters')?['dateOfBirth']",
+                        "serviceFromDate": "@outputs('Extract_Member_Parameters')?['serviceFromDate']",
+                        "serviceToDate": "@outputs('Extract_Member_Parameters')?['serviceToDate']"
+                      },
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 4,
+                        "interval": "PT15S"
+                      }
+                    }
+                  },
+                  "Set_Member_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Query_QNXT_by_Member": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "qnxtResults",
+                      "value": "@body('Query_QNXT_by_Member')"
+                    }
+                  }
+                }
+              },
+              "CheckNumber": {
+                "case": "CheckNumber",
+                "actions": {
+                  "Extract_CheckNumber_Parameters": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "checkNumber": "@triggerBody()?['checkNumberSearch']?['checkNumber']",
+                      "payerId": "@triggerBody()?['checkNumberSearch']?['payerId']",
+                      "checkDate": "@triggerBody()?['checkNumberSearch']?['checkDate']"
+                    }
+                  },
+                  "Query_QNXT_by_CheckNumber": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Extract_CheckNumber_Parameters": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/check-number",
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                      },
+                      "body": {
+                        "checkNumber": "@outputs('Extract_CheckNumber_Parameters')?['checkNumber']",
+                        "payerId": "@outputs('Extract_CheckNumber_Parameters')?['payerId']",
+                        "checkDate": "@outputs('Extract_CheckNumber_Parameters')?['checkDate']"
+                      },
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 4,
+                        "interval": "PT15S"
+                      }
+                    }
+                  },
+                  "Set_CheckNumber_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Query_QNXT_by_CheckNumber": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "qnxtResults",
+                      "value": "@body('Query_QNXT_by_CheckNumber')"
+                    }
+                  }
+                }
+              },
+              "ClaimHistory": {
+                "case": "ClaimHistory",
+                "actions": {
+                  "Extract_ClaimHistory_Parameters": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "claimNumber": "@triggerBody()?['claimHistorySearch']?['claimNumber']",
+                      "patientAccountNumber": "@triggerBody()?['claimHistorySearch']?['patientAccountNumber']",
+                      "memberId": "@triggerBody()?['claimHistorySearch']?['memberId']"
+                    }
+                  },
+                  "Query_QNXT_by_ClaimHistory": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Extract_ClaimHistory_Parameters": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/claim-history",
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                      },
+                      "body": {
+                        "claimNumber": "@outputs('Extract_ClaimHistory_Parameters')?['claimNumber']",
+                        "patientAccountNumber": "@outputs('Extract_ClaimHistory_Parameters')?['patientAccountNumber']",
+                        "memberId": "@outputs('Extract_ClaimHistory_Parameters')?['memberId']"
+                      },
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 4,
+                        "interval": "PT15S"
+                      }
+                    }
+                  },
+                  "Set_ClaimHistory_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Query_QNXT_by_ClaimHistory": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "qnxtResults",
+                      "value": "@body('Query_QNXT_by_ClaimHistory')"
+                    }
+                  }
+                }
+              }
+            },
+            "default": {
+              "actions": {
+                "Invalid_Search_Method": {
+                  "type": "Compose",
+                  "runAfter": {},
+                  "inputs": {
+                    "error": "Invalid search method specified",
+                    "searchMethod": "@triggerBody()?['searchMethod']"
+                  }
+                }
+              }
+            }
+          },
+          "Transform_QNXT_to_Availity_ECS_Format": {
+            "type": "Compose",
+            "runAfter": {
+              "Determine_Search_Method": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "requestId": "@triggerBody()?['requestId']",
+              "status": "success",
+              "timestamp": "@utcNow()",
+              "searchMethod": "@triggerBody()?['searchMethod']",
+              "totalResults": "@length(variables('qnxtResults')?['claims'])",
+              "claims": "@variables('qnxtResults')?['claims']"
+            }
+          },
+          "Log_ECS_Search_Success": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Transform_QNXT_to_Availity_ECS_Format": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "ECSSearchSuccess",
+                "properties": {
+                  "requestId": "@triggerBody()?['requestId']",
+                  "searchMethod": "@triggerBody()?['searchMethod']",
+                  "totalResults": "@length(variables('qnxtResults')?['claims'])",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Response_Success": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Log_ECS_Search_Success": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": "@outputs('Transform_QNXT_to_Availity_ECS_Format')"
+            }
+          }
+        }
+      },
+      "Catch_ECS_Search_Error": {
+        "type": "Scope",
+        "runAfter": {
+          "Try_Process_ECS_Search": [
+            "Failed",
+            "TimedOut",
+            "Skipped"
+          ]
+        },
+        "actions": {
+          "Compose_Error_Response": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": {
+              "requestId": "@triggerBody()?['requestId']",
+              "status": "error",
+              "timestamp": "@utcNow()",
+              "searchMethod": "@triggerBody()?['searchMethod']",
+              "totalResults": 0,
+              "claims": [],
+              "errors": [
+                {
+                  "errorCode": "ECS_SEARCH_ERROR",
+                  "errorMessage": "An error occurred while processing the ECS search request",
+                  "errorDetails": "@{result('Try_Process_ECS_Search')}"
+                }
+              ]
+            }
+          },
+          "Log_ECS_Search_Error": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Compose_Error_Response": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "ECSSearchError",
+                "properties": {
+                  "requestId": "@triggerBody()?['requestId']",
+                  "searchMethod": "@triggerBody()?['searchMethod']",
+                  "errorDetails": "@{result('Try_Process_ECS_Search')}",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Response_Error": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Log_ECS_Search_Error": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 500,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": "@outputs('Compose_Error_Response')"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "defaultValue": {}
+      },
+      "qnxt_base_url": {
+        "type": "String",
+        "defaultValue": "https://qnxt-api.example.com"
+      },
+      "qnxt_api_token": {
+        "type": "SecureString",
+        "defaultValue": ""
+      }
+    },
+    "variables": {
+      "qnxtResults": {
+        "type": "Object",
+        "value": {}
+      }
+    }
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "value": {
+        "appinsights": {
+          "connectionId": "/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.Web/connections/appinsights",
+          "connectionName": "appinsights",
+          "id": "/subscriptions/{subscription-id}/providers/Microsoft.Web/locations/{location}/managedApis/appinsights"
+        }
+      }
+    },
+    "qnxt_base_url": {
+      "value": "https://qnxt-api.example.com"
+    }
+  }
+}
