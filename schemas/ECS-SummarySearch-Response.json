@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ECS Summary Search Response",
+  "description": "Schema for Enhanced Claim Status (ECS) Summary Search responses in Availity format",
+  "type": "object",
+  "required": ["requestId", "status", "timestamp"],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "description": "Original request identifier for tracking"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "error", "partial"],
+      "description": "Overall status of the search operation"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Response generation timestamp (ISO 8601)"
+    },
+    "searchMethod": {
+      "type": "string",
+      "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"],
+      "description": "The search method that was executed"
+    },
+    "totalResults": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of claims found"
+    },
+    "claims": {
+      "type": "array",
+      "description": "Array of claim status results",
+      "items": {
+        "type": "object",
+        "required": ["claimNumber", "claimStatus"],
+        "properties": {
+          "claimNumber": {
+            "type": "string",
+            "description": "Payer claim control number"
+          },
+          "patientAccountNumber": {
+            "type": "string",
+            "description": "Provider's patient account number"
+          },
+          "claimStatus": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "Paid",
+              "Denied",
+              "Partially Paid",
+              "In Process",
+              "Suspended",
+              "Forwarded",
+              "Adjusted"
+            ],
+            "description": "Current status of the claim"
+          },
+          "claimStatusCode": {
+            "type": "string",
+            "description": "X12 status code (e.g., F0, F1, F2, F3)"
+          },
+          "claimStatusCategory": {
+            "type": "string",
+            "description": "Status category code"
+          },
+          "serviceFromDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Service start date (CCYYMMDD)"
+          },
+          "serviceToDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Service end date (CCYYMMDD)"
+          },
+          "receivedDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Date claim was received by payer"
+          },
+          "processedDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Date claim was processed"
+          },
+          "paidDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Date claim was paid (if applicable)"
+          },
+          "billedAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Total amount billed"
+          },
+          "allowedAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Total amount allowed by payer"
+          },
+          "paidAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Total amount paid"
+          },
+          "patientResponsibility": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Amount patient is responsible for"
+          },
+          "adjustmentAmount": {
+            "type": "number",
+            "description": "Total adjustment amount"
+          },
+          "payerId": {
+            "type": "string",
+            "description": "Payer identifier"
+          },
+          "payerName": {
+            "type": "string",
+            "description": "Payer name"
+          },
+          "providerId": {
+            "type": "string",
+            "description": "Provider NPI or identifier"
+          },
+          "providerName": {
+            "type": "string",
+            "description": "Provider name"
+          },
+          "memberId": {
+            "type": "string",
+            "description": "Member/subscriber ID"
+          },
+          "memberName": {
+            "type": "string",
+            "description": "Member/patient name"
+          },
+          "checkNumber": {
+            "type": "string",
+            "description": "Check or EFT trace number (if paid)"
+          },
+          "checkDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Check issue date (if paid)"
+          },
+          "remarkCodes": {
+            "type": "array",
+            "description": "Claim adjustment remark codes",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reasonCodes": {
+            "type": "array",
+            "description": "Claim adjustment reason codes",
+            "items": {
+              "type": "string"
+            }
+          },
+          "statusDetails": {
+            "type": "string",
+            "description": "Additional status details or messages"
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Array of error messages (if status is error or partial)",
+      "items": {
+        "type": "object",
+        "required": ["errorCode", "errorMessage"],
+        "properties": {
+          "errorCode": {
+            "type": "string",
+            "description": "Error code identifier"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "errorDetails": {
+            "type": "string",
+            "description": "Additional error details"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Array of warning messages",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "description": "Pagination information for large result sets",
+      "properties": {
+        "currentPage": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "totalPages": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hasNextPage": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
