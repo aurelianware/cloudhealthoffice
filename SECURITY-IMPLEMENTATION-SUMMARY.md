@@ -46,7 +46,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - DNS zone group configurations for name resolution
 - Complete network isolation from public internet
 
-#### `infra/modules/cmk.bicep` (113 lines)
+#### `infra/modules/cmk.bicep` (130 lines)
 **Optional customer-managed keys (BYOK)**
 - RSA-HSM keys (4096-bit) in Premium Key Vault
 - Automatic key rotation every 90 days
