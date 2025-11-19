@@ -47,12 +47,9 @@ output ecsAppSettings array = [
     name: 'ECS_QNXT_BASE_URL'
     value: qnxtBaseUrl
   }
-  // Note: QNXT API token should be configured via Key Vault reference
-  // Example: '@Microsoft.KeyVault(SecretUri=https://keyvault.vault.azure.net/secrets/qnxt-token/)'
-  {
-    name: 'ECS_QNXT_API_TOKEN'
-    value: '' // Placeholder - configure via Key Vault or secure parameters
-  }
+  // Note: ECS_QNXT_API_TOKEN must be configured separately via Key Vault reference
+  // DO NOT include token values in Bicep outputs or app settings
+  // Configure via: az webapp config appsettings set --settings "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=...)"
   {
     name: 'ECS_WORKFLOW_ENABLED'
     value: string(enableEcs)

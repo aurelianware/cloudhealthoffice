@@ -951,6 +951,47 @@ curl -I http://logic-app.azurewebsites.net
 4. Management sign-off
 5. Store for 6 years
 
+## ECS Integration Security Notes
+
+### QNXT API Token Management
+
+**CRITICAL**: The ECS Summary Search workflow requires a QNXT API token for backend integration.
+
+**DO NOT:**
+- ❌ Commit API tokens, secrets, or passwords to version control
+- ❌ Include token values in Bicep outputs or module definitions
+- ❌ Use default values for `SecureString` parameters in Logic App workflows
+- ❌ Store tokens in plain text in app settings
+
+**DO:**
+- ✅ Store QNXT API tokens in Azure Key Vault
+- ✅ Reference Key Vault secrets via app settings: `@Microsoft.KeyVault(SecretUri=...)`
+- ✅ Use Managed Identity for authentication where possible
+- ✅ Rotate tokens regularly (every 90 days minimum)
+- ✅ Audit token access and usage
+
+**Configuration Example:**
+```bash
+# Store token in Key Vault
+az keyvault secret set \
+  --vault-name "${KV_NAME}" \
+  --name "qnxt-api-token" \
+  --value "${QNXT_TOKEN}"
+
+# Configure Logic App to reference Key Vault
+SECRET_URI=$(az keyvault secret show \
+  --vault-name "${KV_NAME}" \
+  --name "qnxt-api-token" \
+  --query id -o tsv)
+
+az webapp config appsettings set \
+  --resource-group "${RG_NAME}" \
+  --name "${LOGIC_APP_NAME}" \
+  --settings "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})"
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md#7-configure-ecs-enhanced-claim-status-integration) for complete setup instructions.
+
 ---
 
 For architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md)  
