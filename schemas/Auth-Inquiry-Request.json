@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Authorization Inquiry Request",
+  "description": "Schema for X12 278 X215 Authorization Inquiry requests supporting query by authorization number or member demographics",
+  "type": "object",
+  "required": ["providerNpi"],
+  "properties": {
+    "authorizationNumber": {
+      "type": "string",
+      "description": "Authorization number to query (REF01 in 2000E loop). Required if memberId not provided.",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "memberId": {
+      "type": "string",
+      "description": "Member ID or Subscriber ID (2010C NM109). Required if authorizationNumber not provided.",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "patientDateOfBirth": {
+      "type": "string",
+      "format": "date",
+      "description": "Patient date of birth in CCYY-MM-DD format (2010C/D DMG02). Required if authorizationNumber not provided.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "providerNpi": {
+      "type": "string",
+      "description": "Requesting Provider NPI (2010B NM108-109). Required for all inquiries.",
+      "pattern": "^\\d{10}$"
+    },
+    "serviceFromDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Service start date in CCYY-MM-DD format (2000E DTP*AAH). Optional per QRE best practice.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "serviceToDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Service end date in CCYY-MM-DD format (2000E DTP*AAH). Optional per QRE best practice.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "serviceType": {
+      "type": "string",
+      "description": "Type of service being queried. Affects UM01 code (AR=Inpatient, HS=Outpatient, SC=Referral).",
+      "enum": ["AR", "HS", "SC"],
+      "default": "HS"
+    },
+    "patientFirstName": {
+      "type": "string",
+      "description": "Patient first name. Optional for improved matching.",
+      "minLength": 1,
+      "maxLength": 35
+    },
+    "patientLastName": {
+      "type": "string",
+      "description": "Patient last name. Optional for improved matching.",
+      "minLength": 1,
+      "maxLength": 60
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["authorizationNumber"],
+      "description": "Query by authorization number"
+    },
+    {
+      "required": ["memberId", "patientDateOfBirth"],
+      "description": "Query by member ID and date of birth"
+    }
+  ],
+  "additionalProperties": false
+}

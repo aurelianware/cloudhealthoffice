@@ -113,6 +113,7 @@ This solution implements the following process:
 - `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing workflow
 - `logicapps/workflows/replay278/workflow.json`: HTTP endpoint for deterministic 278 replay
 - `logicapps/workflows/ecs_summary_search/workflow.json`: Enhanced Claim Status (ECS) summary search workflow
+- `logicapps/workflows/auth_inquiry/workflow.json`: Authorization Inquiry (X12 278 X215) - Query existing authorizations
 
 ### Key Features
 - **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations}/yyyy/MM/dd/` partitioning
@@ -122,6 +123,80 @@ This solution implements the following process:
 - **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
 - **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
 - **ECS Summary Search**: Enhanced Claim Status queries via HTTP endpoint with four search methods (Service Date, Member, Check Number, Claim History)
+- **Authorization Inquiry**: X12 278 X215 transactions for querying existing authorizations in real-time
+
+## 🔍 Authorization Inquiry (X12 278 X215)
+
+The Authorization Inquiry workflow provides real-time status checks for existing authorizations using X12 278 X215 transactions.
+
+### Features
+- **Dual Query Methods**: Query by authorization number OR member demographics (ID + DOB)
+- **Real-time Status**: Synchronous responses within 30 seconds
+- **Automatic Retry**: 3 retry attempts with 30-second intervals
+- **Minimal Data Requirements**: Following Availity QRE best practices
+- **HIPAA Compliant**: PHI masking in Application Insights
+
+### Use Cases
+1. **Pre-Claim Validation**: Verify authorization before submitting claims
+2. **Member Service**: Real-time status for patient inquiries
+3. **Appeals Preparation**: Gather authorization details for appeals
+4. **Automated Workflows**: Integrate into downstream processing
+
+### Quick Start
+
+**Query by Authorization Number**:
+```json
+POST /api/auth-inquiry
+{
+  "authorizationNumber": "AUTH12345",
+  "providerNpi": "1234567890",
+  "serviceType": "HS"
+}
+```
+
+**Query by Member Demographics**:
+```json
+POST /api/auth-inquiry
+{
+  "memberId": "MEM123456",
+  "patientDateOfBirth": "1985-06-15",
+  "providerNpi": "1234567890"
+}
+```
+
+**Response**:
+```json
+{
+  "authorizationNumber": "AUTH12345",
+  "status": "APPROVED",
+  "effectiveDate": "2025-12-01",
+  "expirationDate": "2025-12-31",
+  "authorizedQuantity": 30,
+  "quantityType": "DAYS"
+}
+```
+
+### Documentation
+- **[AUTHORIZATION-INQUIRY.md](docs/AUTHORIZATION-INQUIRY.md)** - Comprehensive guide (~15 pages)
+  - X215 vs X217 comparison
+  - Query patterns and field requirements
+  - Response structure and status codes
+  - Error handling and troubleshooting
+  - Integration examples
+  - Testing scenarios
+
+### Configuration
+- **Configuration Schema**: `core/schemas/availity-integration-config.schema.json`
+- **Request Schema**: `schemas/Auth-Inquiry-Request.json`
+- **Response Schema**: `schemas/Auth-Inquiry-Response.json`
+- **Example Transactions**: `docs/examples/authorizations/inquiry/`
+
+### Integration Points
+The Authorization Inquiry workflow can be called from:
+- Provider portal (direct HTTP call)
+- Authorization Request workflow (check if auth already exists)
+- Appeals module (verify authorization status before appeal)
+- Pre-claim validation workflows
 
 ## Build & Deployment
 
