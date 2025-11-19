@@ -1,5 +1,5 @@
 # Test HIPAA X12 275/277 Workflows with Trading Partners
-# Availity (030240928) ↔ EXHP-QNXT (66917)
+# Availity (030240928) ↔ Health Plan-QNXT ({config.payerId})
 
 param(
     [Parameter(Mandatory=$false)]
@@ -28,7 +28,7 @@ Write-Host "🧪 HIPAA X12 275/277 Trading Partners Testing" -ForegroundColor Cy
 Write-Host ""
 Write-Host "📋 Test Configuration:" -ForegroundColor White
 Write-Host "  • Sender: Availity (030240928)" -ForegroundColor Green
-Write-Host "  • Receiver: EXHP-QNXT (66917)" -ForegroundColor Green
+Write-Host "  • Receiver: Health Plan-QNXT ({config.payerId})" -ForegroundColor Green
 Write-Host "  • Logic App: $LogicAppName" -ForegroundColor Blue
 Write-Host "  • Service Bus: $ServiceBusNamespace" -ForegroundColor Blue
 Write-Host ""
@@ -128,7 +128,7 @@ if ($TestInbound275 -or $TestFullWorkflow) {
     Write-Host "1. Check Data Lake storage for raw file in /raw/275/" -ForegroundColor White
     Write-Host "2. Verify X12 decode operation with trading partners:" -ForegroundColor White
     Write-Host "   • Sender ID: 030240928 (Availity)" -ForegroundColor Green
-    Write-Host "   • Receiver ID: 66917 (EXHP-QNXT)" -ForegroundColor Green
+    Write-Host "   • Receiver ID: {config.payerId} (Health Plan-QNXT)" -ForegroundColor Green
     Write-Host "3. Confirm Service Bus message in attachments-in topic" -ForegroundColor White
     Write-Host "4. Validate metadata extraction:" -ForegroundColor White
     Write-Host "   • Claim Number: CLM20250924001" -ForegroundColor Blue
@@ -172,7 +172,7 @@ if ($TestOutbound277 -or $TestFullWorkflow) {
     Write-Host "📋 Verification Steps for 277 Processing:" -ForegroundColor Cyan
     Write-Host "1. Verify rfai277 workflow triggered from Service Bus" -ForegroundColor White
     Write-Host "2. Confirm X12 277 encoding with trading partners:" -ForegroundColor White
-    Write-Host "   • Sender ID: 66917 (EXHP-QNXT)" -ForegroundColor Green
+    Write-Host "   • Sender ID: {config.payerId} (Health Plan-QNXT)" -ForegroundColor Green
     Write-Host "   • Receiver ID: 030240928 (Availity)" -ForegroundColor Green
     Write-Host "3. Validate 277 message structure and content" -ForegroundColor White
     Write-Host "4. Check outbound transmission to Availity endpoint" -ForegroundColor White
