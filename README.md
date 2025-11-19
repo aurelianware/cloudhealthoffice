@@ -86,7 +86,131 @@ This solution implements the following process:
 9. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
 10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
 11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
-10. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
+
+## ⚙️ Configuration-Driven Architecture
+
+**NEW**: This system now supports **configuration-driven payer onboarding** through the Unified Availity Integration Configuration Schema.
+
+### Overview
+
+The configuration schema enables **zero-code payer onboarding** for all Availity transaction types:
+
+- **837 Claims** - Professional, Institutional, and Dental claims
+- **270/271 Eligibility** - Real-time eligibility verification  
+- **276/277 Claim Status** - Claim status inquiries
+- **Appeals** - Appeals submission and tracking
+- **275 Attachments** - Clinical attachments
+- **ECS (Enhanced Claim Status)** - Advanced claim status with extended data
+
+### Key Benefits
+
+✅ **No Custom Code Required** - Add new payers by creating a configuration file  
+✅ **Standardized Onboarding** - Consistent structure across all payers  
+✅ **Multi-Transaction Support** - Enable any combination of modules  
+✅ **Validated Configurations** - Built-in validation ensures correctness  
+✅ **Self-Service** - Payers can configure their own integration parameters
+
+### Quick Start
+
+**1. Create a payer configuration:**
+
+```json
+{
+  "$schema": "core/schemas/availity-integration-config.schema.json",
+  "organizationName": "Your Health Plan",
+  "payerId": "YOUR_PAYER_ID",
+  "payerName": "Display Name",
+  "contacts": {
+    "technical": {
+      "name": "John Smith",
+      "email": "john.smith@example.com",
+      "phone": "5551234567"
+    },
+    "accountManager": { ... },
+    "escalation": { ... }
+  },
+  "geography": {
+    "nationwide": true
+  },
+  "modules": {
+    "appeals": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-api.example.com/appeals",
+          "prodUrl": "https://api.example.com/appeals"
+        }
+      },
+      "requestReasons": ["Medical Necessity", "Timely Filing"],
+      "maxFilesPerAppeal": 10
+    }
+  }
+}
+```
+
+**2. Validate the configuration:**
+
+```typescript
+import { validateConfig } from './core/validation/config-validator';
+import schema from './core/schemas/availity-integration-config.schema.json';
+
+const result = validateConfig(config, schema);
+if (result.valid) {
+  console.log('✓ Configuration is valid');
+}
+```
+
+**3. Load and use the configuration:**
+
+```typescript
+import { AvailityIntegrationConfig } from './core/interfaces/availity-integration-config.interface';
+
+const config: AvailityIntegrationConfig = loadConfig('payer-config.json');
+const appealsUrl = config.modules.appeals.transactionModes.realtime_web.prodUrl;
+```
+
+### Configuration Resources
+
+📄 **[Complete Documentation](docs/UNIFIED-CONFIG-SCHEMA.md)** - Full schema reference and guide  
+🔧 **[JSON Schema](core/schemas/availity-integration-config.schema.json)** - JSON Schema Draft-07  
+📝 **[TypeScript Interfaces](core/interfaces/availity-integration-config.interface.ts)** - Type definitions  
+✅ **[Validator](core/validation/config-validator.ts)** - Configuration validation module  
+📋 **[Example: Medicaid MCO](core/examples/medicaid-mco-config.json)** - Nationwide MCO with Appeals + ECS  
+📋 **[Example: Regional BCBS](core/examples/regional-blues-config.json)** - Regional plan with all modules
+
+### Supported Modules
+
+Each module can be independently enabled with its own configuration:
+
+| Module | Transaction Types | Key Features |
+|--------|------------------|--------------|
+| **Claims 837** | 837P, 837I, 837D | Professional, Institutional, Dental claims |
+| **Eligibility 270/271** | 270/271 | Real-time eligibility with 6 search patterns |
+| **Claim Status 276/277** | 276/277 | Claim status inquiries with date ranges |
+| **Appeals** | Appeals API | 8 sub-statuses, attachment support, multi-claim |
+| **Attachments 275** | 275 | Clinical/admin attachments with file validation |
+| **ECS** | ECS API | 4 query methods with extended claim data |
+
+### Transaction Modes
+
+Each module supports multiple transaction modes:
+
+- **Real-time Web** - HTTP/HTTPS API endpoints
+- **Real-time B2B** - B2B API integrations  
+- **EDI Batch** - SFTP batch file processing
+
+### Migration from Hardcoded Configs
+
+See **[Migration Guide](docs/UNIFIED-CONFIG-SCHEMA.md#migration-guide)** for step-by-step instructions on converting from hardcoded payer configurations to the unified schema.
+
+### Extending the Schema
+
+The schema is designed for extensibility. See **[How to Extend](docs/UNIFIED-CONFIG-SCHEMA.md#how-to-extend-the-schema)** for guidance on:
+- Adding new modules
+- Adding new fields to existing modules
+- Versioning the schema
+- Maintaining backward compatibility
 
 ## 📦 Current Production Deployment
 
