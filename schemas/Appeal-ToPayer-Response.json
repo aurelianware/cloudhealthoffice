@@ -116,19 +116,19 @@
           "type": "string",
           "description": "Appeals department phone number",
           "pattern": "^[0-9]{10}$",
-          "examples": ["8005551234"]
+          "examples": ["5555555555"]
         },
         "fax": {
           "type": "string",
           "description": "Appeals department fax number",
           "pattern": "^[0-9]{10}$",
-          "examples": ["8005555678"]
+          "examples": ["5555555556"]
         },
         "email": {
           "type": "string",
           "format": "email",
           "maxLength": 254,
-          "examples": ["appeals@healthplan.com"]
+          "examples": ["appeals@example.com"]
         },
         "mailingAddress": {
           "type": "object",
@@ -162,15 +162,15 @@
     },
     "memberId": {
       "type": "string",
-      "description": "Health plan member identifier",
+      "description": "Health plan member ID",
       "maxLength": 50,
-      "examples": ["MBR-987654321"]
+      "examples": ["MBR-000000000"]
     },
     "providerNpi": {
       "type": "string",
       "description": "Provider NPI for reference",
       "pattern": "^[0-9]{10}$",
-      "examples": ["1234567890"]
+      "examples": ["0000000000"]
     },
     "lastUpdatedDate": {
       "type": "string",
@@ -226,15 +226,15 @@
       "estimatedCompletionDate": "2024-03-15",
       "attachmentStatus": "COMPLETE",
       "contactInfo": {
-        "phone": "8005551234",
-        "fax": "8005555678",
-        "email": "appeals@healthplan.com"
+        "phone": "5555555555",
+        "fax": "5555555556",
+        "email": "appeals@example.com"
       },
       "availityTraceId": "AVL-2024-abc123-xyz789",
       "payerTraceId": "PAY-2024-001234",
       "claimNumber": "CLM-2024-001234",
-      "memberId": "MBR-987654321",
-      "providerNpi": "1234567890",
+      "memberId": "MBR-000000000",
+      "providerNpi": "0000000000",
       "lastUpdatedDate": "2024-01-15T14:35:00Z"
     },
     {
@@ -252,14 +252,14 @@
       "reviewerNotes": "Clinical documentation supports medical necessity. Approved per policy section 4.2.",
       "attachmentStatus": "COMPLETE",
       "contactInfo": {
-        "phone": "8005551234",
-        "email": "appeals@healthplan.com"
+        "phone": "5555555555",
+        "email": "appeals@example.com"
       },
       "availityTraceId": "AVL-2024-abc123-xyz789",
       "payerTraceId": "PAY-2024-001234",
       "claimNumber": "CLM-2024-001234",
-      "memberId": "MBR-987654321",
-      "providerNpi": "1234567890",
+      "memberId": "MBR-000000000",
+      "providerNpi": "0000000000",
       "lastUpdatedDate": "2024-03-10T16:45:00Z",
       "documentLinks": [
         {
