@@ -60,8 +60,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ECSSearchRequest'
-            # NOTE: All example values below are intentionally fake/synthetic test data
-            # Member IDs use MTEST prefix, phone numbers use 555 prefix (reserved for testing)
+            # SECURITY NOTE: All example values are SYNTHETIC TEST DATA - NO REAL PHI/PII
+            # Member IDs: Use MEMTEST prefix (e.g., MEMTEST00001) - clearly synthetic
+            # NPIs: Use 9999 prefix (e.g., 9999999990) - not valid provider numbers
+            # Names: Common test placeholders (Doe, Smith) - not real individuals
+            # This data is compliant with HIPAA testing guidelines and contains no actual PHI
             examples:
               serviceDateSearch:
                 summary: Service Date Search
@@ -72,7 +75,7 @@ paths:
                   serviceDateSearch:
                     serviceFromDate: "20240101"
                     serviceToDate: "20240131"
-                    providerId: "5550100001"
+                    providerId: "9999555001"
                     providerIdQualifier: NPI
               memberSearch:
                 summary: Member Search
@@ -81,7 +84,7 @@ paths:
                   requestId: REQ-2024-002
                   submitterId: PROV-12345
                   memberSearch:
-                    memberId: MTEST00001
+                    memberId: MEMTEST00004
                     firstName: John
                     lastName: Doe
                     dateOfBirth: "19850315"
@@ -106,7 +109,7 @@ paths:
                   claimHistorySearch:
                     claimNumber: CLM987654321
                     patientAccountNumber: PAT-9876
-                    memberId: MTEST00001
+                    memberId: MEMTEST00004
       responses:
         '200':
           description: Successful search (may return empty results)
@@ -157,9 +160,9 @@ paths:
                         adjustmentAmount: -200.00
                         payerId: PCHP
                         payerName: Parkland Community Health Plan
-                        providerId: "1234567890"
+                        providerId: "9999999990"
                         providerName: Smith Medical Group
-                        memberId: M123456
+                        memberId: MEMTEST00004
                         memberName: Doe, Jane
                         checkNumber: CHK789456123
                         checkDate: "20240112"
@@ -180,25 +183,25 @@ paths:
                           middleName: Marie
                           suffix: ""
                           birthdate: "19850315"
-                          memberId: M123456
+                          memberId: MEMTEST00004
                           gender: F
                         subscriber:
                           lastName: Doe
                           firstName: John
                           middleName: Robert
                           suffix: ""
-                          memberId: M123456
+                          memberId: MEMTEST00004
                           groupNumber: GRP789456
                         billingProvider:
                           taxId: "12-3456789"
-                          npi: "1234567890"
+                          npi: "9999999990"
                           lastName: Smith
                           firstName: David
                           middleName: Allen
                           suffix: MD
                         renderingProvider:
                           taxId: "12-3456789"
-                          npi: "9876543210"
+                          npi: "9999999991"
                           lastName: Johnson
                           firstName: Emily
                           middleName: Grace
@@ -262,9 +265,9 @@ paths:
                         adjustmentAmount: -450.00
                         payerId: PCHP
                         payerName: Parkland Community Health Plan
-                        providerId: "5550100001"
+                        providerId: "9999555001"
                         providerName: Central Medical Clinic
-                        memberId: M789012
+                        memberId: MEMTEST00002
                         memberName: Smith, John
                         remarkCodes: ["M80", "N568"]
                         reasonCodes: ["CO-96", "CO-197"]
@@ -279,7 +282,7 @@ paths:
                           middleName: David
                           suffix: ""
                           birthdate: "19700612"
-                          memberId: M789012
+                          memberId: MEMTEST00002
                           gender: M
                         eligibleForAttachment: false
                         eligibleForChat: false
@@ -318,9 +321,9 @@ paths:
                         BILLED: 2450.00
                         payerId: PCHP
                         payerName: Parkland Community Health Plan
-                        providerId: "5550100010"
+                        providerId: "9999555010"
                         providerName: Regional Hospital Center
-                        memberId: M345678
+                        memberId: MEMTEST00003
                         memberName: Johnson, Sarah
                         statusDetails: Claim is under review. Medical records needed.
                         comment: Please submit hospital admission records, progress notes, and discharge summary.
@@ -333,7 +336,7 @@ paths:
                           middleName: Elizabeth
                           suffix: ""
                           birthdate: "19621028"
-                          memberId: M345678
+                          memberId: MEMTEST00003
                           gender: F
                         serviceLines:
                           - fromDate: "20240102"
@@ -521,7 +524,7 @@ components:
         providerId:
           type: string
           description: Provider NPI or Tax ID
-          example: "5550100001"
+          example: "9999555001"
         providerIdQualifier:
           type: string
           enum:
@@ -541,7 +544,7 @@ components:
         memberId:
           type: string
           description: Member ID or Subscriber ID
-          example: MTEST00001
+          example: MEMTEST00004
         firstName:
           type: string
           description: Member first name
@@ -602,7 +605,7 @@ components:
         memberId:
           type: string
           description: Member ID or Subscriber ID
-          example: MTEST00001
+          example: MEMTEST00004
 
     ECSSearchResponse:
       type: object
@@ -757,7 +760,7 @@ components:
         providerId:
           type: string
           description: Provider NPI or identifier
-          example: "5550100001"
+          example: "9999555001"
         providerName:
           type: string
           description: Provider name
@@ -765,7 +768,7 @@ components:
         memberId:
           type: string
           description: Member/subscriber ID
-          example: MTEST00001
+          example: MEMTEST00004
         memberName:
           type: string
           description: Member/patient name
@@ -928,7 +931,7 @@ components:
               example: "19850315"
             memberId:
               type: string
-              example: M123456
+              example: MEMTEST00004
             gender:
               type: string
               enum: [M, F, U]
@@ -951,7 +954,7 @@ components:
               example: ""
             memberId:
               type: string
-              example: M123456
+              example: MEMTEST00004
             groupNumber:
               type: string
               example: GRP789456
@@ -964,7 +967,7 @@ components:
               example: "12-3456789"
             npi:
               type: string
-              example: "1234567890"
+              example: "9999999990"
             lastName:
               type: string
               example: Smith
@@ -986,7 +989,7 @@ components:
               example: "12-3456789"
             npi:
               type: string
-              example: "9876543210"
+              example: "9999999991"
             lastName:
               type: string
               example: Johnson
@@ -1122,7 +1125,7 @@ components:
         errorDetails:
           type: string
           description: Additional error details
-          example: Member ID MTEST99999 does not exist in the claims database
+          example: Member ID MEMTEST99999 does not exist in the claims database
 
     ErrorResponse:
       allOf:

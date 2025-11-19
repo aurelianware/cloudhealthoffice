@@ -36,9 +36,9 @@
       "adjustmentAmount": -450.00,
       "payerId": "PCHP",
       "payerName": "Parkland Community Health Plan",
-      "providerId": "5550100001",
+      "providerId": "9999555001",
       "providerName": "Central Medical Clinic",
-      "memberId": "M789012",
+      "memberId": "MEMTEST00002",
       "memberName": "Smith, John",
       "checkNumber": null,
       "checkDate": null,
@@ -59,7 +59,7 @@
         "middleName": "David",
         "suffix": "",
         "birthdate": "19700612",
-        "memberId": "M789012",
+        "memberId": "MEMTEST00002",
         "gender": "M"
       },
       "subscriber": {
@@ -67,12 +67,12 @@
         "firstName": "John",
         "middleName": "David",
         "suffix": "",
-        "memberId": "M789012",
+        "memberId": "MEMTEST00002",
         "groupNumber": "GRP456123"
       },
       "billingProvider": {
         "taxId": "98-7654321",
-        "npi": "5550100001",
+        "npi": "9999555001",
         "lastName": "Central Medical",
         "firstName": "",
         "middleName": "",
@@ -80,7 +80,7 @@
       },
       "renderingProvider": {
         "taxId": "98-7654321",
-        "npi": "5550100002",
+        "npi": "9999555002",
         "lastName": "Martinez",
         "firstName": "Carlos",
         "middleName": "Luis",
