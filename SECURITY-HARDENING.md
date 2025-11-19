@@ -284,7 +284,7 @@ az keyvault secret set \
 # Update QNXT API with new client secret
 # (Call QNXT API to update OAuth client)
 
-echo "✅ Secrets rotated successfully"
+echo "✅ Key Vault secrets updated. Remember to update SFTP server and QNXT API with new credentials."
 EOF
 
 chmod +x rotate-secrets.sh
