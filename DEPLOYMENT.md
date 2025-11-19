@@ -2265,9 +2265,10 @@ ECS_ENDPOINT="https://${LOGIC_APP_URL}/api/ecs_summary_search/triggers/HTTP_ECS_
 
 echo "ECS Endpoint: $ECS_ENDPOINT"
 
-# Test with sample request (requires valid Bearer token)
+# Test with sample request (requires valid JWT token from Azure AD)
+# Replace YOUR_JWT_TOKEN with actual token
 curl -X POST \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "searchMethod": "ServiceDate",

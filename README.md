@@ -645,8 +645,9 @@ ECS-specific configuration in Logic App parameters:
 Test the ECS endpoint using curl:
 
 ```bash
+# Replace {token} with your actual JWT token from Azure AD
 curl -X POST \
-  -H "Authorization: Bearer {token}" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE" \
   -H "Content-Type: application/json" \
   -d '{
     "searchMethod": "ServiceDate",
