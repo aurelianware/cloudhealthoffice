@@ -101,7 +101,7 @@ export class ConfigValidator {
   ): void {
     // Validate state codes
     if (config.geography && !config.geography.nationwide && config.geography.states) {
-      this.validateStateCodes(config.geography.states, errors);
+      this.validateStateCodes(config.geography.states, errors, warnings);
     }
 
     // Validate appeals module business rules
@@ -139,7 +139,7 @@ export class ConfigValidator {
   /**
    * Validate state codes against valid US states
    */
-  private validateStateCodes(states: string[], errors: ValidationError[]): void {
+  private validateStateCodes(states: string[], errors: ValidationError[], warnings: ValidationError[]): void {
     for (const state of states) {
       if (!VALID_US_STATES.includes(state.toUpperCase())) {
         errors.push({
