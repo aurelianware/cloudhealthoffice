@@ -1,0 +1,275 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/Appeal-ToPayer-Response.json",
+  "title": "Appeal To Payer Response",
+  "description": "Response schema returned by health plan after receiving a claim appeal submission via Availity platform. Compliant with Availity QRE requirements.",
+  "type": "object",
+  "required": [
+    "appealId",
+    "status",
+    "receivedDate"
+  ],
+  "properties": {
+    "appealId": {
+      "type": "string",
+      "description": "Unique identifier assigned by the health plan for this appeal",
+      "minLength": 1,
+      "maxLength": 100,
+      "examples": ["APP-2024-001234", "APPEAL-78901"]
+    },
+    "caseNumber": {
+      "type": "string",
+      "description": "Case number or tracking number assigned by the health plan for external reference",
+      "maxLength": 100,
+      "examples": ["CASE-2024-5678", "TRK-90123"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status of the appeal",
+      "enum": ["RECEIVED", "SUBMITTED", "IN_REVIEW", "FINALIZED", "REJECTED"],
+      "examples": ["RECEIVED", "SUBMITTED"]
+    },
+    "subStatus": {
+      "$ref": "Appeal-SubStatus.json",
+      "description": "Detailed sub-status providing granular tracking of appeal processing stage",
+      "examples": ["REQUEST_RECEIVED", "AWAITING_CLASSIFICATION", "IN_PROGRESS"]
+    },
+    "receivedDate": {
+      "type": "string",
+      "description": "Date and time the appeal was received by the health plan, in ISO 8601 format",
+      "format": "date-time",
+      "examples": ["2024-01-15T14:35:00Z"]
+    },
+    "isEligibleForAttachmentsDate": {
+      "type": "string",
+      "description": "Date until which the appeal is eligible to receive additional attachments, in ISO 8601 format. Null if attachments are no longer accepted.",
+      "format": "date-time",
+      "examples": ["2024-02-15T23:59:59Z", null]
+    },
+    "estimatedCompletionDate": {
+      "type": "string",
+      "description": "Estimated date when the appeal review will be completed, in ISO 8601 format",
+      "format": "date",
+      "examples": ["2024-03-15"]
+    },
+    "decision": {
+      "type": "string",
+      "description": "Final decision on the appeal (only present when status is FINALIZED)",
+      "enum": ["APPROVED", "PARTIALLY_APPROVED", "DENIED", "WITHDRAWN"],
+      "examples": ["APPROVED", "DENIED"]
+    },
+    "decisionReason": {
+      "type": "string",
+      "description": "Explanation for the appeal decision (required when status is FINALIZED)",
+      "maxLength": 4000,
+      "examples": [
+        "Appeal approved. Medical necessity established per clinical review.",
+        "Appeal denied. Service does not meet plan coverage criteria."
+      ]
+    },
+    "decisionDate": {
+      "type": "string",
+      "description": "Date when the appeal decision was made, in ISO 8601 format",
+      "format": "date-time",
+      "examples": ["2024-03-10T16:45:00Z"]
+    },
+    "approvedAmount": {
+      "type": "number",
+      "description": "Approved claim amount in dollars (when decision is APPROVED or PARTIALLY_APPROVED)",
+      "minimum": 0,
+      "examples": [1500.00, 750.50]
+    },
+    "deniedAmount": {
+      "type": "number",
+      "description": "Denied claim amount in dollars (when decision is DENIED or PARTIALLY_APPROVED)",
+      "minimum": 0,
+      "examples": [0, 500.00]
+    },
+    "reviewerNotes": {
+      "type": "string",
+      "description": "Internal notes from the reviewer (may be redacted for provider view)",
+      "maxLength": 2000,
+      "examples": ["Clinical documentation supports medical necessity. Approved per policy section 4.2."]
+    },
+    "attachmentStatus": {
+      "type": "string",
+      "description": "Status of attachment processing",
+      "enum": ["PENDING", "RECEIVED", "INCOMPLETE", "COMPLETE"],
+      "examples": ["COMPLETE", "RECEIVED"]
+    },
+    "requiredDocuments": {
+      "type": "array",
+      "description": "List of additional documents required to complete the appeal review",
+      "items": {
+        "type": "string",
+        "maxLength": 255
+      },
+      "examples": [
+        ["Updated physician notes", "Lab results from 2024-01-20"]
+      ]
+    },
+    "contactInfo": {
+      "type": "object",
+      "description": "Health plan contact information for appeal inquiries",
+      "properties": {
+        "phone": {
+          "type": "string",
+          "description": "Appeals department phone number",
+          "pattern": "^[0-9]{10}$",
+          "examples": ["8005551234"]
+        },
+        "fax": {
+          "type": "string",
+          "description": "Appeals department fax number",
+          "pattern": "^[0-9]{10}$",
+          "examples": ["8005555678"]
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "examples": ["appeals@healthplan.com"]
+        },
+        "mailingAddress": {
+          "type": "object",
+          "properties": {
+            "addressLine1": { "type": "string", "maxLength": 55 },
+            "addressLine2": { "type": "string", "maxLength": 55 },
+            "city": { "type": "string", "maxLength": 30 },
+            "state": { "type": "string", "pattern": "^[A-Z]{2}$" },
+            "zipCode": { "type": "string", "pattern": "^[0-9]{5}(-[0-9]{4})?$" }
+          }
+        }
+      }
+    },
+    "availityTraceId": {
+      "type": "string",
+      "description": "Availity transaction trace identifier for correlation",
+      "maxLength": 100,
+      "examples": ["AVL-2024-abc123-xyz789"]
+    },
+    "payerTraceId": {
+      "type": "string",
+      "description": "Health plan internal trace identifier",
+      "maxLength": 100,
+      "examples": ["PAY-2024-001234"]
+    },
+    "claimNumber": {
+      "type": "string",
+      "description": "Original claim number for reference",
+      "maxLength": 50,
+      "examples": ["CLM-2024-001234"]
+    },
+    "memberId": {
+      "type": "string",
+      "description": "Health plan member identifier",
+      "maxLength": 50,
+      "examples": ["MBR-987654321"]
+    },
+    "providerNpi": {
+      "type": "string",
+      "description": "Provider NPI for reference",
+      "pattern": "^[0-9]{10}$",
+      "examples": ["1234567890"]
+    },
+    "lastUpdatedDate": {
+      "type": "string",
+      "description": "Date and time when the appeal record was last updated",
+      "format": "date-time",
+      "examples": ["2024-02-20T10:15:00Z"]
+    },
+    "documentLinks": {
+      "type": "array",
+      "description": "Links to decision letters or supporting documents available for download",
+      "items": {
+        "type": "object",
+        "required": ["documentId", "documentType"],
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "description": "Unique identifier for the document",
+            "examples": ["DOC-2024-5678"]
+          },
+          "documentType": {
+            "type": "string",
+            "enum": ["DECISION_LETTER", "SUPPORTING_DOCUMENT", "CORRESPONDENCE"],
+            "examples": ["DECISION_LETTER"]
+          },
+          "fileName": {
+            "type": "string",
+            "examples": ["decision_letter_2024-03-10.pdf"]
+          },
+          "availableUntil": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date until which the document is available for download",
+            "examples": ["2024-06-10T23:59:59Z"]
+          },
+          "downloadUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL for downloading the document (may require authentication)",
+            "examples": ["/api/appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234"]
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "appealId": "APP-2024-001234",
+      "caseNumber": "CASE-2024-5678",
+      "status": "RECEIVED",
+      "subStatus": "REQUEST_RECEIVED",
+      "receivedDate": "2024-01-15T14:35:00Z",
+      "isEligibleForAttachmentsDate": "2024-02-15T23:59:59Z",
+      "estimatedCompletionDate": "2024-03-15",
+      "attachmentStatus": "COMPLETE",
+      "contactInfo": {
+        "phone": "8005551234",
+        "fax": "8005555678",
+        "email": "appeals@healthplan.com"
+      },
+      "availityTraceId": "AVL-2024-abc123-xyz789",
+      "payerTraceId": "PAY-2024-001234",
+      "claimNumber": "CLM-2024-001234",
+      "memberId": "MBR-987654321",
+      "providerNpi": "1234567890",
+      "lastUpdatedDate": "2024-01-15T14:35:00Z"
+    },
+    {
+      "appealId": "APP-2024-001234",
+      "caseNumber": "CASE-2024-5678",
+      "status": "FINALIZED",
+      "subStatus": "PENDING_PAYMENT",
+      "receivedDate": "2024-01-15T14:35:00Z",
+      "isEligibleForAttachmentsDate": null,
+      "decision": "APPROVED",
+      "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
+      "decisionDate": "2024-03-10T16:45:00Z",
+      "approvedAmount": 1500.00,
+      "deniedAmount": 0,
+      "reviewerNotes": "Clinical documentation supports medical necessity. Approved per policy section 4.2.",
+      "attachmentStatus": "COMPLETE",
+      "contactInfo": {
+        "phone": "8005551234",
+        "email": "appeals@healthplan.com"
+      },
+      "availityTraceId": "AVL-2024-abc123-xyz789",
+      "payerTraceId": "PAY-2024-001234",
+      "claimNumber": "CLM-2024-001234",
+      "memberId": "MBR-987654321",
+      "providerNpi": "1234567890",
+      "lastUpdatedDate": "2024-03-10T16:45:00Z",
+      "documentLinks": [
+        {
+          "documentId": "DOC-2024-5678",
+          "documentType": "DECISION_LETTER",
+          "fileName": "decision_letter_2024-03-10.pdf",
+          "availableUntil": "2024-06-10T23:59:59Z",
+          "downloadUrl": "/api/appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234"
+        }
+      ]
+    }
+  ]
+}

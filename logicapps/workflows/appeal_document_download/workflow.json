@@ -1,0 +1,428 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_Document_Download_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "GET",
+          "schema": {}
+        }
+      }
+    },
+    "actions": {
+      "Parse_Query_Parameters": {
+        "type": "Compose",
+        "inputs": {
+          "documentId": "@coalesce(triggerOutputs()?['queries']?['documentId'], '')",
+          "appealId": "@coalesce(triggerOutputs()?['queries']?['appealId'], '')",
+          "documentType": "@coalesce(triggerOutputs()?['queries']?['documentType'], '')",
+          "authToken": "@coalesce(triggerOutputs()?['headers']?['Authorization'], '')"
+        },
+        "runAfter": {}
+      },
+      "Validate_Required_Parameters": {
+        "type": "If",
+        "expression": {
+          "and": [
+            {
+              "not": {
+                "equals": [
+                  "@outputs('Parse_Query_Parameters')?['documentId']",
+                  ""
+                ]
+              }
+            },
+            {
+              "not": {
+                "equals": [
+                  "@outputs('Parse_Query_Parameters')?['appealId']",
+                  ""
+                ]
+              }
+            },
+            {
+              "not": {
+                "equals": [
+                  "@outputs('Parse_Query_Parameters')?['documentType']",
+                  ""
+                ]
+              }
+            }
+          ]
+        },
+        "actions": {
+          "Validate_Document_Type": {
+            "type": "If",
+            "expression": {
+              "or": [
+                {
+                  "equals": [
+                    "@outputs('Parse_Query_Parameters')?['documentType']",
+                    "PROVIDER_UPLOAD"
+                  ]
+                },
+                {
+                  "equals": [
+                    "@outputs('Parse_Query_Parameters')?['documentType']",
+                    "DECISION_LETTER"
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Call_Authorization_Check_API": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@{parameters('authorization_api_endpoint')}/validate-appeal-access",
+                  "headers": {
+                    "Authorization": "@outputs('Parse_Query_Parameters')?['authToken']",
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "appealId": "@outputs('Parse_Query_Parameters')?['appealId']",
+                    "documentId": "@outputs('Parse_Query_Parameters')?['documentId']",
+                    "requestedBy": "provider"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 2,
+                    "type": "fixed",
+                    "interval": "PT10S"
+                  }
+                },
+                "runAfter": {}
+              },
+              "Check_Authorization_Result": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@outputs('Call_Authorization_Check_API')?['statusCode']",
+                        200
+                      ]
+                    },
+                    {
+                      "equals": [
+                        "@body('Call_Authorization_Check_API')?['authorized']",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Construct_Blob_Path": {
+                    "type": "Compose",
+                    "inputs": "@concat('hipaa-attachments/appeals/', outputs('Parse_Query_Parameters')?['appealId'], '/', outputs('Parse_Query_Parameters')?['documentType'], '/', outputs('Parse_Query_Parameters')?['documentId'])",
+                    "runAfter": {}
+                  },
+                  "Get_Blob_Content": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                      },
+                      "method": "get",
+                      "path": "/v2/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files/@{encodeURIComponent(encodeURIComponent(outputs('Construct_Blob_Path')))}/content"
+                    },
+                    "runAfter": {
+                      "Construct_Blob_Path": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Get_Blob_Metadata": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                      },
+                      "method": "get",
+                      "path": "/v2/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files/@{encodeURIComponent(encodeURIComponent(outputs('Construct_Blob_Path')))}"
+                    },
+                    "runAfter": {
+                      "Get_Blob_Content": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Determine_Content_Type": {
+                    "type": "Compose",
+                    "inputs": "@if(endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.pdf'), 'application/pdf', if(or(endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.jpg'), endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.jpeg')), 'image/jpeg', if(or(endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.tif'), endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.tiff')), 'image/tiff', if(endsWith(toLower(outputs('Parse_Query_Parameters')?['documentId']), '.gif'), 'image/gif', 'application/octet-stream'))))",
+                    "runAfter": {
+                      "Get_Blob_Metadata": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Log_Document_Access": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/events/customEvent",
+                      "body": {
+                        "eventName": "AppealDocumentAccessed",
+                        "properties": {
+                          "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                          "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}",
+                          "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}",
+                          "blobPath": "@{outputs('Construct_Blob_Path')}",
+                          "fileSizeBytes": "@{body('Get_Blob_Metadata')?['Size']}",
+                          "contentType": "@{outputs('Determine_Content_Type')}",
+                          "accessedBy": "@{body('Call_Authorization_Check_API')?['userId']}",
+                          "timestamp": "@{utcNow()}"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Determine_Content_Type": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Return_Document_Success": {
+                    "type": "Response",
+                    "kind": "Http",
+                    "inputs": {
+                      "statusCode": 200,
+                      "headers": {
+                        "Content-Type": "@outputs('Determine_Content_Type')",
+                        "Content-Disposition": "attachment; filename=\"@{outputs('Parse_Query_Parameters')?['documentId']}\"",
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        "X-Content-Type-Options": "nosniff"
+                      },
+                      "body": "@body('Get_Blob_Content')"
+                    },
+                    "runAfter": {
+                      "Log_Document_Access": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Log_Unauthorized_Access_Attempt": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/events/customEvent",
+                        "body": {
+                          "eventName": "AppealDocumentUnauthorizedAccess",
+                          "properties": {
+                            "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                            "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}",
+                            "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}",
+                            "authorizationStatusCode": "@{outputs('Call_Authorization_Check_API')?['statusCode']}",
+                            "timestamp": "@{utcNow()}"
+                          }
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Return_403_Unauthorized": {
+                      "type": "Response",
+                      "kind": "Http",
+                      "inputs": {
+                        "statusCode": 403,
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "error": "Forbidden",
+                          "message": "You do not have permission to access this document",
+                          "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                          "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}"
+                        }
+                      },
+                      "runAfter": {
+                        "Log_Unauthorized_Access_Attempt": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Call_Authorization_Check_API": [
+                    "Succeeded",
+                    "Failed"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Log_Invalid_Document_Type": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/events/customEvent",
+                    "body": {
+                      "eventName": "AppealDocumentInvalidType",
+                      "properties": {
+                        "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                        "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}",
+                        "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}",
+                        "timestamp": "@{utcNow()}"
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Return_400_Invalid_Type": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "inputs": {
+                    "statusCode": 400,
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "error": "Bad Request",
+                      "message": "Invalid documentType. Must be PROVIDER_UPLOAD or DECISION_LETTER",
+                      "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}"
+                    }
+                  },
+                  "runAfter": {
+                    "Log_Invalid_Document_Type": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              }
+            },
+            "runAfter": {}
+          }
+        },
+        "else": {
+          "actions": {
+            "Return_400_Missing_Parameters": {
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "error": "Bad Request",
+                  "message": "Missing required query parameters: documentId, appealId, and documentType are required",
+                  "provided": {
+                    "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                    "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}",
+                    "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}"
+                  }
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "runAfter": {
+          "Parse_Query_Parameters": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Handle_Blob_Not_Found": {
+        "type": "Scope",
+        "actions": {
+          "Log_Document_Not_Found": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "AppealDocumentNotFound",
+                "properties": {
+                  "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                  "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}",
+                  "documentType": "@{outputs('Parse_Query_Parameters')?['documentType']}",
+                  "timestamp": "@{utcNow()}"
+                }
+              }
+            },
+            "runAfter": {}
+          },
+          "Return_404_Not_Found": {
+            "type": "Response",
+            "kind": "Http",
+            "inputs": {
+              "statusCode": 404,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "error": "Not Found",
+                "message": "The requested document does not exist or has been removed",
+                "documentId": "@{outputs('Parse_Query_Parameters')?['documentId']}",
+                "appealId": "@{outputs('Parse_Query_Parameters')?['appealId']}"
+              }
+            },
+            "runAfter": {
+              "Log_Document_Not_Found": [
+                "Succeeded",
+                "Failed"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Validate_Required_Parameters": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "blob_storage_account": {
+      "type": "String",
+      "defaultValue": "hipaa-attachments-storage"
+    },
+    "authorization_api_endpoint": {
+      "type": "String",
+      "defaultValue": "https://api.healthplan.local/authorization"
+    }
+  }
+}
