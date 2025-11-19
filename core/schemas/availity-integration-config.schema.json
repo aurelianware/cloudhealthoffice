@@ -1,0 +1,275 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/availity-integration-config.json",
+  "title": "Availity Integration Configuration",
+  "description": "Configuration schema for Availity X12 EDI integration including authorizations, eligibility, and attachments",
+  "type": "object",
+  "properties": {
+    "payer": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "string", "description": "Payer ID used in X12 transactions"},
+        "name": {"type": "string"},
+        "tradingPartnerId": {"type": "string", "description": "Availity trading partner ID"}
+      }
+    },
+    "authorizations": {
+      "type": "object",
+      "properties": {
+        "transactionTypes": {
+          "type": "object",
+          "properties": {
+            "inpatientAuthorization": {
+              "type": "object",
+              "properties": {
+                "enabled": {"type": "boolean", "default": true},
+                "umCode": {"type": "string", "enum": ["AR"], "default": "AR"}
+              }
+            },
+            "outpatientAuthorization": {
+              "type": "object",
+              "properties": {
+                "enabled": {"type": "boolean", "default": true},
+                "umCode": {"type": "string", "enum": ["HS"], "default": "HS"}
+              }
+            },
+            "referrals": {
+              "type": "object",
+              "properties": {
+                "enabled": {"type": "boolean", "default": true},
+                "umCode": {"type": "string", "enum": ["SC"], "default": "SC"}
+              }
+            }
+          }
+        },
+        "request_x217": {
+          "type": "object",
+          "description": "Configuration for X12 278 X217 Authorization Request",
+          "properties": {
+            "enabled": {"type": "boolean", "default": true},
+            "tr3Version": {
+              "type": "string",
+              "enum": ["005010X217"],
+              "default": "005010X217"
+            },
+            "connectivity": {
+              "type": "object",
+              "properties": {
+                "testUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Test environment endpoint"
+                },
+                "prodUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Production environment endpoint"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "minimum": 10,
+                  "maximum": 300,
+                  "default": 30,
+                  "description": "Request timeout in seconds"
+                },
+                "xmlWrapperRequired": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Whether payer requires XML wrapper around X12 content"
+                }
+              }
+            },
+            "fieldRequirements": {
+              "type": "object",
+              "properties": {
+                "procedureCodesRequired": {
+                  "type": "object",
+                  "properties": {
+                    "inpatient": {
+                      "type": "string",
+                      "enum": ["always", "situational", "never"],
+                      "default": "situational"
+                    },
+                    "outpatient": {
+                      "type": "string",
+                      "enum": ["always", "situational", "never"],
+                      "default": "always"
+                    },
+                    "referral": {
+                      "type": "string",
+                      "enum": ["always", "situational", "never"],
+                      "default": "never"
+                    }
+                  }
+                },
+                "serviceDateRangeRestrictions": {
+                  "type": "object",
+                  "properties": {
+                    "outpatient": {
+                      "type": "object",
+                      "properties": {
+                        "earliest": {
+                          "type": "string",
+                          "pattern": "^[+-]?\\d+$",
+                          "description": "Earliest allowed service date offset in days (e.g., '0' for today, '-30' for 30 days ago)"
+                        },
+                        "latest": {
+                          "type": "string",
+                          "pattern": "^[+-]?\\d+$",
+                          "description": "Latest allowed service date offset in days (e.g., '+365' for 1 year in future)"
+                        }
+                      }
+                    },
+                    "inpatient": {
+                      "type": "object",
+                      "properties": {
+                        "admissionEarliest": {
+                          "type": "string",
+                          "pattern": "^[+-]?\\d+$",
+                          "default": "0"
+                        },
+                        "admissionLatest": {
+                          "type": "string",
+                          "pattern": "^[+-]?\\d+$",
+                          "default": "+90"
+                        }
+                      }
+                    }
+                  }
+                },
+                "diagnosisCodeRequirements": {
+                  "type": "object",
+                  "properties": {
+                    "minimumRequired": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12,
+                      "default": 1
+                    },
+                    "maximumAllowed": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12,
+                      "default": 12
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "inquiry_x215": {
+          "type": "object",
+          "description": "Configuration for X12 278 X215 Authorization Inquiry",
+          "properties": {
+            "enabled": {"type": "boolean", "default": true},
+            "tr3Version": {"type": "string", "enum": ["005010X215"], "default": "005010X215"}
+          }
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "revisionsSupported": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether payer supports authorization revisions (UM02=S)"
+            },
+            "cancellationsSupported": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether payer supports authorization cancellations (UM02=3)"
+            },
+            "revisionCancellationAllowedStatuses": {
+              "type": "array",
+              "items": {"type": "string", "enum": ["PENDED", "APPROVED", "MODIFIED"]},
+              "default": ["PENDED"],
+              "description": "Authorization statuses that allow revision/cancellation"
+            },
+            "attachments": {
+              "type": "object",
+              "properties": {
+                "duringSubmission": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Whether attachments can be submitted during authorization request"
+                },
+                "postSubmission": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Whether attachments can be submitted after authorization request"
+                }
+              }
+            },
+            "realTimeResponse": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether payer provides real-time authorization responses"
+            },
+            "batchSubmission": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether payer supports batch authorization submissions"
+            }
+          }
+        },
+        "statusMapping": {
+          "type": "object",
+          "description": "Payer-specific mappings of X12 STC codes to internal status values",
+          "properties": {
+            "A1": {"type": "string", "default": "APPROVED"},
+            "A2": {"type": "string", "default": "MODIFIED"},
+            "A3": {"type": "string", "default": "DENIED"},
+            "A4": {"type": "string", "default": "PENDED"},
+            "A6": {"type": "string", "default": "DENIED"},
+            "A7": {"type": "string", "default": "CANCELLED"}
+          }
+        }
+      }
+    },
+    "eligibility": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "tr3Version": {"type": "string", "enum": ["005010X279"], "default": "005010X279"},
+        "requirementForAuth": {
+          "type": "string",
+          "enum": ["required", "recommended", "optional"],
+          "default": "required",
+          "description": "Whether eligibility check is required before authorization submission"
+        }
+      }
+    },
+    "attachments": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "tr3Version": {"type": "string", "enum": ["005010X215"], "default": "005010X215"},
+        "supportedFormats": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["PDF", "TIFF", "JPEG", "PNG", "XML"]},
+          "default": ["PDF", "TIFF"]
+        }
+      }
+    },
+    "x12": {
+      "type": "object",
+      "properties": {
+        "senderId": {
+          "type": "string",
+          "description": "X12 sender ID (ISA06/GS02)"
+        },
+        "receiverId": {
+          "type": "string",
+          "description": "X12 receiver ID (ISA08/GS03)"
+        },
+        "interchangeUsageIndicator": {
+          "type": "string",
+          "enum": ["P", "T"],
+          "default": "P",
+          "description": "ISA15: P=Production, T=Test"
+        }
+      }
+    }
+  }
+}
