@@ -101,17 +101,41 @@ resource cmkKey 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
   }
 }
 
-// =========================
-// NOTE: CMK Configuration
-// =========================
-// To enable CMK encryption on a storage account:
-// 1. Ensure storage account has system-assigned managed identity
-// 2. Grant storage account managed identity "Key Vault Crypto Service Encryption User" role
-// 3. Configure storage account encryption.keySource = 'Microsoft.Keyvault'
-// 4. Set keyvaultproperties with keyVaultUri, keyName, and optional keyVersion
+// ================================================================
+// ⚠️  IMPORTANT: Post-Deployment CMK Configuration Required
+// ================================================================
+// This module creates the encryption key in Key Vault but does NOT configure
+// storage accounts to use it. Additional manual steps are required after deployment.
 //
-// This module only creates the CMK key in Key Vault
-// Storage account configuration must be done in main.bicep
+// COMPLETE IMPLEMENTATION GUIDE:
+// See SECURITY-HARDENING.md § "Customer-Managed Keys (Optional)" for full step-by-step
+// instructions including Azure CLI commands and verification steps.
+//
+// QUICK REFERENCE - Required Steps After Deploying This Module:
+//
+// 1. Enable managed identity on storage account:
+//    az storage account update --name <storage-name> --resource-group <rg> --assign-identity
+//
+// 2. Get storage account principal ID:
+//    STORAGE_IDENTITY=$(az storage account show --name <storage-name> --resource-group <rg> \
+//                       --query identity.principalId -o tsv)
+//
+// 3. Grant Key Vault Crypto Service Encryption User role:
+//    az role assignment create --assignee $STORAGE_IDENTITY \
+//                              --role "Key Vault Crypto Service Encryption User" \
+//                              --scope <cmk-key-id>
+//
+// 4. Configure storage account to use CMK:
+//    az storage account update --name <storage-name> --resource-group <rg> \
+//                              --encryption-key-source Microsoft.Keyvault \
+//                              --encryption-key-vault "https://<vault-name>.vault.azure.net/" \
+//                              --encryption-key-name <cmk-key-name>
+//
+// 5. Verify encryption configuration:
+//    az storage account show --name <storage-name> --resource-group <rg> --query "encryption"
+//
+// For automated deployment scripts, consider creating a separate Bicep module or shell script
+// that orchestrates both this CMK module and the storage account configuration steps above.
 
 // =========================
 // Outputs
