@@ -17,7 +17,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 
 ### 1. Infrastructure Modules (4 Bicep files)
 
-#### `infra/modules/keyvault.bicep` (164 lines)
+#### `infra/modules/keyvault.bicep` (166 lines)
 **Premium Key Vault with full HIPAA compliance**
 - Premium SKU with HSM-backed keys (FIPS 140-2 Level 2)
 - Soft delete with 90-day retention
