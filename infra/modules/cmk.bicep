@@ -126,4 +126,4 @@ output cmkKeyName string = cmkKey.name
 output cmkKeyUri string = cmkKey.properties.keyUri
 
 @description('CMK Key version')
-output cmkKeyVersion string = cmkKey.properties.keyUriWithVersion
+output cmkKeyVersion string = last(split(cmkKey.properties.keyUriWithVersion, '/'))
