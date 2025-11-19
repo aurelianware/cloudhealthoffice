@@ -1,0 +1,344 @@
+{
+  "$schema": "../schemas/availity-integration-config.schema.json",
+  "organizationName": "Blue Cross Blue Shield of Five States",
+  "payerId": "BCBS5ST789",
+  "payerName": "BCBS Five State Region",
+  "logo": "https://example.com/bcbs-regional-logo.png",
+  "tradingPartnerId": "TP-BCBS-5ST",
+  "controlledDeployment": true,
+  "contacts": {
+    "technical": {
+      "name": "Sarah Anderson",
+      "email": "sarah.anderson@bcbs5st.example.com",
+      "phone": "8005551234"
+    },
+    "accountManager": {
+      "name": "Michael Chen",
+      "email": "michael.chen@bcbs5st.example.com",
+      "phone": "8005551235"
+    },
+    "escalation": {
+      "name": "Patricia Martinez",
+      "email": "patricia.martinez@bcbs5st.example.com",
+      "phone": "8005551236"
+    }
+  },
+  "geography": {
+    "nationwide": false,
+    "states": ["TX", "OK", "LA", "AR", "NM"]
+  },
+  "enveloping": {
+    "isaAuthorizationQualifier": "00",
+    "isaSecurityQualifier": "00",
+    "isaInterchangeIdQualifier": "ZZ",
+    "isaUsageIndicator": "P",
+    "gsApplicationSenderCode": "BCBS5ST",
+    "gsApplicationReceiverCode": "AVAILITY",
+    "gsVersionCode": "005010"
+  },
+  "connectivity": {
+    "protocol": "HTTPS",
+    "timeout": 45,
+    "retryAttempts": 3,
+    "maxThreads": 20,
+    "keepAlive": true
+  },
+  "testing": {
+    "testEnvironmentAvailable": true,
+    "certificationRequired": true,
+    "approvalProcess": "Complete comprehensive test suite including all transaction types. Submit certification request with test results. Participate in UAT sessions with BCBS technical team. Obtain final approval from Chief Integration Officer.",
+    "testDataProvided": true,
+    "certificationTimeline": "4-6 weeks"
+  },
+  "characterSet": {
+    "uppercaseOnly": true,
+    "spacesAllowed": true,
+    "extendedCharactersSupported": false,
+    "encoding": "ASCII"
+  },
+  "errorHandling": {
+    "ta1Required": true,
+    "functional997Required": true,
+    "functional999Required": true,
+    "unusedSegmentsAllowed": false,
+    "errorNotificationEmail": "edi-operations@bcbs5st.example.com"
+  },
+  "modules": {
+    "claims837": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-claims.bcbs5st.example.com/837",
+          "prodUrl": "https://claims.bcbs5st.example.com/837",
+          "timeout": 60,
+          "systemAvailability": "Monday-Saturday 6AM-10PM CST",
+          "continuousThreads": 15
+        },
+        "edi_batch": {
+          "enabled": true,
+          "ftpConfig": {
+            "host": "sftp.bcbs5st.example.com",
+            "port": 22,
+            "username": "claims_837_batch",
+            "inboundFolder": "/claims/inbound",
+            "outboundFolder": "/claims/outbound",
+            "archiveFolder": "/claims/archive"
+          },
+          "timeout": 300,
+          "systemAvailability": "24/7"
+        }
+      },
+      "claimTypes": {
+        "professional": true,
+        "institutional": true,
+        "dental": true,
+        "encounters": false
+      },
+      "secondaryClaims": true,
+      "tertiaryClaims": false,
+      "fileStructure": {
+        "maxClaimsPerFile": 500,
+        "maxClaimsPerTransaction": 1,
+        "aggregation": "single"
+      },
+      "fileNaming": {
+        "professional": "837P_${PAYERID}_${TIMESTAMP}.edi",
+        "institutional": "837I_${PAYERID}_${TIMESTAMP}.edi",
+        "dental": "837D_${PAYERID}_${TIMESTAMP}.edi"
+      },
+      "edits": [
+        {
+          "editId": "E001",
+          "description": "Verify provider NPI is registered in BCBS network",
+          "severity": "error"
+        },
+        {
+          "editId": "E002",
+          "description": "Check member eligibility on service date",
+          "severity": "error"
+        },
+        {
+          "editId": "E003",
+          "description": "Validate procedure code against approved list",
+          "severity": "error"
+        },
+        {
+          "editId": "W001",
+          "description": "Missing secondary diagnosis code",
+          "severity": "warning"
+        }
+      ],
+      "enrichments": [
+        {
+          "enrichmentId": "ENR001",
+          "description": "Add member benefit plan details",
+          "dataSource": "Member Management System"
+        },
+        {
+          "enrichmentId": "ENR002",
+          "description": "Append provider contract rate information",
+          "dataSource": "Provider Contracting Database"
+        }
+      ],
+      "responseReports": {
+        "functional999Supported": true,
+        "claimAck277CASupported": true,
+        "responseTimeframe": "24-48 hours"
+      }
+    },
+    "eligibility270271": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-eligibility.bcbs5st.example.com/270",
+          "prodUrl": "https://eligibility.bcbs5st.example.com/270",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 25
+        },
+        "realtime_b2b": {
+          "enabled": true,
+          "testUrl": "https://test-b2b.bcbs5st.example.com/270",
+          "prodUrl": "https://b2b.bcbs5st.example.com/270",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 20
+        }
+      },
+      "searchOptions": [
+        "member_id_dob",
+        "member_id_name",
+        "ssn_dob",
+        "subscriber_id"
+      ],
+      "serviceCodes": "all",
+      "patientIdFormat": {
+        "pattern": "^[A-Z]{3}[0-9]{9}$",
+        "minLength": 12,
+        "maxLength": 12
+      },
+      "requiresGender": true,
+      "xmlWrapper": false
+    },
+    "claimStatus276277": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-claimstatus.bcbs5st.example.com/276",
+          "prodUrl": "https://claimstatus.bcbs5st.example.com/276",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 20
+        },
+        "edi_batch": {
+          "enabled": true,
+          "ftpConfig": {
+            "host": "sftp.bcbs5st.example.com",
+            "port": 22,
+            "username": "claimstatus_batch",
+            "inboundFolder": "/claimstatus/inbound",
+            "outboundFolder": "/claimstatus/outbound",
+            "archiveFolder": "/claimstatus/archive"
+          },
+          "timeout": 120,
+          "systemAvailability": "24/7"
+        }
+      },
+      "atypicalProvidersAllowed": true,
+      "patientAccountNumberDefault": "UNKNOWN",
+      "serviceDateRange": {
+        "earliest": "-730 days",
+        "latest": "today"
+      }
+    },
+    "appeals": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-appeals.bcbs5st.example.com/appeals",
+          "prodUrl": "https://appeals.bcbs5st.example.com/appeals",
+          "timeout": 45,
+          "systemAvailability": "Monday-Friday 7AM-7PM CST",
+          "continuousThreads": 10
+        }
+      },
+      "requestReasons": [
+        "Medical Necessity Dispute",
+        "Incorrect Denial",
+        "Payment Amount Disagreement",
+        "Timely Filing Exception",
+        "Network Status Dispute"
+      ],
+      "subStatuses": [
+        "In Progress",
+        "Additional Information Needed",
+        "Denied",
+        "Overturned",
+        "Upheld"
+      ],
+      "decisions": [
+        {
+          "decision": "Approved",
+          "decisionReasons": [
+            "Additional documentation provided",
+            "Medical review supports medical necessity"
+          ]
+        },
+        {
+          "decision": "Denied",
+          "decisionReasons": [
+            "Insufficient evidence",
+            "Policy exclusion applies"
+          ]
+        }
+      ],
+      "attachmentPattern": "post-appeal",
+      "additionalAttachmentsWindow": 15,
+      "maxFileSize": 52428800,
+      "maxFilesPerAppeal": 15,
+      "allowedFileTypes": [".pdf", ".tif", ".tiff"],
+      "contactInfoRequired": {
+        "phone": false,
+        "fax": false,
+        "email": false
+      },
+      "submittingProviderTypeRequired": false,
+      "providerAddressRequired": true,
+      "additionalClaimsSupported": true,
+      "maxAdditionalClaims": 5,
+      "multiClaimVerification": true,
+      "submitOnBehalfOfMember": false,
+      "documentDownloadSupported": true,
+      "ecsIntegrationEnabled": false
+    },
+    "attachments275": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-attachments.bcbs5st.example.com/275",
+          "prodUrl": "https://attachments.bcbs5st.example.com/275",
+          "timeout": 90,
+          "systemAvailability": "24/7",
+          "continuousThreads": 15
+        },
+        "edi_batch": {
+          "enabled": true,
+          "ftpConfig": {
+            "host": "sftp.bcbs5st.example.com",
+            "port": 22,
+            "username": "attachments_batch",
+            "inboundFolder": "/attachments/inbound",
+            "outboundFolder": "/attachments/outbound",
+            "archiveFolder": "/attachments/archive"
+          },
+          "timeout": 180,
+          "systemAvailability": "24/7"
+        }
+      },
+      "requiredFields": [
+        "claimNumber",
+        "memberId",
+        "providerNPI",
+        "serviceDate",
+        "attachmentType"
+      ],
+      "allowedFileTypes": [".pdf", ".tif", ".tiff"],
+      "maxFileSize": 20971520,
+      "maxFilesPerTransaction": 10,
+      "passwordProtectedAllowed": false
+    },
+    "ecs": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-ecs.bcbs5st.example.com/ecs",
+          "prodUrl": "https://ecs.bcbs5st.example.com/ecs",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 15
+        }
+      },
+      "queryMethods": [
+        "ServiceDate",
+        "Member",
+        "ClaimHistory"
+      ],
+      "additionalProperties": [
+        "claimStatus",
+        "paymentAmount",
+        "paymentDate",
+        "checkNumber",
+        "paidToProvider",
+        "patientResponsibility"
+      ],
+      "cacheEnabled": true,
+      "cacheTTL": 1800
+    }
+  }
+}

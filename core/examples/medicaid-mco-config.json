@@ -1,0 +1,248 @@
+{
+  "$schema": "../schemas/availity-integration-config.schema.json",
+  "organizationName": "Regional Medicaid Managed Care Organization",
+  "payerId": "RMCOID123",
+  "payerName": "Regional MCO",
+  "logo": "https://example.com/regional-mco-logo.png",
+  "tradingPartnerId": "TP-RMCO-001",
+  "controlledDeployment": false,
+  "contacts": {
+    "technical": {
+      "name": "John Smith",
+      "email": "john.smith@regionalmco.example.com",
+      "phone": "5551234567"
+    },
+    "accountManager": {
+      "name": "Jane Doe",
+      "email": "jane.doe@regionalmco.example.com",
+      "phone": "5551234568"
+    },
+    "escalation": {
+      "name": "Bob Johnson",
+      "email": "bob.johnson@regionalmco.example.com",
+      "phone": "5551234569"
+    },
+    "additional": {
+      "name": "Alice Williams",
+      "email": "alice.williams@regionalmco.example.com",
+      "phone": "5551234570"
+    }
+  },
+  "geography": {
+    "nationwide": true
+  },
+  "enveloping": {
+    "isaAuthorizationQualifier": "00",
+    "isaSecurityQualifier": "00",
+    "isaInterchangeIdQualifier": "ZZ",
+    "isaUsageIndicator": "P",
+    "gsApplicationSenderCode": "RMCO",
+    "gsApplicationReceiverCode": "AVAILITY",
+    "gsVersionCode": "005010"
+  },
+  "connectivity": {
+    "protocol": "HTTPS",
+    "timeout": 30,
+    "retryAttempts": 3,
+    "maxThreads": 10,
+    "keepAlive": true
+  },
+  "testing": {
+    "testEnvironmentAvailable": true,
+    "certificationRequired": true,
+    "approvalProcess": "Submit test cases to Regional MCO for validation. Complete 5 successful end-to-end test scenarios. Obtain written approval from technical contact before production deployment.",
+    "testDataProvided": true,
+    "certificationTimeline": "2-4 weeks"
+  },
+  "characterSet": {
+    "uppercaseOnly": false,
+    "spacesAllowed": true,
+    "extendedCharactersSupported": false,
+    "encoding": "ASCII"
+  },
+  "errorHandling": {
+    "ta1Required": false,
+    "functional997Required": true,
+    "functional999Required": false,
+    "unusedSegmentsAllowed": true,
+    "errorNotificationEmail": "edi-errors@regionalmco.example.com"
+  },
+  "modules": {
+    "appeals": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-api.regionalmco.example.com/appeals",
+          "prodUrl": "https://api.regionalmco.example.com/appeals",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 5
+        },
+        "realtime_b2b": {
+          "enabled": true,
+          "testUrl": "https://test-b2b.regionalmco.example.com/appeals",
+          "prodUrl": "https://b2b.regionalmco.example.com/appeals",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 5
+        }
+      },
+      "requestReasons": [
+        "Medical Necessity",
+        "Timely Filing",
+        "Coding Error",
+        "Duplicate Claim",
+        "Incorrect Payment Amount",
+        "Service Not Covered",
+        "Prior Authorization Required",
+        "Missing Information"
+      ],
+      "subStatuses": [
+        "Denied",
+        "Partial Approval",
+        "Overturned",
+        "Upheld",
+        "In Progress",
+        "Additional Information Needed",
+        "Withdrawn",
+        "Closed"
+      ],
+      "decisions": [
+        {
+          "decision": "Approved",
+          "decisionReasons": [
+            "Medical necessity established",
+            "Coding correction accepted",
+            "Documentation sufficient"
+          ]
+        },
+        {
+          "decision": "Denied",
+          "decisionReasons": [
+            "Insufficient documentation",
+            "Service not medically necessary",
+            "Out of network provider"
+          ]
+        },
+        {
+          "decision": "Partially Approved",
+          "decisionReasons": [
+            "Some services approved, others denied",
+            "Reduced payment amount justified"
+          ]
+        },
+        {
+          "decision": "Withdrawn",
+          "decisionReasons": [
+            "Provider request",
+            "Member request"
+          ]
+        }
+      ],
+      "attachmentPattern": "pre-appeal",
+      "additionalAttachmentsWindow": 10,
+      "maxFileSize": 67108864,
+      "maxFilesPerAppeal": 10,
+      "allowedFileTypes": [".gif", ".jpg", ".jpeg", ".pdf", ".tif", ".tiff"],
+      "contactInfoRequired": {
+        "phone": true,
+        "fax": false,
+        "email": true
+      },
+      "submittingProviderTypeRequired": true,
+      "providerAddressRequired": true,
+      "additionalClaimsSupported": true,
+      "maxAdditionalClaims": 10,
+      "multiClaimVerification": false,
+      "submitOnBehalfOfMember": true,
+      "documentDownloadSupported": true,
+      "ecsIntegrationEnabled": true
+    },
+    "attachments275": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-api.regionalmco.example.com/attachments",
+          "prodUrl": "https://api.regionalmco.example.com/attachments",
+          "timeout": 60,
+          "systemAvailability": "24/7",
+          "continuousThreads": 10
+        },
+        "realtime_b2b": {
+          "enabled": true,
+          "testUrl": "https://test-b2b.regionalmco.example.com/attachments",
+          "prodUrl": "https://b2b.regionalmco.example.com/attachments",
+          "timeout": 60,
+          "systemAvailability": "24/7",
+          "continuousThreads": 10
+        },
+        "edi_batch": {
+          "enabled": true,
+          "ftpConfig": {
+            "host": "sftp.regionalmco.example.com",
+            "port": 22,
+            "username": "attachments_batch",
+            "inboundFolder": "/inbound/attachments",
+            "outboundFolder": "/outbound/attachments",
+            "archiveFolder": "/archive/attachments"
+          },
+          "timeout": 120,
+          "systemAvailability": "24/7"
+        }
+      },
+      "requiredFields": [
+        "claimNumber",
+        "memberName",
+        "memberId",
+        "dateOfBirth",
+        "providerName",
+        "providerNPI",
+        "serviceDate"
+      ],
+      "allowedFileTypes": [".pdf", ".tif", ".tiff"],
+      "maxFileSize": 10485760,
+      "maxFilesPerTransaction": 5,
+      "passwordProtectedAllowed": false
+    },
+    "ecs": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-api.regionalmco.example.com/ecs",
+          "prodUrl": "https://api.regionalmco.example.com/ecs",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 10
+        },
+        "realtime_b2b": {
+          "enabled": true,
+          "testUrl": "https://test-b2b.regionalmco.example.com/ecs",
+          "prodUrl": "https://b2b.regionalmco.example.com/ecs",
+          "timeout": 30,
+          "systemAvailability": "24/7",
+          "continuousThreads": 10
+        }
+      },
+      "queryMethods": [
+        "ServiceDate",
+        "Member",
+        "CheckNumber",
+        "ClaimHistory"
+      ],
+      "additionalProperties": [
+        "claimStatus",
+        "paymentAmount",
+        "paymentDate",
+        "checkNumber",
+        "remittanceAdvice",
+        "denialReason",
+        "adjustmentReason"
+      ],
+      "cacheEnabled": true,
+      "cacheTTL": 3600
+    }
+  }
+}
