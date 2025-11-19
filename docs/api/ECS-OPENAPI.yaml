@@ -536,11 +536,11 @@ components:
         payerId:
           type: string
           description: Payer identifier
-          example: EXHP
+          example: Health Plan
         payerName:
           type: string
           description: Payer name
-          example: ExamplePlan Community Health Plan
+          example: Health Plan
         providerId:
           type: string
           description: Provider NPI or identifier
