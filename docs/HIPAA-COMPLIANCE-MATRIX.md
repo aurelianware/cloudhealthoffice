@@ -307,13 +307,21 @@ AzureDiagnostics
 | **Storage Analytics** | 365 days | Data access audit |
 
 **Long-term Retention Configuration:**
+
+> **Note:** HIPAA requires audit logs to be retained for 7 years.  
+> The value `2555` (days) is used for retention, calculated as `365 * 7 = 2555`.  
+> For maintainability, define a variable in scripts:
+> ```bash
+> HIPAA_RETENTION_DAYS=2555  # 7 years per HIPAA requirement
+> ```
+
 ```bash
 # Export Activity Log to Storage for 7-year retention
 az monitor diagnostic-settings create \
   --resource "/subscriptions/{subscription-id}" \
   --name "activity-log-export" \
   --storage-account "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.Storage/storageAccounts/hipaa-audit-logs" \
-  --logs '[{"category": "Administrative", "enabled": true, "retentionPolicy": {"enabled": true, "days": 2555}}]'
+  --logs "[{\"category\": \"Administrative\", \"enabled\": true, \"retentionPolicy\": {\"enabled\": true, \"days\": $HIPAA_RETENTION_DAYS}}]"
 ```
 
 ### Audit Review Procedures
