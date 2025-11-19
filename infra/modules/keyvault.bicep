@@ -163,5 +163,3 @@ output keyVaultName string = keyVault.name
 
 @description('Key Vault URI')
 output keyVaultUri string = keyVault.properties.vaultUri
-
-
