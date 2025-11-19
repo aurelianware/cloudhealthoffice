@@ -872,7 +872,8 @@ az ad sp create --id "$APP_ID"
 CLIENT_SECRET=$(az ad app credential reset --id "$APP_ID" --query password -o tsv)
 
 echo "App ID: $APP_ID"
-echo "Client Secret: $CLIENT_SECRET"  # Save securely in Key Vault
+# Store the client secret securely in Azure Key Vault. Do NOT echo or log the secret.
+az keyvault secret set --vault-name "$KV_NAME" --name "replay278-client-secret" --value "$CLIENT_SECRET"
 ```
 
 #### Configure Token Validation
