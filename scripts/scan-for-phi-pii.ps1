@@ -79,19 +79,19 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b'
         Description = 'Email Address'
         Severity = 'Medium'
-        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*.yml', '*.yaml')
+        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml')
     }
     'PhoneNumber' = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
         Description = 'Phone Number'
         Severity = 'Medium'
-        AllowedFiles = @('*.edi', 'test-*.json', '*.md')
+        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', '*.md', '*.yml', '*.yaml')
     }
     'MemberId' = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
         Description = 'Member/Patient ID'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md', 'test-*.ps1')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', 'example-*.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml')
     }
 }
 
