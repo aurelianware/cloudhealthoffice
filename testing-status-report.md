@@ -10,7 +10,7 @@
 | Partner | Role | ID | Qualifier | Status |
 |---------|------|----|-----------|----- |
 | **Availity** | EDI Clearinghouse | 030240928 | ZZ | ✅ Active |
-| **PCHP-QNXT** | Health Plan System | 66917 | ZZ | ✅ Active |
+| **Health Plan-QNXT** | Health Plan System | {config.payerId} | ZZ | ✅ Active |
 
 ### Azure Infrastructure - DEPLOYED ✅
 | Resource | Name | Status | Purpose |
@@ -34,15 +34,15 @@
 ### Required Agreements:
 
 #### 1️⃣ X12 275 Receive Agreement
-- **Name**: `Availity-to-PCHP-275-Receive`
-- **Host Partner**: PCHP-QNXT (66917) 
+- **Name**: `Availity-to-Health Plan-275-Receive`
+- **Host Partner**: Health Plan-QNXT ({config.payerId}) 
 - **Guest Partner**: Availity (030240928)
 - **Direction**: Receive (Inbound)
 - **Message Type**: 275 (Attachment Request)
 
 #### 2️⃣ X12 277 Send Agreement  
-- **Name**: `PCHP-to-Availity-277-Send`
-- **Host Partner**: PCHP-QNXT (66917)
+- **Name**: `Health Plan-to-Availity-277-Send`
+- **Host Partner**: Health Plan-QNXT ({config.payerId})
 - **Guest Partner**: Availity (030240928) 
 - **Direction**: Send (Outbound)
 - **Message Type**: 277 (Status Response)
@@ -99,15 +99,15 @@ Test Sequence:
 
 ### X12 Message Validation:
 - ✅ **ISA06**: 030240928 (Availity Sender)
-- ✅ **ISA08**: 66917 (PCHP Receiver)  
+- ✅ **ISA08**: {config.payerId} (Health Plan Receiver)  
 - ✅ **GS02**: 030240928 (Availity Application Sender)
-- ✅ **GS03**: 66917 (PCHP Application Receiver)
+- ✅ **GS03**: {config.payerId} (Health Plan Application Receiver)
 - ✅ **ST01**: 275 (Transaction Type)
 - ✅ **BHT**: Attachment request header
 
 ### Trading Partner Mapping:
-- ✅ **Inbound 275**: Availity (030240928) → PCHP-QNXT (66917)
-- ✅ **Outbound 277**: PCHP-QNXT (66917) → Availity (030240928)
+- ✅ **Inbound 275**: Availity (030240928) → Health Plan-QNXT ({config.payerId})
+- ✅ **Outbound 277**: Health Plan-QNXT ({config.payerId}) → Availity (030240928)
 - ✅ **Qualifier**: ZZ (Mutually Defined) for both partners
 
 ## 🌐 Monitoring & Troubleshooting

@@ -223,7 +223,7 @@
     },
     "x12_receiver_id": {
       "type": "String",
-      "defaultValue": "66917"
+      "defaultValue": "{config.payerId}"
     },
     "x12_278_messagetype": {
       "type": "String",

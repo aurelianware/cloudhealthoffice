@@ -227,7 +227,7 @@ git push origin release/v1.0.0
 ```
 
 **UAT Environment Details:**
-- Resource Group: `pchp-attachments-uat-rg`
+- Resource Group: `payer-attachments-uat-rg`
 - Base Name: `hipaa-attachments-uat`
 - Location: `eastus`
 - Logic App: `hipaa-attachments-uat-la`
@@ -357,7 +357,7 @@ After deployment, configure:
      "sb_topic_edi278": "edi-278",
      "qnxt_base_url": "https://qnxt-api-uat.example.com",
      "x12_sender_id": "AVAILITY",
-     "x12_receiver_id": "PCHP"
+     "x12_receiver_id": "Health Plan"
    }
    ```
 

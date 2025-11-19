@@ -103,13 +103,13 @@ The `pr-lint.yml` workflow automatically validates:
 ### Manual Deployment
 ```bash
 # Create resource group
-az group create -n pchp-attachments-rg -l eastus
+az group create -n payer-attachments-rg -l eastus
 
 # Deploy infrastructure
 az deployment group create \
-  -g pchp-attachments-rg \
+  -g payer-attachments-rg \
   -f infra/main.bicep \
-  -p baseName=pchp-attachments
+  -p baseName=payer-attachments
 ```
 
 ### Via GitHub Actions

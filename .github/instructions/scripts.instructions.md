@@ -114,7 +114,7 @@ pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppNa
 
 **Trading Partners**:
 - Sender: Availity (030240928)
-- Receiver: PCHP-QNXT (66917)
+- Receiver: Health Plan-QNXT ({config.payerId})
 
 ### bootstrap_repo.ps1
 **Purpose**: Creates new repository from template  

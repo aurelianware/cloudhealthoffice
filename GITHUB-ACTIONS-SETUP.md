@@ -174,7 +174,7 @@ az role assignment create \
 #### Resource Group-Level Access (More Restrictive)
 
 ```bash
-RESOURCE_GROUP="pchp-attachments-prod-rg"
+RESOURCE_GROUP="payer-attachments-prod-rg"
 APP_ID="<your-app-id>"
 
 # Assign Contributor role at resource group level
@@ -359,7 +359,7 @@ Variables are non-sensitive configuration values accessible by workflows.
 
 | Variable Name | Description | DEV Example | UAT Example | PROD Example |
 |---------------|-------------|-------------|-------------|--------------|
-| `AZURE_RG_NAME` | Resource group name | `rg-hipaa-attachments-dev` | `hipaa-attachments-uat-rg` | `pchp-attachments-prod-rg` |
+| `AZURE_RG_NAME` | Resource group name | `rg-hipaa-attachments-dev` | `hipaa-attachments-uat-rg` | `payer-attachments-prod-rg` |
 | `AZURE_LOCATION` | Azure region | `eastus` | `eastus` | `eastus` |
 | `AZURE_CONNECTOR_LOCATION` | API connection region | `eastus` | `eastus` | `eastus` |
 | `BASE_NAME` | Resource name prefix | `hipaa-attachments-dev` | `hipaa-attachments-uat` | `hipaa-attachments-prod` |
@@ -451,7 +451,7 @@ BASE_NAME = hipaa-attachments-uat
 
 **PROD Environment Variables:**
 ```
-AZURE_RG_NAME = pchp-attachments-prod-rg
+AZURE_RG_NAME = payer-attachments-prod-rg
 BASE_NAME = hipaa-attachments-prod
 ```
 
