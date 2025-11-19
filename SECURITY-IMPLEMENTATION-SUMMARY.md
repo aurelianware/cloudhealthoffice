@@ -344,7 +344,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 ```bash
 # 1. Deploy Key Vault (5 minutes)
 az deployment group create \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/keyvault.bicep \
   --parameters keyVaultName="hipaa-attachments-prod-kv" \
                 location="eastus" \
@@ -352,13 +352,13 @@ az deployment group create \
 
 # 2. Deploy Networking (10 minutes)
 az deployment group create \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/networking.bicep \
   --parameters vnetName="hipaa-attachments-prod-vnet"
 
 # 3. Deploy Private Endpoints (10 minutes)
 az deployment group create \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/private-endpoints.bicep \
   --parameters <resource-ids>
 

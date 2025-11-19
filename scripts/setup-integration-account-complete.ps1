@@ -22,11 +22,11 @@ az logic integration-account partner create `
     --partner-type "B2B" `
     --content $availityContent
 
-# QNXT (PCHP)
+# QNXT (Health Plan)
 $pchpContent = @{
     b2b = @{
         businessIdentities = @(
-            @{ qualifier = "ZZ"; value = "66917" }
+            @{ qualifier = "ZZ"; value = "{config.payerId}" }
         )
     }
 } | ConvertTo-Json -Depth 10
@@ -34,7 +34,7 @@ $pchpContent = @{
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
-    --name "PCHP-QNXT" `
+    --name "Health Plan-QNXT" `
     --partner-type "B2B" `
     --content $pchpContent
 
@@ -64,11 +64,11 @@ foreach ($schema in $schemas) {
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Availity-to-PCHP-275-Receive" `
+    --name "Availity-to-Health Plan-275-Receive" `
     --agreement-type X12 `
-    --host-partner "PCHP-QNXT" `
+    --host-partner "Health Plan-QNXT" `
     --guest-partner "Availity" `
-    --host-identity '{ "qualifier": "ZZ", "value": "66917" }' `
+    --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --guest-identity '{ "qualifier": "ZZ", "value": "030240928" }' `
     --content '{
         "protocolSettings": {
@@ -93,11 +93,11 @@ az logic integration-account agreement create `
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "PCHP-to-Availity-277-Send" `
+    --name "Health Plan-to-Availity-277-Send" `
     --agreement-type X12 `
-    --host-partner "PCHP-QNXT" `
+    --host-partner "Health Plan-QNXT" `
     --guest-partner "Availity" `
-    --host-identity '{ "qualifier": "ZZ", "value": "66917" }' `
+    --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --guest-identity '{ "qualifier": "ZZ", "value": "030240928" }' `
     --content '{
         "protocolSettings": {
@@ -122,12 +122,12 @@ az logic integration-account agreement create `
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "PCHP-278-Processing" `
+    --name "Health Plan-278-Processing" `
     --agreement-type X12 `
-    --host-partner "PCHP-QNXT" `
-    --guest-partner "PCHP-QNXT" `
-    --host-identity '{ "qualifier": "ZZ", "value": "66917" }' `
-    --guest-identity '{ "qualifier": "ZZ", "value": "66917" }' `
+    --host-partner "Health Plan-QNXT" `
+    --guest-partner "Health Plan-QNXT" `
+    --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
+    --guest-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --content '{
         "protocolSettings": {
             "x12": {

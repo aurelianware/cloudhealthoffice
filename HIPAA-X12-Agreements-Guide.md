@@ -1,20 +1,20 @@
 # HIPAA X12 275/277/278 Agreements Configuration Guide
-# Availity ↔ Parkland Community Health Plan (PCHP) / QNXT System
+# Availity ↔ Health Plan (Health Plan) / QNXT System
 
 ## 🏥 Healthcare EDI Workflow Overview
 
 **Business Process**: HIPAA Attachment Processing
-- **275 Message**: Attachment Request (Availity → PCHP)
-- **277 Message**: Attachment Response (PCHP → Availity)  
+- **275 Message**: Attachment Request (Availity → Health Plan)
+- **277 Message**: Attachment Response (Health Plan → Availity)  
 - **278 Message**: Health Care Services Review Information (Processing & Replay)
-- **Backend System**: QNXT (Parkland's claims processing system)
+- **Backend System**: QNXT (Health Plan's claims processing system)
 
 ## 🤝 Trading Partners Configuration ✅ COMPLETED
 
 | Partner | Name | ID | Qualifier | Role |
 |---------|------|----|-----------|----- |
 | **Availity** | Availity | 030240928 | ZZ | Sender (275) / Receiver (277) |
-| **PCHP** | PCHP-QNXT | 66917 | ZZ | Receiver (275) / Sender (277) |
+| **Health Plan** | Health Plan-QNXT | {config.payerId} | ZZ | Receiver (275) / Sender (277) |
 
 ## 📋 Required X12 Agreements
 
@@ -22,17 +22,17 @@
 **Purpose**: Process incoming attachment requests from Availity
 
 **Configuration**:
-- **Agreement Name**: `Availity-to-PCHP-275-Receive`
-- **Host Partner**: PCHP-QNXT (you/receiver)
+- **Agreement Name**: `Availity-to-Health Plan-275-Receive`
+- **Host Partner**: Health Plan-QNXT (you/receiver)
 - **Guest Partner**: Availity (sender)
 - **Protocol**: X12
 - **Direction**: Receive (Inbound)
 
 **Key Settings**:
 - **ISA Sender ID**: 030240928 (Availity)
-- **ISA Receiver ID**: 66917 (PCHP)
+- **ISA Receiver ID**: {config.payerId} (Health Plan)
 - **GS Sender ID**: AVAILITY
-- **GS Receiver ID**: PCHP or QNXT
+- **GS Receiver ID**: Health Plan or QNXT
 - **Transaction Type**: 275 (Additional Information to Support a Healthcare Claim)
 - **Version**: 005010X215 (HIPAA version)
 
@@ -42,16 +42,16 @@
 **Purpose**: Send attachment responses back to Availity
 
 **Configuration**:
-- **Agreement Name**: `PCHP-to-Availity-277-Send`
-- **Host Partner**: PCHP-QNXT (you/sender)
+- **Agreement Name**: `Health Plan-to-Availity-277-Send`
+- **Host Partner**: Health Plan-QNXT (you/sender)
 - **Guest Partner**: Availity (receiver)
 - **Protocol**: X12
 - **Direction**: Send (Outbound)
 
 **Key Settings**:
-- **ISA Sender ID**: 66917 (PCHP)
+- **ISA Sender ID**: {config.payerId} (Health Plan)
 - **ISA Receiver ID**: 030240928 (Availity)
-- **GS Sender ID**: PCHP or QNXT
+- **GS Sender ID**: Health Plan or QNXT
 - **GS Receiver ID**: AVAILITY
 - **Transaction Type**: 277 (Healthcare Information Status Notification)
 - **Version**: 005010X212 (HIPAA version)
@@ -62,17 +62,17 @@
 **Purpose**: Process health care services review information and support replay functionality
 
 **Configuration**:
-- **Agreement Name**: `PCHP-278-Processing`
-- **Host Partner**: PCHP-QNXT (you/receiver)
-- **Guest Partner**: PCHP-QNXT (internal processing)
+- **Agreement Name**: `Health Plan-278-Processing`
+- **Host Partner**: Health Plan-QNXT (you/receiver)
+- **Guest Partner**: Health Plan-QNXT (internal processing)
 - **Protocol**: X12
 - **Direction**: Receive (Internal Processing)
 
 **Key Settings**:
-- **ISA Sender ID**: 66917 (PCHP)
-- **ISA Receiver ID**: 66917 (PCHP - internal)
-- **GS Sender ID**: PCHP or QNXT
-- **GS Receiver ID**: PCHP or QNXT
+- **ISA Sender ID**: {config.payerId} (Health Plan)
+- **ISA Receiver ID**: {config.payerId} (Health Plan - internal)
+- **GS Sender ID**: Health Plan or QNXT
+- **GS Receiver ID**: Health Plan or QNXT
 - **Transaction Type**: 278 (Health Care Services Review Information)
 - **Version**: 005010X217 (HIPAA version)
 
@@ -91,13 +91,13 @@
 
 ### Step 2: Create 275 Receive Agreement
 1. Click **+ Add**
-2. **Agreement Name**: `Availity-to-PCHP-275-Receive`
+2. **Agreement Name**: `Availity-to-Health Plan-275-Receive`
 3. **Agreement Type**: X12
-4. **Host Partner**: Select `PCHP-QNXT`
+4. **Host Partner**: Select `Health Plan-QNXT`
 5. **Guest Partner**: Select `Availity`
 6. **Host Identity**: 
    - Qualifier: ZZ
-   - Value: 66917
+   - Value: {config.payerId}
 7. **Guest Identity**:
    - Qualifier: ZZ  
    - Value: 030240928
@@ -116,13 +116,13 @@
 
 ### Step 3: Create 277 Send Agreement
 1. Click **+ Add**
-2. **Agreement Name**: `PCHP-to-Availity-277-Send`
+2. **Agreement Name**: `Health Plan-to-Availity-277-Send`
 3. **Agreement Type**: X12
-4. **Host Partner**: Select `PCHP-QNXT`
+4. **Host Partner**: Select `Health Plan-QNXT`
 5. **Guest Partner**: Select `Availity`
 6. **Host Identity**: 
    - Qualifier: ZZ
-   - Value: 66917
+   - Value: {config.payerId}
 7. **Guest Identity**:
    - Qualifier: ZZ
    - Value: 030240928

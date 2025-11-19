@@ -48,7 +48,7 @@ This document maps the HIPAA Attachments system's security controls to HIPAA Sec
 ```bash
 # Verify managed identity
 az webapp identity show \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "hipaa-attachments-prod-la" \
   --query "{principalId:principalId, tenantId:tenantId}"
 
@@ -186,7 +186,7 @@ az webapp identity show \
 # Verify storage encryption
 az storage account show \
   --name "hipaa-storage-prod" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --query "encryption"
 
 # Output:
@@ -201,7 +201,7 @@ az storage account show \
 # Verify TLS enforcement
 az webapp show \
   --name "hipaa-attachments-prod-la" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --query "{httpsOnly:httpsOnly, minTlsVersion:siteConfig.minTlsVersion}"
 
 # Output:
@@ -241,7 +241,7 @@ az webapp show \
 ```kusto
 // Query all PHI-related resource operations
 AzureActivity
-| where ResourceGroup == "pchp-attachments-prod-rg"
+| where ResourceGroup == "payer-attachments-prod-rg"
 | where TimeGenerated > ago(30d)
 | project TimeGenerated, Caller, OperationNameValue, Resource, ResourceType, ActivityStatusValue
 | order by TimeGenerated desc
@@ -320,7 +320,7 @@ AzureDiagnostics
 az monitor diagnostic-settings create \
   --resource "/subscriptions/{subscription-id}" \
   --name "activity-log-export" \
-  --storage-account "/subscriptions/{subscription-id}/resourceGroups/pchp-attachments-prod-rg/providers/Microsoft.Storage/storageAccounts/hipaa-audit-logs" \
+  --storage-account "/subscriptions/{subscription-id}/resourceGroups/payer-attachments-prod-rg/providers/Microsoft.Storage/storageAccounts/hipaa-audit-logs" \
   --logs "[{\"category\": \"Administrative\", \"enabled\": true, \"retentionPolicy\": {\"enabled\": true, \"days\": $HIPAA_RETENTION_DAYS}}]"
 ```
 
@@ -386,13 +386,13 @@ AzureDiagnostics
 # Enable blob versioning
 az storage account blob-service-properties update \
   --account-name "hipaa-storage-prod" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --enable-versioning true
 
 # Enable soft delete
 az storage account blob-service-properties update \
   --account-name "hipaa-storage-prod" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --enable-delete-retention true \
   --delete-retention-days 90
 
@@ -476,7 +476,7 @@ StorageBlobLogs
 ```bash
 # Logic App uses system-assigned managed identity
 az webapp identity assign \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "hipaa-attachments-prod-la"
 
 # Output:
@@ -488,7 +488,7 @@ az webapp identity assign \
 
 # Verify authentication in logs
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --caller "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
   --query "[].{Time:eventTimestamp, Caller:caller, Operation:operationName.localizedValue}" \
   --output table
@@ -565,7 +565,7 @@ SigninLogs
 ```bash
 # Verify HTTPS-only enforcement
 az webapp config show \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "hipaa-attachments-prod-la" \
   --query "{httpsOnly:httpsOnly, minTlsVersion:minTlsVersion}"
 
@@ -605,7 +605,7 @@ dependencies
 ```bash
 # Block all non-HTTPS traffic
 az webapp config set \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --name "hipaa-attachments-prod-la" \
   --https-only true \
   --min-tls-version "1.2"
@@ -622,7 +622,7 @@ az webapp config set \
 ```bash
 # Verify private endpoints active
 az network private-endpoint list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --query "[].{Name:name, ProvisioningState:provisioningState, PrivateIP:customDnsConfigs[0].ipAddresses[0]}" \
   --output table
 

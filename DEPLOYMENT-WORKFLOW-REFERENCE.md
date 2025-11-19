@@ -179,7 +179,7 @@ gh secret set AZURE_TENANT_ID_PROD --body "<tenant-id>"
 gh secret set AZURE_SUBSCRIPTION_ID_PROD --body "<subscription-id>"
 
 # 3. Configure GitHub Variables
-gh variable set AZURE_RG_NAME --body "pchp-attachments-prod-rg"
+gh variable set AZURE_RG_NAME --body "payer-attachments-prod-rg"
 gh variable set BASE_NAME --body "hipaa-attachments-prod"
 ```
 

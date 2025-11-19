@@ -27,7 +27,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
 - ✅ ISA/IEA envelope segments
 - ✅ GS/GE functional group segments
 - ✅ ST/SE transaction set segments
-- ✅ Trading partner identifiers (Availity: 030240928, PCHP: 66917)
+- ✅ Trading partner identifiers (Availity: 030240928, Health Plan: {config.payerId})
 - ✅ Transaction types (275/277/278)
 - ✅ Segment counts
 - ✅ X12 structure and format
@@ -40,7 +40,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
 
 📄 Validating: test-x12-275-availity-to-pchp.edi
 ℹ️  Found 20 segments
-ℹ️  Trading partners validated: 030240928 -> 66917
+ℹ️  Trading partners validated: 030240928 -> {config.payerId}
 ℹ️  Detected transaction type: 275 (Attachment Request)
 
 ==================================================
@@ -96,7 +96,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -FailOnWarning
 The scanner intelligently excludes:
 - Test files (`test-*.edi`, `test-*.json`)
 - Documentation files (`*.md`)
-- Trading partner IDs (030240928, 66917)
+- Trading partner IDs (030240928, {config.payerId})
 - Pattern definitions in scanner itself
 
 ### Example Output
@@ -243,7 +243,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 **Solution**: Ensure the EDI file starts with a valid ISA segment and contains proper envelope structure (ISA/GS/ST/SE/GE/IEA).
 
 **Problem**: "Trading partners not validated"  
-**Solution**: Check that ISA segment has correct sender/receiver IDs (030240928/66917)
+**Solution**: Check that ISA segment has correct sender/receiver IDs (030240928/{config.payerId})
 
 **Problem**: "Segment count mismatch"  
 **Solution**: Warning only. Verify SE segment count includes all segments from ST to SE.
@@ -254,7 +254,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 **Solution**: Add patterns to `AllowedFiles` or adjust `ExcludeContext`
 
 **Problem**: Trading partner IDs flagged as SSN  
-**Solution**: Already handled by context-aware filtering. Ensure file name or context contains "trading", "partner", "Availity", or "PCHP"
+**Solution**: Already handled by context-aware filtering. Ensure file name or context contains "trading", "partner", "Availity", or "Health Plan"
 
 ### Workflow Issues
 

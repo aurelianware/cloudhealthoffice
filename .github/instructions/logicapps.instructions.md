@@ -170,7 +170,7 @@ Common workflow parameters:
 
 ### Trading Partners
 - **Sender**: Availity (ID: 030240928)
-- **Receiver**: PCHP-QNXT (ID: 66917)
+- **Receiver**: Health Plan-QNXT (ID: {config.payerId})
 
 ## Deployment
 

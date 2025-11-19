@@ -433,7 +433,7 @@ az deployment group show \
 ```bash
 # List failed operations in deployment
 DEPLOY_NAME="hipaa-infra-deployment-20241116"
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 
 az deployment operation group list \
   --resource-group "$RG_NAME" \
@@ -595,7 +595,7 @@ Approval gates provide:
    - `SFTP_USERNAME`
    - `SFTP_PASSWORD`
 3. Under "Environment variables", add PROD-specific variables:
-   - `AZURE_RG_NAME` = `pchp-attachments-prod-rg`
+   - `AZURE_RG_NAME` = `payer-attachments-prod-rg`
    - `AZURE_LOCATION` = `eastus`
    - `BASE_NAME` = `hipaa-attachments-prod`
    - `IA_NAME` = `prod-integration-account`
@@ -816,21 +816,21 @@ gh api /repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[] | select(.concl
 ```bash
 # Query deployment activities
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --start-time "2024-01-01T00:00:00Z" \
   --query "[?contains(operationName.value, 'deployments')].{Time:eventTimestamp, Caller:caller, Operation:operationName.localizedValue, Status:status.localizedValue}" \
   --output table
 
 # Query resource changes
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --start-time "2024-01-01T00:00:00Z" \
   --query "[?level=='Warning' || level=='Error'].{Time:eventTimestamp, Level:level, Operation:operationName.localizedValue, Status:status.localizedValue}" \
   --output table
 
 # Export audit logs for compliance
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --start-time "2024-01-01T00:00:00Z" \
   --output json > deployment-audit-$(date +%Y%m%d).json
 ```
@@ -906,7 +906,7 @@ gh api "/repos/{owner}/{repo}/actions/runs?created=$MONTH-01..$MONTH-31" \
 
 # Azure activity logs
 az monitor activity-log list \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --start-time "${MONTH}-01T00:00:00Z" \
   --end-time "${MONTH}-31T23:59:59Z" \
   --output json \
@@ -938,12 +938,12 @@ echo "  - App Insights: app-insights-deployments-$MONTH.json"
 # Application Insights - Set 2 year retention
 az monitor app-insights component update \
   --app "hipaa-attachments-prod-ai" \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --retention-time 730
 
 # Log Analytics Workspace - Set 2 year retention
 az monitor log-analytics workspace update \
-  --resource-group "pchp-attachments-prod-rg" \
+  --resource-group "payer-attachments-prod-rg" \
   --workspace-name "hipaa-logs-workspace" \
   --retention-time 730
 ```
@@ -1474,7 +1474,7 @@ Before deploying workflows:
 **Step 1: Verify Logic App Status**
 
 ```bash
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 LOGIC_APP_NAME="hipaa-attachments-prod-la"
 
 # Check Logic App state
@@ -1694,7 +1694,7 @@ az rest --method GET \
 **Trigger:** Manual workflow dispatch or push to `main` branch
 
 **Configuration:**
-- Resource Group: `pchp-attachments-dev-rg`
+- Resource Group: `payer-attachments-dev-rg`
 - Base Name: `hipaa-attachments-dev`
 - Location: `eastus`
 - Branch: `main`
@@ -1703,7 +1703,7 @@ az rest --method GET \
 
 ```bash
 # Set variables
-RG_NAME="pchp-attachments-dev-rg"
+RG_NAME="payer-attachments-dev-rg"
 LOCATION="eastus"
 BASE_NAME="hipaa-attachments-dev"
 
@@ -1761,7 +1761,7 @@ echo "✅ DEV deployment complete"
 **Trigger:** Automatic on push to `release/*` branches
 
 **Configuration:**
-- Resource Group: `pchp-attachments-uat-rg`
+- Resource Group: `payer-attachments-uat-rg`
 - Base Name: `hipaa-attachments-uat`
 - Location: `eastus`
 - Branch: `release/*`
@@ -1795,7 +1795,7 @@ git push origin release/v1.0.0
 #### Manual UAT Deployment (if needed)
 
 ```bash
-RG_NAME="pchp-attachments-uat-rg"
+RG_NAME="payer-attachments-uat-rg"
 LOCATION="eastus"
 BASE_NAME="hipaa-attachments-uat"
 
@@ -1825,7 +1825,7 @@ az webapp restart \
 **Trigger:** Manual workflow dispatch only (requires approval)
 
 **Configuration:**
-- Resource Group: `pchp-attachments-prod-rg`
+- Resource Group: `payer-attachments-prod-rg`
 - Base Name: `hipaa-attachments-prod`
 - Location: `eastus`
 - Branch: `main` (after UAT validation)
@@ -1866,7 +1866,7 @@ Before deploying to production:
 #### Manual PROD Deployment
 
 ```bash
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 LOCATION="eastus"
 BASE_NAME="hipaa-attachments-prod"
 
@@ -1923,7 +1923,7 @@ For production PHI workloads, deploy comprehensive security controls to achieve 
 
 ```bash
 # Set variables
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 BASE_NAME="hipaa-attachments-prod"
 LOCATION="eastus"
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
@@ -2190,7 +2190,7 @@ Logic Apps require API connections to be authenticated:
 
 **Via Azure CLI:**
 ```bash
-RG_NAME="pchp-attachments-uat-rg"
+RG_NAME="payer-attachments-uat-rg"
 IA_NAME="hipaa-attachments-uat-ia"
 
 az logic integration-account schema create \
@@ -2209,27 +2209,27 @@ az logic integration-account schema create \
    - Name: `Availity`
    - Qualifier: `ZZ`
    - Value: `030240928`
-3. Add PCHP partner:
-   - Name: `PCHP-QNXT`
+3. Add Health Plan partner:
+   - Name: `Health Plan-QNXT`
    - Qualifier: `ZZ`
-   - Value: `66917`
+   - Value: `{config.payerId}`
 
 **Via PowerShell:**
 ```powershell
 # Use provided script
-pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'pchp-attachments-uat-rg' -IntegrationAccountName 'hipaa-attachments-uat-ia'"
+pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachments-uat-rg' -IntegrationAccountName 'hipaa-attachments-uat-ia'"
 ```
 
 #### Create X12 Agreements
 
-**1. Availity-to-PCHP-275-Receive Agreement:**
+**1. Availity-to-Health Plan-275-Receive Agreement:**
 1. Navigate to Integration Account → Agreements
 2. Click "+ Add"
 3. Configure:
-   - **Name**: `Availity-to-PCHP-275-Receive`
+   - **Name**: `Availity-to-Health Plan-275-Receive`
    - **Agreement Type**: X12
-   - **Host Partner**: PCHP-QNXT
-   - **Host Identity**: Qualifier=ZZ, Value=66917
+   - **Host Partner**: Health Plan-QNXT
+   - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
    - **Guest Partner**: Availity
    - **Guest Identity**: Qualifier=ZZ, Value=030240928
 4. Receive Settings:
@@ -2238,13 +2238,13 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'pchp-attachments
    - Version: 005010X210
 5. Save
 
-**2. PCHP-to-Availity-277-Send Agreement:**
+**2. Health Plan-to-Availity-277-Send Agreement:**
 1. Click "+ Add"
 2. Configure:
-   - **Name**: `PCHP-to-Availity-277-Send`
+   - **Name**: `Health Plan-to-Availity-277-Send`
    - **Agreement Type**: X12
-   - **Host Partner**: PCHP-QNXT
-   - **Host Identity**: Qualifier=ZZ, Value=66917
+   - **Host Partner**: Health Plan-QNXT
+   - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
    - **Guest Partner**: Availity
    - **Guest Identity**: Qualifier=ZZ, Value=030240928
 3. Send Settings:
@@ -2253,15 +2253,15 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'pchp-attachments
    - Version: 005010X212
 4. Save
 
-**3. PCHP-278-Processing Agreement:**
+**3. Health Plan-278-Processing Agreement:**
 1. Click "+ Add"
 2. Configure:
-   - **Name**: `PCHP-278-Processing`
+   - **Name**: `Health Plan-278-Processing`
    - **Agreement Type**: X12
-   - **Host Partner**: PCHP-QNXT
-   - **Host Identity**: Qualifier=ZZ, Value=66917
-   - **Guest Partner**: PCHP-QNXT (internal)
-   - **Guest Identity**: Qualifier=ZZ, Value=66917
+   - **Host Partner**: Health Plan-QNXT
+   - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
+   - **Guest Partner**: Health Plan-QNXT (internal)
+   - **Guest Identity**: Qualifier=ZZ, Value={config.payerId}
 3. Receive Settings:
    - Schema: X12_005010X217_278
    - Transaction Set: 278
@@ -2270,7 +2270,7 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'pchp-attachments
 
 **Via PowerShell:**
 ```powershell
-pwsh -c "./configure-x12-agreements.ps1 -ResourceGroup 'pchp-attachments-uat-rg' -IntegrationAccountName 'hipaa-attachments-uat-ia'"
+pwsh -c "./configure-x12-agreements.ps1 -ResourceGroup 'payer-attachments-uat-rg' -IntegrationAccountName 'hipaa-attachments-uat-ia'"
 ```
 
 ### 3. Configure Logic App Parameters
@@ -2290,7 +2290,7 @@ sb_topic_rfai=rfai-requests
 sb_topic_edi278=edi-278
 qnxt_base_url=https://qnxt-api-uat.example.com
 x12_sender_id_availity=030240928
-x12_receiver_id_pchp=66917
+x12_receiver_id_pchp={config.payerId}
 x12_messagetype_275=X12_005010X210_275
 x12_messagetype_277=X12_005010X212_277
 x12_messagetype_278=X12_005010X217_278
@@ -2303,7 +2303,7 @@ x12_messagetype_278=X12_005010X217_278
 Grant Logic App managed identity access to resources:
 
 ```bash
-RG_NAME="pchp-attachments-uat-rg"
+RG_NAME="payer-attachments-uat-rg"
 BASE_NAME="hipaa-attachments-uat"
 LOGIC_APP_NAME="${BASE_NAME}-la"
 
@@ -2406,7 +2406,7 @@ az servicebus topic show \
 
 ```bash
 # Environment variables
-RG_NAME="pchp-attachments-uat-rg"
+RG_NAME="payer-attachments-uat-rg"
 BASE_NAME="hipaa-attachments-uat"
 LOGIC_APP_NAME="${BASE_NAME}-la"
 KV_NAME="${BASE_NAME}-kv"
@@ -2519,7 +2519,7 @@ Run these checks after deployment:
 #### 1. Verify Infrastructure Resources
 
 ```bash
-RG_NAME="pchp-attachments-uat-rg"
+RG_NAME="payer-attachments-uat-rg"
 
 # List all resources
 az resource list \
@@ -2660,7 +2660,7 @@ Before initiating rollback:
 
 ```bash
 # Set variables
-RG_NAME="pchp-attachments-prod-rg"
+RG_NAME="payer-attachments-prod-rg"
 LOGIC_APP_NAME="hipaa-attachments-prod-la"
 
 # Step 1: Verify infrastructure is healthy
