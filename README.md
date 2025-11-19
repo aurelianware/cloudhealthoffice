@@ -460,9 +460,11 @@ All configuration is externalized for DEV/UAT/PROD environments:
 - `sb_topic_dead_letter`: Dead-letter queue topic (default: `dead-letter`)
 - `blob_authorizations_folder`: Data Lake folder path (default: `hipaa-attachments/raw/authorizations`)
 - `qnxt_base_url`: QNXT API base URL
-- `qnxt_api_token`: QNXT API authentication token
+- `QNXT_API_TOKEN`: **[SECURE]** QNXT API authentication token (SecureString) - Configure via Azure Key Vault reference or Managed Identity
 - `x12_278_messagetype`: X12 278 message type (default: `X12_005010X217_278`)
 - `x12_277_messagetype`: X12 277 message type (default: `X12_005010X212_277`)
+
+**Security Note**: The `QNXT_API_TOKEN` parameter must be configured using an Azure Key Vault reference (e.g., `@Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token)`) or obtained via Managed Identity. Never commit tokens or secrets to source code.
 
 ## 278 Replay Endpoint
 
@@ -584,11 +586,13 @@ If QNXT response indicates `requiresRFAI: true`, the workflow:
   "sb_topic_rfai": "rfai-requests",
   "sb_subscription_appeals": "appeals-processor",
   "qnxt_base_url": "https://qnxt-api.example.com",
-  "qnxt_api_token": "<secure-token>",
+  "QNXT_API_TOKEN": "@Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token)",
   "appinsights_endpoint": "https://dc.services.visualstudio.com",
   "appinsights_instrumentation_key": "<instrumentation-key>"
 }
 ```
+
+**Security Note**: Secrets like `QNXT_API_TOKEN` should be configured as Azure Key Vault references, not hardcoded values. See [SECURITY-HARDENING.md](SECURITY-HARDENING.md) for complete security configuration guidance.
 
 ### Integration Points
 

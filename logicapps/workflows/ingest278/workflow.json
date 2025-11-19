@@ -128,7 +128,7 @@
           "method": "POST",
           "uri": "@{parameters('qnxt_base_url')}/claims/process-278",
           "headers": {
-            "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+            "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
             "Content-Type": "application/json"
           },
           "body": {
@@ -186,6 +186,10 @@
   },
   "kind": "Stateful",
   "parameters": {
+    "_SECURITY_NOTE": {
+      "type": "String",
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token) or use Managed Identity to obtain tokens at runtime."
+    },
     "$connections": {
       "type": "Object",
       "defaultValue": {}
@@ -210,9 +214,8 @@
       "type": "String",
       "defaultValue": "https://qnxt.api.local"
     },
-    "qnxt_api_token": {
-      "type": "String",
-      "defaultValue": "<token>"
+    "QNXT_API_TOKEN": {
+      "type": "SecureString"
     },
     "x12_sender_id": {
       "type": "String",
