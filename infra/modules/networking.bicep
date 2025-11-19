@@ -20,6 +20,9 @@ param logicAppsSubnetPrefix string = '10.0.1.0/24'
 @description('Private Endpoints subnet address prefix')
 param privateEndpointsSubnetPrefix string = '10.0.2.0/24'
 
+@description('Storage Private DNS zone name (default: standard Azure public cloud)')
+param storageDnsZoneName string = 'privatelink.blob.core.windows.net'
+
 @description('Tags for networking resources')
 param tags object = {
   Environment: 'Production'
@@ -91,7 +94,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
 // Private DNS Zone for Storage (blob)
 // =========================
 resource privateDnsZoneStorage 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.blob.${environment().suffixes.storage}'
+  name: storageDnsZoneName
   location: 'global'
   tags: tags
 }
