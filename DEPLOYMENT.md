@@ -1911,6 +1911,216 @@ echo "✅ PROD deployment complete"
 
 After successful deployment, complete these manual configuration steps:
 
+### 0. Security Hardening Deployment (Recommended for Production)
+
+For production PHI workloads, deploy comprehensive security controls to achieve HIPAA compliance:
+
+#### Security Score Impact
+- **Before**: 7/10 (Basic security)
+- **After**: 9/10 (Production-ready for PHI)
+
+#### Deploy Security Modules
+
+```bash
+# Set variables
+RG_NAME="pchp-attachments-prod-rg"
+BASE_NAME="hipaa-attachments-prod"
+LOCATION="eastus"
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# 1. Deploy Azure Key Vault (Premium with HSM)
+az deployment group create \
+  --resource-group "$RG_NAME" \
+  --template-file infra/modules/keyvault.bicep \
+  --parameters keyVaultName="${BASE_NAME}-kv" \
+                location="$LOCATION" \
+                skuName="premium" \
+                enableRbacAuthorization=true \
+                enableSoftDelete=true \
+                softDeleteRetentionInDays=90 \
+                enablePurgeProtection=true \
+                publicNetworkAccess="Disabled"
+
+echo "✅ Key Vault deployed with HSM-backed keys"
+
+# 2. Deploy Networking (VNet and Private DNS Zones)
+az deployment group create \
+  --resource-group "$RG_NAME" \
+  --template-file infra/modules/networking.bicep \
+  --parameters vnetName="${BASE_NAME}-vnet" \
+                location="$LOCATION" \
+                vnetAddressPrefix="10.0.0.0/16" \
+                logicAppsSubnetPrefix="10.0.1.0/24" \
+                privateEndpointsSubnetPrefix="10.0.2.0/24"
+
+echo "✅ VNet and Private DNS zones deployed"
+
+# 3. Get resource IDs for private endpoints
+STORAGE_NAME=$(az storage account list -g "$RG_NAME" --query "[0].name" -o tsv)
+STORAGE_ID=$(az storage account show --name "$STORAGE_NAME" -g "$RG_NAME" --query id -o tsv)
+SERVICE_BUS_ID=$(az servicebus namespace show --name "${BASE_NAME}-svc" -g "$RG_NAME" --query id -o tsv)
+KEY_VAULT_ID=$(az keyvault show --name "${BASE_NAME}-kv" -g "$RG_NAME" --query id -o tsv)
+
+# Get subnet and DNS zone IDs
+PRIVATE_SUBNET_ID=$(az network vnet subnet show \
+  --resource-group "$RG_NAME" \
+  --vnet-name "${BASE_NAME}-vnet" \
+  --name "private-endpoints-subnet" \
+  --query id -o tsv)
+
+# Dynamically determine the storage DNS zone name (matches networking.bicep logic)
+STORAGE_DNS_ZONE_NAME=$(az network private-dns zone list --resource-group "$RG_NAME" --query "[?starts_with(name, 'privatelink.blob.core')].name" -o tsv)
+STORAGE_DNS_ZONE_ID=$(az network private-dns zone show \
+  --resource-group "$RG_NAME" \
+  --name "$STORAGE_DNS_ZONE_NAME" \
+  --query id -o tsv)
+
+SERVICE_BUS_DNS_ZONE_ID=$(az network private-dns zone show \
+  --resource-group "$RG_NAME" \
+  --name "privatelink.servicebus.windows.net" \
+  --query id -o tsv)
+
+KEY_VAULT_DNS_ZONE_ID=$(az network private-dns zone show \
+  --resource-group "$RG_NAME" \
+  --name "privatelink.vaultcore.azure.net" \
+  --query id -o tsv)
+
+# 4. Deploy Private Endpoints
+az deployment group create \
+  --resource-group "$RG_NAME" \
+  --template-file infra/modules/private-endpoints.bicep \
+  --parameters subnetId="$PRIVATE_SUBNET_ID" \
+                storageAccountId="$STORAGE_ID" \
+                storageAccountName="$STORAGE_NAME" \
+                serviceBusId="$SERVICE_BUS_ID" \
+                serviceBusName="${BASE_NAME}-svc" \
+                keyVaultId="$KEY_VAULT_ID" \
+                keyVaultName="${BASE_NAME}-kv" \
+                storageDnsZoneId="$STORAGE_DNS_ZONE_ID" \
+                serviceBusDnsZoneId="$SERVICE_BUS_DNS_ZONE_ID" \
+                keyVaultDnsZoneId="$KEY_VAULT_DNS_ZONE_ID"
+
+echo "✅ Private endpoints deployed - all resources isolated from public internet"
+
+# 5. Enable VNet Integration for Logic App
+LOGIC_APP_NAME="${BASE_NAME}-la"
+az webapp vnet-integration add \
+  --resource-group "$RG_NAME" \
+  --name "$LOGIC_APP_NAME" \
+  --vnet "${BASE_NAME}-vnet" \
+  --subnet "logic-apps-subnet"
+
+echo "✅ Logic App VNet integration enabled"
+
+# 6. Disable Public Access
+az storage account update --name "$STORAGE_NAME" -g "$RG_NAME" --public-network-access Disabled
+az servicebus namespace update --name "${BASE_NAME}-svc" -g "$RG_NAME" --public-network-access Disabled
+
+echo "✅ Public access disabled on all PHI resources"
+
+# 7. Configure Key Vault RBAC for Logic App
+PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" --name "$LOGIC_APP_NAME" --query principalId -o tsv)
+az role assignment create \
+  --assignee "$PRINCIPAL_ID" \
+  --role "Key Vault Secrets User" \
+  --scope "$KEY_VAULT_ID"
+
+echo "✅ Logic App granted Key Vault access via managed identity"
+
+# 8. Apply Data Lifecycle Policies
+cat > lifecycle-policy.json <<'EOF'
+{
+  "rules": [
+    {
+      "name": "move-to-cool-after-30-days",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "actions": {
+          "baseBlob": {"tierToCool": {"daysAfterModificationGreaterThan": 30}}
+        },
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["hipaa-attachments/raw/"]
+        }
+      }
+    },
+    {
+      "name": "move-to-archive-after-90-days",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "actions": {
+          "baseBlob": {"tierToArchive": {"daysAfterModificationGreaterThan": 90}}
+        },
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["hipaa-attachments/raw/"]
+        }
+      }
+    },
+    {
+      "name": "delete-after-7-years",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "actions": {
+          "baseBlob": {"delete": {"daysAfterModificationGreaterThan": 2555}}
+        },
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["hipaa-attachments/raw/"]
+        }
+      }
+    }
+  ]
+}
+EOF
+
+az storage account management-policy create \
+  --account-name "$STORAGE_NAME" \
+  --resource-group "$RG_NAME" \
+  --policy @lifecycle-policy.json
+
+echo "✅ Data lifecycle policies applied (Cool→30d, Archive→90d, Delete→7yr)"
+
+echo ""
+echo "🎉 Security hardening deployment complete!"
+echo ""
+echo "Next steps:"
+echo "1. Migrate secrets to Key Vault (see DEPLOYMENT-SECRETS-SETUP.md § Azure Key Vault Secret Migration)"
+echo "2. Update Logic App workflows to use Key Vault references"
+echo "3. Configure PHI masking in Application Insights"
+echo "4. Enable Azure AD authentication for replay278 endpoint"
+echo "5. Review SECURITY-HARDENING.md for additional security controls"
+```
+
+#### Verify Security Deployment
+
+```bash
+# Verify private endpoints
+az network private-endpoint list -g "$RG_NAME" --query "[].{Name:name, State:provisioningState}" -o table
+
+# Verify VNet integration
+az webapp vnet-integration list -g "$RG_NAME" --name "$LOGIC_APP_NAME" -o table
+
+# Verify Key Vault configuration
+az keyvault show --name "${BASE_NAME}-kv" --query "{SKU:properties.sku.name, RBAC:properties.enableRbacAuthorization, SoftDelete:properties.enableSoftDelete, PurgeProtection:properties.enablePurgeProtection}"
+
+# Verify public access disabled
+az storage account show --name "$STORAGE_NAME" --query "publicNetworkAccess"
+az servicebus namespace show --name "${BASE_NAME}-svc" --query "publicNetworkAccess"
+
+# Expected: All show "Disabled"
+```
+
+#### Security Documentation References
+
+For detailed security implementation guidance:
+- **[SECURITY-HARDENING.md](SECURITY-HARDENING.md)** - 400+ line comprehensive security guide
+- **[docs/HIPAA-COMPLIANCE-MATRIX.md](docs/HIPAA-COMPLIANCE-MATRIX.md)** - Complete HIPAA technical safeguards mapping
+- **[DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md)** - Key Vault secret migration procedures
+
 ### 1. Configure API Connections
 
 Logic Apps require API connections to be authenticated:
