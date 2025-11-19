@@ -1968,9 +1968,11 @@ PRIVATE_SUBNET_ID=$(az network vnet subnet show \
   --name "private-endpoints-subnet" \
   --query id -o tsv)
 
+# Dynamically determine the storage DNS zone name (matches networking.bicep logic)
+STORAGE_DNS_ZONE_NAME=$(az network private-dns zone list --resource-group "$RG_NAME" --query "[?starts_with(name, 'privatelink.blob.core')].name" -o tsv)
 STORAGE_DNS_ZONE_ID=$(az network private-dns zone show \
   --resource-group "$RG_NAME" \
-  --name "privatelink.blob.core.windows.net" \
+  --name "$STORAGE_DNS_ZONE_NAME" \
   --query id -o tsv)
 
 SERVICE_BUS_DNS_ZONE_ID=$(az network private-dns zone show \
