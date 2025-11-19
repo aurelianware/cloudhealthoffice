@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Availity Integration Configuration Schema",
+  "description": "Configuration schema for Availity payer integrations including authorization inquiry (X12 278 X215)",
+  "type": "object",
+  "properties": {
+    "authorizations": {
+      "type": "object",
+      "description": "Authorization module configuration",
+      "properties": {
+        "inquiry_x215": {
+          "type": "object",
+          "description": "Configuration for Authorization Inquiry (X12 278 X215) - Query existing authorizations",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable or disable authorization inquiry functionality",
+              "default": true
+            },
+            "tr3Version": {
+              "type": "string",
+              "description": "X12 TR3 version for 278 inquiry transactions",
+              "enum": ["005010X215"],
+              "default": "005010X215"
+            },
+            "connectivity": {
+              "type": "object",
+              "description": "Connectivity settings for payer authorization inquiry endpoint",
+              "required": ["testUrl", "prodUrl", "timeout"],
+              "properties": {
+                "testUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Test/UAT payer authorization inquiry endpoint URL",
+                  "examples": ["https://payer-test.example.com/auth-inquiry"]
+                },
+                "prodUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Production payer authorization inquiry endpoint URL",
+                  "examples": ["https://payer-prod.example.com/auth-inquiry"]
+                },
+                "testUserId": {
+                  "type": "string",
+                  "description": "Test environment user ID for authentication",
+                  "default": ""
+                },
+                "prodUserId": {
+                  "type": "string",
+                  "description": "Production environment user ID for authentication",
+                  "default": ""
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "Request timeout in seconds (standard: 30 seconds per Availity)",
+                  "minimum": 10,
+                  "maximum": 120,
+                  "default": 30
+                },
+                "xmlWrapperRequired": {
+                  "type": "boolean",
+                  "description": "Whether payer requires XML wrapper around X12 payload",
+                  "default": false
+                }
+              }
+            },
+            "fieldRequirements": {
+              "type": "object",
+              "description": "Field requirement configuration (minimal per QRE best practice)",
+              "properties": {
+                "authNumberRequired": {
+                  "type": "boolean",
+                  "description": "Whether authorization number is required (alternative to member demographics)",
+                  "default": false
+                },
+                "memberIdRequired": {
+                  "type": "boolean",
+                  "description": "Whether member ID is required (when auth number not provided)",
+                  "default": false
+                },
+                "patientDobRequired": {
+                  "type": "boolean",
+                  "description": "Whether patient DOB is required (when auth number not provided)",
+                  "default": false
+                },
+                "serviceDatesRequired": {
+                  "type": "boolean",
+                  "description": "Whether service dates are required",
+                  "default": false
+                }
+              }
+            },
+            "enveloping": {
+              "type": "object",
+              "description": "X12 envelope configuration for ISA/GS segments",
+              "required": ["isa06_senderId", "isa08_receiverId", "gs02_applicationSenderCode", "gs03_applicationReceiverCode"],
+              "properties": {
+                "isa06_senderId": {
+                  "type": "string",
+                  "description": "ISA06 Interchange Sender ID (typically Availity)",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "default": "AVAILITY001"
+                },
+                "isa08_receiverId": {
+                  "type": "string",
+                  "description": "ISA08 Interchange Receiver ID (payer ID)",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "examples": ["PAYERID"]
+                },
+                "gs02_applicationSenderCode": {
+                  "type": "string",
+                  "description": "GS02 Application Sender's Code",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "default": "AVAILITY"
+                },
+                "gs03_applicationReceiverCode": {
+                  "type": "string",
+                  "description": "GS03 Application Receiver's Code",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "examples": ["PAYER"]
+                },
+                "isa05_senderQualifier": {
+                  "type": "string",
+                  "description": "ISA05 Interchange ID Qualifier for sender",
+                  "enum": ["ZZ", "01", "14", "20", "27", "28", "29", "30"],
+                  "default": "ZZ"
+                },
+                "isa07_receiverQualifier": {
+                  "type": "string",
+                  "description": "ISA07 Interchange ID Qualifier for receiver",
+                  "enum": ["ZZ", "01", "14", "20", "27", "28", "29", "30"],
+                  "default": "ZZ"
+                }
+              }
+            },
+            "retry": {
+              "type": "object",
+              "description": "Retry logic configuration",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable retry logic for failed requests",
+                  "default": true
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "description": "Maximum number of retry attempts",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "default": 3
+                },
+                "retryInterval": {
+                  "type": "integer",
+                  "description": "Interval between retries in seconds",
+                  "minimum": 5,
+                  "maximum": 60,
+                  "default": 30
+                }
+              }
+            }
+          }
+        },
+        "request_x217": {
+          "type": "object",
+          "description": "Configuration for Authorization Request (X12 278 X217) - Future implementation",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "description": "Claims processing configuration - Future use"
+    },
+    "eligibility": {
+      "type": "object",
+      "description": "Eligibility verification configuration - Future use"
+    }
+  },
+  "required": ["authorizations"]
+}
