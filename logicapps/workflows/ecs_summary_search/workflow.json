@@ -312,10 +312,97 @@
               }
             }
           },
-          "Transform_QNXT_to_Availity_ECS_Format": {
+          "Map_ValueAdds277_Fields": {
             "type": "Compose",
             "runAfter": {
               "Determine_Search_Method": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "enrichedClaims": "@body('Map_Claims_with_ValueAdds277')"
+            },
+            "description": "Enriches QNXT claims with ValueAdds277 fields including financial, clinical, demographic, remittance data, and integration flags"
+          },
+          "Map_Claims_with_ValueAdds277": {
+            "type": "Select",
+            "runAfter": {
+              "Determine_Search_Method": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "from": "@variables('qnxtResults')?['claims']",
+              "select": {
+                "claimNumber": "@item()?['claimNumber']",
+                "patientAccountNumber": "@item()?['patientAccountNumber']",
+                "claimStatus": "@item()?['claimStatus']",
+                "claimStatusCode": "@item()?['claimStatusCode']",
+                "claimStatusCategory": "@item()?['claimStatusCategory']",
+                "statusCode": "@if(parameters('includeClinicalFields'), item()?['statusCode'], null())",
+                "statusCodeDescription": "@if(parameters('includeClinicalFields'), item()?['statusCodeDescription'], null())",
+                "serviceFromDate": "@item()?['serviceFromDate']",
+                "serviceToDate": "@item()?['serviceToDate']",
+                "receivedDate": "@item()?['receivedDate']",
+                "processedDate": "@item()?['processedDate']",
+                "finalizedDate": "@if(parameters('includeClinicalFields'), item()?['finalizedDate'], null())",
+                "effectiveDate": "@coalesce(item()?['effectiveDate'], item()?['processedDate'], utcNow())",
+                "exchangeDate": "@if(parameters('includeClinicalFields'), utcNow(), null())",
+                "paidDate": "@item()?['paidDate']",
+                "billedAmount": "@item()?['billedAmount']",
+                "BILLED": "@if(parameters('includeFinancialFields'), coalesce(item()?['BILLED'], item()?['billedAmount']), null())",
+                "allowedAmount": "@item()?['allowedAmount']",
+                "ALLOWED": "@if(parameters('includeFinancialFields'), coalesce(item()?['ALLOWED'], item()?['allowedAmount']), null())",
+                "paidAmount": "@item()?['paidAmount']",
+                "INSURANCE_TOTAL_PAID": "@if(parameters('includeFinancialFields'), coalesce(item()?['INSURANCE_TOTAL_PAID'], item()?['paidAmount']), null())",
+                "patientResponsibility": "@item()?['patientResponsibility']",
+                "PATIENT_RESPONSIBILITY": "@if(parameters('includeFinancialFields'), coalesce(item()?['PATIENT_RESPONSIBILITY'], item()?['patientResponsibility']), null())",
+                "COPAY": "@if(parameters('includeFinancialFields'), item()?['COPAY'], null())",
+                "COINSURANCE": "@if(parameters('includeFinancialFields'), item()?['COINSURANCE'], null())",
+                "DEDUCTIBLE": "@if(parameters('includeFinancialFields'), item()?['DEDUCTIBLE'], null())",
+                "DISCOUNT": "@if(parameters('includeFinancialFields'), item()?['DISCOUNT'], null())",
+                "adjustmentAmount": "@item()?['adjustmentAmount']",
+                "payerId": "@item()?['payerId']",
+                "payerName": "@item()?['payerName']",
+                "providerId": "@item()?['providerId']",
+                "providerName": "@item()?['providerName']",
+                "memberId": "@item()?['memberId']",
+                "memberName": "@item()?['memberName']",
+                "checkNumber": "@item()?['checkNumber']",
+                "checkDate": "@item()?['checkDate']",
+                "remarkCodes": "@item()?['remarkCodes']",
+                "reasonCodes": "@item()?['reasonCodes']",
+                "code": "@if(parameters('includeClinicalFields'), coalesce(item()?['code'], item()?['reasonCodes']), null())",
+                "statusDetails": "@item()?['statusDetails']",
+                "comment": "@if(parameters('includeClinicalFields'), coalesce(item()?['comment'], item()?['statusDetails']), null())",
+                "drgCode": "@if(parameters('includeClinicalFields'), item()?['drgCode'], null())",
+                "facilityTypeCodeDescription": "@if(parameters('includeClinicalFields'), item()?['facilityTypeCodeDescription'], null())",
+                "diagnosisCodes": "@if(parameters('includeClinicalFields'), item()?['diagnosisCodes'], null())",
+                "payeeName": "@if(parameters('includeRemittanceFields'), item()?['payeeName'], null())",
+                "checkCashedDate": "@if(parameters('includeRemittanceFields'), item()?['checkCashedDate'], null())",
+                "checkAmount": "@if(parameters('includeRemittanceFields'), coalesce(item()?['checkAmount'], item()?['paidAmount']), null())",
+                "patient": "@if(parameters('includeDemographicFields'), json(concat('{\"lastName\":\"', coalesce(item()?['patient']?['lastName'], item()?['memberName']), '\",\"firstName\":\"', coalesce(item()?['patient']?['firstName'], ''), '\",\"middleName\":\"', coalesce(item()?['patient']?['middleName'], ''), '\",\"suffix\":\"', coalesce(item()?['patient']?['suffix'], ''), '\",\"birthdate\":\"', coalesce(item()?['patient']?['birthdate'], ''), '\",\"memberId\":\"', coalesce(item()?['patient']?['memberId'], item()?['memberId']), '\",\"gender\":\"', coalesce(item()?['patient']?['gender'], ''), '\"}')), null())",
+                "subscriber": "@if(parameters('includeDemographicFields'), item()?['subscriber'], null())",
+                "billingProvider": "@if(parameters('includeDemographicFields'), item()?['billingProvider'], null())",
+                "renderingProvider": "@if(parameters('includeDemographicFields'), item()?['renderingProvider'], null())",
+                "serviceLines": "@if(parameters('includeServiceLineDetails'), item()?['serviceLines'], null())",
+                "eligibleForAttachment": "@if(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Pending'), equals(item()?['claimStatus'], 'In Process'), equals(item()?['claimStatus'], 'Suspended')), null())",
+                "eligibleForChat": "@if(parameters('includeIntegrationFlags'), coalesce(item()?['eligibleForChat'], false()), null())",
+                "eligibleForCorrection": "@if(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), contains(item()?['claimStatus'], 'Rejected')), null())",
+                "eligibleForMessaging": "@if(parameters('includeIntegrationFlags'), coalesce(item()?['eligibleForMessaging'], true()), null())",
+                "eligibleForAppeal": "@if(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid')), null())",
+                "eligibleForRemittanceViewer": "@if(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Paid'), equals(item()?['claimStatus'], 'Partially Paid')), null())",
+                "appealMessage": "@if(and(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid'))), concat('This claim may be eligible for appeal. Timely filing deadline: ', coalesce(item()?['appealTimelyFilingDate'], addDays(coalesce(item()?['finalizedDate'], item()?['processedDate'], utcNow()), 180))), null())",
+                "appealType": "@if(and(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid'))), 'Reconsideration', null())",
+                "appealTimelyFilingDate": "@if(and(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid'))), coalesce(item()?['appealTimelyFilingDate'], addDays(coalesce(item()?['finalizedDate'], item()?['processedDate'], utcNow()), 180)), null())"
+              }
+            },
+            "description": "Maps each claim from QNXT to ValueAdds277 format with all enhanced fields"
+          },
+          "Transform_QNXT_to_Availity_ECS_Format": {
+            "type": "Compose",
+            "runAfter": {
+              "Map_ValueAdds277_Fields": [
                 "Succeeded"
               ]
             },
@@ -324,8 +411,8 @@
               "status": "success",
               "timestamp": "@utcNow()",
               "searchMethod": "@triggerBody()?['searchMethod']",
-              "totalResults": "@length(variables('qnxtResults')?['claims'])",
-              "claims": "@variables('qnxtResults')?['claims']"
+              "totalResults": "@length(body('Map_Claims_with_ValueAdds277'))",
+              "claims": "@body('Map_Claims_with_ValueAdds277')"
             }
           },
           "Log_ECS_Search_Success": {
@@ -457,6 +544,30 @@
       },
       "qnxt_api_token": {
         "type": "SecureString"
+      },
+      "includeFinancialFields": {
+        "type": "Bool",
+        "defaultValue": true
+      },
+      "includeClinicalFields": {
+        "type": "Bool",
+        "defaultValue": true
+      },
+      "includeDemographicFields": {
+        "type": "Bool",
+        "defaultValue": true
+      },
+      "includeRemittanceFields": {
+        "type": "Bool",
+        "defaultValue": true
+      },
+      "includeIntegrationFlags": {
+        "type": "Bool",
+        "defaultValue": true
+      },
+      "includeServiceLineDetails": {
+        "type": "Bool",
+        "defaultValue": true
       }
     },
     "variables": {
