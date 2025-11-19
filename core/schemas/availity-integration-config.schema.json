@@ -1,0 +1,1028 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/availity-integration-config.json",
+  "title": "Availity Integration Configuration Schema",
+  "description": "Comprehensive multi-payer configuration schema for all Availity transaction types (837 Claims, 270/271 Eligibility, 276/277 Claim Status, Appeals, Attachments, ECS)",
+  "type": "object",
+  "required": ["organizationName", "payerId", "payerName", "contacts"],
+  "additionalProperties": false,
+  "properties": {
+    "organizationName": {
+      "type": "string",
+      "description": "Health plan organization name",
+      "minLength": 1,
+      "maxLength": 100,
+      "examples": ["Blue Cross Blue Shield of Texas", "United Healthcare"]
+    },
+    "payerId": {
+      "type": "string",
+      "description": "Primary payer ID for Availity routing",
+      "pattern": "^[A-Z0-9]+$",
+      "minLength": 5,
+      "maxLength": 20,
+      "examples": ["66917", "030240928"]
+    },
+    "payerName": {
+      "type": "string",
+      "description": "Display name for provider portals",
+      "minLength": 1,
+      "maxLength": 100,
+      "examples": ["PCHP-QNXT", "Availity"]
+    },
+    "logo": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to payer logo (234x60px PNG, <20KB)",
+      "examples": ["https://example.com/logo.png"]
+    },
+    "tradingPartnerId": {
+      "type": "string",
+      "description": "Trading partner ID for connectivity",
+      "pattern": "^[A-Z0-9-]+$",
+      "minLength": 1,
+      "maxLength": 50,
+      "examples": ["TP12345"]
+    },
+    "controlledDeployment": {
+      "type": "boolean",
+      "description": "Whether deployment is restricted to specific providers",
+      "default": false
+    },
+    "contacts": {
+      "type": "object",
+      "description": "Contact information for various roles",
+      "required": ["technical", "accountManager", "escalation"],
+      "additionalProperties": false,
+      "properties": {
+        "technical": {
+          "$ref": "#/definitions/Contact",
+          "description": "Technical contact for integration issues"
+        },
+        "accountManager": {
+          "$ref": "#/definitions/Contact",
+          "description": "Account manager contact"
+        },
+        "escalation": {
+          "$ref": "#/definitions/Contact",
+          "description": "Escalation contact for critical issues"
+        },
+        "additional": {
+          "$ref": "#/definitions/Contact",
+          "description": "Additional contact (optional)"
+        }
+      }
+    },
+    "geography": {
+      "type": "object",
+      "description": "Geographic coverage configuration",
+      "additionalProperties": false,
+      "properties": {
+        "nationwide": {
+          "type": "boolean",
+          "description": "Whether the payer operates nationwide",
+          "default": false
+        },
+        "states": {
+          "type": "array",
+          "description": "Array of 2-letter state codes (required if nationwide=false)",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "minItems": 1,
+          "maxItems": 56,
+          "examples": [["TX", "CA", "NY"]]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "nationwide": { "const": true }
+          },
+          "not": { "required": ["states"] }
+        },
+        {
+          "properties": {
+            "nationwide": { "const": false }
+          },
+          "required": ["states"]
+        }
+      ]
+    },
+    "enveloping": {
+      "type": "object",
+      "description": "ISA/GS segment enveloping configuration",
+      "additionalProperties": false,
+      "properties": {
+        "isaAuthorizationQualifier": {
+          "type": "string",
+          "description": "ISA01 - Authorization Information Qualifier",
+          "enum": ["00", "03"],
+          "default": "00"
+        },
+        "isaSecurityQualifier": {
+          "type": "string",
+          "description": "ISA03 - Security Information Qualifier",
+          "enum": ["00", "01"],
+          "default": "00"
+        },
+        "isaInterchangeIdQualifier": {
+          "type": "string",
+          "description": "ISA05/ISA07 - Interchange ID Qualifier",
+          "enum": ["01", "14", "20", "27", "28", "29", "30", "33", "ZZ"],
+          "default": "ZZ"
+        },
+        "isaUsageIndicator": {
+          "type": "string",
+          "description": "ISA15 - Usage Indicator",
+          "enum": ["P", "T"],
+          "default": "P"
+        },
+        "gsApplicationSenderCode": {
+          "type": "string",
+          "description": "GS02 - Application Sender's Code",
+          "minLength": 2,
+          "maxLength": 15
+        },
+        "gsApplicationReceiverCode": {
+          "type": "string",
+          "description": "GS03 - Application Receiver's Code",
+          "minLength": 2,
+          "maxLength": 15
+        },
+        "gsVersionCode": {
+          "type": "string",
+          "description": "GS08 - Version/Release/Industry Identifier Code",
+          "enum": ["005010", "005010X212", "005010X217", "005010X221", "005010X222"],
+          "default": "005010"
+        }
+      }
+    },
+    "connectivity": {
+      "type": "object",
+      "description": "Connectivity configuration for HTTPS/FTP",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["HTTPS", "SFTP", "FTP"],
+          "default": "HTTPS"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Connection timeout in seconds",
+          "minimum": 10,
+          "maximum": 300,
+          "default": 30
+        },
+        "retryAttempts": {
+          "type": "integer",
+          "description": "Number of retry attempts on failure",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 3
+        },
+        "maxThreads": {
+          "type": "integer",
+          "description": "Maximum number of concurrent threads",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10
+        },
+        "keepAlive": {
+          "type": "boolean",
+          "description": "Whether to maintain persistent connections",
+          "default": true
+        }
+      }
+    },
+    "testing": {
+      "type": "object",
+      "description": "Testing environment and requirements",
+      "additionalProperties": false,
+      "properties": {
+        "testEnvironmentAvailable": {
+          "type": "boolean",
+          "description": "Whether a test environment is available",
+          "default": true
+        },
+        "certificationRequired": {
+          "type": "boolean",
+          "description": "Whether certification is required before production",
+          "default": true
+        },
+        "approvalProcess": {
+          "type": "string",
+          "description": "Description of the approval process",
+          "maxLength": 500
+        },
+        "testDataProvided": {
+          "type": "boolean",
+          "description": "Whether test data is provided by payer",
+          "default": false
+        },
+        "certificationTimeline": {
+          "type": "string",
+          "description": "Expected timeline for certification",
+          "examples": ["2-4 weeks", "1-2 months"]
+        }
+      }
+    },
+    "characterSet": {
+      "type": "object",
+      "description": "Character set and encoding requirements",
+      "additionalProperties": false,
+      "properties": {
+        "uppercaseOnly": {
+          "type": "boolean",
+          "description": "Whether only uppercase characters are allowed",
+          "default": false
+        },
+        "spacesAllowed": {
+          "type": "boolean",
+          "description": "Whether spaces are allowed in fields",
+          "default": true
+        },
+        "extendedCharactersSupported": {
+          "type": "boolean",
+          "description": "Whether extended ASCII characters are supported",
+          "default": false
+        },
+        "encoding": {
+          "type": "string",
+          "enum": ["ASCII", "UTF-8", "ISO-8859-1"],
+          "default": "ASCII"
+        }
+      }
+    },
+    "errorHandling": {
+      "type": "object",
+      "description": "Error handling and acknowledgment configuration",
+      "additionalProperties": false,
+      "properties": {
+        "ta1Required": {
+          "type": "boolean",
+          "description": "Whether TA1 acknowledgments are required",
+          "default": false
+        },
+        "functional997Required": {
+          "type": "boolean",
+          "description": "Whether 997 functional acknowledgments are required",
+          "default": true
+        },
+        "functional999Required": {
+          "type": "boolean",
+          "description": "Whether 999 implementation acknowledgments are required",
+          "default": false
+        },
+        "unusedSegmentsAllowed": {
+          "type": "boolean",
+          "description": "Whether unused segments are allowed in transactions",
+          "default": true
+        },
+        "errorNotificationEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address for error notifications"
+        }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "description": "Configuration for each Availity transaction module",
+      "additionalProperties": false,
+      "properties": {
+        "claims837": {
+          "$ref": "#/definitions/Claims837Module"
+        },
+        "eligibility270271": {
+          "$ref": "#/definitions/Eligibility270271Module"
+        },
+        "claimStatus276277": {
+          "$ref": "#/definitions/ClaimStatus276277Module"
+        },
+        "appeals": {
+          "$ref": "#/definitions/AppealsModule"
+        },
+        "attachments275": {
+          "$ref": "#/definitions/Attachments275Module"
+        },
+        "ecs": {
+          "$ref": "#/definitions/ECSModule"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Contact": {
+      "type": "object",
+      "description": "Contact information",
+      "required": ["name", "email"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Contact person's full name",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Contact email address"
+        },
+        "phone": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$",
+          "description": "10-digit phone number (no formatting)"
+        }
+      }
+    },
+    "TransactionMode": {
+      "type": "object",
+      "description": "Transaction mode connectivity configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether this transaction mode is enabled",
+          "default": false
+        },
+        "testUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Test environment URL"
+        },
+        "prodUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Production environment URL"
+        },
+        "ftpConfig": {
+          "type": "object",
+          "description": "FTP configuration for batch modes",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string",
+              "description": "FTP server hostname"
+            },
+            "port": {
+              "type": "integer",
+              "description": "FTP server port",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 22
+            },
+            "username": {
+              "type": "string",
+              "description": "FTP username"
+            },
+            "inboundFolder": {
+              "type": "string",
+              "description": "Folder for inbound files"
+            },
+            "outboundFolder": {
+              "type": "string",
+              "description": "Folder for outbound files"
+            },
+            "archiveFolder": {
+              "type": "string",
+              "description": "Folder for archived files"
+            }
+          }
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Request timeout in seconds",
+          "minimum": 10,
+          "maximum": 300,
+          "default": 30
+        },
+        "systemAvailability": {
+          "type": "string",
+          "description": "System availability schedule",
+          "examples": ["24/7", "Monday-Friday 8AM-6PM EST"]
+        },
+        "continuousThreads": {
+          "type": "integer",
+          "description": "Number of continuous processing threads",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5
+        }
+      }
+    },
+    "Claims837Module": {
+      "type": "object",
+      "description": "Claims 837 module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Claims 837 module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
+            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "claimTypes": {
+          "type": "object",
+          "description": "Supported claim types",
+          "additionalProperties": false,
+          "properties": {
+            "professional": {
+              "type": "boolean",
+              "description": "837P - Professional claims",
+              "default": false
+            },
+            "institutional": {
+              "type": "boolean",
+              "description": "837I - Institutional claims",
+              "default": false
+            },
+            "dental": {
+              "type": "boolean",
+              "description": "837D - Dental claims",
+              "default": false
+            },
+            "encounters": {
+              "type": "boolean",
+              "description": "Encounter data",
+              "default": false
+            }
+          }
+        },
+        "secondaryClaims": {
+          "type": "boolean",
+          "description": "Whether secondary claims are supported",
+          "default": false
+        },
+        "tertiaryClaims": {
+          "type": "boolean",
+          "description": "Whether tertiary claims are supported",
+          "default": false
+        },
+        "fileStructure": {
+          "type": "object",
+          "description": "File structure requirements",
+          "additionalProperties": false,
+          "properties": {
+            "maxClaimsPerFile": {
+              "type": "integer",
+              "description": "Maximum claims per file",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1000
+            },
+            "maxClaimsPerTransaction": {
+              "type": "integer",
+              "description": "Maximum claims per transaction set",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 1
+            },
+            "aggregation": {
+              "type": "string",
+              "enum": ["single", "batch"],
+              "description": "Claim aggregation strategy",
+              "default": "single"
+            }
+          }
+        },
+        "fileNaming": {
+          "type": "object",
+          "description": "File naming conventions",
+          "additionalProperties": false,
+          "properties": {
+            "professional": {
+              "type": "string",
+              "description": "Pattern for professional claim files"
+            },
+            "institutional": {
+              "type": "string",
+              "description": "Pattern for institutional claim files"
+            },
+            "dental": {
+              "type": "string",
+              "description": "Pattern for dental claim files"
+            }
+          }
+        },
+        "edits": {
+          "type": "array",
+          "description": "Custom claim edits",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "editId": {
+                "type": "string",
+                "description": "Unique identifier for the edit"
+              },
+              "description": {
+                "type": "string",
+                "description": "Description of the edit rule"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["error", "warning", "info"],
+                "default": "error"
+              }
+            }
+          }
+        },
+        "enrichments": {
+          "type": "array",
+          "description": "Custom data enrichments",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enrichmentId": {
+                "type": "string",
+                "description": "Unique identifier for the enrichment"
+              },
+              "description": {
+                "type": "string",
+                "description": "Description of the enrichment"
+              },
+              "dataSource": {
+                "type": "string",
+                "description": "Source of enrichment data"
+              }
+            }
+          }
+        },
+        "responseReports": {
+          "type": "object",
+          "description": "Response report configuration",
+          "additionalProperties": false,
+          "properties": {
+            "functional999Supported": {
+              "type": "boolean",
+              "description": "Whether 999 acknowledgments are supported",
+              "default": false
+            },
+            "claimAck277CASupported": {
+              "type": "boolean",
+              "description": "Whether 277CA claim acknowledgments are supported",
+              "default": false
+            },
+            "responseTimeframe": {
+              "type": "string",
+              "description": "Expected response timeframe",
+              "examples": ["24-48 hours", "2-5 business days"]
+            }
+          }
+        }
+      }
+    },
+    "Eligibility270271Module": {
+      "type": "object",
+      "description": "Eligibility 270/271 module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Eligibility 270/271 module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
+            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "searchOptions": {
+          "type": "array",
+          "description": "Supported search patterns",
+          "items": {
+            "type": "string",
+            "enum": [
+              "member_id_dob",
+              "member_id_name",
+              "ssn_dob",
+              "ssn_name",
+              "name_dob_gender",
+              "subscriber_id"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "serviceCodes": {
+          "oneOf": [
+            {
+              "type": "string",
+              "const": "all"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9]{2}$"
+              }
+            }
+          ],
+          "description": "Supported service type codes (30 for Health Benefit Plan Coverage, etc.) or 'all'"
+        },
+        "patientIdFormat": {
+          "type": "object",
+          "description": "Patient ID format validation",
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Regex pattern for patient ID validation"
+            },
+            "minLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "maxLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "requiresGender": {
+          "type": "boolean",
+          "description": "Whether gender is required for eligibility requests",
+          "default": false
+        },
+        "xmlWrapper": {
+          "type": "boolean",
+          "description": "Whether XML wrapper is used for requests",
+          "default": false
+        }
+      }
+    },
+    "ClaimStatus276277Module": {
+      "type": "object",
+      "description": "Claim Status 276/277 module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Claim Status 276/277 module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
+            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "atypicalProvidersAllowed": {
+          "type": "boolean",
+          "description": "Whether atypical providers are allowed",
+          "default": false
+        },
+        "patientAccountNumberDefault": {
+          "type": "string",
+          "description": "Default patient account number if not provided"
+        },
+        "serviceDateRange": {
+          "type": "object",
+          "description": "Service date range constraints",
+          "additionalProperties": false,
+          "properties": {
+            "earliest": {
+              "type": "string",
+              "description": "Earliest service date (relative or absolute)",
+              "examples": ["-365 days", "2020-01-01"]
+            },
+            "latest": {
+              "type": "string",
+              "description": "Latest service date (relative or absolute)",
+              "examples": ["today", "+30 days"]
+            }
+          }
+        }
+      }
+    },
+    "AppealsModule": {
+      "type": "object",
+      "description": "Appeals module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Appeals module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "requestReasons": {
+          "type": "array",
+          "description": "Supported appeal request reasons",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "subStatuses": {
+          "type": "array",
+          "description": "Supported appeal sub-statuses",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Denied",
+              "Partial Approval",
+              "Overturned",
+              "Upheld",
+              "In Progress",
+              "Additional Information Needed",
+              "Withdrawn",
+              "Closed"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "decisions": {
+          "type": "array",
+          "description": "Supported appeal decisions and their reasons",
+          "items": {
+            "type": "object",
+            "required": ["decision"],
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": ["Approved", "Denied", "Partially Approved", "Withdrawn"]
+              },
+              "decisionReasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "attachmentPattern": {
+          "type": "string",
+          "enum": ["pre-appeal", "post-appeal"],
+          "description": "When attachments can be submitted",
+          "default": "pre-appeal"
+        },
+        "additionalAttachmentsWindow": {
+          "type": "integer",
+          "description": "Days allowed for additional attachments after initial submission",
+          "minimum": 0,
+          "maximum": 90,
+          "default": 10
+        },
+        "maxFileSize": {
+          "type": "integer",
+          "description": "Maximum file size in bytes",
+          "minimum": 1048576,
+          "maximum": 104857600,
+          "default": 67108864
+        },
+        "maxFilesPerAppeal": {
+          "type": "integer",
+          "description": "Maximum number of files per appeal",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10
+        },
+        "allowedFileTypes": {
+          "type": "array",
+          "description": "Allowed file extensions",
+          "items": {
+            "type": "string",
+            "enum": [".gif", ".jpg", ".jpeg", ".pdf", ".tif", ".tiff", ".png", ".doc", ".docx"]
+          },
+          "uniqueItems": true,
+          "default": [".gif", ".jpg", ".jpeg", ".pdf", ".tif", ".tiff"]
+        },
+        "contactInfoRequired": {
+          "type": "object",
+          "description": "Required contact information fields",
+          "additionalProperties": false,
+          "properties": {
+            "phone": {
+              "type": "boolean",
+              "default": false
+            },
+            "fax": {
+              "type": "boolean",
+              "default": false
+            },
+            "email": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "submittingProviderTypeRequired": {
+          "type": "boolean",
+          "description": "Whether submitting provider type is required",
+          "default": false
+        },
+        "providerAddressRequired": {
+          "type": "boolean",
+          "description": "Whether provider address is required",
+          "default": false
+        },
+        "additionalClaimsSupported": {
+          "type": "boolean",
+          "description": "Whether additional claims can be included",
+          "default": false
+        },
+        "maxAdditionalClaims": {
+          "type": "integer",
+          "description": "Maximum number of additional claims",
+          "minimum": 0,
+          "maximum": 25,
+          "default": 0
+        },
+        "multiClaimVerification": {
+          "type": "boolean",
+          "description": "Whether multi-claim verification is enabled",
+          "default": false
+        },
+        "submitOnBehalfOfMember": {
+          "type": "boolean",
+          "description": "Whether submission on behalf of member is allowed",
+          "default": false
+        },
+        "documentDownloadSupported": {
+          "type": "boolean",
+          "description": "Whether document download is supported",
+          "default": false
+        },
+        "ecsIntegrationEnabled": {
+          "type": "boolean",
+          "description": "Whether ECS integration is enabled for appeals",
+          "default": false
+        }
+      }
+    },
+    "Attachments275Module": {
+      "type": "object",
+      "description": "Attachments 275 module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Attachments 275 module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
+            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "requiredFields": {
+          "type": "array",
+          "description": "Required fields for attachment submissions",
+          "items": {
+            "type": "string",
+            "enum": [
+              "claimNumber",
+              "memberName",
+              "memberId",
+              "dateOfBirth",
+              "providerName",
+              "providerNPI",
+              "serviceDate",
+              "attachmentType"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "allowedFileTypes": {
+          "type": "array",
+          "description": "Allowed file extensions",
+          "items": {
+            "type": "string",
+            "enum": [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png", ".gif"]
+          },
+          "uniqueItems": true,
+          "default": [".pdf", ".tif", ".tiff"]
+        },
+        "maxFileSize": {
+          "type": "integer",
+          "description": "Maximum file size in bytes",
+          "minimum": 1048576,
+          "maximum": 104857600,
+          "default": 10485760
+        },
+        "maxFilesPerTransaction": {
+          "type": "integer",
+          "description": "Maximum number of files per transaction",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5
+        },
+        "passwordProtectedAllowed": {
+          "type": "boolean",
+          "description": "Whether password-protected files are allowed",
+          "default": false
+        }
+      }
+    },
+    "ECSModule": {
+      "type": "object",
+      "description": "Enhanced Claim Status (ECS) module configuration",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the ECS module is enabled",
+          "default": false
+        },
+        "transactionModes": {
+          "type": "object",
+          "description": "Supported transaction modes",
+          "additionalProperties": false,
+          "properties": {
+            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
+            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" }
+          }
+        },
+        "queryMethods": {
+          "type": "array",
+          "description": "Supported query methods",
+          "items": {
+            "type": "string",
+            "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "includeProperties": {
+          "type": "array",
+          "description": "Additional ECS properties to include in responses",
+          "items": {
+            "type": "string",
+            "enum": [
+              "claimStatus",
+              "paymentAmount",
+              "paymentDate",
+              "checkNumber",
+              "remittanceAdvice",
+              "denialReason",
+              "adjustmentReason",
+              "paidToProvider",
+              "patientResponsibility"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "cacheEnabled": {
+          "type": "boolean",
+          "description": "Whether caching is enabled for ECS responses",
+          "default": false
+        },
+        "cacheTTL": {
+          "type": "integer",
+          "description": "Cache time-to-live in seconds",
+          "minimum": 60,
+          "maximum": 86400,
+          "default": 3600
+        }
+      }
+    }
+  }
+}
