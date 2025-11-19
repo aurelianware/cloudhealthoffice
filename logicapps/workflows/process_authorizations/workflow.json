@@ -780,7 +780,7 @@
     },
     "x12_sender_id": {
       "type": "String",
-      "defaultValue": "66917"
+      "defaultValue": "{config.payerId}"
     },
     "x12_receiver_id": {
       "type": "String",
