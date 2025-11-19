@@ -60,6 +60,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ECSSearchRequest'
+            # NOTE: All example values below are intentionally fake/synthetic test data
+            # Member IDs use MTEST prefix, phone numbers use 555 prefix (reserved for testing)
             examples:
               serviceDateSearch:
                 summary: Service Date Search
@@ -70,7 +72,7 @@ paths:
                   serviceDateSearch:
                     serviceFromDate: "20240101"
                     serviceToDate: "20240131"
-                    providerId: "1234567890"
+                    providerId: "5550100001"
                     providerIdQualifier: NPI
               memberSearch:
                 summary: Member Search
@@ -79,7 +81,7 @@ paths:
                   requestId: REQ-2024-002
                   submitterId: PROV-12345
                   memberSearch:
-                    memberId: M123456
+                    memberId: MTEST00001
                     firstName: John
                     lastName: Doe
                     dateOfBirth: "19850315"
@@ -104,7 +106,7 @@ paths:
                   claimHistorySearch:
                     claimNumber: CLM987654321
                     patientAccountNumber: PAT-9876
-                    memberId: M123456
+                    memberId: MTEST00001
       responses:
         '200':
           description: Successful search (may return empty results)
@@ -130,8 +132,8 @@ paths:
                         serviceToDate: "20240110"
                         billedAmount: 250.00
                         paidAmount: 200.00
-                        providerId: "1234567890"
-                        memberId: M123456
+                        providerId: "5550100001"
+                        memberId: MTEST00001
                 successNoResults:
                   summary: Successful search with no results
                   value:
@@ -189,7 +191,7 @@ paths:
                 errors:
                   - errorCode: CLAIM_NOT_FOUND
                     errorMessage: The specified claim number was not found
-                    errorDetails: Claim CLM999999999 does not exist in the system
+                    errorDetails: Claim CLMTEST9999 does not exist in the system
         '429':
           description: Rate limit exceeded
           content:
@@ -306,7 +308,7 @@ components:
         providerId:
           type: string
           description: Provider NPI or Tax ID
-          example: "1234567890"
+          example: "5550100001"
         providerIdQualifier:
           type: string
           enum:
@@ -326,7 +328,7 @@ components:
         memberId:
           type: string
           description: Member ID or Subscriber ID
-          example: M123456
+          example: MTEST00001
         firstName:
           type: string
           description: Member first name
@@ -387,7 +389,7 @@ components:
         memberId:
           type: string
           description: Member ID or Subscriber ID
-          example: M123456
+          example: MTEST00001
 
     ECSSearchResponse:
       type: object
@@ -542,7 +544,7 @@ components:
         providerId:
           type: string
           description: Provider NPI or identifier
-          example: "1234567890"
+          example: "5550100001"
         providerName:
           type: string
           description: Provider name
@@ -550,7 +552,7 @@ components:
         memberId:
           type: string
           description: Member/subscriber ID
-          example: M123456
+          example: MTEST00001
         memberName:
           type: string
           description: Member/patient name
@@ -598,7 +600,7 @@ components:
         errorDetails:
           type: string
           description: Additional error details
-          example: Member ID M999999 does not exist in the claims database
+          example: Member ID MTEST99999 does not exist in the claims database
 
     ErrorResponse:
       allOf:
