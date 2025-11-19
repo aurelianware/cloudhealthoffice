@@ -5,9 +5,8 @@
  * business rule validations.
  */
 
-import * as Ajv from 'ajv';
-import * as addFormats from 'ajv-formats';
-import { AvailityIntegrationConfig } from '../interfaces/availity-integration-config.interface';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 
 /**
  * Validation error with field path
@@ -53,12 +52,12 @@ export class ConfigValidator {
   private schema: any;
 
   constructor(schema: any) {
-    this.ajv = new Ajv.default({
+    this.ajv = new Ajv({
       allErrors: true,
       strict: false,
       validateFormats: true
     });
-    addFormats.default(this.ajv);
+    addFormats(this.ajv);
     this.schema = schema;
   }
 

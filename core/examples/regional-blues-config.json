@@ -329,7 +329,7 @@
         "Member",
         "ClaimHistory"
       ],
-      "additionalProperties": [
+      "includeProperties": [
         "claimStatus",
         "paymentAmount",
         "paymentDate",
