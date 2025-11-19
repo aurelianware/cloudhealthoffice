@@ -28,9 +28,11 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 - `blob_storage_account`: connection reference name
 - `blob_raw_folder`: e.g., `hipaa-attachments/raw/275` (will be date-partitioned automatically)
 - `sb_namespace`, `sb_topic`
-- `qnxt_base_url`, `qnxt_api_token`
+- `qnxt_base_url`, `QNXT_API_TOKEN` (SecureString - configure via Azure Key Vault reference)
 - `x12_sender_id`, `x12_receiver_id`
 - `appinsights_custom_events_url`
+
+**Security Note**: Configure `QNXT_API_TOKEN` using Azure Key Vault reference: `@Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token)`. Never hardcode secrets in workflow parameters.
 
 ## Decoding X12
 Update `messageType` to match your TR3 version: `X12_005010X210_275` (or `006020X314` etc.). Ensure your Integration Account has the schema and agreement configured.
