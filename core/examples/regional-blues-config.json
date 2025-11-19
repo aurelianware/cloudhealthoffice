@@ -1,0 +1,332 @@
+{
+  "payerId": "BLUES02",
+  "payerName": "Regional Blue Cross Blue Shield",
+  "organizationName": "Regional BCBS Health Insurance",
+  "contactInfo": {
+    "primaryContact": "Jane Doe",
+    "email": "jane.doe@blues02.com",
+    "phone": "+1-555-0200",
+    "supportEmail": "edi-support@blues02.com"
+  },
+  "enabledModules": {
+    "appeals": true,
+    "ecs": true,
+    "attachments": true,
+    "authorizations": true
+  },
+  "appeals": {
+    "enabled": true,
+    "apiEndpoints": {
+      "test": "https://test-gateway.blues02.com/appeals/api/v2",
+      "prod": "https://gateway.blues02.com/appeals/api/v2"
+    },
+    "authentication": {
+      "type": "apikey",
+      "keyVaultSecretName": "blues02-appeals-api-key"
+    },
+    "timeout": 90000,
+    "retryCount": 4,
+    "retryInterval": 3000,
+    "requestReasons": [
+      {
+        "code": "MED",
+        "description": "Medical Necessity Review",
+        "requiresAttachments": true
+      },
+      {
+        "code": "COV",
+        "description": "Coverage Determination",
+        "requiresAttachments": true
+      },
+      {
+        "code": "TFL",
+        "description": "Timely Filing Limit",
+        "requiresAttachments": false
+      },
+      {
+        "code": "COD",
+        "description": "Coding/Billing Error",
+        "requiresAttachments": true
+      },
+      {
+        "code": "DUP",
+        "description": "Duplicate Payment",
+        "requiresAttachments": false
+      }
+    ],
+    "subStatuses": [
+      {
+        "code": "REGISTERED",
+        "description": "Appeal registered in system",
+        "isFinal": false
+      },
+      {
+        "code": "PENDING_DOCS",
+        "description": "Awaiting additional documentation",
+        "isFinal": false
+      },
+      {
+        "code": "UNDER_REVIEW",
+        "description": "Clinical review in progress",
+        "isFinal": false
+      },
+      {
+        "code": "PEER_REVIEW",
+        "description": "Escalated to peer review",
+        "isFinal": false
+      },
+      {
+        "code": "OVERTURN",
+        "description": "Original decision overturned",
+        "isFinal": true
+      },
+      {
+        "code": "UPHELD",
+        "description": "Original decision upheld",
+        "isFinal": true
+      },
+      {
+        "code": "PARTIAL",
+        "description": "Partial approval",
+        "isFinal": true
+      },
+      {
+        "code": "CANCELLED",
+        "description": "Appeal cancelled",
+        "isFinal": true
+      }
+    ],
+    "attachmentRules": {
+      "pattern": "post-appeal",
+      "maxFileSize": 20971520,
+      "allowedFormats": ["pdf", "jpg", "jpeg", "png", "tif", "tiff", "doc", "docx", "xml"],
+      "maxAttachments": 15,
+      "requiredMetadata": ["claimNumber", "memberID", "providerNPI", "providerTIN", "documentType", "serviceDate"]
+    },
+    "modes": {
+      "realTimeWeb": true,
+      "realTimeB2B": false,
+      "ediBatch": true
+    }
+  },
+  "ecs": {
+    "enabled": true,
+    "apiEndpoints": {
+      "test": "https://test-gateway.blues02.com/ecs/api/v1",
+      "prod": "https://gateway.blues02.com/ecs/api/v1"
+    },
+    "authentication": {
+      "type": "apikey",
+      "keyVaultSecretName": "blues02-ecs-api-key"
+    },
+    "searchMethods": {
+      "serviceDate": true,
+      "member": true,
+      "checkNumber": true,
+      "claimHistory": false
+    },
+    "timeout": 45000,
+    "retryCount": 2
+  },
+  "attachments": {
+    "enabled": true,
+    "sftpConfig": {
+      "host": "edi-sftp.blues02.com",
+      "port": 22,
+      "username": "hipaa_x12_user",
+      "keyVaultSecretName": "blues02-sftp-key",
+      "inboundFolder": "/x12/inbound",
+      "outboundFolder": "/x12/outbound"
+    },
+    "x12Config": {
+      "isa": {
+        "senderId": "BLUES02",
+        "receiverId": "AVAILITY",
+        "senderQualifier": "ZZ",
+        "receiverQualifier": "ZZ"
+      },
+      "transactionSets": {
+        "275": true,
+        "277": true,
+        "278": true
+      }
+    },
+    "archivalConfig": {
+      "storageAccountName": "blues02ediarchive",
+      "containerName": "x12-transactions",
+      "retentionDays": 2555
+    }
+  },
+  "infrastructure": {
+    "resourceNamePrefix": "blues02",
+    "location": "centralus",
+    "environment": "prod",
+    "tags": {
+      "Project": "EDI-Integration",
+      "Payer": "BLUES02",
+      "Environment": "Production",
+      "CostCenter": "EDI-Operations",
+      "Compliance": "HIPAA"
+    },
+    "storageConfig": {
+      "sku": "Standard_GRS",
+      "containers": [
+        "x12-transactions",
+        "appeal-documents",
+        "ecs-results",
+        "auth-requests"
+      ],
+      "lifecycleRules": [
+        {
+          "name": "tier-to-cool",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 60,
+          "tierToCool": 60
+        },
+        {
+          "name": "tier-to-archive",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 180,
+          "tierToArchive": 180
+        },
+        {
+          "name": "compliance-retention",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 2555,
+          "delete": 2555
+        }
+      ]
+    },
+    "serviceBusConfig": {
+      "sku": "Standard",
+      "topics": [
+        {
+          "name": "attachments-in",
+          "maxSizeInMegabytes": 2048,
+          "defaultMessageTimeToLive": "P14D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "appeals-handler",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            },
+            {
+              "name": "audit-logger",
+              "maxDeliveryCount": 5,
+              "lockDuration": "PT2M"
+            }
+          ]
+        },
+        {
+          "name": "appeals-auth",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P7D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "authorization-processor",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        },
+        {
+          "name": "edi-278",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P7D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "auth-request-processor",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        },
+        {
+          "name": "rfai-requests",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P7D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "rfai-handler",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        }
+      ],
+      "queues": [
+        {
+          "name": "dead-letter",
+          "maxSizeInMegabytes": 2048,
+          "defaultMessageTimeToLive": "P30D",
+          "requiresDuplicateDetection": false
+        },
+        {
+          "name": "manual-review",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P30D",
+          "requiresDuplicateDetection": false
+        }
+      ]
+    },
+    "logicAppConfig": {
+      "sku": "WS1",
+      "workerCount": 3,
+      "alwaysOn": true
+    },
+    "keyVaultConfig": {
+      "sku": "premium",
+      "enableSoftDelete": true,
+      "softDeleteRetentionDays": 90
+    }
+  },
+  "monitoring": {
+    "applicationInsights": {
+      "enabled": true,
+      "samplingPercentage": 50
+    },
+    "alertRules": [
+      {
+        "name": "critical-workflow-failure",
+        "description": "Critical alert for workflow failures",
+        "severity": 1,
+        "frequency": "PT1M",
+        "timeWindow": "PT5M",
+        "query": "traces | where severityLevel == 4 | summarize count()",
+        "threshold": 5
+      },
+      {
+        "name": "elevated-error-rate",
+        "description": "Warning for elevated error rates",
+        "severity": 2,
+        "frequency": "PT5M",
+        "timeWindow": "PT15M",
+        "query": "traces | where severityLevel >= 3 | summarize count()",
+        "threshold": 20
+      },
+      {
+        "name": "api-timeout",
+        "description": "Alert for API timeout issues",
+        "severity": 2,
+        "frequency": "PT5M",
+        "timeWindow": "PT15M",
+        "query": "dependencies | where success == false and resultCode contains 'timeout' | summarize count()",
+        "threshold": 10
+      },
+      {
+        "name": "storage-operations-failed",
+        "description": "Alert for storage operation failures",
+        "severity": 3,
+        "frequency": "PT10M",
+        "timeWindow": "PT30M",
+        "query": "dependencies | where type == 'Azure blob' and success == false | summarize count()",
+        "threshold": 15
+      }
+    ],
+    "logRetentionDays": 365
+  }
+}
