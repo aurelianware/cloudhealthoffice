@@ -78,21 +78,21 @@ export class ConfigValidator {
 
   private validateBusinessRules(config: PayerConfig, errors: ValidationError[], warnings: ValidationWarning[]): void {
     // Validate enabled modules have corresponding config
-    if (config.enabledModules.appeals && !config.appeals) {
+    if (config.enabledModules?.appeals && !config.appeals) {
       errors.push({
         field: 'appeals',
         message: 'Appeals module is enabled but configuration is missing',
       });
     }
 
-    if (config.enabledModules.ecs && !config.ecs) {
+    if (config.enabledModules?.ecs && !config.ecs) {
       errors.push({
         field: 'ecs',
         message: 'ECS module is enabled but configuration is missing',
       });
     }
 
-    if (config.enabledModules.attachments && !config.attachments) {
+    if (config.enabledModules?.attachments && !config.attachments) {
       errors.push({
         field: 'attachments',
         message: 'Attachments module is enabled but configuration is missing',
@@ -101,7 +101,7 @@ export class ConfigValidator {
 
     // Validate API endpoints if modules are enabled
     if (config.appeals?.enabled) {
-      if (!config.appeals.apiEndpoints.test || !config.appeals.apiEndpoints.prod) {
+      if (!config.appeals.apiEndpoints?.test || !config.appeals.apiEndpoints?.prod) {
         errors.push({
           field: 'appeals.apiEndpoints',
           message: 'Both test and prod API endpoints are required',
@@ -110,7 +110,7 @@ export class ConfigValidator {
     }
 
     if (config.ecs?.enabled) {
-      if (!config.ecs.apiEndpoints.test || !config.ecs.apiEndpoints.prod) {
+      if (!config.ecs.apiEndpoints?.test || !config.ecs.apiEndpoints?.prod) {
         errors.push({
           field: 'ecs.apiEndpoints',
           message: 'Both test and prod API endpoints are required',
@@ -119,7 +119,7 @@ export class ConfigValidator {
     }
 
     // Validate resource naming
-    if (config.infrastructure.resourceNamePrefix.length > 20) {
+    if (config.infrastructure?.resourceNamePrefix && config.infrastructure.resourceNamePrefix.length > 20) {
       errors.push({
         field: 'infrastructure.resourceNamePrefix',
         message: 'Resource name prefix must be 20 characters or less',
@@ -128,7 +128,7 @@ export class ConfigValidator {
 
     // Validate environment
     const validEnvironments = ['dev', 'uat', 'prod'];
-    if (!validEnvironments.includes(config.infrastructure.environment)) {
+    if (config.infrastructure?.environment && !validEnvironments.includes(config.infrastructure.environment)) {
       errors.push({
         field: 'infrastructure.environment',
         message: 'Environment must be one of: dev, uat, prod',
@@ -137,7 +137,7 @@ export class ConfigValidator {
     }
 
     // Add warnings for best practices
-    if (config.monitoring.applicationInsights.samplingPercentage < 100) {
+    if (config.monitoring?.applicationInsights && config.monitoring.applicationInsights.samplingPercentage < 100) {
       warnings.push({
         field: 'monitoring.applicationInsights.samplingPercentage',
         message: 'Sampling percentage is less than 100%, some telemetry may be lost',
@@ -145,7 +145,9 @@ export class ConfigValidator {
       });
     }
 
-    if (config.infrastructure.logicAppConfig.workerCount < 2 && config.infrastructure.environment === 'prod') {
+    if (config.infrastructure?.logicAppConfig && 
+        config.infrastructure.logicAppConfig.workerCount < 2 && 
+        config.infrastructure.environment === 'prod') {
       warnings.push({
         field: 'infrastructure.logicAppConfig.workerCount',
         message: 'Production environment should have at least 2 workers for high availability',
@@ -164,12 +166,14 @@ export class DeploymentValidator extends ConfigValidator {
     const warnings: ValidationWarning[] = [...result.warnings];
 
     // Ensure at least one module is enabled
-    const hasEnabledModule = Object.values(config.enabledModules).some(enabled => enabled);
-    if (!hasEnabledModule) {
-      errors.push({
-        field: 'enabledModules',
-        message: 'At least one module must be enabled',
-      });
+    if (config.enabledModules) {
+      const hasEnabledModule = Object.values(config.enabledModules).some(enabled => enabled);
+      if (!hasEnabledModule) {
+        errors.push({
+          field: 'enabledModules',
+          message: 'At least one module must be enabled',
+        });
+      }
     }
 
     return {

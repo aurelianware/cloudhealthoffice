@@ -16,9 +16,9 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 
-# Generated deployments (examples kept)
-/generated/MCO001/
-/generated/BLUES02/
+# Generated deployments (examples in generated/examples/ are kept, others ignored)
+/generated/*
+!/generated/examples/
 
 # OS generated files
 .DS_Store
