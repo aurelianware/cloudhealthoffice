@@ -61,6 +61,7 @@ This system implements **comprehensive HIPAA-compliant security controls** for P
 For comprehensive security guidance, see:
 - **[SECURITY-HARDENING.md](SECURITY-HARDENING.md)** - 400+ line complete security implementation guide
 - **[docs/HIPAA-COMPLIANCE-MATRIX.md](docs/HIPAA-COMPLIANCE-MATRIX.md)** - Regulatory mapping to HIPAA technical safeguards
+- **[docs/PHI-SCANNER-GUIDE.md](docs/PHI-SCANNER-GUIDE.md)** - PHI/PII scanner usage and troubleshooting guide
 - **[SECURITY.md](SECURITY.md)** - Security practices, encryption requirements, and incident response
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Includes Key Vault deployment and configuration steps
 
