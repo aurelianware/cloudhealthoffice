@@ -1,0 +1,36 @@
+{
+  "authorizationNumber": "AUTH12345",
+  "status": "APPROVED",
+  "effectiveDate": "2025-12-01",
+  "expirationDate": "2025-12-31",
+  "serviceType": "HS",
+  "authorizedQuantity": 30,
+  "quantityType": "DAYS",
+  "decision": "Approved",
+  "decisionReason": "Medical necessity verified",
+  "messages": [
+    "AUTH APPROVED FOR OUTPATIENT SERVICES",
+    "Please submit claims with this authorization number"
+  ],
+  "patient": {
+    "memberId": "MEM123456",
+    "firstName": "John",
+    "lastName": "Smith",
+    "dateOfBirth": "1985-06-15"
+  },
+  "provider": {
+    "npi": "1234567890",
+    "name": "PROVIDER NAME"
+  },
+  "services": [
+    {
+      "procedureCode": "76700",
+      "quantity": 30,
+      "fromDate": "2025-12-01",
+      "toDate": "2025-12-31"
+    }
+  ],
+  "reviewOutcome": "A1",
+  "requestId": "AUTH-INQ-001",
+  "responseTimestamp": "2025-11-19T10:30:00Z"
+}

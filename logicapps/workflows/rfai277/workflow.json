@@ -98,7 +98,7 @@
     "sb_topic_rfai": { "type": "String", "defaultValue": "rfai-requests" },
     "sb_subscription_rfai": { "type": "String", "defaultValue": "rfai-processor" },
     "sftp_outbound_folder": { "type": "String", "defaultValue": "/outbound/277" },
-    "x12_sender_id": { "type": "String", "defaultValue": "66917" },
+    "x12_sender_id": { "type": "String", "defaultValue": "{config.payerId}" },
     "x12_receiver_id": { "type": "String", "defaultValue": "030240928" },
     "x12_277_messagetype": { "type": "String", "defaultValue": "X12_005010X212_277" }
   }

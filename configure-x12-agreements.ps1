@@ -4,15 +4,15 @@ param(
     [string]$Location = "westus"
 )
 
-# Agreement 1: Availity-to-EXHP-275-Receive
+# Agreement 1: Availity-to-Health Plan-275-Receive
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Availity-to-EXHP-275-Receive" `
+    --name "Availity-to-Health Plan-275-Receive" `
     --agreement-type X12 `
-    --host-partner "EXHP-QNXT" `
+    --host-partner "Health Plan-QNXT" `
     --guest-partner "Availity" `
-    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"66917\" }" `
+    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"030240928\" }" `
     --content '{
         "protocolSettings": {
@@ -33,15 +33,15 @@ az logic integration-account agreement create `
         }
     }'
 
-# Agreement 2: EXHP-to-Availity-277-Send
+# Agreement 2: Health Plan-to-Availity-277-Send
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "EXHP-to-Availity-277-Send" `
+    --name "Health Plan-to-Availity-277-Send" `
     --agreement-type X12 `
-    --host-partner "EXHP-QNXT" `
+    --host-partner "Health Plan-QNXT" `
     --guest-partner "Availity" `
-    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"66917\" }" `
+    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"030240928\" }" `
     --content '{
         "protocolSettings": {
@@ -62,16 +62,16 @@ az logic integration-account agreement create `
         }
     }'
 
-# Agreement 3: EXHP-278-Processing (internal)
+# Agreement 3: Health Plan-278-Processing (internal)
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "EXHP-278-Processing" `
+    --name "Health Plan-278-Processing" `
     --agreement-type X12 `
-    --host-partner "EXHP-QNXT" `
-    --guest-partner "EXHP-QNXT" `
-    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"66917\" }" `
-    --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"66917\" }" `
+    --host-partner "Health Plan-QNXT" `
+    --guest-partner "Health Plan-QNXT" `
+    --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
+    --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --content '{
         "protocolSettings": {
             "x12": {

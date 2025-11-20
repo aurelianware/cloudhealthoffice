@@ -1,0 +1,31 @@
+{
+  "authorizationNumber": "AUTH99999",
+  "status": "DENIED",
+  "effectiveDate": null,
+  "expirationDate": null,
+  "serviceType": "SC",
+  "authorizedQuantity": 0,
+  "quantityType": null,
+  "decision": "Denied",
+  "decisionReason": "Medical necessity not established",
+  "messages": [
+    "REQUEST DENIED - MEDICAL NECESSITY NOT ESTABLISHED",
+    "Please submit additional clinical documentation for review",
+    "You may appeal this decision within 30 days"
+  ],
+  "patient": {
+    "memberId": "MEM789012",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "dateOfBirth": "1992-03-20"
+  },
+  "provider": {
+    "npi": "9876543210",
+    "name": "SPECIALIST CLINIC"
+  },
+  "services": [],
+  "reviewOutcome": "A4",
+  "followUpAction": "APPEAL",
+  "requestId": "AUTH-INQ-002",
+  "responseTimestamp": "2025-11-19T10:35:00Z"
+}

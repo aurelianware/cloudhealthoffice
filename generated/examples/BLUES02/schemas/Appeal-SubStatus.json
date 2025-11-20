@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Appeal Sub-Status - Regional Blue Cross Blue Shield",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "REGISTERED",
+        "PENDING_DOCS",
+        "UNDER_REVIEW",
+        "PEER_REVIEW",
+        "OVERTURN",
+        "UPHELD",
+        "PARTIAL",
+        "CANCELLED"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "isFinal": {
+      "type": "boolean"
+    }
+  }
+}
