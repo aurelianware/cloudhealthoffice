@@ -1,0 +1,508 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_Auth_Inquiry_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "required": ["providerNpi"],
+            "properties": {
+              "authorizationNumber": {
+                "type": "string"
+              },
+              "memberId": {
+                "type": "string"
+              },
+              "patientDateOfBirth": {
+                "type": "string"
+              },
+              "providerNpi": {
+                "type": "string"
+              },
+              "serviceFromDate": {
+                "type": "string"
+              },
+              "serviceToDate": {
+                "type": "string"
+              },
+              "serviceType": {
+                "type": "string"
+              },
+              "patientFirstName": {
+                "type": "string"
+              },
+              "patientLastName": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try_Process_Auth_Inquiry": {
+        "type": "Scope",
+        "actions": {
+          "Log_Auth_Inquiry_Request_Received": {
+            "type": "ApiConnection",
+            "runAfter": {},
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "AuthInquiryRequestReceived",
+                "properties": {
+                  "providerNpiMasked": "@{if(not(empty(triggerBody()?['providerNpi'])), concat('****', substring(triggerBody()?['providerNpi'], sub(length(triggerBody()?['providerNpi']), 4), 4)), 'MASKED')}",
+                  "hasAuthNumber": "@not(empty(triggerBody()?['authorizationNumber']))",
+                  "hasMemberId": "@not(empty(triggerBody()?['memberId']))",
+                  "serviceType": "@coalesce(triggerBody()?['serviceType'], 'HS')",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Validate_Request_Schema": {
+            "type": "If",
+            "runAfter": {
+              "Log_Auth_Inquiry_Request_Received": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "or": [
+                {
+                  "not": {
+                    "equals": [
+                      "@empty(triggerBody()?['authorizationNumber'])",
+                      true
+                    ]
+                  }
+                },
+                {
+                  "and": [
+                    {
+                      "not": {
+                        "equals": [
+                          "@empty(triggerBody()?['memberId'])",
+                          true
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "equals": [
+                          "@empty(triggerBody()?['patientDateOfBirth'])",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Schema_Valid": {
+                "type": "Compose",
+                "runAfter": {},
+                "inputs": {
+                  "message": "Request schema is valid",
+                  "queryBy": "@if(not(empty(triggerBody()?['authorizationNumber'])), 'authNumber', 'memberDemographics')"
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Terminate_Invalid_Schema": {
+                  "type": "Terminate",
+                  "runAfter": {},
+                  "inputs": {
+                    "runStatus": "Failed",
+                    "runError": {
+                      "code": "INVALID_SCHEMA",
+                      "message": "Request must include either authorizationNumber OR (memberId + patientDateOfBirth)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "Determine_Query_Method": {
+            "type": "Switch",
+            "runAfter": {
+              "Validate_Request_Schema": [
+                "Succeeded"
+              ]
+            },
+            "expression": "@if(not(empty(triggerBody()?['authorizationNumber'])), 'ByAuthNumber', 'ByMemberDemographics')",
+            "cases": {
+              "ByAuthNumber": {
+                "case": "ByAuthNumber",
+                "actions": {
+                  "Build_X12_278_X215_AuthNumber": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "_comment": "NOTE: This action creates X12 segment components. For production use, this must be replaced with Integration Account X12 Encode action to generate proper EDI format with segment terminators (~), element separators (*), and proper structure. See deployment docs for Integration Account setup.",
+                      "isa": "@{parameters('isa06_senderId')}*@{parameters('isa08_receiverId')}",
+                      "gs": "@{parameters('gs02_applicationSenderCode')}*@{parameters('gs03_applicationReceiverCode')}",
+                      "st": "278*@{variables('controlNumber')}*005010X215",
+                      "bht": "0007*13*@{guid()}*@{formatDateTime(utcNow(), 'yyyyMMdd')}*@{formatDateTime(utcNow(), 'HHmm')}",
+                      "hl_pr": "1**20*1",
+                      "nm1_pr": "PR*2*PAYER NAME*****PI*@{parameters('isa08_receiverId')}",
+                      "hl_ip": "2*1*21*1",
+                      "nm1_ip": "1P*2*PROVIDER NAME*****XX*@{triggerBody()?['providerNpi']}",
+                      "hl_il": "3*2*22*1",
+                      "ref_auth": "D9*@{triggerBody()?['authorizationNumber']}",
+                      "hl_ut": "4*3*23*0",
+                      "trn": "1*@{guid()}*9@{parameters('gs02_applicationSenderCode')}",
+                      "um": "@{coalesce(triggerBody()?['serviceType'], 'HS')}*I",
+                      "hcr": "I1",
+                      "dtp_dates": "@if(and(not(empty(triggerBody()?['serviceFromDate'])), not(empty(triggerBody()?['serviceToDate']))), concat('472*RD8*', replace(triggerBody()?['serviceFromDate'], '-', ''), '-', replace(triggerBody()?['serviceToDate'], '-', '')), '')"
+                    }
+                  },
+                  "Post_X12_278_to_Payer_AuthNumber": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Build_X12_278_X215_AuthNumber": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@parameters('payer_inquiry_endpoint')",
+                      "headers": {
+                        "Content-Type": "application/edi-x12",
+                        "Authorization": "Bearer @{parameters('payer_api_token')}"
+                      },
+                      "body": "@outputs('Build_X12_278_X215_AuthNumber')",
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 3,
+                        "interval": "PT30S"
+                      },
+                      "timeout": "PT30S"
+                    }
+                  },
+                  "Parse_X12_278_Response_AuthNumber": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Post_X12_278_to_Payer_AuthNumber": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "_comment": "NOTE: This action assumes JSON response from payer. For production use, the payer will return X12 EDI format. This must be replaced with Integration Account X12 Decode action to parse EDI segments (HCR, DTP, QTY, REF, MSG, NM1, DMG) and map to JSON structure. See deployment docs for Integration Account setup.",
+                      "authorizationNumber": "@triggerBody()?['authorizationNumber']",
+                      "status": "@coalesce(body('Post_X12_278_to_Payer_AuthNumber')?['status'], 'UNKNOWN')",
+                      "effectiveDate": "@body('Post_X12_278_to_Payer_AuthNumber')?['effectiveDate']",
+                      "expirationDate": "@body('Post_X12_278_to_Payer_AuthNumber')?['expirationDate']",
+                      "serviceType": "@coalesce(triggerBody()?['serviceType'], 'HS')",
+                      "authorizedQuantity": "@body('Post_X12_278_to_Payer_AuthNumber')?['authorizedQuantity']",
+                      "quantityType": "@body('Post_X12_278_to_Payer_AuthNumber')?['quantityType']",
+                      "decision": "@body('Post_X12_278_to_Payer_AuthNumber')?['decision']",
+                      "decisionReason": "@body('Post_X12_278_to_Payer_AuthNumber')?['decisionReason']",
+                      "messages": "@coalesce(body('Post_X12_278_to_Payer_AuthNumber')?['messages'], createArray())",
+                      "responseTimestamp": "@utcNow()"
+                    }
+                  },
+                  "Set_AuthNumber_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Parse_X12_278_Response_AuthNumber": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "inquiryResults",
+                      "value": "@outputs('Parse_X12_278_Response_AuthNumber')"
+                    }
+                  }
+                }
+              },
+              "ByMemberDemographics": {
+                "case": "ByMemberDemographics",
+                "actions": {
+                  "Build_X12_278_X215_MemberDemo": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "_comment": "NOTE: This action creates X12 segment components. For production use, this must be replaced with Integration Account X12 Encode action to generate proper EDI format with segment terminators (~), element separators (*), and proper structure. See deployment docs for Integration Account setup.",
+                      "isa": "@{parameters('isa06_senderId')}*@{parameters('isa08_receiverId')}",
+                      "gs": "@{parameters('gs02_applicationSenderCode')}*@{parameters('gs03_applicationReceiverCode')}",
+                      "st": "278*@{variables('controlNumber')}*005010X215",
+                      "bht": "0007*13*@{guid()}*@{formatDateTime(utcNow(), 'yyyyMMdd')}*@{formatDateTime(utcNow(), 'HHmm')}",
+                      "hl_pr": "1**20*1",
+                      "nm1_pr": "PR*2*PAYER NAME*****PI*@{parameters('isa08_receiverId')}",
+                      "hl_ip": "2*1*21*1",
+                      "nm1_ip": "1P*2*PROVIDER NAME*****XX*@{triggerBody()?['providerNpi']}",
+                      "hl_il": "3*2*22*1",
+                      "nm1_il": "IL*1*@{coalesce(triggerBody()?['patientLastName'], '')}*@{coalesce(triggerBody()?['patientFirstName'], '')}***MI*@{triggerBody()?['memberId']}",
+                      "dmg_il": "D8*@{replace(triggerBody()?['patientDateOfBirth'], '-', '')}",
+                      "hl_ut": "4*3*23*0",
+                      "trn": "1*@{guid()}*9@{parameters('gs02_applicationSenderCode')}",
+                      "um": "@{coalesce(triggerBody()?['serviceType'], 'HS')}*I",
+                      "hcr": "I1",
+                      "dtp_dates": "@if(and(not(empty(triggerBody()?['serviceFromDate'])), not(empty(triggerBody()?['serviceToDate']))), concat('472*RD8*', replace(triggerBody()?['serviceFromDate'], '-', ''), '-', replace(triggerBody()?['serviceToDate'], '-', '')), '')"
+                    }
+                  },
+                  "Post_X12_278_to_Payer_MemberDemo": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Build_X12_278_X215_MemberDemo": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@parameters('payer_inquiry_endpoint')",
+                      "headers": {
+                        "Content-Type": "application/edi-x12",
+                        "Authorization": "Bearer @{parameters('payer_api_token')}"
+                      },
+                      "body": "@outputs('Build_X12_278_X215_MemberDemo')",
+                      "retryPolicy": {
+                        "type": "fixed",
+                        "count": 3,
+                        "interval": "PT30S"
+                      },
+                      "timeout": "PT30S"
+                    }
+                  },
+                  "Parse_X12_278_Response_MemberDemo": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Post_X12_278_to_Payer_MemberDemo": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "_comment": "NOTE: This action assumes JSON response from payer. For production use, the payer will return X12 EDI format. This must be replaced with Integration Account X12 Decode action to parse EDI segments (HCR, DTP, QTY, REF, MSG, NM1, DMG) and map to JSON structure. See deployment docs for Integration Account setup.",
+                      "authorizationNumber": "@body('Post_X12_278_to_Payer_MemberDemo')?['authorizationNumber']",
+                      "status": "@coalesce(body('Post_X12_278_to_Payer_MemberDemo')?['status'], 'UNKNOWN')",
+                      "effectiveDate": "@body('Post_X12_278_to_Payer_MemberDemo')?['effectiveDate']",
+                      "expirationDate": "@body('Post_X12_278_to_Payer_MemberDemo')?['expirationDate']",
+                      "serviceType": "@coalesce(triggerBody()?['serviceType'], 'HS')",
+                      "authorizedQuantity": "@body('Post_X12_278_to_Payer_MemberDemo')?['authorizedQuantity']",
+                      "quantityType": "@body('Post_X12_278_to_Payer_MemberDemo')?['quantityType']",
+                      "decision": "@body('Post_X12_278_to_Payer_MemberDemo')?['decision']",
+                      "decisionReason": "@body('Post_X12_278_to_Payer_MemberDemo')?['decisionReason']",
+                      "messages": "@coalesce(body('Post_X12_278_to_Payer_MemberDemo')?['messages'], createArray())",
+                      "patient": {
+                        "memberId": "@triggerBody()?['memberId']",
+                        "firstName": "@triggerBody()?['patientFirstName']",
+                        "lastName": "@triggerBody()?['patientLastName']",
+                        "dateOfBirth": "@triggerBody()?['patientDateOfBirth']"
+                      },
+                      "provider": {
+                        "npi": "@triggerBody()?['providerNpi']"
+                      },
+                      "responseTimestamp": "@utcNow()"
+                    }
+                  },
+                  "Set_MemberDemo_Results": {
+                    "type": "SetVariable",
+                    "runAfter": {
+                      "Parse_X12_278_Response_MemberDemo": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "name": "inquiryResults",
+                      "value": "@outputs('Parse_X12_278_Response_MemberDemo')"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "Log_Auth_Inquiry_Success": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Determine_Query_Method": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "AuthInquirySuccess",
+                "properties": {
+                  "authorizationNumberMasked": "@{if(not(empty(variables('inquiryResults')?['authorizationNumber'])), concat('****', substring(variables('inquiryResults')?['authorizationNumber'], sub(length(variables('inquiryResults')?['authorizationNumber']), 4), 4)), 'MASKED')}",
+                  "status": "@variables('inquiryResults')?['status']",
+                  "providerNpiMasked": "@{if(not(empty(triggerBody()?['providerNpi'])), concat('****', substring(triggerBody()?['providerNpi'], sub(length(triggerBody()?['providerNpi']), 4), 4)), 'MASKED')}",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Response_Success": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Log_Auth_Inquiry_Success": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": "@variables('inquiryResults')"
+            }
+          }
+        }
+      },
+      "Catch_Auth_Inquiry_Error": {
+        "type": "Scope",
+        "runAfter": {
+          "Try_Process_Auth_Inquiry": [
+            "Failed",
+            "TimedOut",
+            "Skipped"
+          ]
+        },
+        "actions": {
+          "Compose_Error_Response": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": {
+              "status": "error",
+              "timestamp": "@utcNow()",
+              "providerNpi": "@triggerBody()?['providerNpi']",
+              "errors": [
+                {
+                  "errorCode": "AUTH_INQUIRY_ERROR",
+                  "errorMessage": "An error occurred while processing the authorization inquiry request",
+                  "errorDetails": "@{result('Try_Process_Auth_Inquiry')}"
+                }
+              ]
+            }
+          },
+          "Log_Auth_Inquiry_Error": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Compose_Error_Response": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['appinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/track",
+              "body": {
+                "name": "AuthInquiryError",
+                "properties": {
+                  "providerNpi": "@triggerBody()?['providerNpi']",
+                  "errorDetails": "@{result('Try_Process_Auth_Inquiry')}",
+                  "timestamp": "@utcNow()"
+                }
+              }
+            }
+          },
+          "Response_Error": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Log_Auth_Inquiry_Error": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 500,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": "@outputs('Compose_Error_Response')"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "defaultValue": {}
+      },
+      "payer_inquiry_endpoint": {
+        "type": "String",
+        "defaultValue": "https://payer-api.example.com/auth-inquiry"
+      },
+      "payer_api_token": {
+        "type": "SecureString"
+      },
+      "isa06_senderId": {
+        "type": "String",
+        "defaultValue": "AVAILITY001"
+      },
+      "isa08_receiverId": {
+        "type": "String",
+        "defaultValue": "PAYERID"
+      },
+      "gs02_applicationSenderCode": {
+        "type": "String",
+        "defaultValue": "AVAILITY"
+      },
+      "gs03_applicationReceiverCode": {
+        "type": "String",
+        "defaultValue": "PAYER"
+      }
+    },
+    "variables": {
+      "inquiryResults": {
+        "type": "Object",
+        "value": {}
+      },
+      "controlNumber": {
+        "type": "String",
+        "value": "@{guid()}"
+      }
+    }
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "value": {
+        "appinsights": {
+          "connectionId": "/subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.Web/connections/appinsights",
+          "connectionName": "appinsights",
+          "id": "/subscriptions/{subscription-id}/providers/Microsoft.Web/locations/{location}/managedApis/appinsights"
+        }
+      }
+    },
+    "payer_inquiry_endpoint": {
+      "value": "https://payer-api.example.com/auth-inquiry"
+    },
+    "isa06_senderId": {
+      "value": "AVAILITY001"
+    },
+    "isa08_receiverId": {
+      "value": "PAYERID"
+    },
+    "gs02_applicationSenderCode": {
+      "value": "AVAILITY"
+    },
+    "gs03_applicationReceiverCode": {
+      "value": "PAYER"
+    }
+  }
+}

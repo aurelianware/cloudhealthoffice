@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "tr3Version": "005010X215",
+  "validationRules": {
+    "strictMode": false,
+    "validateSegmentOrder": true,
+    "validateDataElements": true,
+    "validateEnvelopes": true,
+    "checkDuplicateSegments": true
+  },
+  "qreRequirements": {
+    "minimalDataPrinciple": true,
+    "requiredSegments": [
+      "ISA",
+      "GS",
+      "ST",
+      "BHT",
+      "HL",
+      "NM1",
+      "TRN",
+      "UM",
+      "HCR",
+      "SE",
+      "GE",
+      "IEA"
+    ],
+    "optionalSegments": [
+      "REF",
+      "DMG",
+      "DTP",
+      "QTY",
+      "MSG",
+      "AAA"
+    ],
+    "queryMethods": {
+      "byAuthorizationNumber": true,
+      "byMemberDemographics": true
+    }
+  },
+  "outputOptions": {
+    "format": "json",
+    "verbosity": "normal",
+    "includePassedChecks": false,
+    "outputPath": ""
+  },
+  "errorHandling": {
+    "continueOnError": false,
+    "maxErrors": 100,
+    "failOnWarnings": false
+  }
+}

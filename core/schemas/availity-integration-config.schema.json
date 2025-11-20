@@ -4,7 +4,12 @@
   "title": "Availity Integration Configuration Schema",
   "description": "Comprehensive multi-payer configuration schema for all Availity transaction types (837 Claims, 270/271 Eligibility, 276/277 Claim Status, Appeals, Attachments, ECS)",
   "type": "object",
-  "required": ["organizationName", "payerId", "payerName", "contacts"],
+  "required": [
+    "organizationName",
+    "payerId",
+    "payerName",
+    "contacts"
+  ],
   "additionalProperties": false,
   "properties": {
     "organizationName": {
@@ -12,7 +17,10 @@
       "description": "Health plan organization name",
       "minLength": 1,
       "maxLength": 100,
-      "examples": ["Blue Cross Blue Shield of Texas", "United Healthcare"]
+      "examples": [
+        "Blue Cross Blue Shield of Texas",
+        "United Healthcare"
+      ]
     },
     "payerId": {
       "type": "string",
@@ -20,20 +28,28 @@
       "pattern": "^[A-Z0-9]+$",
       "minLength": 5,
       "maxLength": 20,
-      "examples": ["66917", "030240928"]
+      "examples": [
+        "66917",
+        "030240928"
+      ]
     },
     "payerName": {
       "type": "string",
       "description": "Display name for provider portals",
       "minLength": 1,
       "maxLength": 100,
-      "examples": ["PCHP-QNXT", "Availity"]
+      "examples": [
+        "PCHP-QNXT",
+        "Availity"
+      ]
     },
     "logo": {
       "type": "string",
       "format": "uri",
       "description": "URL to payer logo (234x60px PNG, <20KB)",
-      "examples": ["https://example.com/logo.png"]
+      "examples": [
+        "https://example.com/logo.png"
+      ]
     },
     "tradingPartnerId": {
       "type": "string",
@@ -41,7 +57,9 @@
       "pattern": "^[A-Z0-9-]+$",
       "minLength": 1,
       "maxLength": 50,
-      "examples": ["TP12345"]
+      "examples": [
+        "TP12345"
+      ]
     },
     "controlledDeployment": {
       "type": "boolean",
@@ -51,7 +69,11 @@
     "contacts": {
       "type": "object",
       "description": "Contact information for various roles",
-      "required": ["technical", "accountManager", "escalation"],
+      "required": [
+        "technical",
+        "accountManager",
+        "escalation"
+      ],
       "additionalProperties": false,
       "properties": {
         "technical": {
@@ -93,21 +115,37 @@
           },
           "minItems": 1,
           "maxItems": 56,
-          "examples": [["TX", "CA", "NY"]]
+          "examples": [
+            [
+              "TX",
+              "CA",
+              "NY"
+            ]
+          ]
         }
       },
       "oneOf": [
         {
           "properties": {
-            "nationwide": { "const": true }
+            "nationwide": {
+              "const": true
+            }
           },
-          "not": { "required": ["states"] }
+          "not": {
+            "required": [
+              "states"
+            ]
+          }
         },
         {
           "properties": {
-            "nationwide": { "const": false }
+            "nationwide": {
+              "const": false
+            }
           },
-          "required": ["states"]
+          "required": [
+            "states"
+          ]
         }
       ]
     },
@@ -119,25 +157,44 @@
         "isaAuthorizationQualifier": {
           "type": "string",
           "description": "ISA01 - Authorization Information Qualifier",
-          "enum": ["00", "03"],
+          "enum": [
+            "00",
+            "03"
+          ],
           "default": "00"
         },
         "isaSecurityQualifier": {
           "type": "string",
           "description": "ISA03 - Security Information Qualifier",
-          "enum": ["00", "01"],
+          "enum": [
+            "00",
+            "01"
+          ],
           "default": "00"
         },
         "isaInterchangeIdQualifier": {
           "type": "string",
           "description": "ISA05/ISA07 - Interchange ID Qualifier",
-          "enum": ["01", "14", "20", "27", "28", "29", "30", "33", "ZZ"],
+          "enum": [
+            "01",
+            "14",
+            "20",
+            "27",
+            "28",
+            "29",
+            "30",
+            "33",
+            "ZZ"
+          ],
           "default": "ZZ"
         },
         "isaUsageIndicator": {
           "type": "string",
           "description": "ISA15 - Usage Indicator",
-          "enum": ["P", "T"],
+          "enum": [
+            "P",
+            "T"
+          ],
           "default": "P"
         },
         "gsApplicationSenderCode": {
@@ -155,7 +212,14 @@
         "gsVersionCode": {
           "type": "string",
           "description": "GS08 - Version/Release/Industry Identifier Code",
-          "enum": ["005010", "005010X212", "005010X217", "005010X221", "005010X222"],
+          "enum": [
+            "005010",
+            "005010X212",
+            "005010X215",
+            "005010X217",
+            "005010X221",
+            "005010X222"
+          ],
           "default": "005010"
         }
       }
@@ -167,7 +231,11 @@
       "properties": {
         "protocol": {
           "type": "string",
-          "enum": ["HTTPS", "SFTP", "FTP"],
+          "enum": [
+            "HTTPS",
+            "SFTP",
+            "FTP"
+          ],
           "default": "HTTPS"
         },
         "timeout": {
@@ -226,7 +294,10 @@
         "certificationTimeline": {
           "type": "string",
           "description": "Expected timeline for certification",
-          "examples": ["2-4 weeks", "1-2 months"]
+          "examples": [
+            "2-4 weeks",
+            "1-2 months"
+          ]
         }
       }
     },
@@ -252,7 +323,11 @@
         },
         "encoding": {
           "type": "string",
-          "enum": ["ASCII", "UTF-8", "ISO-8859-1"],
+          "enum": [
+            "ASCII",
+            "UTF-8",
+            "ISO-8859-1"
+          ],
           "default": "ASCII"
         }
       }
@@ -311,6 +386,9 @@
         },
         "ecs": {
           "$ref": "#/definitions/ECSModule"
+        },
+        "authorizations278": {
+          "$ref": "#/definitions/Authorizations278Module"
         }
       }
     }
@@ -319,7 +397,10 @@
     "Contact": {
       "type": "object",
       "description": "Contact information",
-      "required": ["name", "email"],
+      "required": [
+        "name",
+        "email"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -404,7 +485,10 @@
         "systemAvailability": {
           "type": "string",
           "description": "System availability schedule",
-          "examples": ["24/7", "Monday-Friday 8AM-6PM EST"]
+          "examples": [
+            "24/7",
+            "Monday-Friday 8AM-6PM EST"
+          ]
         },
         "continuousThreads": {
           "type": "integer",
@@ -430,9 +514,15 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
-            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "edi_batch": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "claimTypes": {
@@ -493,7 +583,10 @@
             },
             "aggregation": {
               "type": "string",
-              "enum": ["single", "batch"],
+              "enum": [
+                "single",
+                "batch"
+              ],
               "description": "Claim aggregation strategy",
               "default": "single"
             }
@@ -536,7 +629,11 @@
               },
               "severity": {
                 "type": "string",
-                "enum": ["error", "warning", "info"],
+                "enum": [
+                  "error",
+                  "warning",
+                  "info"
+                ],
                 "default": "error"
               }
             }
@@ -583,7 +680,10 @@
             "responseTimeframe": {
               "type": "string",
               "description": "Expected response timeframe",
-              "examples": ["24-48 hours", "2-5 business days"]
+              "examples": [
+                "24-48 hours",
+                "2-5 business days"
+              ]
             }
           }
         }
@@ -604,9 +704,15 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
-            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "edi_batch": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "searchOptions": {
@@ -691,9 +797,15 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
-            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "edi_batch": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "atypicalProvidersAllowed": {
@@ -713,12 +825,18 @@
             "earliest": {
               "type": "string",
               "description": "Earliest service date (relative or absolute)",
-              "examples": ["-365 days", "2020-01-01"]
+              "examples": [
+                "-365 days",
+                "2020-01-01"
+              ]
             },
             "latest": {
               "type": "string",
               "description": "Latest service date (relative or absolute)",
-              "examples": ["today", "+30 days"]
+              "examples": [
+                "today",
+                "+30 days"
+              ]
             }
           }
         }
@@ -739,8 +857,12 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "requestReasons": {
@@ -777,12 +899,19 @@
           "description": "Supported appeal decisions and their reasons",
           "items": {
             "type": "object",
-            "required": ["decision"],
+            "required": [
+              "decision"
+            ],
             "additionalProperties": false,
             "properties": {
               "decision": {
                 "type": "string",
-                "enum": ["Approved", "Denied", "Partially Approved", "Withdrawn"]
+                "enum": [
+                  "Approved",
+                  "Denied",
+                  "Partially Approved",
+                  "Withdrawn"
+                ]
               },
               "decisionReasons": {
                 "type": "array",
@@ -795,7 +924,10 @@
         },
         "attachmentPattern": {
           "type": "string",
-          "enum": ["pre-appeal", "post-appeal"],
+          "enum": [
+            "pre-appeal",
+            "post-appeal"
+          ],
           "description": "When attachments can be submitted",
           "default": "pre-appeal"
         },
@@ -825,10 +957,27 @@
           "description": "Allowed file extensions",
           "items": {
             "type": "string",
-            "enum": [".gif", ".jpg", ".jpeg", ".pdf", ".tif", ".tiff", ".png", ".doc", ".docx"]
+            "enum": [
+              ".gif",
+              ".jpg",
+              ".jpeg",
+              ".pdf",
+              ".tif",
+              ".tiff",
+              ".png",
+              ".doc",
+              ".docx"
+            ]
           },
           "uniqueItems": true,
-          "default": [".gif", ".jpg", ".jpeg", ".pdf", ".tif", ".tiff"]
+          "default": [
+            ".gif",
+            ".jpg",
+            ".jpeg",
+            ".pdf",
+            ".tif",
+            ".tiff"
+          ]
         },
         "contactInfoRequired": {
           "type": "object",
@@ -908,9 +1057,15 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" },
-            "edi_batch": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "edi_batch": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "requiredFields": {
@@ -936,10 +1091,22 @@
           "description": "Allowed file extensions",
           "items": {
             "type": "string",
-            "enum": [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png", ".gif"]
+            "enum": [
+              ".pdf",
+              ".tif",
+              ".tiff",
+              ".jpg",
+              ".jpeg",
+              ".png",
+              ".gif"
+            ]
           },
           "uniqueItems": true,
-          "default": [".pdf", ".tif", ".tiff"]
+          "default": [
+            ".pdf",
+            ".tif",
+            ".tiff"
+          ]
         },
         "maxFileSize": {
           "type": "integer",
@@ -977,8 +1144,12 @@
           "description": "Supported transaction modes",
           "additionalProperties": false,
           "properties": {
-            "realtime_web": { "$ref": "#/definitions/TransactionMode" },
-            "realtime_b2b": { "$ref": "#/definitions/TransactionMode" }
+            "realtime_web": {
+              "$ref": "#/definitions/TransactionMode"
+            },
+            "realtime_b2b": {
+              "$ref": "#/definitions/TransactionMode"
+            }
           }
         },
         "queryMethods": {
@@ -986,7 +1157,12 @@
           "description": "Supported query methods",
           "items": {
             "type": "string",
-            "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+            "enum": [
+              "ServiceDate",
+              "Member",
+              "CheckNumber",
+              "ClaimHistory"
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -1021,6 +1197,228 @@
           "minimum": 60,
           "maximum": 86400,
           "default": 3600
+        }
+      }
+    },
+    "Authorizations278Module": {
+      "type": "object",
+      "description": "Authorization 278 module configuration (X215 Inquiry, X217 Request)",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the Authorization 278 module is enabled",
+          "default": false
+        },
+        "inquiry_x215": {
+          "type": "object",
+          "description": "Configuration for Authorization Inquiry (X12 278 X215) - Query existing authorizations",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable or disable authorization inquiry functionality",
+              "default": true
+            },
+            "tr3Version": {
+              "type": "string",
+              "description": "X12 TR3 version for 278 inquiry transactions",
+              "enum": [
+                "005010X215"
+              ],
+              "default": "005010X215"
+            },
+            "connectivity": {
+              "type": "object",
+              "description": "Connectivity settings for payer authorization inquiry endpoint",
+              "required": [
+                "testUrl",
+                "prodUrl",
+                "timeout"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "testUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Test/UAT payer authorization inquiry endpoint URL",
+                  "examples": [
+                    "https://payer-test.example.com/auth-inquiry"
+                  ]
+                },
+                "prodUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Production payer authorization inquiry endpoint URL",
+                  "examples": [
+                    "https://payer-prod.example.com/auth-inquiry"
+                  ]
+                },
+                "testUserId": {
+                  "type": "string",
+                  "description": "Test environment user ID for authentication",
+                  "default": ""
+                },
+                "prodUserId": {
+                  "type": "string",
+                  "description": "Production environment user ID for authentication",
+                  "default": ""
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "Request timeout in seconds (standard: 30 seconds per Availity)",
+                  "minimum": 10,
+                  "maximum": 120,
+                  "default": 30
+                },
+                "xmlWrapperRequired": {
+                  "type": "boolean",
+                  "description": "Whether payer requires XML wrapper around X12 payload",
+                  "default": false
+                }
+              }
+            },
+            "fieldRequirements": {
+              "type": "object",
+              "description": "Field requirement configuration (minimal per QRE best practice)",
+              "additionalProperties": false,
+              "properties": {
+                "authNumberRequired": {
+                  "type": "boolean",
+                  "description": "Whether authorization number is required (alternative to member demographics)",
+                  "default": false
+                },
+                "memberIdRequired": {
+                  "type": "boolean",
+                  "description": "Whether member ID is required (when auth number not provided)",
+                  "default": false
+                },
+                "patientDobRequired": {
+                  "type": "boolean",
+                  "description": "Whether patient DOB is required (when auth number not provided)",
+                  "default": false
+                },
+                "serviceDatesRequired": {
+                  "type": "boolean",
+                  "description": "Whether service dates are required",
+                  "default": false
+                }
+              }
+            },
+            "enveloping": {
+              "type": "object",
+              "description": "X12 envelope configuration for ISA/GS segments",
+              "required": [
+                "isa06_senderId",
+                "isa08_receiverId",
+                "gs02_applicationSenderCode",
+                "gs03_applicationReceiverCode"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "isa06_senderId": {
+                  "type": "string",
+                  "description": "ISA06 Interchange Sender ID (typically Availity)",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "default": "AVAILITY001"
+                },
+                "isa08_receiverId": {
+                  "type": "string",
+                  "description": "ISA08 Interchange Receiver ID (payer ID)",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "examples": [
+                    "PAYERID"
+                  ]
+                },
+                "gs02_applicationSenderCode": {
+                  "type": "string",
+                  "description": "GS02 Application Sender's Code",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "default": "AVAILITY"
+                },
+                "gs03_applicationReceiverCode": {
+                  "type": "string",
+                  "description": "GS03 Application Receiver's Code",
+                  "minLength": 1,
+                  "maxLength": 15,
+                  "examples": [
+                    "PAYER"
+                  ]
+                },
+                "isa05_senderQualifier": {
+                  "type": "string",
+                  "description": "ISA05 Interchange ID Qualifier for sender",
+                  "enum": [
+                    "ZZ",
+                    "01",
+                    "14",
+                    "20",
+                    "27",
+                    "28",
+                    "29",
+                    "30"
+                  ],
+                  "default": "ZZ"
+                },
+                "isa07_receiverQualifier": {
+                  "type": "string",
+                  "description": "ISA07 Interchange ID Qualifier for receiver",
+                  "enum": [
+                    "ZZ",
+                    "01",
+                    "14",
+                    "20",
+                    "27",
+                    "28",
+                    "29",
+                    "30"
+                  ],
+                  "default": "ZZ"
+                }
+              }
+            },
+            "retry": {
+              "type": "object",
+              "description": "Retry logic configuration",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable retry logic for failed requests",
+                  "default": true
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "description": "Maximum number of retry attempts",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "default": 3
+                },
+                "retryInterval": {
+                  "type": "integer",
+                  "description": "Interval between retries in seconds",
+                  "minimum": 5,
+                  "maximum": 60,
+                  "default": 30
+                }
+              }
+            }
+          }
+        },
+        "request_x217": {
+          "type": "object",
+          "description": "Configuration for Authorization Request (X12 278 X217) - Future implementation",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable or disable authorization request functionality",
+              "default": false
+            }
+          }
         }
       }
     }
