@@ -177,7 +177,7 @@ POST /api/auth-inquiry
 ```
 
 ### Documentation
-- **[AUTHORIZATION-INQUIRY.md](docs/AUTHORIZATION-INQUIRY.md)** - Comprehensive guide (~15 pages)
+- **[AUTHORIZATION-INQUIRY.md](./docs/AUTHORIZATION-INQUIRY.md)** - Comprehensive guide (~15 pages)
   - X215 vs X217 comparison
   - Query patterns and field requirements
   - Response structure and status codes
