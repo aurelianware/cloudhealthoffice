@@ -113,14 +113,14 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "status": "IN_REVIEW",
   "subStatus": "IN_CLINICAL_REVIEW",
-  "assignedReviewer": "REV-123",
+  "assignedReviewer": "{reviewer.id}",
   "reviewerNotes": "Clinical documentation review in progress",
   "updatedBy": "SYSTEM",
-  "updateTimestamp": "2024-02-01T10:30:00Z"
+  "updateTimestamp": "{timestamp}"
 }
 ```
 
@@ -147,16 +147,16 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "deniedAmount": 0,
-  "reviewerNotes": "All clinical criteria met per policy section 4.2",
-  "decisionMadeBy": "REV-123",
-  "decisionLetterPath": "hipaa-attachments/appeals/APP-2024-001234/DECISION_LETTER/decision_2024-03-10.pdf"
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "deniedAmount": "{appeal.deniedAmount}",
+  "reviewerNotes": "{reviewer.notes}",
+  "decisionMadeBy": "{reviewer.id}",
+  "decisionLetterPath": "hipaa-attachments/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}"
 }
 ```
 
@@ -164,13 +164,13 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "decision": "APPROVED",
-  "paymentReferenceId": "PAY-2024-7890",
+  "paymentReferenceId": "{payment.referenceId}",
   "providerNotificationSent": true,
   "memberNotificationSent": true,
-  "finalizedTimestamp": "2024-03-10T16:45:30Z"
+  "finalizedTimestamp": "{timestamp}"
 }
 ```
 
@@ -185,11 +185,11 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "documentId": "DOC-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "documentId": "{document.documentId}",
   "requestedBy": "provider",
-  "userId": "USER-123",
-  "providerNpi": "1234567890",
+  "userId": "{user.id}",
+  "providerNpi": "{provider.npi}",
   "operation": "READ_DOCUMENT"
 }
 ```
@@ -198,11 +198,11 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "authorized": true,
-  "appealId": "APP-2024-001234",
-  "userId": "USER-123",
+  "appealId": "{appeal.appealId}",
+  "userId": "{user.id}",
   "accessLevel": "FULL",
-  "validUntil": "2024-06-10T23:59:59Z",
-  "validationTimestamp": "2024-03-15T10:00:00Z"
+  "validUntil": "{timestamp.plus90Days}",
+  "validationTimestamp": "{timestamp}"
 }
 ```
 
@@ -210,10 +210,10 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "authorized": false,
-  "appealId": "APP-2024-001234",
-  "userId": "USER-123",
+  "appealId": "{appeal.appealId}",
+  "userId": "{user.id}",
   "reason": "User does not have access to this appeal",
-  "validationTimestamp": "2024-03-15T10:00:00Z"
+  "validationTimestamp": "{timestamp}"
 }
 ```
 
@@ -232,27 +232,27 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
-  "caseNumber": "CASE-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
   "status": "FINALIZED",
   "subStatus": "PENDING_PAYMENT",
-  "claimNumber": "CLM-2024-001234",
-  "providerNpi": "1234567890",
-  "memberId": "MBR-987654321",
+  "claimNumber": "{claim.claimNumber}",
+  "providerNpi": "{provider.npi}",
+  "memberId": "{member.memberId}",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "assignedReviewer": "REV-123",
-  "receivedDate": "2024-01-15T14:35:00Z",
-  "lastUpdatedDate": "2024-03-10T16:45:00Z",
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "assignedReviewer": "{reviewer.id}",
+  "receivedDate": "{appeal.receivedDate}",
+  "lastUpdatedDate": "{appeal.lastUpdatedDate}",
   "attachments": [
     {
-      "documentId": "DOC-2024-5678",
-      "fileName": "medical_records.pdf",
+      "documentId": "{document.documentId}",
+      "fileName": "{document.fileName}",
       "documentType": "MEDICAL_RECORDS",
-      "uploadedDate": "2024-01-15T14:35:00Z"
+      "uploadedDate": "{document.uploadedDate}"
     }
   ]
 }
@@ -269,12 +269,12 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "claimNumber": "CLM-2024-001234",
-  "memberId": "MBR-987654321",
-  "providerNpi": "1234567890",
-  "appealId": "APP-2024-001234",
-  "serviceFromDate": "2024-01-01",
-  "serviceToDate": "2024-01-01"
+  "claimNumber": "{claim.claimNumber}",
+  "memberId": "{member.memberId}",
+  "providerNpi": "{provider.npi}",
+  "appealId": "{appeal.appealId}",
+  "serviceFromDate": "{claim.serviceFromDate}",
+  "serviceToDate": "{claim.serviceToDate}"
 }
 ```
 
@@ -282,15 +282,15 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "claimNumber": "CLM-2024-001234",
-  "claimId": "CLAIM-INTERNAL-5678",
-  "appealId": "APP-2024-001234",
-  "originalClaimAmount": 2000.00,
-  "paidAmount": 500.00,
-  "deniedAmount": 1500.00,
-  "denialReasonCode": "CO-50",
-  "denialReasonDescription": "Non-covered service",
-  "correlationTimestamp": "2024-01-15T14:36:00Z"
+  "claimNumber": "{claim.claimNumber}",
+  "claimId": "{backend.claimId}",
+  "appealId": "{appeal.appealId}",
+  "originalClaimAmount": "{claim.billedAmount}",
+  "paidAmount": "{claim.paidAmount}",
+  "deniedAmount": "{claim.deniedAmount}",
+  "denialReasonCode": "{claim.denialReasonCode}",
+  "denialReasonDescription": "{claim.denialReasonDescription}",
+  "correlationTimestamp": "{timestamp}"
 }
 ```
 
@@ -305,16 +305,15 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "requiredDocuments": [
-    "Updated physician notes",
-    "Lab results from 2024-01-20"
+    "{rfai.requiredDocuments}"
   ],
   "rfaiReasonCode": "INCOMPLETE_DOCUMENTATION",
-  "rfaiMessage": "Please provide updated physician notes to support medical necessity determination",
-  "dueDate": "2024-02-15",
-  "requestedBy": "REV-123"
+  "rfaiMessage": "{rfai.message}",
+  "dueDate": "{rfai.dueDate}",
+  "requestedBy": "{reviewer.id}"
 }
 ```
 
@@ -322,12 +321,12 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "rfaiId": "RFAI-2024-123",
+  "appealId": "{appeal.appealId}",
+  "rfaiId": "{rfai.id}",
   "status": "NEED_ADDITIONAL_INFO",
-  "dueDate": "2024-02-15",
+  "dueDate": "{rfai.dueDate}",
   "providerNotificationSent": true,
-  "rfaiTimestamp": "2024-01-20T09:00:00Z"
+  "rfaiTimestamp": "{timestamp}"
 }
 ```
 
