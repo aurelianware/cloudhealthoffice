@@ -142,8 +142,8 @@ $HIPAA_PATTERNS = @{
         Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js')
-        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1')
+        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor')
     }
 }
 

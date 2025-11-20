@@ -18,6 +18,11 @@ The PHI/PII scanner (`scripts/scan-for-phi-pii.ps1`) is designed to detect poten
 - ❌ `console.log('Patient SSN: ' + ssn)` - Flags correctly
 - ❌ `console.log('Member ID: ' + memberId)` - Flags correctly
 
+**PowerShell Test Output**:
+- ✅ `Write-Host "   • Member ID: 123456789" -ForegroundColor Blue` - Safe in test files
+- ✅ `Write-Host "  • Member: $($payload.memberId)"` - Safe in test-*.ps1 files
+- ❌ `Write-Host "Patient SSN: $realSSN"` - Would flag correctly
+
 ### 2. Test Data in Code
 
 **Problem**: Test files with example phone numbers, emails, or IDs get flagged.
@@ -80,7 +85,8 @@ Files matching these patterns are allowed to contain certain data types:
 
 #### Logging PHI
 - `*.md` - Documentation
-- `*test*.ts`, `*test*.js` - Test files
+- `*test*.ts`, `*test*.js`, `*.test.ts`, `*.test.js`, `*.spec.ts`, `*.spec.js` - TypeScript/JavaScript test files
+- `*test*.ps1`, `test-*.ps1` - PowerShell test files
 
 ### Exclusion Contexts
 
@@ -219,7 +225,13 @@ If the scanner is blocking your PR with false positives:
 
 ## Version History
 
-- **2025-11-20**: Enhanced patterns to reduce false positives
+- **2025-11-20 (Update 2)**: Fixed PowerShell test file false positives
+  - Added PowerShell test files to LoggingPHI AllowedFiles (*test*.ps1, test-*.ps1)
+  - Added context exclusions for PowerShell output formatting (-ForegroundColor)
+  - Added context exclusions for synthetic test patterns (123456789, CLM\d+, RFAI\d+)
+  - Scanner now correctly handles test output display in test-workflows.ps1
+
+- **2025-11-20 (Update 1)**: Enhanced patterns to reduce false positives
   - Fixed LoggingPHI pattern to only flag PHI-related terms
   - Added context exclusions for test data
   - Added TypeScript/JavaScript test file support
