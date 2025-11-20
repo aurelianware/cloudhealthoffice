@@ -99,9 +99,26 @@
     "attachmentRules": {
       "pattern": "post-appeal",
       "maxFileSize": 20971520,
-      "allowedFormats": ["pdf", "jpg", "jpeg", "png", "tif", "tiff", "doc", "docx", "xml"],
+      "allowedFormats": [
+        "pdf",
+        "jpg",
+        "jpeg",
+        "png",
+        "tif",
+        "tiff",
+        "doc",
+        "docx",
+        "xml"
+      ],
       "maxAttachments": 15,
-      "requiredMetadata": ["claimNumber", "memberID", "providerNPI", "providerTIN", "documentType", "serviceDate"]
+      "requiredMetadata": [
+        "claimNumber",
+        "memberID",
+        "providerNPI",
+        "providerTIN",
+        "documentType",
+        "serviceDate"
+      ]
     },
     "modes": {
       "realTimeWeb": true,

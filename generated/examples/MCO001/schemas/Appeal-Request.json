@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Appeal Request - State Medicaid MCO",
+  "type": "object",
+  "required": [
+    "claimNumber",
+    "memberId",
+    "requestReason"
+  ],
+  "properties": {
+    "claimNumber": {
+      "type": "string"
+    },
+    "memberId": {
+      "type": "string"
+    },
+    "providerNPI": {
+      "type": "string"
+    },
+    "requestReason": {
+      "type": "string",
+      "enum": [
+        "01",
+        "02",
+        "03",
+        "04"
+      ]
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 10
+    }
+  }
+}

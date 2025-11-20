@@ -1,81 +1,67 @@
 /**
- * Availity Integration Configuration Validator
- * 
- * Validates configuration JSON against the schema and performs additional
- * business rule validations.
+ * Configuration Validator
+ * Validates payer configuration against schema and business rules
  */
 
-import Ajv from 'ajv';
-import addFormats from 'ajv-formats';
+import Ajv, { ValidateFunction } from 'ajv';
+import { PayerConfig, ValidationResult, ValidationError, ValidationWarning } from '../types/payer-config';
 
-/**
- * Validation error with field path
- */
-export interface ValidationError {
-  /** Field path where the error occurred */
-  field: string;
-  /** Error message */
-  message: string;
-  /** Error severity */
-  severity: 'error' | 'warning';
-}
-
-/**
- * Validation result
- */
-export interface ValidationResult {
-  /** Whether validation passed */
-  valid: boolean;
-  /** List of validation errors */
-  errors: ValidationError[];
-  /** List of validation warnings */
-  warnings: ValidationError[];
-}
-
-/**
- * Valid US state codes
- */
-const VALID_US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-  'DC', 'PR', 'VI', 'GU', 'AS', 'MP'
-];
-
-/**
- * Configuration validator class
- */
 export class ConfigValidator {
-  private ajv: Ajv.default;
-  private schema: any;
+  private ajv: Ajv;
+  private validateFunction?: ValidateFunction;
 
-  constructor(schema: any) {
-    this.ajv = new Ajv({
-      allErrors: true,
-      strict: false,
-      validateFormats: true
-    });
-    addFormats(this.ajv);
-    this.schema = schema;
+  constructor() {
+    this.ajv = new Ajv({ allErrors: true, strict: false });
+    this.initializeSchema();
   }
 
-  /**
-   * Validate configuration against schema and business rules
-   */
-  public validate(config: any): ValidationResult {
-    const errors: ValidationError[] = [];
-    const warnings: ValidationError[] = [];
+  private initializeSchema(): void {
+    const schema = {
+      type: 'object',
+      required: ['payerId', 'payerName', 'organizationName', 'contactInfo', 'enabledModules', 'infrastructure', 'monitoring'],
+      properties: {
+        payerId: { type: 'string', pattern: '^[A-Z0-9]+$', minLength: 3, maxLength: 20 },
+        payerName: { type: 'string', minLength: 1, maxLength: 100 },
+        organizationName: { type: 'string', minLength: 1, maxLength: 100 },
+        contactInfo: {
+          type: 'object',
+          required: ['primaryContact', 'email', 'phone'],
+          properties: {
+            primaryContact: { type: 'string' },
+            email: { type: 'string', format: 'email' },
+            phone: { type: 'string' },
+            supportEmail: { type: 'string', format: 'email' },
+          },
+        },
+        enabledModules: {
+          type: 'object',
+          required: ['appeals', 'ecs', 'attachments', 'authorizations'],
+          properties: {
+            appeals: { type: 'boolean' },
+            ecs: { type: 'boolean' },
+            attachments: { type: 'boolean' },
+            authorizations: { type: 'boolean' },
+          },
+        },
+      },
+    };
 
-    // Schema validation
-    const schemaValid = this.ajv.validate(this.schema, config);
-    if (!schemaValid && this.ajv.errors) {
-      for (const error of this.ajv.errors) {
-        errors.push({
-          field: error.instancePath || 'root',
-          message: `${error.message} (${error.keyword})`,
-          severity: 'error'
+    this.validateFunction = this.ajv.compile(schema);
+  }
+
+  public validate(config: PayerConfig): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // JSON Schema validation
+    if (this.validateFunction && !this.validateFunction(config)) {
+      if (this.validateFunction.errors) {
+        this.validateFunction.errors.forEach(err => {
+          errors.push({
+            field: err.instancePath || err.schemaPath,
+            message: err.message || 'Validation error',
+            value: err.data,
+          });
         });
       }
     }
@@ -86,357 +72,255 @@ export class ConfigValidator {
     return {
       valid: errors.length === 0,
       errors,
-      warnings
+      warnings,
     };
   }
 
-  /**
-   * Validate business rules
-   */
-  private validateBusinessRules(
-    config: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // Validate state codes
-    if (config.geography && !config.geography.nationwide && config.geography.states) {
-      this.validateStateCodes(config.geography.states, errors, warnings);
+  private validateBusinessRules(config: PayerConfig, errors: ValidationError[], warnings: ValidationWarning[]): void {
+    // Validate enabled modules have corresponding config
+    if (config.enabledModules?.appeals && !config.appeals) {
+      errors.push({
+        field: 'appeals',
+        message: 'Appeals module is enabled but configuration is missing',
+      });
     }
 
-    // Validate appeals module business rules
-    if (config.modules?.appeals?.enabled) {
-      this.validateAppealsModule(config.modules.appeals, errors, warnings);
+    if (config.enabledModules?.ecs && !config.ecs) {
+      errors.push({
+        field: 'ecs',
+        message: 'ECS module is enabled but configuration is missing',
+      });
     }
 
-    // Validate claims837 module business rules
-    if (config.modules?.claims837?.enabled) {
-      this.validateClaims837Module(config.modules.claims837, errors, warnings);
+    if (config.enabledModules?.attachments && !config.attachments) {
+      errors.push({
+        field: 'attachments',
+        message: 'Attachments module is enabled but configuration is missing',
+      });
     }
 
-    // Validate eligibility270271 module business rules
-    if (config.modules?.eligibility270271?.enabled) {
-      this.validateEligibilityModule(config.modules.eligibility270271, errors, warnings);
-    }
-
-    // Validate attachments275 module business rules
-    if (config.modules?.attachments275?.enabled) {
-      this.validateAttachmentsModule(config.modules.attachments275, errors, warnings);
-    }
-
-    // Validate ECS module business rules
-    if (config.modules?.ecs?.enabled) {
-      this.validateECSModule(config.modules.ecs, errors, warnings);
-    }
-
-    // Validate contact emails
-    this.validateContactEmails(config.contacts, errors);
-
-    // Validate at least one module is enabled
-    this.validateModulesEnabled(config.modules, warnings);
-  }
-
-  /**
-   * Validate state codes against valid US states
-   */
-  private validateStateCodes(states: string[], errors: ValidationError[], warnings: ValidationError[]): void {
-    for (const state of states) {
-      if (!VALID_US_STATES.includes(state.toUpperCase())) {
+    // Validate API endpoints if modules are enabled
+    if (config.appeals?.enabled) {
+      if (!config.appeals.apiEndpoints?.test || !config.appeals.apiEndpoints?.prod) {
         errors.push({
-          field: 'geography.states',
-          message: `Invalid state code: ${state}. Must be a valid 2-letter US state code.`,
-          severity: 'error'
+          field: 'appeals.apiEndpoints',
+          message: 'Both test and prod API endpoints are required',
         });
       }
     }
 
-    // Check for duplicates
-    const uniqueStates = new Set(states.map(s => s.toUpperCase()));
-    if (uniqueStates.size !== states.length) {
-      warnings.push({
-        field: 'geography.states',
-        message: 'Duplicate state codes found',
-        severity: 'warning'
-      });
-    }
-  }
-
-  /**
-   * Validate appeals module business rules
-   */
-  private validateAppealsModule(
-    appeals: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // If additionalClaimsSupported is true, maxAdditionalClaims must be > 0
-    if (appeals.additionalClaimsSupported && (!appeals.maxAdditionalClaims || appeals.maxAdditionalClaims === 0)) {
-      errors.push({
-        field: 'modules.appeals.maxAdditionalClaims',
-        message: 'maxAdditionalClaims must be greater than 0 when additionalClaimsSupported is true',
-        severity: 'error'
-      });
-    }
-
-    // If additionalClaimsSupported is false, maxAdditionalClaims should be 0
-    if (!appeals.additionalClaimsSupported && appeals.maxAdditionalClaims > 0) {
-      warnings.push({
-        field: 'modules.appeals.maxAdditionalClaims',
-        message: 'maxAdditionalClaims should be 0 when additionalClaimsSupported is false',
-        severity: 'warning'
-      });
-    }
-
-    // requestReasons is required when appeals is enabled
-    if (!appeals.requestReasons || appeals.requestReasons.length === 0) {
-      errors.push({
-        field: 'modules.appeals.requestReasons',
-        message: 'At least one request reason is required when appeals module is enabled',
-        severity: 'error'
-      });
-    }
-
-    // Validate at least one transaction mode is enabled
-    if (!this.hasEnabledTransactionMode(appeals.transactionModes)) {
-      errors.push({
-        field: 'modules.appeals.transactionModes',
-        message: 'At least one transaction mode must be enabled for appeals module',
-        severity: 'error'
-      });
-    }
-  }
-
-  /**
-   * Validate claims837 module business rules
-   */
-  private validateClaims837Module(
-    claims837: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // At least one claim type must be supported
-    const claimTypes = claims837.claimTypes || {};
-    const hasClaimType = claimTypes.professional || claimTypes.institutional || 
-                         claimTypes.dental || claimTypes.encounters;
-    
-    if (!hasClaimType) {
-      errors.push({
-        field: 'modules.claims837.claimTypes',
-        message: 'At least one claim type must be enabled',
-        severity: 'error'
-      });
-    }
-
-    // Validate edits array size
-    if (claims837.edits && claims837.edits.length > 8) {
-      errors.push({
-        field: 'modules.claims837.edits',
-        message: 'Maximum 8 custom edits allowed',
-        severity: 'error'
-      });
-    }
-
-    // Validate enrichments array size
-    if (claims837.enrichments && claims837.enrichments.length > 5) {
-      errors.push({
-        field: 'modules.claims837.enrichments',
-        message: 'Maximum 5 custom enrichments allowed',
-        severity: 'error'
-      });
-    }
-
-    // Validate at least one transaction mode is enabled
-    if (!this.hasEnabledTransactionMode(claims837.transactionModes)) {
-      errors.push({
-        field: 'modules.claims837.transactionModes',
-        message: 'At least one transaction mode must be enabled for claims837 module',
-        severity: 'error'
-      });
-    }
-  }
-
-  /**
-   * Validate eligibility module business rules
-   */
-  private validateEligibilityModule(
-    eligibility: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // searchOptions must have at least one option
-    if (!eligibility.searchOptions || eligibility.searchOptions.length === 0) {
-      errors.push({
-        field: 'modules.eligibility270271.searchOptions',
-        message: 'At least one search option must be specified',
-        severity: 'error'
-      });
-    }
-
-    // Validate at least one transaction mode is enabled
-    if (!this.hasEnabledTransactionMode(eligibility.transactionModes)) {
-      errors.push({
-        field: 'modules.eligibility270271.transactionModes',
-        message: 'At least one transaction mode must be enabled for eligibility270271 module',
-        severity: 'error'
-      });
-    }
-  }
-
-  /**
-   * Validate attachments module business rules
-   */
-  private validateAttachmentsModule(
-    attachments: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // Validate at least one transaction mode is enabled
-    if (!this.hasEnabledTransactionMode(attachments.transactionModes)) {
-      errors.push({
-        field: 'modules.attachments275.transactionModes',
-        message: 'At least one transaction mode must be enabled for attachments275 module',
-        severity: 'error'
-      });
-    }
-  }
-
-  /**
-   * Validate ECS module business rules
-   */
-  private validateECSModule(
-    ecs: any,
-    errors: ValidationError[],
-    warnings: ValidationError[]
-  ): void {
-    // queryMethods must have at least one method
-    if (!ecs.queryMethods || ecs.queryMethods.length === 0) {
-      errors.push({
-        field: 'modules.ecs.queryMethods',
-        message: 'At least one query method must be specified',
-        severity: 'error'
-      });
-    }
-
-    // If cacheEnabled is true, cacheTTL should be set
-    if (ecs.cacheEnabled && !ecs.cacheTTL) {
-      warnings.push({
-        field: 'modules.ecs.cacheTTL',
-        message: 'cacheTTL should be specified when cacheEnabled is true',
-        severity: 'warning'
-      });
-    }
-
-    // Validate at least one transaction mode is enabled
-    if (!this.hasEnabledTransactionMode(ecs.transactionModes)) {
-      errors.push({
-        field: 'modules.ecs.transactionModes',
-        message: 'At least one transaction mode must be enabled for ecs module',
-        severity: 'error'
-      });
-    }
-  }
-
-  /**
-   * Validate contact emails
-   */
-  private validateContactEmails(contacts: any, errors: ValidationError[]): void {
-    if (!contacts) return;
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const contactTypes = ['technical', 'accountManager', 'escalation', 'additional'];
-
-    for (const type of contactTypes) {
-      if (contacts[type] && contacts[type].email) {
-        if (!emailRegex.test(contacts[type].email)) {
-          errors.push({
-            field: `contacts.${type}.email`,
-            message: `Invalid email format: ${contacts[type].email}`,
-            severity: 'error'
-          });
-        }
-      }
-    }
-  }
-
-  /**
-   * Validate that at least one module is enabled
-   */
-  private validateModulesEnabled(modules: any, warnings: ValidationError[]): void {
-    if (!modules) {
-      warnings.push({
-        field: 'modules',
-        message: 'No modules configured. At least one module should be enabled.',
-        severity: 'warning'
-      });
-      return;
-    }
-
-    const hasEnabledModule = 
-      modules.claims837?.enabled ||
-      modules.eligibility270271?.enabled ||
-      modules.claimStatus276277?.enabled ||
-      modules.appeals?.enabled ||
-      modules.attachments275?.enabled ||
-      modules.ecs?.enabled;
-
-    if (!hasEnabledModule) {
-      warnings.push({
-        field: 'modules',
-        message: 'No modules are enabled. At least one module should be enabled.',
-        severity: 'warning'
-      });
-    }
-  }
-
-  /**
-   * Check if at least one transaction mode is enabled
-   */
-  private hasEnabledTransactionMode(transactionModes: any): boolean {
-    if (!transactionModes) return false;
-
-    return (
-      transactionModes.realtime_web?.enabled ||
-      transactionModes.realtime_b2b?.enabled ||
-      transactionModes.edi_batch?.enabled
-    );
-  }
-
-  /**
-   * Format validation result as human-readable string
-   */
-  public static formatValidationResult(result: ValidationResult): string {
-    const lines: string[] = [];
-
-    if (result.valid) {
-      lines.push('✓ Configuration is valid');
-    } else {
-      lines.push('✗ Configuration validation failed');
-    }
-
-    if (result.errors.length > 0) {
-      lines.push('\nErrors:');
-      for (const error of result.errors) {
-        lines.push(`  [${error.field}] ${error.message}`);
+    if (config.ecs?.enabled) {
+      if (!config.ecs.apiEndpoints?.test || !config.ecs.apiEndpoints?.prod) {
+        errors.push({
+          field: 'ecs.apiEndpoints',
+          message: 'Both test and prod API endpoints are required',
+        });
       }
     }
 
-    if (result.warnings.length > 0) {
-      lines.push('\nWarnings:');
-      for (const warning of result.warnings) {
-        lines.push(`  [${warning.field}] ${warning.message}`);
-      }
+    // Validate resource naming
+    if (config.infrastructure?.resourceNamePrefix && config.infrastructure.resourceNamePrefix.length > 20) {
+      errors.push({
+        field: 'infrastructure.resourceNamePrefix',
+        message: 'Resource name prefix must be 20 characters or less',
+      });
     }
 
-    return lines.join('\n');
+    // Validate environment
+    const validEnvironments = ['dev', 'uat', 'prod'];
+    if (config.infrastructure?.environment && !validEnvironments.includes(config.infrastructure.environment)) {
+      errors.push({
+        field: 'infrastructure.environment',
+        message: 'Environment must be one of: dev, uat, prod',
+        value: config.infrastructure.environment,
+      });
+    }
+
+    // Add warnings for best practices
+    if (config.monitoring?.applicationInsights && config.monitoring.applicationInsights.samplingPercentage < 100) {
+      warnings.push({
+        field: 'monitoring.applicationInsights.samplingPercentage',
+        message: 'Sampling percentage is less than 100%, some telemetry may be lost',
+        suggestion: 'Consider using 100% sampling in non-production environments',
+      });
+    }
+
+    if (config.infrastructure?.logicAppConfig && 
+        config.infrastructure.logicAppConfig.workerCount < 2 && 
+        config.infrastructure.environment === 'prod') {
+      warnings.push({
+        field: 'infrastructure.logicAppConfig.workerCount',
+        message: 'Production environment should have at least 2 workers for high availability',
+        suggestion: 'Increase workerCount to 2 or more',
+      });
+    }
   }
 }
 
-/**
- * Convenience function to validate a configuration
- */
-export function validateConfig(
-  config: any,
-  schema: any
-): ValidationResult {
-  const validator = new ConfigValidator(schema);
-  return validator.validate(config);
+export class DeploymentValidator extends ConfigValidator {
+  public validateForGeneration(config: PayerConfig): ValidationResult {
+    const result = this.validate(config);
+
+    // Additional validation for generation
+    const errors: ValidationError[] = [...result.errors];
+    const warnings: ValidationWarning[] = [...result.warnings];
+
+    // Ensure at least one module is enabled
+    if (config.enabledModules) {
+      const hasEnabledModule = Object.values(config.enabledModules).some(enabled => enabled);
+      if (!hasEnabledModule) {
+        errors.push({
+          field: 'enabledModules',
+          message: 'At least one module must be enabled',
+        });
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  public validateRequiredModules(config: PayerConfig): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // Check for module-specific requirements
+    if (config.enabledModules.attachments && config.attachments) {
+      if (!config.attachments.sftpConfig.host) {
+        errors.push({
+          field: 'attachments.sftpConfig.host',
+          message: 'SFTP host is required when attachments module is enabled',
+        });
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  public async validateEndpoints(config: PayerConfig): Promise<ValidationResult> {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // Validate endpoint URLs format
+    if (config.appeals?.apiEndpoints) {
+      if (!this.isValidUrl(config.appeals.apiEndpoints.test)) {
+        errors.push({
+          field: 'appeals.apiEndpoints.test',
+          message: 'Invalid URL format',
+          value: config.appeals.apiEndpoints.test,
+        });
+      }
+      if (!this.isValidUrl(config.appeals.apiEndpoints.prod)) {
+        errors.push({
+          field: 'appeals.apiEndpoints.prod',
+          message: 'Invalid URL format',
+          value: config.appeals.apiEndpoints.prod,
+        });
+      }
+    }
+
+    if (config.ecs?.apiEndpoints) {
+      if (!this.isValidUrl(config.ecs.apiEndpoints.test)) {
+        errors.push({
+          field: 'ecs.apiEndpoints.test',
+          message: 'Invalid URL format',
+          value: config.ecs.apiEndpoints.test,
+        });
+      }
+      if (!this.isValidUrl(config.ecs.apiEndpoints.prod)) {
+        errors.push({
+          field: 'ecs.apiEndpoints.prod',
+          message: 'Invalid URL format',
+          value: config.ecs.apiEndpoints.prod,
+        });
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  public async validateConnectivity(config: PayerConfig): Promise<ValidationResult> {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    // Note: Actual connectivity tests would go here
+    // For now, just validate that endpoints are configured
+    warnings.push({
+      field: 'connectivity',
+      message: 'Connectivity validation not implemented - manual verification required',
+      suggestion: 'Test API endpoints after deployment',
+    });
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  public generateValidationReport(config: PayerConfig): string {
+    const result = this.validateForGeneration(config);
+    
+    let report = '=== Payer Configuration Validation Report ===\n\n';
+    report += `Payer ID: ${config.payerId}\n`;
+    report += `Payer Name: ${config.payerName}\n`;
+    report += `Organization: ${config.organizationName}\n`;
+    report += `Environment: ${config.infrastructure.environment}\n\n`;
+
+    report += `Enabled Modules:\n`;
+    report += `  - Appeals: ${config.enabledModules.appeals ? '✓' : '✗'}\n`;
+    report += `  - ECS: ${config.enabledModules.ecs ? '✓' : '✗'}\n`;
+    report += `  - Attachments: ${config.enabledModules.attachments ? '✓' : '✗'}\n`;
+    report += `  - Authorizations: ${config.enabledModules.authorizations ? '✓' : '✗'}\n\n`;
+
+    if (result.errors.length > 0) {
+      report += `❌ ERRORS (${result.errors.length}):\n`;
+      result.errors.forEach((error, idx) => {
+        report += `  ${idx + 1}. [${error.field}] ${error.message}\n`;
+        if (error.value) {
+          report += `     Value: ${JSON.stringify(error.value)}\n`;
+        }
+      });
+      report += '\n';
+    }
+
+    if (result.warnings.length > 0) {
+      report += `⚠️  WARNINGS (${result.warnings.length}):\n`;
+      result.warnings.forEach((warning, idx) => {
+        report += `  ${idx + 1}. [${warning.field}] ${warning.message}\n`;
+        if (warning.suggestion) {
+          report += `     Suggestion: ${warning.suggestion}\n`;
+        }
+      });
+      report += '\n';
+    }
+
+    if (result.valid) {
+      report += '✅ Configuration is valid and ready for generation\n';
+    } else {
+      report += '❌ Configuration has errors that must be fixed before generation\n';
+    }
+
+    return report;
+  }
+
+  private isValidUrl(url: string): boolean {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

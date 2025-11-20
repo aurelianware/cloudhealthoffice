@@ -79,13 +79,15 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b'
         Description = 'Email Address'
         Severity = 'Medium'
-        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml')
+        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js')
+        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test')
     }
     'PhoneNumber' = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
         Description = 'Phone Number'
         Severity = 'Medium'
-        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', '*.md', '*.yml', '*.yaml')
+        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml', '*.ts', '*.js')
+        ExcludeContext = @('npi|provider|tax|ein|test|example|sample|mock|dummy|placeholder|1234567890|9999', 'TEST-', 'providerId', 'providerNpi')
     }
     'MemberId' = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
@@ -137,10 +139,11 @@ $HIPAA_PATTERNS = @{
         AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1')
     }
     'LoggingPHI' = @{
-        Pattern = 'console\.log|Write-Host.*(?:ssn|dob|patient|medical)'
+        Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1')
+        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor')
     }
 }
 

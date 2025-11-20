@@ -61,6 +61,7 @@ This system implements **comprehensive HIPAA-compliant security controls** for P
 For comprehensive security guidance, see:
 - **[SECURITY-HARDENING.md](SECURITY-HARDENING.md)** - 400+ line complete security implementation guide
 - **[docs/HIPAA-COMPLIANCE-MATRIX.md](docs/HIPAA-COMPLIANCE-MATRIX.md)** - Regulatory mapping to HIPAA technical safeguards
+- **[docs/PHI-SCANNER-GUIDE.md](docs/PHI-SCANNER-GUIDE.md)** - PHI/PII scanner usage and troubleshooting guide
 - **[SECURITY.md](SECURITY.md)** - Security practices, encryption requirements, and incident response
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Includes Key Vault deployment and configuration steps
 
@@ -246,6 +247,46 @@ The schema is designed for extensibility. See **[How to Extend](docs/UNIFIED-CON
 - **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
 - **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
 - **ECS Summary Search**: Enhanced Claim Status queries via HTTP endpoint with four search methods (Service Date, Member, Check Number, Claim History)
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
 
 ## Build & Deployment
 
