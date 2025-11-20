@@ -61,11 +61,11 @@
   },
   "oneOf": [
     {
-      "required": ["authorizationNumber"],
+      "required": ["authorizationNumber", "providerNpi"],
       "description": "Query by authorization number"
     },
     {
-      "required": ["memberId", "patientDateOfBirth"],
+      "required": ["memberId", "patientDateOfBirth", "providerNpi"],
       "description": "Query by member ID and date of birth"
     }
   ],

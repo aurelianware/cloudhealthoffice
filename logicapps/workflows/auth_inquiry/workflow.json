@@ -61,7 +61,7 @@
               "body": {
                 "name": "AuthInquiryRequestReceived",
                 "properties": {
-                  "providerNpi": "@triggerBody()?['providerNpi']",
+                  "providerNpiMasked": "@{if(not(empty(triggerBody()?['providerNpi'])), concat('****', substring(triggerBody()?['providerNpi'], sub(length(triggerBody()?['providerNpi']), 4), 4)), 'MASKED')}",
                   "hasAuthNumber": "@not(empty(triggerBody()?['authorizationNumber']))",
                   "hasMemberId": "@not(empty(triggerBody()?['memberId']))",
                   "serviceType": "@coalesce(triggerBody()?['serviceType'], 'HS')",
@@ -82,8 +82,8 @@
                 {
                   "not": {
                     "equals": [
-                      "@triggerBody()?['authorizationNumber']",
-                      "@null"
+                      "@empty(triggerBody()?['authorizationNumber'])",
+                      true
                     ]
                   }
                 },
@@ -92,16 +92,16 @@
                     {
                       "not": {
                         "equals": [
-                          "@triggerBody()?['memberId']",
-                          "@null"
+                          "@empty(triggerBody()?['memberId'])",
+                          true
                         ]
                       }
                     },
                     {
                       "not": {
                         "equals": [
-                          "@triggerBody()?['patientDateOfBirth']",
-                          "@null"
+                          "@empty(triggerBody()?['patientDateOfBirth'])",
+                          true
                         ]
                       }
                     }
@@ -151,6 +151,7 @@
                     "type": "Compose",
                     "runAfter": {},
                     "inputs": {
+                      "_comment": "NOTE: This action creates X12 segment components. For production use, this must be replaced with Integration Account X12 Encode action to generate proper EDI format with segment terminators (~), element separators (*), and proper structure. See deployment docs for Integration Account setup.",
                       "isa": "@{parameters('isa06_senderId')}*@{parameters('isa08_receiverId')}",
                       "gs": "@{parameters('gs02_applicationSenderCode')}*@{parameters('gs03_applicationReceiverCode')}",
                       "st": "278*@{variables('controlNumber')}*005010X215",
@@ -199,6 +200,7 @@
                       ]
                     },
                     "inputs": {
+                      "_comment": "NOTE: This action assumes JSON response from payer. For production use, the payer will return X12 EDI format. This must be replaced with Integration Account X12 Decode action to parse EDI segments (HCR, DTP, QTY, REF, MSG, NM1, DMG) and map to JSON structure. See deployment docs for Integration Account setup.",
                       "authorizationNumber": "@triggerBody()?['authorizationNumber']",
                       "status": "@coalesce(body('Post_X12_278_to_Payer_AuthNumber')?['status'], 'UNKNOWN')",
                       "effectiveDate": "@body('Post_X12_278_to_Payer_AuthNumber')?['effectiveDate']",
@@ -233,6 +235,7 @@
                     "type": "Compose",
                     "runAfter": {},
                     "inputs": {
+                      "_comment": "NOTE: This action creates X12 segment components. For production use, this must be replaced with Integration Account X12 Encode action to generate proper EDI format with segment terminators (~), element separators (*), and proper structure. See deployment docs for Integration Account setup.",
                       "isa": "@{parameters('isa06_senderId')}*@{parameters('isa08_receiverId')}",
                       "gs": "@{parameters('gs02_applicationSenderCode')}*@{parameters('gs03_applicationReceiverCode')}",
                       "st": "278*@{variables('controlNumber')}*005010X215",
@@ -282,6 +285,7 @@
                       ]
                     },
                     "inputs": {
+                      "_comment": "NOTE: This action assumes JSON response from payer. For production use, the payer will return X12 EDI format. This must be replaced with Integration Account X12 Decode action to parse EDI segments (HCR, DTP, QTY, REF, MSG, NM1, DMG) and map to JSON structure. See deployment docs for Integration Account setup.",
                       "authorizationNumber": "@body('Post_X12_278_to_Payer_MemberDemo')?['authorizationNumber']",
                       "status": "@coalesce(body('Post_X12_278_to_Payer_MemberDemo')?['status'], 'UNKNOWN')",
                       "effectiveDate": "@body('Post_X12_278_to_Payer_MemberDemo')?['effectiveDate']",
@@ -338,9 +342,9 @@
               "body": {
                 "name": "AuthInquirySuccess",
                 "properties": {
-                  "authorizationNumber": "@variables('inquiryResults')?['authorizationNumber']",
+                  "authorizationNumberMasked": "@{if(not(empty(variables('inquiryResults')?['authorizationNumber'])), concat('****', substring(variables('inquiryResults')?['authorizationNumber'], sub(length(variables('inquiryResults')?['authorizationNumber']), 4), 4)), 'MASKED')}",
                   "status": "@variables('inquiryResults')?['status']",
-                  "providerNpi": "@triggerBody()?['providerNpi']",
+                  "providerNpiMasked": "@{if(not(empty(triggerBody()?['providerNpi'])), concat('****', substring(triggerBody()?['providerNpi'], sub(length(triggerBody()?['providerNpi']), 4), 4)), 'MASKED')}",
                   "timestamp": "@utcNow()"
                 }
               }
