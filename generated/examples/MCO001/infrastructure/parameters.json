@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": {
+      "value": "mco001"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "environment": {
+      "value": "dev"
+    },
+    "tags": {
+      "value": {
+        "Project": "HIPAA-Attachments",
+        "Payer": "MCO001",
+        "Environment": "Dev",
+        "CostCenter": "IT-Integration"
+      }
+    }
+  }
+}

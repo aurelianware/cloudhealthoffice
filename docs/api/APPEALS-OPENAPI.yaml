@@ -1,0 +1,685 @@
+openapi: 3.0.3
+info:
+  title: Health Plan Appeals Integration API
+  description: |
+    RESTful API for claim appeals integration between providers and health plans via Availity platform.
+    
+    This API enables:
+    - Submission of claim appeals from providers to health plans
+    - Retrieval of appeal status and decision information
+    - Download of appeal-related documents (provider uploads and decision letters)
+    - Push notifications of appeal status updates to Availity
+    
+    **Compliance**: Fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements.
+    
+    **Authentication**: All endpoints require Bearer token authentication via OAuth 2.0.
+    
+    **Data Format**: All request and response bodies use JSON.
+  version: 1.0.0
+  contact:
+    name: Health Plan API Support
+    email: api-support@healthplan.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.healthplan.com/v1
+    description: Production server
+  - url: https://api-uat.healthplan.com/v1
+    description: UAT server
+  - url: https://api-dev.healthplan.com/v1
+    description: Development server
+
+tags:
+  - name: Appeals
+    description: Claim appeal submission and management
+  - name: Documents
+    description: Appeal document management and download
+  - name: Status
+    description: Appeal status updates and notifications
+
+paths:
+  /appeal/submit:
+    post:
+      tags:
+        - Appeals
+      summary: Submit a new claim appeal
+      description: |
+        Submit a claim appeal from provider to health plan. This endpoint accepts appeal details,
+        supporting documentation, and patient/provider information.
+        
+        **Requirements**:
+        - Maximum 10 attachments per appeal
+        - Each attachment maximum 64MB
+        - Supported file types: .pdf, .jpg, .jpeg, .gif, .tif, .tiff
+        - Timely filing requirements apply (typically 180 days from claim denial)
+      operationId: submitAppeal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppealToPayerRequest'
+      responses:
+        '200':
+          description: Appeal successfully submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppealToPayerResponse'
+        '400':
+          description: Invalid request (missing required fields, invalid data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized (missing or invalid authentication token)
+        '403':
+          description: Forbidden (user does not have permission to submit appeals)
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /appeal/status:
+    get:
+      tags:
+        - Appeals
+        - Status
+      summary: Get appeal status
+      description: |
+        Retrieve current status and details of a previously submitted appeal.
+        
+        Query by either appealId or claimNumber.
+      operationId: getAppealStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: appealId
+          in: query
+          description: Health plan appeal identifier
+          schema:
+            type: string
+          example: APP-2024-001234
+        - name: claimNumber
+          in: query
+          description: Original claim number
+          schema:
+            type: string
+          example: CLM-2024-001234
+        - name: providerNpi
+          in: query
+          description: Provider NPI (required if querying by claimNumber)
+          schema:
+            type: string
+            pattern: '^[0-9]{10}$'
+          example: '1234567890'
+      responses:
+        '200':
+          description: Appeal status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppealToPayerResponse'
+        '400':
+          description: Invalid request (missing required parameters)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (user does not have access to this appeal)
+        '404':
+          description: Appeal not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /appeal/document/download:
+    get:
+      tags:
+        - Documents
+      summary: Download appeal document
+      description: |
+        Download a document associated with an appeal. This includes:
+        - PROVIDER_UPLOAD: Documents uploaded by the provider as part of the appeal
+        - DECISION_LETTER: Health plan decision letters and correspondence
+        
+        **Authorization**: Users can only download documents for appeals they have access to.
+        
+        **Response**: Returns the document file with appropriate Content-Type and Content-Disposition headers.
+      operationId: downloadAppealDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentId
+          in: query
+          required: true
+          description: Unique identifier of the document to download
+          schema:
+            type: string
+          example: DOC-2024-5678
+        - name: appealId
+          in: query
+          required: true
+          description: Appeal identifier that the document belongs to
+          schema:
+            type: string
+          example: APP-2024-001234
+        - name: documentType
+          in: query
+          required: true
+          description: Type of document being downloaded
+          schema:
+            type: string
+            enum:
+              - PROVIDER_UPLOAD
+              - DECISION_LETTER
+          example: DECISION_LETTER
+      responses:
+        '200':
+          description: Document retrieved successfully
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/tiff:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              description: Suggests filename for download
+              schema:
+                type: string
+              example: 'attachment; filename="decision_letter_2024-03-10.pdf"'
+            Content-Type:
+              description: MIME type of the document
+              schema:
+                type: string
+              example: application/pdf
+        '400':
+          description: Invalid request (missing required parameters or invalid documentType)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (user does not have access to this document)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /appeal/update/webhook:
+    post:
+      tags:
+        - Status
+      summary: Push appeal status update to Availity (Webhook)
+      description: |
+        **Internal use only** - This endpoint is called by the health plan system to push
+        appeal status updates to Availity's Bedlam API.
+        
+        **Direction**: Health Plan → Availity
+        
+        **Trigger**: Service Bus topic subscription on `payer-appeal-status-updates`
+        
+        **Requirements**:
+        - Only SUBMITTED→FINALIZED status transitions are currently supported
+        - FINALIZED status requires `decision` and `decisionReason` fields
+        - Includes retry logic (3 retries, 30-second intervals)
+        
+        This is implemented as a Logic App workflow: `appeal_update_from_payer_to_availity`
+      operationId: pushAppealUpdateToAvality
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppealStatusUpdate'
+      responses:
+        '200':
+          description: Status update successfully pushed to Availity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  traceId:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          description: Invalid request (validation error)
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth 2.0 Bearer token authentication
+
+  schemas:
+    AppealToPayerRequest:
+      type: object
+      required:
+        - claimNumber
+        - providerNpi
+        - memberId
+        - patientFirstName
+        - patientLastName
+        - patientDateOfBirth
+        - requestReason
+        - supportingRationale
+      properties:
+        claimNumber:
+          type: string
+          pattern: '^[A-Z0-9-]{1,50}$'
+          description: Primary claim number for the appeal
+          example: CLM-2024-001234
+        additionalClaims:
+          type: array
+          maxItems: 25
+          items:
+            type: string
+            pattern: '^[A-Z0-9-]{1,50}$'
+          description: Additional claim numbers for consolidated appeals
+          example: ['CLM-2024-001235']
+        providerNpi:
+          type: string
+          pattern: '^[0-9]{10}$'
+          description: National Provider Identifier
+          example: '1234567890'
+        submittingProviderType:
+          type: string
+          enum: [RENDERING, BILLING, REFERRING, FACILITY]
+          description: Type of provider submitting the appeal
+        providerAddress:
+          $ref: '#/components/schemas/Address'
+        contactInfo:
+          $ref: '#/components/schemas/ContactInfo'
+        memberId:
+          type: string
+          maxLength: 50
+          description: Health plan member identifier
+          example: MBR-987654321
+        patientFirstName:
+          type: string
+          maxLength: 35
+          example: John
+        patientLastName:
+          type: string
+          maxLength: 60
+          example: Smith
+        patientMiddleName:
+          type: string
+          maxLength: 25
+        patientDateOfBirth:
+          type: string
+          format: date
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          example: '1985-03-15'
+        requestReason:
+          type: string
+          enum:
+            - DENIAL_OF_COVERAGE
+            - PAYMENT_AMOUNT
+            - MEDICAL_NECESSITY
+            - OUT_OF_NETWORK
+            - PRIOR_AUTHORIZATION
+            - TIMELY_FILING
+            - CODING_DISPUTE
+            - DUPLICATE_CLAIM
+            - COORDINATION_OF_BENEFITS
+            - OTHER
+          description: Primary reason for the appeal
+        supportingRationale:
+          type: string
+          minLength: 10
+          maxLength: 4000
+          description: Detailed explanation supporting the appeal
+        attachments:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AttachmentInfo'
+        ecsAdditionalProperties:
+          $ref: '#/components/schemas/EcsAdditionalProperties'
+        availityTraceId:
+          type: string
+          maxLength: 100
+          description: Availity transaction trace identifier
+        submissionDate:
+          type: string
+          format: date-time
+
+    AppealToPayerResponse:
+      type: object
+      required:
+        - appealId
+        - status
+        - receivedDate
+      properties:
+        appealId:
+          type: string
+          maxLength: 100
+          description: Health plan appeal identifier
+          example: APP-2024-001234
+        caseNumber:
+          type: string
+          maxLength: 100
+          description: Case/tracking number for external reference
+          example: CASE-2024-5678
+        status:
+          type: string
+          enum: [RECEIVED, SUBMITTED, IN_REVIEW, FINALIZED, REJECTED]
+          description: Current status of the appeal
+        subStatus:
+          $ref: '#/components/schemas/AppealSubStatus'
+        receivedDate:
+          type: string
+          format: date-time
+          description: Date appeal was received by health plan
+        isEligibleForAttachmentsDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date until which additional attachments can be submitted
+        estimatedCompletionDate:
+          type: string
+          format: date
+        decision:
+          type: string
+          enum: [APPROVED, PARTIALLY_APPROVED, DENIED, WITHDRAWN]
+          description: Final decision (present when status is FINALIZED)
+        decisionReason:
+          type: string
+          maxLength: 4000
+          description: Explanation for the decision
+        decisionDate:
+          type: string
+          format: date-time
+        approvedAmount:
+          type: number
+          minimum: 0
+          description: Approved claim amount in dollars
+        deniedAmount:
+          type: number
+          minimum: 0
+          description: Denied claim amount in dollars
+        attachmentStatus:
+          type: string
+          enum: [PENDING, RECEIVED, INCOMPLETE, COMPLETE]
+        requiredDocuments:
+          type: array
+          items:
+            type: string
+        contactInfo:
+          $ref: '#/components/schemas/ContactInfo'
+        availityTraceId:
+          type: string
+        payerTraceId:
+          type: string
+        documentLinks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentLink'
+
+    AppealSubStatus:
+      type: string
+      enum:
+        - AWAITING_CLASSIFICATION
+        - CASE_ASSIGNED
+        - IN_CLINICAL_REVIEW
+        - IN_PROGRESS
+        - NEED_ADDITIONAL_INFO
+        - PENDING_ASSIGNMENT
+        - PENDING_PAYMENT
+        - REQUEST_RECEIVED
+      description: |
+        Detailed sub-status providing granular tracking of appeal processing:
+        - REQUEST_RECEIVED: Initial state when appeal is first received
+        - AWAITING_CLASSIFICATION: Appeal is awaiting initial classification
+        - PENDING_ASSIGNMENT: Appeal is in queue awaiting assignment to reviewer
+        - CASE_ASSIGNED: Appeal has been assigned to a reviewer/case manager
+        - IN_PROGRESS: Appeal is actively being processed
+        - IN_CLINICAL_REVIEW: Appeal is undergoing clinical review
+        - NEED_ADDITIONAL_INFO: Processing paused pending additional information
+        - PENDING_PAYMENT: Appeal approved, payment processing pending
+
+    AppealStatusUpdate:
+      type: object
+      required:
+        - availityTraceId
+        - payerTraceId
+        - status
+      properties:
+        availityTraceId:
+          type: string
+          description: Availity transaction trace identifier
+        payerTraceId:
+          type: string
+          description: Health plan internal trace identifier
+        appealId:
+          type: string
+        caseNumber:
+          type: string
+        status:
+          type: string
+          enum: [SUBMITTED, FINALIZED]
+        subStatus:
+          $ref: '#/components/schemas/AppealSubStatus'
+        decision:
+          type: string
+          enum: [APPROVED, PARTIALLY_APPROVED, DENIED, WITHDRAWN]
+          description: Required when status is FINALIZED
+        decisionReason:
+          type: string
+          description: Required when status is FINALIZED
+        decisionDate:
+          type: string
+          format: date-time
+        approvedAmount:
+          type: number
+        deniedAmount:
+          type: number
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentLink'
+        claimNumber:
+          type: string
+        memberId:
+          type: string
+        providerNpi:
+          type: string
+
+    Address:
+      type: object
+      required:
+        - addressLine1
+        - city
+        - state
+        - zipCode
+      properties:
+        addressLine1:
+          type: string
+          maxLength: 55
+        addressLine2:
+          type: string
+          maxLength: 55
+        city:
+          type: string
+          maxLength: 30
+        state:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        zipCode:
+          type: string
+          pattern: '^[0-9]{5}(-[0-9]{4})?$'
+
+    ContactInfo:
+      type: object
+      properties:
+        phone:
+          type: string
+          pattern: '^[0-9]{10}$'
+          description: 10-digit phone number
+        fax:
+          type: string
+          pattern: '^[0-9]{10}$'
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        mailingAddress:
+          $ref: '#/components/schemas/Address'
+
+    AttachmentInfo:
+      type: object
+      required:
+        - fileName
+        - fileType
+        - fileSizeBytes
+      properties:
+        fileName:
+          type: string
+          maxLength: 255
+        fileType:
+          type: string
+          enum: ['.gif', '.jpg', '.jpeg', '.pdf', '.tif', '.tiff']
+        fileSizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+          description: Maximum 64MB (67108864 bytes)
+        documentType:
+          type: string
+          enum:
+            - MEDICAL_RECORDS
+            - PHYSICIAN_NOTES
+            - LAB_RESULTS
+            - IMAGING_REPORTS
+            - TREATMENT_PLAN
+            - CLINICAL_GUIDELINES
+            - POLICY_DOCUMENTATION
+            - CORRESPONDENCE
+            - OTHER
+        description:
+          type: string
+          maxLength: 500
+        blobPath:
+          type: string
+          description: Internal blob storage path
+
+    DocumentLink:
+      type: object
+      required:
+        - documentId
+        - documentType
+      properties:
+        documentId:
+          type: string
+        documentType:
+          type: string
+          enum: [DECISION_LETTER, SUPPORTING_DOCUMENT, CORRESPONDENCE]
+        fileName:
+          type: string
+        availableUntil:
+          type: string
+          format: date-time
+        downloadUrl:
+          type: string
+          format: uri
+          example: /api/appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234
+
+    EcsAdditionalProperties:
+      type: object
+      description: Extended properties for Enhanced Claim Submission (ECS) integration
+      properties:
+        appealType:
+          type: string
+          enum: [FIRST_LEVEL, SECOND_LEVEL, EXPEDITED, EXTERNAL_REVIEW]
+        providerParticipationStatus:
+          type: string
+          enum: [IN_NETWORK, OUT_OF_NETWORK, UNKNOWN]
+        programId:
+          type: string
+          maxLength: 50
+          description: Use {config.payerId} placeholder for generic implementation
+        dataSource:
+          type: string
+          enum: [AVAILITY, PROVIDER_PORTAL, EDI, MANUAL_ENTRY, OTHER]
+        planId:
+          type: string
+          maxLength: 50
+          description: Use {config.payerId} placeholder
+        appealAttachmentName:
+          type: string
+          maxLength: 255
+        appealEligibleForMember:
+          type: boolean
+        appealTimelyFilingDate:
+          type: string
+          format: date
+        appealMessage:
+          type: string
+          maxLength: 1000
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type/code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time

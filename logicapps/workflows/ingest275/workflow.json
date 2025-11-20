@@ -249,7 +249,7 @@
     "qnxt_base_url": { "type": "String", "defaultValue": "https://qnxt.api.local" },
     "QNXT_API_TOKEN": { "type": "SecureString" },
     "x12_sender_id": { "type": "String", "defaultValue": "030240928" },
-    "x12_receiver_id": { "type": "String", "defaultValue": "66917" },
+    "x12_receiver_id": { "type": "String", "defaultValue": "{config.payerId}" },
     "x12_275_messagetype": { "type": "String", "defaultValue": "X12_005010X210_275" }
   }
 }

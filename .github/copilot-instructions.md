@@ -122,10 +122,10 @@ ls -l workflows.zip
 Use `test-workflows.ps1` for comprehensive workflow testing:
 
 ```powershell
-# Test inbound 275 processing (Availity → EXHP)
+# Test inbound 275 processing (Availity → Health Plan)
 pwsh -c "./test-workflows.ps1 -TestInbound275"
 
-# Test outbound 277 RFAI generation (EXHP → Availity)
+# Test outbound 277 RFAI generation (Health Plan → Availity)
 pwsh -c "./test-workflows.ps1 -TestOutbound277"
 
 # Test complete end-to-end workflow
@@ -137,7 +137,7 @@ pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppNa
 
 **Trading Partners**:
 - Sender: Availity (030240928)
-- Receiver: EXHP-QNXT (66917)
+- Receiver: Health Plan-QNXT ({config.payerId})
 
 **Test Files**:
 - `test-x12-275-availity-to-exhp.edi`: Sample 275 EDI file for testing
@@ -172,16 +172,16 @@ pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
 ### Manual Deployment Commands
 ```bash
 # Create resource group
-az group create -n exhp-attachments-rg -l eastus
+az group create -n payer-attachments-rg -l eastus
 
 # Deploy infrastructure
-az deployment group create -g exhp-attachments-rg -f infra/main.bicep -p baseName=exhp-attachments
+az deployment group create -g payer-attachments-rg -f infra/main.bicep -p baseName=payer-attachments
 
 # Deploy workflows (after infrastructure)
-az webapp deploy --resource-group exhp-attachments-rg --name exhp-attachments-la --src-path workflows.zip --type zip
+az webapp deploy --resource-group payer-attachments-rg --name payer-attachments-la --src-path workflows.zip --type zip
 
 # Restart Logic App
-az webapp restart -g exhp-attachments-rg -n exhp-attachments-la
+az webapp restart -g payer-attachments-rg -n payer-attachments-la
 ```
 
 ### GitHub Actions Deployment
@@ -342,7 +342,7 @@ unzip -l workflows.zip  # Verify structure
 **"Deploy infrastructure to UAT"**
 ```bash
 az deployment group create \
-  --resource-group "exhp-attachments-uat-rg" \
+  --resource-group "payer-attachments-uat-rg" \
   --template-file infra/main.bicep \
   --parameters baseName="hipaa-attachments-uat"
 ```
@@ -356,7 +356,7 @@ az deployment group create \
 
 **"X12 decode is failing"**
 - Check Integration Account trading partner configuration
-- Verify ISA/GS identifiers match (Availity: 030240928, EXHP: 66917)
+- Verify ISA/GS identifiers match (Availity: 030240928, Health Plan: {config.payerId})
 - Ensure correct schema is uploaded (275: X12_005010X210_275)
 - See [TROUBLESHOOTING.md](../TROUBLESHOOTING.md#x12-decode-failures)
 

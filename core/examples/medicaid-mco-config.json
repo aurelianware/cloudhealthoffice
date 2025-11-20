@@ -1,0 +1,273 @@
+{
+  "payerId": "MCO001",
+  "payerName": "State Medicaid MCO",
+  "organizationName": "State Medicaid Managed Care Organization",
+  "contactInfo": {
+    "primaryContact": "John Smith",
+    "email": "john.smith@mco001.com",
+    "phone": "+1-555-0100",
+    "supportEmail": "support@mco001.com"
+  },
+  "enabledModules": {
+    "appeals": true,
+    "ecs": true,
+    "attachments": true,
+    "authorizations": true
+  },
+  "appeals": {
+    "enabled": true,
+    "apiEndpoints": {
+      "test": "https://test-api.mco001.com/appeals/v1",
+      "prod": "https://api.mco001.com/appeals/v1"
+    },
+    "authentication": {
+      "type": "oauth",
+      "keyVaultSecretName": "mco001-appeals-oauth-token"
+    },
+    "timeout": 120000,
+    "retryCount": 3,
+    "retryInterval": 5000,
+    "requestReasons": [
+      {
+        "code": "01",
+        "description": "Medical Necessity",
+        "requiresAttachments": true
+      },
+      {
+        "code": "02",
+        "description": "Timely Filing",
+        "requiresAttachments": false
+      },
+      {
+        "code": "03",
+        "description": "Coding Error",
+        "requiresAttachments": true
+      },
+      {
+        "code": "04",
+        "description": "Duplicate Claim",
+        "requiresAttachments": false
+      }
+    ],
+    "subStatuses": [
+      {
+        "code": "RECEIVED",
+        "description": "Appeal received and registered",
+        "isFinal": false
+      },
+      {
+        "code": "IN_REVIEW",
+        "description": "Under medical review",
+        "isFinal": false
+      },
+      {
+        "code": "PENDED",
+        "description": "Additional information requested",
+        "isFinal": false
+      },
+      {
+        "code": "APPROVED",
+        "description": "Appeal approved",
+        "isFinal": true
+      },
+      {
+        "code": "DENIED",
+        "description": "Appeal denied",
+        "isFinal": true
+      },
+      {
+        "code": "WITHDRAWN",
+        "description": "Appeal withdrawn by provider",
+        "isFinal": true
+      }
+    ],
+    "attachmentRules": {
+      "pattern": "pre-appeal",
+      "maxFileSize": 10485760,
+      "allowedFormats": ["pdf", "jpg", "png", "tiff", "doc", "docx"],
+      "maxAttachments": 10,
+      "requiredMetadata": ["claimNumber", "memberID", "providerNPI", "documentType"]
+    },
+    "modes": {
+      "realTimeWeb": true,
+      "realTimeB2B": true,
+      "ediBatch": false
+    }
+  },
+  "ecs": {
+    "enabled": true,
+    "apiEndpoints": {
+      "test": "https://test-api.mco001.com/ecs/v1",
+      "prod": "https://api.mco001.com/ecs/v1"
+    },
+    "authentication": {
+      "type": "oauth",
+      "keyVaultSecretName": "mco001-ecs-oauth-token"
+    },
+    "searchMethods": {
+      "serviceDate": true,
+      "member": true,
+      "checkNumber": true,
+      "claimHistory": true
+    },
+    "timeout": 60000,
+    "retryCount": 3
+  },
+  "attachments": {
+    "enabled": true,
+    "sftpConfig": {
+      "host": "sftp.mco001.com",
+      "port": 22,
+      "username": "hipaa_attachments",
+      "keyVaultSecretName": "mco001-sftp-private-key",
+      "inboundFolder": "/inbound/attachments",
+      "outboundFolder": "/outbound/responses"
+    },
+    "x12Config": {
+      "isa": {
+        "senderId": "MCO001",
+        "receiverId": "AVAILITY",
+        "senderQualifier": "ZZ",
+        "receiverQualifier": "ZZ"
+      },
+      "transactionSets": {
+        "275": true,
+        "277": true,
+        "278": true
+      }
+    },
+    "archivalConfig": {
+      "storageAccountName": "mco001attachments",
+      "containerName": "hipaa-attachments",
+      "retentionDays": 2555
+    }
+  },
+  "infrastructure": {
+    "resourceNamePrefix": "mco001",
+    "location": "eastus",
+    "environment": "dev",
+    "tags": {
+      "Project": "HIPAA-Attachments",
+      "Payer": "MCO001",
+      "Environment": "Dev",
+      "CostCenter": "IT-Integration"
+    },
+    "storageConfig": {
+      "sku": "Standard_LRS",
+      "containers": [
+        "hipaa-attachments",
+        "appeal-documents",
+        "ecs-queries"
+      ],
+      "lifecycleRules": [
+        {
+          "name": "move-to-cool",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 30,
+          "tierToCool": 30
+        },
+        {
+          "name": "move-to-archive",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 90,
+          "tierToArchive": 90
+        },
+        {
+          "name": "delete-old-data",
+          "enabled": true,
+          "daysAfterModificationGreaterThan": 2555,
+          "delete": 2555
+        }
+      ]
+    },
+    "serviceBusConfig": {
+      "sku": "Standard",
+      "topics": [
+        {
+          "name": "attachments-in",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P14D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "appeals-processor",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        },
+        {
+          "name": "appeals-auth",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P14D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "auth-processor",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        },
+        {
+          "name": "edi-278",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P14D",
+          "requiresDuplicateDetection": true,
+          "subscriptions": [
+            {
+              "name": "278-processor",
+              "maxDeliveryCount": 10,
+              "lockDuration": "PT5M"
+            }
+          ]
+        }
+      ],
+      "queues": [
+        {
+          "name": "dead-letter",
+          "maxSizeInMegabytes": 1024,
+          "defaultMessageTimeToLive": "P30D",
+          "requiresDuplicateDetection": false
+        }
+      ]
+    },
+    "logicAppConfig": {
+      "sku": "WS1",
+      "workerCount": 1,
+      "alwaysOn": true
+    },
+    "keyVaultConfig": {
+      "sku": "standard",
+      "enableSoftDelete": true,
+      "softDeleteRetentionDays": 90
+    }
+  },
+  "monitoring": {
+    "applicationInsights": {
+      "enabled": true,
+      "samplingPercentage": 100
+    },
+    "alertRules": [
+      {
+        "name": "high-error-rate",
+        "description": "Alert when workflow error rate exceeds threshold",
+        "severity": 2,
+        "frequency": "PT5M",
+        "timeWindow": "PT15M",
+        "query": "traces | where severityLevel >= 3 | summarize count()",
+        "threshold": 10
+      },
+      {
+        "name": "api-latency",
+        "description": "Alert when API response time is high",
+        "severity": 3,
+        "frequency": "PT5M",
+        "timeWindow": "PT15M",
+        "query": "dependencies | where type == 'HTTP' | summarize avg(duration)",
+        "threshold": 5000
+      }
+    ],
+    "logRetentionDays": 90
+  }
+}
