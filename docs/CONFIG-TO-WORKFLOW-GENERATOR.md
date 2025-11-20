@@ -540,17 +540,259 @@ npm run build
 node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json /tmp/test-output
 ```
 
+## Onboarding Wizard
+
+The platform includes an interactive onboarding wizard to simplify payer configuration:
+
+### Launching the Wizard
+
+```bash
+node dist/scripts/cli/payer-onboarding-wizard.js
+```
+
+### Wizard Flow
+
+The wizard guides you through a series of interactive prompts:
+
+#### 1. Organization Information
+- **Organization Name**: Full legal name of the health plan
+- **Payer ID**: Unique identifier (5-20 characters, alphanumeric)
+- **Payer Name**: Display name for provider portals
+- **Logo URL**: Optional URL to organization logo (234x60px PNG)
+
+#### 2. Contact Information
+- **Technical Contact**: Name, email, phone
+- **Account Manager**: Name, email, phone
+- **Escalation Contact**: Name, email, phone
+
+#### 3. Geography
+- **Coverage Type**: Nationwide or State-Specific
+- **States**: If state-specific, select applicable states
+
+#### 4. Module Selection
+Select which modules to enable:
+- [ ] **ECS (Enhanced Claim Status)** - Claim status queries with ValueAdds277
+- [ ] **Appeals** - Provider appeals submission and tracking
+- [ ] **Attachments (275)** - Clinical and administrative attachments
+- [ ] **Authorizations (278)** - Prior authorization and referrals
+- [ ] **Eligibility (270/271)** - Real-time eligibility verification
+- [ ] **Claims (837)** - Electronic claims submission
+
+#### 5. Backend Configuration
+For each enabled module:
+- **API Base URL**: Backend API endpoint
+- **Authentication Type**: OAuth2, ApiKey, or ManagedIdentity
+- **Credentials**: Key Vault secret names for client ID/secret
+- **Timeout**: API timeout in seconds (default: 30s)
+- **Field Mappings**: Map standard fields to backend fields
+
+#### 6. ValueAdds277 Options (ECS Module)
+If ECS is enabled:
+- [ ] Financial Fields (8 fields)
+- [ ] Clinical Fields (4 fields)
+- [ ] Demographics (20+ fields)
+- [ ] Remittance Fields (4 fields)
+- [ ] Service Line Details (10+ fields per line)
+- [ ] Integration Flags (6 flags)
+
+#### 7. Integration Flags
+Configure cross-module integration:
+- [ ] Enable Appeals integration
+- [ ] Enable Attachments integration
+- [ ] Enable Corrections integration
+- [ ] Enable Messaging integration
+
+#### 8. Infrastructure Settings
+- **Azure Region**: Primary deployment region (default: eastus)
+- **Environment**: DEV, UAT, or PROD
+- **Logic App SKU**: WS1, WS2, or WS3
+- **Storage Tier**: Standard_LRS, Standard_GRS, etc.
+
+#### 9. Monitoring & Alerts
+- **Application Insights**: Enable monitoring (recommended: true)
+- **Alert Email**: Email for critical alerts
+- **Log Retention**: Days to retain logs (default: 365)
+
+#### 10. Review & Confirm
+- Review complete configuration
+- Validate against schema
+- Save to file or proceed to deployment
+
+### Wizard Output
+
+The wizard generates:
+1. **Configuration File**: `{payerId}-config.json`
+2. **Validation Report**: Schema validation results
+3. **Deployment Checklist**: Steps to complete deployment
+4. **Documentation**: Custom deployment guide for the payer
+
+### Example Wizard Session
+
+```
+$ node dist/scripts/cli/payer-onboarding-wizard.js
+
+┌─────────────────────────────────────────────────────┐
+│  Availity Integration Platform - Onboarding Wizard  │
+│  Version 2.0                                         │
+└─────────────────────────────────────────────────────┘
+
+Step 1 of 10: Organization Information
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+? Organization Name: Blue Shield Health Plan
+? Payer ID: BSHP-2024
+? Payer Name: Blue Shield Health
+? Logo URL (optional): https://bshp.com/logo.png
+
+Step 2 of 10: Contact Information
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Technical Contact:
+? Name: John Smith
+? Email: jsmith@bshp.com
+? Phone: 5551234567
+
+... (continues through all steps)
+
+Step 10 of 10: Review & Confirm
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Configuration Summary:
+  Organization: Blue Shield Health Plan (BSHP-2024)
+  Modules: ECS, Appeals, Attachments
+  Region: eastus
+  Environment: DEV
+
+✓ Schema validation passed
+✓ Configuration file saved: BSHP-2024-config.json
+
+Next Steps:
+  1. Review configuration file
+  2. Generate deployment: node dist/scripts/cli/payer-generator-cli.js generate -c BSHP-2024-config.json
+  3. Deploy to Azure: cd generated/BSHP-2024/infrastructure && ./deploy.sh
+
+Would you like to proceed with deployment generation now? (y/n)
+```
+
+### Wizard Features
+
+- **Interactive Prompts**: User-friendly CLI prompts with validation
+- **Smart Defaults**: Sensible defaults for common configurations
+- **Validation**: Real-time validation of inputs
+- **Resume Support**: Save progress and resume later
+- **Templates**: Quick-start templates for common scenarios
+- **Dry Run**: Preview configuration before saving
+
+## Partner Model
+
+### Partner Program Overview
+
+The Config-to-Workflow Generator supports a **partner ecosystem** for resellers and system integrators:
+
+### Partner Benefits
+
+1. **White-Label Deployment**: Deploy platform under partner brand
+2. **Revenue Share**: 20-30% revenue share on customer subscriptions
+3. **Training & Certification**: Technical training for partner engineers
+4. **Partner Portal**: Self-service portal for configuration and deployment
+5. **Co-Marketing**: Joint marketing materials and case studies
+6. **Deal Registration**: Protect partner-sourced opportunities
+
+### Partner Tiers
+
+| Tier | Requirements | Revenue Share | Benefits |
+|------|--------------|---------------|----------|
+| **Bronze** | 1-5 payers | 20% | Standard support, partner badge |
+| **Silver** | 6-15 payers, 1 certified engineer | 25% | Priority support, custom training |
+| **Gold** | 16+ payers, 3+ certified engineers | 30% | 24/7 support, dedicated account manager |
+
+### Partner Tools
+
+Partners have access to specialized tools:
+
+#### Partner CLI Commands
+
+```bash
+# Generate white-labeled deployment
+node dist/scripts/cli/payer-generator-cli.js generate \
+  -c customer-config.json \
+  --white-label \
+  --partner-id PARTNER-001 \
+  --partner-branding branding.json
+
+# Batch deployment for multiple customers
+node dist/scripts/cli/partner-batch-deploy.js \
+  --configs ./customer-configs/*.json \
+  --environment PROD
+
+# Partner usage reporting
+node dist/scripts/cli/partner-reporting.js \
+  --partner-id PARTNER-001 \
+  --month 2024-11 \
+  --format pdf
+```
+
+#### White-Label Configuration
+
+```json
+{
+  "partnerBranding": {
+    "partnerName": "HealthTech Solutions",
+    "logo": "https://healthtech.com/logo.png",
+    "supportEmail": "support@healthtech.com",
+    "supportPhone": "8005551234",
+    "portalUrl": "https://portal.healthtech.com",
+    "documentationUrl": "https://docs.healthtech.com"
+  }
+}
+```
+
+Generated workflows and documentation will use partner branding instead of platform branding.
+
+### Partner Onboarding Process
+
+1. **Partner Application**: Submit application with company info
+2. **Technical Review**: Architecture review, capabilities assessment
+3. **Contract Signing**: Pricing, revenue share, support SLAs
+4. **Training**: 2-day technical training, certification exam
+5. **Sandbox Access**: 90-day sandbox environment
+6. **Certification**: Complete certification project
+7. **Go-Live**: Partner badge, portal access, co-marketing
+
+**Timeline**: 4-8 weeks from application to go-live
+
+### Partner Support
+
+- **Partner Portal**: Configuration management, deployment tracking, usage reporting
+- **Technical Support**: Dedicated partner support team
+- **Documentation**: Partner-specific documentation and guides
+- **Training**: Quarterly training webinars and annual summit
+- **Slack Channel**: Private partner Slack workspace
+
 ## Support
 
 For questions or issues:
 - Review this documentation
-- Check example configurations
+- Check example configurations: `core/examples/`
 - Examine generated output for reference
-- Contact the development team
+- Run generator with `--help` flag
+- Review schema documentation: [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md)
+- Contact the development team: support@platform.com
 
 ## Version History
 
-### v1.0.0 (Current)
+### v2.0.0 (Current)
+
+- **NEW**: Interactive onboarding wizard
+- **NEW**: Partner white-label support
+- **NEW**: Batch deployment for partners
+- **NEW**: Partner usage reporting
+- Enhanced validation with detailed error messages
+- Template library with 10+ pre-built configurations
+- Improved documentation generation
+- Support for custom modules and extensions
+
+### v1.0.0
 
 - Initial release
 - Support for Appeals, ECS, Attachments, and Authorizations modules
