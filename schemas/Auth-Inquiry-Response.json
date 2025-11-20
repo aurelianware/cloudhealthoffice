@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Authorization Inquiry Response",
+  "description": "Schema for X12 278 X215 Authorization Inquiry responses containing authorization status and details",
+  "type": "object",
+  "required": ["authorizationNumber", "status"],
+  "properties": {
+    "authorizationNumber": {
+      "type": "string",
+      "description": "Authorization number returned from payer",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "status": {
+      "type": "string",
+      "enum": ["APPROVED", "PENDED", "DENIED", "MODIFIED"],
+      "description": "Current status of the authorization"
+    },
+    "effectiveDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Authorization effective date (CCYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "expirationDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Authorization expiration date (CCYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "serviceType": {
+      "type": "string",
+      "description": "Type of service authorized (AR=Inpatient, HS=Outpatient, SC=Referral)"
+    },
+    "authorizedQuantity": {
+      "type": "number",
+      "description": "Number of units/visits/days authorized",
+      "minimum": 0
+    },
+    "quantityType": {
+      "type": "string",
+      "description": "Type of quantity (e.g., VISITS, DAYS, UNITS)"
+    },
+    "decision": {
+      "type": "string",
+      "description": "Payer decision summary"
+    },
+    "decisionReason": {
+      "type": "string",
+      "description": "Reason for the authorization decision"
+    },
+    "messages": {
+      "type": "array",
+      "description": "Array of messages from payer",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "patient": {
+      "type": "object",
+      "description": "Patient demographic information",
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "description": "Member ID or Subscriber ID"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Patient first name"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Patient last name"
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "format": "date",
+          "description": "Patient date of birth (CCYY-MM-DD)"
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "description": "Provider information",
+      "properties": {
+        "npi": {
+          "type": "string",
+          "description": "Provider NPI",
+          "pattern": "^\\d{10}$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Provider name"
+        },
+        "taxId": {
+          "type": "string",
+          "description": "Provider tax ID"
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "description": "Array of authorized service details",
+      "items": {
+        "type": "object",
+        "properties": {
+          "procedureCode": {
+            "type": "string",
+            "description": "CPT/HCPCS procedure code"
+          },
+          "modifier": {
+            "type": "string",
+            "description": "Procedure modifier"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Authorized quantity for this service"
+          },
+          "fromDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Service from date (CCYY-MM-DD)"
+          },
+          "toDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Service to date (CCYY-MM-DD)"
+          }
+        }
+      },
+      "default": []
+    },
+    "reviewOutcome": {
+      "type": "string",
+      "description": "Detailed review outcome code from HCR segment"
+    },
+    "followUpAction": {
+      "type": "string",
+      "description": "Follow-up action required, if any"
+    },
+    "requestId": {
+      "type": "string",
+      "description": "Original request tracking ID"
+    },
+    "responseTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Response timestamp in ISO 8601 format"
+    }
+  },
+  "additionalProperties": false
+}
