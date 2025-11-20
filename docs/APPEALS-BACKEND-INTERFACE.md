@@ -2,7 +2,15 @@
 
 ## Overview
 
-This document defines the interface contract between the Appeals Integration Layer and the Health Plan Backend System (e.g., claims processing system). This specification is payer-agnostic and designed for multi-payer platformization.
+This document defines the interface contract between the Appeals Integration Layer and the Health Plan Backend System (e.g., claims processing system). This specification is **payer-agnostic and designed for multi-payer platformization**, enabling rapid onboarding of new health plans through configuration rather than custom development.
+
+### Platform Design Principles
+
+1. **Backend Agnostic**: Interface works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)
+2. **Configuration-Driven**: Backend endpoints, authentication, and field mappings defined in payer configuration
+3. **Standardized Contract**: Consistent API interface across all payers
+4. **Extensible**: Support for payer-specific custom fields via configuration
+5. **Testable**: Mock implementations available for testing without backend connectivity
 
 ## Purpose
 
@@ -41,30 +49,30 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "caseNumber": "CASE-2024-5678",
-  "claimNumber": "CLM-2024-001234",
-  "additionalClaims": ["CLM-2024-001235"],
-  "providerNpi": "1234567890",
-  "memberId": "MBR-987654321",
-  "patientFirstName": "John",
-  "patientLastName": "Smith",
-  "patientDateOfBirth": "1985-03-15",
-  "requestReason": "MEDICAL_NECESSITY",
-  "supportingRationale": "Medical records demonstrate medical necessity...",
-  "submissionDate": "2024-01-15T14:35:00Z",
+  "appealId": "{appeal.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
+  "claimNumber": "{claim.claimNumber}",
+  "additionalClaims": ["{claim.additionalClaimNumbers}"],
+  "providerNpi": "{provider.npi}",
+  "memberId": "{member.memberId}",
+  "patientFirstName": "{member.firstName}",
+  "patientLastName": "{member.lastName}",
+  "patientDateOfBirth": "{member.dateOfBirth}",
+  "requestReason": "{appeal.requestReason}",
+  "supportingRationale": "{appeal.supportingRationale}",
+  "submissionDate": "{appeal.submissionDate}",
   "attachments": [
     {
-      "fileName": "medical_records.pdf",
-      "documentType": "MEDICAL_RECORDS",
-      "blobPath": "hipaa-attachments/appeals/APP-2024-001234/PROVIDER_UPLOAD/medical_records.pdf",
-      "fileSizeBytes": 2097152
+      "fileName": "{document.fileName}",
+      "documentType": "{document.documentType}",
+      "blobPath": "hipaa-attachments/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}",
+      "fileSizeBytes": "{document.fileSizeBytes}"
     }
   ],
-  "availityTraceId": "AVL-2024-abc123",
+  "availityTraceId": "{availity.traceId}",
   "ecsAdditionalProperties": {
-    "appealType": "FIRST_LEVEL",
-    "providerParticipationStatus": "IN_NETWORK",
+    "appealType": "{config.defaultAppealType}",
+    "providerParticipationStatus": "{provider.participationStatus}",
     "programId": "{config.payerId}"
   }
 }
@@ -74,13 +82,13 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "status": "RECEIVED",
   "subStatus": "REQUEST_RECEIVED",
   "assignedReviewer": null,
-  "estimatedCompletionDate": "2024-03-15",
-  "registrationTimestamp": "2024-01-15T14:35:30Z"
+  "estimatedCompletionDate": "{timestamp.plus60Days}",
+  "registrationTimestamp": "{timestamp}"
 }
 ```
 
@@ -90,7 +98,7 @@ The Health Plan Backend System must implement the following endpoints:
   "success": false,
   "error": "ValidationError",
   "message": "Claim number does not exist in system",
-  "claimNumber": "CLM-2024-001234"
+  "claimNumber": "{claim.claimNumber}"
 }
 ```
 
@@ -105,14 +113,14 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "status": "IN_REVIEW",
   "subStatus": "IN_CLINICAL_REVIEW",
-  "assignedReviewer": "REV-123",
+  "assignedReviewer": "{reviewer.id}",
   "reviewerNotes": "Clinical documentation review in progress",
   "updatedBy": "SYSTEM",
-  "updateTimestamp": "2024-02-01T10:30:00Z"
+  "updateTimestamp": "{timestamp}"
 }
 ```
 
@@ -120,11 +128,11 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "previousStatus": "SUBMITTED",
   "newStatus": "IN_REVIEW",
-  "updateTimestamp": "2024-02-01T10:30:15Z"
+  "updateTimestamp": "{timestamp}"
 }
 ```
 
@@ -139,16 +147,16 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "deniedAmount": 0,
-  "reviewerNotes": "All clinical criteria met per policy section 4.2",
-  "decisionMadeBy": "REV-123",
-  "decisionLetterPath": "hipaa-attachments/appeals/APP-2024-001234/DECISION_LETTER/decision_2024-03-10.pdf"
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "deniedAmount": "{appeal.deniedAmount}",
+  "reviewerNotes": "{reviewer.notes}",
+  "decisionMadeBy": "{reviewer.id}",
+  "decisionLetterPath": "hipaa-attachments/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}"
 }
 ```
 
@@ -156,13 +164,13 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "decision": "APPROVED",
-  "paymentReferenceId": "PAY-2024-7890",
+  "paymentReferenceId": "{payment.referenceId}",
   "providerNotificationSent": true,
   "memberNotificationSent": true,
-  "finalizedTimestamp": "2024-03-10T16:45:30Z"
+  "finalizedTimestamp": "{timestamp}"
 }
 ```
 
@@ -177,11 +185,11 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "documentId": "DOC-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "documentId": "{document.documentId}",
   "requestedBy": "provider",
-  "userId": "USER-123",
-  "providerNpi": "1234567890",
+  "userId": "{user.id}",
+  "providerNpi": "{provider.npi}",
   "operation": "READ_DOCUMENT"
 }
 ```
@@ -190,11 +198,11 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "authorized": true,
-  "appealId": "APP-2024-001234",
-  "userId": "USER-123",
+  "appealId": "{appeal.appealId}",
+  "userId": "{user.id}",
   "accessLevel": "FULL",
-  "validUntil": "2024-06-10T23:59:59Z",
-  "validationTimestamp": "2024-03-15T10:00:00Z"
+  "validUntil": "{timestamp.plus90Days}",
+  "validationTimestamp": "{timestamp}"
 }
 ```
 
@@ -202,10 +210,10 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "authorized": false,
-  "appealId": "APP-2024-001234",
-  "userId": "USER-123",
+  "appealId": "{appeal.appealId}",
+  "userId": "{user.id}",
   "reason": "User does not have access to this appeal",
-  "validationTimestamp": "2024-03-15T10:00:00Z"
+  "validationTimestamp": "{timestamp}"
 }
 ```
 
@@ -224,27 +232,27 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
-  "caseNumber": "CASE-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
   "status": "FINALIZED",
   "subStatus": "PENDING_PAYMENT",
-  "claimNumber": "CLM-2024-001234",
-  "providerNpi": "1234567890",
-  "memberId": "MBR-987654321",
+  "claimNumber": "{claim.claimNumber}",
+  "providerNpi": "{provider.npi}",
+  "memberId": "{member.memberId}",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "assignedReviewer": "REV-123",
-  "receivedDate": "2024-01-15T14:35:00Z",
-  "lastUpdatedDate": "2024-03-10T16:45:00Z",
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "assignedReviewer": "{reviewer.id}",
+  "receivedDate": "{appeal.receivedDate}",
+  "lastUpdatedDate": "{appeal.lastUpdatedDate}",
   "attachments": [
     {
-      "documentId": "DOC-2024-5678",
-      "fileName": "medical_records.pdf",
+      "documentId": "{document.documentId}",
+      "fileName": "{document.fileName}",
       "documentType": "MEDICAL_RECORDS",
-      "uploadedDate": "2024-01-15T14:35:00Z"
+      "uploadedDate": "{document.uploadedDate}"
     }
   ]
 }
@@ -261,12 +269,12 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "claimNumber": "CLM-2024-001234",
-  "memberId": "MBR-987654321",
-  "providerNpi": "1234567890",
-  "appealId": "APP-2024-001234",
-  "serviceFromDate": "2024-01-01",
-  "serviceToDate": "2024-01-01"
+  "claimNumber": "{claim.claimNumber}",
+  "memberId": "{member.memberId}",
+  "providerNpi": "{provider.npi}",
+  "appealId": "{appeal.appealId}",
+  "serviceFromDate": "{claim.serviceFromDate}",
+  "serviceToDate": "{claim.serviceToDate}"
 }
 ```
 
@@ -274,15 +282,15 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "claimNumber": "CLM-2024-001234",
-  "claimId": "CLAIM-INTERNAL-5678",
-  "appealId": "APP-2024-001234",
-  "originalClaimAmount": 2000.00,
-  "paidAmount": 500.00,
-  "deniedAmount": 1500.00,
-  "denialReasonCode": "CO-50",
-  "denialReasonDescription": "Non-covered service",
-  "correlationTimestamp": "2024-01-15T14:36:00Z"
+  "claimNumber": "{claim.claimNumber}",
+  "claimId": "{backend.claimId}",
+  "appealId": "{appeal.appealId}",
+  "originalClaimAmount": "{claim.billedAmount}",
+  "paidAmount": "{claim.paidAmount}",
+  "deniedAmount": "{claim.deniedAmount}",
+  "denialReasonCode": "{claim.denialReasonCode}",
+  "denialReasonDescription": "{claim.denialReasonDescription}",
+  "correlationTimestamp": "{timestamp}"
 }
 ```
 
@@ -297,16 +305,15 @@ The Health Plan Backend System must implement the following endpoints:
 **Request Body**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "backendAppealId": "BACKEND-5678",
+  "appealId": "{appeal.appealId}",
+  "backendAppealId": "{backend.appealId}",
   "requiredDocuments": [
-    "Updated physician notes",
-    "Lab results from 2024-01-20"
+    "{rfai.requiredDocuments}"
   ],
   "rfaiReasonCode": "INCOMPLETE_DOCUMENTATION",
-  "rfaiMessage": "Please provide updated physician notes to support medical necessity determination",
-  "dueDate": "2024-02-15",
-  "requestedBy": "REV-123"
+  "rfaiMessage": "{rfai.message}",
+  "dueDate": "{rfai.dueDate}",
+  "requestedBy": "{reviewer.id}"
 }
 ```
 
@@ -314,12 +321,12 @@ The Health Plan Backend System must implement the following endpoints:
 ```json
 {
   "success": true,
-  "appealId": "APP-2024-001234",
-  "rfaiId": "RFAI-2024-123",
+  "appealId": "{appeal.appealId}",
+  "rfaiId": "{rfai.id}",
   "status": "NEED_ADDITIONAL_INFO",
-  "dueDate": "2024-02-15",
+  "dueDate": "{rfai.dueDate}",
   "providerNotificationSent": true,
-  "rfaiTimestamp": "2024-01-20T09:00:00Z"
+  "rfaiTimestamp": "{timestamp}"
 }
 ```
 
@@ -599,22 +606,52 @@ Response:
 
 ## Configuration
 
-### Required Configuration Parameters
+### Platform Configuration
+
+All backend interface implementations are configured through the **Unified Availity Integration Configuration Schema**. Each payer defines their backend connection parameters in their configuration file:
 
 ```json
 {
   "payerId": "{config.payerId}",
-  "backendApiBaseUrl": "https://backend.healthplan.local/api",
-  "backendApiTimeout": "30s",
-  "backendAuthType": "ManagedIdentity",
-  "serviceBusTopic": "payer-appeal-status-updates",
-  "retryPolicy": {
-    "maxRetries": 3,
-    "retryInterval": "10s",
-    "retryOn": ["500", "502", "503", "504"]
+  "appeals": {
+    "enabled": true,
+    "backend": {
+      "apiBaseUrl": "{config.backendApiBaseUrl}",
+      "apiTimeout": "30s",
+      "authType": "ManagedIdentity",
+      "clientIdSecretName": "appeals-backend-client-id",
+      "clientSecretSecretName": "appeals-backend-client-secret"
+    },
+    "serviceBus": {
+      "topic": "payer-appeal-status-updates",
+      "subscription": "backend-updates"
+    },
+    "retryPolicy": {
+      "maxRetries": 3,
+      "retryInterval": "10s",
+      "retryOn": ["500", "502", "503", "504"]
+    },
+    "fieldMappings": {
+      "appealId": "backend.appeal_id",
+      "caseNumber": "backend.case_num",
+      "memberId": "backend.subscriber_id"
+    }
   }
 }
 ```
+
+### Configuration Parameters
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `payerId` | string | Unique payer identifier | Yes |
+| `backend.apiBaseUrl` | string | Base URL for backend API | Yes |
+| `backend.authType` | string | Authentication method (ManagedIdentity, OAuth2, ApiKey) | Yes |
+| `backend.clientIdSecretName` | string | Azure Key Vault secret name for client ID | Conditional |
+| `backend.clientSecretSecretName` | string | Azure Key Vault secret name for client secret | Conditional |
+| `serviceBus.topic` | string | Service Bus topic for status updates | Yes |
+| `fieldMappings` | object | Backend field mapping dictionary | No (uses defaults) |
+| `retryPolicy` | object | Retry configuration for backend calls | No (uses defaults) |
 
 ---
 
@@ -640,21 +677,103 @@ Each phase should be tested in DEV → UAT → PROD environments.
 
 ---
 
+## Developer Guide: Implementing Backend Interface
+
+### For Backend System Developers
+
+If you're implementing this interface for a new claims processing system:
+
+#### Step 1: Review Interface Contract
+
+Read through all 7 endpoint specifications above to understand the complete API contract.
+
+#### Step 2: Implement Core Endpoints
+
+Start with the 3 core endpoints:
+1. Register Appeal (`POST /api/backend/appeals/register`)
+2. Update Appeal Status (`POST /api/backend/appeals/update-status`)
+3. Validate Appeal Access (`POST /api/backend/authorization/validate-appeal-access`)
+
+#### Step 3: Implement Service Bus Events
+
+Set up event publishing to Service Bus topic `payer-appeal-status-updates` for status changes.
+
+#### Step 4: Test with Mock Integration Layer
+
+Use the provided mock integration layer to test your backend implementation:
+```bash
+npm run test:backend-interface -- --backend-url http://localhost:8080
+```
+
+#### Step 5: Configure Field Mappings
+
+Define field mappings in your payer configuration to map standard interface fields to your backend schema:
+```json
+{
+  "appeals": {
+    "backend": {
+      "fieldMappings": {
+        "appealId": "your_backend.appeal_id",
+        "memberId": "your_backend.subscriber_num",
+        "claimNumber": "your_backend.claim_ref"
+      }
+    }
+  }
+}
+```
+
+### For Platform Integrators
+
+If you're adding a new payer to the platform:
+
+#### Step 1: Obtain Backend API Documentation
+
+Request API documentation and credentials from the payer's IT team.
+
+#### Step 2: Create Payer Configuration
+
+Define backend connection in the payer's configuration file:
+```bash
+node dist/scripts/cli/payer-generator-cli.js template -t custom -o new-payer.json
+```
+
+#### Step 3: Configure Field Mappings
+
+Map backend-specific field names to the standard interface using `fieldMappings` configuration.
+
+#### Step 4: Generate and Deploy
+
+Generate deployment package and deploy to Azure:
+```bash
+node dist/scripts/cli/payer-generator-cli.js generate -c new-payer.json
+cd generated/NEW-PAYER-ID/infrastructure
+./deploy.sh
+```
+
 ## Support
 
 For questions about this interface specification:
 - Technical Documentation: See this file and related schemas
 - Implementation Examples: See test-workflows.ps1
 - API Specifications: See docs/api/APPEALS-OPENAPI.yaml
+- Configuration Schema: See [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md)
+- Developer Tools: See [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md)
 - Issue Tracking: GitHub Issues
 
 ---
 
 ## Changelog
 
+### Version 2.0.0 (2025-01-15)
+- Updated to support configuration-driven platform architecture
+- Added platform configuration section
+- Added developer guide for backend and platform integrators
+- Replaced all hardcoded examples with variable placeholders
+- Added field mapping configuration support
+
 ### Version 1.0.0 (2024-01-15)
 - Initial specification
 - All 7 core endpoints defined
 - Event notification pattern specified
 - Security requirements documented
-- Payer-agnostic design (generic {config.payerId} placeholders)
+- Payer-agnostic design
