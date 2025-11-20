@@ -362,10 +362,201 @@ Track these KPIs to demonstrate value:
 
 5. **Q&A and Next Steps (1 min)**
 
+## Developer Onboarding and Extension
+
+### Adding a New Payer Organization
+
+The platform supports **zero-code payer onboarding** through configuration. Organizations can be added to the platform without custom development:
+
+#### Onboarding Wizard
+
+An interactive onboarding wizard guides new payers through the configuration process:
+
+```bash
+# Launch onboarding wizard
+node dist/scripts/cli/payer-onboarding-wizard.js
+```
+
+**Wizard Steps:**
+1. **Organization Information** - Name, payer ID, logo, contacts
+2. **Module Selection** - Choose which modules to enable (ECS, Appeals, Attachments, etc.)
+3. **Backend Configuration** - API endpoints, authentication, field mappings
+4. **ValueAdds277 Options** - Select enhanced features for ECS
+5. **Integration Flags** - Enable cross-module workflows
+6. **Review & Validate** - Preview configuration, validate schema
+7. **Generate & Deploy** - Create deployment package, optional auto-deploy
+
+**Time to Complete:** 15-30 minutes for typical configuration
+
+#### Self-Service Payer Portal
+
+Organizations can manage their own configuration through a web-based portal:
+
+- **Configuration Editor**: Web-based YAML/JSON editor with schema validation
+- **Live Preview**: See workflow changes before deployment
+- **Test Environment**: Sandbox environment for testing configuration changes
+- **Documentation**: Contextual help and examples for each configuration option
+- **Version Control**: Track configuration changes, rollback if needed
+
+**Benefits:**
+- No engineering resources required from platform provider
+- Faster onboarding (days instead of weeks)
+- Payer controls their own configuration
+- Reduces support burden
+
+### Technical Extension Guide
+
+For developers extending the platform with custom modules:
+
+#### Adding a Custom Module
+
+1. **Define Module Schema**: Create JSON schema for module configuration
+2. **Create Workflow Template**: Define Logic App workflow template
+3. **Add Field Mappings**: Configure backend field mappings
+4. **Implement Generator**: Add module to config-to-workflow generator
+5. **Write Tests**: Add integration tests for new module
+6. **Update Documentation**: Document module in platform docs
+
+**Example Module Configuration:**
+```json
+{
+  "customModule": {
+    "enabled": true,
+    "apiEndpoint": "{config.moduleApiUrl}",
+    "customFields": [
+      { "name": "field1", "type": "string", "required": true }
+    ],
+    "businessRules": {
+      "rule1": "config.ruleValue"
+    }
+  }
+}
+```
+
+#### Extending Existing Modules
+
+Modules can be extended with payer-specific functionality:
+
+- **Custom Fields**: Add fields to request/response schemas
+- **Custom Business Rules**: Implement payer-specific validation logic
+- **Custom Workflows**: Add payer-specific workflow steps
+- **Custom Integrations**: Connect to additional backend systems
+
+All extensions are configuration-driven and isolated per payer.
+
+## Partner and Reseller Model
+
+### Partnership Tiers
+
+#### Bronze Partner (Revenue Share: 20%)
+- **Requirements**: 1-5 payer customers
+- **Benefits**:
+  - Access to platform and documentation
+  - Standard support (email, 48-hour response)
+  - Co-marketing materials
+  - Partner badge for website
+- **Responsibilities**:
+  - Lead generation and sales
+  - Level 1 customer support
+  - Configuration and deployment
+
+#### Silver Partner (Revenue Share: 25%)
+- **Requirements**: 6-15 payer customers, 1 certified engineer
+- **Benefits**:
+  - All Bronze benefits
+  - Priority support (phone, 24-hour response)
+  - Custom training for staff
+  - Partner portal access
+  - Quarterly business reviews
+- **Responsibilities**:
+  - All Bronze responsibilities
+  - Level 2 customer support
+  - Custom module development
+
+#### Gold Partner (Revenue Share: 30%)
+- **Requirements**: 16+ payer customers, 3+ certified engineers
+- **Benefits**:
+  - All Silver benefits
+  - 24/7 support hotline
+  - Dedicated account manager
+  - Early access to new features
+  - Annual partner summit attendance
+  - Joint customer presentations
+- **Responsibilities**:
+  - All Silver responsibilities
+  - Strategic account management
+  - Platform evangelism and thought leadership
+
+### Deployment Models
+
+The platform supports multiple deployment models to meet partner and customer needs:
+
+#### 1. Shared SaaS (Multi-Tenant)
+- **Description**: All payers share a single Azure Logic Apps instance
+- **Pricing**: Lowest cost, $7,000-10,000/payer/year
+- **Best For**: Small to medium payers, cost-sensitive organizations
+- **Isolation**: Configuration-based tenant isolation, no infrastructure isolation
+- **Scalability**: Shared resources, may impact performance during peak loads
+
+#### 2. Dedicated SaaS (Single-Tenant)
+- **Description**: Each payer gets their own Azure Logic Apps instance
+- **Pricing**: Premium pricing, $15,000-20,000/payer/year
+- **Best For**: Large payers, compliance-sensitive organizations
+- **Isolation**: Complete infrastructure isolation per payer
+- **Scalability**: Dedicated resources, no noisy neighbor issues
+- **Customization**: Supports custom modules and workflows
+
+#### 3. Private Deployment (On-Premises/Private Cloud)
+- **Description**: Platform deployed in customer's own Azure subscription or on-premises
+- **Pricing**: License fee $50,000/year + deployment services
+- **Best For**: Highly regulated organizations, data sovereignty requirements
+- **Isolation**: Complete control of infrastructure and data
+- **Support**: Platform license includes updates, customer manages infrastructure
+- **Customization**: Full access to source code, custom modifications supported
+
+#### 4. Partner White-Label
+- **Description**: Partner deploys platform under their own brand
+- **Pricing**: Platform license $100,000/year + revenue share
+- **Best For**: System integrators, healthcare IT vendors
+- **Branding**: Partner logo, domain, support channels
+- **Revenue**: Partner sets pricing, shares revenue with platform provider
+- **Support: Platform provider supports partner, partner supports end customers
+
+### Revenue Model Comparison
+
+| Deployment Model | Platform Provider Revenue | Partner Revenue | Total Customer Cost |
+|------------------|---------------------------|-----------------|---------------------|
+| Shared SaaS | $8,000/payer/year | $2,000 (20% share) | $10,000/payer/year |
+| Dedicated SaaS | $14,000/payer/year | $4,000 (25% share) | $18,000/payer/year |
+| Private Deployment | $50,000/year | $15,000-25,000 (services) | $75,000/year |
+| Partner White-Label | $100,000/year + 15% of partner revenue | Variable (partner sets pricing) | Variable |
+
+### Partner Onboarding Process
+
+1. **Partner Application**: Submit application with company info and references
+2. **Technical Review**: Platform architecture review, technical capabilities assessment
+3. **Contract Negotiation**: Pricing, revenue share, support SLAs
+4. **Partner Training**: 2-day technical training, certification exam
+5. **Sandbox Access**: 90-day sandbox environment for testing and learning
+6. **Certification**: Complete certification project, demonstrate competency
+7. **Go-Live**: Partner badge, portal access, co-marketing launch
+
+**Onboarding Timeline:** 4-8 weeks from application to go-live
+
+### Partner Resources
+
+- **Partner Portal**: Access to documentation, training materials, support tools
+- **Certification Program**: Technical certification for partner engineers
+- **Co-Marketing**: Joint case studies, webinars, trade show presence
+- **Deal Registration**: Protect partner-sourced opportunities
+- **NFR Licenses**: Not-for-resale licenses for partner demos and training
+
 ## References
 
 - [ECS-INTEGRATION.md](./ECS-INTEGRATION.md) - Technical documentation
 - [APPEALS-INTEGRATION.md](./APPEALS-INTEGRATION.md) - Appeals integration details
 - [ECS-OPENAPI.yaml](./api/ECS-OPENAPI.yaml) - API specification
+- [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Configuration schema reference
+- [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Developer tools and generator
 - Configuration schema: `config/schemas/availity-integration-config.schema.json`
 - Example responses: `docs/examples/ecs-valueadds277-*.json`

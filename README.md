@@ -88,16 +88,16 @@ This solution implements the following process:
 10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
 11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
 
-## ⚙️ Configuration-Driven Architecture
+## ⚙️ Configuration-Driven Multi-Payer Platform
 
-**NEW**: This system now supports **configuration-driven payer onboarding** through the Unified Availity Integration Configuration Schema.
+**Platform Architecture**: This system is designed as a **payer-agnostic platform** that supports multiple health plans through unified configuration, enabling **zero-code payer onboarding** and rapid deployment.
 
-### Overview
+### Platform Capabilities
 
-The configuration schema enables **zero-code payer onboarding** for all Availity transaction types:
+The platform supports **configuration-driven deployment** for all Availity transaction types:
 
-- **837 Claims** - Professional, Institutional, and Dental claims
-- **270/271 Eligibility** - Real-time eligibility verification  
+- **837 Claims** - Professional, Institutional, and Dental claims submission
+- **270/271 Eligibility** - Real-time eligibility verification and benefit inquiries  
 - **276/277 Claim Status** - Claim status inquiries
 - **Appeals** - Appeals submission and tracking
 - **275 Attachments** - Clinical attachments
@@ -105,13 +105,57 @@ The configuration schema enables **zero-code payer onboarding** for all Availity
 
 ### Key Benefits
 
-✅ **No Custom Code Required** - Add new payers by creating a configuration file  
-✅ **Standardized Onboarding** - Consistent structure across all payers  
+✅ **Zero-Code Onboarding** - Add new payers by creating a configuration file (no custom development)  
+✅ **Backend Agnostic** - Works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)  
+✅ **Rapid Deployment** - Deploy new payer in days instead of months  
 ✅ **Multi-Transaction Support** - Enable any combination of modules  
-✅ **Validated Configurations** - Built-in validation ensures correctness  
-✅ **Self-Service** - Payers can configure their own integration parameters
+✅ **Self-Service Configuration** - Interactive onboarding wizard with guided setup  
+✅ **Multi-Tenant Architecture** - Single codebase serves multiple payers with isolated configuration  
+✅ **Automated Validation** - Schema-based validation ensures configuration correctness
 
-### Quick Start
+### How Platform Onboarding Works
+
+#### Step 1: Create Configuration (15-30 minutes)
+
+Use the interactive onboarding wizard:
+```bash
+node dist/scripts/cli/payer-onboarding-wizard.js
+```
+
+Or create configuration file manually following the Unified Schema.
+
+#### Step 2: Validate Configuration (&lt;1 minute)
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js validate payer-config.json
+```
+
+Schema validation ensures all requirements met.
+
+#### Step 3: Generate Deployment Package (&lt;1 minute)
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
+```
+
+Generator creates complete deployment with:
+- Logic App workflows
+- Bicep infrastructure templates
+- API connection configurations
+- Custom documentation
+
+#### Step 4: Deploy to Azure (15-30 minutes)
+
+```bash
+cd generated/{config.payerId}/infrastructure
+./deploy.sh
+```
+
+Automated deployment provisions all Azure resources.
+
+**Total Time: Production-ready in under 1 hour**
+
+### Quick Start Example
 
 **1. Create a payer configuration:**
 
@@ -322,6 +366,46 @@ The Authorization Inquiry workflow can be called from:
 - Authorization Request workflow (check if auth already exists)
 - Appeals module (verify authorization status before appeal)
 - Pre-claim validation workflows
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
 
 ## 🤖 Automated Payer Onboarding
 
