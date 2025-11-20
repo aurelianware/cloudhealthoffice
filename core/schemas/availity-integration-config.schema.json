@@ -1545,3 +1545,17 @@
     }
   }
 }
+          "description": "Configuration for Authorization Request (X12 278 X217) - Future implementation",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable or disable authorization request functionality",
+              "default": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
