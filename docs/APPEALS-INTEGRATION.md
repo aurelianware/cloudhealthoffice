@@ -2,7 +2,19 @@
 
 ## Overview
 
-This document describes the integration architecture for processing claim appeals between providers and health plans via the Availity platform. The integration is fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements and supports multi-payer platformization.
+This document describes the integration architecture for processing claim appeals between providers and health plans via the Availity platform. The integration is fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements and supports **configuration-driven multi-payer platformization**.
+
+### Platform Architecture
+
+This appeals system is designed as a **payer-agnostic platform** that supports multiple health plans through a unified configuration schema. Key platform features include:
+
+- **Zero-Code Onboarding**: Add new payers by creating a configuration file (no custom code required)
+- **Config-Driven Workflows**: All endpoints, authentication, and business rules driven by payer configuration
+- **Unified API Contract**: Consistent API interface across all payers with payer-specific customization via config
+- **Automated Deployment**: Generate complete deployment packages from configuration using the Config-to-Workflow Generator
+- **Multi-Tenant Architecture**: Single codebase serves multiple payers with isolated data and configuration
+
+For details on adding a new payer to the platform, see the [Developer Onboarding Guide](#developer-onboarding-guide) section below.
 
 ## Architecture
 
@@ -132,18 +144,18 @@ All API endpoints require **Bearer token authentication** via OAuth 2.0.
 ### Token Acquisition
 
 ```bash
-curl -X POST https://auth.healthplan.com/oauth/token \
+curl -X POST {config.authEndpoint}/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" \
-  -d "client_id={client_id}" \
-  -d "client_secret={client_secret}" \
+  -d "client_id={config.clientId}" \
+  -d "client_secret={config.clientSecret}" \
   -d "scope=appeals.read appeals.write"
 ```
 
 ### Using the Token
 
 ```bash
-curl -X GET https://api.healthplan.com/v1/appeal/status?appealId=APP-2024-001234 \
+curl -X GET {config.apiBaseUrl}/v1/appeal/status?appealId={appeal.appealId} \
   -H "Authorization: Bearer {access_token}"
 ```
 
@@ -158,23 +170,23 @@ Content-Type: application/json
 Authorization: Bearer {token}
 
 {
-  "claimNumber": "CLM-2024-001234",
-  "providerNpi": "1234567890",
+  "claimNumber": "{claim.claimNumber}",
+  "providerNpi": "{provider.npi}",
   "submittingProviderType": "RENDERING",
   "providerAddress": {
-    "addressLine1": "123 Medical Plaza Dr",
-    "city": "Dallas",
-    "state": "TX",
-    "zipCode": "75201"
+    "addressLine1": "{provider.addressLine1}",
+    "city": "{provider.city}",
+    "state": "{provider.state}",
+    "zipCode": "{provider.zipCode}"
   },
   "contactInfo": {
-    "phone": "2145551234",
-    "email": "appeals@providerclinic.com"
+    "phone": "{provider.phone}",
+    "email": "{provider.email}"
   },
-  "memberId": "MBR-987654321",
-  "patientFirstName": "John",
-  "patientLastName": "Smith",
-  "patientDateOfBirth": "1985-03-15",
+  "memberId": "{member.memberId}",
+  "patientFirstName": "{member.firstName}",
+  "patientLastName": "{member.lastName}",
+  "patientDateOfBirth": "{member.dateOfBirth}",
   "requestReason": "MEDICAL_NECESSITY",
   "supportingRationale": "Medical records demonstrate that the service was medically necessary per clinical guidelines.",
   "attachments": [
@@ -197,22 +209,22 @@ Authorization: Bearer {token}
 **Response**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "caseNumber": "CASE-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
   "status": "RECEIVED",
   "subStatus": "REQUEST_RECEIVED",
-  "receivedDate": "2024-01-15T14:35:00Z",
-  "isEligibleForAttachmentsDate": "2024-02-15T23:59:59Z",
-  "estimatedCompletionDate": "2024-03-15",
+  "receivedDate": "{timestamp}",
+  "isEligibleForAttachmentsDate": "{timestamp.plus30Days}",
+  "estimatedCompletionDate": "{timestamp.plus60Days}",
   "attachmentStatus": "COMPLETE",
   "contactInfo": {
-    "phone": "8005551234",
-    "email": "appeals@healthplan.com"
+    "phone": "{config.supportPhone}",
+    "email": "{config.supportEmail}"
   },
-  "availityTraceId": "AVL-2024-abc123",
-  "payerTraceId": "PAY-2024-001234",
-  "claimNumber": "CLM-2024-001234",
-  "lastUpdatedDate": "2024-01-15T14:35:00Z"
+  "availityTraceId": "{availity.traceId}",
+  "payerTraceId": "{payer.traceId}",
+  "claimNumber": "{claim.claimNumber}",
+  "lastUpdatedDate": "{timestamp}"
 }
 ```
 
@@ -220,30 +232,30 @@ Authorization: Bearer {token}
 
 **Request**:
 ```bash
-GET /appeal/status?appealId=APP-2024-001234
+GET /appeal/status?appealId={appeal.appealId}
 Authorization: Bearer {token}
 ```
 
 **Response**:
 ```json
 {
-  "appealId": "APP-2024-001234",
-  "caseNumber": "CASE-2024-5678",
+  "appealId": "{appeal.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
   "status": "FINALIZED",
   "subStatus": "PENDING_PAYMENT",
-  "receivedDate": "2024-01-15T14:35:00Z",
+  "receivedDate": "{appeal.receivedDate}",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "deniedAmount": 0,
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "deniedAmount": "{appeal.deniedAmount}",
   "documentLinks": [
     {
-      "documentId": "DOC-2024-5678",
+      "documentId": "{document.documentId}",
       "documentType": "DECISION_LETTER",
-      "fileName": "decision_letter.pdf",
-      "availableUntil": "2024-06-10T23:59:59Z",
-      "downloadUrl": "/api/appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234"
+      "fileName": "{document.fileName}",
+      "availableUntil": "{document.availableUntil}",
+      "downloadUrl": "/api/appeal/document/download?documentId={document.documentId}&appealId={appeal.appealId}"
     }
   ]
 }
@@ -253,7 +265,7 @@ Authorization: Bearer {token}
 
 **Request**:
 ```bash
-GET /appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234&documentType=DECISION_LETTER
+GET /appeal/document/download?documentId={document.documentId}&appealId={appeal.appealId}&documentType=DECISION_LETTER
 Authorization: Bearer {token}
 ```
 
@@ -272,20 +284,20 @@ Content-Length: 245760
 **Service Bus Message** (published to `payer-appeal-status-updates` topic):
 ```json
 {
-  "availityTraceId": "AVL-2024-abc123",
-  "payerTraceId": "PAY-2024-001234",
-  "appealId": "APP-2024-001234",
-  "caseNumber": "CASE-2024-5678",
+  "availityTraceId": "{availity.traceId}",
+  "payerTraceId": "{payer.traceId}",
+  "appealId": "{appeal.appealId}",
+  "caseNumber": "{appeal.caseNumber}",
   "status": "FINALIZED",
   "subStatus": "PENDING_PAYMENT",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "decisionDate": "2024-03-10T16:45:00Z",
-  "approvedAmount": 1500.00,
-  "deniedAmount": 0,
-  "claimNumber": "CLM-2024-001234",
-  "memberId": "MBR-987654321",
-  "providerNpi": "1234567890"
+  "decisionReason": "{appeal.decisionReason}",
+  "decisionDate": "{appeal.decisionDate}",
+  "approvedAmount": "{appeal.approvedAmount}",
+  "deniedAmount": "{appeal.deniedAmount}",
+  "claimNumber": "{claim.claimNumber}",
+  "memberId": "{member.memberId}",
+  "providerNpi": "{provider.npi}"
 }
 ```
 
@@ -297,13 +309,13 @@ Content-Type: application/json
 X-Payer-Id: {config.payerId}
 
 {
-  "traceId": "AVL-2024-abc123",
-  "payerReferenceId": "PAY-2024-001234",
-  "appealId": "APP-2024-001234",
+  "traceId": "{availity.traceId}",
+  "payerReferenceId": "{payer.traceId}",
+  "appealId": "{appeal.appealId}",
   "status": "FINALIZED",
   "decision": "APPROVED",
-  "decisionReason": "Appeal approved. Medical necessity established per clinical review.",
-  "updateTimestamp": "2024-03-10T16:50:00Z"
+  "decisionReason": "{appeal.decisionReason}",
+  "updateTimestamp": "{timestamp}"
 }
 ```
 
@@ -322,8 +334,8 @@ hipaa-attachments/appeals/{appealId}/{documentType}/{documentId}
 ```
 
 Examples:
-- `hipaa-attachments/appeals/APP-2024-001234/PROVIDER_UPLOAD/medical_records.pdf`
-- `hipaa-attachments/appeals/APP-2024-001234/DECISION_LETTER/decision_2024-03-10.pdf`
+- `hipaa-attachments/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}`
+- `hipaa-attachments/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}`
 
 ### Document Types
 
@@ -447,17 +459,17 @@ All operations are logged with:
 
 ```bash
 # Submit appeal
-curl -X POST https://api.healthplan.com/v1/appeal/submit \
+curl -X POST {config.apiBaseUrl}/v1/appeal/submit \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d @appeal-request.json
 
 # Get status
-curl -X GET "https://api.healthplan.com/v1/appeal/status?appealId=APP-2024-001234" \
+curl -X GET "{config.apiBaseUrl}/v1/appeal/status?appealId={appeal.appealId}" \
   -H "Authorization: Bearer {token}"
 
 # Download document
-curl -X GET "https://api.healthplan.com/v1/appeal/document/download?documentId=DOC-2024-5678&appealId=APP-2024-001234&documentType=DECISION_LETTER" \
+curl -X GET "{config.apiBaseUrl}/v1/appeal/document/download?documentId={document.documentId}&appealId={appeal.appealId}&documentType=DECISION_LETTER" \
   -H "Authorization: Bearer {token}" \
   -o decision_letter.pdf
 ```
@@ -490,6 +502,118 @@ Planned features:
 - Support for expedited appeals with SLA tracking
 - Multi-language support for decision letters
 
+## Developer Onboarding Guide
+
+### Adding a New Payer to the Appeals Platform
+
+The appeals system supports **zero-code payer onboarding** through configuration. Follow these steps to add a new payer:
+
+#### Step 1: Create Payer Configuration
+
+Create a new configuration file based on the Unified Availity Integration Configuration Schema:
+
+```json
+{
+  "organizationName": "New Health Plan",
+  "payerId": "NEW-PAYER-ID",
+  "payerName": "New Health Plan",
+  "appeals": {
+    "enabled": true,
+    "apiEndpoint": "https://api.newhealthplan.com/v1/appeals",
+    "authEndpoint": "https://auth.newhealthplan.com/oauth/token",
+    "clientIdSecretName": "appeals-new-payer-client-id",
+    "clientSecretSecretName": "appeals-new-payer-client-secret",
+    "supportPhone": "8005551234",
+    "supportEmail": "appeals@newhealthplan.com",
+    "timelyFilingDays": 180,
+    "defaultAppealType": "Reconsideration"
+  }
+}
+```
+
+#### Step 2: Validate Configuration
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js validate new-payer-config.json
+```
+
+#### Step 3: Generate Deployment Package
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js generate -c new-payer-config.json
+```
+
+This generates:
+- Logic App workflows with payer-specific parameters
+- Bicep infrastructure templates
+- API connection configurations
+- Deployment documentation
+
+#### Step 4: Deploy to Azure
+
+```bash
+cd generated/NEW-PAYER-ID/infrastructure
+./deploy.sh
+```
+
+#### Step 5: Configure Integration Account
+
+Set up X12 trading partner agreements:
+- Configure payer ISA/GS identifiers
+- Upload X12 277 schema
+- Set up acknowledgment settings
+
+#### Step 6: Test Integration
+
+Run integration tests:
+```bash
+pwsh -c "./test-workflows.ps1 -TestAppeals -PayerId NEW-PAYER-ID"
+```
+
+For complete developer documentation, see:
+- [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Configuration schema reference
+- [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Generator usage guide
+- [DEPLOYMENT.md](../DEPLOYMENT.md) - Deployment procedures
+
+## Extending the Appeals Module
+
+### Adding Custom Appeal Fields
+
+To add payer-specific custom fields to the appeals workflow:
+
+1. **Update Configuration Schema**: Add custom field definitions to `appeals.customFields` in the payer config
+2. **Map Backend Fields**: Define field mappings in `appeals.backendFieldMappings`
+3. **Regenerate Workflows**: Run generator to update Logic App workflows
+4. **Deploy Changes**: Deploy updated workflows to Azure
+
+Example custom field configuration:
+```json
+{
+  "appeals": {
+    "customFields": [
+      {
+        "name": "internalReviewId",
+        "type": "string",
+        "required": false,
+        "description": "Internal review tracking ID"
+      }
+    ],
+    "backendFieldMappings": {
+      "internalReviewId": "backend.review_id"
+    }
+  }
+}
+```
+
+### Adding Custom Status Transitions
+
+To support additional status transitions beyond the standard workflow:
+
+1. **Define Transitions**: Add to `appeals.statusTransitions` in payer config
+2. **Add Validation Rules**: Define validation logic for each transition
+3. **Update Workflows**: Regenerate Logic App workflows
+4. **Test Transitions**: Validate all state machine paths
+
 ## References
 
 - [Availity QRE Documentation](https://www.availity.com)
@@ -497,6 +621,9 @@ Planned features:
 - [Appeal-ToPayer-Response Schema](../schemas/Appeal-ToPayer-Response.json)
 - [Appeal-SubStatus Schema](../schemas/Appeal-SubStatus.json)
 - [OpenAPI Specification](./api/APPEALS-OPENAPI.yaml)
+- [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Platform configuration reference
+- [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Developer tools guide
+- [COMMERCIALIZATION.md](./COMMERCIALIZATION.md) - Pricing and partner model
 # Appeals Module Integration with Enhanced Claim Status
 
 ## Overview
@@ -591,10 +718,10 @@ Request:
 ```json
 {
   "searchMethod": "ClaimHistory",
-  "requestId": "REQ-2024-APPEAL-001",
-  "submitterId": "PROV-12345",
+  "requestId": "{request.requestId}",
+  "submitterId": "{provider.submitterId}",
   "claimHistorySearch": {
-    "claimNumber": "CLM987654321"
+    "claimNumber": "{claim.claimNumber}"
   }
 }
 ```
@@ -606,22 +733,22 @@ Response (excerpt):
 {
   "claims": [
     {
-      "claimNumber": "CLM987654321",
+      "claimNumber": "{claim.claimNumber}",
       "claimStatus": "Denied",
-      "statusCode": "P4",
-      "statusCodeDescription": "The procedure code is inconsistent with the modifier used",
+      "statusCode": "{claim.statusCode}",
+      "statusCodeDescription": "{claim.statusDescription}",
       
-      "BILLED": 450.00,
+      "BILLED": "{claim.billedAmount}",
       "ALLOWED": 0.00,
       "INSURANCE_TOTAL_PAID": 0.00,
       
-      "reasonCodes": ["CO-96", "CO-197"],
-      "comment": "Procedure code 29881 with modifier 59 is not appropriate.",
+      "reasonCodes": ["{claim.reasonCodes}"],
+      "comment": "{claim.denialComment}",
       
       "eligibleForAppeal": true,
-      "appealMessage": "This claim may be eligible for appeal. Timely filing deadline: 2024-07-06",
+      "appealMessage": "This claim may be eligible for appeal. Timely filing deadline: {appeal.timelyFilingDeadline}",
       "appealType": "Reconsideration",
-      "appealTimelyFilingDate": "20240706"
+      "appealTimelyFilingDate": "{appeal.timelyFilingDate}"
     }
   ]
 }
@@ -655,21 +782,21 @@ function getAppealWarning(claim) {
 Appeals module receives pre-populated data:
 ```json
 {
-  "appealType": "Reconsideration",
-  "claimNumber": "CLM987654321",
-  "patientAccountNumber": "PAT-2024-002",
-  "memberId": "M789012",
-  "providerNpi": "5550100001",
+  "appealType": "{config.defaultAppealType}",
+  "claimNumber": "{claim.claimNumber}",
+  "patientAccountNumber": "{claim.patientAccountNumber}",
+  "memberId": "{member.memberId}",
+  "providerNpi": "{provider.npi}",
   "claimStatus": "Denied",
-  "denialReasons": ["CO-96", "CO-197"],
-  "denialComment": "Procedure code 29881 with modifier 59 is not appropriate.",
-  "billedAmount": 450.00,
-  "timelyFilingDeadline": "20240706",
-  "serviceFromDate": "20231215",
-  "serviceToDate": "20231215",
-  "diagnosisCodes": ["M25.551", "S83.511A"],
-  "procedureCode": "29881",
-  "modifiers": ["59"]
+  "denialReasons": ["{claim.reasonCodes}"],
+  "denialComment": "{claim.denialComment}",
+  "billedAmount": "{claim.billedAmount}",
+  "timelyFilingDeadline": "{appeal.timelyFilingDate}",
+  "serviceFromDate": "{claim.serviceFromDate}",
+  "serviceToDate": "{claim.serviceToDate}",
+  "diagnosisCodes": ["{claim.diagnosisCodes}"],
+  "procedureCode": "{claim.procedureCode}",
+  "modifiers": ["{claim.modifiers}"]
 }
 ```
 
