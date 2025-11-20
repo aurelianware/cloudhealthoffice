@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": {
+      "value": "blues02"
+    },
+    "location": {
+      "value": "centralus"
+    },
+    "environment": {
+      "value": "prod"
+    },
+    "tags": {
+      "value": {
+        "Project": "EDI-Integration",
+        "Payer": "BLUES02",
+        "Environment": "Production",
+        "CostCenter": "EDI-Operations",
+        "Compliance": "HIPAA"
+      }
+    }
+  }
+}
