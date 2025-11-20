@@ -15,7 +15,19 @@
 
 ## Overview
 
-The Enhanced Claim Status (ECS) integration enables providers to query claim status information from the QNXT claims adjudication system. The integration implements four search methods to support various claim lookup scenarios.
+The Enhanced Claim Status (ECS) integration enables providers to query claim status information from any claims adjudication system (QNXT, FacetsRx, TriZetto, etc.). The integration implements four search methods to support various claim lookup scenarios and is **fully configuration-driven for multi-payer platformization**.
+
+### Platform Architecture
+
+The ECS module is designed as a **payer-agnostic platform** that supports multiple health plans through unified configuration:
+
+- **Backend Agnostic**: Works with any claims processing system via configurable API endpoints
+- **Zero-Code Onboarding**: Add new payers by creating a configuration file
+- **Unified Search Interface**: Consistent API across all payers with backend-specific field mappings
+- **ValueAdds277 Support**: Optional enhanced response fields configurable per payer
+- **Automated Deployment**: Generate Logic App workflows from configuration
+
+For adding a new payer, see the [Developer Onboarding Guide](#developer-onboarding-guide) below.
 
 ### Features
 
@@ -75,7 +87,7 @@ logicapps/workflows/ecs_summary_search/workflow.json
 - `providerIdQualifier`: Type of provider ID ('NPI', 'XX', 'EI')
 
 **Example Scenario**: 
-> "Find all claims for Dr. Smith (NPI: 1234567890) with service dates between January 1, 2024 and January 31, 2024"
+> "Find all claims for provider (NPI: {provider.npi}) with service dates between {startDate} and {endDate}"
 
 ---
 
@@ -94,7 +106,7 @@ logicapps/workflows/ecs_summary_search/workflow.json
 - `dateOfBirth`: Member date of birth (CCYYMMDD)
 
 **Example Scenario**:
-> "Find all claims for member John Doe (ID: M123456) from January 2024 to March 2024"
+> "Find all claims for member (ID: {member.memberId}) from {startDate} to {endDate}"
 
 ---
 
@@ -110,7 +122,7 @@ logicapps/workflows/ecs_summary_search/workflow.json
 - `checkDate`: Check issue date (CCYYMMDD)
 
 **Example Scenario**:
-> "Find all claims paid on check #CHK789456 from UnitedHealthcare"
+> "Find all claims paid on check #{check.checkNumber} from {config.payerName}"
 
 ---
 
@@ -126,7 +138,7 @@ logicapps/workflows/ecs_summary_search/workflow.json
 - `memberId`: Member ID (for validation)
 
 **Example Scenario**:
-> "Retrieve full history for claim CLM987654321 including all status changes and adjustments"
+> "Retrieve full history for claim {claim.claimNumber} including all status changes and adjustments"
 
 ## Request Examples
 
@@ -135,12 +147,12 @@ logicapps/workflows/ecs_summary_search/workflow.json
 ```json
 {
   "searchMethod": "ServiceDate",
-  "requestId": "REQ-2024-001",
-  "submitterId": "PROV-12345",
+  "requestId": "{request.requestId}",
+  "submitterId": "{provider.submitterId}",
   "serviceDateSearch": {
-    "serviceFromDate": "20240101",
-    "serviceToDate": "20240131",
-    "providerId": "1234567890",
+    "serviceFromDate": "{search.serviceFromDate}",
+    "serviceToDate": "{search.serviceToDate}",
+    "providerId": "{provider.npi}",
     "providerIdQualifier": "NPI"
   }
 }
@@ -151,15 +163,15 @@ logicapps/workflows/ecs_summary_search/workflow.json
 ```json
 {
   "searchMethod": "Member",
-  "requestId": "REQ-2024-002",
-  "submitterId": "PROV-12345",
+  "requestId": "{request.requestId}",
+  "submitterId": "{provider.submitterId}",
   "memberSearch": {
-    "memberId": "M123456",
-    "firstName": "John",
-    "lastName": "Doe",
-    "dateOfBirth": "19850315",
-    "serviceFromDate": "20240101",
-    "serviceToDate": "20240331"
+    "memberId": "{member.memberId}",
+    "firstName": "{member.firstName}",
+    "lastName": "{member.lastName}",
+    "dateOfBirth": "{member.dateOfBirth}",
+    "serviceFromDate": "{search.serviceFromDate}",
+    "serviceToDate": "{search.serviceToDate}"
   }
 }
 ```
@@ -169,12 +181,12 @@ logicapps/workflows/ecs_summary_search/workflow.json
 ```json
 {
   "searchMethod": "CheckNumber",
-  "requestId": "REQ-2024-003",
-  "submitterId": "PROV-12345",
+  "requestId": "{request.requestId}",
+  "submitterId": "{provider.submitterId}",
   "checkNumberSearch": {
-    "checkNumber": "CHK789456",
-    "payerId": "UNITED",
-    "checkDate": "20240215"
+    "checkNumber": "{check.checkNumber}",
+    "payerId": "{config.payerId}",
+    "checkDate": "{check.checkDate}"
   }
 }
 ```
@@ -184,12 +196,12 @@ logicapps/workflows/ecs_summary_search/workflow.json
 ```json
 {
   "searchMethod": "ClaimHistory",
-  "requestId": "REQ-2024-004",
-  "submitterId": "PROV-12345",
+  "requestId": "{request.requestId}",
+  "submitterId": "{provider.submitterId}",
   "claimHistorySearch": {
-    "claimNumber": "CLM987654321",
-    "patientAccountNumber": "PAT-9876",
-    "memberId": "M123456"
+    "claimNumber": "{claim.claimNumber}",
+    "patientAccountNumber": "{claim.patientAccountNumber}",
+    "memberId": "{member.memberId}"
   }
 }
 ```
@@ -200,36 +212,36 @@ logicapps/workflows/ecs_summary_search/workflow.json
 
 ```json
 {
-  "requestId": "REQ-2024-001",
+  "requestId": "{request.requestId}",
   "status": "success",
-  "timestamp": "2024-01-15T10:30:45.123Z",
+  "timestamp": "{timestamp}",
   "searchMethod": "ServiceDate",
   "totalResults": 2,
   "claims": [
     {
-      "claimNumber": "CLM123456789",
-      "patientAccountNumber": "PAT-1001",
+      "claimNumber": "{claim.claimNumber}",
+      "patientAccountNumber": "{claim.patientAccountNumber}",
       "claimStatus": "Paid",
       "claimStatusCode": "F2",
       "claimStatusCategory": "Finalized",
-      "serviceFromDate": "20240110",
-      "serviceToDate": "20240110",
-      "receivedDate": "20240112",
-      "processedDate": "20240113",
-      "paidDate": "20240115",
-      "billedAmount": 250.00,
-      "allowedAmount": 200.00,
-      "paidAmount": 160.00,
-      "patientResponsibility": 40.00,
-      "adjustmentAmount": -50.00,
-      "payerId": "Health Plan",
-      "payerName": "Health Plan",
-      "providerId": "1234567890",
-      "providerName": "Dr. John Smith",
-      "memberId": "M123456",
-      "memberName": "Jane Doe",
-      "checkNumber": "CHK789456",
-      "checkDate": "20240115",
+      "serviceFromDate": "{claim.serviceFromDate}",
+      "serviceToDate": "{claim.serviceToDate}",
+      "receivedDate": "{claim.receivedDate}",
+      "processedDate": "{claim.processedDate}",
+      "paidDate": "{claim.paidDate}",
+      "billedAmount": "{claim.billedAmount}",
+      "allowedAmount": "{claim.allowedAmount}",
+      "paidAmount": "{claim.paidAmount}",
+      "patientResponsibility": "{claim.patientResponsibility}",
+      "adjustmentAmount": "{claim.adjustmentAmount}",
+      "payerId": "{config.payerId}",
+      "payerName": "{config.payerName}",
+      "providerId": "{provider.npi}",
+      "providerName": "{provider.name}",
+      "memberId": "{member.memberId}",
+      "memberName": "{member.name}",
+      "checkNumber": "{check.checkNumber}",
+      "checkDate": "{check.checkDate}",
       "remarkCodes": ["M80"],
       "reasonCodes": ["CO-45"],
       "statusDetails": "Claim processed and paid"
@@ -1082,6 +1094,152 @@ ValueAdds277 is fully backward compatible:
 - Monthly ROI: $5,800
 - Annual ROI: $69,600
 
+## Developer Onboarding Guide
+
+### Adding a New Payer to ECS Platform
+
+The ECS module supports **configuration-driven payer onboarding**. Follow these steps to add a new health plan:
+
+#### Step 1: Create Payer Configuration
+
+Create a configuration file with ECS-specific settings:
+
+```json
+{
+  "organizationName": "New Health Plan",
+  "payerId": "{config.payerId}",
+  "payerName": "{config.payerName}",
+  "ecs": {
+    "enabled": true,
+    "queryMethods": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"],
+    "backend": {
+      "apiEndpoint": "{config.backendApiUrl}/claims/search",
+      "authType": "OAuth2",
+      "clientIdSecretName": "ecs-{payerId}-client-id",
+      "clientSecretSecretName": "ecs-{payerId}-client-secret",
+      "timeout": "30s"
+    },
+    "valueAdds277": {
+      "enabled": true,
+      "claimFields": {
+        "financial": true,
+        "remittance": true,
+        "clinical": true,
+        "demographics": true,
+        "statusDetails": true
+      },
+      "integrationFlags": {
+        "attachments": true,
+        "corrections": true,
+        "appeals": true,
+        "messaging": true
+      }
+    },
+    "fieldMappings": {
+      "claimNumber": "backend.claim_id",
+      "memberId": "backend.subscriber_id",
+      "providerNpi": "backend.provider_npi",
+      "billedAmount": "backend.billed_amt"
+    }
+  }
+}
+```
+
+#### Step 2: Configure Backend Field Mappings
+
+Map backend-specific field names to standard ECS fields using `fieldMappings` configuration. This enables the platform to translate between backend schemas and the standard ECS interface.
+
+**Common Mapping Scenarios**:
+- QNXT: `claim_id` → `claimNumber`
+- FacetsRx: `claim_num` → `claimNumber`
+- TriZetto: `clm_nbr` → `claimNumber`
+
+#### Step 3: Enable ValueAdds277 Features
+
+Configure which ValueAdds277 field groups to enable for the payer:
+- **Financial Fields**: Complete financial breakdown (8 fields)
+- **Clinical Fields**: DRG codes, diagnosis codes, facility type
+- **Demographics**: Patient, subscriber, provider details
+- **Remittance**: Check information, payee details
+- **Integration Flags**: Cross-module integration (appeals, attachments, etc.)
+
+#### Step 4: Validate Configuration
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js validate new-payer-config.json
+```
+
+#### Step 5: Generate Deployment Package
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js generate -c new-payer-config.json
+```
+
+This generates:
+- ECS Logic App workflow with payer-specific configuration
+- Backend API connection definitions
+- Field mapping transformation logic
+- Deployment scripts
+
+#### Step 6: Deploy to Azure
+
+```bash
+cd generated/{config.payerId}/infrastructure
+./deploy.sh
+```
+
+#### Step 7: Test ECS Queries
+
+Run integration tests:
+```bash
+pwsh -c "./test-workflows.ps1 -TestECS -PayerId {config.payerId}"
+```
+
+### Extending ECS with Custom Fields
+
+To add payer-specific custom fields to ECS responses:
+
+1. **Define Custom Fields** in payer configuration:
+```json
+{
+  "ecs": {
+    "customFields": [
+      {
+        "name": "internalClaimId",
+        "type": "string",
+        "source": "backend.internal_claim_ref"
+      }
+    ]
+  }
+}
+```
+
+2. **Map Backend Fields**: Add mapping to `fieldMappings`
+3. **Regenerate Workflows**: Run generator to update Logic App
+4. **Deploy Changes**: Deploy updated workflows to Azure
+
+### Backend Integration Patterns
+
+The platform supports multiple backend integration patterns:
+
+#### Pattern 1: Direct API Integration
+```
+ECS Logic App → HTTPS → Backend Claims API
+```
+Best for: Real-time queries, modern REST APIs
+
+#### Pattern 2: Database Direct Query
+```
+ECS Logic App → SQL Connector → Claims Database
+```
+Best for: Legacy systems without APIs, high performance requirements
+
+#### Pattern 3: Service Bus Async
+```
+ECS Logic App → Service Bus → Backend Processor → Response Queue
+```
+Best for: Complex transformations, rate-limited backends
+
 ## References
 
 - [BACKEND-INTERFACE.md](./BACKEND-INTERFACE.md) - Backend interface specification
@@ -1090,6 +1248,8 @@ ValueAdds277 is fully backward compatible:
 - [SECURITY.md](../SECURITY.md) - Security best practices
 - [APPEALS-INTEGRATION.md](./APPEALS-INTEGRATION.md) - Appeals module integration
 - [COMMERCIALIZATION.md](./COMMERCIALIZATION.md) - Enhanced Claim Status Plus product details
+- [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Configuration schema reference
+- [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Generator documentation
 - [Availity ECS Documentation](https://www.availity.com/ecs) - ECS standard reference
 - [Availity ValueAdds277 QRE](https://www.availity.com/valueadds277) - ValueAdds277 specification
 - [X12 277 Implementation Guide](https://x12.org/products/277) - Health Care Claim Status Response

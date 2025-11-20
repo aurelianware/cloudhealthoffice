@@ -998,21 +998,215 @@ If you have an existing configuration format:
 
 ---
 
+## Developer Extension Guide
+
+### Adding a New Module to the Schema
+
+The configuration schema is designed to be extensible. Follow these steps to add a new module:
+
+#### Step 1: Define Module Schema
+
+Create a new JSON schema file for your module in `core/schemas/modules/`:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CustomModule Configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enable/disable the custom module"
+    },
+    "apiEndpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "API endpoint for custom module"
+    },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "apiBaseUrl": { "type": "string", "format": "uri" },
+        "authType": { "type": "string", "enum": ["OAuth2", "ApiKey", "ManagedIdentity"] },
+        "timeout": { "type": "string", "pattern": "^[0-9]+s$" }
+      }
+    },
+    "fieldMappings": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "required": ["enabled"]
+}
+```
+
+#### Step 2: Add Module to Root Schema
+
+Update `availity-integration-config.schema.json`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "organizationName": { "type": "string" },
+    "payerId": { "type": "string" },
+    "customModule": {
+      "$ref": "./modules/customModule.schema.json"
+    }
+  }
+}
+```
+
+#### Step 3: Create Workflow Generator
+
+Implement generator in `generators/customModuleGenerator.ts`:
+
+```typescript
+import { PayerConfig, Workflow } from '../types';
+
+export function generateCustomModuleWorkflow(config: PayerConfig): Workflow {
+  const moduleConfig = config.customModule;
+  
+  return {
+    definition: {
+      $schema: "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      triggers: {
+        httpTrigger: {
+          type: "Request",
+          kind: "Http",
+          inputs: {
+            schema: getModuleRequestSchema(moduleConfig)
+          }
+        }
+      },
+      actions: {
+        callBackendApi: {
+          type: "Http",
+          inputs: {
+            method: "POST",
+            uri: moduleConfig.backend.apiBaseUrl,
+            authentication: getAuthConfig(moduleConfig),
+            body: transformRequest(moduleConfig.fieldMappings)
+          }
+        },
+        transformResponse: {
+          type: "Compose",
+          inputs: transformResponse(moduleConfig.fieldMappings),
+          runAfter: { callBackendApi: ["Succeeded"] }
+        }
+      }
+    },
+    kind: "Stateful",
+    parameters: buildParameters(moduleConfig)
+  };
+}
+```
+
+#### Step 4: Add Validation
+
+Create validator in `validators/customModuleValidator.ts`:
+
+```typescript
+export function validateCustomModule(config: any): ValidationResult {
+  const errors: ValidationError[] = [];
+  
+  if (config.customModule?.enabled) {
+    if (!config.customModule.backend?.apiBaseUrl) {
+      errors.push({
+        path: "customModule.backend.apiBaseUrl",
+        message: "API base URL required when module is enabled"
+      });
+    }
+    
+    if (config.customModule.backend?.authType === "OAuth2") {
+      if (!config.customModule.backend.clientIdSecretName) {
+        errors.push({
+          path: "customModule.backend.clientIdSecretName",
+          message: "Client ID secret name required for OAuth2 authentication"
+        });
+      }
+    }
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+```
+
+#### Step 5: Update CLI and Documentation
+
+Add module support to CLI:
+```typescript
+// cli/payer-generator-cli.ts
+import { generateCustomModuleWorkflow } from '../generators/customModuleGenerator';
+
+// Add to workflow generation
+if (config.customModule?.enabled) {
+  workflows.push(generateCustomModuleWorkflow(config));
+}
+```
+
+Create module documentation:
+- `docs/CUSTOM-MODULE-INTEGRATION.md` - Integration guide
+- `docs/examples/custom-module-config.json` - Example configuration
+- Add to `docs/ARCHITECTURE.md` - Architecture diagram
+
+### Best Practices for Extensions
+
+1. **Backward Compatibility**: Always maintain compatibility with previous schema versions
+2. **Validation**: Add comprehensive validation rules and error messages
+3. **Documentation**: Document all fields with descriptions and examples
+4. **Testing**: Write unit and integration tests for generator and validator
+5. **Defaults**: Provide sensible defaults where appropriate
+6. **Field Mappings**: Support flexible field mappings for backend integration
+7. **Error Handling**: Implement proper error handling in generated workflows
+
+### Testing Extensions
+
+Test your extensions thoroughly:
+
+```typescript
+// tests/generators/customModuleGenerator.test.ts
+describe("CustomModule Generator", () => {
+  it("should generate valid workflow for enabled module", () => {
+    const config = {
+      customModule: {
+        enabled: true,
+        backend: {
+          apiBaseUrl: "https://api.example.com",
+          authType: "OAuth2"
+        }
+      }
+    };
+    
+    const workflow = generateCustomModuleWorkflow(config);
+    
+    expect(workflow.definition.triggers).toBeDefined();
+    expect(workflow.definition.actions.callBackendApi).toBeDefined();
+    expect(workflow.kind).toBe("Stateful");
+  });
+});
+```
+
+---
+
 ## Support and Resources
 
 - **Schema File**: `core/schemas/availity-integration-config.schema.json`
 - **TypeScript Interfaces**: `core/interfaces/availity-integration-config.interface.ts`
 - **Validator**: `core/validation/config-validator.ts`
 - **Examples**: `core/examples/`
+- **Generator**: `scripts/cli/payer-generator-cli.js`
+- **Documentation**: See [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 For questions or issues:
 1. Review this documentation
 2. Check example configurations
 3. Validate your configuration file
-4. Contact the integration team
+4. Run generator with `--dry-run` flag
+5. Contact the integration team
 
 ---
 
-**Last Updated**: 2025-11-19  
-**Schema Version**: 1.0  
-**Document Version**: 1.0
+**Last Updated**: 2025-11-20  
+**Schema Version**: 2.0  
+**Document Version**: 2.0
