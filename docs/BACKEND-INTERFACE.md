@@ -2,16 +2,28 @@
 
 ## Overview
 
-This document defines the backend-agnostic `ClaimsBackend` interface for the HIPAA Attachments system. The interface abstracts claims adjudication system-specific implementations to enable extensibility and support for multiple backend systems beyond QNXT.
+This document defines the backend-agnostic `ClaimsBackend` interface for the HIPAA Attachments system. The interface abstracts claims adjudication system-specific implementations to enable **configuration-driven multi-payer platformization** and support for any backend system (QNXT, FacetsRx, TriZetto, etc.).
 
 ## Purpose
 
 The `ClaimsBackend` interface serves as a contract between the Logic Apps workflows and the underlying claims adjudication systems. By defining a consistent interface, we enable:
 
 1. **Backend Agnosticism**: Logic Apps remain independent of specific backend implementations
-2. **Extensibility**: New backend systems can be integrated by implementing the interface
-3. **Testing**: Mock implementations can be used for testing without connecting to production systems
-4. **Maintainability**: Changes to backend systems are isolated from workflow logic
+2. **Zero-Code Onboarding**: Add new payers by configuring backend connection, no custom code required
+3. **Extensibility**: New backend systems can be integrated by implementing the interface
+4. **Testing**: Mock implementations can be used for testing without connecting to production systems
+5. **Maintainability**: Changes to backend systems are isolated from workflow logic
+6. **Multi-Tenant**: Single platform serves multiple payers with different backend systems
+
+### Configuration-Driven Architecture
+
+All backend implementations are configured through the **Unified Availity Integration Configuration Schema**. Each payer defines their backend connection parameters including:
+- API endpoints and authentication
+- Field mappings between standard interface and backend schema
+- Retry policies and timeouts
+- Custom business rules
+
+This enables **zero-code payer onboarding** - adding a new payer requires only creating a configuration file and running the deployment generator.
 
 ## Interface Definition
 
