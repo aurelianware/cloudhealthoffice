@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QRE Analyzer Configuration Schema",
+  "description": "Configuration schema for X12 278 X215 QRE (Query and Response for Eligibility) validation and analysis",
+  "type": "object",
+  "required": ["version", "validationRules", "qreRequirements"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "QRE analyzer configuration version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "default": "1.0.0"
+    },
+    "tr3Version": {
+      "type": "string",
+      "description": "X12 TR3 version for 278 inquiry transactions",
+      "enum": ["005010X215"],
+      "default": "005010X215"
+    },
+    "validationRules": {
+      "type": "object",
+      "description": "Validation rules for X12 278 X215 transactions",
+      "additionalProperties": false,
+      "properties": {
+        "strictMode": {
+          "type": "boolean",
+          "description": "Enable strict validation mode (fail on warnings)",
+          "default": false
+        },
+        "validateSegmentOrder": {
+          "type": "boolean",
+          "description": "Validate X12 segment ordering per TR3",
+          "default": true
+        },
+        "validateDataElements": {
+          "type": "boolean",
+          "description": "Validate data element formats and lengths",
+          "default": true
+        },
+        "validateEnvelopes": {
+          "type": "boolean",
+          "description": "Validate ISA/GS/ST envelopes",
+          "default": true
+        },
+        "checkDuplicateSegments": {
+          "type": "boolean",
+          "description": "Check for duplicate segment occurrences",
+          "default": true
+        }
+      }
+    },
+    "qreRequirements": {
+      "type": "object",
+      "description": "QRE-specific requirements (Availity best practices)",
+      "additionalProperties": false,
+      "properties": {
+        "minimalDataPrinciple": {
+          "type": "boolean",
+          "description": "Enforce minimal data principle per Availity QRE best practice",
+          "default": true
+        },
+        "requiredSegments": {
+          "type": "array",
+          "description": "Required X12 segments for QRE transactions",
+          "items": {
+            "type": "string",
+            "enum": ["ISA", "GS", "ST", "BHT", "HL", "NM1", "TRN", "UM", "HCR", "SE", "GE", "IEA"]
+          },
+          "default": ["ISA", "GS", "ST", "BHT", "HL", "NM1", "TRN", "UM", "HCR", "SE", "GE", "IEA"]
+        },
+        "optionalSegments": {
+          "type": "array",
+          "description": "Optional X12 segments per QRE best practice",
+          "items": {
+            "type": "string",
+            "enum": ["REF", "DMG", "DTP", "QTY", "MSG", "AAA"]
+          },
+          "default": ["REF", "DMG", "DTP"]
+        },
+        "queryMethods": {
+          "type": "object",
+          "description": "Supported query methods per QRE",
+          "additionalProperties": false,
+          "properties": {
+            "byAuthorizationNumber": {
+              "type": "boolean",
+              "description": "Support query by authorization number (REF segment)",
+              "default": true
+            },
+            "byMemberDemographics": {
+              "type": "boolean",
+              "description": "Support query by member ID + DOB (NM1 + DMG segments)",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "outputOptions": {
+      "type": "object",
+      "description": "Output and reporting options",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Output format for analysis results",
+          "enum": ["json", "xml", "text", "html"],
+          "default": "json"
+        },
+        "verbosity": {
+          "type": "string",
+          "description": "Verbosity level for output",
+          "enum": ["minimal", "normal", "detailed", "debug"],
+          "default": "normal"
+        },
+        "includePassedChecks": {
+          "type": "boolean",
+          "description": "Include passed validation checks in output",
+          "default": false
+        },
+        "outputPath": {
+          "type": "string",
+          "description": "Path for output file (optional, defaults to stdout)",
+          "default": ""
+        }
+      }
+    },
+    "errorHandling": {
+      "type": "object",
+      "description": "Error handling configuration",
+      "additionalProperties": false,
+      "properties": {
+        "continueOnError": {
+          "type": "boolean",
+          "description": "Continue analysis even if critical errors found",
+          "default": false
+        },
+        "maxErrors": {
+          "type": "integer",
+          "description": "Maximum number of errors before stopping (0 = unlimited)",
+          "minimum": 0,
+          "default": 100
+        },
+        "failOnWarnings": {
+          "type": "boolean",
+          "description": "Treat warnings as errors",
+          "default": false
+        }
+      }
+    }
+  }
+}

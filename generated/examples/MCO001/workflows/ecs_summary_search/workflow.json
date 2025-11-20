@@ -1,0 +1,169 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_ECS_Summary_Search_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "required": ["searchMethod", "requestId"],
+            "properties": {
+              "searchMethod": {
+                "type": "string",
+                "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "submitterId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try_Process_ECS_Search": {
+        "type": "Scope",
+        "actions": {
+          "Log_ECS_Request_Received": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": {
+              "message": "ECS Summary Search request received",
+              "payerId": "MCO001",
+              "requestId": "@{triggerBody()?['requestId']}",
+              "searchMethod": "@{triggerBody()?['searchMethod']}",
+              "timestamp": "@{utcNow()}"
+            }
+          },
+          "Call_State Medicaid MCO_ECS_API": {
+            "type": "Http",
+            "runAfter": {
+              "Log_ECS_Request_Received": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "method": "POST",
+              "uri": "@parameters('ecs_api_endpoint')",
+              "headers": {
+                "Content-Type": "application/json",
+                "X-API-Key": "@parameters('ecs_api_key')"
+              },
+              "body": "@triggerBody()",
+              "retryPolicy": {
+                "type": "exponential",
+                "count": 3,
+                "interval": "PT10S",
+                "minimumInterval": "PT5S",
+                "maximumInterval": "PT1H"
+              },
+              "timeout": "PT60S"
+            }
+          },
+          "Parse_ECS_Response": {
+            "type": "ParseJson",
+            "runAfter": {
+              "Call_State Medicaid MCO_ECS_API": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "content": "@body('Call_State Medicaid MCO_ECS_API')",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "claims": {
+                    "type": "array"
+                  },
+                  "responseCode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "Return_Success_Response": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Parse_ECS_Response": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 200,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": "@body('Parse_ECS_Response')"
+            }
+          }
+        }
+      },
+      "Catch_Errors": {
+        "type": "Scope",
+        "runAfter": {
+          "Try_Process_ECS_Search": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        },
+        "actions": {
+          "Log_Error": {
+            "type": "Compose",
+            "runAfter": {},
+            "inputs": {
+              "message": "ECS Summary Search failed",
+              "payerId": "MCO001",
+              "error": "@result('Try_Process_ECS_Search')",
+              "timestamp": "@{utcNow()}"
+            }
+          },
+          "Return_Error_Response": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": {
+              "Log_Error": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "statusCode": 500,
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "error": "Internal server error processing ECS request",
+                "requestId": "@{triggerBody()?['requestId']}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "$connections": {
+        "type": "Object"
+      },
+      "ecs_api_endpoint": {
+        "type": "String",
+        "defaultValue": "https://test-api.mco001.com/ecs/v1"
+      },
+      "ecs_api_key": {
+        "type": "SecureString"
+      }
+    }
+  },
+  "kind": "Stateful",
+  "parameters": {}
+}
