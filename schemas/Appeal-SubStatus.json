@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/Appeal-SubStatus.json",
+  "title": "Appeal Sub-Status",
+  "description": "Sub-status values for appeal processing workflow as defined by Availity QRE requirements. These sub-statuses provide granular tracking of appeal lifecycle stages.",
+  "type": "string",
+  "enum": [
+    "AWAITING_CLASSIFICATION",
+    "CASE_ASSIGNED",
+    "IN_CLINICAL_REVIEW",
+    "IN_PROGRESS",
+    "NEED_ADDITIONAL_INFO",
+    "PENDING_ASSIGNMENT",
+    "PENDING_PAYMENT",
+    "REQUEST_RECEIVED"
+  ],
+  "enumDescriptions": {
+    "AWAITING_CLASSIFICATION": "Appeal has been received and is awaiting initial classification by the health plan",
+    "CASE_ASSIGNED": "Appeal has been classified and assigned to a reviewer or case manager",
+    "IN_CLINICAL_REVIEW": "Appeal is currently undergoing clinical review by medical personnel",
+    "IN_PROGRESS": "Appeal is actively being processed (general processing state)",
+    "NEED_ADDITIONAL_INFO": "Appeal processing is paused pending receipt of additional information from provider or member",
+    "PENDING_ASSIGNMENT": "Appeal is in queue awaiting assignment to a reviewer",
+    "PENDING_PAYMENT": "Appeal has been approved and payment processing is pending",
+    "REQUEST_RECEIVED": "Initial state when appeal request is first received by the system"
+  },
+  "examples": [
+    "REQUEST_RECEIVED",
+    "AWAITING_CLASSIFICATION",
+    "PENDING_ASSIGNMENT",
+    "CASE_ASSIGNED",
+    "IN_PROGRESS",
+    "IN_CLINICAL_REVIEW",
+    "NEED_ADDITIONAL_INFO",
+    "PENDING_PAYMENT"
+  ],
+  "definitions": {
+    "subStatusTransitions": {
+      "description": "Valid state transitions for appeal sub-statuses",
+      "type": "object",
+      "properties": {
+        "REQUEST_RECEIVED": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["AWAITING_CLASSIFICATION", "PENDING_ASSIGNMENT"]]
+        },
+        "AWAITING_CLASSIFICATION": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["PENDING_ASSIGNMENT", "CASE_ASSIGNED"]]
+        },
+        "PENDING_ASSIGNMENT": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["CASE_ASSIGNED"]]
+        },
+        "CASE_ASSIGNED": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["IN_PROGRESS", "IN_CLINICAL_REVIEW", "NEED_ADDITIONAL_INFO"]]
+        },
+        "IN_PROGRESS": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["IN_CLINICAL_REVIEW", "NEED_ADDITIONAL_INFO", "PENDING_PAYMENT"]]
+        },
+        "IN_CLINICAL_REVIEW": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["IN_PROGRESS", "NEED_ADDITIONAL_INFO", "PENDING_PAYMENT"]]
+        },
+        "NEED_ADDITIONAL_INFO": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [["IN_PROGRESS", "IN_CLINICAL_REVIEW", "CASE_ASSIGNED"]]
+        },
+        "PENDING_PAYMENT": {
+          "type": "array",
+          "items": { "type": "string" },
+          "enum": [[]]
+        }
+      }
+    }
+  }
+}

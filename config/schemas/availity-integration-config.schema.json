@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Availity Integration Configuration",
+  "description": "Configuration schema for Availity integration including ECS, Appeals, Attachments, and other modules",
+  "type": "object",
+  "properties": {
+    "ecs": {
+      "type": "object",
+      "description": "Enhanced Claim Status (ECS) module configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable/disable ECS module",
+          "default": true
+        },
+        "queryMethods": {
+          "type": "array",
+          "description": "Enabled query methods for ECS",
+          "items": {
+            "type": "string",
+            "enum": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+          },
+          "default": ["ServiceDate", "Member", "CheckNumber", "ClaimHistory"]
+        },
+        "valueAdds277": {
+          "type": "object",
+          "description": "ValueAdds277 enhanced response fields configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ValueAdds277 enhanced fields",
+              "default": true
+            },
+            "claimFields": {
+              "type": "object",
+              "description": "Claim-level field groups",
+              "properties": {
+                "financial": {
+                  "type": "boolean",
+                  "description": "Include financial fields",
+                  "default": true
+                },
+                "remittance": {
+                  "type": "boolean",
+                  "description": "Include remittance fields",
+                  "default": true
+                },
+                "clinical": {
+                  "type": "boolean",
+                  "description": "Include clinical fields",
+                  "default": true
+                },
+                "demographics": {
+                  "type": "boolean",
+                  "description": "Include demographic fields",
+                  "default": true
+                },
+                "statusDetails": {
+                  "type": "boolean",
+                  "description": "Include enhanced status fields",
+                  "default": true
+                }
+              }
+            },
+            "serviceLineFields": {
+              "type": "object",
+              "description": "Service line-level field configuration",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Include service line details",
+                  "default": true
+                },
+                "includeFinancials": {
+                  "type": "boolean",
+                  "description": "Include financial amounts per service line",
+                  "default": true
+                },
+                "includeModifiers": {
+                  "type": "boolean",
+                  "description": "Include procedure modifiers",
+                  "default": true
+                }
+              }
+            },
+            "integrationFlags": {
+              "type": "object",
+              "description": "Integration eligibility flags",
+              "properties": {
+                "attachments": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForAttachment flag",
+                  "default": true
+                },
+                "corrections": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForCorrection flag",
+                  "default": true
+                },
+                "appeals": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForAppeal flag",
+                  "default": true
+                },
+                "messaging": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForMessaging flag",
+                  "default": true
+                },
+                "chat": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForChat flag",
+                  "default": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": ["ecs"]
+}

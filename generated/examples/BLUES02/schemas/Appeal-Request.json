@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Appeal Request - Regional Blue Cross Blue Shield",
+  "type": "object",
+  "required": [
+    "claimNumber",
+    "memberId",
+    "requestReason"
+  ],
+  "properties": {
+    "claimNumber": {
+      "type": "string"
+    },
+    "memberId": {
+      "type": "string"
+    },
+    "providerNPI": {
+      "type": "string"
+    },
+    "requestReason": {
+      "type": "string",
+      "enum": [
+        "MED",
+        "COV",
+        "TFL",
+        "COD",
+        "DUP"
+      ]
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 15
+    }
+  }
+}

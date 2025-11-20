@@ -1,9 +1,10 @@
 # HIPAA Attachments Architecture
 
-This document provides a comprehensive overview of the HIPAA Attachments processing system architecture, component interactions, and data flows.
+This document provides a comprehensive overview of the HIPAA Attachments processing system architecture, component interactions, and data flows for the **multi-payer platform**.
 
 ## Table of Contents
 - [Overview](#overview)
+- [Platform Architecture](#platform-architecture)
 - [High-Level Architecture](#high-level-architecture)
 - [Component Details](#component-details)
 - [Data Flows](#data-flows)
@@ -14,26 +15,93 @@ This document provides a comprehensive overview of the HIPAA Attachments process
 
 ## Overview
 
-The HIPAA Attachments system is a cloud-native solution built on Azure Logic Apps that processes medical attachments exchanged via X12 EDI transactions. The system handles inbound attachment requests (275), outbound responses (277), health care services review information (278), and provides deterministic replay capabilities.
+The HIPAA Attachments system is a **cloud-native multi-payer platform** built on Azure Logic Apps that processes medical attachments exchanged via X12 EDI transactions. The system is designed as a **payer-agnostic platform** supporting multiple health plans through configuration-driven deployment.
 
 ### Key Objectives
+- **Platform Architecture**: Single codebase serves multiple payers with isolated configuration
+- **Zero-Code Onboarding**: Add new payers through configuration, no custom development
+- **Backend Agnostic**: Works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)
 - **HIPAA Compliance**: Secure processing of Protected Health Information (PHI)
 - **Reliability**: Robust error handling and retry mechanisms
-- **Scalability**: Handle varying transaction volumes
-- **Auditability**: Complete transaction tracking and logging
+- **Scalability**: Handle varying transaction volumes across multiple payers
+- **Auditability**: Complete transaction tracking and logging per payer
 - **Interoperability**: Standards-based X12 EDI integration
 
-### Business Context
+### Platform Context
 
-**Trading Partners:**
+**Platform Model:**
+- **Multi-Tenant**: Single Logic Apps instance serves multiple payers with config-based isolation
+- **Configuration-Driven**: All payer-specific logic defined in configuration files
+- **Automated Deployment**: Config-to-Workflow Generator creates complete deployments
+- **Self-Service**: Interactive onboarding wizard for guided configuration
+
+**Trading Partners (Generic):**
 - **Availity** (ID: 030240928) - EDI clearinghouse sending attachment requests
-- **PCHP-QNXT** (ID: 66917) - Parkland Community Health Plan claims processing system
+- **Health Plans** (ID: {config.payerId}) - Individual payer claims processing systems
 
-**Use Cases:**
-1. Attachment requests from providers via Availity
-2. Status responses sent back to Availity
-3. Health care services review processing
-4. Transaction replay for debugging and reprocessing
+**Supported Use Cases:**
+1. Inbound attachment requests from providers via Availity (275)
+2. Outbound status responses to Availity (277)
+3. Health care services review processing (278)
+4. Deterministic transaction replay for debugging
+5. Appeals integration with attachment workflows
+
+## Platform Architecture
+
+### Configuration-Driven Design
+
+The platform uses a **unified configuration schema** to support multiple payers without custom code:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           Unified Configuration Schema                       │
+│  (Payer-specific settings, backend mappings, business rules) │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Config-to-Workflow Generator                       │
+│  (Generates Logic App workflows, Bicep infrastructure)       │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Payer-Specific Deployment Package                  │
+│  (Workflows, infrastructure, API connections, docs)          │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Azure Logic Apps Standard                          │
+│  (Multi-tenant execution with config-based routing)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Platform Components
+
+1. **Unified Configuration Schema** (`docs/UNIFIED-CONFIG-SCHEMA.md`)
+   - Payer organization information
+   - Module enablement (Appeals, ECS, Attachments, etc.)
+   - Backend system connections and field mappings
+   - X12 EDI settings per payer
+   - Business rules and validation logic
+
+2. **Config-to-Workflow Generator** (`docs/CONFIG-TO-WORKFLOW-GENERATOR.md`)
+   - Reads payer configuration files
+   - Generates Logic App workflow.json files
+   - Creates Bicep infrastructure templates
+   - Produces deployment scripts and documentation
+
+3. **Onboarding Wizard** (`scripts/cli/payer-onboarding-wizard.js`)
+   - Interactive CLI for guided configuration
+   - 10-step process from organization info to deployment
+   - Real-time validation and schema compliance
+
+4. **Multi-Tenant Runtime**
+   - Single Logic Apps instance
+   - Config-based tenant isolation
+   - Payer-specific parameters injected at runtime
+   - Shared infrastructure, isolated data and configuration
 
 ## High-Level Architecture
 
@@ -188,7 +256,7 @@ Service Bus Message Received
   │
   ├─▶ Encode X12 277 Message
   │   (Integration Account)
-  │   Sender: PCHP (66917)
+  │   Sender: Health Plan ({config.payerId})
   │   Receiver: Availity (030240928)
   │
   ├─▶ Send to Availity via SFTP
@@ -421,7 +489,7 @@ hipaa-attachments/
 | Partner | ID | Qualifier | Role |
 |---------|-----|-----------|------|
 | Availity | 030240928 | ZZ | Sender (275/278), Receiver (277) |
-| PCHP-QNXT | 66917 | ZZ | Receiver (275/278), Sender (277) |
+| Health Plan-QNXT | {config.payerId} | ZZ | Receiver (275/278), Sender (277) |
 
 #### X12 Schemas
 | Transaction | Version | Schema Name | Purpose |
@@ -431,22 +499,22 @@ hipaa-attachments/
 | 278 | 005010X217 | X12_005010X217_278 | Health Care Services Review Information |
 
 #### X12 Agreements
-1. **Availity-to-PCHP-275-Receive**
+1. **Availity-to-Health Plan-275-Receive**
    - Direction: Receive (Inbound)
-   - Host: PCHP-QNXT
+   - Host: Health Plan-QNXT
    - Guest: Availity
    - Transaction: 275
 
-2. **PCHP-to-Availity-277-Send**
+2. **Health Plan-to-Availity-277-Send**
    - Direction: Send (Outbound)
-   - Host: PCHP-QNXT
+   - Host: Health Plan-QNXT
    - Guest: Availity
    - Transaction: 277
 
-3. **PCHP-278-Processing**
+3. **Health Plan-278-Processing**
    - Direction: Receive (Internal)
-   - Host: PCHP-QNXT
-   - Guest: PCHP-QNXT
+   - Host: Health Plan-QNXT
+   - Guest: Health Plan-QNXT
    - Transaction: 278
 
 ### Application Insights
@@ -524,7 +592,7 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Decode X12 275         │
-│  Agreement: Availity→PCHP
+│  Agreement: Availity→Health Plan
 └──────┬──────────────────┘
        │ 4. Decoded JSON
        ▼
@@ -587,7 +655,7 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Encode X12 277         │
-│  Agreement: PCHP→Availity│
+│  Agreement: Health Plan→Availity│
 └──────┬──────────────────┘
        │ 4. X12 277 created
        ▼
@@ -762,7 +830,7 @@ Response:
 **ISA/GS Identifiers:**
 ```
 ISA Header:
-- ISA06: Sender ID (Availity: 030240928, PCHP: 66917)
+- ISA06: Sender ID (Availity: 030240928, Health Plan: {config.payerId})
 - ISA08: Receiver ID
 - ISA11: Usage Indicator (T=Test, P=Production)
 

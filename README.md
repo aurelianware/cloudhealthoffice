@@ -61,6 +61,7 @@ This system implements **comprehensive HIPAA-compliant security controls** for P
 For comprehensive security guidance, see:
 - **[SECURITY-HARDENING.md](SECURITY-HARDENING.md)** - 400+ line complete security implementation guide
 - **[docs/HIPAA-COMPLIANCE-MATRIX.md](docs/HIPAA-COMPLIANCE-MATRIX.md)** - Regulatory mapping to HIPAA technical safeguards
+- **[docs/PHI-SCANNER-GUIDE.md](docs/PHI-SCANNER-GUIDE.md)** - PHI/PII scanner usage and troubleshooting guide
 - **[SECURITY.md](SECURITY.md)** - Security practices, encryption requirements, and incident response
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Includes Key Vault deployment and configuration steps
 
@@ -86,7 +87,175 @@ This solution implements the following process:
 9. **278 Transaction Processing**: Processes Health Care Services Review Information via ingest278 workflow
 10. **Authorization Processing**: Processes 278 authorization requests/responses, generates 277 responses (process_authorizations workflow)
 11. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
-10. **Deterministic Replay**: HTTP endpoint for replaying 278 transactions via replay278 workflow
+
+## ⚙️ Configuration-Driven Multi-Payer Platform
+
+**Platform Architecture**: This system is designed as a **payer-agnostic platform** that supports multiple health plans through unified configuration, enabling **zero-code payer onboarding** and rapid deployment.
+
+### Platform Capabilities
+
+The platform supports **configuration-driven deployment** for all Availity transaction types:
+
+- **837 Claims** - Professional, Institutional, and Dental claims submission
+- **270/271 Eligibility** - Real-time eligibility verification and benefit inquiries  
+- **276/277 Claim Status** - Claim status inquiries
+- **Appeals** - Appeals submission and tracking
+- **275 Attachments** - Clinical attachments
+- **ECS (Enhanced Claim Status)** - Advanced claim status with extended data
+
+### Key Benefits
+
+✅ **Zero-Code Onboarding** - Add new payers by creating a configuration file (no custom development)  
+✅ **Backend Agnostic** - Works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)  
+✅ **Rapid Deployment** - Deploy new payer in days instead of months  
+✅ **Multi-Transaction Support** - Enable any combination of modules  
+✅ **Self-Service Configuration** - Interactive onboarding wizard with guided setup  
+✅ **Multi-Tenant Architecture** - Single codebase serves multiple payers with isolated configuration  
+✅ **Automated Validation** - Schema-based validation ensures configuration correctness
+
+### How Platform Onboarding Works
+
+#### Step 1: Create Configuration (15-30 minutes)
+
+Use the interactive onboarding wizard:
+```bash
+node dist/scripts/cli/payer-onboarding-wizard.js
+```
+
+Or create configuration file manually following the Unified Schema.
+
+#### Step 2: Validate Configuration (&lt;1 minute)
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js validate payer-config.json
+```
+
+Schema validation ensures all requirements met.
+
+#### Step 3: Generate Deployment Package (&lt;1 minute)
+
+```bash
+node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
+```
+
+Generator creates complete deployment with:
+- Logic App workflows
+- Bicep infrastructure templates
+- API connection configurations
+- Custom documentation
+
+#### Step 4: Deploy to Azure (15-30 minutes)
+
+```bash
+cd generated/{config.payerId}/infrastructure
+./deploy.sh
+```
+
+Automated deployment provisions all Azure resources.
+
+**Total Time: Production-ready in under 1 hour**
+
+### Quick Start Example
+
+**1. Create a payer configuration:**
+
+```json
+{
+  "$schema": "core/schemas/availity-integration-config.schema.json",
+  "organizationName": "Your Health Plan",
+  "payerId": "YOUR_PAYER_ID",
+  "payerName": "Display Name",
+  "contacts": {
+    "technical": {
+      "name": "John Smith",
+      "email": "john.smith@example.com",
+      "phone": "5551234567"
+    },
+    "accountManager": { ... },
+    "escalation": { ... }
+  },
+  "geography": {
+    "nationwide": true
+  },
+  "modules": {
+    "appeals": {
+      "enabled": true,
+      "transactionModes": {
+        "realtime_web": {
+          "enabled": true,
+          "testUrl": "https://test-api.example.com/appeals",
+          "prodUrl": "https://api.example.com/appeals"
+        }
+      },
+      "requestReasons": ["Medical Necessity", "Timely Filing"],
+      "maxFilesPerAppeal": 10
+    }
+  }
+}
+```
+
+**2. Validate the configuration:**
+
+```typescript
+import { validateConfig } from './core/validation/config-validator';
+import schema from './core/schemas/availity-integration-config.schema.json';
+
+const result = validateConfig(config, schema);
+if (result.valid) {
+  console.log('✓ Configuration is valid');
+}
+```
+
+**3. Load and use the configuration:**
+
+```typescript
+import { AvailityIntegrationConfig } from './core/interfaces/availity-integration-config.interface';
+
+const config: AvailityIntegrationConfig = loadConfig('payer-config.json');
+const appealsUrl = config.modules.appeals.transactionModes.realtime_web.prodUrl;
+```
+
+### Configuration Resources
+
+📄 **[Complete Documentation](docs/UNIFIED-CONFIG-SCHEMA.md)** - Full schema reference and guide  
+🔧 **[JSON Schema](core/schemas/availity-integration-config.schema.json)** - JSON Schema Draft-07  
+📝 **[TypeScript Interfaces](core/interfaces/availity-integration-config.interface.ts)** - Type definitions  
+✅ **[Validator](core/validation/config-validator.ts)** - Configuration validation module  
+📋 **[Example: Medicaid MCO](core/examples/medicaid-mco-config.json)** - Nationwide MCO with Appeals + ECS  
+📋 **[Example: Regional BCBS](core/examples/regional-blues-config.json)** - Regional plan with all modules
+
+### Supported Modules
+
+Each module can be independently enabled with its own configuration:
+
+| Module | Transaction Types | Key Features |
+|--------|------------------|--------------|
+| **Claims 837** | 837P, 837I, 837D | Professional, Institutional, Dental claims |
+| **Eligibility 270/271** | 270/271 | Real-time eligibility with 6 search patterns |
+| **Claim Status 276/277** | 276/277 | Claim status inquiries with date ranges |
+| **Appeals** | Appeals API | 8 sub-statuses, attachment support, multi-claim |
+| **Attachments 275** | 275 | Clinical/admin attachments with file validation |
+| **ECS** | ECS API | 4 query methods with extended claim data |
+
+### Transaction Modes
+
+Each module supports multiple transaction modes:
+
+- **Real-time Web** - HTTP/HTTPS API endpoints
+- **Real-time B2B** - B2B API integrations  
+- **EDI Batch** - SFTP batch file processing
+
+### Migration from Hardcoded Configs
+
+See **[Migration Guide](docs/UNIFIED-CONFIG-SCHEMA.md#migration-guide)** for step-by-step instructions on converting from hardcoded payer configurations to the unified schema.
+
+### Extending the Schema
+
+The schema is designed for extensibility. See **[How to Extend](docs/UNIFIED-CONFIG-SCHEMA.md#how-to-extend-the-schema)** for guidance on:
+- Adding new modules
+- Adding new fields to existing modules
+- Versioning the schema
+- Maintaining backward compatibility
 
 ## 📦 Current Production Deployment
 
@@ -123,7 +292,8 @@ This solution implements the following process:
 **Business Processing**:
 - `logicapps/workflows/process_appeals/workflow.json`: Appeals processing workflow
 - `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing
-- `logicapps/workflows/ecs_summary_search/workflow.json`: Enhanced Claim Status (ECS) summary search
+- `logicapps/workflows/ecs_summary_search/workflow.json`: Enhanced Claim Status (ECS) summary search workflow
+- `logicapps/workflows/auth_inquiry/workflow.json`: Authorization Inquiry (X12 278 X215) - Query existing authorizations
 
 ### Key Features
 - **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations|auth-requests}/yyyy/MM/dd/` partitioning
@@ -134,6 +304,280 @@ This solution implements the following process:
 - **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
 - **Authorization Requests (NEW)**: Submit new authorization requests via HTTP endpoints for Inpatient, Outpatient, and Referral services with real-time approval/denial/pended responses (X12 278 X217)
 - **ECS Summary Search**: Enhanced Claim Status queries via HTTP endpoint with four search methods (Service Date, Member, Check Number, Claim History)
+- **Authorization Inquiry**: X12 278 X215 transactions for querying existing authorizations in real-time
+
+## 🔍 Authorization Inquiry (X12 278 X215)
+
+The Authorization Inquiry workflow provides real-time status checks for existing authorizations using X12 278 X215 transactions.
+
+### Features
+- **Dual Query Methods**: Query by authorization number OR member demographics (ID + DOB)
+- **Real-time Status**: Synchronous responses within 30 seconds
+- **Automatic Retry**: 3 retry attempts with 30-second intervals
+- **Minimal Data Requirements**: Following Availity QRE best practices
+- **HIPAA Compliant**: PHI masking in Application Insights
+
+### Use Cases
+1. **Pre-Claim Validation**: Verify authorization before submitting claims
+2. **Member Service**: Real-time status for patient inquiries
+3. **Appeals Preparation**: Gather authorization details for appeals
+4. **Automated Workflows**: Integrate into downstream processing
+
+### Quick Start
+
+**Query by Authorization Number**:
+```json
+POST /api/auth-inquiry
+{
+  "authorizationNumber": "AUTH12345",
+  "providerNpi": "1234567890",
+  "serviceType": "HS"
+}
+```
+
+**Query by Member Demographics**:
+```json
+POST /api/auth-inquiry
+{
+  "memberId": "MEM123456",
+  "patientDateOfBirth": "1985-06-15",
+  "providerNpi": "1234567890"
+}
+```
+
+**Response**:
+```json
+{
+  "authorizationNumber": "AUTH12345",
+  "status": "APPROVED",
+  "effectiveDate": "2025-12-01",
+  "expirationDate": "2025-12-31",
+  "authorizedQuantity": 30,
+  "quantityType": "DAYS"
+}
+```
+
+### Documentation
+- **[AUTHORIZATION-INQUIRY.md](./docs/AUTHORIZATION-INQUIRY.md)** - Comprehensive guide (~15 pages)
+  - X215 vs X217 comparison
+  - Query patterns and field requirements
+  - Response structure and status codes
+  - Error handling and troubleshooting
+  - Integration examples
+  - Testing scenarios
+
+### Configuration
+- **Configuration Schema**: `core/schemas/availity-integration-config.schema.json`
+- **Request Schema**: `schemas/Auth-Inquiry-Request.json`
+- **Response Schema**: `schemas/Auth-Inquiry-Response.json`
+- **Example Transactions**: `docs/examples/authorizations/inquiry/`
+
+### Integration Points
+The Authorization Inquiry workflow can be called from:
+- Provider portal (direct HTTP call)
+- Authorization Request workflow (check if auth already exists)
+- Appeals module (verify authorization status before appeal)
+- Pre-claim validation workflows
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
+
+## 🤖 Automated Payer Onboarding
+
+### Config-to-Workflow Generator
+
+**Zero-code payer onboarding** - Generate complete deployments from configuration files!
+
+The Config-to-Workflow Generator automatically creates all deployment artifacts (workflows, infrastructure, documentation) from a single JSON configuration file, eliminating manual coding for new payer integrations.
+
+#### Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Build the generator
+npm run build
+
+# Generate deployment from example config
+node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config.json
+
+# Or use the CLI
+node dist/scripts/cli/payer-generator-cli.js generate -c my-payer-config.json
+```
+
+#### What Gets Generated
+
+From a single configuration file, you get:
+- ✅ Complete Logic App workflows (process_appeals, ecs_summary_search, ingest275, etc.)
+- ✅ Bicep infrastructure templates with deployment scripts
+- ✅ Comprehensive documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)
+- ✅ JSON schemas for validation
+- ✅ Ready-to-deploy package
+
+#### Documentation
+
+- **[docs/CONFIG-TO-WORKFLOW-GENERATOR.md](docs/CONFIG-TO-WORKFLOW-GENERATOR.md)** - Complete generator documentation
+- **Examples**: 
+  - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
+  - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
 
 ## 🆕 Authorization Request Module (X12 278 X217)
 
@@ -316,7 +760,7 @@ git push origin release/v1.0.0
 ```
 
 **UAT Environment Details:**
-- Resource Group: `pchp-attachments-uat-rg`
+- Resource Group: `payer-attachments-uat-rg`
 - Base Name: `hipaa-attachments-uat`
 - Location: `eastus`
 - Logic App: `hipaa-attachments-uat-la`
@@ -446,7 +890,7 @@ After deployment, configure:
      "sb_topic_edi278": "edi-278",
      "qnxt_base_url": "https://qnxt-api-uat.example.com",
      "x12_sender_id": "AVAILITY",
-     "x12_receiver_id": "PCHP"
+     "x12_receiver_id": "Health Plan"
    }
    ```
 

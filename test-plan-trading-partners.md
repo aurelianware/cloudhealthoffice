@@ -1,5 +1,5 @@
 # HIPAA X12 275/277 Trading Partners Testing Plan
-# Availity (030240928) ↔ PCHP-QNXT (66917)
+# Availity (030240928) ↔ Health Plan-QNXT ({config.payerId})
 
 ## 🎯 Testing Overview
 
@@ -9,7 +9,7 @@ This comprehensive test plan will verify the end-to-end HIPAA attachment process
 
 ### Prerequisites Checklist:
 - ✅ Integration Account: `hipaa-attachments-ia`
-- ✅ Trading Partners: Availity (030240928) & PCHP-QNXT (66917)  
+- ✅ Trading Partners: Availity (030240928) & Health Plan-QNXT ({config.payerId})  
 - ⚠️ X12 Agreements: Need to be created in Azure Portal
 - ✅ Logic Apps: ingest275 & rfai277 workflows
 - ✅ Service Bus: hipaa-attachments-svc with topics
@@ -18,16 +18,16 @@ This comprehensive test plan will verify the end-to-end HIPAA attachment process
 ## 🧪 Test Cases
 
 ### Test Case 1: X12 275 Inbound Processing
-**Objective**: Verify Availity → PCHP attachment request processing
+**Objective**: Verify Availity → Health Plan attachment request processing
 
 **Test Data**: Sample X12 275 EDI Message
 ```edi
-ISA*00*          *00*          *ZZ*030240928      *ZZ*66917          *250924*1425*^*00501*000000001*0*T*:~
-GS*HI*030240928*66917*20250924*1425*1*X*005010X215~
+ISA*00*          *00*          *ZZ*030240928      *ZZ*{config.payerId}          *250924*1425*^*00501*000000001*0*T*:~
+GS*HI*030240928*{config.payerId}*20250924*1425*1*X*005010X215~
 ST*275*0001*005010X215~
 BHT*0085*08*RFAI20250924001*20250924*1425~
 HL*1**20*1~
-NM1*PR*2*PARKLAND COMMUNITY HEALTH PLAN*****PI*66917~
+NM1*PR*2*PARKLAND COMMUNITY HEALTH PLAN*****PI*{config.payerId}~
 HL*2*1*22*1~
 NM1*IL*1*SMITH*JOHN*A***MI*123456789~
 HL*3*2*23*0~
@@ -43,13 +43,13 @@ IEA*1*000000001~
 
 **Expected Results**:
 1. ✅ File stored in Data Lake: `/raw/275/2025/09/24/`
-2. ✅ X12 decoded successfully using Availity-PCHP agreement
+2. ✅ X12 decoded successfully using Availity-Health Plan agreement
 3. ✅ Metadata extracted: Claim CLM20250924001, Member 123456789
 4. ✅ Message sent to Service Bus topic: attachments-in
 5. ✅ QNXT API called with claim linkage data
 
 ### Test Case 2: X12 277 Outbound Generation
-**Objective**: Verify PCHP → Availity response processing
+**Objective**: Verify Health Plan → Availity response processing
 
 **Test Data**: QNXT Response Payload
 ```json
@@ -67,8 +67,8 @@ IEA*1*000000001~
 
 **Expected Results**:
 1. ✅ Service Bus message received from rfai-requests topic
-2. ✅ X12 277 constructed with PCHP as sender, Availity as receiver
-3. ✅ Message encoded using PCHP-Availity agreement
+2. ✅ X12 277 constructed with Health Plan as sender, Availity as receiver
+3. ✅ Message encoded using Health Plan-Availity agreement
 4. ✅ Response transmitted back to Availity endpoint
 
 ## 🚀 Execute Tests

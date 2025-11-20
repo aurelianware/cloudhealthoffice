@@ -1,0 +1,530 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "ServiceBus_Payer_Appeal_Status_Updates": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['servicebus']['connectionId']"
+            }
+          },
+          "method": "get",
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/head"
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 1
+        },
+        "splitOn": "@triggerBody()"
+      }
+    },
+    "actions": {
+      "Try_Process_Appeal_Update": {
+        "type": "Scope",
+        "actions": {
+          "Parse_Appeal_Update_Message": {
+            "type": "ParseJson",
+            "inputs": {
+              "content": "@json(base64ToString(triggerBody()?['ContentData']))",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "availityTraceId": {
+                    "type": "string"
+                  },
+                  "payerTraceId": {
+                    "type": "string"
+                  },
+                  "appealId": {
+                    "type": "string"
+                  },
+                  "caseNumber": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "subStatus": {
+                    "type": "string"
+                  },
+                  "decision": {
+                    "type": "string"
+                  },
+                  "decisionReason": {
+                    "type": "string"
+                  },
+                  "decisionDate": {
+                    "type": "string"
+                  },
+                  "approvedAmount": {
+                    "type": "number"
+                  },
+                  "deniedAmount": {
+                    "type": "number"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "documentId": {
+                          "type": "string"
+                        },
+                        "documentType": {
+                          "type": "string"
+                        },
+                        "fileName": {
+                          "type": "string"
+                        },
+                        "downloadUrl": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "claimNumber": {
+                    "type": "string"
+                  },
+                  "memberId": {
+                    "type": "string"
+                  },
+                  "providerNpi": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "availityTraceId",
+                  "payerTraceId",
+                  "status"
+                ]
+              }
+            },
+            "runAfter": {}
+          },
+          "Validate_Status_Transition": {
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@body('Parse_Appeal_Update_Message')?['status']",
+                    "FINALIZED"
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Check_Required_Fields_For_Finalized": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "not": {
+                        "equals": [
+                          "@coalesce(body('Parse_Appeal_Update_Message')?['decision'], '')",
+                          ""
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "equals": [
+                          "@coalesce(body('Parse_Appeal_Update_Message')?['decisionReason'], '')",
+                          ""
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "Log_Validation_Success": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/events/customEvent",
+                      "body": {
+                        "eventName": "AppealUpdateValidationSuccess",
+                        "properties": {
+                          "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                          "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
+                          "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
+                          "decision": "@{body('Parse_Appeal_Update_Message')?['decision']}",
+                          "timestamp": "@{utcNow()}"
+                        }
+                      }
+                    },
+                    "runAfter": {}
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Compose_Validation_Error": {
+                      "type": "Compose",
+                      "inputs": {
+                        "errorType": "ValidationError",
+                        "errorMessage": "FINALIZED status requires both decision and decisionReason fields",
+                        "availityTraceId": "@body('Parse_Appeal_Update_Message')?['availityTraceId']",
+                        "payerTraceId": "@body('Parse_Appeal_Update_Message')?['payerTraceId']",
+                        "status": "@body('Parse_Appeal_Update_Message')?['status']",
+                        "decision": "@coalesce(body('Parse_Appeal_Update_Message')?['decision'], 'MISSING')",
+                        "decisionReason": "@coalesce(body('Parse_Appeal_Update_Message')?['decisionReason'], 'MISSING')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_Validation_Error": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/events/customEvent",
+                        "body": {
+                          "eventName": "AppealUpdateValidationError",
+                          "properties": {
+                            "errorType": "@{outputs('Compose_Validation_Error')?['errorType']}",
+                            "errorMessage": "@{outputs('Compose_Validation_Error')?['errorMessage']}",
+                            "availityTraceId": "@{outputs('Compose_Validation_Error')?['availityTraceId']}",
+                            "payerTraceId": "@{outputs('Compose_Validation_Error')?['payerTraceId']}",
+                            "timestamp": "@{utcNow()}"
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Compose_Validation_Error": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Abandon_To_DLQ_Validation_Failed": {
+                      "type": "ApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['servicebus']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
+                        "queries": {
+                          "deadLetterReason": "ValidationError",
+                          "deadLetterErrorDescription": "@{outputs('Compose_Validation_Error')?['errorMessage']}"
+                        }
+                      },
+                      "runAfter": {
+                        "Log_Validation_Error": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      }
+                    },
+                    "Terminate_Validation_Failed": {
+                      "type": "Terminate",
+                      "inputs": {
+                        "runStatus": "Failed",
+                        "runError": {
+                          "code": "ValidationError",
+                          "message": "@{outputs('Compose_Validation_Error')?['errorMessage']}"
+                        }
+                      },
+                      "runAfter": {
+                        "Abandon_To_DLQ_Validation_Failed": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "runAfter": {}
+              }
+            },
+            "else": {
+              "actions": {
+                "Log_Non_Finalized_Status": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/events/customEvent",
+                    "body": {
+                      "eventName": "AppealUpdateNonFinalizedStatus",
+                      "properties": {
+                        "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                        "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
+                        "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
+                        "subStatus": "@{body('Parse_Appeal_Update_Message')?['subStatus']}",
+                        "note": "Status is not FINALIZED, decision fields not required",
+                        "timestamp": "@{utcNow()}"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "Parse_Appeal_Update_Message": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Compose_Availity_Bedlam_Payload": {
+            "type": "Compose",
+            "inputs": {
+              "traceId": "@body('Parse_Appeal_Update_Message')?['availityTraceId']",
+              "payerReferenceId": "@body('Parse_Appeal_Update_Message')?['payerTraceId']",
+              "appealId": "@coalesce(body('Parse_Appeal_Update_Message')?['appealId'], '')",
+              "caseNumber": "@coalesce(body('Parse_Appeal_Update_Message')?['caseNumber'], '')",
+              "status": "@body('Parse_Appeal_Update_Message')?['status']",
+              "subStatus": "@coalesce(body('Parse_Appeal_Update_Message')?['subStatus'], '')",
+              "decision": "@coalesce(body('Parse_Appeal_Update_Message')?['decision'], '')",
+              "decisionReason": "@coalesce(body('Parse_Appeal_Update_Message')?['decisionReason'], '')",
+              "decisionDate": "@coalesce(body('Parse_Appeal_Update_Message')?['decisionDate'], '')",
+              "approvedAmount": "@coalesce(body('Parse_Appeal_Update_Message')?['approvedAmount'], 0)",
+              "deniedAmount": "@coalesce(body('Parse_Appeal_Update_Message')?['deniedAmount'], 0)",
+              "attachments": "@coalesce(body('Parse_Appeal_Update_Message')?['attachments'], createArray())",
+              "claimNumber": "@coalesce(body('Parse_Appeal_Update_Message')?['claimNumber'], '')",
+              "memberId": "@coalesce(body('Parse_Appeal_Update_Message')?['memberId'], '')",
+              "providerNpi": "@coalesce(body('Parse_Appeal_Update_Message')?['providerNpi'], '')",
+              "updateTimestamp": "@utcNow()"
+            },
+            "runAfter": {
+              "Validate_Status_Transition": [
+                "Succeeded"
+              ]
+            }
+          },
+          "POST_To_Availity_Bedlam_API": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@parameters('availity_bedlam_endpoint')",
+              "headers": {
+                "Authorization": "Bearer @{parameters('availity_bedlam_api_key')}",
+                "Content-Type": "application/json",
+                "X-Payer-Id": "{config.payerId}",
+                "X-Correlation-Id": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}"
+              },
+              "body": "@outputs('Compose_Availity_Bedlam_Payload')"
+            },
+            "runtimeConfiguration": {
+              "retry": {
+                "count": 3,
+                "type": "fixed",
+                "interval": "PT30S"
+              }
+            },
+            "runAfter": {
+              "Compose_Availity_Bedlam_Payload": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Parse_Availity_Response": {
+            "type": "ParseJson",
+            "inputs": {
+              "content": "@body('POST_To_Availity_Bedlam_API')",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "success": {
+                    "type": "boolean"
+                  },
+                  "traceId": {
+                    "type": "string"
+                  },
+                  "responseCode": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "POST_To_Availity_Bedlam_API": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Log_Update_Sent_To_Availity": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "AppealUpdateSentToAvality",
+                "properties": {
+                  "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                  "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
+                  "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
+                  "subStatus": "@{body('Parse_Appeal_Update_Message')?['subStatus']}",
+                  "decision": "@{body('Parse_Appeal_Update_Message')?['decision']}",
+                  "availityResponseCode": "@{body('Parse_Availity_Response')?['responseCode']}",
+                  "availitySuccess": "@{body('Parse_Availity_Response')?['success']}",
+                  "httpStatusCode": "@{outputs('POST_To_Availity_Bedlam_API')?['statusCode']}",
+                  "timestamp": "@{utcNow()}"
+                }
+              }
+            },
+            "runAfter": {
+              "Parse_Availity_Response": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Complete_Service_Bus_Message": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "delete",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}"
+            },
+            "runAfter": {
+              "Log_Update_Sent_To_Availity": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch_Appeal_Update_Error": {
+        "type": "Scope",
+        "actions": {
+          "Compose_Error_Details": {
+            "type": "Compose",
+            "inputs": {
+              "errorType": "AppealUpdateError",
+              "errorMessage": "@{coalesce(result('Try_Process_Appeal_Update')?[0]?['error']?['message'], 'Unknown error occurred')}",
+              "errorCode": "@{coalesce(result('Try_Process_Appeal_Update')?[0]?['error']?['code'], 'UNKNOWN')}",
+              "availityTraceId": "@{coalesce(body('Parse_Appeal_Update_Message')?['availityTraceId'], 'Unknown')}",
+              "payerTraceId": "@{coalesce(body('Parse_Appeal_Update_Message')?['payerTraceId'], 'Unknown')}",
+              "status": "@{coalesce(body('Parse_Appeal_Update_Message')?['status'], 'Unknown')}",
+              "triggerBody": "@triggerBody()",
+              "timestamp": "@utcNow()"
+            },
+            "runAfter": {}
+          },
+          "Log_Error_to_AppInsights": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "AppealUpdateError",
+                "properties": {
+                  "errorType": "@{outputs('Compose_Error_Details')?['errorType']}",
+                  "errorMessage": "@{outputs('Compose_Error_Details')?['errorMessage']}",
+                  "errorCode": "@{outputs('Compose_Error_Details')?['errorCode']}",
+                  "availityTraceId": "@{outputs('Compose_Error_Details')?['availityTraceId']}",
+                  "payerTraceId": "@{outputs('Compose_Error_Details')?['payerTraceId']}",
+                  "status": "@{outputs('Compose_Error_Details')?['status']}",
+                  "workflowName": "appeal_update_from_payer_to_availity",
+                  "timestamp": "@{outputs('Compose_Error_Details')?['timestamp']}"
+                }
+              }
+            },
+            "runAfter": {
+              "Compose_Error_Details": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Abandon_Message_to_DLQ": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['servicebus']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
+              "queries": {
+                "deadLetterReason": "AppealUpdateError",
+                "deadLetterErrorDescription": "@{outputs('Compose_Error_Details')?['errorMessage']}"
+              }
+            },
+            "runAfter": {
+              "Log_Error_to_AppInsights": [
+                "Succeeded",
+                "Failed"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try_Process_Appeal_Update": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "_SECURITY_NOTE": {
+      "type": "String",
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure availity_bedlam_api_key as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/availity-bedlam-api-key) or use Managed Identity to obtain tokens at runtime."
+    },
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "hipaa-logic-svc"
+    },
+    "sb_topic_payer_appeal_updates": {
+      "type": "String",
+      "defaultValue": "payer-appeal-status-updates"
+    },
+    "sb_subscription_availity": {
+      "type": "String",
+      "defaultValue": "availity-push"
+    },
+    "availity_bedlam_endpoint": {
+      "type": "String",
+      "defaultValue": "https://api.availity.com/bedlam/v1/appeals/status"
+    },
+    "availity_bedlam_api_key": {
+      "type": "SecureString"
+    }
+  }
+}

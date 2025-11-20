@@ -75,7 +75,7 @@ on:
       resourceGroup:
         description: 'Resource Group name (will be created if missing)'
         required: true
-        default: 'pchp-attachments-rg'
+        default: 'payer-attachments-rg'
       location:
         description: 'Azure region'
         required: true
@@ -83,7 +83,7 @@ on:
       baseName:
         description: 'Base name prefix for resources'
         required: true
-        default: 'pchp-attachments'
+        default: 'payer-attachments'
       logicAppName:
         description: 'Logic App Standard app name (optional; defaults to <baseName>-la)'
         required: false
@@ -128,7 +128,7 @@ jobs:
           resourceGroupName: \${{ github.event.inputs.resourceGroup }}
           template: \${{ github.event.inputs.bicepPath }}
           parameters: baseName=\${{ github.event.inputs.baseName }}
-          deploymentName: pchp-attachments-infra
+          deploymentName: payer-attachments-infra
 
       - name: Resolve Logic App name
         id: resolvela

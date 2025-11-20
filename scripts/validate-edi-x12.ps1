@@ -7,7 +7,7 @@
     - ISA/IEA envelope segments
     - GS/GE functional group segments
     - ST/SE transaction set segments
-    - Trading partner identifiers (Availity/PCHP)
+    - Trading partner identifiers (Availity/Health Plan)
     - Segment structure and delimiters
     - Transaction types (275/277/278)
 
@@ -49,7 +49,7 @@ $ErrorActionPreference = "Stop"
 # HIPAA X12 constants
 $VALID_ISA_QUALIFIERS = @('ZZ', '01', '14', '20', '27', '28', '29', '30')
 $AVAILITY_ID = '030240928'
-$PCHP_ID = '66917'
+$PAYER_ID = '{config.payerId}'
 
 # Transaction type identifiers
 $TRANSACTION_TYPES = @{
@@ -144,8 +144,8 @@ function Test-ISASegment {
     $receiverId = $elements[8].Trim()
     
     $validPairs = @(
-        @($AVAILITY_ID, $PCHP_ID),
-        @($PCHP_ID, $AVAILITY_ID)
+        @($AVAILITY_ID, $PAYER_ID),
+        @($PAYER_ID, $AVAILITY_ID)
     )
     
     $found = $false
@@ -158,7 +158,7 @@ function Test-ISASegment {
     }
     
     if (-not $found -and $Strict) {
-        Write-ValidationWarning "Trading partner IDs don't match expected Availity/PCHP pairs: $senderId -> $receiverId" $File $Line
+        Write-ValidationWarning "Trading partner IDs don't match expected Availity/Health Plan pairs: $senderId -> $receiverId" $File $Line
     }
     
     return $true

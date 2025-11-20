@@ -117,7 +117,7 @@ grep -A 5 "param baseName" infra/main.bicep
 
 # Valid examples:
 # - "hipaa-attachments"
-# - "pchp-uat"
+# - "payer-uat"
 # - "prod-la-01"
 
 # Invalid examples:
@@ -565,7 +565,7 @@ cat test-file.edi | grep "^ISA"
 cat test-file.edi | grep "^GS"
 
 # Expected format:
-# ISA*00*          *00*          *ZZ*030240928      *ZZ*66917          *...
+# ISA*00*          *00*          *ZZ*030240928      *ZZ*{config.payerId}          *...
 #     ^^                          ^^  ^^^^^^^^^^      ^^  ^^^^^
 #     |                           |   |               |   |
 #     Auth qualifier              |   Sender ID       |   Receiver ID
@@ -573,7 +573,7 @@ cat test-file.edi | grep "^GS"
 
 # Ensure IDs match Integration Account configuration:
 # - Availity: 030240928
-# - PCHP: 66917
+# - Health Plan: {config.payerId}
 ```
 
 **Validate Schema:**
@@ -868,7 +868,7 @@ az logic integration-account schema create \
 
 **Error Message:**
 ```
-No agreement found for sender 030240928 and receiver 66917
+No agreement found for sender 030240928 and receiver {config.payerId}
 ```
 
 **Solution:**
@@ -1014,7 +1014,7 @@ customEvents
 #### Quick Health Check Script
 ```bash
 #!/bin/bash
-RG="pchp-attachments-uat-rg"
+RG="payer-attachments-uat-rg"
 LA="hipaa-attachments-uat-la"
 
 echo "=== Health Check ==="
