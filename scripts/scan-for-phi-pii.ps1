@@ -85,7 +85,7 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
         Description = 'Phone Number'
         Severity = 'Medium'
-        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', '*.md', '*.yml', '*.yaml')
+        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml')
     }
     'MemberId' = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
