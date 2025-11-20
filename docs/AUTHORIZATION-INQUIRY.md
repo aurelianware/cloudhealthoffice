@@ -536,34 +536,45 @@ Authorization Inquiry is configured via `core/schemas/availity-integration-confi
 
 ```json
 {
-  "authorizations": {
-    "inquiry_x215": {
+  "organizationName": "Your Health Plan",
+  "payerId": "PAYERID",
+  "payerName": "Payer Display Name",
+  "contacts": {
+    "technical": { "name": "Tech Contact", "email": "tech@example.com" },
+    "accountManager": { "name": "Account Manager", "email": "am@example.com" },
+    "escalation": { "name": "Escalation Contact", "email": "escalation@example.com" }
+  },
+  "modules": {
+    "authorizations278": {
       "enabled": true,
-      "tr3Version": "005010X215",
-      "connectivity": {
-        "testUrl": "https://payer-test.example.com/auth-inquiry",
-        "prodUrl": "https://payer-prod.example.com/auth-inquiry",
-        "testUserId": "",
-        "prodUserId": "",
-        "timeout": 30,
-        "xmlWrapperRequired": false
-      },
-      "fieldRequirements": {
-        "authNumberRequired": false,
-        "memberIdRequired": false,
-        "patientDobRequired": false,
-        "serviceDatesRequired": false
-      },
-      "enveloping": {
-        "isa06_senderId": "AVAILITY001",
-        "isa08_receiverId": "PAYERID",
-        "gs02_applicationSenderCode": "AVAILITY",
-        "gs03_applicationReceiverCode": "PAYER"
-      },
-      "retry": {
+      "inquiry_x215": {
         "enabled": true,
-        "maxRetries": 3,
-        "retryInterval": 30
+        "tr3Version": "005010X215",
+        "connectivity": {
+          "testUrl": "https://payer-test.example.com/auth-inquiry",
+          "prodUrl": "https://payer-prod.example.com/auth-inquiry",
+          "testUserId": "",
+          "prodUserId": "",
+          "timeout": 30,
+          "xmlWrapperRequired": false
+        },
+        "fieldRequirements": {
+          "authNumberRequired": false,
+          "memberIdRequired": false,
+          "patientDobRequired": false,
+          "serviceDatesRequired": false
+        },
+        "enveloping": {
+          "isa06_senderId": "AVAILITY001",
+          "isa08_receiverId": "PAYERID",
+          "gs02_applicationSenderCode": "AVAILITY",
+          "gs03_applicationReceiverCode": "PAYER"
+        },
+        "retry": {
+          "enabled": true,
+          "maxRetries": 3,
+          "retryInterval": 30
+        }
       }
     }
   }
@@ -572,20 +583,30 @@ Authorization Inquiry is configured via `core/schemas/availity-integration-confi
 
 ### Per-Payer Configuration
 
-Each payer may have different requirements. Override settings as needed:
+Each payer may have different requirements. The authorization inquiry configuration is nested within the `modules.authorizations278.inquiry_x215` section. Override settings as needed:
 
 #### Example: Payer A (Standard Availity)
 ```json
 {
+  "organizationName": "Payer A Health Plan",
   "payerId": "PAYERA",
-  "connectivity": {
-    "testUrl": "https://payera-test.availity.com/auth-inquiry",
-    "prodUrl": "https://payera.availity.com/auth-inquiry",
-    "timeout": 30
-  },
-  "enveloping": {
-    "isa08_receiverId": "PAYERA",
-    "gs03_applicationReceiverCode": "PAYERA"
+  "payerName": "Payer A",
+  "contacts": { ... },
+  "modules": {
+    "authorizations278": {
+      "enabled": true,
+      "inquiry_x215": {
+        "connectivity": {
+          "testUrl": "https://payera-test.availity.com/auth-inquiry",
+          "prodUrl": "https://payera.availity.com/auth-inquiry",
+          "timeout": 30
+        },
+        "enveloping": {
+          "isa08_receiverId": "PAYERA",
+          "gs03_applicationReceiverCode": "PAYERA"
+        }
+      }
+    }
   }
 }
 ```
@@ -593,16 +614,26 @@ Each payer may have different requirements. Override settings as needed:
 #### Example: Payer B (Requires XML Wrapper)
 ```json
 {
+  "organizationName": "Payer B Health System",
   "payerId": "PAYERB",
-  "connectivity": {
-    "testUrl": "https://payerb-gateway.example.com/x12",
-    "prodUrl": "https://payerb-prod.example.com/x12",
-    "timeout": 45,
-    "xmlWrapperRequired": true
-  },
-  "enveloping": {
-    "isa08_receiverId": "PAYERB123",
-    "gs03_applicationReceiverCode": "PAYERB"
+  "payerName": "Payer B",
+  "contacts": { ... },
+  "modules": {
+    "authorizations278": {
+      "enabled": true,
+      "inquiry_x215": {
+        "connectivity": {
+          "testUrl": "https://payerb-gateway.example.com/x12",
+          "prodUrl": "https://payerb-prod.example.com/x12",
+          "timeout": 45,
+          "xmlWrapperRequired": true
+        },
+        "enveloping": {
+          "isa08_receiverId": "PAYERB123",
+          "gs03_applicationReceiverCode": "PAYERB"
+        }
+      }
+    }
   }
 }
 ```
