@@ -173,9 +173,10 @@
         "properties": {
           "fileName": {
             "type": "string",
-            "description": "Name of the attachment file",
+            "description": "Name of the attachment file. Only underscores (_) and hyphens (-) are allowed as special characters. File names must be unique within the appeal.",
             "minLength": 1,
             "maxLength": 255,
+            "pattern": "^[a-zA-Z0-9_-]+\\.(gif|jpg|jpeg|pdf|tif|tiff)$",
             "examples": ["medical_records_2024-01-15.pdf", "physician_notes.pdf"]
           },
           "fileType": {
