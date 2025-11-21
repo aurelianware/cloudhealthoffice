@@ -1,6 +1,6 @@
-# Deployment Guide
+# Deployment Guide - Cloud Health Office
 
-This guide provides step-by-step instructions for deploying the HIPAA Attachments system to Azure environments (DEV/UAT/PROD).
+This guide provides step-by-step instructions for deploying the Cloud Health Office multi-tenant SaaS platform to Azure environments (DEV/UAT/PROD).
 
 ## 🚀 Quick Start
 
