@@ -1,4 +1,4 @@
-# HIPAA Attachments Platform - Onboarding Configuration Worksheet
+# Cloud Health Office Platform - Onboarding Configuration Worksheet
 
 ## Document Information
 
@@ -348,7 +348,7 @@ Select all modules to enable:
 | Field | Response | Notes |
 |-------|----------|-------|
 | **Storage Account Name** | | Azure naming rules apply |
-| **Container Name** | | e.g., hipaa-attachments |
+| **Container Name** | | e.g., cloud-health-office |
 | **Folder Structure** | | Default: {type}/yyyy/MM/dd/ |
 | **Retention Policy** | | HIPAA: 7 years minimum |
 | **Lifecycle Management** | | ☐ Hot→Cool(30d)→Archive(90d) |

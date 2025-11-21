@@ -186,7 +186,7 @@ az webapp restart -g payer-attachments-rg -n payer-attachments-la
 ```
 
 ### GitHub Actions Deployment
-- **Workflow**: "Deploy HIPAA Attachments (Matrix: DEV/UAT/PROD + DEV Lint)"
+- **Workflow**: "Deploy Cloud Health Office (Matrix: DEV/UAT/PROD + DEV Lint)"
 - **NEVER CANCEL**: Complete deployment takes 5-15 minutes per environment. Set timeout to 30+ minutes.
 - **Required Secrets**: AZURE_CLIENT_ID_*, AZURE_TENANT_ID_*, AZURE_SUBSCRIPTION_ID_* for each environment
 - **Deployment includes**: Bicep validation → ARM What-If → Infrastructure deployment → Workflow ZIP deployment

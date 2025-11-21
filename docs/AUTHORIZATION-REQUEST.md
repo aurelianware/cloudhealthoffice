@@ -295,7 +295,7 @@ All workflows share common parameters:
 ```json
 {
   "blob_storage_account": "default",
-  "blob_auth_requests_folder": "hipaa-attachments/raw/auth-requests",
+  "blob_auth_requests_folder": "cloud-health-office/raw/auth-requests",
   "sb_namespace": "hipaa-logic-svc",
   "sb_topic_attachments": "attachments-in",
   "eligibility_api_url": "https://eligibility.api.local",
@@ -312,7 +312,7 @@ All workflows share common parameters:
 Authorization requests and responses are archived with date-based partitioning:
 
 ```
-hipaa-attachments/raw/auth-requests/
+cloud-health-office/raw/auth-requests/
 ├── inpatient/
 │   └── 2024/
 │       └── 11/
@@ -872,7 +872,7 @@ traces
 # List inpatient requests from today
 az storage blob list \
   --account-name hipaa7v2rrsoo6tac2 \
-  --container-name hipaa-attachments \
+  --container-name cloud-health-office \
   --prefix "raw/auth-requests/inpatient/2024/11/19/" \
   --output table
 ```
@@ -954,4 +954,4 @@ az servicebus topic show \
 
 **Document Version**: 1.0  
 **Last Updated**: 2024-11-19  
-**Author**: HIPAA Attachments Team
+**Author**: Cloud Health Office Team

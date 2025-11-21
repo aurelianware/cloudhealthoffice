@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document maps the HIPAA Attachments system's security controls to HIPAA Security Rule requirements (45 CFR §§ 164.308, 164.310, 164.312). It demonstrates comprehensive compliance with all technical safeguards required for Protected Health Information (PHI) processing.
+This document maps the Cloud Health Office system's security controls to HIPAA Security Rule requirements (45 CFR §§ 164.308, 164.310, 164.312). It demonstrates comprehensive compliance with all technical safeguards required for Protected Health Information (PHI) processing.
 
 ## Document Purpose
 
@@ -49,7 +49,7 @@ This document maps the HIPAA Attachments system's security controls to HIPAA Sec
 # Verify managed identity
 az webapp identity show \
   --resource-group "payer-attachments-prod-rg" \
-  --name "hipaa-attachments-prod-la" \
+  --name "cloud-health-office-prod-la" \
   --query "{principalId:principalId, tenantId:tenantId}"
 
 # Output shows unique principal ID:
@@ -87,19 +87,19 @@ az webapp identity show \
    
    # Access Key Vault to retrieve credentials
    az keyvault secret show \
-     --vault-name "hipaa-attachments-prod-kv" \
+     --vault-name "cloud-health-office-prod-kv" \
      --name "emergency-access-token"
    ```
 
 2. **Recover deleted resources:**
    ```bash
    # Recover deleted Key Vault
-   az keyvault recover --name "hipaa-attachments-prod-kv"
+   az keyvault recover --name "cloud-health-office-prod-kv"
    
    # Recover deleted blob
    az storage blob undelete \
      --account-name "hipaa-storage" \
-     --container-name "hipaa-attachments" \
+     --container-name "cloud-health-office" \
      --name "emergency-file.edi"
    ```
 
@@ -200,7 +200,7 @@ az storage account show \
 
 # Verify TLS enforcement
 az webapp show \
-  --name "hipaa-attachments-prod-la" \
+  --name "cloud-health-office-prod-la" \
   --resource-group "payer-attachments-prod-rg" \
   --query "{httpsOnly:httpsOnly, minTlsVersion:siteConfig.minTlsVersion}"
 
@@ -341,7 +341,7 @@ az monitor diagnostic-settings create \
 ```kusto
 // Detect unusual access patterns
 let normalUsers = datatable(userId:string) [
-    "hipaa-attachments-prod-la",  // Logic App managed identity
+    "cloud-health-office-prod-la",  // Logic App managed identity
     "admin@example.com"            // Expected admin
 ];
 AzureDiagnostics
@@ -477,7 +477,7 @@ StorageBlobLogs
 # Logic App uses system-assigned managed identity
 az webapp identity assign \
   --resource-group "payer-attachments-prod-rg" \
-  --name "hipaa-attachments-prod-la"
+  --name "cloud-health-office-prod-la"
 
 # Output:
 # {
@@ -510,7 +510,7 @@ az monitor activity-log list \
     "Content-Type": "application/json"
   },
   "body": {
-    "blobUrl": "hipaa-attachments/raw/278/2024/01/15/test.edi",
+    "blobUrl": "cloud-health-office/raw/278/2024/01/15/test.edi",
     "fileName": "replay-test"
   }
 }
@@ -566,7 +566,7 @@ SigninLogs
 # Verify HTTPS-only enforcement
 az webapp config show \
   --resource-group "payer-attachments-prod-rg" \
-  --name "hipaa-attachments-prod-la" \
+  --name "cloud-health-office-prod-la" \
   --query "{httpsOnly:httpsOnly, minTlsVersion:minTlsVersion}"
 
 # Expected output:
@@ -606,7 +606,7 @@ dependencies
 # Block all non-HTTPS traffic
 az webapp config set \
   --resource-group "payer-attachments-prod-rg" \
-  --name "hipaa-attachments-prod-la" \
+  --name "cloud-health-office-prod-la" \
   --https-only true \
   --min-tls-version "1.2"
 
@@ -630,8 +630,8 @@ az network private-endpoint list \
 # Name                                    ProvisioningState    PrivateIP
 # -------------------------------------   ------------------   -----------
 # hipaa-storage-prod-blob-pe             Succeeded            10.0.2.4
-# hipaa-attachments-prod-svc-pe          Succeeded            10.0.2.5
-# hipaa-attachments-prod-kv-pe           Succeeded            10.0.2.6
+# cloud-health-office-prod-svc-pe          Succeeded            10.0.2.5
+# cloud-health-office-prod-kv-pe           Succeeded            10.0.2.6
 ```
 
 **Compliance Evidence:**

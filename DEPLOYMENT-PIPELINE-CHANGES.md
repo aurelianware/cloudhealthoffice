@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the comprehensive enhancements made to the GitHub Actions deployment pipeline for the HIPAA Attachments Logic Apps solution.
+This document describes the comprehensive enhancements made to the GitHub Actions deployment pipeline for the Cloud Health Office Logic Apps solution.
 
 ## Changes Summary
 

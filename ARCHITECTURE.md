@@ -108,7 +108,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    HIPAA Attachments System                      │
+│              Cloud Health Office Platform                        │
 │                     (Azure West US / East US)                    │
 └─────────────────────────────────────────────────────────────────┘
 

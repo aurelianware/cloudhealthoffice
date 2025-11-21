@@ -118,7 +118,7 @@ pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppNa
 
 ### bootstrap_repo.ps1
 **Purpose**: Creates new repository from template  
-**Usage**: For creating new HIPAA Attachments deployments  
+**Usage**: For creating new Cloud Health Office deployments  
 **Note**: Typically used once during initial setup
 
 ### deploy-workflows.ps1
