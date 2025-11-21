@@ -1186,6 +1186,109 @@
           },
           "uniqueItems": true
         },
+        "valueAdds277": {
+          "type": "object",
+          "description": "ValueAdds277 enhancement configuration for ECS responses (60+ additional fields)",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ValueAdds277 enhanced response fields",
+              "default": true
+            },
+            "claimFields": {
+              "type": "object",
+              "description": "Claim-level field groups (30+ fields)",
+              "additionalProperties": false,
+              "properties": {
+                "financial": {
+                  "type": "boolean",
+                  "description": "Include financial fields (BILLED, ALLOWED, INSURANCE_TOTAL_PAID, PATIENT_RESPONSIBILITY, COPAY, COINSURANCE, DEDUCTIBLE, DISCOUNT)",
+                  "default": true
+                },
+                "remittance": {
+                  "type": "boolean",
+                  "description": "Include remittance fields (payeeName, checkNumber, checkCashedDate, checkAmount)",
+                  "default": true
+                },
+                "clinical": {
+                  "type": "boolean",
+                  "description": "Include clinical fields (drgCode, facilityTypeCodeDescription, diagnosisCodes, code/reasonCodes)",
+                  "default": true
+                },
+                "demographics": {
+                  "type": "boolean",
+                  "description": "Include demographic objects (patient, subscriber, billingProvider, renderingProvider)",
+                  "default": true
+                },
+                "statusDetails": {
+                  "type": "boolean",
+                  "description": "Include enhanced status fields (statusCode, statusCodeDescription, effectiveDate, exchangeDate, comment)",
+                  "default": true
+                }
+              }
+            },
+            "serviceLineFields": {
+              "type": "object",
+              "description": "Service line-level field configuration (10+ fields per line)",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Include service line details",
+                  "default": true
+                },
+                "includeFinancials": {
+                  "type": "boolean",
+                  "description": "Include line-level financial fields (DEDUCTIBLE, DISCOUNT, COPAY, COINSURANCE, PATIENT_RESPONSIBILITY)",
+                  "default": true
+                },
+                "includeModifiers": {
+                  "type": "boolean",
+                  "description": "Include procedure modifiers array",
+                  "default": true
+                }
+              }
+            },
+            "integrationFlags": {
+              "type": "object",
+              "description": "Integration eligibility flags for cross-module workflows (6 flags)",
+              "additionalProperties": false,
+              "properties": {
+                "attachments": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForAttachment flag (allows sending HIPAA 275 attachments)",
+                  "default": true
+                },
+                "corrections": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForCorrection flag (allows claim corrections)",
+                  "default": true
+                },
+                "appeals": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForAppeal flag with appeal metadata (appealMessage, appealType, appealTimelyFilingDate)",
+                  "default": true
+                },
+                "messaging": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForMessaging flag (allows secure payer messaging)",
+                  "default": true
+                },
+                "chat": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForChat flag (allows live chat with payer)",
+                  "default": false
+                },
+                "remittanceViewer": {
+                  "type": "boolean",
+                  "description": "Enable eligibleForRemittanceViewer flag (allows viewing remittance details)",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
         "cacheEnabled": {
           "type": "boolean",
           "description": "Whether caching is enabled for ECS responses",
