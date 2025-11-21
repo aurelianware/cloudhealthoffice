@@ -1,5 +1,5 @@
 # Customer Onboarding Checklist
-## HIPAA Attachments Platform - Phase 1
+## Cloud Health Office Platform - Phase 1
 
 Use this checklist to track progress through the customer onboarding process from contract signature to go-live.
 
@@ -462,7 +462,7 @@ Use this checklist to track progress through the customer onboarding process fro
 
 ### Customer Approval
 
-**I certify that the HIPAA Attachments Platform has been successfully deployed and meets all acceptance criteria outlined in the Statement of Work.**
+**I certify that the Cloud Health Office Platform has been successfully deployed and meets all acceptance criteria outlined in the Statement of Work.**
 
 Customer Name: ______________________________
 Title: ______________________________________
@@ -471,7 +471,7 @@ Date: _______________________________________
 
 ### Provider Confirmation
 
-**I certify that all deliverables have been completed and the customer has been successfully onboarded to the HIPAA Attachments Platform.**
+**I certify that all deliverables have been completed and the customer has been successfully onboarded to the Cloud Health Office Platform.**
 
 Provider Name: ______________________________
 Title: ______________________________________

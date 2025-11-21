@@ -321,4 +321,4 @@ For questions or issues:
 
 ## License
 
-This configuration schema is part of the HIPAA Attachments Processing System and is licensed under the Apache License 2.0.
+This configuration schema is part of the Cloud Health Office Processing System and is licensed under the Apache License 2.0.

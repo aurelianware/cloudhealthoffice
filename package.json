@@ -1,7 +1,7 @@
 {
-  "name": "hipaa-attachments-generator",
+  "name": "cloud-health-office-generator",
   "version": "1.0.0",
-  "description": "TypeScript-based automation system for generating Logic App workflows from payer configurations",
+  "description": "TypeScript-based automation system for generating multi-tenant SaaS EDI workflows from payer configurations",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -12,13 +12,18 @@
     "clean": "rm -rf dist"
   },
   "keywords": [
+    "healthcare",
+    "edi",
+    "saas",
+    "multi-tenant",
     "hipaa",
     "logic-apps",
     "azure",
     "generator",
-    "automation"
+    "automation",
+    "x12"
   ],
-  "author": "",
+  "author": "Aurelianware",
   "license": "Apache-2.0",
   "dependencies": {
     "handlebars": "^4.7.7",

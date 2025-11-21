@@ -1,4 +1,4 @@
-# Sales Materials for HIPAA Attachments Platform
+# Sales Materials for Cloud Health Office Platform
 ## Phase 1: Manual Onboarding - First Customer Live
 
 This directory contains all sales, marketing, and customer onboarding materials for securing and deploying the first paying customer.

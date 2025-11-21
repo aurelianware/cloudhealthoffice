@@ -1,4 +1,4 @@
-# HIPAA Attachments Platform
+# Cloud Health Office Platform
 ## Sales Proposal
 
 ---
@@ -9,7 +9,7 @@
 [Customer Address]
 
 **Prepared By:**
-HIPAA Attachments Platform
+Cloud Health Office Platform
 [Your Name], [Your Title]
 [Your Email] | [Your Phone]
 
@@ -86,7 +86,7 @@ Based on our discovery conversations, [Customer Organization Name] faces the fol
 
 ### Platform Overview
 
-The HIPAA Attachments Platform is an Azure-native, configuration-driven solution that automates end-to-end medical attachment processing for healthcare payers.
+The Cloud Health Office Platform is an Azure-native, configuration-driven solution that automates end-to-end medical attachment processing for healthcare payers.
 
 **Core Capabilities:**
 - Automated SFTP polling and file retrieval from Availity
@@ -413,7 +413,7 @@ We guarantee the ROI outlined in this proposal. If [Customer Organization Name] 
 - Go-live in 85 days
 
 **Testimonial:**
-> "The HIPAA Attachments Platform transformed our attachment workflow. What used to take our team 900 hours per month now takes less than 100. The ROI was evident within the first month."
+> "The Cloud Health Office Platform transformed our attachment workflow. What used to take our team 900 hours per month now takes less than 100. The ROI was evident within the first month."
 > — Director of Claims Operations
 
 ### Reference 2: [Similar Payer Organization]
@@ -546,7 +546,7 @@ We guarantee the ROI outlined in this proposal. If [Customer Organization Name] 
 
 **Customer Approval:**
 
-By signing below, [Customer Organization Name] approves this proposal and authorizes HIPAA Attachments Platform to proceed with the Statement of Work as outlined.
+By signing below, [Customer Organization Name] approves this proposal and authorizes Cloud Health Office Platform to proceed with the Statement of Work as outlined.
 
 **Authorized Signature:**
 
@@ -557,7 +557,7 @@ Date: _________________________________
 Signature: _____________________________
 ```
 
-**HIPAA Attachments Platform:**
+**Cloud Health Office Platform:**
 
 ```
 Name: _________________________________
