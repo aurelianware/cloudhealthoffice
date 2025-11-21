@@ -115,6 +115,8 @@ The platform supports **configuration-driven deployment** for all Availity trans
 
 ### How Platform Onboarding Works
 
+**New Prospect?** Start with the [Onboarding Configuration Worksheet](docs/ONBOARDING-CONFIGURATION-WORKSHEET.md) to capture all technical and business requirements during your initial onboarding call.
+
 #### Step 1: Create Configuration (15-30 minutes)
 
 Use the interactive onboarding wizard:
@@ -1296,6 +1298,7 @@ Comprehensive documentation is available to guide development, deployment, and m
 - **[docs/api/ECS-OPENAPI.yaml](docs/api/ECS-OPENAPI.yaml)** - OpenAPI 3.0 API specification
 
 ### Additional Resources
+- **[docs/ONBOARDING-CONFIGURATION-WORKSHEET.md](docs/ONBOARDING-CONFIGURATION-WORKSHEET.md)** - Comprehensive onboarding worksheet for new prospects
 - **[HIPAA-X12-Agreements-Guide.md](HIPAA-X12-Agreements-Guide.md)** - X12 EDI agreement configuration
 - **[test-plan-trading-partners.md](test-plan-trading-partners.md)** - Testing procedures and trading partner details
 
