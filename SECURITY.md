@@ -684,9 +684,9 @@ az monitor metrics alert create \
 ### Incident Response Contacts
 
 **Internal:**
-- Security Team: security@example.com
-- Compliance Officer: compliance@example.com
-- Legal: legal@example.com
+- Security Team: security@cloudhealthoffice.com
+- Compliance Officer: compliance@cloudhealthoffice.com
+- Legal: legal@cloudhealthoffice.com
 
 **External:**
 - Azure Support: 1-800-642-7676
