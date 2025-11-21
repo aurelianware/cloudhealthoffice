@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HIPAA-compliant attachments processing platform for healthcare payers. Automate 275/277/278 EDI transactions with Azure Logic Apps.">
+    <title>HIPAA Attachments Platform - Automated EDI Processing for Healthcare Payers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #0078D4 0%, #00BCF2 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 30px;
+            font-weight: 500;
+        }
+        
+        nav a:hover {
+            text-decoration: underline;
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, #0078D4 0%, #00BCF2 100%);
+            color: white;
+            padding: 100px 0;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .hero p {
+            font-size: 24px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: #0078D4;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 18px;
+            transition: transform 0.2s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .section {
+            padding: 80px 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 36px;
+            margin-bottom: 50px;
+            color: #0078D4;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+        
+        .feature {
+            text-align: center;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: transform 0.2s;
+        }
+        
+        .feature:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .feature h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #0078D4;
+        }
+        
+        .benefits {
+            background: #f8f9fa;
+        }
+        
+        .benefit-list {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .benefit-item {
+            display: flex;
+            align-items: start;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .benefit-icon {
+            font-size: 32px;
+            margin-right: 20px;
+            color: #0078D4;
+        }
+        
+        .pricing {
+            text-align: center;
+        }
+        
+        .price-card {
+            background: white;
+            border: 2px solid #0078D4;
+            border-radius: 10px;
+            padding: 40px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .price {
+            font-size: 48px;
+            color: #0078D4;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .price-subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .roi-callout {
+            background: #e7f5ff;
+            padding: 30px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 48px;
+            color: #0078D4;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .testimonials {
+            background: #f8f9fa;
+        }
+        
+        .testimonial {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0078D4;
+        }
+        
+        .testimonial-text {
+            font-style: italic;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .testimonial-author {
+            font-weight: bold;
+            color: #0078D4;
+        }
+        
+        .contact {
+            text-align: center;
+            padding: 80px 0;
+            background: linear-gradient(135deg, #0078D4 0%, #00BCF2 100%);
+            color: white;
+        }
+        
+        .contact h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        
+        .contact p {
+            font-size: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .contact-button {
+            background: white;
+            color: #0078D4;
+            padding: 15px 50px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 20px;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        
+        .contact-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 30px 0;
+        }
+        
+        .footer-links {
+            margin-bottom: 20px;
+        }
+        
+        .footer-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+        }
+        
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 32px;
+            }
+            
+            .hero p {
+                font-size: 18px;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">🏥 HIPAA Attachments Platform</div>
+                <nav>
+                    <a href="#features">Features</a>
+                    <a href="#benefits">Benefits</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#contact">Contact</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Automate HIPAA Attachments Processing</h1>
+            <p>Secure, Scalable, Configuration-Driven EDI Platform for Healthcare Payers</p>
+            <a href="#contact" class="cta-button">Schedule a Demo</a>
+        </div>
+    </section>
+
+    <section id="features" class="section">
+        <div class="container">
+            <h2 class="section-title">Enterprise-Grade Features</h2>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🔒</div>
+                    <h3>HIPAA Compliant</h3>
+                    <p>Premium Key Vault with HSM-backed keys, private endpoints, and PHI masking in all logs. 100% HIPAA technical safeguards addressed.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Zero-Code Onboarding</h3>
+                    <p>Configuration-driven platform supports multiple payers without custom development. Add new payers in 15-30 minutes.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Complete EDI Support</h3>
+                    <p>Process 275 Attachments, 277 RFAI, and 278 Authorization requests with X12 encoding/decoding via Integration Account.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h3>Backend Agnostic</h3>
+                    <p>Works with any claims system: QNXT, FacetsRx, TriZetto, or custom platforms through configurable API mappings.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">☁️</div>
+                    <h3>Azure-Native</h3>
+                    <p>Built on Logic Apps Standard with Data Lake Gen2, Service Bus, and Application Insights for enterprise reliability.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Multi-Tenant Platform</h3>
+                    <p>Single codebase serves multiple payers with config-based isolation. Shared or dedicated deployment options.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="benefits" class="section benefits">
+        <div class="container">
+            <h2 class="section-title">Business Benefits</h2>
+            <div class="benefit-list">
+                <div class="benefit-item">
+                    <div class="benefit-icon">💰</div>
+                    <div>
+                        <h3>Reduce Operational Costs</h3>
+                        <p>Automate manual attachment processing, reducing staff time by 60-80%. Eliminate manual file transfers and data entry.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">🚀</div>
+                    <div>
+                        <h3>Accelerate Processing</h3>
+                        <p>Real-time SFTP polling and automated workflows process attachments in seconds, not hours or days.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">✅</div>
+                    <div>
+                        <h3>Improve Compliance</h3>
+                        <p>Automated audit logging, 7-year retention policies, and encryption at rest/transit ensure HIPAA compliance.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">📈</div>
+                    <div>
+                        <h3>Scale Effortlessly</h3>
+                        <p>Handle varying transaction volumes across multiple payers without infrastructure changes or performance degradation.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Process Flow</h2>
+            <div style="max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <ol style="font-size: 18px; line-height: 2;">
+                    <li><strong>SFTP Polling:</strong> Monitors Availity SFTP for new 275 attachment files</li>
+                    <li><strong>Data Lake Archive:</strong> Stores raw files with date-based partitioning</li>
+                    <li><strong>X12 Decoding:</strong> Processes EDI messages via Integration Account</li>
+                    <li><strong>Metadata Extraction:</strong> Extracts claim, member, and provider information</li>
+                    <li><strong>Backend Integration:</strong> Links attachments to claims via your system's API</li>
+                    <li><strong>Event Publishing:</strong> Publishes to Service Bus for downstream processing</li>
+                    <li><strong>277 RFAI:</strong> Generates and sends status responses to Availity</li>
+                    <li><strong>278 Processing:</strong> Handles authorization requests and responses</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section id="pricing" class="section pricing">
+        <div class="container">
+            <h2 class="section-title">Simple, Transparent Pricing</h2>
+            <div class="price-card">
+                <h3>Platform License</h3>
+                <div class="price">$10,000<span style="font-size: 24px;">/year</span></div>
+                <p class="price-subtitle">per payer organization</p>
+                <ul style="text-align: left; margin: 0 auto; max-width: 400px; line-height: 2;">
+                    <li>✅ Complete 275/277/278 EDI processing</li>
+                    <li>✅ Zero-code configuration system</li>
+                    <li>✅ Backend-agnostic API integration</li>
+                    <li>✅ HIPAA-compliant infrastructure</li>
+                    <li>✅ Data Lake Gen2 with 7-year retention</li>
+                    <li>✅ Application Insights monitoring</li>
+                    <li>✅ Email & phone support</li>
+                    <li>✅ Quarterly platform updates</li>
+                </ul>
+                <a href="#contact" class="cta-button" style="margin-top: 30px;">Get Started</a>
+                <div class="roi-callout">
+                    <strong>ROI Guarantee:</strong> Save $180,000+ annually in call center costs and staff time, or your money back.
+                </div>
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">60%</div>
+                    <div class="stat-label">Call Reduction</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">18x</div>
+                    <div class="stat-label">ROI First Year</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">80%</div>
+                    <div class="stat-label">Time Savings</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">99.9%</div>
+                    <div class="stat-label">Uptime SLA</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section testimonials">
+        <div class="container">
+            <h2 class="section-title">What Customers Say</h2>
+            <div class="testimonial">
+                <p class="testimonial-text">"The platform reduced our attachment processing time from 2 hours to 5 minutes. The configuration-driven approach meant we onboarded 3 additional payers in just one week."</p>
+                <p class="testimonial-author">— Healthcare Payer CTO</p>
+            </div>
+            <div class="testimonial">
+                <p class="testimonial-text">"HIPAA compliance was our biggest concern, and this platform exceeded our expectations. Premium Key Vault, private endpoints, and complete audit logging gave our security team confidence."</p>
+                <p class="testimonial-author">— Regional Health Plan CISO</p>
+            </div>
+            <div class="testimonial">
+                <p class="testimonial-text">"The backend-agnostic design was perfect for us. We integrated with our legacy claims system in 3 days without modifying any core workflows."</p>
+                <p class="testimonial-author">— Claims Operations Director</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2>Ready to Automate Your Attachments Processing?</h2>
+            <p>Schedule a 30-minute demo and see the platform in action</p>
+            <a href="mailto:sales@hipaa-attachments.com?subject=Demo Request" class="contact-button">Schedule Demo</a>
+            <p style="margin-top: 30px; font-size: 18px;">
+                Or call us at: <strong>1-888-555-HIPAA (4472)</strong>
+            </p>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="#features">Features</a>
+                <a href="#benefits">Benefits</a>
+                <a href="#pricing">Pricing</a>
+                <a href="https://github.com/aurelianware/hipaa-attachments">Documentation</a>
+                <a href="mailto:support@hipaa-attachments.com">Support</a>
+            </div>
+            <p>&copy; 2025 HIPAA Attachments Platform. All rights reserved. | Apache 2.0 License</p>
+            <p style="margin-top: 10px; font-size: 14px; opacity: 0.8;">Built on Azure • HIPAA Compliant • SOC 2 Ready</p>
+        </div>
+    </footer>
+</body>
+</html>
