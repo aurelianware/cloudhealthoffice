@@ -1,4 +1,4 @@
-# Security Hardening Guide - HIPAA Attachments System
+# Security Hardening Guide - Cloud Health Office Platform
 
 ## Table of Contents
 - [Overview](#overview)

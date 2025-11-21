@@ -1,6 +1,6 @@
 # GitHub Actions Setup Guide
 
-This comprehensive guide covers all aspects of setting up GitHub Actions for automated deployment of the HIPAA Attachments solution.
+This comprehensive guide covers all aspects of setting up GitHub Actions for automated deployment of the Cloud Health Office solution.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -50,7 +50,7 @@ Create a separate Azure AD application for each environment (DEV, UAT, PROD).
 1. Navigate to **Azure Active Directory** → **App registrations**
 2. Click **+ New registration**
 3. Configure:
-   - **Name**: `hipaa-attachments-{ENV}-github` (e.g., `hipaa-attachments-prod-github`)
+   - **Name**: `cloud-health-office-{ENV}-github` (e.g., `cloud-health-office-prod-github`)
    - **Supported account types**: Single tenant
    - **Redirect URI**: Leave empty
 4. Click **Register**
@@ -61,9 +61,9 @@ Create a separate Azure AD application for each environment (DEV, UAT, PROD).
 ```bash
 # Set environment-specific variables
 ENV="prod"  # Change to "dev", "uat", or "prod"
-APP_NAME="hipaa-attachments-${ENV}-github"
+APP_NAME="cloud-health-office-${ENV}-github"
 REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_NAME="cloud-health-office"
 
 # Create Azure AD application
 az ad app create --display-name "$APP_NAME"
@@ -94,7 +94,7 @@ For **main branch** deployments (typical for DEV and PROD):
 ENV="prod"
 APP_ID="<your-app-id>"
 REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_NAME="cloud-health-office"
 BRANCH="main"
 
 # Create federated credential
@@ -201,8 +201,8 @@ az role assignment list --assignee "$APP_ID" --output table
 ```
 Name                      Subject
 ------------------------  --------------------------------------------------------
-github-prod-main          repo:aurelianware/hipaa-attachments:ref:refs/heads/main
-github-prod-environment   repo:aurelianware/hipaa-attachments:environment:PROD
+github-prod-main          repo:aurelianware/cloud-health-office:ref:refs/heads/main
+github-prod-environment   repo:aurelianware/cloud-health-office:environment:PROD
 ```
 
 ### Step 5: Gather Required IDs
@@ -241,7 +241,7 @@ Each environment (DEV, UAT, PROD) requires these three secrets:
 ### Adding Secrets via GitHub UI
 
 1. **Navigate to Repository Settings**
-   - Go to your GitHub repository: `https://github.com/aurelianware/hipaa-attachments`
+   - Go to your GitHub repository: `https://github.com/aurelianware/cloud-health-office`
    - Click **Settings** (top menu)
    - Click **Secrets and variables** → **Actions** (left sidebar)
 
@@ -300,7 +300,7 @@ gh auth login
 
 # Set repository
 REPO_OWNER="aurelianware"
-REPO_NAME="hipaa-attachments"
+REPO_NAME="cloud-health-office"
 
 # Add DEV secrets
 gh secret set AZURE_CLIENT_ID_DEV --repo "$REPO_OWNER/$REPO_NAME" --body "<dev-client-id>"
@@ -359,12 +359,12 @@ Variables are non-sensitive configuration values accessible by workflows.
 
 | Variable Name | Description | DEV Example | UAT Example | PROD Example |
 |---------------|-------------|-------------|-------------|--------------|
-| `AZURE_RG_NAME` | Resource group name | `rg-hipaa-attachments-dev` | `hipaa-attachments-uat-rg` | `payer-attachments-prod-rg` |
+| `AZURE_RG_NAME` | Resource group name | `rg-cloud-health-office-dev` | `cloud-health-office-uat-rg` | `payer-attachments-prod-rg` |
 | `AZURE_LOCATION` | Azure region | `eastus` | `eastus` | `eastus` |
 | `AZURE_CONNECTOR_LOCATION` | API connection region | `eastus` | `eastus` | `eastus` |
-| `BASE_NAME` | Resource name prefix | `hipaa-attachments-dev` | `hipaa-attachments-uat` | `hipaa-attachments-prod` |
+| `BASE_NAME` | Resource name prefix | `cloud-health-office-dev` | `cloud-health-office-uat` | `cloud-health-office-prod` |
 | `IA_NAME` | Integration Account name | `dev-integration-account` | `uat-integration-account` | `prod-integration-account` |
-| `SERVICE_BUS_NAME` | Service Bus namespace | `hipaa-attachments-dev-svc` | `hipaa-attachments-uat-svc` | `hipaa-attachments-prod-svc` |
+| `SERVICE_BUS_NAME` | Service Bus namespace | `cloud-health-office-dev-svc` | `cloud-health-office-uat-svc` | `cloud-health-office-prod-svc` |
 | `STORAGE_SKU` | Storage account SKU | `Standard_LRS` | `Standard_GRS` | `Standard_GRS` |
 
 ### Adding Variables via GitHub UI
@@ -379,11 +379,11 @@ Variables are non-sensitive configuration values accessible by workflows.
 
 ```bash
 # Add DEV variables
-gh variable set AZURE_RG_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "rg-hipaa-attachments-dev"
+gh variable set AZURE_RG_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "rg-cloud-health-office-dev"
 gh variable set AZURE_LOCATION --repo "$REPO_OWNER/$REPO_NAME" --body "eastus"
-gh variable set BASE_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "hipaa-attachments-dev"
+gh variable set BASE_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "cloud-health-office-dev"
 gh variable set IA_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "dev-integration-account"
-gh variable set SERVICE_BUS_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "hipaa-attachments-dev-svc"
+gh variable set SERVICE_BUS_NAME --repo "$REPO_OWNER/$REPO_NAME" --body "cloud-health-office-dev-svc"
 gh variable set STORAGE_SKU --repo "$REPO_OWNER/$REPO_NAME" --body "Standard_LRS"
 gh variable set AZURE_CONNECTOR_LOCATION --repo "$REPO_OWNER/$REPO_NAME" --body "eastus"
 ```
@@ -439,20 +439,20 @@ Add environment-specific variables to each environment:
 
 **DEV Environment Variables:**
 ```
-AZURE_RG_NAME = rg-hipaa-attachments-dev
-BASE_NAME = hipaa-attachments-dev
+AZURE_RG_NAME = rg-cloud-health-office-dev
+BASE_NAME = cloud-health-office-dev
 ```
 
 **UAT Environment Variables:**
 ```
-AZURE_RG_NAME = hipaa-attachments-uat-rg
-BASE_NAME = hipaa-attachments-uat
+AZURE_RG_NAME = cloud-health-office-uat-rg
+BASE_NAME = cloud-health-office-uat
 ```
 
 **PROD Environment Variables:**
 ```
 AZURE_RG_NAME = payer-attachments-prod-rg
-BASE_NAME = hipaa-attachments-prod
+BASE_NAME = cloud-health-office-prod
 ```
 
 ## Workflow Permissions
@@ -484,7 +484,7 @@ permissions:
 ### Test DEV Deployment
 
 1. **Manual Trigger**
-   - Go to **Actions** → **Deploy DEV - HIPAA Attachments**
+   - Go to **Actions** → **Deploy DEV - Cloud Health Office**
    - Click **Run workflow**
    - Select branch: `main`
    - Click **Run workflow**
@@ -547,7 +547,7 @@ az ad app federated-credential list --id "$APP_ID"
 az ad app federated-credential update \
   --id "$APP_ID" \
   --federated-credential-id "<credential-id>" \
-  --parameters "{ \"subject\": \"repo:aurelianware/hipaa-attachments:ref:refs/heads/main\" }"
+  --parameters "{ \"subject\": \"repo:aurelianware/cloud-health-office:ref:refs/heads/main\" }"
 ```
 
 #### Issue: "Error: Unable to get ACTIONS_ID_TOKEN_REQUEST_URL env variable"
@@ -718,10 +718,10 @@ az ad app federated-credential list --id "$APP_ID"
 az role assignment list --assignee "$APP_ID"
 
 # Verify GitHub secrets
-gh secret list --repo "aurelianware/hipaa-attachments"
+gh secret list --repo "aurelianware/cloud-health-office"
 
 # Verify GitHub variables
-gh variable list --repo "aurelianware/hipaa-attachments"
+gh variable list --repo "aurelianware/cloud-health-office"
 ```
 
 ### Useful Links

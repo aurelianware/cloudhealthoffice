@@ -1,6 +1,6 @@
 # Security and HIPAA Compliance Guide
 
-This document outlines security requirements, HIPAA compliance measures, and secure development practices for the HIPAA Attachments system.
+This document outlines security requirements, HIPAA compliance measures, and secure development practices for the Cloud Health Office system.
 
 ## Table of Contents
 - [HIPAA Compliance Overview](#hipaa-compliance-overview)
@@ -18,7 +18,7 @@ This document outlines security requirements, HIPAA compliance measures, and sec
 
 ### Regulatory Requirements
 
-The HIPAA Attachments system processes Protected Health Information (PHI) and must comply with:
+The Cloud Health Office system processes Protected Health Information (PHI) and must comply with:
 
 - **HIPAA Privacy Rule**: Governs use and disclosure of PHI
 - **HIPAA Security Rule**: Requires safeguards for electronic PHI (ePHI)

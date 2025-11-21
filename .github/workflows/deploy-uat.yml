@@ -1,4 +1,4 @@
-name: Deploy UAT - HIPAA Attachments
+name: Deploy UAT - Cloud Health Office
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       baseName:
         description: "Base name prefix for UAT resources"
         required: false
-        default: "hipaa-attachments"
+        default: "cloud-health-office"
       bicepPath:
         description: "Path to Bicep file"
         required: false
@@ -21,8 +21,8 @@ on:
 
 env:
   AZURE_LOCATION: westus
-  UAT_RESOURCE_GROUP: hipaa-attachments-uat-rg
-  UAT_BASE_NAME: hipaa-attachments-uat
+  UAT_RESOURCE_GROUP: cloud-health-office-uat-rg
+  UAT_BASE_NAME: cloud-health-office-uat
 
 jobs:
   # Pre-approval security validation
@@ -236,7 +236,7 @@ jobs:
           resourceGroupName: ${{ env.UAT_RESOURCE_GROUP }}
           template: ${{ needs.validate.outputs.bicep-path }}
           parameters: baseName=${{ needs.validate.outputs.base-name }}
-          deploymentName: hipaa-attachments-uat-infra-${{ github.run_number }}
+          deploymentName: cloud-health-office-uat-infra-${{ github.run_number }}
 
       - name: Verify Infrastructure Deployment
         uses: azure/cli@v2
@@ -461,7 +461,7 @@ jobs:
           inlineScript: |
             set +e  # Continue on error
             RG="${{ env.UAT_RESOURCE_GROUP }}"
-            DEPLOY_NAME="hipaa-attachments-uat-infra-${{ github.run_number }}"
+            DEPLOY_NAME="cloud-health-office-uat-infra-${{ github.run_number }}"
 
             echo "=== Deployment Failed - Gathering Diagnostics ==="
             echo "⚠️  UAT deployment failed. Collecting diagnostic information..."
