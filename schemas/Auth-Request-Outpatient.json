@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/auth-request-outpatient.json",
+  "title": "Outpatient Authorization Request (X12 278 X217 - UM01=HS)",
+  "description": "Schema for outpatient authorization requests supporting X12 278 Healthcare Services Review",
+  "type": "object",
+  "required": ["patient", "requestingProvider", "serviceDateRange", "diagnosis", "service"],
+  "properties": {
+    "patient": {
+      "type": "object",
+      "required": ["memberId", "dateOfBirth", "gender"],
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,80}$"
+        },
+        "firstName": {"type": "string", "maxLength": 35},
+        "lastName": {"type": "string", "maxLength": 60},
+        "dateOfBirth": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["M", "F", "U"]
+        },
+        "relationship": {
+          "type": "string",
+          "enum": ["01", "18", "19", "20", "21", "39", "40", "53"]
+        }
+      }
+    },
+    "subscriber": {
+      "type": "object",
+      "properties": {
+        "memberId": {"type": "string", "pattern": "^[A-Z0-9]{1,80}$"},
+        "firstName": {"type": "string", "maxLength": 35},
+        "lastName": {"type": "string", "maxLength": 60}
+      }
+    },
+    "requestingProvider": {
+      "type": "object",
+      "required": ["npi"],
+      "properties": {
+        "npi": {"type": "string", "pattern": "^\\d{10}$"},
+        "firstName": {"type": "string", "maxLength": 35},
+        "lastName": {"type": "string", "maxLength": 60},
+        "organizationName": {"type": "string", "maxLength": 60},
+        "address": {
+          "type": "object",
+          "properties": {
+            "street1": {"type": "string", "maxLength": 55},
+            "street2": {"type": "string", "maxLength": 55},
+            "city": {"type": "string", "maxLength": 30},
+            "state": {"type": "string", "pattern": "^[A-Z]{2}$"},
+            "zipCode": {"type": "string", "pattern": "^\\d{5}(-\\d{4})?$"}
+          }
+        },
+        "phone": {"type": "string", "pattern": "^\\d{10}$"}
+      }
+    },
+    "serviceDateRange": {
+      "type": "object",
+      "required": ["fromDate", "toDate"],
+      "description": "Service date range for outpatient services (DTP*AAH*RD8)",
+      "properties": {
+        "fromDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Service from date in YYYY-MM-DD format"
+        },
+        "toDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Service to date in YYYY-MM-DD format"
+        }
+      }
+    },
+    "diagnosis": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[A-Z0-9.]{3,7}$"},
+          "codeType": {
+            "type": "string",
+            "enum": ["ABK", "ABF"],
+            "default": "ABK"
+          }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["serviceType", "placeOfService"],
+      "properties": {
+        "serviceType": {
+          "type": "string",
+          "description": "UM03 - Service Type Code (e.g., 1=Medical Care, 2=Surgical, 3=Consultation, 12=Durable Medical Equipment, 33=Chiropractic)",
+          "pattern": "^\\d{1,3}$"
+        },
+        "placeOfService": {
+          "type": "string",
+          "description": "UM04 - Place of Service Code: 11=Office, 22=Outpatient Hospital, 23=Emergency Room, 24=Ambulatory Surgical Center",
+          "pattern": "^\\d{2}$"
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Service quantity"
+        },
+        "quantityType": {
+          "type": "string",
+          "enum": ["DY", "HR", "MO", "UN", "VS"],
+          "description": "Quantity type: DY=Days, HR=Hours, MO=Months, UN=Units, VS=Visits"
+        }
+      }
+    },
+    "procedures": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Procedure codes (often required for outpatient)",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {"type": "string"},
+          "codeType": {
+            "type": "string",
+            "enum": ["HC", "IJ", "IV", "NU"],
+            "description": "HC=HCPCS/CPT, IJ=ICD-10-PCS, IV=ICD-9-PCS, NU=Revenue Code"
+          },
+          "modifier": {"type": "string", "pattern": "^[A-Z0-9]{2}$"}
+        }
+      }
+    },
+    "providerMessage": {
+      "type": "string",
+      "maxLength": 264
+    },
+    "attachmentRequired": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

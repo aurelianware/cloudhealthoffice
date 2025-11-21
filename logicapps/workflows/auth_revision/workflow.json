@@ -1,0 +1,425 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_Authorization_Revision_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "authorizationNumber": {"type": "string"},
+              "patient": {
+                "type": "object",
+                "properties": {
+                  "memberId": {"type": "string"}
+                },
+                "required": ["memberId"]
+              },
+              "revisionType": {"type": "string"},
+              "modifiedFields": {
+                "type": "object",
+                "properties": {
+                  "serviceDateRange": {"type": "object"},
+                  "diagnosis": {"type": "array"},
+                  "service": {"type": "object"},
+                  "procedures": {"type": "array"}
+                }
+              },
+              "revisionReason": {"type": "string"}
+            },
+            "required": ["authorizationNumber", "patient", "modifiedFields", "revisionReason"]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try_Process_Revision": {
+        "type": "Scope",
+        "actions": {
+          "Check_Revision_Supported": {
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@parameters('revisions_supported')",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Get_Original_Authorization": {
+                "type": "Http",
+                "inputs": {
+                  "method": "GET",
+                  "uri": "@{parameters('auth_lookup_api_url')}/authorizations/@{triggerBody()?['authorizationNumber']}",
+                  "headers": {
+                    "Authorization": "Bearer @{parameters('API_TOKEN')}"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 3,
+                    "type": "fixed",
+                    "interval": "PT10S"
+                  }
+                },
+                "runAfter": {}
+              },
+              "Check_Status_Allows_Revision": {
+                "type": "If",
+                "expression": {
+                  "or": [
+                    {
+                      "equals": [
+                        "@body('Get_Original_Authorization')?['status']",
+                        "PENDED"
+                      ]
+                    },
+                    {
+                      "contains": [
+                        "@parameters('revision_allowed_statuses')",
+                        "@body('Get_Original_Authorization')?['status']"
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Transform_Revision_to_X12_278": {
+                    "type": "Compose",
+                    "inputs": {
+                      "interchange": {
+                        "ISA": {
+                          "ISA05": "ZZ",
+                          "ISA06": "@{padRight(parameters('x12_sender_id'), 15)}",
+                          "ISA07": "ZZ",
+                          "ISA08": "@{padRight(parameters('x12_receiver_id'), 15)}"
+                        }
+                      },
+                      "transaction": {
+                        "ST": {
+                          "ST01": "278",
+                          "ST02": "0001"
+                        },
+                        "BHT": {
+                          "BHT01": "0007",
+                          "BHT02": "13",
+                          "BHT03": "@{guid()}",
+                          "BHT04": "@{formatDateTime(utcNow(), 'yyyyMMdd')}",
+                          "BHT06": "RQ"
+                        },
+                        "UM": {
+                          "UM01": "@{body('Get_Original_Authorization')?['umCode']}",
+                          "UM02": "S"
+                        },
+                        "REF_D9": {
+                          "REF01": "D9",
+                          "REF02": "@{triggerBody()?['authorizationNumber']}"
+                        },
+                        "REF_EW": "@if(not(empty(triggerBody()?['revisionReason'])), json(concat('{\"REF01\":\"EW\",\"REF02\":\"', triggerBody()?['revisionReason'], '\"}')), null())"
+                      }
+                    },
+                    "runAfter": {}
+                  },
+                  "Encode_X12_278_Revision": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/encode/edi",
+                      "body": {
+                        "content": "@outputs('Transform_Revision_to_X12_278')",
+                        "contentType": "application/edi-x12",
+                        "agreementType": "X12",
+                        "messageType": "@parameters('x12_278_x217_messagetype')",
+                        "senderId": "@parameters('x12_sender_id')",
+                        "receiverId": "@parameters('x12_receiver_id')"
+                      }
+                    },
+                    "runAfter": {
+                      "Transform_Revision_to_X12_278": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Archive_Revision_Request": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+                      "queries": {
+                        "folderPath": "@concat(parameters('blob_auth_requests_folder'), '/revisions/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                        "name": "278-revision-@{triggerBody()?['authorizationNumber']}-@{guid()}.edi"
+                      },
+                      "body": "@body('Encode_X12_278_Revision')"
+                    },
+                    "runAfter": {
+                      "Encode_X12_278_Revision": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "POST_Revision_to_Payer": {
+                    "type": "Http",
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@parameters('payer_auth_endpoint_url')",
+                      "headers": {
+                        "Content-Type": "application/edi-x12",
+                        "Authorization": "Bearer @{parameters('API_TOKEN')}"
+                      },
+                      "body": "@body('Encode_X12_278_Revision')"
+                    },
+                    "runtimeConfiguration": {
+                      "retry": {
+                        "count": 3,
+                        "type": "fixed",
+                        "interval": "PT15S"
+                      }
+                    },
+                    "runAfter": {
+                      "Archive_Revision_Request": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Parse_Revision_Response": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/decode/edi",
+                      "body": {
+                        "content": "@base64(body('POST_Revision_to_Payer'))",
+                        "contentType": "application/edi-x12",
+                        "agreementType": "X12",
+                        "messageType": "@parameters('x12_278_x217_messagetype')",
+                        "senderId": "@parameters('x12_receiver_id')",
+                        "receiverId": "@parameters('x12_sender_id')"
+                      }
+                    },
+                    "runAfter": {
+                      "POST_Revision_to_Payer": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Extract_Revision_Response": {
+                    "type": "Compose",
+                    "inputs": {
+                      "authorizationNumber": "@{triggerBody()?['authorizationNumber']}",
+                      "revisionStatus": "@if(equals(body('Parse_Revision_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['STC']?[0]?['STC01_1'], 'A1'), 'APPROVED', if(equals(body('Parse_Revision_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['STC']?[0]?['STC01_1'], 'A4'), 'PENDED', 'DENIED'))",
+                      "certificationTypeCode": "@{body('Parse_Revision_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['STC']?[0]?['STC01_1']}",
+                      "revisionReason": "@{triggerBody()?['revisionReason']}"
+                    },
+                    "runAfter": {
+                      "Parse_Revision_Response": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Log_Revision_Success": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/events/customEvent",
+                      "body": {
+                        "eventName": "Authorization_Revision_Processed",
+                        "properties": {
+                          "authorizationNumber": "@triggerBody()?['authorizationNumber']",
+                          "revisionStatus": "@outputs('Extract_Revision_Response')?['revisionStatus']",
+                          "memberId": "@triggerBody()?['patient']?['memberId']",
+                          "revisionReason": "@triggerBody()?['revisionReason']"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Extract_Revision_Response": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Get_Original_Authorization": [
+                    "Succeeded"
+                  ]
+                },
+                "else": {
+                  "actions": {
+                    "Return_Status_Not_Allowed": {
+                      "type": "Response",
+                      "kind": "Http",
+                      "inputs": {
+                        "statusCode": 400,
+                        "body": {
+                          "status": "ERROR",
+                          "error": "Revisions not allowed for authorization in current status",
+                          "currentStatus": "@body('Get_Original_Authorization')?['status']",
+                          "allowedStatuses": "@parameters('revision_allowed_statuses')"
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  }
+                }
+              },
+              "Return_Revision_Success": {
+                "type": "Response",
+                "kind": "Http",
+                "inputs": {
+                  "statusCode": 200,
+                  "body": "@outputs('Extract_Revision_Response')"
+                },
+                "runAfter": {
+                  "Check_Status_Allows_Revision": [
+                    "Succeeded"
+                  ]
+                }
+              }
+            },
+            "runAfter": {},
+            "else": {
+              "actions": {
+                "Return_Not_Supported": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "inputs": {
+                    "statusCode": 400,
+                    "body": {
+                      "status": "ERROR",
+                      "error": "Revisions are not supported by payer configuration"
+                    }
+                  },
+                  "runAfter": {}
+                }
+              }
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch_Revision_Error": {
+        "type": "Scope",
+        "actions": {
+          "Log_Error": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Authorization_Revision_Error",
+                "properties": {
+                  "errorMessage": "@{result('Try_Process_Revision')?[0]?['error']?['message']}",
+                  "authorizationNumber": "@{triggerBody()?['authorizationNumber']}"
+                }
+              }
+            },
+            "runAfter": {}
+          },
+          "Return_Error_Response": {
+            "type": "Response",
+            "kind": "Http",
+            "inputs": {
+              "statusCode": 500,
+              "body": {
+                "status": "ERROR",
+                "error": "@{result('Try_Process_Revision')?[0]?['error']?['message']}"
+              }
+            },
+            "runAfter": {
+              "Log_Error": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try_Process_Revision": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "_SECURITY_NOTE": {
+      "type": "String",
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON."
+    },
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "blob_storage_account": {
+      "type": "String",
+      "defaultValue": "default"
+    },
+    "blob_auth_requests_folder": {
+      "type": "String",
+      "defaultValue": "hipaa-attachments/raw/auth-requests"
+    },
+    "auth_lookup_api_url": {
+      "type": "String",
+      "defaultValue": "https://auth-lookup.api.local"
+    },
+    "payer_auth_endpoint_url": {
+      "type": "String",
+      "defaultValue": "https://payer-prod.example.com/auth"
+    },
+    "revisions_supported": {
+      "type": "Bool",
+      "defaultValue": true
+    },
+    "revision_allowed_statuses": {
+      "type": "Array",
+      "defaultValue": ["PENDED"]
+    },
+    "API_TOKEN": {
+      "type": "SecureString"
+    },
+    "x12_sender_id": {
+      "type": "String",
+      "defaultValue": "66917"
+    },
+    "x12_receiver_id": {
+      "type": "String",
+      "defaultValue": "030240928"
+    },
+    "x12_278_x217_messagetype": {
+      "type": "String",
+      "defaultValue": "X12_005010X217_278"
+    }
+  }
+}

@@ -275,22 +275,34 @@ The schema is designed for extensibility. See **[How to Extend](docs/UNIFIED-CON
 - **Application Insights**: Telemetry and monitoring
 
 ### Workflows
-- `logicapps/workflows/ingest275/workflow.json`: Main 275 ingestion workflow
-- `logicapps/workflows/process_appeals/workflow.json`: Appeals processing workflow (consumes from attachments-in topic)
+
+**HIPAA Transactions (X12 EDI)**:
+- `logicapps/workflows/ingest275/workflow.json`: Main 275 attachment ingestion workflow
 - `logicapps/workflows/rfai277/workflow.json`: Outbound 277 RFAI workflow
 - `logicapps/workflows/ingest278/workflow.json`: X12 278 transaction processing workflow
-- `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing workflow
 - `logicapps/workflows/replay278/workflow.json`: HTTP endpoint for deterministic 278 replay
+
+**Authorization Requests (X12 278 X217)**:
+- `logicapps/workflows/auth_request_inpatient/workflow.json`: Inpatient authorization requests (UM01=AR)
+- `logicapps/workflows/auth_request_outpatient/workflow.json`: Outpatient authorization requests (UM01=HS)
+- `logicapps/workflows/auth_request_referral/workflow.json`: Referral authorization requests (UM01=SC)
+- `logicapps/workflows/auth_revision/workflow.json`: Authorization revision workflow (UM02=S)
+- `logicapps/workflows/auth_cancellation/workflow.json`: Authorization cancellation workflow (UM02=3)
+
+**Business Processing**:
+- `logicapps/workflows/process_appeals/workflow.json`: Appeals processing workflow
+- `logicapps/workflows/process_authorizations/workflow.json`: Authorization request/response processing
 - `logicapps/workflows/ecs_summary_search/workflow.json`: Enhanced Claim Status (ECS) summary search workflow
 - `logicapps/workflows/auth_inquiry/workflow.json`: Authorization Inquiry (X12 278 X215) - Query existing authorizations
 
 ### Key Features
-- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations}/yyyy/MM/dd/` partitioning
+- **Data Lake Storage**: Files stored with `hipaa-attachments/raw/{275|278|authorizations|auth-requests}/yyyy/MM/dd/` partitioning
 - **Retry Logic**: 4 retries with 15-second intervals for QNXT API calls
 - **Error Handling**: Service Bus dead-letter support
 - **Monitoring**: Application Insights integration
 - **278 Replay Endpoint**: HTTP trigger for deterministic transaction replay
 - **Authorization Processing**: Complete authorization lifecycle from request through 277 response generation
+- **Authorization Requests (NEW)**: Submit new authorization requests via HTTP endpoints for Inpatient, Outpatient, and Referral services with real-time approval/denial/pended responses (X12 278 X217)
 - **ECS Summary Search**: Enhanced Claim Status queries via HTTP endpoint with four search methods (Service Date, Member, Check Number, Claim History)
 - **Authorization Inquiry**: X12 278 X215 transactions for querying existing authorizations in real-time
 
@@ -566,6 +578,83 @@ From a single configuration file, you get:
 - **Examples**: 
   - `core/examples/medicaid-mco-config.json` - Medicaid MCO with all modules
   - `core/examples/regional-blues-config.json` - Regional Blues with EDI batch
+
+## 🆕 Authorization Request Module (X12 278 X217)
+
+The system now supports submitting **new authorization requests** to payers with real-time responses. This module implements the X12 278 Healthcare Services Review - Request for Review and Response (005010X217).
+
+### Transaction Types Supported
+
+1. **Inpatient Authorization (UM01=AR)**
+   - Hospital admissions
+   - Requires: Admission date, facility, diagnosis codes
+   - Quantity type: Days (DY)
+
+2. **Outpatient Authorization (UM01=HS)**
+   - Outpatient procedures, surgeries, imaging, therapy
+   - Requires: Service date range, procedure codes (CPT/HCPCS)
+   - Quantity types: Days, Hours, Months, Units, Visits
+
+3. **Referral Request (UM01=SC)**
+   - Specialty care referrals
+   - Requires: Referred-to provider with NPI and specialty/taxonomy
+   - Service dates and procedures optional
+
+### Additional Capabilities
+
+- **Authorization Revision (UM02=S)**: Modify existing authorizations (dates, quantities, diagnoses)
+- **Authorization Cancellation (UM02=3)**: Cancel pending or approved authorizations
+- **Eligibility Pre-Check**: Required 270/271 eligibility verification before submission
+- **Attachment Integration**: Trigger 275 attachment workflow during or after submission
+- **Response Status Mapping**: A1 (Approved), A4 (Pended), A6 (Denied), A2 (Modified)
+
+### Documentation
+
+- **[docs/AUTHORIZATION-REQUEST.md](docs/AUTHORIZATION-REQUEST.md)** - Complete authorization request documentation (~25 pages)
+- **[schemas/Auth-Request-*.json](schemas/)** - Request/response JSON schemas
+- **[docs/examples/authorizations/request/](docs/examples/authorizations/request/)** - 12 example X12 EDI transactions
+- **[core/schemas/availity-integration-config.schema.json](core/schemas/availity-integration-config.schema.json)** - Configuration schema
+
+### Example Usage
+
+```bash
+# Submit inpatient authorization request
+POST https://hipaa-logic-la.azurewebsites.net/api/auth_request_inpatient/triggers/...
+Content-Type: application/json
+
+{
+  "patient": {
+    "memberId": "ABC123456789",
+    "dateOfBirth": "1985-06-15",
+    "gender": "M"
+  },
+  "requestingProvider": {
+    "npi": "1234567890"
+  },
+  "admission": {
+    "admissionDate": "2024-12-01"
+  },
+  "diagnosis": [
+    {"code": "I50.9"}
+  ],
+  "service": {
+    "serviceType": "48",
+    "quantity": 5,
+    "quantityType": "DY"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "authorizationNumber": "AUTH20241119001",
+  "status": "APPROVED",
+  "certificationTypeCode": "A1",
+  "effectiveDate": "2024-12-01",
+  "expirationDate": "2024-12-05"
+}
+```
 
 ## Build & Deployment
 

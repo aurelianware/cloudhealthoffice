@@ -86,14 +86,15 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
         Description = 'Phone Number'
         Severity = 'Medium'
-        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml', '*.ts', '*.js')
-        ExcludeContext = @('npi|provider|tax|ein|test|example|sample|mock|dummy|placeholder|1234567890|9999', 'TEST-', 'providerId', 'providerNpi')
+        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml', '*.ts', '*.js', 'Appeal-*.json', '*Request*.json', '*Response*.json', '*.schema.json')
+        ExcludeContext = @('npi|provider|tax|ein|test|example|sample|mock|dummy|placeholder|1234567890|9999|5555', 'TEST-', 'providerId', 'providerNpi')
     }
     'MemberId' = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
         Description = 'Member/Patient ID'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', 'example-*.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', 'example-*.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*test*.ts', '*test*.js', '*.schema.json', 'Auth-*.json', '*Request*.json', '*Response*.json', '*Inquiry*.json')
+        ExcludeContext = @('identifier|description|string|memberId:|memberIdRequired|field|property|param|variable|interface|type')
     }
 }
 

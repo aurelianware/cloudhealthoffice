@@ -1,0 +1,623 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "HTTP_Referral_Authorization_Request": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "patient": {
+                "type": "object",
+                "properties": {
+                  "memberId": {"type": "string"},
+                  "firstName": {"type": "string"},
+                  "lastName": {"type": "string"},
+                  "dateOfBirth": {"type": "string"},
+                  "gender": {"type": "string"},
+                  "relationship": {"type": "string"}
+                },
+                "required": ["memberId", "dateOfBirth", "gender"]
+              },
+              "subscriber": {
+                "type": "object",
+                "properties": {
+                  "memberId": {"type": "string"},
+                  "firstName": {"type": "string"},
+                  "lastName": {"type": "string"}
+                }
+              },
+              "requestingProvider": {
+                "type": "object",
+                "properties": {
+                  "npi": {"type": "string"},
+                  "firstName": {"type": "string"},
+                  "lastName": {"type": "string"},
+                  "organizationName": {"type": "string"},
+                  "address": {"type": "object"},
+                  "phone": {"type": "string"}
+                },
+                "required": ["npi"]
+              },
+              "referredToProvider": {
+                "type": "object",
+                "properties": {
+                  "npi": {"type": "string"},
+                  "firstName": {"type": "string"},
+                  "lastName": {"type": "string"},
+                  "organizationName": {"type": "string"},
+                  "specialty": {"type": "string"},
+                  "taxonomy": {"type": "string"},
+                  "address": {"type": "object"}
+                },
+                "required": ["npi"]
+              },
+              "serviceDateRange": {
+                "type": "object",
+                "properties": {
+                  "fromDate": {"type": "string"},
+                  "toDate": {"type": "string"}
+                }
+              },
+              "diagnosis": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {"type": "string"},
+                    "codeType": {"type": "string"}
+                  }
+                },
+                "minItems": 1,
+                "maxItems": 12
+              },
+              "service": {
+                "type": "object",
+                "properties": {
+                  "serviceType": {"type": "string"},
+                  "placeOfService": {"type": "string"}
+                }
+              },
+              "providerMessage": {"type": "string"},
+              "attachmentRequired": {"type": "boolean"}
+            },
+            "required": ["patient", "requestingProvider", "referredToProvider", "diagnosis"]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Try_Process_Referral_Authorization": {
+        "type": "Scope",
+        "actions": {
+          "Validate_Request_Schema": {
+            "type": "Compose",
+            "inputs": "@triggerBody()",
+            "runAfter": {}
+          },
+          "Check_Eligibility_270_271": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "@{parameters('eligibility_api_url')}/check",
+              "headers": {
+                "Authorization": "Bearer @{parameters('API_TOKEN')}",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "memberId": "@{triggerBody()?['patient']?['memberId']}",
+                "dateOfBirth": "@{triggerBody()?['patient']?['dateOfBirth']}",
+                "serviceDate": "@{coalesce(triggerBody()?['serviceDateRange']?['fromDate'], formatDateTime(utcNow(), 'yyyy-MM-dd'))}",
+                "requestedAt": "@utcNow()"
+              }
+            },
+            "runtimeConfiguration": {
+              "retry": {
+                "count": 3,
+                "type": "fixed",
+                "interval": "PT10S"
+              }
+            },
+            "runAfter": {
+              "Validate_Request_Schema": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Check_Eligibility_Result": {
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@body('Check_Eligibility_270_271')?['eligible']",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Transform_JSON_to_X12_278_Referral": {
+                "type": "Compose",
+                "inputs": {
+                  "interchange": {
+                    "ISA": {
+                      "ISA01": "00",
+                      "ISA02": "          ",
+                      "ISA03": "00",
+                      "ISA04": "          ",
+                      "ISA05": "ZZ",
+                      "ISA06": "@{padRight(parameters('x12_sender_id'), 15)}",
+                      "ISA07": "ZZ",
+                      "ISA08": "@{padRight(parameters('x12_receiver_id'), 15)}",
+                      "ISA09": "@{formatDateTime(utcNow(), 'yyMMdd')}",
+                      "ISA10": "@{formatDateTime(utcNow(), 'HHmm')}",
+                      "ISA11": "^",
+                      "ISA12": "00501",
+                      "ISA13": "@{padLeft(string(rand(100000000, 999999999)), 9, '0')}",
+                      "ISA14": "0",
+                      "ISA15": "P",
+                      "ISA16": ":"
+                    },
+                    "GS": {
+                      "GS01": "HS",
+                      "GS02": "@parameters('x12_sender_id')",
+                      "GS03": "@parameters('x12_receiver_id')",
+                      "GS04": "@{formatDateTime(utcNow(), 'yyyyMMdd')}",
+                      "GS05": "@{formatDateTime(utcNow(), 'HHmm')}",
+                      "GS06": "@{string(rand(1000, 9999))}",
+                      "GS07": "X",
+                      "GS08": "005010X217"
+                    }
+                  },
+                  "transaction": {
+                    "ST": {
+                      "ST01": "278",
+                      "ST02": "0001"
+                    },
+                    "BHT": {
+                      "BHT01": "0007",
+                      "BHT02": "13",
+                      "BHT03": "@{guid()}",
+                      "BHT04": "@{formatDateTime(utcNow(), 'yyyyMMdd')}",
+                      "BHT05": "@{formatDateTime(utcNow(), 'HHmmss')}",
+                      "BHT06": "RQ"
+                    },
+                    "HL_2000A": {
+                      "HL": {
+                        "HL01": "1",
+                        "HL03": "20",
+                        "HL04": "1"
+                      },
+                      "UM": {
+                        "UM01": "SC",
+                        "UM02": "I",
+                        "UM03": "@{coalesce(triggerBody()?['service']?['serviceType'], '')}",
+                        "UM04": "@{coalesce(triggerBody()?['service']?['placeOfService'], '')}"
+                      },
+                      "NM1_IL": {
+                        "NM101": "IL",
+                        "NM102": "1",
+                        "NM103": "@{triggerBody()?['patient']?['lastName']}",
+                        "NM104": "@{triggerBody()?['patient']?['firstName']}",
+                        "NM108": "MI",
+                        "NM109": "@{triggerBody()?['patient']?['memberId']}"
+                      },
+                      "DMG": {
+                        "DMG01": "D8",
+                        "DMG02": "@{replace(triggerBody()?['patient']?['dateOfBirth'], '-', '')}",
+                        "DMG03": "@{triggerBody()?['patient']?['gender']}"
+                      },
+                      "DTP_AAH": "@if(not(empty(triggerBody()?['serviceDateRange']?['fromDate'])), json(concat('{\"DTP01\":\"AAH\",\"DTP02\":\"RD8\",\"DTP03\":\"', replace(triggerBody()?['serviceDateRange']?['fromDate'], '-', ''), '-', replace(coalesce(triggerBody()?['serviceDateRange']?['toDate'], triggerBody()?['serviceDateRange']?['fromDate']), '-', ''), '\"}')), null())",
+                      "HI_ABK": "@if(greater(length(triggerBody()?['diagnosis']), 0), createArray(json(concat('{\"HI01_1\":\"ABK\",\"HI01_2\":\"', triggerBody()?['diagnosis'][0]['code'], '\"}'))), createArray())"
+                    },
+                    "HL_2000B": {
+                      "HL": {
+                        "HL01": "2",
+                        "HL02": "1",
+                        "HL03": "21",
+                        "HL04": "1"
+                      },
+                      "NM1_SJ": {
+                        "NM101": "SJ",
+                        "NM102": "@{if(not(empty(triggerBody()?['referredToProvider']?['organizationName'])), '2', '1')}",
+                        "NM103": "@{if(not(empty(triggerBody()?['referredToProvider']?['organizationName'])), triggerBody()?['referredToProvider']?['organizationName'], triggerBody()?['referredToProvider']?['lastName'])}",
+                        "NM104": "@{coalesce(triggerBody()?['referredToProvider']?['firstName'], '')}",
+                        "NM108": "XX",
+                        "NM109": "@{triggerBody()?['referredToProvider']?['npi']}"
+                      },
+                      "PRV": "@if(not(empty(triggerBody()?['referredToProvider']?['taxonomy'])), json(concat('{\"PRV01\":\"RF\",\"PRV02\":\"PXC\",\"PRV03\":\"', triggerBody()?['referredToProvider']?['taxonomy'], '\"}')), null())"
+                    },
+                    "HL_2000C": {
+                      "HL": {
+                        "HL01": "3",
+                        "HL02": "2",
+                        "HL03": "19"
+                      },
+                      "NM1_DK": {
+                        "NM101": "DK",
+                        "NM102": "1",
+                        "NM103": "@{triggerBody()?['requestingProvider']?['lastName']}",
+                        "NM104": "@{triggerBody()?['requestingProvider']?['firstName']}",
+                        "NM108": "XX",
+                        "NM109": "@{triggerBody()?['requestingProvider']?['npi']}"
+                      },
+                      "TRN": {
+                        "TRN01": "1",
+                        "TRN02": "@{guid()}"
+                      }
+                    }
+                  }
+                },
+                "runAfter": {}
+              },
+              "Encode_X12_278_Request": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/encode/edi",
+                  "body": {
+                    "content": "@outputs('Transform_JSON_to_X12_278_Referral')",
+                    "contentType": "application/edi-x12",
+                    "agreementType": "X12",
+                    "messageType": "@parameters('x12_278_x217_messagetype')",
+                    "senderId": "@parameters('x12_sender_id')",
+                    "receiverId": "@parameters('x12_receiver_id')"
+                  }
+                },
+                "runAfter": {
+                  "Transform_JSON_to_X12_278_Referral": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Archive_278_Request": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['azureblob']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+                  "queries": {
+                    "folderPath": "@concat(parameters('blob_auth_requests_folder'), '/referral/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                    "name": "278-referral-request-@{guid()}.edi"
+                  },
+                  "body": "@body('Encode_X12_278_Request')"
+                },
+                "runAfter": {
+                  "Encode_X12_278_Request": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "POST_to_Payer_Authorization_Endpoint": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "@parameters('payer_auth_endpoint_url')",
+                  "headers": {
+                    "Content-Type": "application/edi-x12",
+                    "Authorization": "Bearer @{parameters('API_TOKEN')}"
+                  },
+                  "body": "@body('Encode_X12_278_Request')"
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 3,
+                    "type": "fixed",
+                    "interval": "PT15S"
+                  }
+                },
+                "runAfter": {
+                  "Archive_278_Request": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Parse_X12_278_Response": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['integrationaccount']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/decode/edi",
+                  "body": {
+                    "content": "@base64(body('POST_to_Payer_Authorization_Endpoint'))",
+                    "contentType": "application/edi-x12",
+                    "agreementType": "X12",
+                    "messageType": "@parameters('x12_278_x217_messagetype')",
+                    "senderId": "@parameters('x12_receiver_id')",
+                    "receiverId": "@parameters('x12_sender_id')"
+                  }
+                },
+                "runAfter": {
+                  "POST_to_Payer_Authorization_Endpoint": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Extract_Response_Status": {
+                "type": "Compose",
+                "inputs": {
+                  "certificationTypeCode": "@{coalesce(body('Parse_X12_278_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['STC']?[0]?['STC01_1'], 'A4')}",
+                  "authorizationNumber": "@{coalesce(body('Parse_X12_278_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['REF']?[?(@['REF01']=='D9')][0]?['REF02'], '')}",
+                  "effectiveDate": "@{coalesce(body('Parse_X12_278_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='472')][0]?['DTP03'], '')}",
+                  "expirationDate": "@{coalesce(body('Parse_X12_278_Response')?['interchanges']?[0]?['groups']?[0]?['transactions']?[0]?['segments']?['DTP']?[?(@['DTP01']=='473')][0]?['DTP03'], '')}"
+                },
+                "runAfter": {
+                  "Parse_X12_278_Response": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Map_Response_Status": {
+                "type": "Compose",
+                "inputs": {
+                  "authorizationNumber": "@outputs('Extract_Response_Status')?['authorizationNumber']",
+                  "status": "@if(equals(outputs('Extract_Response_Status')?['certificationTypeCode'], 'A1'), 'APPROVED', if(equals(outputs('Extract_Response_Status')?['certificationTypeCode'], 'A4'), 'PENDED', if(equals(outputs('Extract_Response_Status')?['certificationTypeCode'], 'A6'), 'DENIED', if(equals(outputs('Extract_Response_Status')?['certificationTypeCode'], 'A2'), 'MODIFIED', 'ERROR'))))",
+                  "certificationTypeCode": "@outputs('Extract_Response_Status')?['certificationTypeCode']",
+                  "effectiveDate": "@outputs('Extract_Response_Status')?['effectiveDate']",
+                  "expirationDate": "@outputs('Extract_Response_Status')?['expirationDate']",
+                  "serviceType": "@{coalesce(triggerBody()?['service']?['serviceType'], 'REFERRAL')}",
+                  "patient": "@triggerBody()?['patient']",
+                  "provider": "@triggerBody()?['requestingProvider']",
+                  "referredToProvider": "@triggerBody()?['referredToProvider']",
+                  "attachmentRequired": "@{triggerBody()?['attachmentRequired']}"
+                },
+                "runAfter": {
+                  "Extract_Response_Status": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Archive_278_Response": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['azureblob']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/datasets/@{encodeURIComponent(parameters('blob_storage_account'))}/files",
+                  "queries": {
+                    "folderPath": "@concat(parameters('blob_auth_requests_folder'), '/referral/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
+                    "name": "278-referral-response-@{outputs('Map_Response_Status')?['authorizationNumber']}.edi"
+                  },
+                  "body": "@body('POST_to_Payer_Authorization_Endpoint')"
+                },
+                "runAfter": {
+                  "Map_Response_Status": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Check_Attachment_Required": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@triggerBody()?['attachmentRequired']",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Trigger_Attachment_Workflow": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_attachments'))}/messages",
+                      "body": {
+                        "contentData": "@{base64(string(outputs('Map_Response_Status')))}",
+                        "contentType": "application/json",
+                        "properties": {
+                          "authorizationNumber": "@outputs('Map_Response_Status')?['authorizationNumber']",
+                          "memberId": "@triggerBody()?['patient']?['memberId']",
+                          "requestType": "referral",
+                          "attachmentTrigger": "duringSubmission"
+                        }
+                      }
+                    },
+                    "runAfter": {}
+                  }
+                },
+                "runAfter": {
+                  "Archive_278_Response": [
+                    "Succeeded"
+                  ]
+                }
+              },
+              "Log_Authorization_Request": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/events/customEvent",
+                  "body": {
+                    "eventName": "Referral_Authorization_Request_Processed",
+                    "properties": {
+                      "authorizationNumber": "@outputs('Map_Response_Status')?['authorizationNumber']",
+                      "status": "@outputs('Map_Response_Status')?['status']",
+                      "memberId": "@triggerBody()?['patient']?['memberId']",
+                      "requestType": "referral",
+                      "referredToNPI": "@triggerBody()?['referredToProvider']?['npi']",
+                      "certificationTypeCode": "@outputs('Map_Response_Status')?['certificationTypeCode']"
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Check_Attachment_Required": [
+                    "Succeeded",
+                    "Skipped"
+                  ]
+                }
+              }
+            },
+            "runAfter": {
+              "Check_Eligibility_270_271": [
+                "Succeeded"
+              ]
+            },
+            "else": {
+              "actions": {
+                "Return_Eligibility_Error": {
+                  "type": "Response",
+                  "kind": "Http",
+                  "inputs": {
+                    "statusCode": 400,
+                    "body": {
+                      "status": "ERROR",
+                      "error": "Member not eligible for requested service",
+                      "eligibilityResponse": "@body('Check_Eligibility_270_271')"
+                    }
+                  },
+                  "runAfter": {}
+                }
+              }
+            }
+          },
+          "Return_Success_Response": {
+            "type": "Response",
+            "kind": "Http",
+            "inputs": {
+              "statusCode": 200,
+              "body": "@outputs('Map_Response_Status')"
+            },
+            "runAfter": {
+              "Check_Eligibility_Result": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {}
+      },
+      "Catch_Authorization_Request_Error": {
+        "type": "Scope",
+        "actions": {
+          "Log_Error": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['applicationinsights']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/events/customEvent",
+              "body": {
+                "eventName": "Referral_Authorization_Request_Error",
+                "properties": {
+                  "errorMessage": "@{result('Try_Process_Referral_Authorization')?[0]?['error']?['message']}",
+                  "errorCode": "@{result('Try_Process_Referral_Authorization')?[0]?['error']?['code']}",
+                  "memberId": "@{triggerBody()?['patient']?['memberId']}"
+                }
+              }
+            },
+            "runAfter": {}
+          },
+          "Return_Error_Response": {
+            "type": "Response",
+            "kind": "Http",
+            "inputs": {
+              "statusCode": 500,
+              "body": {
+                "status": "ERROR",
+                "error": "@{result('Try_Process_Referral_Authorization')?[0]?['error']?['message']}"
+              }
+            },
+            "runAfter": {
+              "Log_Error": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Try_Process_Referral_Authorization": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "_SECURITY_NOTE": {
+      "type": "String",
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure API_TOKEN as an app setting using Azure Key Vault reference or use Managed Identity."
+    },
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "blob_storage_account": {
+      "type": "String",
+      "defaultValue": "default"
+    },
+    "blob_auth_requests_folder": {
+      "type": "String",
+      "defaultValue": "hipaa-attachments/raw/auth-requests"
+    },
+    "sb_namespace": {
+      "type": "String",
+      "defaultValue": "hipaa-logic-svc"
+    },
+    "sb_topic_attachments": {
+      "type": "String",
+      "defaultValue": "attachments-in"
+    },
+    "eligibility_api_url": {
+      "type": "String",
+      "defaultValue": "https://eligibility.api.local"
+    },
+    "payer_auth_endpoint_url": {
+      "type": "String",
+      "defaultValue": "https://payer-prod.example.com/auth"
+    },
+    "API_TOKEN": {
+      "type": "SecureString"
+    },
+    "x12_sender_id": {
+      "type": "String",
+      "defaultValue": "66917"
+    },
+    "x12_receiver_id": {
+      "type": "String",
+      "defaultValue": "030240928"
+    },
+    "x12_278_x217_messagetype": {
+      "type": "String",
+      "defaultValue": "X12_005010X217_278"
+    }
+  }
+}
