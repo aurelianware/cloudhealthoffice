@@ -313,6 +313,25 @@ module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
 }
 
 // =========================
+// Azure Static Web App (for marketing site)
+// =========================
+resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
+  name: '${baseName}-swa'
+  location: location
+  sku: {
+    name: 'Free'
+    tier: 'Free'
+  }
+  properties: {
+    repositoryUrl: ''  // Will be configured via GitHub Actions deployment
+    branch: ''
+    buildProperties: {
+      skipGithubActionWorkflowGeneration: true
+    }
+  }
+}
+
+// =========================
 // Outputs
 // =========================
 output storageAccountName string = stg.name
@@ -326,3 +345,6 @@ output serviceBusConnectionId string = connSb.id
 output integrationAccountConnectionId string = enableB2B ? connIa.id : 'disabled'
 output ecsEndpointUrl string = enableEcs && ecs != null ? ecs.outputs.ecsEndpointInfo.fullUrl : 'disabled'
 output ecsWorkflowName string = enableEcs && ecs != null ? ecs.outputs.ecsWorkflowConfig.workflowName : 'disabled'
+output staticWebAppName string = staticWebApp.name
+output staticWebAppDefaultHostname string = staticWebApp.properties.defaultHostname
+output staticWebAppId string = staticWebApp.id
