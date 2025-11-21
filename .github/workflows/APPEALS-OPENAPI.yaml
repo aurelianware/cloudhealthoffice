@@ -3,17 +3,17 @@ info:
   title: Health Plan Appeals Integration API
   description: |
     RESTful API for claim appeals integration between providers and health plans via Availity platform.
-    
+
     This API enables:
     - Submission of claim appeals from providers to health plans
     - Retrieval of appeal status and decision information
     - Download of appeal-related documents (provider uploads and decision letters)
     - Push notifications of appeal status updates to Availity
-    
+
     **Compliance**: Fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements.
-    
+
     **Authentication**: All endpoints require Bearer token authentication via OAuth 2.0.
-    
+
     **Data Format**: All request and response bodies use JSON.
   version: 1.0.0
   contact:
@@ -48,7 +48,7 @@ paths:
       description: |
         Submit a claim appeal from provider to health plan. This endpoint accepts appeal details,
         supporting documentation, and patient/provider information.
-        
+
         **Requirements**:
         - Maximum 10 attachments per appeal
         - Each attachment maximum 64MB
@@ -95,7 +95,7 @@ paths:
       summary: Get appeal status
       description: |
         Retrieve current status and details of a previously submitted appeal.
-        
+
         Query by either appealId or claimNumber.
       operationId: getAppealStatus
       security:
@@ -155,9 +155,9 @@ paths:
         Download a document associated with an appeal. This includes:
         - PROVIDER_UPLOAD: Documents uploaded by the provider as part of the appeal
         - DECISION_LETTER: Health plan decision letters and correspondence
-        
+
         **Authorization**: Users can only download documents for appeals they have access to.
-        
+
         **Response**: Returns the document file with appropriate Content-Type and Content-Disposition headers.
       operationId: downloadAppealDocument
       security:
@@ -249,16 +249,16 @@ paths:
       description: |
         **Internal use only** - This endpoint is called by the health plan system to push
         appeal status updates to Availity's Bedlam API.
-        
+
         **Direction**: Health Plan → Availity
-        
+
         **Trigger**: Service Bus topic subscription on `payer-appeal-status-updates`
-        
+
         **Requirements**:
         - Only SUBMITTED→FINALIZED status transitions are currently supported
         - FINALIZED status requires `decision` and `decisionReason` fields
         - Includes retry logic (3 retries, 30-second intervals)
-        
+
         This is implemented as a Logic App workflow: `appeal_update_from_payer_to_availity`
       operationId: pushAppealUpdateToAvality
       security:
