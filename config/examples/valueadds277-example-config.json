@@ -1,0 +1,59 @@
+{
+  "$schema": "../../core/schemas/availity-integration-config.schema.json",
+  "organizationName": "Example Health Plan",
+  "payerId": "EXAMPLE",
+  "payerName": "Example Health Plan",
+  "contacts": {
+    "technical": {
+      "name": "Technical Contact",
+      "email": "tech@example.com",
+      "phone": "555-0100"
+    },
+    "accountManager": {
+      "name": "Account Manager",
+      "email": "account@example.com",
+      "phone": "555-0101"
+    },
+    "escalation": {
+      "name": "Escalation Contact",
+      "email": "escalation@example.com",
+      "phone": "555-0102"
+    }
+  },
+  "modules": {
+    "ecs": {
+      "enabled": true,
+      "queryMethods": [
+        "ServiceDate",
+        "Member",
+        "CheckNumber",
+        "ClaimHistory"
+      ],
+      "valueAdds277": {
+        "enabled": true,
+        "claimFields": {
+          "financial": true,
+          "remittance": true,
+          "clinical": true,
+          "demographics": true,
+          "statusDetails": true
+        },
+        "serviceLineFields": {
+          "enabled": true,
+          "includeFinancials": true,
+          "includeModifiers": true
+        },
+        "integrationFlags": {
+          "attachments": true,
+          "corrections": true,
+          "appeals": true,
+          "messaging": true,
+          "chat": false,
+          "remittanceViewer": true
+        }
+      },
+      "cacheEnabled": false,
+      "cacheTTL": 3600
+    }
+  }
+}
