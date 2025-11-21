@@ -4,7 +4,7 @@ This document provides a quick reference for the complete deployment workflow, m
 
 ## 📋 Overview
 
-The HIPAA Attachments deployment uses a comprehensive automated workflow that:
+The Cloud Health Office deployment uses a comprehensive automated workflow that:
 1. Validates infrastructure templates and workflow definitions
 2. Compiles Bicep to ARM templates
 3. Performs What-If analysis for safety
@@ -180,7 +180,7 @@ gh secret set AZURE_SUBSCRIPTION_ID_PROD --body "<subscription-id>"
 
 # 3. Configure GitHub Variables
 gh variable set AZURE_RG_NAME --body "payer-attachments-prod-rg"
-gh variable set BASE_NAME --body "hipaa-attachments-prod"
+gh variable set BASE_NAME --body "cloud-health-office-prod"
 ```
 
 ### Validate Before Deployment
@@ -200,17 +200,17 @@ pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
 
 ```bash
 # Via GitHub Actions (recommended)
-# 1. Go to: Actions → Deploy DEV - HIPAA Attachments
+# 1. Go to: Actions → Deploy DEV - Cloud Health Office
 # 2. Click: Run workflow
 # 3. Select: main branch
 # 4. Click: Run workflow
 
 # Via Azure CLI (manual)
-az group create -n rg-hipaa-attachments-dev -l eastus
+az group create -n rg-cloud-health-office-dev -l eastus
 az deployment group create \
-  -g rg-hipaa-attachments-dev \
+  -g rg-cloud-health-office-dev \
   -f infra/main.bicep \
-  -p baseName=hipaa-attachments-dev
+  -p baseName=cloud-health-office-dev
 ```
 
 ### Deploy to UAT

@@ -1,6 +1,6 @@
 # Branching Strategy
 
-This document defines the branching strategy, naming conventions, merge requirements, and commit policies for the HIPAA Attachments repository. Our branching model is designed to support continuous integration, automated deployments, and semantic versioning while maintaining code quality and HIPAA compliance.
+This document defines the branching strategy, naming conventions, merge requirements, and commit policies for the Cloud Health Office repository. Our branching model is designed to support continuous integration, automated deployments, and semantic versioning while maintaining code quality and HIPAA compliance.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -19,7 +19,7 @@ This document defines the branching strategy, naming conventions, merge requirem
 
 ## Overview
 
-The HIPAA Attachments repository follows a **trunk-based development** approach with feature branches and release branches. This strategy enables:
+The Cloud Health Office repository follows a **trunk-based development** approach with feature branches and release branches. This strategy enables:
 
 - **Continuous Integration**: Frequent merging to main branch with automated validation
 - **Environment-Specific Deployments**: Automated deployments to DEV, UAT, and PROD

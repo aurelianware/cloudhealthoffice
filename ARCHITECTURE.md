@@ -1,6 +1,6 @@
-# HIPAA Attachments Architecture
+# Cloud Health Office - Platform Architecture
 
-This document provides a comprehensive overview of the HIPAA Attachments processing system architecture, component interactions, and data flows for the **multi-payer platform**.
+This document provides a comprehensive overview of the Cloud Health Office multi-tenant SaaS platform architecture, component interactions, and data flows supporting unlimited health plans.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -15,17 +15,18 @@ This document provides a comprehensive overview of the HIPAA Attachments process
 
 ## Overview
 
-The HIPAA Attachments system is a **cloud-native multi-payer platform** built on Azure Logic Apps that processes medical attachments exchanged via X12 EDI transactions. The system is designed as a **payer-agnostic platform** supporting multiple health plans through configuration-driven deployment.
+Cloud Health Office is a **cloud-native multi-tenant SaaS platform** built on Azure Logic Apps that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
 
 ### Key Objectives
-- **Platform Architecture**: Single codebase serves multiple payers with isolated configuration
-- **Zero-Code Onboarding**: Add new payers through configuration, no custom development
-- **Backend Agnostic**: Works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)
-- **HIPAA Compliance**: Secure processing of Protected Health Information (PHI)
-- **Reliability**: Robust error handling and retry mechanisms
-- **Scalability**: Handle varying transaction volumes across multiple payers
-- **Auditability**: Complete transaction tracking and logging per payer
-- **Interoperability**: Standards-based X12 EDI integration
+- **Multi-Tenant SaaS**: Single codebase serves unlimited payers with per-tenant isolation
+- **Zero-Code Onboarding**: Add new payers through configuration (<1 hour to production)
+- **Backend Agnostic**: Works with any claims system (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)
+- **Enterprise Security**: HIPAA-compliant with Key Vault, private endpoints, PHI masking, automated rotation
+- **Reliability**: Comprehensive error handling, retry logic, dead-letter queues, and health monitoring
+- **Horizontal Scalability**: Auto-scales to handle any transaction volume across all tenants
+- **Complete Auditability**: Full transaction tracking, compliance logging, and per-payer reporting
+- **Standards-Based**: X12 EDI integration with Availity and other clearinghouses
+- **SaaS-Ready**: Marketplace-ready with billing integration and customer portal (roadmap)
 
 ### Platform Context
 
@@ -107,7 +108,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    HIPAA Attachments System                      │
+│              Cloud Health Office Platform                        │
 │                     (Azure West US / East US)                    │
 └─────────────────────────────────────────────────────────────────┘
 

@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy PROD - Cloud Health Office
 
 on:
   push:

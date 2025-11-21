@@ -1,6 +1,6 @@
 # Deployment Secrets and Environment Configuration Setup
 
-This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the HIPAA Attachments Logic Apps solution.
+This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the Cloud Health Office Logic Apps solution.
 
 > **🚀 Quick Validation:** Run `./validate-github-secrets.sh` to verify your configuration!
 
@@ -16,7 +16,7 @@ This guide provides comprehensive instructions for configuring GitHub Secrets an
 
 ## Overview
 
-The HIPAA Attachments deployment uses GitHub Actions workflows with OIDC (OpenID Connect) authentication to securely deploy to Azure environments. This eliminates the need to store Azure credentials as secrets while maintaining secure access.
+The Cloud Health Office deployment uses GitHub Actions workflows with OIDC (OpenID Connect) authentication to securely deploy to Azure environments. This eliminates the need to store Azure credentials as secrets while maintaining secure access.
 
 ### Architecture
 - **OIDC Authentication**: Federated identity credentials for secure, passwordless authentication
@@ -37,12 +37,12 @@ The HIPAA Attachments deployment uses GitHub Actions workflows with OIDC (OpenID
 
 | Variable Name | Example Value | Purpose |
 |---------------|---------------|---------|
-| `AZURE_RG_NAME` | `hipaa-attachments-prod-rg` | Resource group name |
+| `AZURE_RG_NAME` | `cloud-health-office-prod-rg` | Resource group name |
 | `AZURE_LOCATION` | `eastus` | Primary Azure region |
 | `AZURE_CONNECTOR_LOCATION` | `eastus` | API connector region |
-| `BASE_NAME` | `hipaa-attachments-prod` | Base name for resources |
+| `BASE_NAME` | `cloud-health-office-prod` | Base name for resources |
 | `IA_NAME` | `prod-integration-account` | Integration Account name |
-| `SERVICE_BUS_NAME` | `hipaa-attachments-prod-sb` | Service Bus namespace name |
+| `SERVICE_BUS_NAME` | `cloud-health-office-prod-sb` | Service Bus namespace name |
 | `STORAGE_SKU` | `Standard_LRS` | Storage account SKU |
 
 ## GitHub Secrets Setup
@@ -63,9 +63,9 @@ Run this script for each environment (DEV, UAT, PROD):
 ```bash
 # Set variables for your environment
 ENV="prod"  # Change to: dev, uat, or prod
-APP_NAME="hipaa-attachments-$ENV-github"
+APP_NAME="cloud-health-office-$ENV-github"
 REPO_OWNER="aurelianware"  # TODO: Update to your GitHub organization/username
-REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
+REPO_NAME="cloud-health-office"  # TODO: Update to your repository name
 SUBSCRIPTION_ID="<your-azure-subscription-id>"
 
 # Login to Azure
@@ -279,7 +279,7 @@ Add the following variables for production deployment:
 
 ```
 Name: AZURE_RG_NAME
-Value: hipaa-attachments-prod-rg
+Value: cloud-health-office-prod-rg
 Description: Production resource group name
 
 Name: AZURE_LOCATION
@@ -291,7 +291,7 @@ Value: eastus
 Description: Region for API connectors (must match AZURE_LOCATION)
 
 Name: BASE_NAME
-Value: hipaa-attachments-prod
+Value: cloud-health-office-prod
 Description: Base name prefix for all Azure resources
 
 Name: IA_NAME
@@ -299,7 +299,7 @@ Value: prod-integration-account
 Description: Integration Account name for X12 processing
 
 Name: SERVICE_BUS_NAME
-Value: hipaa-attachments-prod-sb
+Value: cloud-health-office-prod-sb
 Description: Service Bus namespace name
 
 Name: STORAGE_SKU
@@ -321,11 +321,11 @@ DEV and UAT environments use hardcoded values in their workflow files for simpli
 ```
 # DEV Environment
 AZURE_LOCATION_DEV: westus
-BASE_NAME_DEV: hipaa-attachments-dev
+BASE_NAME_DEV: cloud-health-office-dev
 
 # UAT Environment
 AZURE_LOCATION_UAT: westus
-BASE_NAME_UAT: hipaa-attachments-uat
+BASE_NAME_UAT: cloud-health-office-uat
 ```
 
 ## Step-by-Step Setup for New Team Members
@@ -344,7 +344,7 @@ Follow this checklist when setting up a new team member or environment:
 - [ ] Login to Azure: `az login`
 - [ ] Set subscription: `az account set --subscription "<subscription-id>"`
 - [ ] Run Azure AD app creation script (see Step 1 above)
-- [ ] Verify service principal created: `az ad sp list --display-name "hipaa-attachments-*-github"`
+- [ ] Verify service principal created: `az ad sp list --display-name "cloud-health-office-*-github"`
 - [ ] Verify federated credentials: `az ad app federated-credential list --id "<app-id>"`
 - [ ] Verify role assignment: `az role assignment list --assignee "<app-id>"`
 - [ ] Save output values securely
@@ -407,7 +407,7 @@ If you prefer to validate manually or need to create a custom validation script,
 #!/bin/bash
 
 REPO_OWNER="aurelianware"      # TODO: Update to your GitHub organization/username
-REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
+REPO_NAME="cloud-health-office"  # TODO: Update to your repository name
 
 echo "Validating GitHub Secrets Configuration"
 echo "========================================"
@@ -492,7 +492,7 @@ Use this script to validate OIDC federated credentials:
 ```bash
 # Validate OIDC setup for an environment
 ENV="prod"  # Change to: dev, uat, or prod
-APP_NAME="hipaa-attachments-$ENV-github"
+APP_NAME="cloud-health-office-$ENV-github"
 
 echo "Validating OIDC Configuration for $ENV"
 echo "========================================"
@@ -649,7 +649,7 @@ Error: Unable to connect to SFTP server
 ```bash
 APP_ID="<your-app-id>"
 REPO_OWNER="aurelianware"  # TODO: Update to your GitHub organization/username
-REPO_NAME="hipaa-attachments"  # TODO: Update to your repository name
+REPO_NAME="cloud-health-office"  # TODO: Update to your repository name
 
 # Add workflow_dispatch credential
 az ad app federated-credential create \
@@ -762,7 +762,7 @@ For production PHI workloads, migrate from GitHub Secrets to Azure Key Vault for
 az deployment group create \
   --resource-group "payer-attachments-prod-rg" \
   --template-file infra/modules/keyvault.bicep \
-  --parameters keyVaultName="hipaa-attachments-prod-kv" \
+  --parameters keyVaultName="cloud-health-office-prod-kv" \
                 location="eastus" \
                 skuName="premium" \
                 enableRbacAuthorization=true \
@@ -776,7 +776,7 @@ az deployment group create \
 
 ```bash
 # Set variables
-KV_NAME="hipaa-attachments-prod-kv"
+KV_NAME="cloud-health-office-prod-kv"
 
 # Add SFTP credentials
 az keyvault secret set \
@@ -818,7 +818,7 @@ az keyvault secret list --vault-name "$KV_NAME" --output table
 
 ```bash
 # Get Logic App managed identity principal ID
-LOGIC_APP_NAME="hipaa-attachments-prod-la"
+LOGIC_APP_NAME="cloud-health-office-prod-la"
 PRINCIPAL_ID=$(az webapp identity show \
   --resource-group "payer-attachments-prod-rg" \
   --name "$LOGIC_APP_NAME" \
@@ -860,10 +860,10 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 {
   "type": "Http",
   "inputs": {
-    "uri": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-base-url')/api/claims",
+    "uri": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/qnxt-api-base-url')/api/claims",
     "authentication": {
       "type": "ClientCredentials",
-      "secret": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-client-secret')"
+      "secret": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/qnxt-api-client-secret')"
     }
   }
 }
@@ -877,7 +877,7 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 
 # Check Application Insights for Key Vault access
 az monitor app-insights query \
-  --app "hipaa-attachments-prod-ai" \
+  --app "cloud-health-office-prod-ai" \
   --resource-group "payer-attachments-prod-rg" \
   --analytics-query "dependencies | where timestamp > ago(1h) | where target contains 'vault.azure.net' | project timestamp, name, target, resultCode | order by timestamp desc" \
   --output table
@@ -910,7 +910,7 @@ cat > rotate-secrets.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-KV_NAME="hipaa-attachments-prod-kv"
+KV_NAME="cloud-health-office-prod-kv"
 
 # Rotate SFTP password
 NEW_SFTP_PASSWORD=$(openssl rand -base64 32)
@@ -986,7 +986,7 @@ AzureDiagnostics
 # Verify managed identity
 az webapp identity show \
   --resource-group "payer-attachments-prod-rg" \
-  --name "hipaa-attachments-prod-la"
+  --name "cloud-health-office-prod-la"
 
 # Check role assignments
 az role assignment list \
@@ -1020,4 +1020,4 @@ For comprehensive security guidance, see:
 
 **Document Version:** 1.1  
 **Last Updated:** 2024-11-19  
-**Maintained By:** HIPAA Attachments Team
+**Maintained By:** Cloud Health Office Team

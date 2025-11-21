@@ -1,4 +1,4 @@
-name: Deploy DEV - HIPAA Attachments
+name: Deploy DEV - Cloud Health Office
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       baseName:
         description: "Base name prefix for DEV resources"
         required: false
-        default: "hipaa-attachments"
+        default: "cloud-health-office"
       bicepPath:
         description: "Path to Bicep file"
         required: false
@@ -21,8 +21,8 @@ on:
 
 env:
   AZURE_LOCATION: westus
-  DEV_RESOURCE_GROUP: rg-hipaa-attachments-dev
-  DEV_BASE_NAME: hipaa-attachments-dev
+  DEV_RESOURCE_GROUP: rg-cloud-health-office-dev
+  DEV_BASE_NAME: cloud-health-office-dev
 
 jobs:
   validate:
@@ -204,7 +204,7 @@ jobs:
           resourceGroupName: ${{ env.DEV_RESOURCE_GROUP }}
           template: ${{ needs.validate.outputs.bicep-path }}
           parameters: baseName=${{ needs.validate.outputs.base-name }}
-          deploymentName: hipaa-attachments-dev-infra-${{ github.run_number }}
+          deploymentName: cloud-health-office-dev-infra-${{ github.run_number }}
 
       - name: Verify Infrastructure Deployment
         uses: azure/cli@v2
