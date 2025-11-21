@@ -59,35 +59,3 @@ node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
 
 # 3. Deploy
 cd generated/your-payer/infrastructure && ./deploy.sh
-```
-
-## One-Click Deployment Package
-
-Ready to deploy in under 1 hour? Download the complete production package:
-
-[![Download Latest Release](https://img.shields.io/github/v/release/aurelianware/cloudhealthoffice?label=Download%20v1.0.0&style=for-the-badge&color=000000&logo=github)](https://github.com/aurelianware/cloudhealthoffice/releases/download/v1.0.0/cloudhealthoffice-v1.0.0.zip)
-
-**Contains everything:**
-- Full Bicep infrastructure templates
-- All Logic App Standard workflows
-- CLI onboarding wizard + config generator
-- Security modules (Key Vault, Private Endpoints, PHI masking)
-- Complete documentation  set
-- Sample payer configurations
-
-## Quick Start (45 minutes to production)
-
-```bash
-# 1. Download & unzip
-curl -L -o cloudhealthoffice-v1.0.0.zip \
-  https://github.com/aurelianware/cloudhealthoffice/releases/download/v1.0.0/cloudhealthoffice-v1.0.0.zip
-unzip cloudhealthoffice-v1.0.0.zip -d cloudhealthoffice
-
-# 2. Run the onboarding wizard
-cd cloudhealthoffice
-node dist/scripts/cli/payer-onboarding-wizard.js
-
-# 3. Deploy
-cd generated/your-payer-id/infrastructure
-./deploy.sh
-```
