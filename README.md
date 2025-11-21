@@ -1,11 +1,45 @@
-# Cloud Health Office 🏥
-## Multi-Payer EDI Integration Platform
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg">
+    <img alt="Cloud Health Office Sentinel" src="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg" width="800">
+  </picture>
+  
+  <p><em>Just emerged from the void</em></p>
+</div>
+
+---
+
+# Cloud Health Office v1.0.0 — The Sentinel
+
+**November 21, 2025**
+
+This is the first production release of Cloud Health Office — the open-source, Azure-native, HIPAA-engineered platform that ends decades of payer EDI pain.
+
+### What's Inside
+- **Full multi-tenant SaaS deployment** via a single CLI wizard (<45 minutes from worksheet to production)
+- **Native integration** with Availity, Change Healthcare, Optum 360, Inovalon, and direct payer endpoints
+- **Real-time 278 prior-authorization** + QNXT/Facets/HealthEdge correlation APIs
+- **Zero-trust, private-endpoint-only architecture** (no public IPs, DCR-based PHI redaction, HSM-backed keys)
+- **Complete Bicep + Logic Apps Standard source** — no black boxes
+- **Ready for Azure Marketplace Managed Application publishing**
+
+### Key Highlights
+- **Onboarding time**: 6–18 months (legacy) → <1 hour
+- **Professional services cost**: $500k–$2M → $0 (bring-your-own-subscription)
+- **First platform ever** to ship production-grade QNXT REST correlation in open source
+
+### The Sentinel Has Awakened
+The monolith has landed.  
+Legacy EDI integration is now optional.
+
+---
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Azure Logic Apps](https://img.shields.io/badge/Azure-Logic%20Apps-0078D4)](https://azure.microsoft.com/en-us/services/logic-apps/)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-Compliant-green)](https://www.hhs.gov/hipaa/index.html)
 
-A comprehensive Azure-based SaaS platform for processing multi-payer healthcare EDI transactions with enterprise-grade security, automated onboarding, and rapid deployment capabilities. Process claims, eligibility, attachments, authorizations, appeals, and claim status for any number of health plans with zero custom code.
+**Cloud Health Office** delivers inevitable transformation to healthcare EDI processing. This comprehensive Azure-based SaaS platform processes multi-payer healthcare EDI transactions with enterprise-grade security, automated onboarding, and deployment capabilities that render traditional approaches obsolete. Process claims, eligibility, attachments, authorizations, appeals, and claim status for unlimited health plans with zero custom code.
 
 > **Platform Notice**: This is an independent EDI integration platform that supports connectivity with Availity and other clearinghouses. This platform is not affiliated with, endorsed by, or sponsored by Availity, LLC. Availity is a registered trademark of Availity, LLC.
 
@@ -1493,7 +1527,7 @@ Cloud Health Office is actively preparing for Azure Marketplace publication to e
 
 Have ideas for new features? Want to help with Azure Marketplace preparation?
 
-- **Submit Feature Requests**: [GitHub Discussions](https://github.com/aurelianware/hipaa-attachments/discussions)
+- **Submit Feature Requests**: [GitHub Discussions](https://github.com/aurelianware/cloudhealthoffice/discussions)
 - **Vote on Features**: Upvote existing feature requests
 - **Contribute Code**: See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines
 - **Beta Testing**: Contact us to participate in early access programs
@@ -1501,8 +1535,8 @@ Have ideas for new features? Want to help with Azure Marketplace preparation?
 ### Community & Support
 
 - **Documentation**: Comprehensive guides in this repository
-- **Issues**: Report bugs via [GitHub Issues](https://github.com/aurelianware/hipaa-attachments/issues)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/aurelianware/hipaa-attachments/discussions)
+- **Issues**: Report bugs via [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)
+- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/aurelianware/cloudhealthoffice/discussions)
 - **Enterprise Support**: Contact sales@aurelianware.com for commercial support packages
 
 ## 📄 License
@@ -1533,3 +1567,13 @@ Users must perform their own compliance assessments and implement necessary safe
 ### Contributing
 
 By contributing to this project, you agree that your contributions will be licensed under the Apache License 2.0. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process and how to submit contributions.
+
+---
+
+## ⭐ Star the Repository
+
+Cloud Health Office is Apache 2.0 licensed and actively maintained by Aurelianware.
+
+**Star ★ the repo if you believe payers deserve better than 1990s technology in 2025.**
+
+Legacy EDI integration is now optional. The Sentinel has awakened.

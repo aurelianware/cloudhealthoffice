@@ -61,7 +61,7 @@ The schema is organized hierarchically:
 
 ```
 Root Configuration
-├── Organization Information (name, IDs, logo)
+├── Organization Information (name, IDs, Sentinel logo)
 ├── Contacts (technical, account manager, escalation)
 ├── Geography (nationwide or state-specific)
 ├── Common Configuration
@@ -103,8 +103,8 @@ Root Configuration
 
 #### `logo` (string, uri format, optional)
 **Description**: URL to payer logo  
-**Requirements**: 234x60px PNG, <20KB  
-**Example**: `"https://example.com/logo.png"`
+**Requirements**: 800x400px PNG/SVG recommended (Cloud Health Office Sentinel branding available at docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg)  
+**Example**: `"https://example.com/logo.png"` or `"docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg"`
 
 #### `tradingPartnerId` (string, optional)
 **Description**: Trading partner ID for connectivity  
