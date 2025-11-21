@@ -326,6 +326,33 @@ X-Payer-Id: {config.payerId}
 - **Maximum attachments per appeal**: 10
 - **Maximum file size**: 64MB (67,108,864 bytes) per file
 - **Supported file types**: `.pdf`, `.jpg`, `.jpeg`, `.gif`, `.tif`, `.tiff`
+- **File naming rules**: 
+  - Only alphanumeric characters, underscores (_), and hyphens (-) allowed
+  - Must include valid file extension
+  - No duplicate file names within the same appeal
+  - Pattern: `^[a-zA-Z0-9_-]+\.(gif|jpg|jpeg|pdf|tif|tiff)$`
+
+### Pre-Appeal vs Post-Appeal Attachment Patterns
+
+The appeals system supports two attachment submission patterns, configurable per payer:
+
+#### Pre-Appeal Pattern
+- Provider **uploads attachments first** before submitting the appeal
+- Attachments are validated and stored in blob storage
+- Appeal submission includes references to pre-uploaded documents
+- **Advantages**: Ensures all documents are present at submission time
+- **Configuration**: Set `appeals.attachmentPattern` to `"PRE_APPEAL"` in payer config
+
+#### Post-Appeal Pattern  
+- Provider **submits appeal first** with metadata
+- Attachments are uploaded after appeal is accepted
+- System tracks which attachments are still pending
+- **Advantages**: Faster initial submission, allows for late additions
+- **Configuration**: Set `appeals.attachmentPattern` to `"POST_APPEAL"` in payer config
+
+**Default Behavior**: If not specified in configuration, system defaults to POST_APPEAL pattern with 30-day upload window (see `isEligibleForAttachmentsDate` in response).
+
+> **Note:** The 30-day upload window default is enforced in application logic if the `additionalAttachmentsWindow` field is not specified in the payer configuration. To override this default, set `appeals.additionalAttachmentsWindow` (in days) in the payer's configuration file.
 
 ### Storage Path Pattern
 
@@ -356,9 +383,24 @@ All workflows and APIs require the following configuration parameters:
   "serviceBusTopic": "payer-appeal-status-updates",
   "serviceBusSubscription": "availity-push",
   "blobStorageAccount": "hipaa-attachments-storage",
-  "authorizationApiEndpoint": "https://api.healthplan.local/authorization"
+  "authorizationApiEndpoint": "https://api.healthplan.local/authorization",
+  "attachmentPattern": "POST_APPEAL"
 }
 ```
+
+### Attachment Validation Rules
+
+The system enforces the following validation rules for appeal attachments:
+
+1. **File Name Uniqueness**: No duplicate file names allowed within a single appeal
+2. **File Name Format**: Must match pattern `^[a-zA-Z0-9_-]+\.(gif|jpg|jpeg|pdf|tif|tiff)$`
+3. **File Size**: Each file must be ≤ 64MB (67,108,864 bytes)
+4. **File Count**: Maximum 10 attachments per appeal
+5. **File Types**: Only .gif, .jpg, .jpeg, .pdf, .tif, .tiff extensions allowed
+6. **Attachment Verification**: Before accepting appeal submission, system verifies:
+   - All listed attachments exist in blob storage (for PRE_APPEAL pattern)
+   - File metadata matches schema requirements
+   - No files exceed size limits
 
 ### Security Notes
 
