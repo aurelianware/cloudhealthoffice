@@ -520,7 +520,7 @@ The platform supports multiple deployment models to meet partner and customer ne
 - **Best For**: System integrators, healthcare IT vendors
 - **Branding**: Partner branding (or Cloud Health Office Sentinel), domain, support channels
 - **Revenue**: Partner sets pricing, shares revenue with platform provider
-- **Support: Platform provider supports partner, partner supports end customers
+- **Support**: Platform provider supports partner, partner supports end customers
 
 ### Revenue Model Comparison
 
