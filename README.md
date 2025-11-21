@@ -8,8 +8,6 @@
   <p><em>Just emerged from the void</em></p>
 </div>
 
-<br/>
-
 # Cloud Health Office v1.0.0 — The Sentinel
 
 **November 21, 2025**
