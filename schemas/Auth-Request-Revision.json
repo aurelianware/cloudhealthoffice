@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurelianware.com/schemas/auth-request-revision.json",
+  "title": "Authorization Revision Request (X12 278 X217 - UM02=S)",
+  "description": "Schema for revising existing authorization requests",
+  "type": "object",
+  "required": ["authorizationNumber", "patient", "modifiedFields", "revisionReason"],
+  "properties": {
+    "authorizationNumber": {
+      "type": "string",
+      "description": "Existing authorization number to revise (REF*D9)"
+    },
+    "patient": {
+      "type": "object",
+      "required": ["memberId"],
+      "properties": {
+        "memberId": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,80}$",
+          "description": "Patient member identifier"
+        }
+      }
+    },
+    "revisionType": {
+      "type": "string",
+      "enum": ["date_change", "quantity_change", "diagnosis_change", "procedure_change", "provider_change"],
+      "description": "Type of revision being requested"
+    },
+    "modifiedFields": {
+      "type": "object",
+      "description": "Fields being modified in the revision",
+      "minProperties": 1,
+      "properties": {
+        "serviceDateRange": {
+          "type": "object",
+          "properties": {
+            "fromDate": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "toDate": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          }
+        },
+        "diagnosis": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": ["code"],
+            "properties": {
+              "code": {"type": "string", "pattern": "^[A-Z0-9.]{3,7}$"},
+              "codeType": {"type": "string", "enum": ["ABK", "ABF"]}
+            }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "quantity": {"type": "number", "minimum": 1},
+            "quantityType": {"type": "string", "enum": ["DY", "HR", "MO", "UN", "VS"]}
+          }
+        },
+        "procedures": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": ["code"],
+            "properties": {
+              "code": {"type": "string"},
+              "codeType": {"type": "string", "enum": ["HC", "IJ", "IV", "NU"]}
+            }
+          }
+        }
+      }
+    },
+    "revisionReason": {
+      "type": "string",
+      "maxLength": 264,
+      "description": "Reason for the revision (REF*EW)"
+    }
+  }
+}
