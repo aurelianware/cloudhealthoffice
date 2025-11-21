@@ -158,8 +158,8 @@ paths:
                         DEDUCTIBLE: 35.00
                         DISCOUNT: 200.00
                         adjustmentAmount: -200.00
-                        payerId: PCHP
-                        payerName: Parkland Community Health Plan
+                        payerId: "{config.payerId}"
+                        payerName: "{config.payerName}"
                         providerId: "9999999990"
                         providerName: Smith Medical Group
                         memberId: MEMTEST00004
@@ -263,8 +263,8 @@ paths:
                         DEDUCTIBLE: 0.00
                         DISCOUNT: 0.00
                         adjustmentAmount: -450.00
-                        payerId: PCHP
-                        payerName: Parkland Community Health Plan
+                        payerId: "{config.payerId}"
+                        payerName: "{config.payerName}"
                         providerId: "9999555001"
                         providerName: Central Medical Clinic
                         memberId: MEMTEST00002
@@ -319,8 +319,8 @@ paths:
                         exchangeDate: "2024-01-15T09:15:30.789Z"
                         billedAmount: 2450.00
                         BILLED: 2450.00
-                        payerId: PCHP
-                        payerName: Parkland Community Health Plan
+                        payerId: "{config.payerId}"
+                        payerName: "{config.payerName}"
                         providerId: "9999555010"
                         providerName: Regional Hospital Center
                         memberId: MEMTEST00003

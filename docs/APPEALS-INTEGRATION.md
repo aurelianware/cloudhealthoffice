@@ -326,6 +326,31 @@ X-Payer-Id: {config.payerId}
 - **Maximum attachments per appeal**: 10
 - **Maximum file size**: 64MB (67,108,864 bytes) per file
 - **Supported file types**: `.pdf`, `.jpg`, `.jpeg`, `.gif`, `.tif`, `.tiff`
+- **File naming rules**: 
+  - Only alphanumeric characters, underscores (_), and hyphens (-) allowed
+  - Must include valid file extension
+  - No duplicate file names within the same appeal
+  - Pattern: `^[a-zA-Z0-9_-]+\.(gif|jpg|jpeg|pdf|tif|tiff)$`
+
+### Pre-Appeal vs Post-Appeal Attachment Patterns
+
+The appeals system supports two attachment submission patterns, configurable per payer:
+
+#### Pre-Appeal Pattern
+- Provider **uploads attachments first** before submitting the appeal
+- Attachments are validated and stored in blob storage
+- Appeal submission includes references to pre-uploaded documents
+- **Advantages**: Ensures all documents are present at submission time
+- **Configuration**: Set `appeals.attachmentPattern` to `"PRE_APPEAL"` in payer config
+
+#### Post-Appeal Pattern  
+- Provider **submits appeal first** with metadata
+- Attachments are uploaded after appeal is accepted
+- System tracks which attachments are still pending
+- **Advantages**: Faster initial submission, allows for late additions
+- **Configuration**: Set `appeals.attachmentPattern` to `"POST_APPEAL"` in payer config
+
+**Default Behavior**: If not specified in configuration, system defaults to POST_APPEAL pattern with 30-day upload window (see `isEligibleForAttachmentsDate` in response).
 
 ### Storage Path Pattern
 

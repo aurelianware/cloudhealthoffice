@@ -39,8 +39,8 @@
       "minLength": 1,
       "maxLength": 100,
       "examples": [
-        "PCHP-QNXT",
-        "Availity"
+        "{config.payerName}",
+        "Health Plan QNXT"
       ]
     },
     "logo": {

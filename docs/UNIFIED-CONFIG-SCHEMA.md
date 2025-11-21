@@ -99,7 +99,7 @@ Root Configuration
 #### `payerName` (string, required)
 **Description**: Display name for provider portals  
 **Constraints**: 1-100 characters  
-**Example**: `"PCHP-QNXT"`, `"Availity"`
+**Example**: `"{config.payerName}"`, `"Health Plan QNXT"`
 
 #### `logo` (string, uri format, optional)
 **Description**: URL to payer logo  
