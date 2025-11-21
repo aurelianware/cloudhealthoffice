@@ -186,14 +186,15 @@ jobs:
           else
             echo "Adding custom domain $CUSTOM_DOMAIN..."
 
-            # Add custom domain (this will require CNAME verification)
-            az staticwebapp hostname set \
+            # Add custom domain (this will require DNS verification)
+            if az staticwebapp hostname set \
               --name "$SWA_NAME" \
               --resource-group "$RG_NAME" \
-              --hostname "$CUSTOM_DOMAIN" || {
-                echo "::warning::Custom domain addition initiated but requires DNS verification"
-                echo "domain_requires_verification=true" >> "$GITHUB_OUTPUT"
-              }
+              --hostname "$CUSTOM_DOMAIN"; then
+              echo "✅ Custom domain addition initiated successfully"
+            else
+              echo "::warning::Custom domain addition failed or requires DNS verification"
+            fi
 
             echo "domain_requires_verification=true" >> "$GITHUB_OUTPUT"
           fi
@@ -206,21 +207,21 @@ jobs:
           echo "DNS Configuration Required"
           echo "=========================================="
           echo ""
-          echo "To complete custom domain setup, add the following DNS record:"
+          echo "For ROOT DOMAIN (cloudhealthoffice.com):"
+          echo "  Record Type: ALIAS or ANAME (required for root domains)"
+          echo "  Host/Name: @ (or leave blank)"
+          echo "  Points to: $SWA_DEFAULT_HOSTNAME"
+          echo "  TTL: 3600"
           echo ""
-          echo "Record Type: CNAME"
-          echo "Host/Name: @ (or leave blank for root domain)"
-          echo "Points to: $SWA_DEFAULT_HOSTNAME"
-          echo "TTL: 3600 (or as preferred)"
+          echo "Note: ALIAS/ANAME records are required for root domains."
+          echo "Standard CNAME records do NOT work for root domains (@)."
           echo ""
-          echo "Alternatively, for root domain support:"
-          echo "Record Type: ALIAS or ANAME (if supported by your DNS provider)"
-          echo "Host/Name: @"
-          echo "Points to: $SWA_DEFAULT_HOSTNAME"
-          echo ""
-          echo "Note: CNAME records for root domains (@) are not supported by all DNS providers."
-          echo "If your DNS provider doesn't support ALIAS/ANAME records for root domains,"
-          echo "consider using 'www.cloudhealthoffice.com' as the custom domain instead."
+          echo "If your DNS provider does not support ALIAS/ANAME records,"
+          echo "use 'www.cloudhealthoffice.com' instead:"
+          echo "  Record Type: CNAME"
+          echo "  Host/Name: www"
+          echo "  Points to: $SWA_DEFAULT_HOSTNAME"
+          echo "  TTL: 3600"
           echo ""
           echo "=========================================="
           echo ""
@@ -235,18 +236,24 @@ jobs:
             echo ""
             echo "## DNS Records to Add"
             echo ""
-            echo "### Option 1: CNAME Record (for subdomains like www)"
+            echo "### For Root Domain (cloudhealthoffice.com) - REQUIRED"
+            echo ""
+            echo "**IMPORTANT:** Root domains require ALIAS or ANAME records. Standard CNAME records do NOT work for root domains (@)."
+            echo ""
             echo '```'
-            echo "Record Type: CNAME"
-            echo "Host/Name: www"
+            echo "Record Type: ALIAS or ANAME"
+            echo "Host/Name: @ (or leave blank for root domain)"
             echo "Points to: $SWA_DEFAULT_HOSTNAME"
             echo "TTL: 3600"
             echo '```'
             echo ""
-            echo "### Option 2: ALIAS/ANAME Record (for root domain @)"
+            echo "### Alternative: Use www Subdomain (if ALIAS/ANAME not supported)"
+            echo ""
+            echo "If your DNS provider does not support ALIAS or ANAME records, use the www subdomain instead:"
+            echo ""
             echo '```'
-            echo "Record Type: ALIAS or ANAME"
-            echo "Host/Name: @"
+            echo "Record Type: CNAME"
+            echo "Host/Name: www"
             echo "Points to: $SWA_DEFAULT_HOSTNAME"
             echo "TTL: 3600"
             echo '```'
