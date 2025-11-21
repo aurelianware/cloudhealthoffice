@@ -1,6 +1,6 @@
-# Contributing to HIPAA Attachments
+# Contributing to Cloud Health Office
 
-Welcome to the HIPAA Attachments repository! This guide will help you get started with development and contributions.
+Welcome to the Cloud Health Office platform repository! This guide will help you get started with development and contributions to our multi-tenant SaaS platform for healthcare EDI integration.
 
 ## Table of Contents
 - [License and Contribution Agreement](#license-and-contribution-agreement)
@@ -805,4 +805,4 @@ Contributors working on HIPAA-related features must:
 
 ---
 
-Thank you for contributing to the HIPAA Attachments project! Your efforts help maintain a secure, compliant, and efficient medical attachment processing system.
+Thank you for contributing to the Cloud Health Office platform! Your efforts help maintain a secure, compliant, and efficient multi-tenant SaaS platform for healthcare EDI processing.

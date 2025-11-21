@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides comprehensive information about the gated release strategy implemented for HIPAA Attachments deployments to UAT and PROD environments.
+This guide provides comprehensive information about the gated release strategy implemented for Cloud Health Office deployments to UAT and PROD environments.
 
 ## Table of Contents
 

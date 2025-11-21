@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide provides solutions to common issues encountered when developing, deploying, and operating the HIPAA Attachments system.
+This guide provides solutions to common issues encountered when developing, deploying, and operating the Cloud Health Office system.
 
 ## Table of Contents
 - [Development Issues](#development-issues)

@@ -1,14 +1,15 @@
-# HIPAA Attachments - Logic Apps & Infrastructure
+# Cloud Health Office - Multi-Tenant SaaS Platform
 
 ## Project Overview
 
-This repository implements an Azure Logic Apps solution for processing HIPAA-compliant medical attachments:
-- **HIPAA 275 Ingestion**: Polls Availity SFTP for 275 attachment files, archives to Data Lake, processes X12, publishes to Service Bus, updates QNXT
-- **HIPAA 277 RFAI**: Consumes RFAI requests from Service Bus, generates X12 277, sends via SFTP
-- **HIPAA 278 Processing**: Processes Health Care Services Review Information transactions
-- **278 Replay Endpoint**: HTTP endpoint for deterministic replay of 278 transactions for debugging
+This repository implements a multi-tenant SaaS platform for processing healthcare EDI transactions across unlimited health plans:
+- **Multi-Payer EDI Processing**: Claims (837), Eligibility (270/271), Claim Status (276/277), Attachments (275), Authorizations (278), Appeals, ECS
+- **Configuration-Driven Onboarding**: Zero-code deployment for new payers in under 1 hour
+- **Backend Agnostic**: Works with any claims system (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)
+- **Enterprise Security**: Key Vault (Premium), Private Endpoints, PHI Masking, Automated Secret Rotation
+- **SaaS-Ready**: Multi-tenant architecture with Azure Marketplace roadmap
 
-**Infrastructure**: Azure Data Lake Storage Gen2 (hierarchical namespace), Service Bus (topics: attachments-in, rfai-requests, edi-278), Logic App Standard (WS1 SKU), Application Insights
+**Infrastructure**: Azure Data Lake Storage Gen2 (hierarchical namespace), Service Bus (per-tenant topics), Logic App Standard (WS1+ SKU), Application Insights (PHI masking), Key Vault (Premium with HSM), VNet with Private Endpoints
 
 Always reference these instructions first and only fallback to search or bash commands when you encounter unexpected information that does not match the info here.
 
