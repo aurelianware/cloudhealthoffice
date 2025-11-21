@@ -1,1 +1,45 @@
-[SVG FILE CONTENTS HERE]
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="chrome" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a0a0ff"/>
+      <stop offset="50%" stop-color="#c0ffff"/>
+      <stop offset="100%" stop-color="#a0a0ff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background void -->
+  <rect width="800" height="600" fill="#000000"/>
+
+  <!-- Monolith shield -->
+  <path d="M200 100 L600 100 L700 200 L700 400 L600 500 L200 500 L100 400 L100 200 Z" fill="#0f0f0f" stroke="url(#chrome)" stroke-width="4" filter="url(#glow)"/>
+
+  <!-- Digital eye (the Sentinel) -->
+  <circle cx="400" cy="250" r="80" fill="none" stroke="#ffffff" stroke-width="12" filter="url(#glow)"/>
+  <circle cx="400" cy="250" r="50" fill="none" stroke="#00ffff" stroke-width="8" opacity="0.8"/>
+  <circle cx="400" cy="250" r="25" fill="#0088ff"/>
+
+  <!-- Circuit veins emanating from the eye -->
+  <g stroke="#00ffff" stroke-width="2" opacity="0.6">
+    <path d="M400 170 Q350 100, 300 120" fill="none"/>
+    <path d="M400 170 Q450 100, 500 120" fill="none"/>
+    <path d="M400 330 Q320 400, 250 450" fill="none"/>
+    <path d="M400 330 Q480 400, 550 450" fill="none"/>
+    <path d="M320 250 Q200 220, 150 280" fill="none"/>
+    <path d="M480 250 Q600 220, 650 280" fill="none"/>
+  </g>
+
+  <!-- Subtle lock & cloud hints -->
+  <path d="M380 380 H420 V420 H380 Z M390 420 V440 H410 V420" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.5"/>
+  <circle cx="400" cy="440" r="12" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.4"/>
+
+  <!-- Text -->
+  <text x="400" y="480" font-family="Segoe UI, system-ui, sans-serif" font-size="56" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="4">CLOUD HEALTH OFFICE</text>
+  <text x="400" y="530" font-family="Segoe UI, system-ui, sans-serif" font-size="20" font-weight="300" fill="#00ffff" text-anchor="middle" opacity="0.8">Just emerged from the void</text>
+</svg>
