@@ -1,0 +1,1167 @@
+openapi: 3.0.3
+info:
+  title: Enhanced Claim Status (ECS) API
+  description: |
+    API for querying claim status information from QNXT claims adjudication system.
+    Supports four search methods: Service Date, Member, Check Number, and Claim History.
+    
+    ## Authentication
+    All endpoints require Bearer token authentication via the Authorization header.
+    
+    ## Rate Limits
+    - 100 requests per minute per API key
+    - 1000 requests per hour per API key
+    
+    ## HIPAA Compliance
+    This API handles Protected Health Information (PHI). All requests and responses
+    must be transmitted over encrypted channels (TLS 1.2+).
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@example.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://{environment}-logic-la.azurewebsites.net/api/ecs_summary_search
+    description: Logic App endpoint
+    variables:
+      environment:
+        default: prod
+        enum:
+          - dev
+          - uat
+          - prod
+        description: Deployment environment
+
+tags:
+  - name: Search
+    description: Claim status search operations
+
+paths:
+  /triggers/HTTP_ECS_Summary_Search_Request/invoke:
+    post:
+      tags:
+        - Search
+      summary: ECS Summary Search
+      description: |
+        Perform an Enhanced Claim Status summary search using one of four methods:
+        - Service Date: Search by provider and service date range
+        - Member: Search by member ID and service date range
+        - Check Number: Search by check/EFT number
+        - Claim History: Search for specific claim details
+      operationId: ecsSearchClaims
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ECSSearchRequest'
+            # SECURITY NOTE: All example values are SYNTHETIC TEST DATA - NO REAL PHI/PII
+            # Member IDs: Use MEMTEST prefix (e.g., MEMTEST00001) - clearly synthetic
+            # NPIs: Use 9999 prefix (e.g., 9999999990) - not valid provider numbers
+            # Names: Common test placeholders (Doe, Smith) - not real individuals
+            # This data is compliant with HIPAA testing guidelines and contains no actual PHI
+            examples:
+              serviceDateSearch:
+                summary: Service Date Search
+                value:
+                  searchMethod: ServiceDate
+                  requestId: REQ-2024-001
+                  submitterId: PROV-12345
+                  serviceDateSearch:
+                    serviceFromDate: "20240101"
+                    serviceToDate: "20240131"
+                    providerId: "9999555001"
+                    providerIdQualifier: NPI
+              memberSearch:
+                summary: Member Search
+                value:
+                  searchMethod: Member
+                  requestId: REQ-2024-002
+                  submitterId: PROV-12345
+                  memberSearch:
+                    memberId: MEMTEST00004
+                    firstName: John
+                    lastName: Doe
+                    dateOfBirth: "19850315"
+                    serviceFromDate: "20240101"
+                    serviceToDate: "20240331"
+              checkNumberSearch:
+                summary: Check Number Search
+                value:
+                  searchMethod: CheckNumber
+                  requestId: REQ-2024-003
+                  submitterId: PROV-12345
+                  checkNumberSearch:
+                    checkNumber: CHK789456
+                    payerId: UNITED
+                    checkDate: "20240215"
+              claimHistorySearch:
+                summary: Claim History Search
+                value:
+                  searchMethod: ClaimHistory
+                  requestId: REQ-2024-004
+                  submitterId: PROV-12345
+                  claimHistorySearch:
+                    claimNumber: CLM987654321
+                    patientAccountNumber: PAT-9876
+                    memberId: MEMTEST00004
+      responses:
+        '200':
+          description: Successful search (may return empty results)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ECSSearchResponse'
+              examples:
+                paidClaimWithValueAdds277:
+                  summary: Paid claim with complete ValueAdds277 fields
+                  description: |
+                    Example showing a fully paid claim with all ValueAdds277 enhanced fields populated.
+                    Integration flags show eligibleForRemittanceViewer=true, all others false.
+                  value:
+                    requestId: REQ-2024-001
+                    status: success
+                    timestamp: "2024-01-15T10:30:45.123Z"
+                    searchMethod: ClaimHistory
+                    totalResults: 1
+                    claims:
+                      - claimNumber: CLM123456789
+                        patientAccountNumber: PAT-2024-001
+                        claimStatus: Paid
+                        claimStatusCode: F2
+                        claimStatusCategory: Finalized
+                        statusCode: F2
+                        statusCodeDescription: Claim has been finalized and paid
+                        serviceFromDate: "20240105"
+                        serviceToDate: "20240105"
+                        receivedDate: "20240107"
+                        processedDate: "20240110"
+                        finalizedDate: "20240110"
+                        effectiveDate: "20240110"
+                        exchangeDate: "2024-01-15T10:30:45.123Z"
+                        paidDate: "20240112"
+                        billedAmount: 850.00
+                        BILLED: 850.00
+                        allowedAmount: 650.00
+                        ALLOWED: 650.00
+                        paidAmount: 520.00
+                        INSURANCE_TOTAL_PAID: 520.00
+                        patientResponsibility: 130.00
+                        PATIENT_RESPONSIBILITY: 130.00
+                        COPAY: 30.00
+                        COINSURANCE: 65.00
+                        DEDUCTIBLE: 35.00
+                        DISCOUNT: 200.00
+                        adjustmentAmount: -200.00
+                        payerId: PCHP
+                        payerName: Parkland Community Health Plan
+                        providerId: "9999999990"
+                        providerName: Smith Medical Group
+                        memberId: MEMTEST00004
+                        memberName: Doe, Jane
+                        checkNumber: CHK789456123
+                        checkDate: "20240112"
+                        remarkCodes: ["M80", "N428"]
+                        reasonCodes: ["CO-45"]
+                        code: ["CO-45", "M80", "N428"]
+                        statusDetails: Claim processed and paid. Check mailed on 2024-01-12
+                        comment: Payment processed. Contractual adjustment applied per provider agreement.
+                        drgCode: "470"
+                        facilityTypeCodeDescription: Outpatient Hospital
+                        diagnosisCodes: ["J18.9", "R50.9", "J96.00"]
+                        payeeName: Smith Medical Group PA
+                        checkCashedDate: "20240115"
+                        checkAmount: 520.00
+                        patient:
+                          lastName: Doe
+                          firstName: Jane
+                          middleName: Marie
+                          suffix: ""
+                          birthdate: "19850315"
+                          memberId: MEMTEST00004
+                          gender: F
+                        subscriber:
+                          lastName: Doe
+                          firstName: John
+                          middleName: Robert
+                          suffix: ""
+                          memberId: MEMTEST00004
+                          groupNumber: GRP789456
+                        billingProvider:
+                          taxId: "12-3456789"
+                          npi: "9999999990"
+                          lastName: Smith
+                          firstName: David
+                          middleName: Allen
+                          suffix: MD
+                        renderingProvider:
+                          taxId: "12-3456789"
+                          npi: "9999999991"
+                          lastName: Johnson
+                          firstName: Emily
+                          middleName: Grace
+                          suffix: DO
+                        serviceLines:
+                          - fromDate: "20240105"
+                            toDate: "20240105"
+                            diagnosisCodes: ["J18.9", "R50.9"]
+                            procedureCode: "99214"
+                            modifiers: ["25"]
+                            quantity: 1
+                            DEDUCTIBLE: 35.00
+                            DISCOUNT: 50.00
+                            COPAY: 30.00
+                            COINSURANCE: 20.00
+                            PATIENT_RESPONSIBILITY: 85.00
+                        eligibleForAttachment: false
+                        eligibleForChat: false
+                        eligibleForCorrection: false
+                        eligibleForMessaging: true
+                        eligibleForAppeal: false
+                        eligibleForRemittanceViewer: true
+                        appealMessage: null
+                        appealType: null
+                        appealTimelyFilingDate: null
+                deniedClaimWithAppealEligibility:
+                  summary: Denied claim with eligibleForAppeal=true
+                  description: |
+                    Example showing a denied claim with eligibleForAppeal=true and populated
+                    appeal metadata. This enables "Dispute Claim" button in provider UI.
+                  value:
+                    requestId: REQ-2024-002
+                    status: success
+                    timestamp: "2024-01-15T14:22:15.456Z"
+                    searchMethod: Member
+                    totalResults: 1
+                    claims:
+                      - claimNumber: CLM987654321
+                        patientAccountNumber: PAT-2024-002
+                        claimStatus: Denied
+                        claimStatusCode: F3
+                        claimStatusCategory: Denied
+                        statusCode: P4
+                        statusCodeDescription: The procedure code is inconsistent with the modifier used
+                        serviceFromDate: "20231215"
+                        serviceToDate: "20231215"
+                        receivedDate: "20231218"
+                        processedDate: "20240108"
+                        finalizedDate: "20240108"
+                        effectiveDate: "20240108"
+                        exchangeDate: "2024-01-15T14:22:15.456Z"
+                        billedAmount: 450.00
+                        BILLED: 450.00
+                        ALLOWED: 0.00
+                        INSURANCE_TOTAL_PAID: 0.00
+                        PATIENT_RESPONSIBILITY: 0.00
+                        COPAY: 0.00
+                        COINSURANCE: 0.00
+                        DEDUCTIBLE: 0.00
+                        DISCOUNT: 0.00
+                        adjustmentAmount: -450.00
+                        payerId: PCHP
+                        payerName: Parkland Community Health Plan
+                        providerId: "9999555001"
+                        providerName: Central Medical Clinic
+                        memberId: MEMTEST00002
+                        memberName: Smith, John
+                        remarkCodes: ["M80", "N568"]
+                        reasonCodes: ["CO-96", "CO-197"]
+                        code: ["CO-96", "CO-197", "M80", "N568"]
+                        statusDetails: Claim denied due to coding error
+                        comment: Procedure code 29881 with modifier 59 is not appropriate. Please review coding guidelines.
+                        facilityTypeCodeDescription: Outpatient Surgery Center
+                        diagnosisCodes: ["M25.551", "S83.511A"]
+                        patient:
+                          lastName: Smith
+                          firstName: John
+                          middleName: David
+                          suffix: ""
+                          birthdate: "19700612"
+                          memberId: MEMTEST00002
+                          gender: M
+                        eligibleForAttachment: false
+                        eligibleForChat: false
+                        eligibleForCorrection: true
+                        eligibleForMessaging: true
+                        eligibleForAppeal: true
+                        eligibleForRemittanceViewer: false
+                        appealMessage: "This claim may be eligible for appeal. Timely filing deadline: 2024-07-06"
+                        appealType: Reconsideration
+                        appealTimelyFilingDate: "20240706"
+                pendingClaimWithAttachmentEligibility:
+                  summary: Pending claim with eligibleForAttachment=true
+                  description: |
+                    Example showing a pending claim awaiting documentation with eligibleForAttachment=true.
+                    This enables "Send Attachments" button in provider UI.
+                  value:
+                    requestId: REQ-2024-003
+                    status: success
+                    timestamp: "2024-01-15T09:15:30.789Z"
+                    searchMethod: ServiceDate
+                    totalResults: 1
+                    claims:
+                      - claimNumber: CLM555666777
+                        patientAccountNumber: PAT-2024-003
+                        claimStatus: Pending
+                        claimStatusCode: F0
+                        claimStatusCategory: Pending
+                        statusCode: A3
+                        statusCodeDescription: Claim is pending review. Additional documentation requested.
+                        serviceFromDate: "20240102"
+                        serviceToDate: "20240105"
+                        receivedDate: "20240108"
+                        effectiveDate: "20240112"
+                        exchangeDate: "2024-01-15T09:15:30.789Z"
+                        billedAmount: 2450.00
+                        BILLED: 2450.00
+                        payerId: PCHP
+                        payerName: Parkland Community Health Plan
+                        providerId: "9999555010"
+                        providerName: Regional Hospital Center
+                        memberId: MEMTEST00003
+                        memberName: Johnson, Sarah
+                        statusDetails: Claim is under review. Medical records needed.
+                        comment: Please submit hospital admission records, progress notes, and discharge summary.
+                        drgCode: "189"
+                        facilityTypeCodeDescription: Inpatient Hospital
+                        diagnosisCodes: ["E11.65", "I50.9", "N18.3"]
+                        patient:
+                          lastName: Johnson
+                          firstName: Sarah
+                          middleName: Elizabeth
+                          suffix: ""
+                          birthdate: "19621028"
+                          memberId: MEMTEST00003
+                          gender: F
+                        serviceLines:
+                          - fromDate: "20240102"
+                            toDate: "20240105"
+                            diagnosisCodes: ["E11.65", "I50.9", "N18.3"]
+                            procedureCode: "99223"
+                            quantity: 4
+                        eligibleForAttachment: true
+                        eligibleForChat: false
+                        eligibleForCorrection: false
+                        eligibleForMessaging: true
+                        eligibleForAppeal: false
+                        eligibleForRemittanceViewer: false
+                successNoResults:
+                  summary: Successful search with no results
+                  value:
+                    requestId: REQ-2024-005
+                    status: success
+                    timestamp: "2024-01-15T11:00:00.000Z"
+                    searchMethod: ServiceDate
+                    totalResults: 0
+                    claims: []
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-006
+                status: error
+                timestamp: "2024-01-15T11:15:30.456Z"
+                searchMethod: ServiceDate
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: INVALID_REQUEST
+                    errorMessage: Missing required field 'serviceFromDate'
+                    errorDetails: The serviceDateSearch object must include serviceFromDate
+        '401':
+          description: Unauthorized - invalid or missing authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-007
+                status: error
+                timestamp: "2024-01-15T11:20:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: AUTHENTICATION_FAILED
+                    errorMessage: Invalid or expired authentication token
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-008
+                status: error
+                timestamp: "2024-01-15T11:25:00.000Z"
+                searchMethod: ClaimHistory
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: CLAIM_NOT_FOUND
+                    errorMessage: The specified claim number was not found
+                    errorDetails: Claim CLMTEST9999 does not exist in the system
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-009
+                status: error
+                timestamp: "2024-01-15T11:30:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: RATE_LIMIT_EXCEEDED
+                    errorMessage: Too many requests. Please retry after 60 seconds.
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-010
+                status: error
+                timestamp: "2024-01-15T11:35:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: INTERNAL_ERROR
+                    errorMessage: An unexpected error occurred while processing the request
+        '503':
+          description: Service unavailable - backend system unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                requestId: REQ-2024-011
+                status: error
+                timestamp: "2024-01-15T11:40:00.000Z"
+                totalResults: 0
+                claims: []
+                errors:
+                  - errorCode: QNXT_UNAVAILABLE
+                    errorMessage: QNXT backend system is temporarily unavailable
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT bearer token for authentication.
+        Obtain token from Azure AD OAuth 2.0 endpoint.
+
+  schemas:
+    ECSSearchRequest:
+      type: object
+      required:
+        - searchMethod
+        - requestId
+      properties:
+        searchMethod:
+          type: string
+          enum:
+            - ServiceDate
+            - Member
+            - CheckNumber
+            - ClaimHistory
+          description: The type of search to perform
+        requestId:
+          type: string
+          pattern: '^[A-Z0-9-]+$'
+          minLength: 1
+          maxLength: 50
+          description: Unique identifier for tracking the request
+          example: REQ-2024-001
+        submitterId:
+          type: string
+          description: Identifier of the submitter (provider, clearinghouse)
+          example: PROV-12345
+        serviceDateSearch:
+          $ref: '#/components/schemas/ServiceDateSearch'
+        memberSearch:
+          $ref: '#/components/schemas/MemberSearch'
+        checkNumberSearch:
+          $ref: '#/components/schemas/CheckNumberSearch'
+        claimHistorySearch:
+          $ref: '#/components/schemas/ClaimHistorySearch'
+      oneOf:
+        - required: [serviceDateSearch]
+        - required: [memberSearch]
+        - required: [checkNumberSearch]
+        - required: [claimHistorySearch]
+
+    ServiceDateSearch:
+      type: object
+      required:
+        - serviceFromDate
+        - serviceToDate
+        - providerId
+      properties:
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date in CCYYMMDD format
+          example: "20240101"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date in CCYYMMDD format
+          example: "20240131"
+        providerId:
+          type: string
+          description: Provider NPI or Tax ID
+          example: "9999555001"
+        providerIdQualifier:
+          type: string
+          enum:
+            - NPI
+            - XX
+            - EI
+          default: NPI
+          description: Qualifier for provider identifier
+
+    MemberSearch:
+      type: object
+      required:
+        - memberId
+        - serviceFromDate
+        - serviceToDate
+      properties:
+        memberId:
+          type: string
+          description: Member ID or Subscriber ID
+          example: MEMTEST00004
+        firstName:
+          type: string
+          description: Member first name
+          example: John
+        lastName:
+          type: string
+          description: Member last name
+          example: Doe
+        dateOfBirth:
+          type: string
+          pattern: '^\d{8}$'
+          description: Member date of birth in CCYYMMDD format
+          example: "19850315"
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date in CCYYMMDD format
+          example: "20240101"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date in CCYYMMDD format
+          example: "20240331"
+
+    CheckNumberSearch:
+      type: object
+      required:
+        - checkNumber
+        - payerId
+      properties:
+        checkNumber:
+          type: string
+          description: Check or EFT trace number
+          example: CHK789456
+        payerId:
+          type: string
+          description: Payer identifier
+          example: UNITED
+        checkDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Check issue date in CCYYMMDD format
+          example: "20240215"
+
+    ClaimHistorySearch:
+      type: object
+      required:
+        - claimNumber
+      properties:
+        claimNumber:
+          type: string
+          description: Payer claim control number
+          example: CLM987654321
+        patientAccountNumber:
+          type: string
+          description: Provider's patient account number
+          example: PAT-9876
+        memberId:
+          type: string
+          description: Member ID or Subscriber ID
+          example: MEMTEST00004
+
+    ECSSearchResponse:
+      type: object
+      required:
+        - requestId
+        - status
+        - timestamp
+      properties:
+        requestId:
+          type: string
+          description: Original request identifier
+          example: REQ-2024-001
+        status:
+          type: string
+          enum:
+            - success
+            - error
+            - partial
+          description: Overall status of the search operation
+        timestamp:
+          type: string
+          format: date-time
+          description: Response generation timestamp (ISO 8601)
+          example: "2024-01-15T10:30:45.123Z"
+        searchMethod:
+          type: string
+          enum:
+            - ServiceDate
+            - Member
+            - CheckNumber
+            - ClaimHistory
+          description: The search method that was executed
+        totalResults:
+          type: integer
+          minimum: 0
+          description: Total number of claims found
+          example: 2
+        claims:
+          type: array
+          description: Array of claim status results
+          items:
+            $ref: '#/components/schemas/Claim'
+        errors:
+          type: array
+          description: Array of error messages (if status is error or partial)
+          items:
+            $ref: '#/components/schemas/Error'
+        warnings:
+          type: array
+          description: Array of warning messages
+          items:
+            type: string
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Claim:
+      type: object
+      required:
+        - claimNumber
+        - claimStatus
+      properties:
+        claimNumber:
+          type: string
+          description: Payer claim control number
+          example: CLM123456789
+        patientAccountNumber:
+          type: string
+          description: Provider's patient account number
+          example: PAT-1001
+        claimStatus:
+          type: string
+          enum:
+            - Pending
+            - Paid
+            - Denied
+            - Partially Paid
+            - In Process
+            - Suspended
+            - Forwarded
+            - Adjusted
+          description: Current status of the claim
+        claimStatusCode:
+          type: string
+          description: X12 status code (e.g., F0, F1, F2, F3)
+          example: F2
+        claimStatusCategory:
+          type: string
+          description: Status category code
+          example: Finalized
+        serviceFromDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service start date (CCYYMMDD)
+          example: "20240110"
+        serviceToDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Service end date (CCYYMMDD)
+          example: "20240110"
+        receivedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was received by payer
+          example: "20240112"
+        processedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was processed
+          example: "20240113"
+        paidDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was paid (if applicable)
+          example: "20240115"
+        billedAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount billed
+          example: 250.00
+        allowedAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount allowed by payer
+          example: 200.00
+        paidAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Total amount paid
+          example: 160.00
+        patientResponsibility:
+          type: number
+          format: double
+          minimum: 0
+          description: Amount patient is responsible for
+          example: 40.00
+        adjustmentAmount:
+          type: number
+          format: double
+          description: Total adjustment amount
+          example: -50.00
+        payerId:
+          type: string
+          description: Payer identifier
+          example: Health Plan
+        payerName:
+          type: string
+          description: Payer name
+          example: Health Plan
+        providerId:
+          type: string
+          description: Provider NPI or identifier
+          example: "9999555001"
+        providerName:
+          type: string
+          description: Provider name
+          example: Dr. John Smith
+        memberId:
+          type: string
+          description: Member/subscriber ID
+          example: MEMTEST00004
+        memberName:
+          type: string
+          description: Member/patient name
+          example: Jane Doe
+        checkNumber:
+          type: string
+          description: Check or EFT trace number (if paid)
+          example: CHK789456
+        checkDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Check issue date (if paid)
+          example: "20240115"
+        remarkCodes:
+          type: array
+          description: Claim adjustment remark codes
+          items:
+            type: string
+          example: ["M80"]
+        reasonCodes:
+          type: array
+          description: Claim adjustment reason codes
+          items:
+            type: string
+          example: ["CO-45"]
+        statusDetails:
+          type: string
+          description: Additional status details or messages
+          example: Claim processed and paid
+        # ValueAdds277 Enhanced Fields
+        statusCode:
+          type: string
+          description: X12 status code (ValueAdds277)
+          example: F2
+        statusCodeDescription:
+          type: string
+          description: Human-readable status description (ValueAdds277)
+          example: Claim has been finalized and paid
+        finalizedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Date claim was finalized (best practice - ValueAdds277)
+          example: "20240110"
+        effectiveDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Last status update date (REQUIRED - ValueAdds277)
+          example: "20240110"
+        exchangeDate:
+          type: string
+          format: date-time
+          description: Availity received data timestamp (ValueAdds277)
+          example: "2024-01-15T10:30:45.123Z"
+        comment:
+          type: string
+          description: Payer-provided comment (ValueAdds277)
+          example: Payment processed. Contractual adjustment applied per provider agreement.
+        BILLED:
+          type: number
+          format: double
+          minimum: 0
+          description: Total billed amount (REQUIRED - ValueAdds277)
+          example: 850.00
+        ALLOWED:
+          type: number
+          format: double
+          minimum: 0
+          description: Contractual amount (best practice - ValueAdds277)
+          example: 650.00
+        INSURANCE_TOTAL_PAID:
+          type: number
+          format: double
+          minimum: 0
+          description: Insurance payment (best practice - ValueAdds277)
+          example: 520.00
+        PATIENT_RESPONSIBILITY:
+          type: number
+          format: double
+          minimum: 0
+          description: Patient liability (best practice - ValueAdds277)
+          example: 130.00
+        COPAY:
+          type: number
+          format: double
+          minimum: 0
+          description: Patient copay (best practice - ValueAdds277)
+          example: 30.00
+        COINSURANCE:
+          type: number
+          format: double
+          minimum: 0
+          description: Patient coinsurance (best practice - ValueAdds277)
+          example: 65.00
+        DEDUCTIBLE:
+          type: number
+          format: double
+          minimum: 0
+          description: Deductible amount (best practice - ValueAdds277)
+          example: 35.00
+        DISCOUNT:
+          type: number
+          format: double
+          minimum: 0
+          description: Discount amount (best practice - ValueAdds277)
+          example: 200.00
+        code:
+          type: array
+          description: Reason/remark codes array (best practice - ValueAdds277)
+          items:
+            type: string
+          example: ["CO-45", "M80", "N428"]
+        drgCode:
+          type: string
+          description: Diagnosis Related Group (best practice - ValueAdds277)
+          example: "470"
+        facilityTypeCodeDescription:
+          type: string
+          description: Facility type description (best practice - ValueAdds277)
+          example: Outpatient Hospital
+        diagnosisCodes:
+          type: array
+          description: ICD-10 diagnosis codes array (best practice - ValueAdds277)
+          items:
+            type: string
+          example: ["J18.9", "R50.9", "J96.00"]
+        payeeName:
+          type: string
+          description: Payee on remittance (ValueAdds277)
+          example: Smith Medical Group PA
+        checkCashedDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: When check was cashed (ValueAdds277)
+          example: "20240115"
+        checkAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: Check amount (ValueAdds277)
+          example: 520.00
+        patient:
+          type: object
+          description: Patient demographic information (ValueAdds277)
+          properties:
+            lastName:
+              type: string
+              example: Doe
+            firstName:
+              type: string
+              example: Jane
+            middleName:
+              type: string
+              example: Marie
+            suffix:
+              type: string
+              example: ""
+            birthdate:
+              type: string
+              pattern: '^\d{8}$'
+              example: "19850315"
+            memberId:
+              type: string
+              example: MEMTEST00004
+            gender:
+              type: string
+              enum: [M, F, U]
+              example: F
+        subscriber:
+          type: object
+          description: Subscriber demographic information (ValueAdds277)
+          properties:
+            lastName:
+              type: string
+              example: Doe
+            firstName:
+              type: string
+              example: John
+            middleName:
+              type: string
+              example: Robert
+            suffix:
+              type: string
+              example: ""
+            memberId:
+              type: string
+              example: MEMTEST00004
+            groupNumber:
+              type: string
+              example: GRP789456
+        billingProvider:
+          type: object
+          description: Billing provider information (ValueAdds277)
+          properties:
+            taxId:
+              type: string
+              example: "12-3456789"
+            npi:
+              type: string
+              example: "9999999990"
+            lastName:
+              type: string
+              example: Smith
+            firstName:
+              type: string
+              example: David
+            middleName:
+              type: string
+              example: Allen
+            suffix:
+              type: string
+              example: MD
+        renderingProvider:
+          type: object
+          description: Rendering provider information (ValueAdds277)
+          properties:
+            taxId:
+              type: string
+              example: "12-3456789"
+            npi:
+              type: string
+              example: "9999999991"
+            lastName:
+              type: string
+              example: Johnson
+            firstName:
+              type: string
+              example: Emily
+            middleName:
+              type: string
+              example: Grace
+            suffix:
+              type: string
+              example: DO
+        serviceLines:
+          type: array
+          description: Service line details (ValueAdds277)
+          items:
+            type: object
+            properties:
+              fromDate:
+                type: string
+                pattern: '^\d{8}$'
+                description: Service line start date (best practice - ValueAdds277)
+                example: "20240105"
+              toDate:
+                type: string
+                pattern: '^\d{8}$'
+                description: Service line end date (best practice - ValueAdds277)
+                example: "20240105"
+              diagnosisCodes:
+                type: array
+                description: ICD-10 codes per line (best practice - ValueAdds277)
+                items:
+                  type: string
+                example: ["J18.9", "R50.9"]
+              procedureCode:
+                type: string
+                description: CPT/HCPCS code (best practice - ValueAdds277)
+                example: "99214"
+              modifiers:
+                type: array
+                description: Procedure modifiers (best practice - ValueAdds277)
+                items:
+                  type: string
+                example: ["25"]
+              quantity:
+                type: number
+                format: double
+                minimum: 0
+                description: Units (best practice - ValueAdds277)
+                example: 1
+              DEDUCTIBLE:
+                type: number
+                format: double
+                minimum: 0
+                description: Line deductible (best practice - ValueAdds277)
+                example: 35.00
+              DISCOUNT:
+                type: number
+                format: double
+                minimum: 0
+                description: Line discount (best practice - ValueAdds277)
+                example: 50.00
+              COPAY:
+                type: number
+                format: double
+                minimum: 0
+                description: Line copay (best practice - ValueAdds277)
+                example: 30.00
+              COINSURANCE:
+                type: number
+                format: double
+                minimum: 0
+                description: Line coinsurance (best practice - ValueAdds277)
+                example: 20.00
+              PATIENT_RESPONSIBILITY:
+                type: number
+                format: double
+                minimum: 0
+                description: Line patient responsibility (best practice - ValueAdds277)
+                example: 85.00
+        eligibleForAttachment:
+          type: boolean
+          description: Can send attachments (ValueAdds277 integration flag)
+          example: false
+        eligibleForChat:
+          type: boolean
+          description: Can chat with payer (ValueAdds277 integration flag)
+          example: false
+        eligibleForCorrection:
+          type: boolean
+          description: Can correct claim (ValueAdds277 integration flag)
+          example: false
+        eligibleForMessaging:
+          type: boolean
+          description: Can message payer (ValueAdds277 integration flag)
+          example: true
+        eligibleForAppeal:
+          type: boolean
+          description: Can dispute claim - CRITICAL for Appeals integration (ValueAdds277)
+          example: false
+        eligibleForRemittanceViewer:
+          type: boolean
+          description: Remittance viewer eligibility (ValueAdds277 integration flag)
+          example: true
+        appealMessage:
+          type: string
+          description: Appeal-related message for provider (ValueAdds277)
+          example: null
+        appealType:
+          type: string
+          description: Type of appeal allowed (ValueAdds277)
+          example: null
+        appealTimelyFilingDate:
+          type: string
+          pattern: '^\d{8}$'
+          description: Last date to file appeal (ValueAdds277)
+          example: null
+
+    Error:
+      type: object
+      required:
+        - errorCode
+        - errorMessage
+      properties:
+        errorCode:
+          type: string
+          description: Error code identifier
+          example: MEMBER_NOT_FOUND
+        errorMessage:
+          type: string
+          description: Human-readable error message
+          example: The specified member ID was not found in the system
+        errorDetails:
+          type: string
+          description: Additional error details
+          example: Member ID MEMTEST99999 does not exist in the claims database
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ECSSearchResponse'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum:
+                - error
+            totalResults:
+              type: integer
+              enum:
+                - 0
+            claims:
+              type: array
+              maxItems: 0
+          required:
+            - errors
+
+    Pagination:
+      type: object
+      description: Pagination information for large result sets
+      properties:
+        currentPage:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          example: 50
+        totalPages:
+          type: integer
+          minimum: 1
+          example: 3
+        hasNextPage:
+          type: boolean
+          example: true
