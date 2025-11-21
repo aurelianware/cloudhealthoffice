@@ -287,7 +287,7 @@ The request must include **either** an authorization number **or** member demogr
 - **Field**: `memberId`
 - **X12 Location**: 2010C NM1*IL segment, NM109 (MI qualifier)
 - **Format**: String, 1-80 characters
-- **Example**: "MEM123456", "PCHP789456"
+- **Example**: "MEM123456", "{config.payerId}789456"
 
 **When Required**: If `authorizationNumber` is not provided (requires `patientDateOfBirth`)
 

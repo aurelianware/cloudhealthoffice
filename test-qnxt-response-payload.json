@@ -14,7 +14,7 @@
   "processingDate": "2025-09-24T14:25:00Z",
   "attachmentPath": "/processed/275/2025/09/24/attachment001.pdf",
   "qnxtClaimId": "QNX20250924001",
-  "pchpMemberId": "PCHP123456",
+  "memberId": "{config.payerId}123456",
   "attachmentRequested": "Chest X-Ray",
   "responseRequired": true,
   "dueDate": "2025-10-08T23:59:59Z"

@@ -39,8 +39,8 @@
       "minLength": 1,
       "maxLength": 100,
       "examples": [
-        "PCHP-QNXT",
-        "Availity"
+        "{config.payerName}",
+        "Health Plan QNXT"
       ]
     },
     "logo": {
@@ -925,11 +925,11 @@
         "attachmentPattern": {
           "type": "string",
           "enum": [
-            "pre-appeal",
-            "post-appeal"
+            "PRE_APPEAL",
+            "POST_APPEAL"
           ],
-          "description": "When attachments can be submitted",
-          "default": "pre-appeal"
+          "description": "Attachment submission pattern: PRE_APPEAL (upload before appeal submission) or POST_APPEAL (upload after appeal acceptance, default)",
+          "default": "POST_APPEAL"
         },
         "additionalAttachmentsWindow": {
           "type": "integer",
