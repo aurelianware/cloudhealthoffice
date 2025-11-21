@@ -1,0 +1,18 @@
+SENTINEL LOGO SPECIFICATION
+
+This file represents the Cloud Health Office Sentinel primary logo.
+The actual PNG should be created with the following specifications:
+
+DIMENSIONS: 800x400 pixels
+BACKGROUND: Absolute black (#000000)
+PRIMARY TEXT: "CLOUD HEALTH OFFICE" in Segoe UI Bold, 48pt, neon cyan (#00ffff)
+SECONDARY TEXT: "SENTINEL" in Segoe UI, 24pt, neon cyan (#00ffff)
+TAGLINE: "Just emerged from the void" in Segoe UI italic, 16pt, neon green (#00ff88)
+VISUAL ELEMENTS: Holographic/neon circuit veins pattern in the background
+STYLE: Kubrickian, 2047-era, authoritative and inevitable
+
+The logo embodies:
+- Absolute black backgrounds (no grays, no gradients from black)
+- Holographic/neon circuit veins aesthetic
+- Segoe UI Bold for all headings
+- Authoritative, inevitable tone

@@ -1,11 +1,23 @@
-# Cloud Health Office 🏥
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg">
+    <img alt="Cloud Health Office Sentinel" src="docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg" width="800">
+  </picture>
+  
+  <p><em>Just emerged from the void</em></p>
+</div>
+
+---
+
+# Cloud Health Office
 ## Multi-Payer EDI Integration Platform
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Azure Logic Apps](https://img.shields.io/badge/Azure-Logic%20Apps-0078D4)](https://azure.microsoft.com/en-us/services/logic-apps/)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-Compliant-green)](https://www.hhs.gov/hipaa/index.html)
 
-A comprehensive Azure-based SaaS platform for processing multi-payer healthcare EDI transactions with enterprise-grade security, automated onboarding, and rapid deployment capabilities. Process claims, eligibility, attachments, authorizations, appeals, and claim status for any number of health plans with zero custom code.
+**Cloud Health Office** delivers inevitable transformation to healthcare EDI processing. This comprehensive Azure-based SaaS platform processes multi-payer healthcare EDI transactions with enterprise-grade security, automated onboarding, and deployment capabilities that render traditional approaches obsolete. Process claims, eligibility, attachments, authorizations, appeals, and claim status for unlimited health plans with zero custom code.
 
 > **Platform Notice**: This is an independent EDI integration platform that supports connectivity with Availity and other clearinghouses. This platform is not affiliated with, endorsed by, or sponsored by Availity, LLC. Availity is a registered trademark of Availity, LLC.
 
