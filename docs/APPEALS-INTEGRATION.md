@@ -381,9 +381,24 @@ All workflows and APIs require the following configuration parameters:
   "serviceBusTopic": "payer-appeal-status-updates",
   "serviceBusSubscription": "availity-push",
   "blobStorageAccount": "hipaa-attachments-storage",
-  "authorizationApiEndpoint": "https://api.healthplan.local/authorization"
+  "authorizationApiEndpoint": "https://api.healthplan.local/authorization",
+  "attachmentPattern": "POST_APPEAL"
 }
 ```
+
+### Attachment Validation Rules
+
+The system enforces the following validation rules for appeal attachments:
+
+1. **File Name Uniqueness**: No duplicate file names allowed within a single appeal
+2. **File Name Format**: Must match pattern `^[a-zA-Z0-9_-]+\.(gif|jpg|jpeg|pdf|tif|tiff)$`
+3. **File Size**: Each file must be ≤ 64MB (67,108,864 bytes)
+4. **File Count**: Maximum 10 attachments per appeal
+5. **File Types**: Only .gif, .jpg, .jpeg, .pdf, .tif, .tiff extensions allowed
+6. **Attachment Verification**: Before accepting appeal submission, system verifies:
+   - All listed attachments exist in blob storage (for PRE_APPEAL pattern)
+   - File metadata matches schema requirements
+   - No files exceed size limits
 
 ### Security Notes
 
