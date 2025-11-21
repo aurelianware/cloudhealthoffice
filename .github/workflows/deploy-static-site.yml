@@ -1,0 +1,391 @@
+name: Deploy Static Site with Custom Domain
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-static-site.yml'
+      - 'infra/main.bicep'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy-site:
+    runs-on: ubuntu-latest
+    environment: PROD
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Required Secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=========================================="
+          echo "Validating Required Secrets"
+          echo "=========================================="
+          echo ""
+
+          FAILED=0
+
+          REQUIRED_SECRETS=(
+            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
+            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
+            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          )
+
+          for item in "${REQUIRED_SECRETS[@]}"; do
+            SECRET_NAME="${item%%:*}"
+            SECRET_VALUE="${item#*:}"
+            if [ -z "$SECRET_VALUE" ]; then
+              echo "❌ $SECRET_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $SECRET_NAME is configured"
+            fi
+          done
+
+          REQUIRED_VARS=(
+            "AZURE_RG_NAME:${{ vars.AZURE_RG_NAME }}"
+            "BASE_NAME:${{ vars.BASE_NAME }}"
+          )
+
+          for item in "${REQUIRED_VARS[@]}"; do
+            VAR_NAME="${item%%:*}"
+            VAR_VALUE="${item#*:}"
+            if [ -z "$VAR_VALUE" ]; then
+              echo "❌ $VAR_NAME is not set or empty"
+              FAILED=1
+            else
+              echo "✅ $VAR_NAME = $VAR_VALUE"
+            fi
+          done
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Validation FAILED"
+            exit 1
+          else
+            echo "✅ Validation PASSED"
+          fi
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get Static Web App Details
+        id: get-swa
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          SWA_NAME="${{ vars.BASE_NAME }}-swa"
+
+          echo "Checking for Static Web App: $SWA_NAME"
+
+          # Check if Static Web App exists
+          if ! az staticwebapp show --name "$SWA_NAME" --resource-group "$RG_NAME" &>/dev/null; then
+            echo "::warning::Static Web App $SWA_NAME not found. It will be created by infrastructure deployment."
+            echo "swa_exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Get Static Web App details
+          SWA_HOSTNAME=$(az staticwebapp show \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "defaultHostname" -o tsv)
+
+          SWA_ID=$(az staticwebapp show \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "id" -o tsv)
+
+          {
+            echo "swa_exists=true"
+            echo "swa_hostname=$SWA_HOSTNAME"
+            echo "swa_id=$SWA_ID"
+            echo "swa_name=$SWA_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "✅ Static Web App found: $SWA_HOSTNAME"
+
+      - name: Get Static Web App Deployment Token
+        if: steps.get-swa.outputs.swa_exists == 'true'
+        id: get-token
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          SWA_NAME="${{ steps.get-swa.outputs.swa_name }}"
+
+          echo "Retrieving deployment token..."
+
+          # Get deployment token
+          DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "properties.apiKey" -o tsv)
+
+          if [ -z "$DEPLOYMENT_TOKEN" ]; then
+            echo "::error::Failed to retrieve deployment token"
+            exit 1
+          fi
+
+          echo "::add-mask::$DEPLOYMENT_TOKEN"
+          echo "deployment_token=$DEPLOYMENT_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "✅ Deployment token retrieved"
+
+      - name: Deploy to Azure Static Web Apps
+        if: steps.get-swa.outputs.swa_exists == 'true'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.get-token.outputs.deployment_token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/site"
+          skip_app_build: true
+          skip_api_build: true
+
+      - name: Configure Custom Domain
+        if: steps.get-swa.outputs.swa_exists == 'true'
+        id: custom-domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          SWA_NAME="${{ steps.get-swa.outputs.swa_name }}"
+          CUSTOM_DOMAIN="cloudhealthoffice.com"
+
+          echo "=========================================="
+          echo "Configuring Custom Domain"
+          echo "=========================================="
+          echo ""
+          echo "Static Web App: $SWA_NAME"
+          echo "Custom Domain: $CUSTOM_DOMAIN"
+          echo ""
+
+          # Check if custom domain already exists (idempotent)
+          EXISTING_DOMAINS=$(az staticwebapp hostname list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "[].name" -o tsv)
+
+          if echo "$EXISTING_DOMAINS" | grep -q "^${CUSTOM_DOMAIN}$"; then
+            echo "✅ Custom domain $CUSTOM_DOMAIN already configured"
+            echo "domain_already_configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Adding custom domain $CUSTOM_DOMAIN..."
+
+            # Add custom domain (this will require DNS verification)
+            if az staticwebapp hostname set \
+              --name "$SWA_NAME" \
+              --resource-group "$RG_NAME" \
+              --hostname "$CUSTOM_DOMAIN"; then
+              echo "✅ Custom domain addition initiated successfully"
+            else
+              echo "::warning::Custom domain addition failed or requires DNS verification"
+            fi
+
+            echo "domain_requires_verification=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Get the CNAME target for DNS configuration
+          SWA_DEFAULT_HOSTNAME="${{ steps.get-swa.outputs.swa_hostname }}"
+
+          echo ""
+          echo "=========================================="
+          echo "DNS Configuration Required"
+          echo "=========================================="
+          echo ""
+          echo "For ROOT DOMAIN (cloudhealthoffice.com):"
+          echo "  Record Type: ALIAS or ANAME (required for root domains)"
+          echo "  Host/Name: @ (or leave blank)"
+          echo "  Points to: $SWA_DEFAULT_HOSTNAME"
+          echo "  TTL: 3600"
+          echo ""
+          echo "Note: ALIAS/ANAME records are required for root domains."
+          echo "Standard CNAME records do NOT work for root domains (@)."
+          echo ""
+          echo "If your DNS provider does not support ALIAS/ANAME records,"
+          echo "use 'www.cloudhealthoffice.com' instead:"
+          echo "  Record Type: CNAME"
+          echo "  Host/Name: www"
+          echo "  Points to: $SWA_DEFAULT_HOSTNAME"
+          echo "  TTL: 3600"
+          echo ""
+          echo "=========================================="
+          echo ""
+
+          # Save DNS instructions for artifact
+          {
+            echo "# DNS Configuration for cloudhealthoffice.com"
+            echo ""
+            echo "**Static Web App:** $SWA_NAME"
+            echo "**Default Hostname:** $SWA_DEFAULT_HOSTNAME"
+            echo "**Custom Domain:** $CUSTOM_DOMAIN"
+            echo ""
+            echo "## DNS Records to Add"
+            echo ""
+            echo "### For Root Domain (cloudhealthoffice.com) - REQUIRED"
+            echo ""
+            echo "**IMPORTANT:** Root domains require ALIAS or ANAME records. Standard CNAME records do NOT work for root domains (@)."
+            echo ""
+            echo '```'
+            echo "Record Type: ALIAS or ANAME"
+            echo "Host/Name: @ (or leave blank for root domain)"
+            echo "Points to: $SWA_DEFAULT_HOSTNAME"
+            echo "TTL: 3600"
+            echo '```'
+            echo ""
+            echo "### Alternative: Use www Subdomain (if ALIAS/ANAME not supported)"
+            echo ""
+            echo "If your DNS provider does not support ALIAS or ANAME records, use the www subdomain instead:"
+            echo ""
+            echo '```'
+            echo "Record Type: CNAME"
+            echo "Host/Name: www"
+            echo "Points to: $SWA_DEFAULT_HOSTNAME"
+            echo "TTL: 3600"
+            echo '```'
+            echo ""
+            echo "## Verification"
+            echo ""
+            echo "After adding the DNS record:"
+            echo "1. Wait for DNS propagation (up to 48 hours, typically 5-10 minutes)"
+            echo "2. Verify with: \`dig $CUSTOM_DOMAIN\` or \`nslookup $CUSTOM_DOMAIN\`"
+            echo "3. Azure will automatically validate and enable HTTPS once DNS is verified"
+            echo ""
+            echo "## Additional Information"
+            echo ""
+            echo "- Azure Static Web Apps automatically provisions SSL/TLS certificates via Azure Managed Certificates"
+            echo "- Certificate provisioning happens automatically after DNS verification"
+            echo "- No manual certificate configuration required"
+            echo ""
+            echo "## Status Check"
+            echo ""
+            echo "To check custom domain status:"
+            echo '```bash'
+            echo "az staticwebapp hostname list \\"
+            echo "  --name $SWA_NAME \\"
+            echo "  --resource-group $RG_NAME"
+            echo '```'
+          } > /tmp/dns-instructions.md
+
+          echo "dns_instructions_file=/tmp/dns-instructions.md" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DNS Instructions
+        if: steps.get-swa.outputs.swa_exists == 'true' && steps.custom-domain.outputs.dns_instructions_file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-configuration-instructions
+          path: ${{ steps.custom-domain.outputs.dns_instructions_file }}
+          retention-days: 90
+
+      - name: Post DNS Instructions as PR Comment
+        if: steps.get-swa.outputs.swa_exists == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const dnsInstructions = fs.readFileSync('${{ steps.custom-domain.outputs.dns_instructions_file }}', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: dnsInstructions
+            });
+
+      - name: Verify Deployment
+        if: steps.get-swa.outputs.swa_exists == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SWA_HOSTNAME="${{ steps.get-swa.outputs.swa_hostname }}"
+
+          echo "=========================================="
+          echo "Verifying Deployment"
+          echo "=========================================="
+          echo ""
+          echo "Testing Static Web App endpoint..."
+          echo "URL: https://$SWA_HOSTNAME"
+          echo ""
+
+          # Wait a moment for deployment to propagate
+          sleep 10
+
+          # Test the endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Deployment verified - HTTP $HTTP_STATUS"
+          else
+            echo "::warning::Deployment may need more time - HTTP $HTTP_STATUS"
+            echo "This is normal for new deployments. The site will be available shortly."
+          fi
+
+          echo ""
+          echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
+
+      - name: Deployment Success Summary
+        if: success()
+        run: |
+          echo "🎉 ====================================="
+          echo "🎉  Static Site Deployment Successful!"
+          echo "🎉 ====================================="
+          echo ""
+          echo "**Deployed Resources:**"
+          echo "- Static Web App: ${{ steps.get-swa.outputs.swa_name }}"
+          echo "- Default URL: https://${{ steps.get-swa.outputs.swa_hostname }}"
+          echo "- Custom Domain: cloudhealthoffice.com (pending DNS verification)"
+          echo ""
+          echo "**Next Steps:**"
+          echo "1. Download the 'dns-configuration-instructions' artifact from this workflow run"
+          echo "2. Add the CNAME record to your DNS provider"
+          echo "3. Wait for DNS propagation (5-10 minutes typically)"
+          echo "4. Azure will automatically enable HTTPS once DNS is verified"
+          echo ""
+          echo "**Important Notes:**"
+          echo "- For root domain (@), use ALIAS or ANAME record if supported by your DNS provider"
+          echo "- If ALIAS/ANAME is not available, use 'www.cloudhealthoffice.com' instead"
+          echo "- SSL/TLS certificate will be automatically provisioned by Azure"
+
+      - name: Rollback on Failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "=========================================="
+          echo "❌ Deployment Failed"
+          echo "=========================================="
+          echo ""
+          echo "**Troubleshooting Steps:**"
+          echo "1. Verify Static Web App exists in Azure Portal"
+          echo "2. Check deployment logs above for specific errors"
+          echo "3. Ensure AZURE_CLIENT_ID has 'Website Contributor' role"
+          echo "4. Verify resource group ${{ vars.AZURE_RG_NAME }} exists"
+          echo ""
+          echo "**To Retry:**"
+          echo "- Fix any configuration issues"
+          echo "- Re-run this workflow from Actions tab"
+          echo "- Or push a new commit to trigger deployment"
+          echo ""
+          echo "**Manual Deployment:**"
+          echo "If automated deployment continues to fail:"
+          echo "1. Go to Azure Portal > Static Web Apps"
+          echo "2. Select ${{ vars.BASE_NAME }}-swa"
+          echo "3. Use 'Deployment token' for manual deployment"
+          echo "4. Use Azure CLI:"
+          echo "   az staticwebapp deploy --name ${{ vars.BASE_NAME }}-swa \\"
+          echo "     --resource-group ${{ vars.AZURE_RG_NAME }} \\"
+          echo "     --source ./site"

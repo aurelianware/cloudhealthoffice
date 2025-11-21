@@ -57,3 +57,38 @@ node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
 
 # 3. Deploy
 cd generated/your-payer/infrastructure && ./deploy.sh
+```
+
+### Marketing Site with Auto-Custom Domain
+
+The repository includes a static marketing site (`/site` folder) that automatically deploys to Azure Static Web Apps with custom domain configuration.
+
+**Automated Features:**
+- Deploys to Azure Static Web Apps on push to `main` branch
+- Automatically configures `cloudhealthoffice.com` as custom domain
+- Generates DNS configuration instructions as workflow artifact
+- Idempotent domain assignment (safe to re-run)
+- HTTPS/SSL certificate provisioned automatically by Azure
+
+**DNS Configuration:**
+
+After deployment, download the `dns-configuration-instructions` artifact from the GitHub Actions workflow run. Add one of these DNS records:
+
+- **For www subdomain (recommended):** CNAME record pointing `www` to the Static Web App hostname
+- **For root domain (@):** ALIAS or ANAME record (if supported by DNS provider)
+
+DNS verification typically completes in 5-10 minutes. Azure automatically provisions SSL/TLS certificates once DNS is verified.
+
+**Manual Verification:**
+
+```bash
+# Check custom domain status
+az staticwebapp hostname list \
+  --name <base-name>-swa \
+  --resource-group <resource-group-name>
+
+# Test DNS propagation
+dig cloudhealthoffice.com
+```
+
+For troubleshooting or manual deployment, see `.github/workflows/deploy-static-site.yml`.
