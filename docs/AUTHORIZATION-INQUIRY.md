@@ -1159,5 +1159,5 @@ Authorization: Bearer {token}
 
 **Document Version**: 1.0  
 **Last Updated**: 2025-11-19  
-**Maintained By**: HIPAA Attachments Integration Team  
+**Maintained By**: Cloud Health Office Integration Team  
 **Questions?**: Contact integration-support@example.com

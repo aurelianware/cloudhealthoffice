@@ -1,10 +1,10 @@
-# Cold Call Scripts for HIPAA Attachments Platform
+# Cold Call Scripts for Cloud Health Office Platform
 
 ## Script 1: Initial Discovery Call (Gatekeeper)
 
 **Goal:** Get past the gatekeeper and reach the decision maker
 
-**YOU:** "Hi, this is [Your Name] from HIPAA Attachments Platform. I'm trying to reach the person who handles EDI processing or claims operations. Who would be the best person to speak with?"
+**YOU:** "Hi, this is [Your Name] from Cloud Health Office Platform. I'm trying to reach the person who handles EDI processing or claims operations. Who would be the best person to speak with?"
 
 **GATEKEEPER:** "What is this regarding?"
 
@@ -16,7 +16,7 @@
 
 **GATEKEEPER:** "They're not available. Can I take a message?"
 
-**YOU:** "Sure. My name is [Your Name] with HIPAA Attachments Platform. My number is [Phone] and email is [Email]. I'm calling about reducing attachment processing time from hours to minutes. Could you let them know I'll follow up with an email today and try back tomorrow?"
+**YOU:** "Sure. My name is [Your Name] with Cloud Health Office Platform. My number is [Phone] and email is [Email]. I'm calling about reducing attachment processing time from hours to minutes. Could you let them know I'll follow up with an email today and try back tomorrow?"
 
 ---
 
@@ -24,7 +24,7 @@
 
 **Goal:** Qualify the prospect and schedule a demo
 
-**YOU:** "Hi [Name], this is [Your Name] from HIPAA Attachments Platform. Do you have 3 minutes?"
+**YOU:** "Hi [Name], this is [Your Name] from Cloud Health Office Platform. Do you have 3 minutes?"
 
 **PROSPECT:** "What is this about?"
 
@@ -178,7 +178,7 @@
 
 **Goal:** Re-engage a prospect who didn't respond to email or voicemail
 
-**YOU:** "Hi [Name], this is [Your Name] from HIPAA Attachments Platform. I left you a voicemail and sent an email last week about automating your attachment processing, but I wanted to try you one more time."
+**YOU:** "Hi [Name], this is [Your Name] from Cloud Health Office Platform. I left you a voicemail and sent an email last week about automating your attachment processing, but I wanted to try you one more time."
 
 **YOU:** "I don't want to be a pest, so I'll make this the last call. But I did want to mention one thing—we just onboarded [Similar Payer], and they're seeing exactly the results we discussed: 80% reduction in processing time and about $180K in annual savings."
 
@@ -194,7 +194,7 @@
 
 **Goal:** Leave a compelling voicemail that gets a callback
 
-**YOU:** "Hi [Name], this is [Your Name] from HIPAA Attachments Platform. My number is [Phone Number]."
+**YOU:** "Hi [Name], this is [Your Name] from Cloud Health Office Platform. My number is [Phone Number]."
 
 **YOU:** "I'm calling because we work with healthcare payers to automate their 275 attachment processing through Availity. We've helped organizations like [Similar Payer] reduce processing time from 2 hours per attachment to about 5 minutes."
 

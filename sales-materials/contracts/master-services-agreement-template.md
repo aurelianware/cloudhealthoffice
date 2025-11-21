@@ -1,10 +1,10 @@
 # MASTER SERVICES AGREEMENT
-## HIPAA Attachments Platform
+## Cloud Health Office Platform
 
 **This Master Services Agreement** ("Agreement") is entered into as of [Effective Date] ("Effective Date") by and between:
 
 **PROVIDER:**
-HIPAA Attachments Platform LLC
+Cloud Health Office Platform LLC
 [Address]
 [City, State ZIP]
 ("Provider")
@@ -33,7 +33,7 @@ NOW, THEREFORE, in consideration of the mutual covenants and agreements set fort
 
 ## 1. DEFINITIONS
 
-**1.1 "Platform"** means the HIPAA Attachments Platform software-as-a-service solution, including all Logic Apps workflows, Azure infrastructure, integrations, and related components.
+**1.1 "Platform"** means the Cloud Health Office Platform software-as-a-service solution, including all Logic Apps workflows, Azure infrastructure, integrations, and related components.
 
 **1.2 "Services"** means the Platform and all related services provided by Provider under this Agreement, including implementation, support, and maintenance.
 
@@ -307,7 +307,7 @@ Notices to Customer: [Email] / [Address]
 IN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.
 
 **PROVIDER:**
-HIPAA Attachments Platform LLC
+Cloud Health Office Platform LLC
 
 By: ___________________________________
 Name: [Name]

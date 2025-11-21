@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the backend-agnostic `ClaimsBackend` interface for the HIPAA Attachments system. The interface abstracts claims adjudication system-specific implementations to enable **configuration-driven multi-payer platformization** and support for any backend system (QNXT, FacetsRx, TriZetto, etc.).
+This document defines the backend-agnostic `ClaimsBackend` interface for the Cloud Health Office system. The interface abstracts claims adjudication system-specific implementations to enable **configuration-driven multi-payer platformization** and support for any backend system (QNXT, FacetsRx, TriZetto, etc.).
 
 ## Purpose
 

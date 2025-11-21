@@ -1,7 +1,7 @@
 # Manual Customer Deployment Guide
-## HIPAA Attachments Platform - Phase 1 First Customer
+## Cloud Health Office Platform - Phase 1 First Customer
 
-This guide outlines the step-by-step process for manually deploying the HIPAA Attachments Platform for the first paying customer.
+This guide outlines the step-by-step process for manually deploying the Cloud Health Office Platform for the first paying customer.
 
 ---
 

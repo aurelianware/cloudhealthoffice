@@ -1,4 +1,4 @@
-# HIPAA Attachments Platform - Demo Script
+# Cloud Health Office Platform - Demo Script
 
 ## Pre-Demo Preparation (15 minutes before call)
 

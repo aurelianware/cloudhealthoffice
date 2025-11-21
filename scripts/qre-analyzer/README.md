@@ -308,4 +308,4 @@ For issues or questions:
 
 ## License
 
-This analyzer is part of the HIPAA Attachments Logic Apps solution and follows the same licensing terms as the parent project.
+This analyzer is part of the Cloud Health Office Logic Apps solution and follows the same licensing terms as the parent project.

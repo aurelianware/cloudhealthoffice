@@ -966,7 +966,7 @@ Effective communication is critical for successful gated deployments.
 
 **UAT Deployment Notification:**
 ```markdown
-Subject: UAT Deployment Scheduled - HIPAA Attachments Release X.Y.Z
+Subject: UAT Deployment Scheduled - Cloud Health Office Release X.Y.Z
 
 Team,
 
@@ -999,7 +999,7 @@ Questions? Contact: [DevOps Team]
 
 **PROD Deployment Notification:**
 ```markdown
-Subject: PROD Deployment Scheduled - HIPAA Attachments Release X.Y.Z
+Subject: PROD Deployment Scheduled - Cloud Health Office Release X.Y.Z
 
 Team,
 
@@ -1047,7 +1047,7 @@ Questions? Contact: [Release Manager / DevOps Lead]
 
 **Successful Deployment:**
 ```markdown
-Subject: ✅ [ENV] Deployment Complete - HIPAA Attachments Release X.Y.Z
+Subject: ✅ [ENV] Deployment Complete - Cloud Health Office Release X.Y.Z
 
 Team,
 
@@ -1084,7 +1084,7 @@ Questions? Contact: [DevOps Team]
 
 **Failed Deployment:**
 ```markdown
-Subject: ⚠️ [ENV] Deployment FAILED - HIPAA Attachments Release X.Y.Z
+Subject: ⚠️ [ENV] Deployment FAILED - Cloud Health Office Release X.Y.Z
 
 Team,
 

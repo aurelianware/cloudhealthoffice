@@ -65,7 +65,7 @@ The Health Plan Backend System must implement the following endpoints:
     {
       "fileName": "{document.fileName}",
       "documentType": "{document.documentType}",
-      "blobPath": "hipaa-attachments/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}",
+      "blobPath": "cloud-health-office/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}",
       "fileSizeBytes": "{document.fileSizeBytes}"
     }
   ],
@@ -156,7 +156,7 @@ The Health Plan Backend System must implement the following endpoints:
   "deniedAmount": "{appeal.deniedAmount}",
   "reviewerNotes": "{reviewer.notes}",
   "decisionMadeBy": "{reviewer.id}",
-  "decisionLetterPath": "hipaa-attachments/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}"
+  "decisionLetterPath": "cloud-health-office/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}"
 }
 ```
 

@@ -215,7 +215,7 @@ Each enabled module requires its own configuration block:
   },
   "archivalConfig": {
     "storageAccountName": "payerstorage",
-    "containerName": "hipaa-attachments",
+    "containerName": "cloud-health-office",
     "retentionDays": 2555
   }
 }

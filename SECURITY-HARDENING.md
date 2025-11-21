@@ -15,7 +15,7 @@
 
 ## Overview
 
-This guide provides comprehensive security hardening procedures for the HIPAA Attachments system to achieve production readiness for Protected Health Information (PHI) workloads.
+This guide provides comprehensive security hardening procedures for the Cloud Health Office platform to achieve production readiness for Protected Health Information (PHI) workloads in multi-tenant SaaS environments.
 
 ### Security Posture
 - **Current Score**: 7/10 (basic security controls)

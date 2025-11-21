@@ -88,7 +88,7 @@ Health Plan → Availity Bedlam API → Availity Platform → Provider
 2. API validates query parameters (documentId, appealId, documentType)
 3. API calls authorization service to verify provider access
 4. API retrieves document from Azure Blob Storage
-   Path: hipaa-attachments/appeals/{appealId}/{documentType}/{documentId}
+   Path: cloud-health-office/appeals/{appealId}/{documentType}/{documentId}
 5. API returns document with appropriate Content-Type and Content-Disposition headers
 6. API logs access event to Application Insights
 ```
@@ -357,12 +357,12 @@ The appeals system supports two attachment submission patterns, configurable per
 ### Storage Path Pattern
 
 ```
-hipaa-attachments/appeals/{appealId}/{documentType}/{documentId}
+cloud-health-office/appeals/{appealId}/{documentType}/{documentId}
 ```
 
 Examples:
-- `hipaa-attachments/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}`
-- `hipaa-attachments/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}`
+- `cloud-health-office/appeals/{appeal.appealId}/PROVIDER_UPLOAD/{document.fileName}`
+- `cloud-health-office/appeals/{appeal.appealId}/DECISION_LETTER/{document.fileName}`
 
 ### Document Types
 
@@ -382,7 +382,7 @@ All workflows and APIs require the following configuration parameters:
   "availityBedlamApiKey": "{secure-from-keyvault}",
   "serviceBusTopic": "payer-appeal-status-updates",
   "serviceBusSubscription": "availity-push",
-  "blobStorageAccount": "hipaa-attachments-storage",
+  "blobStorageAccount": "cloud-health-office-storage",
   "authorizationApiEndpoint": "https://api.healthplan.local/authorization",
   "attachmentPattern": "POST_APPEAL"
 }

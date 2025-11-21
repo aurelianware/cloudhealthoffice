@@ -4,7 +4,7 @@
 
 ## Overview
 
-This directory contains GitHub Actions workflow files for CI/CD automation of the HIPAA Attachments Logic Apps solution.
+This directory contains GitHub Actions workflow files for CI/CD automation of the Cloud Health Office Logic Apps solution.
 
 ## Workflow Files
 

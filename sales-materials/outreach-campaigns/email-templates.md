@@ -18,7 +18,7 @@ Most payers manually process 275 attachment requests, resulting in:
 - Increased provider call volume
 
 **Our Solution:**
-HIPAA Attachments Platform automates the entire workflow:
+Cloud Health Office Platform automates the entire workflow:
 ✅ Automated SFTP polling and X12 decoding
 ✅ Direct integration with your claims system (QNXT, FacetsRx, etc.)
 ✅ Real-time processing with complete audit trails
@@ -36,7 +36,7 @@ Would you be open to a 15-minute call to see how this could work for [Company Na
 Best regards,
 [Your Name]
 [Your Title]
-HIPAA Attachments Platform
+Cloud Health Office Platform
 [Phone] | [Email]
 
 ---
@@ -69,7 +69,7 @@ Best,
 
 ## Template 3: Demo Confirmation Email
 
-**Subject:** Your HIPAA Attachments Platform Demo - [Date/Time]
+**Subject:** Your Cloud Health Office Platform Demo - [Date/Time]
 
 **Body:**
 
@@ -108,7 +108,7 @@ See you soon!
 
 Hi [First Name],
 
-Thank you for taking the time to review the HIPAA Attachments Platform with me today. I really enjoyed learning about [Company Name]'s current workflow and challenges.
+Thank you for taking the time to review the Cloud Health Office Platform with me today. I really enjoyed learning about [Company Name]'s current workflow and challenges.
 
 **As discussed, here's what we covered:**
 - Your current manual process takes 2-3 hours per attachment
@@ -135,13 +135,13 @@ Best regards,
 
 ## Template 5: Proposal Sent Email
 
-**Subject:** Your HIPAA Attachments Platform Proposal
+**Subject:** Your Cloud Health Office Platform Proposal
 
 **Body:**
 
 Hi [First Name],
 
-As promised, I've attached your formal proposal for the HIPAA Attachments Platform.
+As promised, I've attached your formal proposal for the Cloud Health Office Platform.
 
 **Key Highlights:**
 - **Investment:** $25,000 first year ($10K annual + $15K implementation)
@@ -174,7 +174,7 @@ P.S. If you need internal buy-in, I'm happy to present to your executive team or
 
 ## Template 6: Contract Sent Email
 
-**Subject:** Your HIPAA Attachments Platform Agreement
+**Subject:** Your Cloud Health Office Platform Agreement
 
 **Body:**
 
@@ -210,13 +210,13 @@ Best regards,
 
 ## Template 7: Implementation Kickoff Email
 
-**Subject:** Welcome to HIPAA Attachments Platform - Kickoff Scheduled
+**Subject:** Welcome to Cloud Health Office Platform - Kickoff Scheduled
 
 **Body:**
 
 Hi [First Name],
 
-Welcome to HIPAA Attachments Platform! We're thrilled to partner with [Company Name].
+Welcome to Cloud Health Office Platform! We're thrilled to partner with [Company Name].
 
 **Your Implementation Team:**
 - **Project Manager:** [Name] - [Email] - Overall coordination
@@ -304,7 +304,7 @@ Customer Success Manager
 
 Hi [First Name],
 
-I hope everything is going well with the HIPAA Attachments Platform! Your team has been saving over 1,000 hours per month, which is exactly what we hoped to achieve.
+I hope everything is going well with the Cloud Health Office Platform! Your team has been saving over 1,000 hours per month, which is exactly what we hoped to achieve.
 
 **Quick Question:**
 Do you know any other payers or health plans who might benefit from similar automation? I'm thinking specifically of:
@@ -327,7 +327,7 @@ Thanks for being an amazing customer!
 
 ## Template 10: Renewal Reminder (60 Days Before)
 
-**Subject:** Your HIPAA Attachments Platform Renewal - [Date]
+**Subject:** Your Cloud Health Office Platform Renewal - [Date]
 
 **Body:**
 
