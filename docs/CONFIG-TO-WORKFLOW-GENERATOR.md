@@ -558,7 +558,7 @@ The wizard guides you through a series of interactive prompts:
 - **Organization Name**: Full legal name of the health plan
 - **Payer ID**: Unique identifier (5-20 characters, alphanumeric)
 - **Payer Name**: Display name for provider portals
-- **Logo URL**: Optional URL to organization logo (234x60px PNG)
+- **Logo URL**: Optional URL to organization logo (recommended: 800x400px PNG/SVG, Cloud Health Office Sentinel branding available at docs/images/logo-cloudhealthoffice-sentinel-primary.png.svg)
 
 #### 2. Contact Information
 - **Technical Contact**: Name, email, phone
@@ -642,7 +642,7 @@ Step 1 of 10: Organization Information
 ? Organization Name: Blue Shield Health Plan
 ? Payer ID: BSHP-2024
 ? Payer Name: Blue Shield Health
-? Logo URL (optional): https://bshp.com/logo.png
+? Logo URL (optional): https://yourorg.com/logo.png
 
 Step 2 of 10: Contact Information
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

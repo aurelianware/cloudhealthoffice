@@ -378,7 +378,7 @@ node dist/scripts/cli/payer-onboarding-wizard.js
 ```
 
 **Wizard Steps:**
-1. **Organization Information** - Name, payer ID, logo, contacts
+1. **Organization Information** - Name, payer ID, Sentinel branding, contacts
 2. **Module Selection** - Choose which modules to enable (ECS, Appeals, Attachments, etc.)
 3. **Backend Configuration** - API endpoints, authentication, field mappings
 4. **ValueAdds277 Options** - Select enhanced features for ECS
@@ -518,9 +518,9 @@ The platform supports multiple deployment models to meet partner and customer ne
 - **Description**: Partner deploys platform under their own brand
 - **Pricing**: Platform license $100,000/year + revenue share
 - **Best For**: System integrators, healthcare IT vendors
-- **Branding**: Partner logo, domain, support channels
+- **Branding**: Partner branding (or Cloud Health Office Sentinel), domain, support channels
 - **Revenue**: Partner sets pricing, shares revenue with platform provider
-- **Support: Platform provider supports partner, partner supports end customers
+- **Support**: Platform provider supports partner, partner supports end customers
 
 ### Revenue Model Comparison
 
