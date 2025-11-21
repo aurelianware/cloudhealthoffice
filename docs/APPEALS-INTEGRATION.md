@@ -352,6 +352,8 @@ The appeals system supports two attachment submission patterns, configurable per
 
 **Default Behavior**: If not specified in configuration, system defaults to POST_APPEAL pattern with 30-day upload window (see `isEligibleForAttachmentsDate` in response).
 
+> **Note:** The 30-day upload window default is enforced in application logic if the `additionalAttachmentsWindow` field is not specified in the payer configuration. To override this default, set `appeals.additionalAttachmentsWindow` (in days) in the payer's configuration file.
+
 ### Storage Path Pattern
 
 ```

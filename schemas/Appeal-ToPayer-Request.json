@@ -177,7 +177,7 @@
             "minLength": 1,
             "maxLength": 255,
             "pattern": "^[a-zA-Z0-9_-]+\\.(gif|jpg|jpeg|pdf|tif|tiff)$",
-            "examples": ["medical_records_2024-01-15.pdf", "physician_notes.pdf"]
+            "examples": ["medical_records_2024_01_15.pdf", "physician_notes.pdf"]
           },
           "fileType": {
             "type": "string",
