@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "build:site": "node site/js/markdown-converter.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "test": "jest",
     "validate": "node dist/scripts/utils/validate-all-templates.js",
