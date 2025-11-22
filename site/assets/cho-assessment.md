@@ -151,7 +151,7 @@ Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure
 - 7-year retention minimum
 - Real-time security alerts
 
-**Compliance Matrix:** See [HIPAA-COMPLIANCE-MATRIX.md](../../docs/HIPAA-COMPLIANCE-MATRIX.md) for complete technical safeguards documentation.
+**Compliance Matrix:** See [HIPAA Compliance Matrix](https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/HIPAA-COMPLIANCE-MATRIX.md) for complete technical safeguards documentation.
 
 ---
 
@@ -458,8 +458,8 @@ Organizations that embrace Cloud Health Office will achieve:
 
 2. **Review Documentation**
    - [GitHub Repository](https://github.com/aurelianware/cloudhealthoffice)
-   - [HIPAA Compliance Matrix](../../docs/HIPAA-COMPLIANCE-MATRIX.md)
-   - [Deployment Guide](../../DEPLOYMENT.md)
+   - [HIPAA Compliance Matrix](https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/HIPAA-COMPLIANCE-MATRIX.md)
+   - [Deployment Guide](https://github.com/aurelianware/cloudhealthoffice/blob/main/DEPLOYMENT.md)
 
 3. **Start Free Trial**
    - Clone repository
