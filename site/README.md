@@ -35,7 +35,7 @@ npm run build:site
 
 This will:
 1. Read all `.md` files from `site/assets/`
-2. Convert Markdown to HTML
+2. Convert Markdown to HTML using the `marked` library
 3. Wrap content in Sentinel-themed template
 4. Output HTML files to `site/` directory
 
@@ -47,6 +47,48 @@ The assessment page is generated from `assets/cho-assessment.md`:
 cd /home/runner/work/cloudhealthoffice/cloudhealthoffice
 npm run build:site
 ```
+
+### ⚠️ Important: Keep Source and Generated Files in Sync
+
+**Before committing changes to Markdown files, you must run the build:**
+
+```bash
+# Edit the Markdown source
+vim site/assets/cho-assessment.md
+
+# Build to regenerate HTML
+npm run build:site
+
+# Commit both source and generated files together
+git add site/assets/cho-assessment.md site/assessment.html
+git commit -m "Update platform assessment content"
+```
+
+### Automated Build with Pre-Commit Hook
+
+A pre-commit hook automatically runs `npm run build:site` when you commit changes to `site/assets/*.md` files. This ensures:
+
+1. ✅ Generated HTML is always up-to-date with source Markdown
+2. ✅ No risk of committing stale HTML
+3. ✅ Consistent build process across all contributors
+
+To install the pre-commit hook:
+
+```bash
+npm install
+npm run prepare  # Installs husky hooks
+```
+
+### CI Validation
+
+The GitHub Actions workflow (`pr-lint.yml`) validates:
+
+1. **Site builds successfully** - Runs `npm run build:site`
+2. **HTML structure is valid** - Checks for DOCTYPE, proper heading hierarchy
+3. **Source and generated files match** - Ensures no uncommitted changes
+4. **Accessibility compliance** - Validates heading structure (single h1, proper list nesting)
+
+If validation fails, the PR will be blocked until issues are fixed.
 
 ## Deployment
 

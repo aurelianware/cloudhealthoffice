@@ -1,8 +1,15 @@
 /**
- * Simple Markdown to HTML converter for Cloud Health Office site
+ * Markdown to HTML converter for Cloud Health Office site
  * Converts .md files in /site/assets to styled HTML pages
  * 
  * Usage: node site/js/markdown-converter.js
+ * 
+ * IMPORTANT: This script must be run before committing changes to Markdown files.
+ * A pre-commit hook will automatically run this script when you commit changes
+ * to site/assets/*.md files.
+ * 
+ * The generated HTML (e.g., assessment.html) must be committed along with the
+ * source Markdown to keep them in sync.
  */
 
 const fs = require('fs');
