@@ -7,68 +7,15 @@
 
 const fs = require('fs');
 const path = require('path');
+const { marked } = require('marked');
 
 /**
  * Basic Markdown to HTML conversion
  * Supports: headings, paragraphs, lists, links, bold, italic, code blocks, blockquotes, horizontal rules
  */
 function markdownToHtml(markdown) {
-  let html = markdown;
-  
-  // Convert code blocks first (triple backticks)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<pre><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`;
-  });
-  
-  // Convert inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  
-  // Convert headings (h1 should only appear once, so convert subsequent ones to h2)
-  let h1Count = 0;
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, (match, content) => {
-    h1Count++;
-    // Only the first h1 stays as h1, rest become h2 for accessibility
-    return h1Count === 1 ? `<h1>${content}</h1>` : `<h2>${content}</h2>`;
-  });
-  
-  // Convert bold
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  
-  // Convert italic
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  
-  // Convert links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-  
-  // Convert unordered lists
-  html = html.replace(/^\* (.+)$/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-  
-  // Convert ordered lists
-  html = html.replace(/^\d+\. (.+)$/gim, '<li>$1</li>');
-  
-  // Convert blockquotes
-  html = html.replace(/^> (.+)$/gim, '<blockquote>$1</blockquote>');
-  
-  // Convert horizontal rules
-  html = html.replace(/^---$/gim, '<hr>');
-  
-  // Convert paragraphs (lines that don't start with HTML tags)
-  html = html.split('\n').map(line => {
-    line = line.trim();
-    if (line === '' || line.match(/^<[^>]+>/)) {
-      return line;
-    }
-    return `<p>${line}</p>`;
-  }).join('\n');
-  
-  // Clean up extra p tags around block elements
-  html = html.replace(/<p><(h[1-6]|ul|ol|li|blockquote|pre|hr|div)>/gi, '<$1>');
-  html = html.replace(/<\/(h[1-6]|ul|ol|li|blockquote|pre|hr|div)><\/p>/gi, '</$1>');
-  
-  return html;
+  // Use the marked library for robust Markdown parsing
+  return marked.parse(markdown);
 }
 
 /**
