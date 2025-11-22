@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Pre-commit hook for Cloud Health Office
+# Ensures site build runs before committing changes to Markdown sources
+
+echo "Running pre-commit checks..."
+
+# Check if any Markdown files in site/assets have changed
+CHANGED_MD=$(git diff --cached --name-only | grep '^site/assets/.*\.md$' || true)
+
+if [ -n "$CHANGED_MD" ]; then
+  echo "Detected changes to Markdown files in site/assets/"
+  echo "Running site build to regenerate HTML..."
+  
+  # Run the build
+  npm run build:site
+  
+  if [ $? -ne 0 ]; then
+    echo "Error: Site build failed. Please fix errors before committing."
+    exit 1
+  fi
+  
+  # Check if assessment.html was modified
+  if [ -f site/assessment.html ]; then
+    # Stage the regenerated HTML file
+    git add site/assessment.html
+    echo "✓ Regenerated assessment.html has been staged"
+  fi
+  
+  echo "✓ Site build completed successfully"
+fi
+
+echo "✓ Pre-commit checks passed"
