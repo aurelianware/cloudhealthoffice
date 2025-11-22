@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+  <rect width="600" height="600" fill="#000000"/>
+  
+  <!-- Grid Lines -->
+  <line x1="300" y1="50" x2="300" y2="550" stroke="#00ffff" stroke-width="1" opacity="0.3"/>
+  <line x1="50" y1="300" x2="550" y2="300" stroke="#00ffff" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Axes -->
+  <line x1="50" y1="550" x2="550" y2="550" stroke="#00ffff" stroke-width="2"/>
+  <line x1="50" y1="50" x2="50" y2="550" stroke="#00ffff" stroke-width="2"/>
+  
+  <!-- Quadrant Shading -->
+  <rect x="300" y="50" width="250" height="250" fill="#00ffff" opacity="0.05"/>
+  
+  <!-- Cloud Health Office (High Vision, High Execution) -->
+  <circle cx="480" cy="180" r="40" fill="none" stroke="#00ff88" stroke-width="3"/>
+  <circle cx="480" cy="180" r="6" fill="#00ff88"/>
+  <text x="480" y="150" fill="#00ff88" font-size="16" font-weight="bold" text-anchor="middle" font-family="Segoe UI">CHO</text>
+  
+  <!-- Traditional Vendors (Low Vision) -->
+  <circle cx="150" cy="200" r="20" fill="#808080" opacity="0.5"/>
+  <text x="150" y="245" fill="#808080" font-size="12" text-anchor="middle" font-family="Segoe UI">Legacy</text>
+  
+  <!-- Axis Labels -->
+  <text x="300" y="580" fill="#b0b0b0" font-size="14" text-anchor="middle" font-family="Segoe UI">Vision</text>
+  <text x="20" y="300" fill="#b0b0b0" font-size="14" text-anchor="middle" font-family="Segoe UI" transform="rotate(-90 20 300)">Execution</text>
+  
+  <!-- Arrow indicators -->
+  <polygon points="540,550 550,550 545,540" fill="#00ffff"/>
+  <polygon points="50,60 50,50 60,55" fill="#00ffff"/>
+  
+  <!-- Title -->
+  <text x="300" y="30" fill="#00ffff" font-size="20" font-weight="bold" text-anchor="middle" font-family="Segoe UI">Healthcare EDI Platforms - 2025</text>
+</svg>
