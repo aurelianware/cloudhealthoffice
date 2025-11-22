@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "build:site": "node site/js/markdown-converter.js",
+    "validate:site": "node site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "test": "jest",
     "validate": "node dist/scripts/utils/validate-all-templates.js",
