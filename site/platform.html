@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Cloud Health Office Platform Overview - Azure-native, HIPAA-compliant, multi-payer EDI integration deployed in under 1 hour with zero custom code.">
+  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, X12 transactions, prior authorization, claims processing">
+  <meta name="author" content="Aurelianware">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cloudhealthoffice.com/platform.html">
+  <meta property="og:title" content="Cloud Health Office Platform - The Inevitable Evolution">
+  <meta property="og:description" content="Deploy production-grade payer EDI integration in under 1 hour. Zero custom code. Azure-native. HIPAA-engineered.">
+  <meta property="og:image" content="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://cloudhealthoffice.com/platform.html">
+  <meta property="twitter:title" content="Cloud Health Office Platform - The Inevitable Evolution">
+  <meta property="twitter:description" content="Deploy production-grade payer EDI integration in under 1 hour. Zero custom code. Azure-native. HIPAA-engineered.">
+  <meta property="twitter:image" content="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <title>Platform Overview - Cloud Health Office</title>
+  <link rel="stylesheet" href="css/sentinel.css">
+  <style>
+    .platform-overview {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    
+    .platform-hero {
+      text-align: center;
+      padding: 60px 0;
+      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+      border-bottom: 2px solid #00ffff;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 30px;
+      margin: 60px 0;
+    }
+    
+    .stat-card {
+      background: #0a0a0a;
+      border: 2px solid #00ffff;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    
+    .stat-card:hover {
+      border-color: #00ff88;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+      transform: translateY(-4px);
+    }
+    
+    .stat-number {
+      font-size: 3rem;
+      font-weight: bold;
+      color: #00ffff;
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+      margin-bottom: 10px;
+    }
+    
+    .stat-label {
+      font-size: 1rem;
+      color: #b0b0b0;
+    }
+    
+    .capability-section {
+      margin: 60px 0;
+    }
+    
+    .capability-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 30px;
+      margin-top: 40px;
+    }
+    
+    .capability-card {
+      background: #0a0a0a;
+      border-left: 4px solid #00ffff;
+      padding: 30px;
+      border-radius: 8px;
+    }
+    
+    .capability-card h3 {
+      margin-top: 0;
+      font-size: 1.5rem;
+    }
+    
+    .capability-card ul {
+      list-style: none;
+      margin: 20px 0 0 0;
+      padding: 0;
+    }
+    
+    .capability-card li {
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+    }
+    
+    .capability-card li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #00ff88;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="platform.html" aria-current="page">Platform</a></li>
+      <li><a href="insights.html">Insights</a></li>
+      <li><a href="assessment.html">Assessment</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <main id="main-content">
+    <div class="platform-hero circuit-veins">
+      <div class="hero-content">
+        <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" 
+             alt="Cloud Health Office Sentinel Logo - Obsidian monolith shield with digital eye and circuit veins"
+             style="max-width: 600px; height: auto; margin: 20px 0;">
+        <h1>Cloud Health Office Platform</h1>
+        <p class="tagline">The inevitable evolution of payer EDI integration</p>
+      </div>
+    </div>
+
+    <div class="platform-overview">
+      <section class="assessment-section">
+        <h2>What Just Changed Forever</h2>
+        <p>Cloud Health Office is the first open-source, Azure-native, HIPAA-engineered platform that deploys a complete production payer EDI tenant in <strong>under one hour</strong>—with zero custom code.</p>
+        
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-number">&lt;1hr</div>
+            <div class="stat-label">Deployment Time<br>(vs. 6-18 months)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">$0</div>
+            <div class="stat-label">Professional Services<br>(vs. $500k-$2M)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">82%</div>
+            <div class="stat-label">5-Year TCO Reduction</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">∞</div>
+            <div class="stat-label">Multi-Payer Tenants<br>(Complete Isolation)</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="capability-section">
+        <h2>Core Capabilities</h2>
+        <p>Production-ready EDI processing for all major transaction types. No custom code. No vendor lock-in.</p>
+        
+        <div class="capability-grid">
+          <div class="capability-card">
+            <h3>Real-Time Prior Authorization</h3>
+            <ul>
+              <li>278 Health Care Services Review</li>
+              <li>Sub-2-minute processing (&lt;12 days)</li>
+              <li>Automated QNXT/Facets/HealthEdge correlation</li>
+              <li>Complete audit trail</li>
+              <li>Zero manual intervention</li>
+            </ul>
+          </div>
+
+          <div class="capability-card">
+            <h3>Claims Processing</h3>
+            <ul>
+              <li>837P/I/D (Professional, Institutional, Dental)</li>
+              <li>Automated X12 validation</li>
+              <li>Real-time status updates</li>
+              <li>Deterministic replay endpoint</li>
+              <li>PHI-redacted Application Insights</li>
+            </ul>
+          </div>
+
+          <div class="capability-card">
+            <h3>Eligibility Verification</h3>
+            <ul>
+              <li>270/271 real-time eligibility</li>
+              <li>Availity, Change Healthcare, Optum 360</li>
+              <li>Sub-second response times</li>
+              <li>Backend system correlation</li>
+              <li>99.9% uptime SLA</li>
+            </ul>
+          </div>
+
+          <div class="capability-card">
+            <h3>Enhanced Claim Status (ECS)</h3>
+            <ul>
+              <li>X215 Authorization Inquiry</li>
+              <li>X217 Authorization Request</li>
+              <li>Real-time status tracking</li>
+              <li>Historical lookup capabilities</li>
+              <li>NCPDP and HIPAA format support</li>
+            </ul>
+          </div>
+
+          <div class="capability-card">
+            <h3>Appeals Integration</h3>
+            <ul>
+              <li>277 RFAI automated generation</li>
+              <li>275 Attachment processing</li>
+              <li>Deadline tracking and notifications</li>
+              <li>Complete audit trail</li>
+              <li>Regulatory compliance built-in</li>
+            </ul>
+          </div>
+
+          <div class="capability-card">
+            <h3>Security That Passes Audits</h3>
+            <ul>
+              <li>Private endpoints everywhere</li>
+              <li>HSM-backed Key Vault Premium</li>
+              <li>DCR-based PHI redaction</li>
+              <li>Immutable audit logs (7-year retention)</li>
+              <li>Managed identities only</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-section">
+        <h2>Complete Platform Assessment</h2>
+        <p>Detailed technical analysis, competitive positioning, deployment roadmap, and ROI calculations.</p>
+        <p style="font-size: 1.2rem; margin: 30px 0;">
+          <strong>82% cost reduction.</strong> 
+          <strong>Sub-1-hour deployment.</strong> 
+          <strong>Zero custom code.</strong>
+        </p>
+        <a href="assessment.html" class="button">Read Full Assessment →</a>
+        <a href="https://calendly.com/mark-cloudhealthoffice" class="button button-green" target="_blank" rel="noopener noreferrer">Schedule Demo</a>
+      </section>
+
+      <section class="assessment-section">
+        <h2>Architecture Overview</h2>
+        <p>Azure-native infrastructure leveraging Logic Apps Standard, Service Bus, Data Lake Gen2, and Integration Account for complete X12 transaction processing.</p>
+        
+        <div class="card">
+          <h3>Deployment Components</h3>
+          <ul>
+            <li><strong>Logic Apps Standard:</strong> Workflow orchestration for all EDI transaction types</li>
+            <li><strong>Service Bus:</strong> Event-driven architecture with topics for pub/sub patterns</li>
+            <li><strong>Data Lake Gen2:</strong> Hierarchical namespace for organized PHI storage</li>
+            <li><strong>Integration Account:</strong> X12 schema validation and trading partner agreements</li>
+            <li><strong>Key Vault Premium:</strong> HSM-backed key management with soft-delete + purge protection</li>
+            <li><strong>Application Insights:</strong> Telemetry with DCR-based PHI redaction</li>
+            <li><strong>Private Endpoints:</strong> No public IP addresses exposed</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Multi-Tenant Architecture</h3>
+          <p>Each payer tenant receives complete logical isolation while sharing infrastructure efficiency:</p>
+          <ul>
+            <li>Dedicated Logic App workflows per payer</li>
+            <li>Isolated Service Bus topics and subscriptions</li>
+            <li>Separate Data Lake containers with hierarchical paths</li>
+            <li>Individual Integration Account agreements</li>
+            <li>Zero shared secrets or configuration</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="assessment-section">
+        <h2>One-Click to Production</h2>
+        <p>Configuration-driven deployment via CLI wizard. No programming expertise required.</p>
+        
+        <pre><code># Step 1: Run onboarding wizard (5 minutes)
+node dist/scripts/cli/payer-onboarding-wizard.js
+
+# Step 2: Generate infrastructure and workflows (10 minutes)
+node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
+
+# Step 3: Deploy to Azure (25 minutes)
+cd generated/your-payer/infrastructure && ./deploy.sh
+
+# Step 4: Configure trading partners (10 minutes)
+./configure-hipaa-trading-partners.ps1
+
+# Total: ~50 minutes from zero to production</code></pre>
+      </section>
+
+      <section class="cta-section">
+        <h2>Ready to Transform Your Payer Operations?</h2>
+        <p>The sequence is immutable. Legacy EDI integration is now optional.</p>
+        <div style="margin-top: 30px;">
+          <a href="assessment.html" class="button">View Complete Assessment</a>
+          <a href="https://github.com/aurelianware/cloudhealthoffice" class="button button-secondary" target="_blank" rel="noopener noreferrer">Clone Repository</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <strong>Cloud Health Office v1.0.0 — The Sentinel</strong><br>
+      Capabilities beyond question. Systems that do not fail.
+    </p>
+    <p>
+      Apache 2.0 • Not affiliated with Availity, LLC • © 2025 Aurelianware<br>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
+      <a href="mailto:mark@aurelianware.com">Contact</a>
+    </p>
+  </footer>
+</body>
+</html>

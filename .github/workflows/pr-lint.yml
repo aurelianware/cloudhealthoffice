@@ -293,3 +293,78 @@ jobs:
           fi
 
           echo "✓ HIPAA compliance validation complete"
+
+      # ---------- Site build validation ----------
+      - name: Install site dependencies
+        run: |
+          echo "Installing dependencies for site build..."
+          npm install
+          echo "✓ Dependencies installed"
+
+      - name: Validate site build
+        run: |
+          echo "Validating site Markdown to HTML conversion..."
+
+          # Check if there are any Markdown files in site/assets
+          if [ -d "site/assets" ] && ls site/assets/*.md >/dev/null 2>&1; then
+            echo "Found Markdown files in site/assets"
+
+            # Run the build
+            npm run build:site
+
+            if [ $? -ne 0 ]; then
+              echo "::error::Site build failed"
+              exit 1
+            fi
+
+            # Check if assessment.html exists and is in sync
+            if [ -f "site/assessment.html" ]; then
+              # Compare modification times or check git status
+              if git diff --name-only | grep -q "site/assets/cho-assessment.md"; then
+                if ! git diff --name-only | grep -q "site/assessment.html"; then
+                  echo "::error::assessment.html is out of sync with cho-assessment.md"
+                  echo "Please run 'npm run build:site' and commit the generated HTML"
+                  exit 1
+                fi
+              fi
+
+              # Validate HTML structure
+              echo "Validating generated HTML structure..."
+
+              # Check for valid HTML (has <!DOCTYPE>, <html>, <head>, <body>)
+              if ! grep -q "<!DOCTYPE html>" site/assessment.html; then
+                echo "::error file=site/assessment.html::Missing DOCTYPE declaration"
+                exit 1
+              fi
+
+              if ! grep -q "<html" site/assessment.html; then
+                echo "::error file=site/assessment.html::Missing <html> tag"
+                exit 1
+              fi
+
+              # Check for proper heading structure (should have exactly one h1)
+              h1_count=$(grep -o "<h1>" site/assessment.html | wc -l)
+              if [ "$h1_count" -ne 1 ]; then
+                echo "::warning file=site/assessment.html::Found $h1_count <h1> tags (should have exactly 1 for accessibility)"
+              fi
+
+              # Check for list structure (li elements should be in ul/ol)
+              if grep -q "<li>" site/assessment.html; then
+                # Simple check: count <li> and <ul>+<ol>
+                li_count=$(grep -o "<li>" site/assessment.html | wc -l)
+                ul_count=$(grep -o "<ul>" site/assessment.html | wc -l)
+                ol_count=$(grep -o "<ol>" site/assessment.html | wc -l)
+
+                if [ $((ul_count + ol_count)) -eq 0 ] && [ $li_count -gt 0 ]; then
+                  echo "::error file=site/assessment.html::Found <li> tags without parent <ul> or <ol>"
+                  exit 1
+                fi
+              fi
+
+              echo "✓ Generated HTML has valid structure"
+            fi
+
+            echo "✓ Site build validation complete"
+          else
+            echo "No Markdown files found in site/assets, skipping site build validation"
+          fi
