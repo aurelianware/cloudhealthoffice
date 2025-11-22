@@ -50,7 +50,7 @@ function generateHtmlPage(title, content, filename) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="${title} - Cloud Health Office platform assessment and technical analysis">
   <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, platform assessment">
-  <title>${title} - Cloud Health Office</title>
+  <title>${escapeHtml(title)} - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css">
 </head>
 <body>
