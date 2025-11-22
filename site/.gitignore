@@ -1,0 +1,24 @@
+# Node modules (if any dependencies added later)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.log
+
+# Build artifacts (if any)
+dist/
+build/
+
+# Keep generated HTML from markdown
+!*.html
