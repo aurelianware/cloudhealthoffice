@@ -298,7 +298,7 @@ jobs:
       - name: Install site dependencies
         run: |
           echo "Installing dependencies for site build..."
-          npm install marked
+          npm install
           echo "✓ Dependencies installed"
 
       - name: Validate site build
