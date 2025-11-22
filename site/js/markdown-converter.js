@@ -23,10 +23,15 @@ function markdownToHtml(markdown) {
   // Convert inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   
-  // Convert headings
+  // Convert headings (h1 should only appear once, so convert subsequent ones to h2)
+  let h1Count = 0;
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  html = html.replace(/^# (.*$)/gim, (match, content) => {
+    h1Count++;
+    // Only the first h1 stays as h1, rest become h2 for accessibility
+    return h1Count === 1 ? `<h1>${content}</h1>` : `<h2>${content}</h2>`;
+  });
   
   // Convert bold
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
