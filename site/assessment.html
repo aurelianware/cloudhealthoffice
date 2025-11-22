@@ -193,19 +193,19 @@
 
 <h3>Onboarding Process</h3>
 
-<pre><code class="language-bash"># Step 1: Run onboarding wizard (5 minutes)
-<p>node dist/scripts/cli/payer-onboarding-wizard.js</p>
+<h3>Step 1: Run onboarding wizard (5 minutes)</h3>
+<pre><code class="language-bash">node dist/scripts/cli/payer-onboarding-wizard.js</code></pre>
 
-<h2>Step 2: Generate infrastructure and workflows (10 minutes)</h2>
-<p>node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json</p>
+<h3>Step 2: Generate infrastructure and workflows (10 minutes)</h3>
+<pre><code class="language-bash">node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json</code></pre>
 
-<h2>Step 3: Deploy to Azure (25 minutes)</h2>
-<p>cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh</p>
+<h3>Step 3: Deploy to Azure (25 minutes)</h3>
+<pre><code class="language-bash">cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh</code></pre>
 
-<h2>Step 4: Configure trading partners (10 minutes)</h2>
-<p>./configure-hipaa-trading-partners.ps1</p>
+<h3>Step 4: Configure trading partners (10 minutes)</h3>
+<pre><code class="language-bash">./configure-hipaa-trading-partners.ps1</code></pre>
 
-<h2>Total: ~50 minutes</code></pre></h2>
+<strong>Total: ~50 minutes</strong>
 
 <strong>What Gets Deployed:</strong>
 <p>- Complete Azure infrastructure (Bicep)</p>
