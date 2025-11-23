@@ -19,7 +19,8 @@
   },
   "include": [
     "scripts/**/*",
-    "core/**/*"
+    "core/**/*",
+    "src/security/**/*"
   ],
   "exclude": [
     "node_modules",
