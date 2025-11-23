@@ -19,12 +19,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
         run: |
           echo "📦 Installing dependencies..."
-          npm ci
+          npm install
           echo "✅ Dependencies installed"
 
       - name: Build TypeScript
