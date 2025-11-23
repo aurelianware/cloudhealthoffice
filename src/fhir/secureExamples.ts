@@ -263,7 +263,7 @@ async function getAzureManagedIdentityToken(): Promise<string> {
   // Production implementation would use:
   // import { DefaultAzureCredential } from '@azure/identity';
   // const credential = new DefaultAzureCredential();
-  // const token = await credential.getToken('https://fhir-server.com/.default');
+  // const token = await credential.getToken('https://<your-workspace-name>.fhir.azurehealthcareapis.com/.default');
   // return token.token;
   
   // For this example, return a placeholder
