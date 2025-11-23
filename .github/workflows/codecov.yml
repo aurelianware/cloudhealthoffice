@@ -1,0 +1,63 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [main, 'release/*', 'feature/*']
+  pull_request:
+    branches: [main, 'release/*']
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    name: Run tests and upload coverage
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install
+          echo "✅ Dependencies installed"
+
+      - name: Build TypeScript
+        run: |
+          echo "🔨 Building TypeScript..."
+          npm run build
+          echo "✅ Build complete"
+
+      - name: Run tests with coverage
+        run: |
+          echo "🧪 Running tests with coverage..."
+          npm test -- --coverage --coverageReporters=lcov
+          echo "✅ Tests complete"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Coverage summary
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "📊 Code Coverage Report"
+          echo "=========================================="
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "Coverage data generated successfully"
+            echo "Report uploaded to Codecov"
+          else
+            echo "⚠️  No coverage summary found"
+          fi
+          echo ""
