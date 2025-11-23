@@ -313,6 +313,18 @@ module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
 }
 
 // =========================
+// Azure Monitor Workbooks Module
+// =========================
+module workbooks 'modules/workbooks.bicep' = {
+  name: 'workbooks-module'
+  params: {
+    baseName: baseName
+    location: location
+    appInsightsId: insights.id
+  }
+}
+
+// =========================
 // Azure Static Web App (for marketing site)
 // =========================
 resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
@@ -348,3 +360,11 @@ output ecsWorkflowName string = enableEcs && ecs != null ? ecs.outputs.ecsWorkfl
 output staticWebAppName string = staticWebApp.name
 output staticWebAppDefaultHostname string = staticWebApp.properties.defaultHostname
 output staticWebAppId string = staticWebApp.id
+
+// Workbook outputs
+output ediTransactionMetricsWorkbookId string = workbooks.outputs.ediTransactionMetricsWorkbookId
+output payerIntegrationHealthWorkbookId string = workbooks.outputs.payerIntegrationHealthWorkbookId
+output hipaaComplianceWorkbookId string = workbooks.outputs.hipaaComplianceWorkbookId
+output ediTransactionMetricsUrl string = workbooks.outputs.ediTransactionMetricsUrl
+output payerIntegrationHealthUrl string = workbooks.outputs.payerIntegrationHealthUrl
+output hipaaComplianceUrl string = workbooks.outputs.hipaaComplianceUrl
