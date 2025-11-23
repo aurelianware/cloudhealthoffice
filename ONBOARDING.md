@@ -327,7 +327,7 @@ The platform includes a purpose-built HIPAA logging module at `src/security/hipa
 **1. PHI Detection and Redaction**
 
 ```typescript
-import { isPHI, redactPHI, redactValue } from './src/security/hipaaLogger';
+import { isPHI, redactPHI, redactValue } from '../src/security/hipaaLogger';
 
 // Check if a value contains PHI
 const containsPHI = isPHI('123-45-6789'); // true (SSN pattern)
@@ -351,7 +351,7 @@ const safePatient = redactPHI(patient);
 **2. Audit Logging**
 
 ```typescript
-import { logPHIAccess, createHIPAALogger } from './src/security/hipaaLogger';
+import { logPHIAccess, createHIPAALogger } from '../src/security/hipaaLogger';
 
 // Create a logger instance for a user
 const logger = createHIPAALogger('user@healthplan.com', '192.168.1.1');
@@ -369,7 +369,7 @@ logger.logDataExport('Patient', 150, 'Analytics System');
 **3. Validation**
 
 ```typescript
-import { validateRedaction } from './src/security/hipaaLogger';
+import { validateRedaction } from '../src/security/hipaaLogger';
 
 const dataToLog = {
   claimId: 'CLM-2024-001',
@@ -449,7 +449,7 @@ Before deploying to production, verify:
 Here's a complete example of HIPAA-compliant logging in a Logic App workflow:
 
 ```typescript
-import { redactPHI, createHIPAALogger } from './src/security/hipaaLogger';
+import { redactPHI, createHIPAALogger } from '../src/security/hipaaLogger';
 
 // Initialize logger for the current user/system
 const hipaaLogger = createHIPAALogger('system@healthplan.com', 'logic-app-ip');
