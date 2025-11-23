@@ -75,16 +75,22 @@ export function redactValue(value: string, category?: string): string {
 export function redactPHI<T>(obj: T, phiFields?: string[]): T {
   if (!obj || typeof obj !== 'object') return obj;
 
-  const clone: any = Array.isArray(obj) ? [...obj] : { ...obj };
   const fieldsToRedact = phiFields || [
     'ssn', 'socialSecurityNumber',
     'mrn', 'medicalRecordNumber',
     'dob', 'dateOfBirth',
-    'firstName', 'lastName', 'fullName',
+    'firstName', 'lastName', 'fullName', 'name',
     'address', 'street', 'city', 'zipCode',
     'phone', 'phoneNumber', 'mobile',
     'email', 'emailAddress',
   ];
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => redactPHI(item, phiFields)) as T;
+  }
+
+  const clone: any = { ...obj };
 
   for (const key in clone) {
     const value = clone[key];
@@ -99,7 +105,7 @@ export function redactPHI<T>(obj: T, phiFields?: string[]): T {
         clone[key] = redactValue(value);
       }
     } else if (typeof value === 'object' && value !== null) {
-      // Recursively redact nested objects
+      // Recursively redact nested objects and arrays
       clone[key] = redactPHI(value, phiFields);
     }
   }
@@ -111,10 +117,11 @@ export function redactPHI<T>(obj: T, phiFields?: string[]): T {
  * Log PHI access for audit trail
  */
 export function logPHIAccess(entry: AuditLogEntry): void {
-  const redactedEntry = {
+  // Redact the entire entry to ensure all PHI is scrubbed
+  const redactedEntry = redactPHI({
     ...entry,
     metadata: entry.metadata ? redactPHI(entry.metadata) : undefined,
-  };
+  });
 
   // In production, send to secure audit log service
   // For now, log to console (should be replaced with proper audit system)
