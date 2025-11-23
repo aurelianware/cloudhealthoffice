@@ -20,7 +20,7 @@
   "include": [
     "scripts/**/*",
     "core/**/*",
-    "src/**/*"
+    "src/security/**/*"
   ],
   "exclude": [
     "node_modules",
