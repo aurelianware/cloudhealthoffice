@@ -9,6 +9,9 @@
     "validate:site": "node site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "test": "jest",
+    "test:fhir": "jest --testPathPattern=fhir",
+    "examples:fhir": "npm run build && node dist/src/fhir/examples.js",
+    "examples:fhir:secure": "npm run build && node dist/src/fhir/secureExamples.js",
     "validate": "node dist/scripts/utils/validate-all-templates.js",
     "lint": "eslint 'scripts/**/*.ts'",
     "clean": "rm -rf dist",
@@ -40,6 +43,7 @@
     "ora": "^7.0.0"
   },
   "devDependencies": {
+    "@types/fhir": "^0.0.41",
     "@types/handlebars": "^4.1.0",
     "@types/inquirer": "^9.0.0",
     "@types/jest": "^29.0.0",
@@ -47,6 +51,7 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
+    "fhir.js": "^0.0.22",
     "husky": "^8.0.3",
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
