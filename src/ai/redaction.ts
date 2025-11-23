@@ -43,6 +43,8 @@ const PHI_PATTERNS = {
   
   // ZIP code: Only match when not part of longer identifiers (5 or 9 digit)
   // Using negative lookbehind/ahead to avoid matching parts of longer IDs
+  // Note: This is conservative and may match some business IDs (order numbers, etc.)
+  // This is intentional - false positives are safer than missing PHI in HIPAA context
   zip: /\b\d{5}(?:-\d{4})?\b(?!\d)/g,
   
   // Credit card: 16 digits with optional separators
