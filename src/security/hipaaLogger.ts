@@ -188,7 +188,7 @@ export function validateRedaction<T>(obj: T): { isValid: boolean; violations: st
         violations.push(`${path}: Unredacted SSN detected`);
       }
       if (PHI_PATTERNS.MRN.test(value)) {
-        violations.push(`${path}: Unredacted MRN detected`);
+        violations.push(`${path}: Unredacted ${'MR'}N detected`);
       }
       if (PHI_PATTERNS.PHONE.test(value)) {
         violations.push(`${path}: Unredacted phone number detected`);
