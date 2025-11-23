@@ -9,6 +9,8 @@
     "validate:site": "node site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "test": "jest",
+    "test:fhir": "jest --testPathPattern=fhir",
+    "examples:fhir": "npm run build && node dist/src/fhir/examples.js",
     "validate": "node dist/scripts/utils/validate-all-templates.js",
     "lint": "eslint 'scripts/**/*.ts'",
     "clean": "rm -rf dist",
