@@ -49,7 +49,7 @@ export async function resolveEdi277Claim(
     return {
       transactionId: payload.transactionId,
       suggestions: [
-        "Correct member ID format.",
+        "Verify the subscriber identifier follows the required format.",
         "Check eligibility dates.",
         "Resubmit with valid payer code.",
       ],

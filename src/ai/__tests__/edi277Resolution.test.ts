@@ -5,7 +5,7 @@ describe("AI EDI 277 Error Resolution", () => {
     const samplePayload = {
       transactionId: "TRX555",
       payer: "BestMed",
-      memberId: "123-45-6789", // PHI format for demonstration
+      memberId: "MBR123456789", // Test member ID (not real PHI)
       errorCode: "123X",
       errorDesc: "INVALID MEMBER ID",
     };
