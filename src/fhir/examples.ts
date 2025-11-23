@@ -257,7 +257,7 @@ export async function example_fhirjsIntegration(): Promise<void> {
     insurerId: 'DEMOPLAN'
   };
 
-  const { patient, eligibility } = mapX12270ToFhirEligibility(x12Input);
+  const { eligibility } = mapX12270ToFhirEligibility(x12Input);
   
   try {
     console.log('Creating Patient resource on FHIR server...');
