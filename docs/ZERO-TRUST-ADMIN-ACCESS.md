@@ -215,7 +215,7 @@ sequenceDiagram
          Duration = "PT8H"  # 8 hours
        }
      } \
-     -Justification "Deploying workflow updates for 275 ingestion - Ticket #12345"
+     -Justification "Deploying workflow updates for attachment processing (X12 275/277/278) - Ticket #12345"
    ```
 
 2. **MFA Challenge:**
