@@ -941,9 +941,9 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 | **Backup & DR** | $0 | $0 | $1,500 | $1,500 | $3,000 |
 | **Consulting** | $0 | $0 | $0 | $10,000 | $10,000 |
 | **Contingency (10%)** | $268 | $3,143 | $977 | $7,178 | $11,572 |
-| **Total** | **$2,948** | **$34,573** | **$10,807** | **$78,958** | **$127,292** |
+| **Total** | **$2,948** | **$34,573** | **$10,747** | **$78,958** | **$127,232** |
 
-**Annual Budget:** $127,292
+**Annual Budget:** $127,232
 
 **Budget Breakdown by Category:**
 - **Third-Party Audits/Testing:** $80,000 (63%)
