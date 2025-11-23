@@ -35,7 +35,7 @@ const PHI_PATTERNS = {
   SSN: /^\d{3}-?\d{2}-?\d{4}$/,
   MRN: /^MRN[A-Z0-9]{6,12}$/i,
   DOB: /^\d{4}-\d{2}-\d{2}$/,
-  PHONE: /^\+?1?\d{10}$/,
+  PHONE: /^(\+?1)?(\d{10})$/,
   EMAIL: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
 };
 
@@ -56,7 +56,7 @@ export function isPHI(value: string, category?: keyof typeof PHI_PATTERNS): bool
 /**
  * Redact PHI from a single value
  */
-export function redactValue(value: string, category?: string): string {
+export function redactValue(value: string): string {
   if (!value || typeof value !== 'string') return value;
 
   // Show only first and last character for context, redact the rest
