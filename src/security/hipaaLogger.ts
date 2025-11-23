@@ -41,6 +41,8 @@ const PHI_PATTERNS = {
 
 /**
  * Check if a value matches a PHI pattern
+ * Note: DOB pattern is excluded from general detection as it's too broad (matches any ISO date).
+ * DOB is only detected via context-based field name matching in redactPHI.
  */
 export function isPHI(value: string, category?: keyof typeof PHI_PATTERNS): boolean {
   if (!value || typeof value !== 'string') return false;
@@ -49,8 +51,12 @@ export function isPHI(value: string, category?: keyof typeof PHI_PATTERNS): bool
     return PHI_PATTERNS[category]?.test(value) ?? false;
   }
 
-  // Check against all patterns
-  return Object.values(PHI_PATTERNS).some(pattern => pattern.test(value));
+  // Check against all patterns except DOB (which requires context)
+  const patternsToCheck = Object.entries(PHI_PATTERNS)
+    .filter(([key]) => key !== 'DOB')
+    .map(([, pattern]) => pattern);
+  
+  return patternsToCheck.some(pattern => pattern.test(value));
 }
 
 /**
