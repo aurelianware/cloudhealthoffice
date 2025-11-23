@@ -10,8 +10,8 @@ import { X12_270 } from './x12Types';
  * References:
  * - CMS-9115-F: Patient Access and Interoperability Final Rule
  * - X12 005010X279A1 Health Care Eligibility Benefit Inquiry (270)
- * - HL7 FHIR R4 Specification (v4.0.1)
- * - Da Vinci Payer Data Exchange (PDex) Implementation Guide
+ * - HL7 FHIR R4 Specification (v4.0.1) (Intentionally used for compatibility with Da Vinci PDex IG and US Core profiles. FHIR R4B (v4.3.0) is available but not used here.)
+ * - Da Vinci Payer Data Exchange (PDex) Implementation Guide (based on FHIR R4)
  * 
  * @param input X12 270 EDI eligibility inquiry structure
  * @returns Object containing FHIR R4 Patient and CoverageEligibilityRequest resources
