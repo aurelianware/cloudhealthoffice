@@ -403,7 +403,7 @@ This security hardening initiative delivers comprehensive documentation for HIPA
 - Improved customer retention
 
 **Total Annual Value:** $867,000  
-**Net ROI:** $740,000 / $127,000 = **582% return**
+**Net ROI:** $739,708 / $127,292 = **581% return**
 
 ---
 
