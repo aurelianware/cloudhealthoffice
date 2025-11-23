@@ -234,7 +234,7 @@ export async function example_fhirjsIntegration(): Promise<void> {
   console.log('\n=== Example 6: Integration with fhir.js Client ===\n');
   
   // Note: This is a code example - actual execution would require a FHIR server
-  const Client = require('fhir.js'); // Would need: npm install fhir.js
+  // const Client = require('fhir.js'); // Would need: npm install fhir.js
   
   const x12Input: X12_270 = {
     inquiryId: 'INQ20240115-FHIRJS-001',
@@ -252,30 +252,22 @@ export async function example_fhirjsIntegration(): Promise<void> {
   const { patient, eligibility } = mapX12270ToFhirEligibility(x12Input);
   
   try {
-    console.log('Example: Initializing FHIR client and creating resources...');
-    
-    // In a real implementation, you would:
-    // 1. Initialize FHIR client (example configuration)
-    // const client = Client({
-    //   baseUrl: 'https://your-fhir-server.com/fhir',
-    //   auth: {
-    //     bearer: 'your-oauth-token-here' // Use Azure AD token in production
-    //   }
-    // });
-    
-    // 2. Create Patient resource on FHIR server
-    // const patientResponse = await client.create({ resource: patient });
-    // console.log('Patient created with ID:', patientResponse.id);
-
-    // 3. Create CoverageEligibilityRequest
-    // const eligibilityResponse = await client.create({ resource: eligibility });
-    // console.log('Eligibility request created with ID:', eligibilityResponse.id);
-    
+    console.log('Example: Transforming X12 270 to FHIR resources...');
     console.log(`Generated Patient resource: ${patient.id}`);
     console.log(`Generated Eligibility request: ${eligibility.id}`);
-    console.log('\n(This is a code example - actual client usage would require FHIR server)');
+    
+    console.log('\nIn a real implementation with fhir.js, you would:');
+    console.log('1. Initialize FHIR client:');
+    console.log('   const Client = require("fhir.js");');
+    console.log('   const client = Client({ baseUrl: "https://your-fhir-server.com/fhir", auth: { bearer: "token" } });');
+    console.log('2. Create Patient resource:');
+    console.log('   const patientResponse = await client.create({ resource: patient });');
+    console.log('3. Create CoverageEligibilityRequest:');
+    console.log('   const eligibilityResponse = await client.create({ resource: eligibility });');
+    
+    console.log('\n(This is a code example - actual client usage requires FHIR server and fhir.js in devDependencies)');
   } catch (error) {
-    console.error('Error creating FHIR resources:', error);
+    console.error('Error in FHIR transformation:', error);
   }
 }
 
