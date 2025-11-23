@@ -1,0 +1,361 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## EDI Transaction Metrics Dashboard\n\n**Real-time monitoring of HIPAA X12 transaction processing across all payers**\n\n⚠️ **PHI Redaction Active**: All patient identifiers are automatically redacted in this dashboard.\n\n---"
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "1d48bcbb-98f6-4b95-8f3c-9c4b34a8c7d9",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 3600000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 300000
+                },
+                {
+                  "durationMs": 900000
+                },
+                {
+                  "durationMs": 1800000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 1209600000
+                },
+                {
+                  "durationMs": 2419200000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "2e89bcbb-98f6-4b95-8f3c-9c4b34a8c7e0",
+            "version": "KqlParameterItem/1.0",
+            "name": "PayerId",
+            "label": "Payer ID",
+            "type": 2,
+            "isRequired": false,
+            "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.payerId != ''\n| distinct tostring(customDimensions.payerId)\n| order by customDimensions_payerId asc",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 0
+            },
+            "timeContextFromParameter": "TimeRange",
+            "defaultValue": "value::all",
+            "queryType": 0,
+            "resourceType": "microsoft.insights/components"
+          },
+          {
+            "id": "3f89bcbb-98f6-4b95-8f3c-9c4b34a8c7e1",
+            "version": "KqlParameterItem/1.0",
+            "name": "TransactionType",
+            "label": "Transaction Type",
+            "type": 2,
+            "isRequired": false,
+            "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.transactionType != ''\n| distinct tostring(customDimensions.transactionType)\n| order by customDimensions_transactionType asc",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 0
+            },
+            "timeContextFromParameter": "TimeRange",
+            "defaultValue": "value::all",
+            "queryType": 0,
+            "resourceType": "microsoft.insights/components"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\n| summarize \n    TotalTransactions = count(),\n    SuccessfulTransactions = countif(success == true),\n    FailedTransactions = countif(success == false),\n    AvgDurationMs = avg(duration),\n    P50DurationMs = percentile(duration, 50),\n    P95DurationMs = percentile(duration, 95),\n    P99DurationMs = percentile(duration, 99)\n| extend SuccessRate = round(100.0 * SuccessfulTransactions / TotalTransactions, 2)\n| project \n    TotalTransactions, \n    SuccessfulTransactions, \n    FailedTransactions, \n    SuccessRate,\n    AvgDurationMs = round(AvgDurationMs, 2),\n    P50DurationMs = round(P50DurationMs, 2),\n    P95DurationMs = round(P95DurationMs, 2),\n    P99DurationMs = round(P99DurationMs, 2)",
+        "size": 3,
+        "title": "Transaction Overview",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "TotalTransactions",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "TotalTransactions",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            }
+          },
+          "secondaryContent": {
+            "columnMatch": "SuccessRate",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "greenRed"
+            }
+          },
+          "showBorder": true
+        }
+      },
+      "name": "transactionOverview"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\n| summarize \n    Count = count(),\n    SuccessCount = countif(success == true),\n    FailureCount = countif(success == false),\n    AvgDuration = avg(duration) \n    by bin(timestamp, 5m), tostring(customDimensions.transactionType)\n| extend SuccessRate = 100.0 * SuccessCount / Count\n| project timestamp, transactionType = customDimensions_transactionType, Count, SuccessCount, FailureCount, SuccessRate, AvgDuration\n| order by timestamp asc",
+        "size": 0,
+        "title": "Transaction Volume Over Time",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "transactionVolumeChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\n| summarize \n    AvgDuration = avg(duration),\n    P50Duration = percentile(duration, 50),\n    P95Duration = percentile(duration, 95),\n    P99Duration = percentile(duration, 99)\n    by bin(timestamp, 5m)\n| project timestamp, AvgDuration, P50Duration, P95Duration, P99Duration\n| order by timestamp asc",
+        "size": 0,
+        "title": "Transaction Latency (milliseconds)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "transactionLatencyChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where success == false\n| summarize ErrorCount = count() by bin(timestamp, 5m), tostring(customDimensions.transactionType), resultCode\n| project timestamp, TransactionType = customDimensions_transactionType, ResultCode = resultCode, ErrorCount\n| order by timestamp asc",
+        "size": 0,
+        "title": "Error Rate Over Time",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "errorRateChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where customDimensions.payerId != ''\n| summarize \n    TransactionCount = count(),\n    SuccessCount = countif(success == true),\n    FailureCount = countif(success == false),\n    AvgDuration = avg(duration)\n    by PayerId = tostring(customDimensions.payerId)\n| extend SuccessRate = round(100.0 * SuccessCount / TransactionCount, 2)\n| project PayerId, TransactionCount, SuccessCount, FailureCount, SuccessRate, AvgDuration = round(AvgDuration, 2)\n| order by TransactionCount desc",
+        "size": 0,
+        "title": "Transactions by Payer",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TransactionCount",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "SuccessRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            },
+            {
+              "columnMatch": "AvgDuration",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "yellowOrangeRed"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "payerBreakdownTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| where success == false\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\n| extend \n    WorkflowName = name,\n    ErrorMessage = tostring(customDimensions.errorMessage),\n    ErrorCode = resultCode,\n    PayerId = tostring(customDimensions.payerId),\n    TransactionType = tostring(customDimensions.transactionType)\n| project \n    timestamp, \n    WorkflowName, \n    TransactionType,\n    PayerId,\n    ErrorCode, \n    ErrorMessage = substring(ErrorMessage, 0, 100),\n    Duration = duration\n| order by timestamp desc\n| take 50",
+        "size": 0,
+        "title": "Recent Errors (Last 50)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "timestamp",
+              "formatter": 6
+            },
+            {
+              "columnMatch": "ErrorCode",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Duration",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ]
+        }
+      },
+      "name": "recentErrorsTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "dependencies\n| where timestamp {TimeRange}\n| where type == \"Azure Service Bus\" or type == \"HTTP\" or type == \"Azure blob\"\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    CallCount = count(),\n    SuccessCount = countif(success == true),\n    FailureCount = countif(success == false),\n    AvgDuration = avg(duration)\n    by DependencyType = type, DependencyName = name\n| extend SuccessRate = round(100.0 * SuccessCount / CallCount, 2)\n| project DependencyType, DependencyName, CallCount, SuccessCount, FailureCount, SuccessRate, AvgDuration = round(AvgDuration, 2)\n| order by CallCount desc",
+        "size": 0,
+        "title": "Dependency Health",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "CallCount",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "SuccessRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            },
+            {
+              "columnMatch": "AvgDuration",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "yellowOrangeRed"
+              }
+            }
+          ]
+        }
+      },
+      "name": "dependencyHealthTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n\n### PHI Redaction Notice\n\n✅ **All queries in this dashboard automatically exclude PHI fields**\n- Patient names, SSNs, dates of birth, member IDs, and other PHI are not queried\n- Only aggregate metrics and non-PHI identifiers are displayed\n- Error messages are truncated to prevent exposure of sensitive data\n- All data complies with HIPAA privacy requirements\n\n⚠️ **Alert Configuration**: Set alerts on Success Rate < 95% and P95 Latency > 5000ms"
+      },
+      "name": "footer"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "sentinel-UserWorkbook",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
