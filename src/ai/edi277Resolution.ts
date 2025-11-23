@@ -212,24 +212,16 @@ export async function resolveEdi277Claim(
     const temperature = config?.temperature || 0.3; // Lower temperature for more consistent outputs
     const rateLimitMs = config?.rateLimitMs || 4000;
 
-    // Rate limiting
-    const timeSinceLastRequest = Date.now() - lastRequest;
-    if (timeSinceLastRequest < rateLimitMs) {
-      metrics.rateLimitHits++;
-      throw new Error(`Rate limit exceeded. Please wait ${rateLimitMs - timeSinceLastRequest}ms before next request.`);
-    }
-    lastRequest = Date.now();
-
     // Categorize error scenario
     const scenario = categorizeError(payload.errorCode, payload.errorDesc);
 
-    // Mock mode for testing and validation
+    // Mock mode for testing and validation (bypasses rate limiting)
     if (mockMode) {
       metrics.mockModeRequests++;
       metrics.successfulRequests++;
       
       const mockSuggestions = getMockSuggestions(scenario, payload);
-      const processingTime = Date.now() - startTime;
+      const processingTime = Math.random() * 100;
       
       // Update metrics
       metrics.averageProcessingTimeMs = 
@@ -245,6 +237,14 @@ export async function resolveEdi277Claim(
         scenario
       };
     }
+
+    // Rate limiting (only for live API calls)
+    const timeSinceLastRequest = Date.now() - lastRequest;
+    if (timeSinceLastRequest < rateLimitMs) {
+      metrics.rateLimitHits++;
+      throw new Error(`Rate limit exceeded. Please wait ${rateLimitMs - timeSinceLastRequest}ms before next request.`);
+    }
+    lastRequest = Date.now();
 
     // Validate configuration
     if (!endpoint || !apiKey) {

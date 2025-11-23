@@ -1,5 +1,4 @@
 {
-  "$schema": "./ai-resolution-config.schema.json",
   "aiErrorResolution": {
     "enabled": true,
     "provider": "azure-openai",

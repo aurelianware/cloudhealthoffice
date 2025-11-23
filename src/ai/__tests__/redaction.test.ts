@@ -87,10 +87,17 @@ describe("PHI Redaction Module", () => {
       expect(isPHIFieldName("status")).toBe(false);
     });
 
-    it("should detect partial matches in field names", () => {
-      expect(isPHIFieldName("patientFirstName")).toBe(true);
-      expect(isPHIFieldName("subscriberEmail")).toBe(true);
-      expect(isPHIFieldName("billingAddress")).toBe(true);
+    it("should detect word boundary matches in field names", () => {
+      // Should match with word boundaries (camelCase, snake_case)
+      expect(isPHIFieldName("patient_name")).toBe(true);
+      expect(isPHIFieldName("subscriber_email")).toBe(true);
+      expect(isPHIFieldName("billing_address")).toBe(true);
+      expect(isPHIFieldName("patientName")).toBe(true); // word boundary in camelCase
+      
+      // Should NOT match false positives from substring matching
+      expect(isPHIFieldName("statement")).toBe(false); // contains "state" but not as whole word
+      expect(isPHIFieldName("cityId")).toBe(false); // contains "city" but not as whole word
+      expect(isPHIFieldName("naming")).toBe(false); // contains "name" but not as whole word
     });
   });
 

@@ -79,15 +79,31 @@ export function isPHI(val: string): boolean {
 
 /**
  * Check if a field name indicates it contains PHI
+ * Uses precise matching to avoid false positives from substring matching
  */
 export function isPHIFieldName(fieldName: string): boolean {
   if (!fieldName) return false;
   
   const lowerFieldName = fieldName.toLowerCase();
-  return PHI_FIELD_NAMES.some(phiName => 
-    lowerFieldName === phiName.toLowerCase() || 
-    lowerFieldName.includes(phiName.toLowerCase())
-  );
+  return PHI_FIELD_NAMES.some(phiName => {
+    const lowerPhiName = phiName.toLowerCase();
+    // Exact match
+    if (lowerFieldName === lowerPhiName) return true;
+    // Prefix match with underscore (e.g., "name_id")
+    if (lowerFieldName.startsWith(lowerPhiName + '_')) return true;
+    // Suffix match with underscore (e.g., "id_name")
+    if (lowerFieldName.endsWith('_' + lowerPhiName)) return true;
+    // Surrounded by underscores (e.g., "id_name_id")
+    if (lowerFieldName.includes('_' + lowerPhiName + '_')) return true;
+    // CamelCase suffix match (e.g., "patientEmail" contains "Email")
+    // Match if PHI name appears as a capitalized word at the end
+    const camelCasePattern = new RegExp(lowerPhiName + '$', 'i');
+    if (camelCasePattern.test(lowerFieldName)) return true;
+    // Word boundary match for other cases (e.g., "name" as a whole word)
+    const wordBoundaryRegex = new RegExp(`\\b${lowerPhiName}\\b`, 'i');
+    if (wordBoundaryRegex.test(fieldName)) return true;
+    return false;
+  });
 }
 
 /**
@@ -246,6 +262,7 @@ export function validateRedaction(obj: any): { isValid: boolean; violations: str
   const checkValue = (value: any, path: string = ''): void => {
     if (typeof value === 'string') {
       for (const [patternName, pattern] of Object.entries(PHI_PATTERNS)) {
+        pattern.lastIndex = 0; // Reset lastIndex before each test
         if (pattern.test(value)) {
           violations.push(`${path}: Detected ${patternName} pattern in value`);
         }

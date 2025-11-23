@@ -312,7 +312,7 @@ setInterval(() => {
 
 ### Production
 
-- `openai` - ^4.0.0 - OpenAI JavaScript/TypeScript library
+- `openai` - ^6.9.1 - OpenAI JavaScript/TypeScript library
 - `@azure/openai` - ^2.0.0 - Azure OpenAI companion library
 
 ### Development
