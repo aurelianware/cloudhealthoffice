@@ -1,0 +1,312 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Example Azure Monitor alert rules configuration for Cloud Health Office dashboards. Deploy these alerts to monitor transaction health, latency, and HIPAA compliance.",
+    "usage": "az deployment group create --resource-group <rg> --template-file azure-monitor-alerts-config.json --parameters appInsightsId=<id> actionGroupId=<id>"
+  },
+  "parameters": {
+    "appInsightsId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Application Insights instance"
+      }
+    },
+    "actionGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Action Group for alert notifications"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for alert rules"
+      }
+    }
+  },
+  "variables": {
+    "alertPrefix": "[concat('CloudHealthOffice-', uniqueString(resourceGroup().id))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-LowSuccessRate')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - Low Success Rate Alert",
+        "description": "Triggers when transaction success rate drops below 95% for 15 minutes",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT15M",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "requests\n| where timestamp > ago(15m)\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| summarize Total = count(), Success = countif(success == true)\n| extend SuccessRate = 100.0 * Success / Total\n| where SuccessRate < 95",
+              "timeAggregation": "Count",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-HighLatency')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - High Latency Alert",
+        "description": "Triggers when P95 latency exceeds 5000ms for 15 minutes",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT15M",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "requests\n| where timestamp > ago(15m)\n| where name contains \"ingest\" or name contains \"rfai\" or name contains \"process\"\n| summarize P95Latency = percentile(duration, 95)\n| where P95Latency > 5000",
+              "timeAggregation": "Count",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-PHIExposure')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - PHI Exposure Alert (CRITICAL)",
+        "description": "CRITICAL: Triggers when potential PHI patterns are detected in logs",
+        "severity": 0,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT5M",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "traces\n| where timestamp > ago(5m)\n| where message matches regex @\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\" or message matches regex @\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\" or message matches regex @\"DOB|SSN|Member\\\\s*ID|Patient\\\\s*Name\"\n| count\n| where Count > 0",
+              "timeAggregation": "Count",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-UnencryptedTraffic')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - Unencrypted Traffic Alert (CRITICAL)",
+        "description": "CRITICAL: Triggers when unencrypted HTTP traffic is detected",
+        "severity": 0,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT5M",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "dependencies\n| where timestamp > ago(5m)\n| where type == \"HTTP\"\n| where data startswith \"http://\"\n| count\n| where Count > 0",
+              "timeAggregation": "Count",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-PayerIntegrationFailure')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - Payer Integration Failure Alert",
+        "description": "Triggers when a payer has zero transactions in 24 hours",
+        "severity": 3,
+        "enabled": true,
+        "evaluationFrequency": "PT1H",
+        "windowSize": "P1D",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "requests\n| where timestamp > ago(24h)\n| where name contains \"ingest\" or name contains \"rfai\"\n| summarize Count = count() by PayerId = tostring(customDimensions.payerId)\n| where Count == 0",
+              "timeAggregation": "Count",
+              "dimensions": [
+                {
+                  "name": "PayerId",
+                  "operator": "Include",
+                  "values": ["*"]
+                }
+              ],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "[concat(variables('alertPrefix'), '-DependencyFailure')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Cloud Health Office - Dependency Failure Alert",
+        "description": "Triggers when backend dependency success rate drops below 95%",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT15M",
+        "scopes": [
+          "[parameters('appInsightsId')]"
+        ],
+        "targetResourceTypes": [
+          "microsoft.insights/components"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "dependencies\n| where timestamp > ago(15m)\n| where type in (\"Azure Service Bus\", \"HTTP\", \"Azure blob\")\n| summarize Total = count(), Success = countif(success == true) by DependencyName = name\n| extend SuccessRate = 100.0 * Success / Total\n| where SuccessRate < 95",
+              "timeAggregation": "Count",
+              "dimensions": [
+                {
+                  "name": "DependencyName",
+                  "operator": "Include",
+                  "values": ["*"]
+                }
+              ],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "lowSuccessRateAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-LowSuccessRate'))]"
+    },
+    "highLatencyAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-HighLatency'))]"
+    },
+    "phiExposureAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-PHIExposure'))]"
+    },
+    "unencryptedTrafficAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-UnencryptedTraffic'))]"
+    },
+    "payerIntegrationFailureAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-PayerIntegrationFailure'))]"
+    },
+    "dependencyFailureAlertId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', concat(variables('alertPrefix'), '-DependencyFailure'))]"
+    }
+  }
+}

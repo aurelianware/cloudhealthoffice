@@ -533,6 +533,40 @@ hipaa-attachments/
 - X12 decode/encode operations
 - Exception tracking and stack traces
 
+**Azure Monitor Workbooks:**
+
+Three production-ready dashboards are automatically deployed:
+
+1. **EDI Transaction Metrics** (`{baseName}-edi-metrics`)
+   - Real-time transaction volume, latency (P50/P95/P99), success rates
+   - Per-transaction-type breakdown (275, 277, 278)
+   - Error distribution and recent failures
+   - Dependency health (SFTP, Service Bus, Storage, QNXT)
+
+2. **Payer Integration Health** (`{baseName}-payer-health`)
+   - Per-payer health scoring (0-100%)
+   - Integration status and backend connectivity
+   - Transaction volume trends and latency by payer
+   - Error analysis and recent incidents
+
+3. **HIPAA Compliance Monitoring** (`{baseName}-hipaa-compliance`)
+   - PHI redaction validation
+   - Encryption in transit monitoring (HTTPS enforcement)
+   - Security audit events (PHI access, data exports)
+   - Data retention compliance tracking
+
+**Alerting Rules:**
+
+Six recommended alerts deployed via ARM template:
+- Low Success Rate (< 95%)
+- High Latency (P95 > 5000ms)
+- PHI Exposure Detection (CRITICAL)
+- Unencrypted Traffic (CRITICAL)
+- Payer Integration Failure
+- Dependency Failure
+
+See `docs/AZURE-MONITOR-DASHBOARDS.md` for complete documentation.
+
 **Custom Events:**
 ```
 - workflow_started
