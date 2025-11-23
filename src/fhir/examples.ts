@@ -389,7 +389,7 @@ export function example_errorHandling(): void {
   };
 
   try {
-    const { patient, eligibility } = mapX12270ToFhirEligibility(minimalInput);
+    mapX12270ToFhirEligibility(minimalInput);
     console.log('✅ Minimal inquiry processed successfully');
     console.log('   Required fields only provided');
   } catch (error) {
