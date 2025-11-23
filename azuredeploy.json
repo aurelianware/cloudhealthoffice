@@ -1,0 +1,375 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Cloud Health Office - Azure-native HIPAA EDI Integration Platform. Deploy in <5 minutes for rapid sandbox testing.",
+    "author": "Aurelianware",
+    "github": "https://github.com/aurelianware/cloudhealthoffice"
+  },
+  "parameters": {
+    "baseName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 20,
+      "metadata": {
+        "description": "Base name for all resources (e.g., 'myhealthplan'). Will be used to generate unique resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "allowedValues": [
+        "eastus",
+        "eastus2",
+        "westus",
+        "westus2",
+        "centralus"
+      ],
+      "metadata": {
+        "description": "Azure region for core resources"
+      }
+    },
+    "sftpHost": {
+      "type": "string",
+      "defaultValue": "sftp.availity.com",
+      "metadata": {
+        "description": "SFTP host for EDI file exchange (e.g., sftp.availity.com)"
+      }
+    },
+    "sftpUsername": {
+      "type": "string",
+      "defaultValue": "demo",
+      "metadata": {
+        "description": "SFTP username for authentication"
+      }
+    },
+    "sftpPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SFTP password (leave empty for demo/sandbox mode)"
+      }
+    },
+    "enableB2B": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable X12 B2B Integration Account for EDI processing"
+      }
+    },
+    "iaSku": {
+      "type": "string",
+      "defaultValue": "Free",
+      "allowedValues": [
+        "Free",
+        "Basic",
+        "Standard"
+      ],
+      "metadata": {
+        "description": "Integration Account SKU (Free tier suitable for sandbox)"
+      }
+    },
+    "deploymentEnvironment": {
+      "type": "string",
+      "defaultValue": "sandbox",
+      "allowedValues": [
+        "sandbox",
+        "dev",
+        "uat",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Deployment environment type"
+      }
+    }
+  },
+  "variables": {
+    "storageAccountName": "[concat('cho', uniqueString(resourceGroup().id))]",
+    "serviceBusName": "[concat(parameters('baseName'), '-sb-', uniqueString(resourceGroup().id))]",
+    "logicAppName": "[concat(parameters('baseName'), '-la')]",
+    "appServicePlanName": "[concat(parameters('baseName'), '-asp')]",
+    "integrationAccountName": "[concat(parameters('baseName'), '-ia')]",
+    "appInsightsName": "[concat(parameters('baseName'), '-ai')]",
+    "logAnalyticsName": "[concat(parameters('baseName'), '-law')]",
+    "sftpConnectionName": "[concat(parameters('baseName'), '-sftp-conn')]",
+    "blobConnectionName": "[concat(parameters('baseName'), '-blob-conn')]",
+    "serviceBusConnectionName": "[concat(parameters('baseName'), '-sb-conn')]",
+    "connectorLocation": "eastus"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "isHnsEnabled": true,
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "services": {
+            "blob": {
+              "enabled": true
+            },
+            "file": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        }
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]",
+        "ManagedBy": "AzureDeploy"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[concat(variables('storageAccountName'), '/default/hipaa-attachments')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "publicAccess": "None"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[variables('serviceBusName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2"
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/attachments-in')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/edi-278')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/rfai-requests')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    },
+    {
+      "condition": "[parameters('enableB2B')]",
+      "type": "Microsoft.Logic/integrationAccounts",
+      "apiVersion": "2019-05-01",
+      "name": "[variables('integrationAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('iaSku')]"
+      },
+      "properties": {},
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "WS1",
+        "tier": "WorkflowStandard"
+      },
+      "kind": "elastic",
+      "properties": {
+        "targetWorkerCount": 1,
+        "maximumElasticWorkerCount": 20,
+        "elasticScaleEnabled": true,
+        "isSpot": false,
+        "reserved": true
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('logicAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,workflowapp",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "node"
+            },
+            {
+              "name": "WEBSITE_NODE_DEFAULT_VERSION",
+              "value": "~18"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
+            },
+            {
+              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
+            },
+            {
+              "name": "WEBSITE_CONTENTSHARE",
+              "value": "[toLower(variables('logicAppName'))]"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+            },
+            {
+              "name": "AzureFunctionsJobHost__extensionBundle__id",
+              "value": "Microsoft.Azure.Functions.ExtensionBundle.Workflows"
+            },
+            {
+              "name": "AzureFunctionsJobHost__extensionBundle__version",
+              "value": "[1.*, 2.0.0)"
+            },
+            {
+              "name": "WORKFLOWS_SUBSCRIPTION_ID",
+              "value": "[subscription().subscriptionId]"
+            },
+            {
+              "name": "WORKFLOWS_RESOURCE_GROUP_NAME",
+              "value": "[resourceGroup().name]"
+            }
+          ],
+          "use32BitWorkerProcess": false,
+          "netFrameworkVersion": "v6.0"
+        },
+        "httpsOnly": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+      ],
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "Environment": "[parameters('deploymentEnvironment')]"
+      }
+    }
+  ],
+  "outputs": {
+    "logicAppName": {
+      "type": "string",
+      "value": "[variables('logicAppName')]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "serviceBusNamespace": {
+      "type": "string",
+      "value": "[variables('serviceBusName')]"
+    },
+    "integrationAccountName": {
+      "type": "string",
+      "value": "[if(parameters('enableB2B'), variables('integrationAccountName'), 'Not deployed')]"
+    },
+    "applicationInsightsName": {
+      "type": "string",
+      "value": "[variables('appInsightsName')]"
+    },
+    "nextSteps": {
+      "type": "string",
+      "value": "1. Clone workflows: git clone https://github.com/aurelianware/cloudhealthoffice && cd cloudhealthoffice && npm install && npm run build\n2. Deploy workflows: ./deploy-workflows.ps1 -ResourceGroup [your-rg] -LogicAppName [logic-app-name]\n3. Configure X12 schemas: ./configure-x12-agreements.ps1\n4. Test: ./test-workflows.ps1 -TestInbound275"
+    }
+  }
+}
