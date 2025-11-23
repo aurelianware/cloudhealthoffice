@@ -28,11 +28,13 @@ The `fhir.js` package (v0.0.22) included in our examples has known vulnerabiliti
 
 **No security vulnerabilities in production mapping code.**
 
-#### 2. fhir.js is Optional
+#### 2. fhir.js is in devDependencies Only ✅
 
-fhir.js is included only for:
-- Example code demonstrating FHIR client patterns
-- Documentation purposes
+**fhir.js is now properly isolated as a development dependency**:
+- Listed in `devDependencies` (not production dependencies)
+- Used only in example code demonstrating FHIR client patterns
+- Used only for documentation purposes
+- **Will NOT be deployed to production** when using `npm install --production`
 - NOT required for core functionality
 
 #### 3. Production Recommendations
@@ -143,37 +145,51 @@ const client = await Client.authorize({
 
 ### Development vs Production
 
-#### Development (Current State)
+#### Development (Current State) ✅
 ```json
 {
   "dependencies": {
-    "fhir.js": "^0.0.22"  // ⚠️ For examples only
+    // ✅ No fhir.js in production dependencies
   },
   "devDependencies": {
-    "@types/fhir": "^0.0.x"  // ✅ Safe, types only
+    "@types/fhir": "^0.0.x",  // ✅ Safe, types only
+    "fhir.js": "^0.0.22"      // ✅ Dev only, not deployed to production
   }
 }
 ```
 
-#### Production (Recommended)
+#### Production Deployment
 ```json
 {
   "dependencies": {
     "@types/fhir": "^0.0.x",  // ✅ Safe, types only
-    "node-fetch": "^3.x.x"    // ✅ Safe, modern HTTP client
+    "node-fetch": "^3.x.x"    // ✅ Safe, modern HTTP client (optional)
   }
+  // fhir.js excluded automatically with npm install --production
 }
 ```
 
 ### Security Best Practices
 
-#### 1. Never Use fhir.js in Production
+#### 1. Production Deployment ✅
+
+**fhir.js is automatically excluded from production deployments**:
+
+```bash
+# Development (includes fhir.js for examples)
+npm install
+
+# Production (excludes fhir.js automatically)
+npm install --production
+```
 
 ```typescript
-// ❌ DON'T: Use fhir.js in production
+// ❌ DON'T: Use fhir.js in production code
 import Client from 'fhir.js';
 
-// ✅ DO: Use native fetch or Azure SDK
+// ✅ DO: Use SecureFhirClient or native fetch
+import { SecureFhirClient } from './src/fhir/secureExamples';
+// OR
 import { Patient } from 'fhir/r4';
 const response = await fetch(...);
 ```
@@ -252,7 +268,7 @@ If you discover security vulnerabilities:
 ---
 
 **Last Updated**: November 2024  
-**Severity**: Medium (mitigated by core mapper being safe)  
-**Status**: Under review, alternatives documented
+**Severity**: Low (fully mitigated - fhir.js in devDependencies only)  
+**Status**: ✅ Resolved - fhir.js properly isolated, SecureFhirClient available
 
-**Action Required**: Replace fhir.js with native fetch before production deployment
+**Action Required**: None - fhir.js is automatically excluded from production deployments (`npm install --production`)
