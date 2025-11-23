@@ -247,7 +247,7 @@ describe('mapX12270ToFhirEligibility', () => {
         insurerId: 'FAMILYPLAN01'
       };
 
-      const { patient, eligibility } = mapX12270ToFhirEligibility(input);
+      const { patient } = mapX12270ToFhirEligibility(input);
       
       // Should map dependent, not subscriber
       expect(patient.name![0].given).toContain('Emily');
