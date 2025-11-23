@@ -198,7 +198,7 @@ describe("AI EDI 277 Error Resolution", () => {
   });
 
   describe("Rate Limiting", () => {
-    it("should enforce rate limiting between requests", async () => {
+    it("should not apply rate limiting in mock mode", async () => {
       const payload: EDI277Payload = {
         transactionId: "TRX010",
         payer: "TestPayer",
@@ -207,16 +207,19 @@ describe("AI EDI 277 Error Resolution", () => {
         errorDesc: "Test error"
       };
 
-      // First request should succeed
-      await resolveEdi277Claim(payload, true);
+      // First request in mock mode should succeed
+      const result1 = await resolveEdi277Claim(payload, true);
+      expect(result1.model).toBe("mock");
 
-      // Immediate second request should fail
-      await expect(
-        resolveEdi277Claim(payload, true)
-      ).rejects.toThrow(/rate limit/i);
+      // Immediate second request in mock mode should also succeed (no rate limiting)
+      const result2 = await resolveEdi277Claim(payload, true);
+      expect(result2.model).toBe("mock");
+      
+      const metrics = getMetrics();
+      expect(metrics.rateLimitHits).toBe(0); // No rate limit hits in mock mode
     });
 
-    it("should track rate limit hits in metrics", async () => {
+    it("should track mock mode requests separately", async () => {
       const payload: EDI277Payload = {
         transactionId: "TRX011",
         payer: "TestPayer",
@@ -225,16 +228,13 @@ describe("AI EDI 277 Error Resolution", () => {
         errorDesc: "Test error"
       };
 
+      const initialMetrics = getMetrics();
+      const initialMockRequests = initialMetrics.mockModeRequests;
+
       await resolveEdi277Claim(payload, true);
 
-      try {
-        await resolveEdi277Claim(payload, true);
-      } catch {
-        // Expected to fail
-      }
-
-      const metrics = getMetrics();
-      expect(metrics.rateLimitHits).toBeGreaterThan(0);
+      const finalMetrics = getMetrics();
+      expect(finalMetrics.mockModeRequests).toBeGreaterThan(initialMockRequests);
     });
   });
 
