@@ -900,25 +900,18 @@ $report | ConvertTo-Json -Depth 3 | Out-File "monthly-access-report-$(Get-Date -
 **Tasks:**
 
 1. **Convert Role Assignments:**
-   ```bash
+   ```powershell
    # For each user with permanent role:
    
    # 1. Create eligible assignment
-   New-AzRoleEligibilityScheduleRequest \
-     -Name (New-Guid).Guid \
-     -Scope "/subscriptions/{sub}/resourceGroups/{rg}" \
-     -RoleDefinitionId "{role-id}" \
-     -PrincipalId "{user-id}" \
-     -RequestType "AdminAssign" \
-     -ScheduleInfo @{ StartDateTime = Get-Date; Expiration = @{ Type = "NoExpiration" } } \
+   New-AzRoleEligibilityScheduleRequest `
+     -Name (New-Guid).Guid `
+     -Scope "/subscriptions/{sub}/resourceGroups/{rg}" `
+     -RoleDefinitionId "{role-id}" `
+     -PrincipalId "{user-id}" `
+     -RequestType "AdminAssign" `
+     -ScheduleInfo @{ StartDateTime = Get-Date; Expiration = @{ Type = "NoExpiration" } } `
      -Justification "Migration to JIT access model"
-   
-   # 2. Remove permanent assignment
-   az role assignment delete \
-     --assignee "{user-id}" \
-     --role "{role-name}" \
-     --scope "/subscriptions/{sub}/resourceGroups/{rg}"
-   
    # 3. Notify user of change
    Send-MailMessage -To "{user-email}" -Subject "Admin Access Migrated to JIT Model" -Body "..."
    ```
