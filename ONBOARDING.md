@@ -304,6 +304,38 @@ az logicapp list-workflows -g your-rg --name your-logic-app
 az servicebus topic list --namespace-name your-sb-ns -g your-rg
 ```
 
+### Monitoring & Dashboards
+
+Cloud Health Office includes three production-ready Azure Monitor Workbooks for real-time monitoring:
+
+1. **EDI Transaction Metrics**: Monitor transaction volume, latency (P50/P95/P99), success rates, and error patterns
+2. **Payer Integration Health**: Per-payer health scoring, integration status, and backend connectivity
+3. **HIPAA Compliance Monitoring**: PHI redaction validation, security audit logging, and encryption monitoring
+
+**Access Dashboards**:
+- Navigate to Azure Portal → **Monitor** → **Workbooks**
+- Look for workbooks with your `{baseName}` prefix
+- Filter by payer ID for multi-tenant deployments
+
+**Setup Alerts**:
+```bash
+# Deploy recommended alert rules
+az deployment group create \
+  --resource-group your-rg \
+  --template-file docs/examples/azure-monitor-alerts-config.json \
+  --parameters appInsightsId="<your-app-insights-id>" \
+               actionGroupId="<your-action-group-id>"
+```
+
+📖 **Full Documentation**: See [docs/AZURE-MONITOR-DASHBOARDS.md](docs/AZURE-MONITOR-DASHBOARDS.md) for:
+- Dashboard details and KQL queries
+- 6 recommended alerting rules with thresholds
+- PHI redaction configuration
+- Multi-tenant setup
+- Troubleshooting guide
+
+📋 **Alerting Setup**: See [docs/examples/ALERTING-SETUP-GUIDE.md](docs/examples/ALERTING-SETUP-GUIDE.md) for step-by-step alert configuration.
+
 ---
 
 ## HIPAA Logging & Compliance
