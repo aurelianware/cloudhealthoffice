@@ -85,6 +85,19 @@ function parseX12Response(x12Content: string): AuthResponse {
       certificationTypeCode: 'A1'
     };
   }
+  if (x12Content.includes('STC*A4')) {
+    return {
+      authorizationNumber: 'AUTH20241119001',
+      status: 'PENDED',
+      certificationTypeCode: 'A4'
+    };
+  }
+  if (x12Content.includes('STC*A3')) {
+    return {
+      status: 'DENIED',
+      certificationTypeCode: 'A3'
+    };
+  }
   return {
     status: 'ERROR',
     certificationTypeCode: 'NA'
@@ -255,7 +268,7 @@ describe('Authorization Request - Outpatient (UM01=HS)', () => {
   it('should require service date range for outpatient', () => {
     // Test outpatient-specific validation
     const hasDateRange = (request: any) => {
-      return request.serviceDateRange?.fromDate && request.serviceDateRange?.toDate;
+      return !!(request.serviceDateRange?.fromDate && request.serviceDateRange?.toDate);
     };
     
     const request = {
@@ -353,7 +366,7 @@ describe('Authorization Cancellation (UM02=3)', () => {
 describe('Eligibility Integration', () => {
   
   it('should check eligibility before submitting authorization', async () => {
-    const mockEligibilityCheck = jest.fn().mockResolvedValue({
+    const mockEligibilityCheck = jest.fn<(params: any) => Promise<{ eligible: boolean; coverageLevel: string }>>().mockResolvedValue({
       eligible: true,
       coverageLevel: 'Active Coverage'
     });
@@ -369,7 +382,7 @@ describe('Eligibility Integration', () => {
   });
   
   it('should reject authorization if member not eligible', async () => {
-    const mockEligibilityCheck = jest.fn().mockResolvedValue({
+    const mockEligibilityCheck = jest.fn<(params: any) => Promise<{ eligible: boolean; reason: string }>>().mockResolvedValue({
       eligible: false,
       reason: 'Coverage terminated'
     });
@@ -416,13 +429,13 @@ describe('Attachment Workflow Integration', () => {
 describe('Error Handling', () => {
   
   it('should handle X12 encoding errors gracefully', () => {
-    const mockEncode = jest.fn().mockRejectedValue(new Error('Integration Account not configured'));
+    const mockEncode = jest.fn<() => Promise<void>>().mockRejectedValue(new Error('Integration Account not configured'));
     
     expect(mockEncode).rejects.toThrow('Integration Account not configured');
   });
   
   it('should handle payer endpoint timeouts', async () => {
-    const mockPostToPayer = jest.fn().mockRejectedValue(new Error('Request timeout'));
+    const mockPostToPayer = jest.fn<() => Promise<void>>().mockRejectedValue(new Error('Request timeout'));
     
     await expect(mockPostToPayer()).rejects.toThrow('Request timeout');
   });
