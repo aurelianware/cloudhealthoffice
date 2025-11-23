@@ -35,7 +35,7 @@ const PHI_PATTERNS = {
   SSN: /^\d{3}-?\d{2}-?\d{4}$/,
   MRN: /^MRN[A-Z0-9]{6,12}$/i,
   DOB: /^\d{4}-\d{2}-\d{2}$/,
-  PHONE: /^(\+?1|1)?(\d{10})$/,
+  PHONE: /^(\+1|1)?\d{10}$/,
   EMAIL: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
 };
 
@@ -196,6 +196,11 @@ export function validateRedaction<T>(obj: T): { isValid: boolean; violations: st
       if (PHI_PATTERNS.EMAIL.test(value)) {
         violations.push(`${path}: Unredacted email detected`);
       }
+    } else if (Array.isArray(value)) {
+      // Handle arrays separately to validate each element
+      value.forEach((item, index) => {
+        checkValue(item, `${path}[${index}]`);
+      });
     } else if (typeof value === 'object' && value !== null) {
       for (const key in value) {
         checkValue(value[key], `${path}.${key}`);
