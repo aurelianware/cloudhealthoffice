@@ -321,7 +321,7 @@ finally {
         New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
     }
     
-    $script:TestResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $ReportPath -Encoding UTF8
+    $script:TestResults | ConvertTo-Json -Depth 100 | Out-File -FilePath $ReportPath -Encoding UTF8
     Write-Host "`n📄 Test report saved to: $ReportPath" -ForegroundColor Cyan
     
     # Exit with appropriate code

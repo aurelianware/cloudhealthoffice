@@ -98,7 +98,7 @@ export function generate837P(options: Claim837Options = { claimType: '837P' }): 
   const diagnosis = DIAGNOSIS_CODES[Math.floor(Math.random() * DIAGNOSIS_CODES.length)];
   
   const serviceDate = options.serviceDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const claimNumber = options.claimNumber || `CLM${timestamp()}`;
+  const claimNumber = options.claimNumber || `CLM${Date.now().toString().slice(-9)}`;
   
   const segments: string[] = [];
   
@@ -144,8 +144,9 @@ export function generate837P(options: Claim837Options = { claimType: '837P' }): 
   segments.push(`SV1*HC:${procedure.code}*${procedure.amount}*UN*1***1~`);
   segments.push(`DTP*472*D8*${serviceDate}~`);
   
-  // Transaction Set Trailer
-  segments.push(`SE*${segments.length - 2}*${controlNumber}~`);
+  // Transaction Set Trailer (count includes this SE segment)
+  const segmentCount = segments.length - 2 + 1; // Subtract headers, add SE itself
+  segments.push(`SE*${segmentCount}*${controlNumber}~`);
   
   // Functional Group and Interchange Trailers
   segments.push(`GE*1*${controlNumber}~`);
@@ -165,7 +166,7 @@ export function generate837I(options: Claim837Options = { claimType: '837I' }): 
   const provider = { npi: '1111111119', name: 'GENERAL HOSPITAL', taxId: '111111111' };
   const patient = SYNTHETIC_PATIENTS[options.patientIndex || 0];
   const serviceDate = options.serviceDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const claimNumber = options.claimNumber || `CLM${timestamp()}`;
+  const claimNumber = options.claimNumber || `CLM${Date.now().toString().slice(-9)}`;
   
   const segments: string[] = [];
   
@@ -212,8 +213,9 @@ export function generate837I(options: Claim837Options = { claimType: '837I' }): 
   segments.push('SV2*0100*HC:99223*1500.00*UN*1~');
   segments.push(`DTP*472*D8*${serviceDate}~`);
   
-  // Transaction Set Trailer
-  segments.push(`SE*${segments.length - 2}*${controlNumber}~`);
+  // Transaction Set Trailer (count includes this SE segment)
+  const segmentCount837I = segments.length - 2 + 1; // Subtract headers, add SE itself
+  segments.push(`SE*${segmentCount837I}*${controlNumber}~`);
   
   // Functional Group and Interchange Trailers
   segments.push(`GE*1*${controlNumber}~`);
