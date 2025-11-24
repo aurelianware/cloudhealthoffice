@@ -32,7 +32,7 @@ import {
   OperationOutcome
 } from 'fhir/r4';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
-import { ServiceBusClient, ServiceBusSender } from '@azure/service-bus';
+import { ServiceBusClient } from '@azure/service-bus';
 
 /**
  * Supported FHIR resource types for payer-to-payer exchange
