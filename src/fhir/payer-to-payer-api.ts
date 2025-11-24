@@ -601,8 +601,8 @@ export class PayerToPayerAPI {
         const resource = JSON.parse(lines[i]);
         resources.push(resource);
       } catch (error) {
-        // Log error but continue parsing other lines
-        console.warn(`Failed to parse NDJSON line ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Skip malformed lines silently to avoid logging potential PHI
+        // Error details not logged for security reasons
       }
     }
     
