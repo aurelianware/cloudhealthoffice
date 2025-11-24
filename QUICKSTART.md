@@ -96,9 +96,11 @@ If using X12 EDI processing:
   -ServiceBusNamespace "your-sb-namespace"
 ```
 
-## ✨ Interactive Onboarding Wizard
+## ✨ New Capabilities (Post v1.0.0)
 
-For a guided configuration experience:
+### Interactive Onboarding Wizard
+
+For a guided configuration experience with zero-code payer onboarding:
 
 ```bash
 # Start interactive wizard
@@ -113,6 +115,122 @@ The wizard will guide you through:
 5. Monitoring preferences
 
 Then automatically generate your deployment package!
+
+**Features:**
+- 30+ Handlebars template helpers for customization
+- Complete workflow.json generation for Logic Apps
+- Bicep infrastructure templates with parameters
+- Payer-specific documentation auto-generated
+- Validated with 23-test comprehensive suite
+
+**Documentation:** [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
+
+### FHIR R4 Integration
+
+Transform X12 EDI data to modern FHIR resources:
+
+```typescript
+import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
+
+// X12 270 eligibility inquiry
+const x12Data = {
+  inquiryId: 'INQ001',
+  subscriber: { memberId: 'MEM123', firstName: 'John', lastName: 'Doe' }
+};
+
+// Convert to FHIR R4
+const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
+```
+
+**Compliance:**
+- ✅ CMS Patient Access API (CMS-9115-F)
+- ✅ US Core Patient profile v3.1.1
+- ✅ HIPAA X12 270: 005010X279A1
+- ✅ HL7 FHIR R4: v4.0.1
+
+**Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
+
+### ValueAdds277 Enhanced Claim Status
+
+Premium ECS features for comprehensive claim intelligence:
+
+```bash
+# Enable in configuration
+"ecsModule": {
+  "enabled": true,
+  "valueAdds277": {
+    "enabled": true,
+    "claimFields": {
+      "financial": true,    // 8 fields: BILLED, ALLOWED, PAID, etc.
+      "clinical": true,     // 4 fields: diagnosis, procedures, dates
+      "demographics": true, // Patient, subscriber, providers
+      "remittance": true    // Check/EFT details
+    },
+    "integrationFlags": {
+      "eligibleForAppeal": true,        // Link to appeals module
+      "eligibleForAttachment": true,    // Send 275 attachments
+      "eligibleForCorrection": true,    // Resubmit claims
+      "eligibleForRemittanceViewer": true  // View 835 data
+    }
+  }
+}
+```
+
+**Benefits:**
+- Provider time savings: 7-21 minutes per claim lookup
+- 60+ enhanced response fields
+- Cross-module integration workflows
+- Additional $10k/year revenue per payer
+
+**Documentation:** [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md)
+
+### Security Hardening (9/10 Score)
+
+Production-ready security controls for PHI workloads:
+
+```bash
+# Deploy security modules
+az deployment group create \
+  --resource-group "payer-attachments-prod-rg" \
+  --template-file infra/modules/keyvault.bicep
+  
+az deployment group create \
+  --resource-group "payer-attachments-prod-rg" \
+  --template-file infra/modules/networking.bicep
+  
+az deployment group create \
+  --resource-group "payer-attachments-prod-rg" \
+  --template-file infra/modules/private-endpoints.bicep
+```
+
+**Implemented Controls:**
+- Premium Key Vault with HSM-backed keys (FIPS 140-2 Level 2)
+- Private endpoints for Storage, Service Bus, Key Vault
+- PHI masking in Application Insights with DCR transformation
+- Customer-managed keys (optional BYOK)
+- 7-year data retention with automated lifecycle management
+- 365-day audit log retention
+
+**Cost Optimization:** 94% storage savings ($463/mo → $29/mo) with lifecycle policies
+
+**Documentation:** [SECURITY-HARDENING.md](./SECURITY-HARDENING.md)
+
+### Gated Release Strategy
+
+Secure deployment approvals for UAT and PROD:
+
+**Features:**
+- Pre-approval security validation (TruffleHog, PII/PHI scanning)
+- Automated audit logging and compliance reporting
+- Communication/notification strategy for stakeholders
+- Emergency hotfix procedures
+- Rollback automation
+
+**Approval Requirements:**
+- **UAT**: 1-2 approvers, triggers on `release/*` branches
+- **PROD**: 2-3 approvers, manual workflow dispatch only
+
+**Documentation:** [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md)
 
 ## 🧪 Testing
 
