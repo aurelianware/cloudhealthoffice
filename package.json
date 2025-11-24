@@ -12,6 +12,7 @@
     "test:fhir": "jest --testPathPattern=fhir",
     "examples:fhir": "npm run build && node dist/src/fhir/examples.js",
     "examples:fhir:secure": "npm run build && node dist/src/fhir/secureExamples.js",
+    "examples:provider-access": "npm run build && node dist/src/fhir/provider-access-examples.js",
     "validate": "node dist/scripts/utils/validate-all-templates.js",
     "lint": "eslint 'scripts/**/*.ts'",
     "clean": "rm -rf dist",
