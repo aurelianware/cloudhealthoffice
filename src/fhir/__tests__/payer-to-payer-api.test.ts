@@ -1,5 +1,5 @@
 import { PayerToPayerAPI, PayerToPayerConfig, BulkExportRequest, BulkImportRequest, MemberMatchRequest } from '../payer-to-payer-api';
-import { Patient, Claim, Encounter, ExplanationOfBenefit, ServiceRequest } from 'fhir/r4';
+import { Patient, Claim } from 'fhir/r4';
 
 // Mock Azure SDK modules
 jest.mock('@azure/storage-blob');
