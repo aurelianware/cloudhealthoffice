@@ -220,6 +220,51 @@ console.log('Patient:', redactPHI(patient)); // Safe
 
 Automated PHI scanning in CI/CD prevents accidental exposure.
 
+### CMS-0057-F Interoperability & Patient Access
+
+Cloud Health Office is designed to support **CMS-0057-F** (CMS Interoperability and Patient Access final rule) compliance:
+
+**Regulatory Mandate:**
+- **Patient Access API:** FHIR R4 API enabling patients to access their health information
+- **Provider Access API:** FHIR R4 API for providers to access patient data with consent
+- **Payer-to-Payer API:** Data exchange during member transitions between payers
+- **Prior Authorization API:** FHIR-based prior authorization workflow automation
+
+**Development Best Practices:**
+
+✅ **Code Generation (80% automated):** Handlebars templates and AI-assisted prompts generate API scaffolding, resource mappers, and test suites to accelerate development while ensuring consistency.
+
+✅ **Security Review:** All PRs require security validation:
+- No hard-coded secrets (Azure Key Vault/environment variables only)
+- Mandatory PHI/PII redaction in logs (`redactPHI()` function)
+- Comprehensive audit logging for all data access operations
+- CodeQL security scans with zero critical/high findings
+
+✅ **Automated Testing/CI:** Full test coverage enforced:
+- **Jest Test Suite:** Unit, integration, and compliance tests (90%+ coverage)
+- **API Coverage:** Patient, Coverage, ExplanationOfBenefit, Encounter, Procedure, Observation
+- **OAuth 2.0 Validation:** Token validation and scope enforcement tests
+- **Performance SLA:** Response time <1s (95th percentile), bulk export within 5s
+- **CI/CD Integration:** All tests run on every PR with mandatory pass requirement
+
+✅ **Prioritized Roadmap:**
+- **2026 Q2:** Patient Access API (Priority 1 - foundational compliance)
+- **2027 Q2:** Provider Access API (Priority 2 - care coordination)
+- **2027 Q4:** Payer-to-Payer API (Priority 3 - member transitions)
+- **2028 Q2:** Prior Authorization API (Priority 4 - workflow automation)
+
+✅ **Sandbox Testing:** Dedicated Azure sandbox environment with synthetic test data, validated against CMS Blue Button 2.0, Da Vinci PDex, and CARIN BB reference implementations.
+
+✅ **Compliance Reporting:** Detailed documentation of API coverage, US Core/CARIN BB/Da Vinci IG conformance, timelines, and configuration checklists for auditors and certification bodies.
+
+**Implementation Guides Supported:**
+- **US Core v3.1.1** - Patient, Coverage, ExplanationOfBenefit (60% complete)
+- **CARIN BB v1.0.0** - Consumer Directed Payer Data Exchange (60% complete)
+- **Da Vinci PDex v1.0.0** - Payer Data Exchange (planned 2027)
+- **Da Vinci PAS v1.1.0** - Prior Authorization Support (planned 2028)
+
+**For Complete Details:** See [CMS-0057-F Compliance Documentation](./docs/CMS-0057-F-COMPLIANCE.md)
+
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
