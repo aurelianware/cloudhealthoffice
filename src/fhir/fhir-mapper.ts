@@ -768,14 +768,31 @@ function normalizeX12Date(dateStr: string): string {
 
 /**
  * Normalizes X12 date-time format to ISO 8601
+ * Handles formats: CCYYMMDD-HHMM, CCYYMMDDHHMM, or YYYY-MM-DD-HH:MM
  */
 function normalizeX12DateTime(dateTime: string): string {
-  const [date, time] = dateTime.split('-');
-  const normalizedDate = normalizeX12Date(date);
+  // Handle formats with separator (CCYYMMDD-HHMM or YYYY-MM-DD-HH:MM)
+  if (dateTime.includes('-')) {
+    const parts = dateTime.split('-');
+    const date = parts[0];
+    const time = parts.length > 1 ? parts[parts.length - 1] : undefined;
+    const normalizedDate = normalizeX12Date(date);
+    
+    if (time && time.length === 4) {
+      return `${normalizedDate}T${time.substring(0, 2)}:${time.substring(2, 4)}:00Z`;
+    }
+    
+    return `${normalizedDate}T00:00:00Z`;
+  }
   
-  if (time && time.length === 4) {
+  // Handle format without separator (CCYYMMDDHHMM - 12 characters)
+  if (dateTime.length === 12) {
+    const date = dateTime.substring(0, 8); // CCYYMMDD
+    const time = dateTime.substring(8, 12); // HHMM
+    const normalizedDate = normalizeX12Date(date);
     return `${normalizedDate}T${time.substring(0, 2)}:${time.substring(2, 4)}:00Z`;
   }
   
-  return `${normalizedDate}T00:00:00Z`;
+  // Fallback: treat as date only
+  return `${normalizeX12Date(dateTime)}T00:00:00Z`;
 }
