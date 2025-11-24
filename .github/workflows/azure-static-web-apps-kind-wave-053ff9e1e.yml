@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'site/**'
+      - '.github/workflows/azure-static-web-apps-kind-wave-053ff9e1e.yml'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
+    paths:
+      - 'site/**'
+      - '.github/workflows/azure-static-web-apps-kind-wave-053ff9e1e.yml'
 
 jobs:
   build_and_deploy_job:
