@@ -64,8 +64,12 @@ npm run generate -- interactive --output my-config.json --generate
 ### FHIR R4 Integration
 - ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
 - ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
+- ✅ **Payer-to-Payer API (CMS-0057-F)** - Secure bulk data exchange during plan transitions
+- ✅ **FHIR Bulk Data Operations** - NDJSON export/import with Azure Data Lake integration
+- ✅ **Member Matching** - Da Vinci PDex IG compliant with 0.8 confidence threshold
+- ✅ **Consent Management** - Opt-in consent flows per CMS requirements
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **19 Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **34 Comprehensive Tests** - 100% pass rate, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
@@ -114,20 +118,38 @@ node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config
 **Documentation:** [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 ### FHIR R4 Integration
-Bridge traditional X12 EDI with modern FHIR APIs:
+Bridge traditional X12 EDI with modern FHIR APIs and enable payer-to-payer data exchange:
 
 ```typescript
 import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
+import { PayerToPayerAPI } from './src/fhir/payer-to-payer-api';
 
 // Transform X12 270 to FHIR R4
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
+
+// Payer-to-Payer bulk data exchange
+const api = new PayerToPayerAPI(config);
+const exportResult = await api.exportBulkData(request, resources);
+const consent = await api.manageMemberConsent(patientId, consentGiven);
+const matchResult = await api.matchMember(request, candidatePatients);
 ```
 
 **Standards Compliance:**
 - HIPAA X12 270: 005010X279A1 ✓
 - HL7 FHIR R4: v4.0.1 ✓
 - US Core Patient: 3.1.1 ✓
-- CMS Patient Access Rule: Ready ✓
+- CMS Patient Access Rule (CMS-9115-F): Ready ✓
+- CMS Payer-to-Payer Exchange (CMS-0057-F): Ready ✓
+- FHIR Bulk Data Access IG: NDJSON format ✓
+- HL7 Da Vinci PDex IG: Member matching ✓
+
+**Key Features:**
+- **Bulk Export/Import**: NDJSON format with Azure Data Lake storage
+- **Member Matching**: Weighted algorithm with 0.8 confidence threshold
+- **Consent Management**: Opt-in consent flows per CMS requirements
+- **Resource Support**: Patient, Claim, Encounter, EOB, PriorAuthorizationRequest
+- **Deduplication**: Automatic duplicate detection during import
+- **US Core Validation**: Profile compliance checking
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
 
