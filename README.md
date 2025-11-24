@@ -5,7 +5,7 @@
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-The #1 open-source, Azure-native, multi-payer EDI integration platform for healthcare.
+Open-source, Azure-native, multi-payer EDI integration platform for healthcare.
 
 > **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security (9/10 score), and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
@@ -16,7 +16,7 @@ Deploy a complete HIPAA-compliant EDI platform in **&lt;5 minutes**:
 1. **Click Deploy to Azure** ☝️ (button above)
 2. **Configure** basic settings (baseName, region)
 3. **Deploy workflows** via CLI
-4. **Start processing** 275/277/278 transactions
+4. **Start processing** 270/275/277/278/837 transactions
 
 See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
@@ -63,15 +63,16 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### FHIR R4 Integration
 - ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
-- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
-- ✅ **CMS-0057-F Payer-to-Payer Exchange** - Full bulk data export/import with consent management
+- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F and CMS-0057-F requirements
+- ✅ **Provider Access API (CMS-0057-F)** - SMART on FHIR authentication, consent management, HIPAA safeguards
+- ✅ **Payer-to-Payer API (CMS-0057-F)** - Secure bulk data exchange during plan transitions
+- ✅ **FHIR Bulk Data Operations** - NDJSON export/import with Azure Data Lake integration
+- ✅ **Member Matching** - Da Vinci PDex IG compliant with 0.8 confidence threshold
+- ✅ **Consent Management** - Opt-in consent flows per CMS requirements
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **46 Comprehensive Tests** - 100% pass rate, production-ready
-- ✅ **Azure Service Bus Integration** - Async workflow orchestration for bulk operations
-- ✅ **Azure Data Lake Storage** - NDJSON bulk file storage and retrieval
-- ✅ **Member Consent Validation** - Opt-in consent flows with authorization checks
-- ✅ **Data Reconciliation** - Duplicate prevention using PDex member matching
-- ✅ **Synthetic Data Generator** - Generate test FHIR bulk data (Patient, Claim, EOB, Encounter)
+- ✅ **Clinical USCDI Data** - Condition and Observation resources for comprehensive clinical data
+- ✅ **97+ Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
 - ✅ **ValueAdds277 Premium Features** - 60+ enhanced response fields
@@ -119,20 +120,38 @@ node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config
 **Documentation:** [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 ### FHIR R4 Integration
-Bridge traditional X12 EDI with modern FHIR APIs:
+Bridge traditional X12 EDI with modern FHIR APIs and enable payer-to-payer data exchange:
 
 ```typescript
 import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
+import { PayerToPayerAPI } from './src/fhir/payer-to-payer-api';
 
 // Transform X12 270 to FHIR R4
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
+
+// Payer-to-Payer bulk data exchange
+const api = new PayerToPayerAPI(config);
+const exportResult = await api.exportBulkData(request, resources);
+const consent = await api.manageMemberConsent(patientId, consentGiven);
+const matchResult = await api.matchMember(request, candidatePatients);
 ```
 
 **Standards Compliance:**
 - HIPAA X12 270: 005010X279A1 ✓
 - HL7 FHIR R4: v4.0.1 ✓
 - US Core Patient: 3.1.1 ✓
-- CMS Patient Access Rule: Ready ✓
+- CMS Patient Access Rule (CMS-9115-F): Ready ✓
+- CMS Payer-to-Payer Exchange (CMS-0057-F): Ready ✓
+- FHIR Bulk Data Access IG: NDJSON format ✓
+- HL7 Da Vinci PDex IG: Member matching ✓
+
+**Key Features:**
+- **Bulk Export/Import**: NDJSON format with Azure Data Lake storage
+- **Member Matching**: Weighted algorithm with 0.8 confidence threshold
+- **Consent Management**: Opt-in consent flows per CMS requirements
+- **Resource Support**: Patient, Claim, Encounter, EOB, PriorAuthorizationRequest
+- **Deduplication**: Automatic duplicate detection during import
+- **US Core Validation**: Profile compliance checking
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
 

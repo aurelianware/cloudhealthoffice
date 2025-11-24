@@ -1,512 +1,551 @@
-import {
-  PayerToPayerAPI,
-  PayerToPayerConfig,
-  BulkExportRequest,
-  BulkImportRequest,
-  MemberConsent,
-  generateSyntheticPatient,
-  generateSyntheticClaim,
-  validateUSCorePatient
-} from '../payer-to-payer-api';
-import { Patient } from 'fhir/r4';
+import { PayerToPayerAPI, PayerToPayerConfig, BulkExportRequest, BulkImportRequest, MemberMatchRequest } from '../payer-to-payer-api';
+import { Patient, Claim } from 'fhir/r4';
+
+// Mock Azure SDK modules
+jest.mock('@azure/storage-blob');
+jest.mock('@azure/service-bus');
+
+import { BlobServiceClient, ContainerClient, BlockBlobClient } from '@azure/storage-blob';
+import { ServiceBusClient, ServiceBusSender } from '@azure/service-bus';
 
 describe('PayerToPayerAPI', () => {
   let api: PayerToPayerAPI;
-  let config: PayerToPayerConfig;
+  let mockConfig: PayerToPayerConfig;
+  let mockContainerClient: jest.Mocked<ContainerClient>;
+  let mockBlockBlobClient: jest.Mocked<BlockBlobClient>;
+  let mockSender: jest.Mocked<ServiceBusSender>;
 
   beforeEach(() => {
-    // Test configuration without actual Azure connections
-    config = {
-      storageConnectionString: 'UseDevelopmentStorage=true',
-      storageContainerName: 'test-container',
-      serviceBusConnectionString: 'Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=test;SharedAccessKey=test',
-      exportRequestTopic: 'export-requests',
+    mockConfig = {
+      storageConnectionString: 'DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test==;EndpointSuffix=core.windows.net',
+      serviceBusConnectionString: 'Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=test;SharedAccessKey=test=',
+      bulkDataContainerName: 'payer-exchange',
+      exportNotificationTopic: 'export-notifications',
       importRequestTopic: 'import-requests',
-      fhirServerBaseUrl: 'https://test-fhir.example.com',
-      payerOrganizationId: 'PAYER001'
+      sourcePayer: 'PAYER-SOURCE',
+      targetPayer: 'PAYER-TARGET'
     };
 
-    api = new PayerToPayerAPI(config);
+    // Mock Azure Blob Storage
+    const createMockStream = (): any => ({
+      on: jest.fn((event: string, handler: any) => {
+        if (event === 'data') {
+          handler(Buffer.from('{"resourceType":"Patient","id":"test"}'));
+        }
+        if (event === 'end') {
+          handler();
+        }
+        return createMockStream();
+      })
+    });
+
+    mockBlockBlobClient = {
+      upload: jest.fn().mockResolvedValue({}),
+      download: jest.fn().mockResolvedValue({
+        readableStreamBody: createMockStream()
+      }),
+      url: 'https://test.blob.core.windows.net/payer-exchange/test.ndjson'
+    } as any;
+
+    mockContainerClient = {
+      createIfNotExists: jest.fn().mockResolvedValue({}),
+      getBlockBlobClient: jest.fn().mockReturnValue(mockBlockBlobClient)
+    } as any;
+
+    (BlobServiceClient.fromConnectionString as jest.Mock) = jest.fn().mockReturnValue({
+      getContainerClient: jest.fn().mockReturnValue(mockContainerClient)
+    });
+
+    // Mock Azure Service Bus
+    mockSender = {
+      sendMessages: jest.fn().mockResolvedValue({}),
+      close: jest.fn().mockResolvedValue({})
+    } as any;
+
+    (ServiceBusClient as jest.MockedClass<typeof ServiceBusClient>) = jest.fn().mockImplementation(() => ({
+      createSender: jest.fn().mockReturnValue(mockSender),
+      close: jest.fn().mockResolvedValue({})
+    } as any));
+
+    api = new PayerToPayerAPI(mockConfig);
   });
 
   afterEach(async () => {
     await api.close();
   });
 
-  describe('Consent Management', () => {
-    it('should register member consent successfully', async () => {
-      const consent: MemberConsent = {
-        patientId: 'PAT001',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit']
-      };
-
-      await api.registerConsent(consent);
-
-      const hasConsent = await api.hasConsent('PAT001', 'PAYER002', ['Patient', 'Claim']);
-      expect(hasConsent).toBe(true);
-    });
-
-    it('should deny access when consent is not present', async () => {
-      const hasConsent = await api.hasConsent('PAT999', 'PAYER002', ['Patient']);
-      expect(hasConsent).toBe(false);
-    });
-
-    it('should deny access when consent is revoked', async () => {
-      const consent: MemberConsent = {
-        patientId: 'PAT002',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'revoked',
-        authorizedResourceTypes: ['Patient']
-      };
-
-      await api.registerConsent(consent);
-
-      const hasConsent = await api.hasConsent('PAT002', 'PAYER002', ['Patient']);
-      expect(hasConsent).toBe(false);
-    });
-
-    it('should deny access when consent is expired', async () => {
-      const consent: MemberConsent = {
-        patientId: 'PAT003',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2023-01-01'),
-        expirationDate: new Date('2023-12-31'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient']
-      };
-
-      await api.registerConsent(consent);
-
-      const hasConsent = await api.hasConsent('PAT003', 'PAYER002', ['Patient']);
-      expect(hasConsent).toBe(false);
-    });
-
-    it('should deny access when requested resource types are not authorized', async () => {
-      const consent: MemberConsent = {
-        patientId: 'PAT004',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient'] // Only Patient authorized
-      };
-
-      await api.registerConsent(consent);
-
-      const hasConsent = await api.hasConsent('PAT004', 'PAYER002', ['Patient', 'Claim']);
-      expect(hasConsent).toBe(false);
-    });
-
-    it('should allow access when all requested resource types are authorized', async () => {
-      const consent: MemberConsent = {
-        patientId: 'PAT005',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim', 'Encounter', 'ExplanationOfBenefit']
-      };
-
-      await api.registerConsent(consent);
-
-      const hasConsent = await api.hasConsent('PAT005', 'PAYER002', ['Patient', 'Claim']);
-      expect(hasConsent).toBe(true);
-    });
-
-    it('should update existing consent when registered again', async () => {
-      const consent1: MemberConsent = {
-        patientId: 'PAT006',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient']
-      };
-
-      await api.registerConsent(consent1);
-
-      const consent2: MemberConsent = {
-        patientId: 'PAT006',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-02-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim', 'Encounter']
-      };
-
-      await api.registerConsent(consent2);
-
-      const hasConsent = await api.hasConsent('PAT006', 'PAYER002', ['Patient', 'Claim']);
-      expect(hasConsent).toBe(true);
-    });
-  });
-
-  describe('Bulk Export', () => {
-    it('should reject export when no patients have consent', async () => {
-      const exportRequest: BulkExportRequest = {
-        exportId: 'EXP001',
-        patientIds: ['PAT100', 'PAT101'],
-        resourceTypes: ['Patient', 'Claim'],
-        requestingPayerId: 'PAYER002'
-      };
-
-      await expect(api.initiateExport(exportRequest)).rejects.toThrow(
-        'No patients with valid consent for export'
-      );
-    });
-
-    it('should initiate export for patients with consent', async () => {
-      // Register consent for one patient
-      const consent: MemberConsent = {
-        patientId: 'PAT200',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim']
-      };
-      await api.registerConsent(consent);
-
-      const exportRequest: BulkExportRequest = {
-        exportId: 'EXP002',
-        patientIds: ['PAT200', 'PAT201'], // One with consent, one without
-        resourceTypes: ['Patient', 'Claim'],
-        requestingPayerId: 'PAYER002'
-      };
-
-      // Mock Service Bus to avoid actual connection
-      const mockSender = {
-        sendMessages: jest.fn().mockResolvedValue(undefined),
-        close: jest.fn().mockResolvedValue(undefined)
-      };
-      
-      if ((api as any).serviceBusClient) {
-        (api as any).serviceBusClient.createSender = jest.fn().mockReturnValue(mockSender);
-      }
-
-      const result = await api.initiateExport(exportRequest);
-
-      expect(result).toBeDefined();
-      expect(result.exportId).toBe('EXP002');
-      expect(result.status).toBe('in-progress');
-      expect(result.timestamp).toBeInstanceOf(Date);
-    });
-
-    it('should filter out patients without consent during export', async () => {
-      // Register consent for multiple patients
-      const consent1: MemberConsent = {
-        patientId: 'PAT300',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim', 'Encounter']
-      };
-      await api.registerConsent(consent1);
-
-      const consent2: MemberConsent = {
-        patientId: 'PAT301',
-        targetPayerId: 'PAYER002',
-        consentDate: new Date('2024-01-01'),
-        status: 'active',
-        authorizedResourceTypes: ['Patient', 'Claim', 'Encounter']
-      };
-      await api.registerConsent(consent2);
-
-      const exportRequest: BulkExportRequest = {
-        exportId: 'EXP003',
-        patientIds: ['PAT300', 'PAT301', 'PAT302'], // Two with consent, one without
-        resourceTypes: ['Patient', 'Claim'],
-        requestingPayerId: 'PAYER002'
-      };
-
-      // Mock Service Bus
-      const mockSender = {
-        sendMessages: jest.fn().mockResolvedValue(undefined),
-        close: jest.fn().mockResolvedValue(undefined)
-      };
-      
-      if ((api as any).serviceBusClient) {
-        (api as any).serviceBusClient.createSender = jest.fn().mockReturnValue(mockSender);
-      }
-
-      await api.initiateExport(exportRequest);
-
-      // Verify only authorized patients are in the message
-      expect(mockSender.sendMessages).toHaveBeenCalled();
-      const sentMessage = mockSender.sendMessages.mock.calls[0][0];
-      expect(sentMessage.body.patientIds).toHaveLength(2);
-      expect(sentMessage.body.patientIds).toContain('PAT300');
-      expect(sentMessage.body.patientIds).toContain('PAT301');
-      expect(sentMessage.body.patientIds).not.toContain('PAT302');
-    });
-  });
-
-  describe('Bulk Import', () => {
-    it('should initiate bulk import successfully', async () => {
-      const importRequest: BulkImportRequest = {
-        importId: 'IMP001',
-        ndjsonBlobUrls: [
-          'https://storage.example.com/exports/exp001/Patient.ndjson',
-          'https://storage.example.com/exports/exp001/Claim.ndjson'
-        ],
-        sourcePayerId: 'PAYER002',
-        enableReconciliation: true
-      };
-
-      // Mock Service Bus
-      const mockSender = {
-        sendMessages: jest.fn().mockResolvedValue(undefined),
-        close: jest.fn().mockResolvedValue(undefined)
-      };
-      
-      if ((api as any).serviceBusClient) {
-        (api as any).serviceBusClient.createSender = jest.fn().mockReturnValue(mockSender);
-      }
-
-      const result = await api.initiateImport(importRequest);
-
-      expect(result).toBeDefined();
-      expect(result.importId).toBe('IMP001');
-      expect(result.status).toBe('in-progress');
-      expect(result.timestamp).toBeInstanceOf(Date);
-      expect(mockSender.sendMessages).toHaveBeenCalled();
-    });
-
-    it('should include reconciliation flag in import message', async () => {
-      const importRequest: BulkImportRequest = {
-        importId: 'IMP002',
-        ndjsonBlobUrls: ['https://storage.example.com/exports/exp001/Patient.ndjson'],
-        sourcePayerId: 'PAYER002',
-        enableReconciliation: true
-      };
-
-      // Mock Service Bus
-      const mockSender = {
-        sendMessages: jest.fn().mockResolvedValue(undefined),
-        close: jest.fn().mockResolvedValue(undefined)
-      };
-      
-      if ((api as any).serviceBusClient) {
-        (api as any).serviceBusClient.createSender = jest.fn().mockReturnValue(mockSender);
-      }
-
-      await api.initiateImport(importRequest);
-
-      expect(mockSender.sendMessages).toHaveBeenCalled();
-      const sentMessage = mockSender.sendMessages.mock.calls[0][0];
-      expect(sentMessage.body.enableReconciliation).toBe(true);
-      expect(sentMessage.body.sourcePayerId).toBe('PAYER002');
-    });
-  });
-
-  describe('Synthetic Data Generation', () => {
-    it('should generate valid synthetic Patient', () => {
-      const patient = generateSyntheticPatient('TEST001');
-
-      expect(patient.resourceType).toBe('Patient');
-      expect(patient.id).toBe('TEST001');
-      expect(patient.identifier).toBeDefined();
-      expect(patient.identifier!.length).toBeGreaterThan(0);
-      expect(patient.name).toBeDefined();
-      expect(patient.gender).toBe('unknown');
-      expect(patient.birthDate).toBe('2000-01-01');
-    });
-
-    it('should generate synthetic Patient with US Core profile', () => {
-      const patient = generateSyntheticPatient('TEST002');
-
-      expect(patient.meta?.profile).toBeDefined();
-      expect(patient.meta!.profile![0]).toContain('us-core-patient');
-    });
-
-    it('should generate valid synthetic Claim', () => {
-      const claim = generateSyntheticClaim('PAT001', 'CLM001');
-
-      expect(claim.resourceType).toBe('Claim');
-      expect(claim.id).toBe('CLM001');
-      expect(claim.patient.reference).toBe('Patient/PAT001');
-      expect(claim.status).toBe('active');
-      expect(claim.type).toBeDefined();
-      expect(claim.insurance).toBeDefined();
-      expect(claim.insurance!.length).toBeGreaterThan(0);
-    });
-
-    it('should generate synthetic Claim with required fields', () => {
-      const claim = generateSyntheticClaim('PAT002', 'CLM002');
-
-      expect(claim.use).toBe('claim');
-      expect(claim.created).toBeDefined();
-      expect(claim.provider).toBeDefined();
-      expect(claim.priority).toBeDefined();
-    });
-  });
-
-  describe('US Core Patient Validation', () => {
-    it('should validate compliant US Core Patient', () => {
-      const patient = generateSyntheticPatient('TEST003');
-      const result = validateUSCorePatient(patient);
-
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it('should reject Patient without identifier', () => {
-      const patient: Patient = {
-        resourceType: 'Patient',
-        name: [{ family: 'Doe', given: ['John'] }],
-        gender: 'male'
-      };
-
-      const result = validateUSCorePatient(patient);
-
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Patient must have at least one identifier');
-    });
-
-    it('should reject Patient without name', () => {
-      const patient: Patient = {
-        resourceType: 'Patient',
-        identifier: [{ value: 'TEST001' }],
-        gender: 'male'
-      };
-
-      const result = validateUSCorePatient(patient);
-
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Patient must have at least one name');
-    });
-
-    it('should reject Patient without gender', () => {
-      const patient: Patient = {
-        resourceType: 'Patient',
-        identifier: [{ value: 'TEST001' }],
-        name: [{ family: 'Doe', given: ['John'] }]
-      };
-
-      const result = validateUSCorePatient(patient);
-
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Patient must have gender');
-    });
-
-    it('should reject Patient without US Core profile', () => {
-      const patient: Patient = {
-        resourceType: 'Patient',
-        identifier: [{ value: 'TEST001' }],
-        name: [{ family: 'Doe', given: ['John'] }],
-        gender: 'male'
-      };
-
-      const result = validateUSCorePatient(patient);
-
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Patient must declare US Core Patient profile in meta.profile');
-    });
-
-    it('should validate Patient with all required fields', () => {
-      const patient: Patient = {
-        resourceType: 'Patient',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+  describe('Bulk Data Export', () => {
+    it('exports patient data to NDJSON format', async () => {
+      const samplePatients: Patient[] = [
+        {
+          resourceType: 'Patient',
+          id: 'patient-001',
+          meta: {
+            profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+          },
+          identifier: [{
+            system: 'http://hospital.example.org',
+            value: 'MRN123456'
+          }],
+          name: [{
+            family: 'Doe',
+            given: ['John']
+          }],
+          gender: 'male',
+          birthDate: '1985-06-15'
         },
-        identifier: [{ value: 'TEST004' }],
-        name: [{ family: 'Smith', given: ['Jane'] }],
-        gender: 'female',
-        birthDate: '1990-01-01'
+        {
+          resourceType: 'Patient',
+          id: 'patient-002',
+          meta: {
+            profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+          },
+          identifier: [{
+            system: 'http://hospital.example.org',
+            value: 'MRN654321'
+          }],
+          name: [{
+            family: 'Smith',
+            given: ['Jane']
+          }],
+          gender: 'female',
+          birthDate: '1990-03-21'
+        }
+      ];
+
+      const request: BulkExportRequest = {
+        resourceTypes: ['Patient'],
+        includeHistorical: true
       };
 
-      const result = validateUSCorePatient(patient);
+      const result = await api.exportBulkData(request, [
+        { resourceType: 'Patient', data: samplePatients }
+      ]);
 
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(result.status).toBe('completed');
+      expect(result.exportId).toBeDefined();
+      expect(result.outputUrls).toHaveLength(1);
+      expect(result.outputUrls[0].resourceType).toBe('Patient');
+      expect(result.outputUrls[0].count).toBe(2);
+      expect(mockContainerClient.createIfNotExists).toHaveBeenCalled();
+      expect(mockBlockBlobClient.upload).toHaveBeenCalled();
+      expect(mockSender.sendMessages).toHaveBeenCalled();
+    });
+
+    it('exports multiple resource types', async () => {
+      const samplePatient: Patient = {
+        resourceType: 'Patient',
+        id: 'patient-001',
+        name: [{ family: 'Doe', given: ['John'] }],
+        gender: 'male'
+      };
+
+      const sampleClaim: Claim = {
+        resourceType: 'Claim',
+        id: 'claim-001',
+        status: 'active',
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+            code: 'professional'
+          }]
+        },
+        use: 'claim',
+        patient: { reference: 'Patient/patient-001' },
+        created: '2024-01-15',
+        provider: { reference: 'Organization/org-001' },
+        priority: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+            code: 'normal'
+          }]
+        },
+        insurance: [{
+          sequence: 1,
+          focal: true,
+          coverage: { reference: 'Coverage/cov-001' }
+        }]
+      };
+
+      const request: BulkExportRequest = {
+        resourceTypes: ['Patient', 'Claim']
+      };
+
+      const result = await api.exportBulkData(request, [
+        { resourceType: 'Patient', data: [samplePatient] },
+        { resourceType: 'Claim', data: [sampleClaim] }
+      ]);
+
+      expect(result.status).toBe('completed');
+      expect(result.outputUrls).toHaveLength(2);
+      expect(result.outputUrls.map(u => u.resourceType)).toEqual(['Patient', 'Claim']);
+    });
+
+    it('filters data by date range', async () => {
+      const patient: Patient = {
+        resourceType: 'Patient',
+        id: 'patient-001',
+        meta: {
+          lastUpdated: '2024-06-15T10:00:00Z'
+        },
+        name: [{ family: 'Doe', given: ['John'] }],
+        gender: 'male'
+      };
+
+      const request: BulkExportRequest = {
+        resourceTypes: ['Patient'],
+        startDate: '2024-01-01',
+        endDate: '2024-12-31'
+      };
+
+      const result = await api.exportBulkData(request, [
+        { resourceType: 'Patient', data: [patient] }
+      ]);
+
+      expect(result.status).toBe('completed');
+      expect(result.outputUrls[0].count).toBe(1);
     });
   });
 
-  describe('NDJSON Serialization', () => {
-    it('should serialize resources to NDJSON format', () => {
-      const patient1 = generateSyntheticPatient('PAT001');
-      const patient2 = generateSyntheticPatient('PAT002');
-      const resources = [patient1, patient2];
+  describe('Bulk Data Import', () => {
+    it('imports NDJSON patient data', async () => {
+      const request: BulkImportRequest = {
+        inputUrls: [
+          {
+            resourceType: 'Patient',
+            url: 'https://test.blob.core.windows.net/payer-exchange/exports/test-id/Patient.ndjson'
+          }
+        ],
+        deduplicate: false,
+        validateUsCore: false
+      };
 
-      const ndjson = (api as any).serializeToNDJSON(resources);
+      const result = await api.importBulkData(request);
 
-      const lines = ndjson.split('\n');
-      expect(lines).toHaveLength(2);
-      
-      const parsed1 = JSON.parse(lines[0]);
-      const parsed2 = JSON.parse(lines[1]);
-      
-      expect(parsed1.id).toBe('PAT001');
-      expect(parsed2.id).toBe('PAT002');
+      expect(result.status).toBe('completed');
+      expect(result.importId).toBeDefined();
+      expect(result.imported).toHaveLength(1);
+      expect(result.imported[0].resourceType).toBe('Patient');
     });
 
-    it('should handle empty resource array', () => {
-      const ndjson = (api as any).serializeToNDJSON([]);
-      expect(ndjson).toBe('');
+    it('deduplicates resources during import', async () => {
+      // Mock duplicate data
+      const createDuplicateStream = (): any => ({
+        on: jest.fn((event: string, handler: any) => {
+          if (event === 'data') {
+            const ndjson = '{"resourceType":"Patient","id":"dup-001"}\n{"resourceType":"Patient","id":"dup-001"}\n{"resourceType":"Patient","id":"unique-002"}';
+            handler(Buffer.from(ndjson));
+          }
+          if (event === 'end') {
+            handler();
+          }
+          return createDuplicateStream();
+        })
+      });
+
+      mockBlockBlobClient.download = jest.fn().mockResolvedValue({
+        readableStreamBody: createDuplicateStream()
+      });
+
+      const request: BulkImportRequest = {
+        inputUrls: [
+          {
+            resourceType: 'Patient',
+            url: 'https://test.blob.core.windows.net/payer-exchange/test.ndjson'
+          }
+        ],
+        deduplicate: true,
+        validateUsCore: false
+      };
+
+      const result = await api.importBulkData(request);
+
+      expect(result.status).toBe('completed');
+      expect(result.imported[0].count).toBe(2); // 2 unique out of 3
+      expect(result.imported[0].duplicatesSkipped).toBe(1);
     });
 
-    it('should serialize Claims to NDJSON', () => {
-      const claim1 = generateSyntheticClaim('PAT001', 'CLM001');
-      const claim2 = generateSyntheticClaim('PAT002', 'CLM002');
-      const resources = [claim1, claim2];
+    it('validates US Core profiles during import', async () => {
+      const createInvalidStream = (): any => ({
+        on: jest.fn((event: string, handler: any) => {
+          if (event === 'data') {
+            // Patient missing required fields
+            const ndjson = '{"resourceType":"Patient","id":"invalid-001"}';
+            handler(Buffer.from(ndjson));
+          }
+          if (event === 'end') {
+            handler();
+          }
+          return createInvalidStream();
+        })
+      });
 
-      const ndjson = (api as any).serializeToNDJSON(resources);
+      mockBlockBlobClient.download = jest.fn().mockResolvedValue({
+        readableStreamBody: createInvalidStream()
+      });
 
-      const lines = ndjson.split('\n');
-      expect(lines).toHaveLength(2);
-      
-      const parsed1 = JSON.parse(lines[0]);
-      const parsed2 = JSON.parse(lines[1]);
-      
-      expect(parsed1.resourceType).toBe('Claim');
-      expect(parsed2.resourceType).toBe('Claim');
+      const request: BulkImportRequest = {
+        inputUrls: [
+          {
+            resourceType: 'Patient',
+            url: 'https://test.blob.core.windows.net/payer-exchange/test.ndjson'
+          }
+        ],
+        deduplicate: false,
+        validateUsCore: true
+      };
+
+      const result = await api.importBulkData(request);
+
+      expect(result.status).toBe('partial');
+      expect(result.errors).toBeDefined();
+      expect(result.errors!.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Member Consent Management', () => {
+    it('creates active consent for data exchange', async () => {
+      const consent = await api.manageMemberConsent('patient-001', true);
+
+      expect(consent.patientId).toBe('patient-001');
+      expect(consent.status).toBe('active');
+      expect(consent.sourcePayer).toBe('PAYER-SOURCE');
+      expect(consent.targetPayer).toBe('PAYER-TARGET');
+      expect(consent.fhirConsent.resourceType).toBe('Consent');
+      expect(consent.fhirConsent.status).toBe('active');
+      expect(consent.fhirConsent.provision?.type).toBe('permit');
+    });
+
+    it('creates inactive consent when consent not given', async () => {
+      const consent = await api.manageMemberConsent('patient-002', false);
+
+      expect(consent.status).toBe('inactive');
+      expect(consent.fhirConsent.status).toBe('inactive');
+      expect(consent.fhirConsent.provision?.type).toBe('deny');
+    });
+
+    it('includes CMS policy reference in consent', async () => {
+      const consent = await api.manageMemberConsent('patient-001', true);
+
+      expect(consent.fhirConsent.policy).toBeDefined();
+      expect(consent.fhirConsent.policy![0].uri).toContain('cms-0057');
+    });
+  });
+
+  describe('Member Matching', () => {
+    it('matches patient by exact demographics', async () => {
+      const sourcePatient: Patient = {
+        resourceType: 'Patient',
+        id: 'source-001',
+        identifier: [{
+          system: 'http://hl7.org/fhir/sid/us-ssn',
+          value: '123-45-6789'
+        }],
+        name: [{
+          family: 'Doe',
+          given: ['John']
+        }],
+        gender: 'male',
+        birthDate: '1985-06-15',
+        address: [{
+          city: 'Seattle',
+          state: 'WA',
+          postalCode: '98101'
+        }],
+        telecom: [{
+          system: 'phone',
+          value: '206-555-0100'
+        }]
+      };
+
+      const candidatePatients: Patient[] = [
+        {
+          resourceType: 'Patient',
+          id: 'target-001',
+          identifier: [{
+            system: 'http://hl7.org/fhir/sid/us-ssn',
+            value: '123-45-6789'
+          }],
+          name: [{
+            family: 'Doe',
+            given: ['John']
+          }],
+          gender: 'male',
+          birthDate: '1985-06-15',
+          address: [{
+            city: 'Seattle',
+            state: 'WA',
+            postalCode: '98101'
+          }],
+          telecom: [{
+            system: 'phone',
+            value: '206-555-0100'
+          }]
+        }
+      ];
+
+      const request: MemberMatchRequest = {
+        patient: sourcePatient
+      };
+
+      const result = await api.matchMember(request, candidatePatients);
+
+      expect(result.matched).toBe(true);
+      expect(result.confidence).toBeGreaterThan(0.8);
+      expect(result.matchedPatientId).toBe('target-001');
+      expect(result.matchDetails?.matchedOn).toContain('name');
+      expect(result.matchDetails?.matchedOn).toContain('birthDate');
+      expect(result.matchDetails?.matchedOn).toContain('gender');
+      expect(result.matchDetails?.matchedOn).toContain('identifier');
+    });
+
+    it('does not match with low confidence', async () => {
+      const sourcePatient: Patient = {
+        resourceType: 'Patient',
+        id: 'source-001',
+        name: [{
+          family: 'Doe',
+          given: ['John']
+        }],
+        gender: 'male',
+        birthDate: '1985-06-15'
+      };
+
+      const candidatePatients: Patient[] = [
+        {
+          resourceType: 'Patient',
+          id: 'target-002',
+          name: [{
+            family: 'Smith',
+            given: ['Jane']
+          }],
+          gender: 'female',
+          birthDate: '1990-03-21'
+        }
+      ];
+
+      const request: MemberMatchRequest = {
+        patient: sourcePatient
+      };
+
+      const result = await api.matchMember(request, candidatePatients);
+
+      expect(result.matched).toBe(false);
+      expect(result.confidence).toBeLessThan(0.8);
+      expect(result.matchedPatientId).toBeUndefined();
+    });
+
+    it('calculates confidence score with partial demographics', async () => {
+      const sourcePatient: Patient = {
+        resourceType: 'Patient',
+        id: 'source-001',
+        name: [{
+          family: 'Doe',
+          given: ['John']
+        }],
+        gender: 'male',
+        birthDate: '1985-06-15'
+      };
+
+      const candidatePatients: Patient[] = [
+        {
+          resourceType: 'Patient',
+          id: 'target-001',
+          name: [{
+            family: 'Doe',
+            given: ['John']
+          }],
+          gender: 'male',
+          birthDate: '1985-06-15'
+        }
+      ];
+
+      const request: MemberMatchRequest = {
+        patient: sourcePatient
+      };
+
+      const result = await api.matchMember(request, candidatePatients);
+
+      // name + birthDate + gender = 0.65, below 0.8 threshold
+      expect(result.matched).toBe(false);
+      expect(result.confidence).toBe(0.65); // name (0.25) + birthDate (0.25) + gender (0.15) = 0.65
+      expect(result.matchedPatientId).toBeUndefined();
     });
   });
 
   describe('Error Handling', () => {
-    it('should throw error when Azure clients not initialized for export', async () => {
-      const uninitializedApi = new PayerToPayerAPI({
-        storageContainerName: 'test',
-        exportRequestTopic: 'test',
-        importRequestTopic: 'test',
-        fhirServerBaseUrl: 'https://test.com',
-        payerOrganizationId: 'TEST'
-      });
+    it('handles export errors gracefully', async () => {
+      mockBlockBlobClient.upload = jest.fn().mockRejectedValue(new Error('Upload failed'));
 
-      const exportRequest: BulkExportRequest = {
-        exportId: 'EXP999',
-        patientIds: ['PAT001'],
-        resourceTypes: ['Patient'],
-        requestingPayerId: 'PAYER002'
+      const request: BulkExportRequest = {
+        resourceTypes: ['Patient']
       };
 
-      await expect(uninitializedApi.initiateExport(exportRequest)).rejects.toThrow(
-        'Azure clients not initialized'
-      );
+      const result = await api.exportBulkData(request, [
+        { resourceType: 'Patient', data: [] }
+      ]);
 
-      await uninitializedApi.close();
+      expect(result.status).toBe('error');
+      expect(result.error).toBeDefined();
+      expect(result.error?.issue[0].diagnostics).toContain('Export failed');
     });
 
-    it('should throw error when Azure clients not initialized for import', async () => {
-      const uninitializedApi = new PayerToPayerAPI({
-        storageContainerName: 'test',
-        exportRequestTopic: 'test',
-        importRequestTopic: 'test',
-        fhirServerBaseUrl: 'https://test.com',
-        payerOrganizationId: 'TEST'
-      });
+    it('handles import errors gracefully', async () => {
+      mockBlockBlobClient.download = jest.fn().mockRejectedValue(new Error('Download failed'));
 
-      const importRequest: BulkImportRequest = {
-        importId: 'IMP999',
-        ndjsonBlobUrls: ['https://test.com/file.ndjson'],
-        sourcePayerId: 'PAYER002',
-        enableReconciliation: true
+      const request: BulkImportRequest = {
+        inputUrls: [
+          {
+            resourceType: 'Patient',
+            url: 'https://test.blob.core.windows.net/invalid/test.ndjson'
+          }
+        ]
       };
 
-      await expect(uninitializedApi.initiateImport(importRequest)).rejects.toThrow(
-        'Service Bus client not initialized'
-      );
+      const result = await api.importBulkData(request);
 
-      await uninitializedApi.close();
+      expect(result.status).toBe('error');
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0].issue[0].diagnostics).toContain('Import failed');
+    });
+  });
+
+  describe('NDJSON Format', () => {
+    it('converts resources to NDJSON format correctly', async () => {
+      const patients: Patient[] = [
+        {
+          resourceType: 'Patient',
+          id: 'patient-001',
+          name: [{ family: 'Doe', given: ['John'] }]
+        },
+        {
+          resourceType: 'Patient',
+          id: 'patient-002',
+          name: [{ family: 'Smith', given: ['Jane'] }]
+        }
+      ];
+
+      const request: BulkExportRequest = {
+        resourceTypes: ['Patient']
+      };
+
+      await api.exportBulkData(request, [
+        { resourceType: 'Patient', data: patients }
+      ]);
+
+      const uploadCall = mockBlockBlobClient.upload.mock.calls[0];
+      const ndjsonContent = uploadCall[0] as string;
+
+      const lines = ndjsonContent.split('\n');
+      expect(lines).toHaveLength(2);
+      
+      const parsed1 = JSON.parse(lines[0]);
+      expect(parsed1.resourceType).toBe('Patient');
+      expect(parsed1.id).toBe('patient-001');
+
+      const parsed2 = JSON.parse(lines[1]);
+      expect(parsed2.resourceType).toBe('Patient');
+      expect(parsed2.id).toBe('patient-002');
     });
   });
 });
