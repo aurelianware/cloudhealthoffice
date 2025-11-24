@@ -2,7 +2,7 @@
 
 **Cloud Health Office** - HIPAA-compliant FHIR R4 integration for payer systems
 
-This document details the FHIR R4 implementation for mapping X12 EDI eligibility transactions (270/271) to FHIR resources, supporting CMS Patient Access API mandates, and Provider Access API (CMS-0057-F) for provider data access.
+This document details the FHIR R4 implementation for healthcare payer eligibility workflows. Supported mandates include mapping X12 EDI eligibility transactions (270/271) to FHIR resources, CMS Patient Access API requirements, and Provider Access API (CMS-0057-F) for provider data access.
 
 ---
 
