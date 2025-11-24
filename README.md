@@ -46,7 +46,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **Azure-Native Architecture**: Logic Apps, Service Bus, Data Lake Storage
 - ✅ **Multi-Tenant SaaS**: Configuration-driven deployment
 - ✅ **Production-Grade Security**: Built-in HIPAA compliance
-- ✅ **&lt;1 Hour Onboarding**: Rapid deployment with templates
+- ✅ **<1 Hour Onboarding**: Rapid deployment with templates
 - ✅ **Automated Testing**: Comprehensive test framework
 - ✅ **PHI Redaction**: Automatic PHI protection in logs
 
