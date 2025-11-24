@@ -179,7 +179,6 @@ describe('PayerToPayerAPI', () => {
         close: jest.fn().mockResolvedValue(undefined)
       };
       
-      const originalCreateSender = (api as any).serviceBusClient?.createSender;
       if ((api as any).serviceBusClient) {
         (api as any).serviceBusClient.createSender = jest.fn().mockReturnValue(mockSender);
       }
