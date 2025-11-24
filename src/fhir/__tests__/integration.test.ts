@@ -94,10 +94,12 @@ describe('CMS-0057-F Integration Tests', () => {
       expect(exportRequest.outputFormat).toBe('application/fhir+ndjson');
       
       // Verify 5-year historical data requirement
+      // The 'since' parameter should allow retrieving data at least 5 years old
       const sinceDate = new Date(exportRequest.since);
       const fiveYearsAgo = new Date();
       fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-      expect(sinceDate <= fiveYearsAgo).toBe(true);
+      // Since date should be at or before 5 years ago to capture all required historical data
+      expect(sinceDate.getTime()).toBeLessThanOrEqual(fiveYearsAgo.getTime());
     });
     
     it('validates bulk export response format', () => {

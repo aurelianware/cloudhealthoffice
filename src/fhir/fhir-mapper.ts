@@ -175,7 +175,7 @@ export function mapX12837ToFhirClaim(input: X12_837_Claim): Claim {
     
     // Reference identifiers
     identifier: [{
-      system: 'urn:oid:2.16.840.1.113883.3.8901.1', // Example OID for claim ID
+      system: 'urn:oid:2.16.840.1.113883.3.8901.1', // TODO: Configure with payer-specific OID namespace
       value: input.claimId
     }]
   };
@@ -256,7 +256,7 @@ export function mapX12278ToFhirPriorAuth(input: X12_278_Request): ServiceRequest
     
     // Authorization code/identifier
     identifier: [{
-      system: 'urn:oid:2.16.840.1.113883.3.8901.2', // Example OID for auth ID
+      system: 'urn:oid:2.16.840.1.113883.3.8901.2', // TODO: Configure with payer-specific OID namespace
       value: input.transactionId
     }],
     
@@ -548,7 +548,7 @@ export function mapX12835ToFhirEOB(input: X12_835_Remittance): ExplanationOfBene
       // Identifiers
       identifier: [
         {
-          system: 'urn:oid:2.16.840.1.113883.3.8901.3', // Example OID
+          system: 'urn:oid:2.16.840.1.113883.3.8901.3', // TODO: Configure with payer-specific OID namespace
           value: claim.claimId
         },
         ...(claim.referenceNumbers?.payerClaimControlNumber ? [{

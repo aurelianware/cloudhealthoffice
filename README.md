@@ -226,7 +226,7 @@ import { validateCMS0057FCompliance } from './src/fhir/compliance-checker';
 const result = validateCMS0057FCompliance(fhirResource);
 ```
 
-**Deployment:** &lt;10 minutes from configuration to live FHIR APIs using the CLI wizard.
+**Deployment:** <10 minutes from configuration to live FHIR APIs using the CLI wizard.
 
 **Documentation:** See [CMS-0057-F Compliance Guide](./docs/CMS-0057-F-COMPLIANCE.md) for detailed requirements, implementation steps, and payer checklist.
 
