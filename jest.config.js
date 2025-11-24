@@ -19,6 +19,7 @@ module.exports = {
     '!**/secureExamples.ts',
     '!**/cli/**',
     '!**/utils/template-helpers.ts',
+    '!**/utils/generate-*.ts',
   ],
   coverageThreshold: {
     global: {
