@@ -481,29 +481,28 @@ describe('FHIR Mapper - X12 835 to FHIR ExplanationOfBenefit', () => {
 
 describe('Date Normalization', () => {
   it('converts X12 date format CCYYMMDD to YYYY-MM-DD', () => {
-    const x12_837 = {
-      ...{
-        claimId: 'TEST',
-        transactionDate: '20240115-0000',
-        totalClaimChargeAmount: 100,
-        subscriber: {
-          memberId: 'MEM001',
-          firstName: 'Test',
-          lastName: 'User',
-          dob: '19850615',
-        },
-        billingProvider: {
-          npi: '1234567890',
-        },
-        serviceLines: [{
-          lineNumber: 1,
-          procedureCode: '99213',
-          serviceDate: '20240115',
-          units: 1,
-          chargeAmount: 100,
-        }],
-        payerId: 'PAYER',
+    const x12_837: X12_837 = {
+      claimId: 'TEST',
+      transactionDate: '20240115-0000',
+      totalClaimChargeAmount: 100,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'Test',
+        lastName: 'User',
+        dob: '19850615',
       },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: '20240115',
+        units: 1,
+        chargeAmount: 100,
+      }],
+      diagnosisCodes: [],
+      payerId: 'PAYER',
     };
 
     const claim = mapX12_837_ToFhirClaim(x12_837);
@@ -511,7 +510,7 @@ describe('Date Normalization', () => {
   });
 
   it('handles dates already in YYYY-MM-DD format', () => {
-    const x12_837 = {
+    const x12_837: X12_837 = {
       claimId: 'TEST',
       transactionDate: '2024-01-15-00:00',
       totalClaimChargeAmount: 100,
@@ -531,6 +530,7 @@ describe('Date Normalization', () => {
         units: 1,
         chargeAmount: 100,
       }],
+      diagnosisCodes: [],
       payerId: 'PAYER',
     };
 
@@ -559,6 +559,7 @@ describe('Date Normalization', () => {
         units: 1,
         chargeAmount: 100,
       }],
+      diagnosisCodes: [],
       payerId: 'PAYER',
     };
 

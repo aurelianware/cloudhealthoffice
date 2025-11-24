@@ -367,8 +367,10 @@ export function mapX12_278_ToFhirServiceRequest(input: X12_278): ServiceRequest 
     // Occurrence period
     occurrencePeriod: buildOccurrencePeriod(input.serviceDetails),
     
-    // Authored date
-    authoredOn: new Date().toISOString(),
+    // Authored date - use certification begin date if available, otherwise current date
+    authoredOn: input.certificationInfo?.beginDate 
+      ? normalizeX12Date(input.certificationInfo.beginDate)
+      : new Date().toISOString(),
     
     // Requester (Provider)
     requester: {
@@ -425,7 +427,9 @@ export function mapX12_835_ToFhirExplanationOfBenefit(
   const claimData = input.claims[claimIndex];
   
   if (!claimData) {
-    throw new Error(`Claim index ${claimIndex} not found in X12 835 transaction`);
+    throw new Error(
+      `Claim index ${claimIndex} not found. X12 835 transaction contains ${input.claims.length} claim(s).`
+    );
   }
   
   const eob: ExplanationOfBenefit = {
@@ -753,16 +757,18 @@ function getServiceTypeDisplay(code: string): string {
  * Normalizes X12 date format (CCYYMMDD) to FHIR date format (YYYY-MM-DD)
  */
 function normalizeX12Date(dateStr: string): string {
-  // Already in YYYY-MM-DD format
-  if (dateStr.includes('-') && dateStr.length === 10) {
+  // Validate and return if already in YYYY-MM-DD format
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (isoDatePattern.test(dateStr)) {
     return dateStr;
   }
   
   // Convert CCYYMMDD to YYYY-MM-DD
-  if (dateStr.length === 8) {
+  if (dateStr.length === 8 && /^\d{8}$/.test(dateStr)) {
     return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
   }
   
+  // Fallback: return as-is if format unknown
   return dateStr;
 }
 
