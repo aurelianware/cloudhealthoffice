@@ -1,52 +1,789 @@
-name: Deploy HIPAA Attachments Infrastructure
-
-on:
-  workflow_dispatch:
-
-env:
-  AZURE_RESOURCE_GROUP: hipaa-attachments-rg
-  AZURE_LOCATION: eastus
-  BASE_NAME: hipaa-attachments
-  STORAGE_SKU: Standard_LRS
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Azure CLI
-        uses: azure/cli@v2
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Validate Bicep file
-        run: |
-          az bicep build --file infra/main.bicep --outfile /tmp/arm.json
-
-      - name: Validate deployment (What-If)
-        run: |
-          az deployment group what-if \
-            --resource-group $AZURE_RESOURCE_GROUP \
-            --template-file infra/main.bicep \
-            --parameters baseName="$BASE_NAME" storageSku="$STORAGE_SKU" location="$AZURE_LOCATION"
-
-      - name: Deploy infrastructure
-        run: |
-          az deployment group create \
-            --resource-group $AZURE_RESOURCE_GROUP \
-            --template-file infra/main.bicep \
-            --parameters baseName="$BASE_NAME" storageSku="$STORAGE_SKU" location="$AZURE_LOCATION"
-
-      - name: Show outputs
-        run: |
-          az deployment group show \
-            --resource-group $AZURE_RESOURCE_GROUP \
-            --name $(az deployment group list --resource-group $AZURE_RESOURCE_GROUP --query "[0].name" -o tsv) \
-            --query "properties.outputs" -o json
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.38.33.27573",
+      "templateHash": "4476951905493689372"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "connectorLocation": {
+      "type": "string",
+      "defaultValue": "eastus"
+    },
+    "baseName": {
+      "type": "string"
+    },
+    "sftpHost": {
+      "type": "string"
+    },
+    "sftpUsername": {
+      "type": "string"
+    },
+    "sftpPassword": {
+      "type": "securestring"
+    },
+    "storageSku": {
+      "type": "string",
+      "defaultValue": "Standard_LRS"
+    },
+    "iaSku": {
+      "type": "string",
+      "defaultValue": "Free",
+      "allowedValues": [
+        "Free",
+        "Basic",
+        "Standard"
+      ]
+    },
+    "useExistingIa": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "iaName": {
+      "type": "string"
+    },
+    "enableB2B": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "blobAccountName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "blobAccountKey": {
+      "type": "securestring",
+      "defaultValue": ""
+    },
+    "serviceBusConnectionString": {
+      "type": "securestring",
+      "defaultValue": ""
+    },
+    "appServicePlanName": {
+      "type": "string",
+      "defaultValue": "[format('{0}-plan', parameters('baseName'))]"
+    },
+    "serviceBusName": {
+      "type": "string"
+    },
+    "enableEcs": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "qnxtBaseUrl": {
+      "type": "string",
+      "defaultValue": "https://qnxt-api.example.com"
+    },
+    "qnxtApiToken": {
+      "type": "securestring",
+      "defaultValue": ""
+    }
+  },
+  "variables": {
+    "storageAccountName": "[format('staging{0}', uniqueString(resourceGroup().id))]",
+    "effectiveBlobAccountName": "[if(empty(parameters('blobAccountName')), variables('storageAccountName'), parameters('blobAccountName'))]",
+    "effectiveIaName": "[if(parameters('useExistingIa'), parameters('iaName'), parameters('iaName'))]",
+    "iaResourceId": "[resourceId('Microsoft.Logic/integrationAccounts', variables('effectiveIaName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('storageSku')]"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "isHnsEnabled": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/default/hipaa-attachments', variables('storageAccountName'))]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[parameters('serviceBusName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/AuthorizationRules",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'RootManageSharedAccessKey')]",
+      "properties": {
+        "rights": [
+          "Listen",
+          "Send",
+          "Manage"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'attachments-in')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'rfai-requests')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'edi-278')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}/{2}', parameters('serviceBusName'), 'edi-278', 'auth-processor')]",
+      "properties": {
+        "maxDeliveryCount": 10,
+        "lockDuration": "PT5M"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('serviceBusName'), 'edi-278')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'appeals-auth')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'auth-statuses')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[format('{0}/{1}', parameters('serviceBusName'), 'dead-letter')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[format('{0}-ai', parameters('baseName'))]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-03-01",
+      "name": "[parameters('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "WS1",
+        "tier": "WorkflowStandard"
+      },
+      "kind": "elastic",
+      "properties": {
+        "elasticScaleEnabled": false
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-03-01",
+      "name": "[format('{0}-la', parameters('baseName'))]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,workflowapp",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+        "siteConfig": {
+          "netFrameworkVersion": "v6.0",
+          "appSettings": [
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix=core.windows.net', variables('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value)]"
+            },
+            {
+              "name": "WEBSITE_RUN_FROM_PACKAGE",
+              "value": "1"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').ConnectionString]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "node"
+            }
+          ]
+        }
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName')))]",
+        "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "condition": "[not(parameters('useExistingIa'))]",
+      "type": "Microsoft.Logic/integrationAccounts",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('iaName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('iaSku')]"
+      },
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[format('{0}-sftp', parameters('baseName'))]",
+      "location": "[parameters('connectorLocation')]",
+      "properties": {
+        "displayName": "[format('{0}-sftp', parameters('baseName'))]",
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('connectorLocation'), 'sftpwithssh')]"
+        },
+        "parameterValues": {
+          "hostName": "[parameters('sftpHost')]",
+          "username": "[parameters('sftpUsername')]",
+          "password": "[parameters('sftpPassword')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "azureblob",
+      "location": "[parameters('connectorLocation')]",
+      "properties": {
+        "displayName": "azureblob",
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('connectorLocation'), 'azureblob')]"
+        },
+        "parameterValues": {
+          "accountName": "[variables('effectiveBlobAccountName')]",
+          "accessKey": "[if(empty(parameters('blobAccountKey')), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, parameters('blobAccountKey'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "servicebus",
+      "location": "[parameters('connectorLocation')]",
+      "properties": {
+        "displayName": "servicebus",
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('connectorLocation'), 'servicebus')]"
+        },
+        "parameterValues": {
+          "connectionString": "[if(empty(parameters('serviceBusConnectionString')), listKeys(resourceId('Microsoft.ServiceBus/namespaces/AuthorizationRules', parameters('serviceBusName'), 'RootManageSharedAccessKey'), '2022-10-01-preview').primaryConnectionString, parameters('serviceBusConnectionString'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces/AuthorizationRules', parameters('serviceBusName'), 'RootManageSharedAccessKey')]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableB2B')]",
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "integrationaccount",
+      "location": "[parameters('connectorLocation')]",
+      "properties": {
+        "displayName": "integrationaccount",
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('connectorLocation'), 'x12')]"
+        },
+        "parameterValues": {
+          "integrationAccountId": "[variables('iaResourceId')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Logic/integrationAccounts', parameters('iaName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/staticSites",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}-swa', parameters('baseName'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Free",
+        "tier": "Free"
+      },
+      "properties": {
+        "repositoryUrl": "",
+        "branch": "",
+        "buildProperties": {
+          "skipGithubActionWorkflowGeneration": true
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableEcs')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "ecs-api-module",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "logicAppName": {
+            "value": "[format('{0}-la', parameters('baseName'))]"
+          },
+          "appInsightsKey": {
+            "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').InstrumentationKey]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').ConnectionString]"
+          },
+          "qnxtBaseUrl": {
+            "value": "[parameters('qnxtBaseUrl')]"
+          },
+          "qnxtApiToken": {
+            "value": "[parameters('qnxtApiToken')]"
+          },
+          "enableEcs": {
+            "value": "[parameters('enableEcs')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "1079678534631794073"
+            }
+          },
+          "parameters": {
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name for ECS resources"
+              }
+            },
+            "logicAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Logic App name (parent resource)"
+              }
+            },
+            "appInsightsKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights instrumentation key"
+              }
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string"
+              }
+            },
+            "qnxtBaseUrl": {
+              "type": "string",
+              "defaultValue": "https://qnxt-api.example.com",
+              "metadata": {
+                "description": "QNXT API base URL"
+              }
+            },
+            "qnxtApiToken": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "QNXT API authentication token"
+              }
+            },
+            "enableEcs": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Enable ECS workflow deployment"
+              }
+            }
+          },
+          "variables": {
+            "ecsWorkflowName": "ecs_summary_search"
+          },
+          "resources": [],
+          "outputs": {
+            "ecsWorkflowConfig": {
+              "type": "object",
+              "value": {
+                "workflowName": "[variables('ecsWorkflowName')]",
+                "qnxtBaseUrl": "[parameters('qnxtBaseUrl')]",
+                "enabled": "[parameters('enableEcs')]"
+              }
+            },
+            "ecsAppSettings": {
+              "type": "array",
+              "value": [
+                {
+                  "name": "ECS_QNXT_BASE_URL",
+                  "value": "[parameters('qnxtBaseUrl')]"
+                },
+                {
+                  "name": "ECS_WORKFLOW_ENABLED",
+                  "value": "[string(parameters('enableEcs'))]"
+                }
+              ]
+            },
+            "ecsMonitoringConfig": {
+              "type": "object",
+              "value": {
+                "instrumentationKey": "[parameters('appInsightsKey')]",
+                "connectionString": "[parameters('appInsightsConnectionString')]",
+                "enableDetailedLogging": true,
+                "logSearchRequests": true,
+                "logSearchResults": true
+              }
+            },
+            "ecsEndpointInfo": {
+              "type": "object",
+              "value": {
+                "workflowName": "[variables('ecsWorkflowName')]",
+                "triggerName": "HTTP_ECS_Summary_Search_Request",
+                "endpointPath": "[format('/api/{0}/triggers/HTTP_ECS_Summary_Search_Request/invoke', variables('ecsWorkflowName'))]",
+                "baseUrl": "[format('https://{0}.azurewebsites.net', parameters('logicAppName'))]",
+                "fullUrl": "[format('https://{0}.azurewebsites.net/api/{1}/triggers/HTTP_ECS_Summary_Search_Request/invoke', parameters('logicAppName'), variables('ecsWorkflowName'))]"
+              }
+            },
+            "ecsWorkflowParameters": {
+              "type": "object",
+              "value": {
+                "qnxt_base_url": {
+                  "type": "String",
+                  "value": "[parameters('qnxtBaseUrl')]"
+                }
+              }
+            },
+            "ecsTags": {
+              "type": "object",
+              "value": {
+                "Component": "ECS",
+                "WorkflowType": "SummarySearch",
+                "IntegrationType": "QNXT",
+                "Environment": "[if(contains(parameters('baseName'), 'prod'), 'Production', if(contains(parameters('baseName'), 'uat'), 'UAT', 'Development'))]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName')))]",
+        "[resourceId('Microsoft.Web/sites', format('{0}-la', parameters('baseName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "workbooks-module",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "baseName": {
+            "value": "[parameters('baseName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appInsightsId": {
+            "value": "[resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName')))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.38.33.27573",
+              "templateHash": "7415999815822545093"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "baseName": {
+              "type": "string"
+            },
+            "appInsightsId": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {
+                "Environment": "Production",
+                "Application": "CloudHealthOffice",
+                "Component": "Monitoring",
+                "ManagedBy": "Bicep"
+              }
+            }
+          },
+          "variables": {
+            "ediTransactionMetricsName": "[format('{0}-edi-metrics', parameters('baseName'))]",
+            "payerHealthName": "[format('{0}-payer-health', parameters('baseName'))]",
+            "hipaaComplianceName": "[format('{0}-hipaa-compliance', parameters('baseName'))]",
+            "ediTransactionMetricsTemplate": "{\n  \"version\": \"Notebook/1.0\",\n  \"items\": [\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"## EDI Transaction Metrics Dashboard\\n\\n**Real-time monitoring of HIPAA X12 transaction processing across all payers**\\n\\n⚠️ **PHI Redaction Active**: All patient identifiers are automatically redacted in this dashboard.\\n\\n---\"\n      },\n      \"name\": \"header\"\n    },\n    {\n      \"type\": 9,\n      \"content\": {\n        \"version\": \"KqlParameterItem/1.0\",\n        \"parameters\": [\n          {\n            \"id\": \"1d48bcbb-98f6-4b95-8f3c-9c4b34a8c7d9\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"TimeRange\",\n            \"label\": \"Time Range\",\n            \"type\": 4,\n            \"isRequired\": true,\n            \"value\": {\n              \"durationMs\": 3600000\n            },\n            \"typeSettings\": {\n              \"selectableValues\": [\n                {\n                  \"durationMs\": 300000\n                },\n                {\n                  \"durationMs\": 900000\n                },\n                {\n                  \"durationMs\": 1800000\n                },\n                {\n                  \"durationMs\": 3600000\n                },\n                {\n                  \"durationMs\": 14400000\n                },\n                {\n                  \"durationMs\": 43200000\n                },\n                {\n                  \"durationMs\": 86400000\n                },\n                {\n                  \"durationMs\": 172800000\n                },\n                {\n                  \"durationMs\": 259200000\n                },\n                {\n                  \"durationMs\": 604800000\n                },\n                {\n                  \"durationMs\": 1209600000\n                },\n                {\n                  \"durationMs\": 2419200000\n                },\n                {\n                  \"durationMs\": 2592000000\n                }\n              ],\n              \"allowCustom\": true\n            }\n          },\n          {\n            \"id\": \"2e89bcbb-98f6-4b95-8f3c-9c4b34a8c7e0\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"PayerId\",\n            \"label\": \"Payer ID\",\n            \"type\": 2,\n            \"isRequired\": false,\n            \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where customDimensions.payerId != ''\\n| distinct tostring(customDimensions.payerId)\\n| order by customDimensions_payerId asc\",\n            \"typeSettings\": {\n              \"additionalResourceOptions\": [\n                \"value::all\"\n              ],\n              \"showDefault\": false\n            },\n            \"timeContext\": {\n              \"durationMs\": 0\n            },\n            \"timeContextFromParameter\": \"TimeRange\",\n            \"defaultValue\": \"value::all\",\n            \"queryType\": 0,\n            \"resourceType\": \"microsoft.insights/components\"\n          },\n          {\n            \"id\": \"3f89bcbb-98f6-4b95-8f3c-9c4b34a8c7e1\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"TransactionType\",\n            \"label\": \"Transaction Type\",\n            \"type\": 2,\n            \"isRequired\": false,\n            \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where customDimensions.transactionType != ''\\n| distinct tostring(customDimensions.transactionType)\\n| order by customDimensions_transactionType asc\",\n            \"typeSettings\": {\n              \"additionalResourceOptions\": [\n                \"value::all\"\n              ],\n              \"showDefault\": false\n            },\n            \"timeContext\": {\n              \"durationMs\": 0\n            },\n            \"timeContextFromParameter\": \"TimeRange\",\n            \"defaultValue\": \"value::all\",\n            \"queryType\": 0,\n            \"resourceType\": \"microsoft.insights/components\"\n          }\n        ],\n        \"style\": \"pills\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\"\n      },\n      \"name\": \"parameters\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\\n| summarize \\n    TotalTransactions = count(),\\n    SuccessfulTransactions = countif(success == true),\\n    FailedTransactions = countif(success == false),\\n    AvgDurationMs = avg(duration),\\n    P50DurationMs = percentile(duration, 50),\\n    P95DurationMs = percentile(duration, 95),\\n    P99DurationMs = percentile(duration, 99)\\n| extend SuccessRate = round(100.0 * SuccessfulTransactions / TotalTransactions, 2)\\n| project \\n    TotalTransactions, \\n    SuccessfulTransactions, \\n    FailedTransactions, \\n    SuccessRate,\\n    AvgDurationMs = round(AvgDurationMs, 2),\\n    P50DurationMs = round(P50DurationMs, 2),\\n    P95DurationMs = round(P95DurationMs, 2),\\n    P99DurationMs = round(P99DurationMs, 2)\",\n        \"size\": 3,\n        \"title\": \"Transaction Overview\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"tiles\",\n        \"tileSettings\": {\n          \"titleContent\": {\n            \"columnMatch\": \"TotalTransactions\",\n            \"formatter\": 1\n          },\n          \"leftContent\": {\n            \"columnMatch\": \"TotalTransactions\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"auto\"\n            }\n          },\n          \"secondaryContent\": {\n            \"columnMatch\": \"SuccessRate\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"greenRed\"\n            }\n          },\n          \"showBorder\": true\n        }\n      },\n      \"name\": \"transactionOverview\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\\n| summarize \\n    Count = count(),\\n    SuccessCount = countif(success == true),\\n    FailureCount = countif(success == false),\\n    AvgDuration = avg(duration) \\n    by bin(timestamp, 5m), tostring(customDimensions.transactionType)\\n| extend SuccessRate = 100.0 * SuccessCount / Count\\n| project timestamp, transactionType = customDimensions_transactionType, Count, SuccessCount, FailureCount, SuccessRate, AvgDuration\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Transaction Volume Over Time\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"timechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"transactionVolumeChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\\n| summarize \\n    AvgDuration = avg(duration),\\n    P50Duration = percentile(duration, 50),\\n    P95Duration = percentile(duration, 95),\\n    P99Duration = percentile(duration, 99)\\n    by bin(timestamp, 5m)\\n| project timestamp, AvgDuration, P50Duration, P95Duration, P99Duration\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Transaction Latency (milliseconds)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"timechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"transactionLatencyChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| where success == false\\n| summarize ErrorCount = count() by bin(timestamp, 5m), tostring(customDimensions.transactionType), resultCode\\n| project timestamp, TransactionType = customDimensions_transactionType, ResultCode = resultCode, ErrorCount\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Error Rate Over Time\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"barchart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"errorRateChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where customDimensions.payerId != ''\\n| summarize \\n    TransactionCount = count(),\\n    SuccessCount = countif(success == true),\\n    FailureCount = countif(success == false),\\n    AvgDuration = avg(duration)\\n    by PayerId = tostring(customDimensions.payerId)\\n| extend SuccessRate = round(100.0 * SuccessCount / TransactionCount, 2)\\n| project PayerId, TransactionCount, SuccessCount, FailureCount, SuccessRate, AvgDuration = round(AvgDuration, 2)\\n| order by TransactionCount desc\",\n        \"size\": 0,\n        \"title\": \"Transactions by Payer\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"TransactionCount\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"blue\"\n              }\n            },\n            {\n              \"columnMatch\": \"SuccessRate\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"greenRed\",\n                \"min\": 0,\n                \"max\": 100\n              }\n            },\n            {\n              \"columnMatch\": \"AvgDuration\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"yellowOrangeRed\"\n              }\n            }\n          ]\n        }\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"payerBreakdownTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where name contains \\\"ingest\\\" or name contains \\\"rfai\\\" or name contains \\\"process\\\"\\n| where success == false\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| where customDimensions.transactionType == '{TransactionType}' or '{TransactionType}' == 'value::all'\\n| extend \\n    WorkflowName = name,\\n    ErrorMessage = tostring(customDimensions.errorMessage),\\n    ErrorCode = resultCode,\\n    PayerId = tostring(customDimensions.payerId),\\n    TransactionType = tostring(customDimensions.transactionType)\\n| project \\n    timestamp, \\n    WorkflowName, \\n    TransactionType,\\n    PayerId,\\n    ErrorCode, \\n    ErrorMessage = substring(ErrorMessage, 0, 100),\\n    Duration = duration\\n| order by timestamp desc\\n| take 50\",\n        \"size\": 0,\n        \"title\": \"Recent Errors (Last 50)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"timestamp\",\n              \"formatter\": 6\n            },\n            {\n              \"columnMatch\": \"ErrorCode\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"colors\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"redBright\",\n                    \"text\": \"{0}{1}\"\n                  }\n                ]\n              }\n            },\n            {\n              \"columnMatch\": \"Duration\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"blue\"\n              }\n            }\n          ]\n        }\n      },\n      \"name\": \"recentErrorsTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"dependencies\\n| where timestamp {TimeRange}\\n| where type == \\\"Azure Service Bus\\\" or type == \\\"HTTP\\\" or type == \\\"Azure blob\\\"\\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\\n| summarize \\n    CallCount = count(),\\n    SuccessCount = countif(success == true),\\n    FailureCount = countif(success == false),\\n    AvgDuration = avg(duration)\\n    by DependencyType = type, DependencyName = name\\n| extend SuccessRate = round(100.0 * SuccessCount / CallCount, 2)\\n| project DependencyType, DependencyName, CallCount, SuccessCount, FailureCount, SuccessRate, AvgDuration = round(AvgDuration, 2)\\n| order by CallCount desc\",\n        \"size\": 0,\n        \"title\": \"Dependency Health\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"CallCount\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"blue\"\n              }\n            },\n            {\n              \"columnMatch\": \"SuccessRate\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"greenRed\",\n                \"min\": 0,\n                \"max\": 100\n              }\n            },\n            {\n              \"columnMatch\": \"AvgDuration\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"yellowOrangeRed\"\n              }\n            }\n          ]\n        }\n      },\n      \"name\": \"dependencyHealthTable\"\n    },\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"---\\n\\n### PHI Redaction Notice\\n\\n✅ **All queries in this dashboard automatically exclude PHI fields**\\n- Patient names, SSNs, dates of birth, member IDs, and other PHI are not queried\\n- Only aggregate metrics and non-PHI identifiers are displayed\\n- Error messages are truncated to prevent exposure of sensitive data\\n- All data complies with HIPAA privacy requirements\\n\\n⚠️ **Alert Configuration**: Set alerts on Success Rate < 95% and P95 Latency > 5000ms\"\n      },\n      \"name\": \"footer\"\n    }\n  ],\n  \"fallbackResourceIds\": [],\n  \"fromTemplateId\": \"sentinel-UserWorkbook\",\n  \"$schema\": \"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"\n}\n",
+            "payerIntegrationHealthTemplate": "{\n  \"version\": \"Notebook/1.0\",\n  \"items\": [\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"## Payer Integration Health Dashboard\\n\\n**Per-payer monitoring of EDI transaction health and integration status**\\n\\n⚠️ **PHI Redaction Active**: All patient identifiers are automatically redacted.\\n\\n---\"\n      },\n      \"name\": \"header\"\n    },\n    {\n      \"type\": 9,\n      \"content\": {\n        \"version\": \"KqlParameterItem/1.0\",\n        \"parameters\": [\n          {\n            \"id\": \"timeRange\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"TimeRange\",\n            \"label\": \"Time Range\",\n            \"type\": 4,\n            \"isRequired\": true,\n            \"value\": {\n              \"durationMs\": 86400000\n            },\n            \"typeSettings\": {\n              \"selectableValues\": [\n                {\n                  \"durationMs\": 3600000\n                },\n                {\n                  \"durationMs\": 14400000\n                },\n                {\n                  \"durationMs\": 43200000\n                },\n                {\n                  \"durationMs\": 86400000\n                },\n                {\n                  \"durationMs\": 172800000\n                },\n                {\n                  \"durationMs\": 604800000\n                },\n                {\n                  \"durationMs\": 2592000000\n                }\n              ],\n              \"allowCustom\": true\n            }\n          },\n          {\n            \"id\": \"payerId\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"PayerId\",\n            \"label\": \"Payer ID\",\n            \"type\": 2,\n            \"isRequired\": true,\n            \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where customDimensions.payerId != ''\\n| distinct tostring(customDimensions.payerId)\\n| order by customDimensions_payerId asc\",\n            \"typeSettings\": {\n              \"showDefault\": false\n            },\n            \"timeContext\": {\n              \"durationMs\": 0\n            },\n            \"timeContextFromParameter\": \"TimeRange\",\n            \"queryType\": 0,\n            \"resourceType\": \"microsoft.insights/components\"\n          }\n        ],\n        \"style\": \"pills\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\"\n      },\n      \"name\": \"parameters\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"let payerData = requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| summarize \\n    TotalTransactions = count(),\\n    SuccessfulTransactions = countif(success == true),\\n    FailedTransactions = countif(success == false),\\n    AvgDurationMs = avg(duration),\\n    P95DurationMs = percentile(duration, 95),\\n    LastTransaction = max(timestamp);\\nlet healthScore = payerData\\n| extend \\n    SuccessRate = 100.0 * SuccessfulTransactions / TotalTransactions,\\n    LatencyScore = case(\\n        P95DurationMs < 2000, 100,\\n        P95DurationMs < 5000, 75,\\n        P95DurationMs < 10000, 50,\\n        25\\n    ),\\n    VolumeScore = case(\\n        TotalTransactions > 100, 100,\\n        TotalTransactions > 50, 75,\\n        TotalTransactions > 10, 50,\\n        25\\n    ),\\n    FreshnessScore = case(\\n        datetime_diff('minute', now(), LastTransaction) < 60, 100,\\n        datetime_diff('minute', now(), LastTransaction) < 240, 75,\\n        datetime_diff('minute', now(), LastTransaction) < 1440, 50,\\n        25\\n    )\\n| extend OverallHealth = round((SuccessRate + LatencyScore + VolumeScore + FreshnessScore) / 4, 1);\\npayerData\\n| join kind=inner healthScore on TotalTransactions\\n| project \\n    PayerId = '{PayerId}',\\n    OverallHealth = strcat(OverallHealth, '%'),\\n    TotalTransactions,\\n    SuccessRate = strcat(round(SuccessRate, 1), '%'),\\n    AvgDurationMs = round(AvgDurationMs, 0),\\n    P95DurationMs = round(P95DurationMs, 0),\\n    LastTransaction\",\n        \"size\": 4,\n        \"title\": \"Payer Health Summary\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"tiles\",\n        \"tileSettings\": {\n          \"titleContent\": {\n            \"columnMatch\": \"PayerId\",\n            \"formatter\": 1\n          },\n          \"leftContent\": {\n            \"columnMatch\": \"OverallHealth\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"greenRed\"\n            }\n          },\n          \"secondaryContent\": {\n            \"columnMatch\": \"TotalTransactions\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"blue\"\n            }\n          },\n          \"showBorder\": true\n        }\n      },\n      \"name\": \"payerHealthSummary\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| summarize \\n    Count = count(),\\n    Successful = countif(success == true),\\n    Failed = countif(success == false)\\n    by TransactionType = tostring(customDimensions.transactionType)\\n| extend SuccessRate = round(100.0 * Successful / Count, 1)\\n| project TransactionType, Count, Successful, Failed, SuccessRate\\n| order by Count desc\",\n        \"size\": 0,\n        \"title\": \"Transaction Types for {PayerId}\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"Count\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"blue\"\n              }\n            },\n            {\n              \"columnMatch\": \"SuccessRate\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"greenRed\",\n                \"min\": 0,\n                \"max\": 100\n              }\n            }\n          ]\n        }\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"transactionTypesTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| summarize Count = count() by bin(timestamp, 1h), success\\n| extend Status = case(success == true, 'Success', 'Failed')\\n| project timestamp, Status, Count\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Hourly Transaction Volume\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"barchart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"hourlyVolumeChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| summarize \\n    AvgDuration = avg(duration),\\n    P50Duration = percentile(duration, 50),\\n    P95Duration = percentile(duration, 95),\\n    P99Duration = percentile(duration, 99)\\n    by bin(timestamp, 15m), tostring(customDimensions.transactionType)\\n| project timestamp, TransactionType = customDimensions_transactionType, AvgDuration, P50Duration, P95Duration, P99Duration\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Latency Trends by Transaction Type\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"linechart\"\n      },\n      \"name\": \"latencyTrendsChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"dependencies\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| summarize \\n    CallCount = count(),\\n    AvgDuration = avg(duration),\\n    SuccessRate = 100.0 * countif(success == true) / count()\\n    by DependencyType = type, DependencyName = name\\n| extend \\n    Status = case(\\n        SuccessRate >= 99, '✅ Healthy',\\n        SuccessRate >= 95, '⚠️ Warning',\\n        '❌ Critical'\\n    )\\n| project Status, DependencyType, DependencyName, CallCount, AvgDuration = round(AvgDuration, 2), SuccessRate = round(SuccessRate, 2)\\n| order by SuccessRate asc\",\n        \"size\": 0,\n        \"title\": \"Backend Integration Status\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"Status\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"icons\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Healthy\",\n                    \"representation\": \"success\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Warning\",\n                    \"representation\": \"warning\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Critical\",\n                    \"representation\": \"failed\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"unknown\",\n                    \"text\": \"\"\n                  }\n                ]\n              }\n            },\n            {\n              \"columnMatch\": \"CallCount\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"blue\"\n              }\n            },\n            {\n              \"columnMatch\": \"SuccessRate\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"greenRed\",\n                \"min\": 0,\n                \"max\": 100\n              }\n            }\n          ]\n        }\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"backendIntegrationTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| where success == false\\n| extend \\n    ErrorType = case(\\n        resultCode startswith '4', 'Client Error',\\n        resultCode startswith '5', 'Server Error',\\n        'Other Error'\\n    )\\n| summarize ErrorCount = count() by ErrorType, resultCode\\n| order by ErrorCount desc\",\n        \"size\": 0,\n        \"title\": \"Error Distribution\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"piechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"errorDistributionChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| where success == false\\n| extend \\n    WorkflowName = name,\\n    ErrorCode = resultCode,\\n    ErrorMessage = tostring(customDimensions.errorMessage),\\n    TransactionType = tostring(customDimensions.transactionType)\\n| project \\n    timestamp,\\n    WorkflowName,\\n    TransactionType,\\n    ErrorCode,\\n    ErrorMessage = substring(ErrorMessage, 0, 150),\\n    Duration = duration\\n| order by timestamp desc\\n| take 100\",\n        \"size\": 0,\n        \"title\": \"Recent Errors for {PayerId} (Last 100)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"timestamp\",\n              \"formatter\": 6\n            },\n            {\n              \"columnMatch\": \"ErrorCode\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"colors\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"redBright\",\n                    \"text\": \"{0}{1}\"\n                  }\n                ]\n              }\n            }\n          ],\n          \"filter\": true\n        }\n      },\n      \"name\": \"recentErrorsTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"customEvents\\n| where timestamp {TimeRange}\\n| where tostring(customDimensions.payerId) == '{PayerId}'\\n| where name in ('X12_Decode_Success', 'X12_Encode_Success', 'SFTP_Upload_Success', 'ServiceBus_Message_Sent')\\n| summarize EventCount = count() by EventName = name, bin(timestamp, 1h)\\n| project timestamp, EventName, EventCount\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Integration Events Timeline\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"timechart\"\n      },\n      \"name\": \"integrationEventsChart\"\n    },\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"---\\n\\n### Health Score Calculation\\n\\n**Overall Health** is calculated from four components:\\n\\n1. **Success Rate** (0-100%): Percentage of successful transactions\\n2. **Latency Score**: Based on P95 latency\\n   - <2s: 100, <5s: 75, <10s: 50, >10s: 25\\n3. **Volume Score**: Based on transaction volume\\n   - >100: 100, >50: 75, >10: 50, <10: 25\\n4. **Freshness Score**: Based on time since last transaction\\n   - <1h: 100, <4h: 75, <24h: 50, >24h: 25\\n\\n⚠️ **Recommended Actions**:\\n- Health < 70%: Investigate immediately\\n- Success Rate < 95%: Review error logs\\n- P95 Latency > 5s: Check backend systems\\n- No transactions in 24h: Verify integration status\"\n      },\n      \"name\": \"footer\"\n    }\n  ],\n  \"fallbackResourceIds\": [],\n  \"fromTemplateId\": \"sentinel-UserWorkbook\",\n  \"$schema\": \"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"\n}\n",
+            "hipaaComplianceTemplate": "{\n  \"version\": \"Notebook/1.0\",\n  \"items\": [\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"## HIPAA Compliance Monitoring Dashboard\\n\\n**Real-time validation of PHI redaction and HIPAA compliance controls**\\n\\n🔒 **Security**: This dashboard monitors PHI redaction effectiveness and audit logging.\\n\\n---\"\n      },\n      \"name\": \"header\"\n    },\n    {\n      \"type\": 9,\n      \"content\": {\n        \"version\": \"KqlParameterItem/1.0\",\n        \"parameters\": [\n          {\n            \"id\": \"timeRange\",\n            \"version\": \"KqlParameterItem/1.0\",\n            \"name\": \"TimeRange\",\n            \"label\": \"Time Range\",\n            \"type\": 4,\n            \"isRequired\": true,\n            \"value\": {\n              \"durationMs\": 86400000\n            },\n            \"typeSettings\": {\n              \"selectableValues\": [\n                {\n                  \"durationMs\": 3600000\n                },\n                {\n                  \"durationMs\": 14400000\n                },\n                {\n                  \"durationMs\": 43200000\n                },\n                {\n                  \"durationMs\": 86400000\n                },\n                {\n                  \"durationMs\": 604800000\n                },\n                {\n                  \"durationMs\": 2592000000\n                }\n              ],\n              \"allowCustom\": true\n            }\n          }\n        ],\n        \"style\": \"pills\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\"\n      },\n      \"name\": \"parameters\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"let totalLogs = traces\\n| where timestamp {TimeRange}\\n| count\\n| project TotalLogs = Count;\\nlet suspiciousPatterns = traces\\n| where timestamp {TimeRange}\\n| where message matches regex @\\\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\\\" or\\n        message matches regex @\\\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\\\" or\\n        message matches regex @\\\"DOB|SSN|Member\\\\s*ID|Patient\\\\s*Name\\\"\\n| count\\n| project SuspiciousLogs = Count;\\nlet encryptedCalls = dependencies\\n| where timestamp {TimeRange}\\n| where type == \\\"HTTP\\\"\\n| where data startswith \\\"https://\\\"\\n| count\\n| project EncryptedCalls = Count;\\nlet auditEvents = customEvents\\n| where timestamp {TimeRange}\\n| where name in ('PHI_Access', 'Data_Export', 'Configuration_Change')\\n| count\\n| project AuditEvents = Count;\\ntotalLogs\\n| extend dummy = 1\\n| join kind=inner (suspiciousPatterns | extend dummy = 1) on dummy\\n| join kind=inner (encryptedCalls | extend dummy = 1) on dummy\\n| join kind=inner (auditEvents | extend dummy = 1) on dummy\\n| extend \\n    ComplianceScore = round(100.0 - (100.0 * SuspiciousLogs / TotalLogs), 2),\\n    Status = case(\\n        SuspiciousLogs == 0, '✅ Compliant',\\n        SuspiciousLogs < 10, '⚠️ Review Required',\\n        '❌ Critical'\\n    )\\n| project Status, ComplianceScore, TotalLogs, SuspiciousLogs, EncryptedCalls, AuditEvents\",\n        \"size\": 4,\n        \"title\": \"HIPAA Compliance Overview\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"tiles\",\n        \"tileSettings\": {\n          \"titleContent\": {\n            \"columnMatch\": \"Status\",\n            \"formatter\": 1\n          },\n          \"leftContent\": {\n            \"columnMatch\": \"ComplianceScore\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"greenRed\"\n            }\n          },\n          \"secondaryContent\": {\n            \"columnMatch\": \"SuspiciousLogs\",\n            \"formatter\": 12,\n            \"formatOptions\": {\n              \"palette\": \"redGreen\"\n            }\n          },\n          \"showBorder\": true\n        }\n      },\n      \"name\": \"complianceOverview\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"traces\\n| where timestamp {TimeRange}\\n| where message matches regex @\\\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\\\" or\\n        message matches regex @\\\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\\\" or\\n        message matches regex @\\\"DOB|SSN|Member\\\\s*ID|Patient\\\\s*Name|Date\\\\s*of\\\\s*Birth\\\"\\n| extend \\n    PotentialPHI = case(\\n        message matches regex @\\\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\\\", 'SSN Pattern',\\n        message matches regex @\\\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\\\", 'Member ID Pattern',\\n        message matches regex @\\\"DOB|Date\\\\s*of\\\\s*Birth\\\", 'DOB Reference',\\n        message matches regex @\\\"SSN\\\", 'SSN Reference',\\n        message matches regex @\\\"Patient\\\\s*Name\\\", 'Patient Name Reference',\\n        'Other PHI Pattern'\\n    ),\\n    TruncatedMessage = substring(message, 0, 100)\\n| summarize Count = count() by PotentialPHI\\n| order by Count desc\",\n        \"size\": 0,\n        \"title\": \"Potential PHI Pattern Detections\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"piechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"phiPatternsChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"dependencies\\n| where timestamp {TimeRange}\\n| extend IsEncrypted = case(\\n    type == \\\"HTTP\\\" and data startswith \\\"https://\\\", 'Encrypted (HTTPS)',\\n    type == \\\"HTTP\\\", '⚠️ Unencrypted (HTTP)',\\n    type == \\\"Azure Service Bus\\\", 'Encrypted (Service Bus)',\\n    type == \\\"Azure blob\\\", 'Encrypted (Storage)',\\n    'Other'\\n)\\n| summarize Count = count() by IsEncrypted\\n| order by Count desc\",\n        \"size\": 0,\n        \"title\": \"Data Transmission Encryption Status\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"piechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"encryptionStatusChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"traces\\n| where timestamp {TimeRange}\\n| where message matches regex @\\\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\\\" or\\n        message matches regex @\\\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\\\" or\\n        message matches regex @\\\"DOB|SSN|Member\\\\s*ID|Patient\\\\s*Name\\\"\\n| extend \\n    PotentialPHI = case(\\n        message matches regex @\\\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\\\", 'SSN Pattern',\\n        message matches regex @\\\"\\\\b[A-Z]{2}\\\\d{9}\\\\b\\\", 'Member ID Pattern',\\n        'PHI Reference'\\n    ),\\n    Source = tostring(customDimensions.WorkflowName),\\n    TruncatedMessage = substring(message, 0, 150)\\n| project \\n    timestamp,\\n    PotentialPHI,\\n    Source,\\n    SeverityLevel = severityLevel,\\n    TruncatedMessage\\n| order by timestamp desc\\n| take 100\",\n        \"size\": 0,\n        \"title\": \"Potential PHI Exposure Incidents (Last 100)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"timestamp\",\n              \"formatter\": 6\n            },\n            {\n              \"columnMatch\": \"PotentialPHI\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"colors\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"SSN\",\n                    \"representation\": \"redBright\",\n                    \"text\": \"{0}{1}\"\n                  },\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Member ID\",\n                    \"representation\": \"orange\",\n                    \"text\": \"{0}{1}\"\n                  },\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"yellow\",\n                    \"text\": \"{0}{1}\"\n                  }\n                ]\n              }\n            },\n            {\n              \"columnMatch\": \"SeverityLevel\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"icons\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"==\",\n                    \"thresholdValue\": \"0\",\n                    \"representation\": \"info\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"==\",\n                    \"thresholdValue\": \"1\",\n                    \"representation\": \"info\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"==\",\n                    \"thresholdValue\": \"2\",\n                    \"representation\": \"warning\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"==\",\n                    \"thresholdValue\": \"3\",\n                    \"representation\": \"failed\",\n                    \"text\": \"\"\n                  },\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"more\",\n                    \"text\": \"\"\n                  }\n                ]\n              }\n            }\n          ],\n          \"filter\": true\n        }\n      },\n      \"name\": \"phiExposureTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"customEvents\\n| where timestamp {TimeRange}\\n| where name in ('PHI_Access', 'Data_Export', 'User_Authentication', 'Configuration_Change', 'Security_Alert')\\n| extend \\n    EventType = name,\\n    User = tostring(customDimensions.userId),\\n    Resource = tostring(customDimensions.resourceId),\\n    Action = tostring(customDimensions.action)\\n| summarize EventCount = count() by bin(timestamp, 1h), EventType\\n| project timestamp, EventType, EventCount\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Security Audit Events Timeline\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"linechart\"\n      },\n      \"name\": \"auditEventsChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"customEvents\\n| where timestamp {TimeRange}\\n| where name in ('PHI_Access', 'Data_Export', 'Configuration_Change')\\n| extend \\n    EventType = name,\\n    User = tostring(customDimensions.userId),\\n    PayerId = tostring(customDimensions.payerId),\\n    Action = tostring(customDimensions.action),\\n    IpAddress = tostring(customDimensions.clientIp)\\n| project \\n    timestamp,\\n    EventType,\\n    User,\\n    PayerId,\\n    Action,\\n    IpAddress\\n| order by timestamp desc\\n| take 100\",\n        \"size\": 0,\n        \"title\": \"Audit Trail (Last 100 Events)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"timestamp\",\n              \"formatter\": 6\n            },\n            {\n              \"columnMatch\": \"EventType\",\n              \"formatter\": 18,\n              \"formatOptions\": {\n                \"thresholdsOptions\": \"colors\",\n                \"thresholdsGrid\": [\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"PHI_Access\",\n                    \"representation\": \"orange\",\n                    \"text\": \"{0}{1}\"\n                  },\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Data_Export\",\n                    \"representation\": \"redBright\",\n                    \"text\": \"{0}{1}\"\n                  },\n                  {\n                    \"operator\": \"contains\",\n                    \"thresholdValue\": \"Configuration_Change\",\n                    \"representation\": \"yellow\",\n                    \"text\": \"{0}{1}\"\n                  },\n                  {\n                    \"operator\": \"Default\",\n                    \"thresholdValue\": null,\n                    \"representation\": \"blue\",\n                    \"text\": \"{0}{1}\"\n                  }\n                ]\n              }\n            }\n          ],\n          \"filter\": true\n        }\n      },\n      \"name\": \"auditTrailTable\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"dependencies\\n| where timestamp {TimeRange}\\n| where type == \\\"Azure blob\\\" or name contains \\\"storage\\\"\\n| extend \\n    OperationType = tostring(customDimensions.operationType),\\n    IsArchive = data contains \\\"hipaa-attachments\\\"\\n| summarize \\n    TotalOperations = count(),\\n    ArchiveOperations = countif(IsArchive == true),\\n    AvgDuration = avg(duration)\\n    by bin(timestamp, 1h)\\n| project timestamp, TotalOperations, ArchiveOperations, AvgDuration\\n| order by timestamp asc\",\n        \"size\": 0,\n        \"title\": \"Data Archive Operations (HIPAA Retention)\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"timechart\"\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"archiveOperationsChart\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"requests\\n| where timestamp {TimeRange}\\n| summarize \\n    TotalRequests = count(),\\n    AuthenticatedRequests = countif(tostring(customDimensions.authenticated) == 'true'),\\n    AnonymousRequests = countif(tostring(customDimensions.authenticated) != 'true')\\n| extend AuthenticationRate = round(100.0 * AuthenticatedRequests / TotalRequests, 2)\\n| project TotalRequests, AuthenticatedRequests, AnonymousRequests, AuthenticationRate\",\n        \"size\": 0,\n        \"title\": \"Authentication Metrics\",\n        \"timeContext\": {\n          \"durationMs\": 0\n        },\n        \"timeContextFromParameter\": \"TimeRange\",\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.insights/components\",\n        \"visualization\": \"table\",\n        \"gridSettings\": {\n          \"formatters\": [\n            {\n              \"columnMatch\": \"AuthenticationRate\",\n              \"formatter\": 8,\n              \"formatOptions\": {\n                \"palette\": \"greenRed\",\n                \"min\": 0,\n                \"max\": 100\n              }\n            }\n          ]\n        }\n      },\n      \"customWidth\": \"50\",\n      \"name\": \"authenticationMetrics\"\n    },\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"---\\n\\n### HIPAA Compliance Checklist\\n\\n✅ **Required Controls**:\\n\\n1. **PHI Redaction**: All logs must not contain unmasked PHI (SSN, DOB, Member IDs, Patient Names)\\n2. **Encryption in Transit**: All HTTP calls must use HTTPS (TLS 1.2+)\\n3. **Encryption at Rest**: Storage accounts must use AES-256 encryption\\n4. **Audit Logging**: All PHI access and data exports must be logged\\n5. **Access Control**: All requests must be authenticated\\n6. **Data Retention**: Archives must be maintained per HIPAA requirements (6+ years)\\n\\n⚠️ **Alert Thresholds**:\\n- Suspicious PHI patterns detected: **Immediate investigation required**\\n- Unencrypted HTTP calls: **Block and remediate**\\n- Authentication rate < 95%: **Review access controls**\\n- Audit event gaps > 24h: **Verify logging configuration**\\n\\n📋 **Compliance Reporting**: Export this dashboard weekly for HIPAA audit documentation.\"\n      },\n      \"name\": \"complianceFooter\"\n    }\n  ],\n  \"fallbackResourceIds\": [],\n  \"fromTemplateId\": \"sentinel-UserWorkbook\",\n  \"$schema\": \"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"\n}\n"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, variables('ediTransactionMetricsName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "EDI Transaction Metrics",
+                "description": "Real-time monitoring of HIPAA X12 transaction processing - latency, volume, error rates with PHI redaction",
+                "serializedData": "[variables('ediTransactionMetricsTemplate')]",
+                "sourceId": "[parameters('appInsightsId')]",
+                "category": "workbook",
+                "version": "1.0"
+              }
+            },
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, variables('payerHealthName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "Payer Integration Health",
+                "description": "Per-payer monitoring of EDI transaction health and integration status with health scoring",
+                "serializedData": "[variables('payerIntegrationHealthTemplate')]",
+                "sourceId": "[parameters('appInsightsId')]",
+                "category": "workbook",
+                "version": "1.0"
+              }
+            },
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, variables('hipaaComplianceName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "HIPAA Compliance Monitoring",
+                "description": "Real-time validation of PHI redaction and HIPAA compliance controls with security audit logging",
+                "serializedData": "[variables('hipaaComplianceTemplate')]",
+                "sourceId": "[parameters('appInsightsId')]",
+                "category": "workbook",
+                "version": "1.0"
+              }
+            }
+          ],
+          "outputs": {
+            "ediTransactionMetricsWorkbookId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('ediTransactionMetricsName')))]"
+            },
+            "ediTransactionMetricsWorkbookName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('ediTransactionMetricsName'))), '2022-04-01').displayName]"
+            },
+            "payerIntegrationHealthWorkbookId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('payerHealthName')))]"
+            },
+            "payerIntegrationHealthWorkbookName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('payerHealthName'))), '2022-04-01').displayName]"
+            },
+            "hipaaComplianceWorkbookId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('hipaaComplianceName')))]"
+            },
+            "hipaaComplianceWorkbookName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('hipaaComplianceName'))), '2022-04-01').displayName]"
+            },
+            "workbookResourceGroup": {
+              "type": "string",
+              "value": "[resourceGroup().name]"
+            },
+            "workbookLocation": {
+              "type": "string",
+              "value": "[parameters('location')]"
+            },
+            "ediTransactionMetricsUrl": {
+              "type": "string",
+              "value": "[format('https://portal.azure.com/#@/resource{0}/workbook', resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('ediTransactionMetricsName'))))]"
+            },
+            "payerIntegrationHealthUrl": {
+              "type": "string",
+              "value": "[format('https://portal.azure.com/#@/resource{0}/workbook', resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('payerHealthName'))))]"
+            },
+            "hipaaComplianceUrl": {
+              "type": "string",
+              "value": "[format('https://portal.azure.com/#@/resource{0}/workbook', resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, variables('hipaaComplianceName'))))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "serviceBusNamespace": {
+      "type": "string",
+      "value": "[parameters('serviceBusName')]"
+    },
+    "logicAppName": {
+      "type": "string",
+      "value": "[format('{0}-la', parameters('baseName'))]"
+    },
+    "appInsightsName": {
+      "type": "string",
+      "value": "[format('{0}-ai', parameters('baseName'))]"
+    },
+    "integrationAccountName": {
+      "type": "string",
+      "value": "[variables('effectiveIaName')]"
+    },
+    "sftpConnectionId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/connections', format('{0}-sftp', parameters('baseName')))]"
+    },
+    "blobConnectionId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/connections', 'azureblob')]"
+    },
+    "serviceBusConnectionId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/connections', 'servicebus')]"
+    },
+    "integrationAccountConnectionId": {
+      "type": "string",
+      "value": "[if(parameters('enableB2B'), resourceId('Microsoft.Web/connections', 'integrationaccount'), 'disabled')]"
+    },
+    "ecsEndpointUrl": {
+      "type": "string",
+      "value": "[if(and(parameters('enableEcs'), not(equals(reference(resourceId('Microsoft.Resources/deployments', 'ecs-api-module'), '2025-04-01'), null()))), reference(resourceId('Microsoft.Resources/deployments', 'ecs-api-module'), '2025-04-01').outputs.ecsEndpointInfo.value.fullUrl, 'disabled')]"
+    },
+    "ecsWorkflowName": {
+      "type": "string",
+      "value": "[if(and(parameters('enableEcs'), not(equals(reference(resourceId('Microsoft.Resources/deployments', 'ecs-api-module'), '2025-04-01'), null()))), reference(resourceId('Microsoft.Resources/deployments', 'ecs-api-module'), '2025-04-01').outputs.ecsWorkflowConfig.value.workflowName, 'disabled')]"
+    },
+    "staticWebAppName": {
+      "type": "string",
+      "value": "[format('{0}-swa', parameters('baseName'))]"
+    },
+    "staticWebAppDefaultHostname": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/staticSites', format('{0}-swa', parameters('baseName'))), '2023-01-01').defaultHostname]"
+    },
+    "staticWebAppId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/staticSites', format('{0}-swa', parameters('baseName')))]"
+    },
+    "ediTransactionMetricsWorkbookId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.ediTransactionMetricsWorkbookId.value]"
+    },
+    "payerIntegrationHealthWorkbookId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.payerIntegrationHealthWorkbookId.value]"
+    },
+    "hipaaComplianceWorkbookId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.hipaaComplianceWorkbookId.value]"
+    },
+    "ediTransactionMetricsUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.ediTransactionMetricsUrl.value]"
+    },
+    "payerIntegrationHealthUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.payerIntegrationHealthUrl.value]"
+    },
+    "hipaaComplianceUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'workbooks-module'), '2025-04-01').outputs.hipaaComplianceUrl.value]"
+    }
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "aiErrorResolution": {
+    "enabled": true,
+    "provider": "azure-openai",
+    "azure": {
+      "endpoint": "${AZURE_OPENAI_ENDPOINT}",
+      "apiKey": "${AZURE_OPENAI_API_KEY}",
+      "deploymentName": "gpt-4",
+      "apiVersion": "2024-08-01-preview"
+    },
+    "model": {
+      "maxTokens": 500,
+      "temperature": 0.3,
+      "topP": 0.95,
+      "frequencyPenalty": 0,
+      "presencePenalty": 0
+    },
+    "rateLimit": {
+      "enabled": true,
+      "minIntervalMs": 4000,
+      "maxRequestsPerMinute": 15,
+      "burstAllowance": 3
+    },
+    "phi": {
+      "redactionEnabled": true,
+      "validationRequired": true,
+      "allowedFields": [
+        "transactionId",
+        "errorCode",
+        "statusCategory",
+        "payer",
+        "payerId"
+      ],
+      "customPatterns": []
+    },
+    "scenarios": {
+      "memberIdInvalid": {
+        "enabled": true,
+        "priority": "high",
+        "customPrompt": null
+      },
+      "eligibilityIssue": {
+        "enabled": true,
+        "priority": "high",
+        "customPrompt": null
+      },
+      "providerCredential": {
+        "enabled": true,
+        "priority": "medium",
+        "customPrompt": null
+      },
+      "serviceNotCovered": {
+        "enabled": true,
+        "priority": "medium",
+        "customPrompt": null
+      },
+      "priorAuthRequired": {
+        "enabled": true,
+        "priority": "high",
+        "customPrompt": null
+      },
+      "duplicateClaim": {
+        "enabled": true,
+        "priority": "low",
+        "customPrompt": null
+      },
+      "timelyFiling": {
+        "enabled": true,
+        "priority": "low",
+        "customPrompt": null
+      },
+      "codingError": {
+        "enabled": true,
+        "priority": "medium",
+        "customPrompt": null
+      },
+      "missingInformation": {
+        "enabled": true,
+        "priority": "high",
+        "customPrompt": null
+      },
+      "general": {
+        "enabled": true,
+        "priority": "low",
+        "customPrompt": null
+      }
+    },
+    "monitoring": {
+      "metricsEnabled": true,
+      "applicationInsightsEnabled": true,
+      "logLevel": "info",
+      "trackTokenUsage": true,
+      "trackConfidence": true,
+      "trackProcessingTime": true
+    },
+    "caching": {
+      "enabled": true,
+      "ttlSeconds": 3600,
+      "maxEntries": 1000,
+      "keyStrategy": "errorCode-errorDesc"
+    },
+    "fallback": {
+      "useMockMode": false,
+      "mockModeOnError": true,
+      "retryAttempts": 3,
+      "retryDelayMs": 5000
+    },
+    "integration": {
+      "logicApps": {
+        "enabled": true,
+        "workflowName": "rfai277",
+        "autoResolveEnabled": false
+      },
+      "serviceBus": {
+        "enabled": true,
+        "topic": "ai-resolutions",
+        "publishResults": true
+      },
+      "applicationInsights": {
+        "enabled": true,
+        "connectionString": "${APPLICATIONINSIGHTS_CONNECTION_STRING}",
+        "trackDependencies": true
+      }
+    }
+  }
+}

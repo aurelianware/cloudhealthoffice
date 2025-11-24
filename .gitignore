@@ -9,6 +9,10 @@ arm.json
 dist/
 *.tsbuildinfo
 
+# Test coverage
+coverage/
+*.lcov
+
 # Node.js
 node_modules/
 npm-debug.log*
