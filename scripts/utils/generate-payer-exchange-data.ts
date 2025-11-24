@@ -432,7 +432,7 @@ function writeNDJSON(resources: any[], filename: string, outputDir: string): voi
   const ndjson = resources.map(r => JSON.stringify(r)).join('\n');
   const filepath = path.join(outputDir, filename);
   fs.writeFileSync(filepath, ndjson, 'utf8');
-  console.log('✓ Generated ' + resources.length + ' resources in ' + filename);
+  // File written successfully
 }
 
 /**
@@ -448,31 +448,29 @@ export function generatePayerExchangeData(options: SyntheticDataOptions): void {
   }
 
   // Generate data
-  console.log('Generating ' + options.patientCount + ' patients...');
+  console.log('Generating patients...');
   const patients = generateSyntheticPatients(options.patientCount);
   writeNDJSON(patients, 'Patient.ndjson', options.outputDir);
 
-  console.log('Generating ' + options.claimsPerPatient + ' claims per patient...');
+  console.log('Generating claims...');
   const claims = generateSyntheticClaims(patients, options.claimsPerPatient);
   writeNDJSON(claims, 'Claim.ndjson', options.outputDir);
 
-  console.log('Generating ' + options.encountersPerPatient + ' encounters per patient...');
+  console.log('Generating encounters...');
   const encounters = generateSyntheticEncounters(patients, options.encountersPerPatient);
   writeNDJSON(encounters, 'Encounter.ndjson', options.outputDir);
 
-  console.log('Generating ' + options.eobsPerPatient + ' EOBs per patient...');
+  console.log('Generating EOBs...');
   const eobs = generateSyntheticEOBs(patients, options.eobsPerPatient);
   writeNDJSON(eobs, 'ExplanationOfBenefit.ndjson', options.outputDir);
 
-  console.log('Generating ' + options.priorAuthsPerPatient + ' prior auths per patient...');
+  console.log('Generating prior auths...');
   const priorAuths = generateSyntheticPriorAuths(patients, options.priorAuthsPerPatient);
   writeNDJSON(priorAuths, 'ServiceRequest.ndjson', options.outputDir);
 
   console.log('');
   console.log('✓ Synthetic data generation complete!');
-  console.log('Output directory: ' + options.outputDir);
-  const totalResources = patients.length + claims.length + encounters.length + eobs.length + priorAuths.length;
-  console.log('Total resources: ' + totalResources);
+  // Files written to output directory
 }
 
 // CLI execution
