@@ -70,52 +70,133 @@ Before getting started, ensure you have:
 
 Get up and running in minutes with these steps:
 
-### 1. Clone the Repository
+### ⚡ Option 1: One-Click Azure Deployment (Fastest - &lt;5 minutes)
+
+Deploy a complete sandbox environment instantly:
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
+
+After infrastructure is deployed:
+
+```bash
+# Clone repository
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+
+# Install and build
+npm install && npm run build
+
+# Deploy workflows
+./deploy-workflows.ps1 -ResourceGroup <your-rg> -LogicAppName <your-la>
+```
+
+**See [QUICKSTART.md](./QUICKSTART.md) for detailed one-click deployment guide.**
+
+### 🎯 Option 2: Interactive Wizard (Guided - ~10 minutes)
+
+Use the interactive configuration wizard for a guided setup:
+
+```bash
+# Clone and setup
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+npm install && npm run build
+
+# Start interactive wizard
+npm run generate -- interactive --output my-config.json --generate
+```
+
+The wizard will guide you through:
+- ✓ Basic payer information
+- ✓ Trading partner configuration  
+- ✓ Module selection
+- ✓ Infrastructure settings
+- ✓ Monitoring preferences
+
+Then automatically generate your deployment package!
+
+### 📝 Option 3: Manual Configuration (Advanced)
+
+For full control over configuration:
+
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/aurelianware/cloudhealthoffice.git
 cd cloudhealthoffice
 ```
 
-### 2. Install Dependencies
+#### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Build the Project
+#### 3. Build the Project
 
 ```bash
 npm run build
 ```
 
-### 4. Configure Your Payer
+#### 4. Configure Your Payer
 
-Create a configuration file in `config/payers/your-payer.json`:
+Option A - Use template generator:
+```bash
+# Generate a starter template
+npm run generate -- template -t medicaid -o my-payer-config.json
+
+# Edit the generated file
+vim my-payer-config.json
+```
+
+Option B - Create manual configuration in `config/payers/your-payer.json`:
 
 ```json
 {
   "payerId": "YOUR_PAYER_ID",
   "payerName": "Your Health Plan",
-  "azureRegion": "eastus",
-  "enabledModules": ["275-attachments", "277-rfai", "278-authorization"]
+  "organizationName": "Your Organization",
+  "contactInfo": {
+    "email": "your.email@example.com",
+    "primaryContact": "Your Name",
+    "phone": "+1-555-0100"
+  },
+  "enabledModules": {
+    "attachments": true,
+    "authorizations": true,
+    "appeals": false,
+    "ecs": false
+  },
+  "infrastructure": {
+    "location": "eastus",
+    "environment": "dev",
+    "resourceNamePrefix": "your-payer"
+  }
 }
 ```
 
-### 5. Run Tests
+#### 5. Run Tests
 
 ```bash
 npm test
 ```
 
-### 6. Deploy to Azure
+#### 6. Deploy to Azure
 
 ```bash
 # Authenticate with Azure
 az login
 
-# Deploy infrastructure and workflows
-./scripts/deploy-all.sh -g your-resource-group -p your-payer
+# Generate deployment package
+npm run generate -- generate -c my-payer-config.json
+
+# Deploy infrastructure
+cd generated/YOUR_PAYER_ID/infrastructure
+./deploy.sh
+
+# Deploy workflows
+cd ../..
+./deploy-workflows.ps1 -ResourceGroup your-resource-group -LogicAppName your-logic-app
 ```
 
 ---
@@ -231,29 +312,63 @@ npm test -- validator.test.ts
 
 # Watch mode for development
 npm test -- --watch
+
+# Run HIPAA logging validation
+npm test -- logging-validation.test.ts
 ```
 
 ### Testing Workflows
 
-Use the provided PowerShell test script to validate workflows:
+Use the provided PowerShell test scripts to validate workflows:
 
 ```powershell
-# Test inbound 275 processing
+# Quick workflow tests
 ./test-workflows.ps1 -TestInbound275 -ResourceGroup "dev-rg" -LogicAppName "dev-la"
-
-# Test outbound 277 RFAI
 ./test-workflows.ps1 -TestOutbound277
-
-# Full end-to-end workflow
 ./test-workflows.ps1 -TestFullWorkflow
+
+# Comprehensive end-to-end tests with health checks
+./scripts/test-e2e.ps1 `
+  -ResourceGroup "dev-rg" `
+  -LogicAppName "dev-la" `
+  -ServiceBusNamespace "dev-sb" `
+  -StorageAccount "devstorage" `
+  -ReportPath "./health-report.json"
 ```
 
-### Test Data
+### Generate Test Data
+
+Create synthetic HIPAA-compliant test data:
+
+```bash
+# Generate 837P (Professional) claims
+node dist/scripts/utils/generate-837-claims.js 837P 10 ./test-data
+
+# Generate 837I (Institutional) claims  
+node dist/scripts/utils/generate-837-claims.js 837I 5 ./test-data
+
+# Claims use synthetic data only - PHI-safe for testing
+```
+
+### Test Data Files
 
 Sample test files are included:
 - `test-x12-275-availity-to-healthplan.edi`: Sample 275 transaction
 - `test-qnxt-response-payload.json`: Mock QNXT API response
 - `test-x12-278-review-request.edi`: Sample 278 authorization request
+- Generated claims in `./test-data/`: Synthetic 837 claims
+
+### PHI Validation
+
+Scan code for potential PHI exposure:
+
+```powershell
+# Scan workflows for PHI/PII
+./scripts/scan-for-phi-pii.ps1 -Path ./logicapps/workflows
+
+# Validate logging uses proper redaction
+npm test -- logging-validation.test.ts
+```
 
 ---
 
@@ -303,6 +418,38 @@ az logicapp list-workflows -g your-rg --name your-logic-app
 # Check Service Bus topics
 az servicebus topic list --namespace-name your-sb-ns -g your-rg
 ```
+
+### Monitoring & Dashboards
+
+Cloud Health Office includes three production-ready Azure Monitor Workbooks for real-time monitoring:
+
+1. **EDI Transaction Metrics**: Monitor transaction volume, latency (P50/P95/P99), success rates, and error patterns
+2. **Payer Integration Health**: Per-payer health scoring, integration status, and backend connectivity
+3. **HIPAA Compliance Monitoring**: PHI redaction validation, security audit logging, and encryption monitoring
+
+**Access Dashboards**:
+- Navigate to Azure Portal → **Monitor** → **Workbooks**
+- Look for workbooks with your `{baseName}` prefix
+- Filter by payer ID for multi-tenant deployments
+
+**Setup Alerts**:
+```bash
+# Deploy recommended alert rules
+az deployment group create \
+  --resource-group your-rg \
+  --template-file docs/examples/azure-monitor-alerts-config.json \
+  --parameters appInsightsId="<your-app-insights-id>" \
+               actionGroupId="<your-action-group-id>"
+```
+
+📖 **Full Documentation**: See [docs/AZURE-MONITOR-DASHBOARDS.md](docs/AZURE-MONITOR-DASHBOARDS.md) for:
+- Dashboard details and KQL queries
+- 6 recommended alerting rules with thresholds
+- PHI redaction configuration
+- Multi-tenant setup
+- Troubleshooting guide
+
+📋 **Alerting Setup**: See [docs/examples/ALERTING-SETUP-GUIDE.md](docs/examples/ALERTING-SETUP-GUIDE.md) for step-by-step alert configuration.
 
 ---
 
@@ -513,6 +660,8 @@ export async function process275Attachment(payload: any) {
 
 ### Getting Help
 
+- **Quick Start**: See [QUICKSTART.md](./QUICKSTART.md) for one-click deployment
+- **Troubleshooting**: Check [TROUBLESHOOTING-FAQ.md](./TROUBLESHOOTING-FAQ.md) for common issues
 - **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)
 - **Discussions**: Community support via [GitHub Discussions](https://github.com/aurelianware/cloudhealthoffice/discussions)
 - **Documentation**: Browse the `/docs` directory for detailed guides

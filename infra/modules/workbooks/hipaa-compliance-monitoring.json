@@ -1,0 +1,359 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## HIPAA Compliance Monitoring Dashboard\n\n**Real-time validation of PHI redaction and HIPAA compliance controls**\n\n🔒 **Security**: This dashboard monitors PHI redaction effectiveness and audit logging.\n\n---"
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let totalLogs = traces\n| where timestamp {TimeRange}\n| count\n| project TotalLogs = Count;\nlet suspiciousPatterns = traces\n| where timestamp {TimeRange}\n| where message matches regex @\"\\b\\d{3}-\\d{2}-\\d{4}\\b\" or\n        message matches regex @\"\\b[A-Z]{2}\\d{9}\\b\" or\n        message matches regex @\"DOB|SSN|Member\\s*ID|Patient\\s*Name\"\n| count\n| project SuspiciousLogs = Count;\nlet encryptedCalls = dependencies\n| where timestamp {TimeRange}\n| where type == \"HTTP\"\n| where data startswith \"https://\"\n| count\n| project EncryptedCalls = Count;\nlet auditEvents = customEvents\n| where timestamp {TimeRange}\n| where name in ('PHI_Access', 'Data_Export', 'Configuration_Change')\n| count\n| project AuditEvents = Count;\ntotalLogs\n| extend dummy = 1\n| join kind=inner (suspiciousPatterns | extend dummy = 1) on dummy\n| join kind=inner (encryptedCalls | extend dummy = 1) on dummy\n| join kind=inner (auditEvents | extend dummy = 1) on dummy\n| extend \n    ComplianceScore = round(100.0 - (100.0 * SuspiciousLogs / TotalLogs), 2),\n    Status = case(\n        SuspiciousLogs == 0, '✅ Compliant',\n        SuspiciousLogs < 10, '⚠️ Review Required',\n        '❌ Critical'\n    )\n| project Status, ComplianceScore, TotalLogs, SuspiciousLogs, EncryptedCalls, AuditEvents",
+        "size": 4,
+        "title": "HIPAA Compliance Overview",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "Status",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "ComplianceScore",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "greenRed"
+            }
+          },
+          "secondaryContent": {
+            "columnMatch": "SuspiciousLogs",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "redGreen"
+            }
+          },
+          "showBorder": true
+        }
+      },
+      "name": "complianceOverview"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where timestamp {TimeRange}\n| where message matches regex @\"\\b\\d{3}-\\d{2}-\\d{4}\\b\" or\n        message matches regex @\"\\b[A-Z]{2}\\d{9}\\b\" or\n        message matches regex @\"DOB|SSN|Member\\s*ID|Patient\\s*Name|Date\\s*of\\s*Birth\"\n| extend \n    PotentialPHI = case(\n        message matches regex @\"\\b\\d{3}-\\d{2}-\\d{4}\\b\", 'SSN Pattern',\n        message matches regex @\"\\b[A-Z]{2}\\d{9}\\b\", 'Member ID Pattern',\n        message matches regex @\"DOB|Date\\s*of\\s*Birth\", 'DOB Reference',\n        message matches regex @\"SSN\", 'SSN Reference',\n        message matches regex @\"Patient\\s*Name\", 'Patient Name Reference',\n        'Other PHI Pattern'\n    ),\n    TruncatedMessage = substring(message, 0, 100)\n| summarize Count = count() by PotentialPHI\n| order by Count desc",
+        "size": 0,
+        "title": "Potential PHI Pattern Detections",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "phiPatternsChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "dependencies\n| where timestamp {TimeRange}\n| extend IsEncrypted = case(\n    type == \"HTTP\" and data startswith \"https://\", 'Encrypted (HTTPS)',\n    type == \"HTTP\", '⚠️ Unencrypted (HTTP)',\n    type == \"Azure Service Bus\", 'Encrypted (Service Bus)',\n    type == \"Azure blob\", 'Encrypted (Storage)',\n    'Other'\n)\n| summarize Count = count() by IsEncrypted\n| order by Count desc",
+        "size": 0,
+        "title": "Data Transmission Encryption Status",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "encryptionStatusChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where timestamp {TimeRange}\n| where message matches regex @\"\\b\\d{3}-\\d{2}-\\d{4}\\b\" or\n        message matches regex @\"\\b[A-Z]{2}\\d{9}\\b\" or\n        message matches regex @\"DOB|SSN|Member\\s*ID|Patient\\s*Name\"\n| extend \n    PotentialPHI = case(\n        message matches regex @\"\\b\\d{3}-\\d{2}-\\d{4}\\b\", 'SSN Pattern',\n        message matches regex @\"\\b[A-Z]{2}\\d{9}\\b\", 'Member ID Pattern',\n        'PHI Reference'\n    ),\n    Source = tostring(customDimensions.WorkflowName),\n    TruncatedMessage = substring(message, 0, 150)\n| project \n    timestamp,\n    PotentialPHI,\n    Source,\n    SeverityLevel = severityLevel,\n    TruncatedMessage\n| order by timestamp desc\n| take 100",
+        "size": 0,
+        "title": "Potential PHI Exposure Incidents (Last 100)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "timestamp",
+              "formatter": 6
+            },
+            {
+              "columnMatch": "PotentialPHI",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "SSN",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Member ID",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "yellow",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "SeverityLevel",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "0",
+                    "representation": "info",
+                    "text": ""
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "1",
+                    "representation": "info",
+                    "text": ""
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "2",
+                    "representation": "warning",
+                    "text": ""
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "3",
+                    "representation": "failed",
+                    "text": ""
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "more",
+                    "text": ""
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "phiExposureTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('PHI_Access', 'Data_Export', 'User_Authentication', 'Configuration_Change', 'Security_Alert')\n| extend \n    EventType = name,\n    User = tostring(customDimensions.userId),\n    Resource = tostring(customDimensions.resourceId),\n    Action = tostring(customDimensions.action)\n| summarize EventCount = count() by bin(timestamp, 1h), EventType\n| project timestamp, EventType, EventCount\n| order by timestamp asc",
+        "size": 0,
+        "title": "Security Audit Events Timeline",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "linechart"
+      },
+      "name": "auditEventsChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('PHI_Access', 'Data_Export', 'Configuration_Change')\n| extend \n    EventType = name,\n    User = tostring(customDimensions.userId),\n    PayerId = tostring(customDimensions.payerId),\n    Action = tostring(customDimensions.action),\n    IpAddress = tostring(customDimensions.clientIp)\n| project \n    timestamp,\n    EventType,\n    User,\n    PayerId,\n    Action,\n    IpAddress\n| order by timestamp desc\n| take 100",
+        "size": 0,
+        "title": "Audit Trail (Last 100 Events)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "timestamp",
+              "formatter": 6
+            },
+            {
+              "columnMatch": "EventType",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "PHI_Access",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Data_Export",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Configuration_Change",
+                    "representation": "yellow",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "blue",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "auditTrailTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "dependencies\n| where timestamp {TimeRange}\n| where type == \"Azure blob\" or name contains \"storage\"\n| extend \n    OperationType = tostring(customDimensions.operationType),\n    IsArchive = data contains \"hipaa-attachments\"\n| summarize \n    TotalOperations = count(),\n    ArchiveOperations = countif(IsArchive == true),\n    AvgDuration = avg(duration)\n    by bin(timestamp, 1h)\n| project timestamp, TotalOperations, ArchiveOperations, AvgDuration\n| order by timestamp asc",
+        "size": 0,
+        "title": "Data Archive Operations (HIPAA Retention)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "archiveOperationsChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| summarize \n    TotalRequests = count(),\n    AuthenticatedRequests = countif(tostring(customDimensions.authenticated) == 'true'),\n    AnonymousRequests = countif(tostring(customDimensions.authenticated) != 'true')\n| extend AuthenticationRate = round(100.0 * AuthenticatedRequests / TotalRequests, 2)\n| project TotalRequests, AuthenticatedRequests, AnonymousRequests, AuthenticationRate",
+        "size": 0,
+        "title": "Authentication Metrics",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AuthenticationRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "authenticationMetrics"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n\n### HIPAA Compliance Checklist\n\n✅ **Required Controls**:\n\n1. **PHI Redaction**: All logs must not contain unmasked PHI (SSN, DOB, Member IDs, Patient Names)\n2. **Encryption in Transit**: All HTTP calls must use HTTPS (TLS 1.2+)\n3. **Encryption at Rest**: Storage accounts must use AES-256 encryption\n4. **Audit Logging**: All PHI access and data exports must be logged\n5. **Access Control**: All requests must be authenticated\n6. **Data Retention**: Archives must be maintained per HIPAA requirements (6+ years)\n\n⚠️ **Alert Thresholds**:\n- Suspicious PHI patterns detected: **Immediate investigation required**\n- Unencrypted HTTP calls: **Block and remediate**\n- Authentication rate < 95%: **Review access controls**\n- Audit event gaps > 24h: **Verify logging configuration**\n\n📋 **Compliance Reporting**: Export this dashboard weekly for HIPAA audit documentation."
+      },
+      "name": "complianceFooter"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "sentinel-UserWorkbook",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

@@ -10,6 +10,7 @@ import * as path from 'path';
 import { PayerDeploymentGenerator } from '../generate-payer-deployment';
 import { PayerConfig } from '../../core/types/payer-config';
 import { DeploymentValidator } from '../../core/validation/config-validator';
+import { InteractiveWizard } from './interactive-wizard';
 
 // Note: chalk, ora, and inquirer are ESM modules - we'll use simple console logging instead
 function chalk_green(text: string): string { return `\x1b[32m${text}\x1b[0m`; }
@@ -246,15 +247,63 @@ program
   });
 
 /**
- * Interactive mode - Not implemented (requires inquirer ESM)
+ * Interactive mode - Full guided wizard
  */
 program
   .command('interactive')
-  .description('Start interactive configuration wizard (use template command instead)')
-  .action(async () => {
-    console.log(chalk.yellow('Interactive mode not available in CommonJS build.'));
-    console.log(chalk.cyan('Use: payer-generator template -t medicaid -o payer-config.json'));
-    console.log(chalk.cyan('Then edit payer-config.json and run: payer-generator generate -c payer-config.json'));
+  .description('Start interactive configuration wizard for guided onboarding')
+  .option('-o, --output <path>', 'Output configuration file path', './payer-config.json')
+  .option('--generate', 'Automatically generate deployment after configuration')
+  .action(async (options) => {
+    try {
+      const wizard = new InteractiveWizard();
+      const config = await wizard.run();
+
+      // Save configuration
+      await wizard.saveConfiguration(config, options.output);
+
+      // Optionally generate deployment immediately
+      if (options.generate) {
+        console.log(chalk.cyan('\n🚀 Generating deployment package...'));
+        const generator = new PayerDeploymentGenerator();
+        const outputDir = path.join(process.cwd(), 'generated', config.payerId);
+
+        const spinner = ora('Generating workflows...').start();
+        await generator.generateWorkflows(config, outputDir);
+        spinner.succeed('Workflows generated');
+
+        spinner.start('Generating infrastructure...');
+        await generator.generateInfrastructure(config, outputDir);
+        spinner.succeed('Infrastructure templates generated');
+
+        spinner.start('Generating documentation...');
+        await generator.generateDocumentation(config, outputDir);
+        spinner.succeed('Documentation generated');
+
+        spinner.start('Generating schemas...');
+        await generator.generateSchemas(config, outputDir);
+        spinner.succeed('Schemas generated');
+
+        spinner.start('Packaging deployment...');
+        await generator.packageDeployment(config, outputDir);
+        spinner.succeed('Deployment packaged');
+
+        console.log(chalk_bold(chalk.green(`\n✅ Successfully generated deployment for ${config.payerName}`)));
+        console.log(chalk.cyan(`📦 Output: ${outputDir}`));
+      } else {
+        console.log(chalk.cyan('\n📝 Next steps:'));
+        console.log(chalk.cyan(`  1. Review configuration: ${options.output}`));
+        console.log(chalk.cyan(`  2. Generate deployment: payer-generator generate -c ${options.output}`));
+        console.log(chalk.cyan(`  3. Deploy to Azure: cd generated/${config.payerId} && ./infrastructure/deploy.sh`));
+      }
+    } catch (error) {
+      console.error(chalk.red(`\n❌ Error: ${error instanceof Error ? error.message : error}`));
+      if (error instanceof Error && error.stack) {
+        console.error(chalk.red('Stack trace:'));
+        console.error(error.stack);
+      }
+      process.exit(1);
+    }
   });
 
 program.parse(process.argv);
