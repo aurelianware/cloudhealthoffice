@@ -596,7 +596,7 @@ describe('CMS0057FComplianceChecker - Comprehensive Validation', () => {
 });
 
 describe('validateWithAzureFHIR', () => {
-  it('validates ServiceRequest', async () => {
+  it('validates ServiceRequest without Azure endpoint', async () => {
     const serviceRequest: ServiceRequest = {
       resourceType: 'ServiceRequest',
       meta: {
@@ -615,12 +615,119 @@ describe('validateWithAzureFHIR', () => {
     expect(result.compliant).toBeDefined();
   });
 
+  it('validates ServiceRequest with Azure endpoint (falls back to local)', async () => {
+    const serviceRequest: ServiceRequest = {
+      resourceType: 'ServiceRequest',
+      meta: {
+        profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest'],
+      },
+      status: 'active',
+      intent: 'order',
+      code: { coding: [{ code: '48' }] },
+      subject: { reference: 'Patient/PAT001' },
+      requester: { identifier: { value: '1234567890' } },
+    };
+
+    // Should log warning about not implemented but still return result
+    const result = await validateWithAzureFHIR(
+      serviceRequest,
+      'https://my-fhir.azurehealthcareapis.com'
+    );
+
+    expect(result).toBeDefined();
+    expect(result.compliant).toBeDefined();
+  });
+
+  it('validates Claim with Azure endpoint', async () => {
+    const claim: Claim = {
+      resourceType: 'Claim',
+      meta: {
+        profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim'],
+      },
+      status: 'active',
+      type: { coding: [{ code: 'professional' }] },
+      use: 'claim',
+      patient: { reference: 'Patient/PAT001' },
+      created: '2024-01-15T10:00:00Z',
+      provider: { identifier: { value: '1234567890' } },
+      insurer: { identifier: { value: 'PAYER001' } },
+      priority: { coding: [{ code: 'normal' }] },
+      insurance: [{ sequence: 1, focal: true, coverage: { reference: 'Coverage/COV001' } }],
+      item: [{ sequence: 1, productOrService: { coding: [{ code: '99213' }] } }],
+    };
+
+    const result = await validateWithAzureFHIR(
+      claim,
+      'https://my-fhir.azurehealthcareapis.com'
+    );
+
+    expect(result).toBeDefined();
+  });
+
+  it('validates ExplanationOfBenefit with Azure endpoint', async () => {
+    const eob: ExplanationOfBenefit = {
+      resourceType: 'ExplanationOfBenefit',
+      meta: {
+        profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-explanationofbenefit'],
+      },
+      status: 'active',
+      type: { coding: [{ code: 'professional' }] },
+      use: 'claim',
+      patient: { reference: 'Patient/PAT001' },
+      created: '2024-01-20T10:00:00Z',
+      insurer: { identifier: { value: 'PAYER001' } },
+      provider: { identifier: { value: '1234567890' } },
+      outcome: 'complete',
+      insurance: [{ focal: true, coverage: { reference: 'Coverage/COV001' } }],
+    };
+
+    const result = await validateWithAzureFHIR(
+      eob,
+      'https://my-fhir.azurehealthcareapis.com'
+    );
+
+    expect(result).toBeDefined();
+  });
+
+  it('validates Patient with Azure endpoint', async () => {
+    const patient: Patient = {
+      resourceType: 'Patient',
+      meta: {
+        profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'],
+      },
+      identifier: [{ value: 'MEM001' }],
+      name: [{ family: 'Doe', given: ['John'] }],
+      gender: 'male',
+    };
+
+    const result = await validateWithAzureFHIR(
+      patient,
+      'https://my-fhir.azurehealthcareapis.com'
+    );
+
+    expect(result).toBeDefined();
+  });
+
   it('handles unsupported resource types', async () => {
     const unsupportedResource = {
       resourceType: 'Observation',
     } as any;
 
     const result = await validateWithAzureFHIR(unsupportedResource);
+
+    expect(result.compliant).toBe(false);
+    expect(result.issues[0].message).toContain('Unsupported resource type');
+  });
+
+  it('handles unsupported resource types with Azure endpoint', async () => {
+    const unsupportedResource = {
+      resourceType: 'Observation',
+    } as any;
+
+    const result = await validateWithAzureFHIR(
+      unsupportedResource,
+      'https://my-fhir.azurehealthcareapis.com'
+    );
 
     expect(result.compliant).toBe(false);
     expect(result.issues[0].message).toContain('Unsupported resource type');

@@ -566,4 +566,323 @@ describe('Date Normalization', () => {
     const claim = mapX12_837_ToFhirClaim(x12_837);
     expect(claim.created).toBe('2024-01-15T14:30:00Z');
   });
+
+  it('handles invalid date formats gracefully', () => {
+    const x12_837: X12_837 = {
+      claimId: 'TEST',
+      transactionDate: 'invalid-date',
+      totalClaimChargeAmount: 100,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'Test',
+        lastName: 'User',
+        dob: 'invalid',
+      },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: 'invalid',
+        units: 1,
+        chargeAmount: 100,
+      }],
+      diagnosisCodes: [],
+      payerId: 'PAYER',
+    };
+
+    const claim = mapX12_837_ToFhirClaim(x12_837);
+    // Should return as-is if format is unrecognized
+    expect(claim.created).toContain('invalid');
+    expect(claim.item![0].servicedDate).toBe('invalid');
+  });
+});
+
+describe('Edge Cases and Coverage', () => {
+  it('maps X12 278 with certification info for authoredOn', () => {
+    const x12_278: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {
+        diagnosisCode: 'A00',
+        procedureCode: '99213',
+      },
+      payerId: 'PAYER001',
+      certificationInfo: {
+        certType: 'I',
+        beginDate: '20240115',
+        endDate: '20240120',
+      },
+    };
+
+    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
+    expect(serviceRequest.authoredOn).toBe('2024-01-15');
+  });
+
+  it('maps X12 278 with different priority types', () => {
+    const baseRequest: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {},
+      payerId: 'PAYER001',
+    };
+
+    // Test HS request type (urgent)
+    const hsRequest = { ...baseRequest, requestType: 'HS' as const };
+    const hsSR = mapX12_278_ToFhirServiceRequest(hsRequest);
+    expect(hsSR.priority).toBe('urgent');
+
+    // Test SC request type (asap)
+    const scRequest = { ...baseRequest, requestType: 'SC' as const };
+    const scSR = mapX12_278_ToFhirServiceRequest(scRequest);
+    expect(scSR.priority).toBe('asap');
+
+    // Test AR request type (routine)
+    const arSR = mapX12_278_ToFhirServiceRequest(baseRequest);
+    expect(arSR.priority).toBe('routine');
+  });
+
+  it('maps X12 278 without occurrence period when no dates provided', () => {
+    const x12_278: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {}, // No dates
+      payerId: 'PAYER001',
+    };
+
+    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
+    expect(serviceRequest.occurrencePeriod).toBeUndefined();
+  });
+
+  it('maps X12 278 with only admission date', () => {
+    const x12_278: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {
+        admissionDate: '20240115',
+      },
+      payerId: 'PAYER001',
+    };
+
+    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
+    expect(serviceRequest.occurrencePeriod?.start).toBe('2024-01-15');
+    expect(serviceRequest.occurrencePeriod?.end).toBeUndefined();
+  });
+
+  it('maps X12 278 with only service date (no admission date)', () => {
+    const x12_278: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {
+        serviceDate: '20240115',
+      },
+      payerId: 'PAYER001',
+    };
+
+    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
+    expect(serviceRequest.occurrencePeriod?.start).toBe('2024-01-15');
+  });
+
+  it('maps X12 278 without supporting info when no diagnosis or procedure', () => {
+    const x12_278: X12_278 = {
+      requestId: 'REQ001',
+      requestType: 'AR',
+      requestCategory: '1',
+      serviceTypeCode: '48',
+      patient: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      requester: {
+        npi: '1234567890',
+      },
+      serviceDetails: {}, // No diagnosis or procedure
+      payerId: 'PAYER001',
+    };
+
+    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
+    expect(serviceRequest.supportingInfo).toBeUndefined();
+  });
+
+  it('maps X12 835 without service lines', () => {
+    const x12_835: X12_835 = {
+      transactionId: 'TXN001',
+      paymentDate: '2024-01-20',
+      paymentAmount: 100.00,
+      paymentMethod: 'ACH',
+      payer: {
+        id: 'PAYER001',
+        name: 'Test Payer',
+      },
+      payee: {
+        npi: '1234567890',
+      },
+      claims: [{
+        claimId: 'CLM001',
+        claimStatusCode: '1',
+        chargedAmount: 100.00,
+        paidAmount: 100.00,
+        patient: {
+          firstName: 'John',
+          lastName: 'Doe',
+          memberId: 'MEM001',
+        },
+        // No service lines
+      }],
+    };
+
+    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
+    expect(eob.item).toBeUndefined();
+  });
+
+  it('maps X12 835 without patient responsibility', () => {
+    const x12_835: X12_835 = {
+      transactionId: 'TXN001',
+      paymentDate: '2024-01-20',
+      paymentAmount: 100.00,
+      paymentMethod: 'ACH',
+      payer: {
+        id: 'PAYER001',
+        name: 'Test Payer',
+      },
+      payee: {
+        npi: '1234567890',
+      },
+      claims: [{
+        claimId: 'CLM001',
+        claimStatusCode: '1',
+        chargedAmount: 100.00,
+        paidAmount: 100.00,
+        patient: {
+          firstName: 'John',
+          lastName: 'Doe',
+          memberId: 'MEM001',
+        },
+        // No patientResponsibility field
+      }],
+    };
+
+    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
+    expect(eob.total).toBeDefined();
+    const deductible = eob.total!.find(t => t.category.coding![0].code === 'deductible');
+    expect(deductible).toBeUndefined();
+  });
+
+  it('maps X12 835 with check number', () => {
+    const x12_835: X12_835 = {
+      transactionId: 'TXN001',
+      paymentDate: '2024-01-20',
+      paymentAmount: 100.00,
+      paymentMethod: 'CHK',
+      checkNumber: 'CHK12345',
+      payer: {
+        id: 'PAYER001',
+        name: 'Test Payer',
+      },
+      payee: {
+        npi: '1234567890',
+      },
+      claims: [{
+        claimId: 'CLM001',
+        claimStatusCode: '1',
+        chargedAmount: 100.00,
+        paidAmount: 100.00,
+        patient: {
+          firstName: 'John',
+          lastName: 'Doe',
+          memberId: 'MEM001',
+        },
+      }],
+    };
+
+    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
+    expect(eob.payment?.identifier?.value).toBe('CHK12345');
+  });
+
+  it('maps X12 837 without diagnosis codes', () => {
+    const x12_837: X12_837 = {
+      claimId: 'CLM001',
+      transactionDate: '20240115-1430',
+      totalClaimChargeAmount: 100.00,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: '20240115',
+        units: 1,
+        chargeAmount: 100.00,
+      }],
+      // No diagnosisCodes
+      payerId: 'PAYER001',
+    };
+
+    const claim = mapX12_837_ToFhirClaim(x12_837);
+    expect(claim.diagnosis).toBeUndefined();
+  });
 });
