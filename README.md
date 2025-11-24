@@ -72,7 +72,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
 - ✅ **Clinical USCDI Data** - Condition and Observation resources for comprehensive clinical data
 - ✅ **97+ Comprehensive Tests** - 100% pass rate, production-ready
-- ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities** - Secure core mapper with no vulnerabilities
+- ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
 - ✅ **ValueAdds277 Premium Features** - 60+ enhanced response fields
