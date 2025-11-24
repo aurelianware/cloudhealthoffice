@@ -5,7 +5,7 @@
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-The #1 open-source, Azure-native, multi-payer EDI integration platform for healthcare.
+An open-source, Azure-native platform for multi-payer EDI integration in healthcare.
 
 > **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security (9/10 score), and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
@@ -24,7 +24,7 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
 ### Enhanced Onboarding Experience
 
-- 🎯 **Interactive Wizard** - Guided configuration in &lt;5 minutes
+- 🎯 **Interactive Wizard** - Guided configuration typically in under 5 minutes, based on testing
 - ⚡ **One-Click Azure Deploy** - Instant sandbox environment  
 - 🧪 **Test Data Generator** - Synthetic 837 claims for testing
 - 📊 **E2E Test Suite** - Automated health checks and reporting
@@ -56,7 +56,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### Zero-Code Payer Onboarding
 - ✅ **Config-to-Workflow Generator** - TypeScript-based automation for deployment artifacts
-- ✅ **Interactive Configuration Wizard** - Guided setup in <5 minutes
+- ✅ **Interactive Configuration Wizard** - Guided setup typically in under 5 minutes, based on testing
 - ✅ **30+ Handlebars Template Helpers** - Comprehensive template system
 - ✅ **23-Test Suite** - Validated workflow and infrastructure generation
 - ✅ **Example Configurations** - Medicaid MCO and Regional Blues templates
@@ -71,14 +71,14 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **Consent Management** - Opt-in consent flows per CMS requirements
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
 - ✅ **Clinical USCDI Data** - Condition and Observation resources for comprehensive clinical data
-- ✅ **97+ Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **97+ Comprehensive Tests** - Estimated 100% pass rate in internal tests, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
 - ✅ **ValueAdds277 Premium Features** - 60+ enhanced response fields
 - ✅ **Cross-Module Integration Flags** - Seamless appeals, attachments, corrections
-- ✅ **Premium Product Capability** - $10k/year additional revenue per payer
-- ✅ **Provider Time Savings** - 7-21 minutes saved per claim lookup
+- ✅ **Premium Product Capability** - Potential value-add of up to $10k/year per payer (varies by implementation)
+- ✅ **Provider Time Savings** - May save providers time on claim lookups
 - ✅ **Configurable Field Groups** - Financial, clinical, demographics, remittance
 
 ### Production-Grade Security
@@ -87,7 +87,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **PHI Masking** - DCR-based redaction in Application Insights
 - ✅ **Customer-Managed Keys** - Optional BYOK for compliance
 - ✅ **Data Lifecycle Management** - 7-year retention, automated tiering
-- ✅ **HIPAA Compliance** - 100% technical safeguards addressed
+- ✅ **HIPAA Compliance** - Addresses key HIPAA technical safeguards
 
 ### Deployment & Operations
 - ✅ **One-Click Azure Deploy** - Instant sandbox environment
@@ -100,7 +100,7 @@ npm run generate -- interactive --output my-config.json --generate
 ## 🎯 Key Capabilities
 
 ### Config-to-Workflow Generator
-Transform what was previously a multi-week engineering project into minutes:
+Streamline deployment processes that traditionally take weeks:
 
 ```bash
 # Interactive wizard mode
@@ -170,12 +170,12 @@ Premium ECS features that save providers 7-21 minutes per lookup:
 - `eligibleForCorrection` - Resubmit corrected claims
 - `eligibleForRemittanceViewer` - View 835 remittance data
 
-**ROI:** $69,600/year for providers (1,000 lookups/month), $10k/year additional revenue per payer
+**ROI:** Potential value-add of up to $10k/year per payer (varies by implementation)
 
 **Documentation:** [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md)
 
-### Security Hardening (9/10 Security Score)
-Production-ready security for PHI workloads:
+### Security Hardening
+Production-ready security for PHI workloads with high security maturity (self-assessed):
 
 **Infrastructure:**
 - Premium Key Vault with HSM-backed keys
@@ -184,14 +184,18 @@ Production-ready security for PHI workloads:
 - Customer-managed keys (optional BYOK)
 
 **Compliance:**
-- 100% HIPAA technical safeguards ✓
+- Addresses key HIPAA technical safeguards ✓
 - Automated PHI masking in logs ✓
 - 7-year data retention with lifecycle management ✓
 - 365-day audit log retention ✓
 
-**Cost Impact:** 94% storage cost reduction ($463/mo → $29/mo) with lifecycle policies
+**Cost Impact:** Estimated 94% storage cost reduction based on lifecycle policies; actual savings vary
 
 **Documentation:** [SECURITY-HARDENING.md](./SECURITY-HARDENING.md)
+
+## 🤝 Integration Focus
+
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like QNXT and Facets, providing enhancements to EDI workflows without requiring full replacements.
 
 ## 📖 Documentation
 
@@ -259,6 +263,12 @@ Apache 2.0 - See [LICENSE](./LICENSE) for details.
 
 ---
 
-**Cloud Health Office** – The Future of Healthcare EDI Integration
+## 🤝 Collaboration and Integration
+
+Cloud Health Office is designed to complement leading core administrative platforms like QNXT and Facets, enabling rapid enhancements to existing workflows without disruption.
+
+---
+
+**Cloud Health Office** – Advancing Healthcare EDI Integration
 
 *Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
