@@ -7,7 +7,7 @@
 
 An open-source, Azure-native platform for multi-payer EDI integration in healthcare.
 
-> **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security (9/10 score), and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
+> **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security with high security maturity, and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
 ## 🚀 Quick Start
 
