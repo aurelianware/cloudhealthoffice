@@ -16,7 +16,7 @@ Deploy a complete HIPAA-compliant EDI platform in **&lt;5 minutes**:
 1. **Click Deploy to Azure** ☝️ (button above)
 2. **Configure** basic settings (baseName, region)
 3. **Deploy workflows** via CLI
-4. **Start processing** 275/277/278 transactions
+4. **Start processing** 270/275/277/278/837 transactions
 
 See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
