@@ -176,6 +176,43 @@ export interface AuditLogEntry {
   details?: string;
 }
 
+/**
+ * FHIR OperationOutcome issue type codes
+ * Based on FHIR R4 IssueType value set
+ */
+export type OperationOutcomeCode = 
+  | 'invalid' 
+  | 'structure' 
+  | 'required' 
+  | 'value' 
+  | 'invariant' 
+  | 'security' 
+  | 'login' 
+  | 'unknown' 
+  | 'expired' 
+  | 'forbidden' 
+  | 'suppressed' 
+  | 'processing' 
+  | 'not-supported' 
+  | 'duplicate' 
+  | 'multiple-matches' 
+  | 'not-found' 
+  | 'deleted' 
+  | 'too-long' 
+  | 'code-invalid' 
+  | 'extension' 
+  | 'too-costly' 
+  | 'business-rule' 
+  | 'conflict' 
+  | 'transient' 
+  | 'lock-error' 
+  | 'no-store' 
+  | 'exception' 
+  | 'timeout' 
+  | 'incomplete' 
+  | 'throttled' 
+  | 'informational';
+
 // ============================================================================
 // Error Classes
 // ============================================================================
@@ -731,7 +768,7 @@ export class ProviderAccessApi {
    */
   createErrorOutcome(
     severity: 'fatal' | 'error' | 'warning' | 'information',
-    code: 'invalid' | 'structure' | 'required' | 'value' | 'invariant' | 'security' | 'login' | 'unknown' | 'expired' | 'forbidden' | 'suppressed' | 'processing' | 'not-supported' | 'duplicate' | 'multiple-matches' | 'not-found' | 'deleted' | 'too-long' | 'code-invalid' | 'extension' | 'too-costly' | 'business-rule' | 'conflict' | 'transient' | 'lock-error' | 'no-store' | 'exception' | 'timeout' | 'incomplete' | 'throttled' | 'informational',
+    code: OperationOutcomeCode,
     message: string
   ): OperationOutcome {
     return {

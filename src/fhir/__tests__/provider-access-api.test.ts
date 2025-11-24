@@ -15,11 +15,11 @@ import {
   AuthenticationError,
   ConsentDeniedError,
   ResourceNotFoundError,
-  SmartOnFhirToken,
   QnxtPatient,
   QnxtClaim,
   QnxtEncounter
 } from '../provider-access-api';
+import { Condition, Observation, Patient } from 'fhir/r4';
 
 describe('ProviderAccessApi', () => {
   let api: ProviderAccessApi;
@@ -185,9 +185,9 @@ describe('ProviderAccessApi', () => {
       expect(bundle.entry).toBeDefined();
       expect(bundle.entry![0].resource?.resourceType).toBe('Condition');
       
-      const condition = bundle.entry![0].resource as any;
+      const condition = bundle.entry![0].resource as Condition;
       expect(condition.code).toBeDefined();
-      expect(condition.subject.reference).toContain('Patient');
+      expect(condition.subject?.reference).toContain('Patient');
     });
 
     it('should successfully search for Observation resources (USCDI)', async () => {
@@ -201,7 +201,7 @@ describe('ProviderAccessApi', () => {
       expect(bundle.entry).toBeDefined();
       expect(bundle.entry![0].resource?.resourceType).toBe('Observation');
       
-      const observation = bundle.entry![0].resource as any;
+      const observation = bundle.entry![0].resource as Observation;
       expect(observation.code).toBeDefined();
       expect(observation.valueQuantity).toBeDefined();
     });
@@ -482,13 +482,13 @@ describe('ProviderAccessApi', () => {
       };
 
       const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
-      const redacted = api.redactPhi(fhirPatient) as any;
+      const redacted = api.redactPhi(fhirPatient) as Patient;
 
-      expect(redacted.name![0].family).toBe('***');
-      expect(redacted.name![0].given).toContain('***');
+      expect(redacted.name?.[0]?.family).toBe('***');
+      expect(redacted.name?.[0]?.given).toContain('***');
       expect(redacted.birthDate).toBe('****-**-**');
-      expect(redacted.address![0].city).toBe('***');
-      expect(redacted.telecom![0].value).toBe('***');
+      expect(redacted.address?.[0]?.city).toBe('***');
+      expect(redacted.telecom?.[0]?.value).toBe('***');
     });
 
     it('should preserve resource structure when redacting', () => {
@@ -501,7 +501,7 @@ describe('ProviderAccessApi', () => {
       };
 
       const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
-      const redacted = api.redactPhi(fhirPatient) as any;
+      const redacted = api.redactPhi(fhirPatient) as Patient;
 
       expect(redacted.resourceType).toBe('Patient');
       expect(redacted.id).toBe(fhirPatient.id);
