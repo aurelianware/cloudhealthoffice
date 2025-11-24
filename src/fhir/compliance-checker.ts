@@ -58,6 +58,9 @@ export class CMS0057FComplianceChecker {
   private issues: ComplianceIssue[] = [];
   private checkedRules: string[] = [];
   
+  // Scoring constants
+  private readonly WARNING_PENALTY = 0.5; // Warnings count as half an error in scoring
+  
   /**
    * Validates a FHIR ServiceRequest against CMS-0057-F requirements
    */
@@ -562,7 +565,7 @@ export class CMS0057FComplianceChecker {
     
     const compliant = errorCount === 0;
     const score = Math.round(
-      ((this.checkedRules.length - errorCount - warningCount * 0.5) / this.checkedRules.length) * 100
+      ((this.checkedRules.length - errorCount - warningCount * this.WARNING_PENALTY) / this.checkedRules.length) * 100
     );
     
     return {
@@ -613,12 +616,14 @@ export async function validateWithAzureFHIR(
   // If Azure FHIR endpoint provided, call $validate operation
   if (azureFhirEndpoint) {
     try {
-      // TODO: Implement Azure FHIR $validate integration
-      // This would require:
+      // TODO: Implement Azure FHIR $validate integration (Tracked in GitHub Issue #TBD)
+      // Target: Q1 2025
+      // Requirements:
       // 1. Authentication (managed identity or service principal)
       // 2. HTTP POST to {endpoint}/{resourceType}/$validate
       // 3. Parse OperationOutcome response
       // 4. Convert to ComplianceResult format
+      // Reference: https://www.hl7.org/fhir/resource-operation-validate.html
       
       // For now, log that Azure validation is requested but fall back to local
       console.warn(`Azure FHIR validation requested for ${azureFhirEndpoint} but not yet implemented. Using local validation.`);
