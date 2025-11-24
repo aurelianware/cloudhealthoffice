@@ -75,7 +75,8 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12_270_data);
 ### Standards References
 
 - **CMS-9115-F**: Interoperability and Patient Access Final Rule
-- **CMS-0057-F**: Prior Authorization and Provider Access Rule (March 2023, Effective 2027)
+- **CMS-0057-F**: Prior Authorization API (March 2023, Effective January 1, 2026)
+- **CMS-0057-F**: Provider Access API (March 2023, Effective January 1, 2027)
 - **X12 005010X279A1**: Health Care Eligibility Benefit Inquiry and Response
 - **HL7 FHIR R4**: v4.0.1 Specification
 - **US Core 3.1.1**: US Core Implementation Guide
