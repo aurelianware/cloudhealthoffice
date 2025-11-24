@@ -19,7 +19,7 @@ describe("AI EDI 277 Error Resolution", () => {
       const samplePayload: EDI277Payload = {
         transactionId: "TRX555",
         payer: "BestMed",
-        memberId: "123-45-6789",
+        memberId: "MBR123456789",
         errorCode: "123X",
         errorDesc: "INVALID MEMBER ID",
       };
@@ -146,7 +146,7 @@ describe("AI EDI 277 Error Resolution", () => {
       const payload: EDI277Payload = {
         transactionId: "TRX007",
         payer: "TestPayer",
-        memberId: "123-45-6789", // SSN format
+        memberId: "MBR123456789", // Test member ID (not real PHI)
         claimNumber: "CLM123456",
         providerNpi: "1234567890",
         errorCode: "TEST",
@@ -164,9 +164,9 @@ describe("AI EDI 277 Error Resolution", () => {
       const payload: EDI277Payload = {
         transactionId: "TRX008",
         payer: "TestPayer",
-        memberId: "123-45-6789",
+        memberId: "MBR123456789",
         errorCode: "TEST",
-        errorDesc: "Member 123-45-6789 not found"
+        errorDesc: "Member MBR123456789 not found"
       };
 
       const masked = maskPHIFields(payload);
