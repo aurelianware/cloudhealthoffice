@@ -166,7 +166,6 @@ describe('HIPAA Logging Validation', () => {
     });
 
     it('should verify hipaaLogger import in workflow files', () => {
-      const workflowDir = path.join(__dirname, '../../logicapps/workflows');
       
       // This would check actual workflow files in a real implementation
       // For now, we verify the test framework is in place
