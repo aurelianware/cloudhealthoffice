@@ -1,8 +1,8 @@
-# FHIR R4 Integration Guide - Eligibility and Claims
+# FHIR R4 Integration Guide - Eligibility, Claims, and Provider Access
 
 **Cloud Health Office** - HIPAA-compliant FHIR R4 integration for payer systems
 
-This document details the FHIR R4 implementation for mapping X12 EDI eligibility transactions (270/271) to FHIR resources, supporting CMS Patient Access API mandates.
+This document details the FHIR R4 implementation for healthcare payer eligibility workflows. Supported mandates include mapping X12 EDI eligibility transactions (270/271) to FHIR resources, CMS Patient Access API requirements, and Provider Access API (CMS-0057-F) for provider data access.
 
 ---
 
@@ -11,12 +11,13 @@ This document details the FHIR R4 implementation for mapping X12 EDI eligibility
 1. [Overview](#overview)
 2. [CMS Interoperability Compliance](#cms-interoperability-compliance)
 3. [Architecture](#architecture)
-4. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
-5. [Usage Examples](#usage-examples)
-6. [fhir.js Integration](#fhirjs-integration)
-7. [API Endpoints](#api-endpoints)
-8. [Testing](#testing)
-9. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
+4. [Provider Access API (CMS-0057-F)](#provider-access-api-cms-0057-f)
+5. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
+6. [Usage Examples](#usage-examples)
+7. [fhir.js Integration](#fhirjs-integration)
+8. [API Endpoints](#api-endpoints)
+9. [Testing](#testing)
+10. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
 
 ---
 
@@ -74,11 +75,419 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12_270_data);
 ### Standards References
 
 - **CMS-9115-F**: Interoperability and Patient Access Final Rule
-- **CMS-0057-F**: Prior Authorization Rule (March 2023)
+- **CMS-0057-F**: Prior Authorization API (March 2023, Effective January 1, 2026)
+- **CMS-0057-F**: Provider Access API (March 2023, Effective January 1, 2027)
 - **X12 005010X279A1**: Health Care Eligibility Benefit Inquiry and Response
 - **HL7 FHIR R4**: v4.0.1 Specification
 - **US Core 3.1.1**: US Core Implementation Guide
 - **Da Vinci PDex**: Payer Data Exchange Implementation Guide
+- **SMART on FHIR**: Authorization framework for healthcare apps
+
+---
+
+## Provider Access API (CMS-0057-F)
+
+The Provider Access API enables healthcare providers to securely access patient data with proper authentication, authorization, and consent management. This implementation aligns with CMS-0057-F requirements effective in 2027.
+
+### Key Features
+
+✅ **SMART on FHIR Authentication** - OpenID Connect/OAuth2 for EHR/provider authentication  
+✅ **Patient Consent Management** - Validate patient authorization before data access  
+✅ **FHIR R4 Endpoints** - Search and read operations for clinical and administrative data  
+✅ **HIPAA Safeguards** - Encryption, audit logging, and PHI redaction  
+✅ **US Core v3.1.1 Compliance** - US Core Patient profile and USCDI data elements  
+✅ **Da Vinci PDex Alignment** - Compatible with Payer Data Exchange Implementation Guides  
+✅ **Backend Integration** - QNXT to FHIR data mapping
+
+### Supported Resources
+
+The Provider Access API supports search and read operations for the following FHIR resources:
+
+| Resource Type | Purpose | Standards |
+|---------------|---------|-----------|
+| **Patient** | Patient demographics and identifiers | US Core v3.1.1 |
+| **Claim** | Claims data (837 Professional, Institutional, Dental) | FHIR R4 |
+| **Encounter** | Clinical encounters and visits | FHIR R4 |
+| **ExplanationOfBenefit** | Adjudicated claim information | FHIR R4 |
+| **Condition** | Clinical conditions (diagnoses) | US Core, USCDI |
+| **Observation** | Laboratory results and vital signs | US Core, USCDI |
+
+### Authentication Flow
+
+The Provider Access API uses SMART on FHIR for secure authentication:
+
+```
+1. Provider EHR initiates OAuth2 authorization request
+   ↓
+2. Provider authenticates with Azure AD / Identity Provider
+   ↓
+3. Patient consent is validated (active consent required)
+   ↓
+4. Access token issued with appropriate scopes
+   ↓
+5. Provider makes FHIR API requests with Bearer token
+   ↓
+6. API validates token, checks consent, returns FHIR resources
+   ↓
+7. All access logged to audit trail (HIPAA compliance)
+```
+
+### Consent Model
+
+Patient consent is required before providers can access data via the Provider Access API:
+
+- **Active Consent**: Patient must have active, unexpired consent on file
+- **Scope-Based Access**: Consent defines which resource types are accessible
+- **Purpose of Use**: Consent records purpose (Treatment, Payment, Operations)
+- **Expiration**: Consents have configurable expiration dates
+- **Revocation**: Patients can revoke consent at any time
+
+**Consent Statuses:**
+- `active` - Provider has access to patient data
+- `inactive` - Consent not yet effective
+- `revoked` - Patient has revoked consent
+- `pending` - Awaiting patient approval
+
+### API Endpoints
+
+#### Search Resources
+```
+GET /[ResourceType]?patient=[patientId]&[other-params]
+Authorization: Bearer {access_token}
+```
+
+**Supported Parameters:**
+- `patient` - Patient identifier (required)
+- `date` - Filter by service/effective date
+- `status` - Filter by resource status
+- `category` - Filter by category (Condition, Observation)
+- `_count` - Results per page (pagination)
+- `_page` - Page number (pagination)
+
+**Example Request:**
+```http
+GET /Condition?patient=PAT123&clinical-status=active
+Authorization: Bearer provider:NPI12345:abc123token
+```
+
+**Example Response:**
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "total": 2,
+  "entry": [
+    {
+      "fullUrl": "Condition/COND001",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "COND001",
+        "clinicalStatus": {
+          "coding": [{
+            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+            "code": "active"
+          }]
+        },
+        "code": {
+          "coding": [{
+            "system": "http://snomed.info/sct",
+            "code": "44054006",
+            "display": "Type 2 diabetes mellitus"
+          }]
+        },
+        "subject": {
+          "reference": "Patient/PAT123"
+        },
+        "onsetDateTime": "2020-06-15"
+      }
+    }
+  ]
+}
+```
+
+#### Read Specific Resource
+```
+GET /[ResourceType]/[id]
+Authorization: Bearer {access_token}
+```
+
+**Example Request:**
+```http
+GET /Patient/PAT123
+Authorization: Bearer provider:NPI12345:abc123token
+```
+
+**Example Response:**
+```json
+{
+  "resourceType": "Patient",
+  "id": "PAT123",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+  },
+  "identifier": [
+    {
+      "use": "official",
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+          "code": "MB",
+          "display": "Member Number"
+        }]
+      },
+      "value": "PAT123"
+    }
+  ],
+  "active": true,
+  "name": [
+    {
+      "use": "official",
+      "family": "Doe",
+      "given": ["John"]
+    }
+  ],
+  "gender": "male",
+  "birthDate": "1980-01-01"
+}
+```
+
+### Error Handling
+
+The Provider Access API returns FHIR OperationOutcome resources for errors:
+
+#### Authentication Error (401)
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [{
+    "severity": "error",
+    "code": "login",
+    "diagnostics": "Invalid or missing SMART on FHIR token"
+  }]
+}
+```
+
+#### Consent Denied (403)
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [{
+    "severity": "error",
+    "code": "forbidden",
+    "diagnostics": "Provider NPI12345 does not have consent to access patient PAT123 data"
+  }]
+}
+```
+
+#### Resource Not Found (404)
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [{
+    "severity": "error",
+    "code": "not-found",
+    "diagnostics": "Patient/PAT999 not found"
+  }]
+}
+```
+
+### Backend Data Mapping (QNXT → FHIR)
+
+The Provider Access API includes mappers to transform backend payer system data (e.g., QNXT) to FHIR resources:
+
+**Patient Mapping:**
+```typescript
+// QNXT Patient data
+const qnxtPatient = {
+  memberId: 'MEM123',
+  firstName: 'John',
+  lastName: 'Doe',
+  dob: '19850615',
+  gender: 'M',
+  address: { /* ... */ },
+  phone: '555-1234',
+  email: 'john@example.com'
+};
+
+// Transform to FHIR Patient (US Core)
+const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+```
+
+**Claim Mapping:**
+```typescript
+// QNXT Claim data
+const qnxtClaim = {
+  claimId: 'CLM123',
+  memberId: 'MEM123',
+  providerId: 'NPI98765',
+  claimType: 'Professional',
+  serviceDate: '2024-01-15',
+  diagnosisCodes: ['E11.9', 'I10'],
+  procedureCodes: ['99213', '80053'],
+  totalCharged: 350.00,
+  totalPaid: 280.00,
+  status: 'active'
+};
+
+// Transform to FHIR Claim
+const fhirClaim = api.mapQnxtClaimToFhir(qnxtClaim);
+```
+
+**Encounter Mapping:**
+```typescript
+// QNXT Encounter data
+const qnxtEncounter = {
+  encounterId: 'ENC123',
+  memberId: 'MEM123',
+  providerId: 'NPI98765',
+  encounterType: 'AMB',
+  encounterDate: '2024-01-15T10:00:00Z',
+  diagnosisCodes: ['E11.9'],
+  status: 'finished'
+};
+
+// Transform to FHIR Encounter
+const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
+```
+
+### HIPAA Safeguards
+
+The Provider Access API implements comprehensive HIPAA safeguards:
+
+#### 1. Encryption (AES-256-GCM)
+```typescript
+// Encrypt PHI data
+const encrypted = api.encryptPhi('John Doe, SSN: 123-45-6789');
+
+// Decrypt when needed
+const decrypted = api.decryptPhi(encrypted);
+```
+
+#### 2. Audit Logging
+All access is logged with:
+- Timestamp
+- Event type (access, search, read, consent_check, auth_failure)
+- User/Provider identifier
+- Patient identifier
+- Resource type and ID
+- Result (success/failure)
+- IP address
+- Details
+
+**Audit Log Example:**
+```
+[AUDIT] 2024-01-15T10:30:00Z - search - success - User: NPI12345 - Search: Patient with params {"patient":"PAT123"}
+[AUDIT] 2024-01-15T10:30:01Z - consent_check - success - User: NPI12345 - Patient: PAT123
+[AUDIT] 2024-01-15T10:30:02Z - read - success - User: NPI12345 - Read: Patient/PAT123
+```
+
+#### 3. PHI Redaction
+```typescript
+// Original patient resource
+const patient = { /* full PHI */ };
+
+// Redact for logging/monitoring
+const redacted = api.redactPhi(patient);
+// Result: names → ***, DOB → ****-**-**, addresses → ***
+```
+
+### Azure API Management Integration
+
+Deploy the Provider Access API behind Azure API Management for:
+
+- **Rate Limiting**: Prevent abuse and ensure fair usage
+- **IP Whitelisting**: Restrict access to known provider networks
+- **Additional Authentication**: Layer OAuth2 scopes and policies
+- **Monitoring**: Track API usage, performance, and errors
+- **Caching**: Improve performance for frequently accessed data
+- **Transformation**: Additional request/response processing if needed
+
+**Example API Management Policy:**
+```xml
+<policies>
+  <inbound>
+    <rate-limit calls="100" renewal-period="60" />
+    <validate-jwt header-name="Authorization" />
+    <set-header name="X-Forwarded-For" exists-action="override">
+      <value>@(context.Request.IpAddress)</value>
+    </set-header>
+  </inbound>
+  <backend>
+    <forward-request />
+  </backend>
+  <outbound>
+    <set-header name="X-Content-Type-Options" exists-action="override">
+      <value>nosniff</value>
+    </set-header>
+  </outbound>
+</policies>
+```
+
+### Usage Example
+
+```typescript
+import { createProviderAccessApi } from './src/fhir/provider-access-api';
+
+// Initialize API with encryption key (from Azure Key Vault in production)
+const api = createProviderAccessApi(process.env.ENCRYPTION_KEY);
+
+// Provider authentication token from SMART on FHIR flow
+const token = 'provider:NPI12345:valid-access-token';
+
+// Search for patient conditions
+const conditionsBundle = await api.searchResources(
+  'Condition',
+  { 
+    resourceType: 'Condition', 
+    patient: 'PAT123',
+    'clinical-status': 'active'
+  },
+  token
+);
+
+// Read specific patient
+const patient = await api.readResource('Patient', 'PAT123', token);
+
+// Get audit logs for compliance reporting
+const auditLogs = api.getAuditLogs();
+```
+
+### Testing
+
+The Provider Access API includes 44 comprehensive unit tests covering:
+
+- ✅ SMART on FHIR authentication (valid/invalid tokens)
+- ✅ Patient consent validation (active, expired, revoked)
+- ✅ Search operations (all 6 resource types)
+- ✅ Read operations with consent checks
+- ✅ QNXT to FHIR mapping (Patient, Claim, Encounter)
+- ✅ Gender and date format handling
+- ✅ Encryption/decryption (AES-256-GCM)
+- ✅ PHI redaction
+- ✅ Audit logging
+- ✅ Error handling (401, 403, 404)
+- ✅ US Core v3.1.1 compliance
+- ✅ Integration scenarios
+
+**Run Provider Access API tests:**
+```bash
+npm run test:fhir
+```
+
+**Expected Output:**
+```
+PASS src/fhir/__tests__/provider-access-api.test.ts
+  ProviderAccessApi
+    ✓ should validate SMART on FHIR tokens
+    ✓ should check patient consent
+    ✓ should search FHIR resources
+    ✓ should map QNXT data to FHIR
+    ✓ should encrypt/decrypt PHI
+    ✓ should log audit trails
+    ... (44 tests total)
+
+Tests: 44 passed, 44 total
+```
 
 ---
 
