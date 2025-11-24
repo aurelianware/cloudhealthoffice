@@ -537,4 +537,32 @@ describe('Date Normalization', () => {
     const claim = mapX12_837_ToFhirClaim(x12_837);
     expect(claim.item![0].servicedDate).toBe('2024-01-15');
   });
+
+  it('handles X12 datetime without separator (CCYYMMDDHHMM)', () => {
+    const x12_837 = {
+      claimId: 'TEST',
+      transactionDate: '202401151430', // 12 characters, no separator
+      totalClaimChargeAmount: 100,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'Test',
+        lastName: 'User',
+        dob: '19850615',
+      },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: '20240115',
+        units: 1,
+        chargeAmount: 100,
+      }],
+      payerId: 'PAYER',
+    };
+
+    const claim = mapX12_837_ToFhirClaim(x12_837);
+    expect(claim.created).toBe('2024-01-15T14:30:00Z');
+  });
 });

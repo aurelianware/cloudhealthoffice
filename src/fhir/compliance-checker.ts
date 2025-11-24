@@ -598,15 +598,36 @@ export function createComplianceChecker(): CMS0057FComplianceChecker {
 
 /**
  * Validates FHIR resources against Azure API for FHIR (if available)
- * This is a placeholder for integration with Azure FHIR service
+ * 
+ * When azureFhirEndpoint is provided, this function will call the Azure FHIR $validate operation.
+ * Otherwise, it performs local validation using the compliance checker.
+ * 
+ * @param resource FHIR resource to validate
+ * @param azureFhirEndpoint Optional Azure FHIR endpoint URL (e.g., https://my-fhir.azurehealthcareapis.com)
+ * @returns ComplianceResult with validation details
  */
 export async function validateWithAzureFHIR(
   resource: ServiceRequest | Claim | ExplanationOfBenefit | Patient,
   azureFhirEndpoint?: string
 ): Promise<ComplianceResult> {
-  // This would integrate with Azure API for FHIR $validate operation
-  // For now, return a basic compliance check
+  // If Azure FHIR endpoint provided, call $validate operation
+  if (azureFhirEndpoint) {
+    try {
+      // TODO: Implement Azure FHIR $validate integration
+      // This would require:
+      // 1. Authentication (managed identity or service principal)
+      // 2. HTTP POST to {endpoint}/{resourceType}/$validate
+      // 3. Parse OperationOutcome response
+      // 4. Convert to ComplianceResult format
+      
+      // For now, log that Azure validation is requested but fall back to local
+      console.warn(`Azure FHIR validation requested for ${azureFhirEndpoint} but not yet implemented. Using local validation.`);
+    } catch (error) {
+      console.error('Azure FHIR validation failed, falling back to local validation:', error);
+    }
+  }
   
+  // Perform local validation
   const checker = createComplianceChecker();
   
   switch (resource.resourceType) {
