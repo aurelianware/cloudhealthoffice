@@ -1606,7 +1606,7 @@ A:
 
 ### Code Examples
 
-- **Basic Usage**: `src/fhir/prior-auth-api.ts` (690+ lines)
+- **Basic Usage**: `src/fhir/prior-auth-api.ts` (820+ lines)
 - **Test Suite**: `src/fhir/__tests__/prior-auth-api.test.ts` (32 tests)
 - **Integration**: See Logic Apps workflows in `logicapps/workflows/`
 

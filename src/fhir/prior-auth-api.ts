@@ -30,17 +30,10 @@
 import { 
   Claim, 
   ClaimResponse, 
-  Patient, 
-  Organization,
-  Practitioner,
-  ServiceRequest,
   DocumentReference,
   Binary,
-  Identifier,
-  CodeableConcept,
   Extension,
   Reference,
-  Period,
   Meta
 } from 'fhir/r4';
 
@@ -136,6 +129,8 @@ export interface X12_278 {
       description?: string;
       modifier?: string[];
       quantity?: number;
+      /** References to diagnosis codes (0-indexed positions in diagnosisCodes array) */
+      diagnosisPointers?: number[];
     }>;
     diagnosisCodes?: Array<{
       code: string;
@@ -160,8 +155,8 @@ export interface X12_278 {
     reviewOutcome?: 'A1' | 'A2' | 'A3' | 'A4' | 'A6' | 'CT' | 'NA';
     certifiedQuantity?: number;
     certifiedPeriod?: {
-      startDate: string;
-      endDate: string;
+      startDate?: string;
+      endDate?: string;
     };
     reviewNotes?: string[];
     additionalInfoRequired?: boolean;
@@ -320,7 +315,9 @@ export function mapX12278ToFhirPriorAuth(input: X12_278): PriorAuthorizationRequ
         start: input.serviceRequest.serviceStartDate,
         end: input.serviceRequest.serviceEndDate
       },
-      diagnosisSequence: proc.codeType === 'ICD10' ? [1] : undefined
+      diagnosisSequence: Array.isArray(proc.diagnosisPointers) && proc.diagnosisPointers.length > 0
+        ? proc.diagnosisPointers.map(ptr => ptr + 1)
+        : undefined
     })),
     diagnosis: input.serviceRequest.diagnosisCodes?.map((diag, index) => ({
       sequence: index + 1,
@@ -393,6 +390,17 @@ export function mapFhirPriorAuthToX12278(
 ): X12_278 {
   const responseCode = getX12ResponseCode(response.outcome, response.disposition);
   
+  // Extract certified period from extension (avoiding redundant lookups)
+  const reviewPeriodExtension = response.item?.[0]?.extension?.find(
+    ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
+  );
+  const certifiedPeriod = reviewPeriodExtension?.valuePeriod 
+    ? {
+        startDate: reviewPeriodExtension.valuePeriod.start,
+        endDate: reviewPeriodExtension.valuePeriod.end
+      }
+    : undefined;
+
   const x12Response: X12_278 = {
     ...originalRequest,
     transactionType: '13', // Response
@@ -406,16 +414,7 @@ export function mapFhirPriorAuthToX12278(
       certifiedQuantity: response.item?.[0]?.adjudication?.find(
         adj => adj.category.coding?.[0]?.code === 'approved'
       )?.value,
-      certifiedPeriod: response.item?.[0]?.extension?.find(
-        ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
-      )?.valuePeriod ? {
-        startDate: response.item[0].extension.find(
-          ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
-        )!.valuePeriod!.start!,
-        endDate: response.item[0].extension.find(
-          ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
-        )!.valuePeriod!.end!
-      } : undefined,
+      certifiedPeriod,
       reviewNotes: response.processNote?.map(note => note.text) || [],
       additionalInfoRequired: response.outcome === 'queued',
       additionalInfoDeadline: response.outcome === 'queued' ? 
@@ -476,6 +475,20 @@ export function checkSlaCompliance(
 }
 
 /**
+ * Generates a unique ID for resources
+ * Uses crypto.randomUUID when available, falls back to timestamp + random
+ */
+function generateUniqueId(prefix: string): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  // Fallback: timestamp + random string for environments without crypto.randomUUID
+  const timestamp = Date.now().toString(36);
+  const randomPart = Math.random().toString(36).substring(2, 10);
+  return `${prefix}-${timestamp}-${randomPart}`;
+}
+
+/**
  * Creates a FHIR Binary resource for attachment handling
  * Supports documents, images, and other clinical attachments
  * 
@@ -491,7 +504,7 @@ export function createAttachmentBinary(
 ): Binary {
   return {
     resourceType: 'Binary',
-    id: `attachment-${Date.now()}`,
+    id: generateUniqueId('attachment'),
     meta: {
       profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-binary'],
       lastUpdated: new Date().toISOString()
@@ -552,13 +565,42 @@ export function createAttachmentDocumentReference(
 }
 
 /**
+ * CDS Hooks request payload interface for CRD validation
+ * Based on CDS Hooks specification: https://cds-hooks.org/
+ */
+export interface CDSHookRequest {
+  /** The hook that triggered this request */
+  hook?: string;
+  /** Unique identifier for this hook invocation */
+  hookInstance?: string;
+  /** Context data specific to the hook type */
+  context?: {
+    userId?: string;
+    patientId?: string;
+    draftOrders?: unknown;
+    appointments?: unknown;
+    [key: string]: unknown;
+  };
+  /** FHIR server base URL */
+  fhirServer?: string;
+  /** OAuth2 access token (all fields optional when parent is provided) */
+  fhirAuthorization?: {
+    access_token?: string;
+    token_type?: string;
+    scope?: string;
+  };
+  /** Prefetch data provided by the EHR */
+  prefetch?: Record<string, unknown>;
+}
+
+/**
  * Validates Da Vinci CRD hook request structure
  * Implements Coverage Requirements Discovery (CRD) IG
  * 
  * @param hookRequest CDS Hooks request payload
  * @returns Validation result
  */
-export function validateCRDHookRequest(hookRequest: any): { valid: boolean; errors: string[] } {
+export function validateCRDHookRequest(hookRequest: CDSHookRequest): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   if (!hookRequest.hook) {
@@ -589,14 +631,27 @@ export function validateCRDHookRequest(hookRequest: any): { valid: boolean; erro
 
 /**
  * Helper: Get X12 response code from FHIR outcome
+ * Maps FHIR ClaimResponse outcome to X12 278 response codes
  */
 function getX12ResponseCode(outcome: string, disposition?: string): '01' | '02' | '03' | '04' | '05' | '06' {
-  if (outcome === 'complete' && disposition?.includes('approved')) return '01'; // Approved
-  if (outcome === 'complete' && disposition?.includes('denied')) return '02'; // Denied
+  if (outcome === 'complete') {
+    // For complete outcomes, check disposition for approval/denial status
+    // Use exact word boundary checks to avoid false positives (e.g., "not approved")
+    const lowerDisposition = disposition?.toLowerCase() ?? '';
+    const approvedPatterns = [/\bapproved\b/, /\bauthorized\b/, /\bcertified\b/];
+    const deniedPatterns = [/\bdenied\b/, /\brejected\b/, /\bnot approved\b/, /\bnot authorized\b/];
+    
+    // Check denial patterns first (more specific, handles "not approved")
+    if (deniedPatterns.some(pattern => pattern.test(lowerDisposition))) return '02'; // Denied
+    if (approvedPatterns.some(pattern => pattern.test(lowerDisposition))) return '01'; // Approved
+    
+    // Default to approved for complete outcomes without explicit disposition
+    return '01'; // Approved (complete without disposition implies success)
+  }
   if (outcome === 'queued') return '03'; // Pended/Additional Info Required
   if (outcome === 'partial') return '04'; // Partial Approval
   if (outcome === 'error') return '06'; // Invalid/Error
-  return '05'; // Modified
+  return '05'; // Modified (fallback for unknown outcomes)
 }
 
 /**
@@ -671,6 +726,13 @@ export interface ClearinghouseConfig {
 /**
  * Packages a prior authorization request for clearinghouse submission
  * 
+ * @note This is a placeholder implementation that returns JSON format.
+ *       Production implementations should integrate with an actual X12 EDI
+ *       encoder library (e.g., x12-parser, edi-parser) to generate compliant
+ *       X12 278 EDI segments.
+ * 
+ * @todo Integrate with X12 EDI encoder library for production use
+ * 
  * @param fhirRequest FHIR Prior Authorization Request
  * @param x12Request X12 278 structure
  * @param config Clearinghouse configuration
@@ -682,11 +744,11 @@ export function packageForClearinghouse(
   config: ClearinghouseConfig
 ): {
   x12Payload: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   destination: string;
 } {
-  // In production, this would generate actual X12 EDI format
-  // For now, we return a structured representation
+  // Note: In production, this would generate actual X12 EDI format
+  // using an EDI encoder library. Current implementation returns JSON.
   const x12Payload = JSON.stringify(x12Request, null, 2);
   
   return {
