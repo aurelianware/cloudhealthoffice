@@ -611,7 +611,7 @@ export class ProviderAccessApi {
       status: this.mapEncounterStatus(qnxtEncounter.status),
       class: {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-        code: qnxtEncounter.encounterType.toLowerCase()
+        code: this.mapEncounterClass(qnxtEncounter.encounterType)
       },
       subject: {
         reference: `Patient/${qnxtEncounter.memberId}`
@@ -626,6 +626,7 @@ export class ProviderAccessApi {
       },
       diagnosis: qnxtEncounter.diagnosisCodes.map((code, index) => ({
         condition: {
+          reference: `Condition/${qnxtEncounter.encounterId}-COND${index + 1}`,
           display: code
         },
         rank: index + 1
@@ -730,7 +731,7 @@ export class ProviderAccessApi {
    */
   createErrorOutcome(
     severity: 'fatal' | 'error' | 'warning' | 'information',
-    code: string,
+    code: 'invalid' | 'structure' | 'required' | 'value' | 'invariant' | 'security' | 'login' | 'unknown' | 'expired' | 'forbidden' | 'suppressed' | 'processing' | 'not-supported' | 'duplicate' | 'multiple-matches' | 'not-found' | 'deleted' | 'too-long' | 'code-invalid' | 'extension' | 'too-costly' | 'business-rule' | 'conflict' | 'transient' | 'lock-error' | 'no-store' | 'exception' | 'timeout' | 'incomplete' | 'throttled' | 'informational',
     message: string
   ): OperationOutcome {
     return {
@@ -1070,6 +1071,49 @@ export class ProviderAccessApi {
         return 'cancelled';
       default:
         return 'unknown';
+    }
+  }
+
+  private mapEncounterClass(encounterType: string): string {
+    // Map QNXT encounter types to valid v3-ActCode values
+    const normalized = encounterType.toUpperCase();
+    switch (normalized) {
+      case 'AMB':
+      case 'AMBULATORY':
+      case 'OUTPATIENT':
+        return 'AMB'; // ambulatory
+      case 'EMER':
+      case 'EMERGENCY':
+        return 'EMER'; // emergency
+      case 'FLD':
+      case 'FIELD':
+        return 'FLD'; // field
+      case 'HH':
+      case 'HOME':
+      case 'HOME HEALTH':
+        return 'HH'; // home health
+      case 'IMP':
+      case 'INPATIENT':
+        return 'IMP'; // inpatient encounter
+      case 'ACUTE':
+        return 'ACUTE'; // inpatient acute
+      case 'NONAC':
+        return 'NONAC'; // inpatient non-acute
+      case 'OBSENC':
+      case 'OBSERVATION':
+        return 'OBSENC'; // observation encounter
+      case 'PRENC':
+      case 'PREENROLLMENT':
+        return 'PRENC'; // pre-admission
+      case 'SS':
+      case 'SHORT STAY':
+        return 'SS'; // short stay
+      case 'VR':
+      case 'VIRTUAL':
+        return 'VR'; // virtual
+      default:
+        // If not recognized, default to ambulatory (most common)
+        return 'AMB';
     }
   }
 }
