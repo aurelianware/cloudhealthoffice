@@ -542,12 +542,14 @@ export class PayerToPayerAPI {
 
     // Match on identifier (SSN, member ID)
     if (patient1.identifier && patient2.identifier) {
-      for (const id1 of patient1.identifier) {
+      let identifierMatched = false;
+      outerIdentifier: for (const id1 of patient1.identifier) {
         for (const id2 of patient2.identifier) {
           if (id1.value === id2.value && id1.system === id2.system) {
             score += weights.identifier;
             matchedOn.push('identifier');
-            break;
+            identifierMatched = true;
+            break outerIdentifier;
           }
         }
       }
@@ -568,12 +570,14 @@ export class PayerToPayerAPI {
 
     // Match on telecom
     if (patient1.telecom && patient2.telecom) {
-      for (const tel1 of patient1.telecom) {
+      let telecomMatched = false;
+      outerTelecom: for (const tel1 of patient1.telecom) {
         for (const tel2 of patient2.telecom) {
           if (tel1.value === tel2.value) {
             score += weights.telecom;
             matchedOn.push('telecom');
-            break;
+            telecomMatched = true;
+            break outerTelecom;
           }
         }
       }
@@ -584,6 +588,7 @@ export class PayerToPayerAPI {
 
   /**
    * Convert FHIR resources to NDJSON format
+   * For large datasets, consider processing in batches to reduce memory footprint
    */
   private convertToNDJSON(resources: any[]): string {
     return resources.map(r => JSON.stringify(r)).join('\n');
@@ -591,12 +596,23 @@ export class PayerToPayerAPI {
 
   /**
    * Parse NDJSON format to FHIR resources
+   * Includes error handling for malformed JSON lines
    */
   private parseNDJSON(ndjson: string): any[] {
-    return ndjson
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => JSON.parse(line));
+    const resources: any[] = [];
+    const lines = ndjson.split('\n').filter(line => line.trim());
+    
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const resource = JSON.parse(lines[i]);
+        resources.push(resource);
+      } catch (error) {
+        // Log error but continue parsing other lines
+        console.warn(`Failed to parse NDJSON line ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+    
+    return resources;
   }
 
   /**
@@ -630,6 +646,7 @@ export class PayerToPayerAPI {
 
   /**
    * Deduplicate resources by ID
+   * Resources without IDs are treated as unique
    */
   private deduplicateResources(resources: any[]): {
     unique: any[];
@@ -640,6 +657,12 @@ export class PayerToPayerAPI {
     let duplicates = 0;
 
     for (const resource of resources) {
+      // Resources without IDs are always treated as unique
+      if (!resource.id) {
+        unique.push(resource);
+        continue;
+      }
+
       const key = `${resource.resourceType}/${resource.id}`;
       if (!seen.has(key)) {
         seen.add(key);
