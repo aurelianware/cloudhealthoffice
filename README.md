@@ -63,9 +63,11 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### FHIR R4 Integration
 - ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
-- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
+- ✅ **Provider Access API (CMS-0057-F)** - SMART on FHIR authentication, consent management, HIPAA safeguards
+- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F and CMS-0057-F requirements
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **19 Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **Clinical USCDI Data** - Condition and Observation resources for comprehensive clinical data
+- ✅ **63+ Comprehensive Tests** - 100% pass rate, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
