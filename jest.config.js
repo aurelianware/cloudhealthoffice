@@ -17,6 +17,7 @@ module.exports = {
     '!**/dist/**',
     '!**/examples.ts',
     '!**/secureExamples.ts',
+    '!**/provider-access-examples.ts',
     '!**/cli/**',
     '!**/utils/template-helpers.ts',
   ],

@@ -117,6 +117,36 @@ describe('ProviderAccessApi', () => {
       expect(consentLogs[0].patientId).toBe(testPatientId);
       expect(consentLogs[0].userId).toBe(testProviderId);
     });
+
+    it('should properly construct ConsentDeniedError with all properties', () => {
+      const error = new ConsentDeniedError(
+        'No active consent found',
+        'PAT999',
+        'NPI99999'
+      );
+
+      expect(error instanceof ConsentDeniedError).toBe(true);
+      expect(error instanceof Error).toBe(true);
+      expect(error.message).toBe('No active consent found');
+      expect(error.patientId).toBe('PAT999');
+      expect(error.providerId).toBe('NPI99999');
+      expect(error.name).toBe('ConsentDeniedError');
+    });
+
+    it('should properly construct ResourceNotFoundError with all properties', () => {
+      const error = new ResourceNotFoundError(
+        'Resource not found',
+        'Patient',
+        'PAT999'
+      );
+
+      expect(error instanceof ResourceNotFoundError).toBe(true);
+      expect(error instanceof Error).toBe(true);
+      expect(error.message).toBe('Resource not found');
+      expect(error.resourceType).toBe('Patient');
+      expect(error.resourceId).toBe('PAT999');
+      expect(error.name).toBe('ResourceNotFoundError');
+    });
   });
 
   // ==========================================================================
@@ -398,6 +428,38 @@ describe('ProviderAccessApi', () => {
 
       const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
       expect(fhirPatient.birthDate).toBe('1985-06-15');
+    });
+
+    it('should map various encounter types correctly', () => {
+      const testCases = [
+        { input: 'AMB', expected: 'AMB' },
+        { input: 'AMBULATORY', expected: 'AMB' },
+        { input: 'OUTPATIENT', expected: 'AMB' },
+        { input: 'EMER', expected: 'EMER' },
+        { input: 'EMERGENCY', expected: 'EMER' },
+        { input: 'IMP', expected: 'IMP' },
+        { input: 'INPATIENT', expected: 'IMP' },
+        { input: 'HH', expected: 'HH' },
+        { input: 'HOME', expected: 'HH' },
+        { input: 'VR', expected: 'VR' },
+        { input: 'VIRTUAL', expected: 'VR' },
+        { input: 'UNKNOWN_TYPE', expected: 'AMB' } // Defaults to AMB
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const qnxtEncounter: QnxtEncounter = {
+          encounterId: 'TEST',
+          memberId: 'MEM123',
+          providerId: 'NPI123',
+          encounterType: input,
+          encounterDate: '2024-01-01',
+          diagnosisCodes: [],
+          status: 'finished'
+        };
+
+        const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
+        expect(fhirEncounter.class.code).toBe(expected);
+      });
     });
   });
 
