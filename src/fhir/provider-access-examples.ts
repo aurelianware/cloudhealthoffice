@@ -7,9 +7,7 @@
 
 import {
   createProviderAccessApi,
-  QnxtPatient,
-  QnxtClaim,
-  QnxtEncounter
+  QnxtPatient
 } from './provider-access-api';
 
 /**
