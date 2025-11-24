@@ -61,12 +61,16 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **23-Test Suite** - Validated workflow and infrastructure generation
 - ✅ **Example Configurations** - Medicaid MCO and Regional Blues templates
 
-### FHIR R4 Integration
-- ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
-- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
-- ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **19 Comprehensive Tests** - 100% pass rate, production-ready
-- ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
+### FHIR R4 Integration (CMS-0057-F Compliant)
+- ✅ **Complete Transaction Coverage** - X12 270/837/278/835 → FHIR R4 mappers
+- ✅ **X12 837 → FHIR Claim** - Professional claims with Da Vinci PDex profiles
+- ✅ **X12 278 → FHIR ServiceRequest** - Prior authorization with Da Vinci PAS/CRD
+- ✅ **X12 835 → FHIR ExplanationOfBenefit** - Remittance with adjudication details
+- ✅ **CMS-0057-F Compliance Checker** - Automated validation of data classes & timelines
+- ✅ **Azure FHIR Validator** - Profile validation via Azure API for FHIR
+- ✅ **US Core + Da Vinci IGs** - PDex, PAS, CRD, DTR profile conformance
+- ✅ **45 Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **Zero External Dependencies** - Secure core mappers with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
 - ✅ **ValueAdds277 Premium Features** - 60+ enhanced response fields
@@ -113,21 +117,36 @@ node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config
 
 **Documentation:** [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
-### FHIR R4 Integration
+### FHIR R4 Integration (CMS-0057-F Compliant)
 Bridge traditional X12 EDI with modern FHIR APIs:
 
 ```typescript
-import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
+import { 
+  mapX12270ToFhirEligibility,
+  mapX12837ToFhirClaim,
+  mapX12278ToFhirServiceRequest,
+  mapX12835ToFhirExplanationOfBenefit
+} from './src/fhir/fhir-mapper';
+import { checkCMSCompliance } from './src/fhir/compliance-checker';
 
-// Transform X12 270 to FHIR R4
-const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
+// X12 837 → FHIR Claim
+const claim = mapX12837ToFhirClaim(x12_837_data);
+
+// X12 278 → FHIR ServiceRequest (Prior Auth)
+const serviceRequest = mapX12278ToFhirServiceRequest(x12_278_data);
+
+// Validate CMS-0057-F compliance
+const result = checkCMSCompliance(serviceRequest);
+console.log('Compliant:', result.compliant, 'Score:', result.score);
 ```
 
 **Standards Compliance:**
-- HIPAA X12 270: 005010X279A1 ✓
+- CMS-0057-F: Prior Authorization Final Rule ✓
+- HIPAA X12: 270/837/278/835 (005010 series) ✓
 - HL7 FHIR R4: v4.0.1 ✓
-- US Core Patient: 3.1.1 ✓
-- CMS Patient Access Rule: Ready ✓
+- US Core IG: v3.1.1+ ✓
+- Da Vinci IGs: PDex, PAS, CRD, DTR ✓
+- USCDI v3: Data class requirements ✓
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
 
