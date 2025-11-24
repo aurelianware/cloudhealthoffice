@@ -1033,7 +1033,7 @@ export class ProviderAccessApi {
 
   private normalizeDateFormat(date: string): string {
     // Handle CCYYMMDD format
-    if (date.length === 8 && /^\d{8}$/.test(date)) {
+    if (date.length === 8 && /^\d+$/.test(date)) {
       return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
     }
     return date;
