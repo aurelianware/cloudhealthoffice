@@ -64,8 +64,12 @@ npm run generate -- interactive --output my-config.json --generate
 ### FHIR R4 Integration
 - ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
 - ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
+- ✅ **Prior Authorization API (CMS-0057-F)** - FHIR R4 prior auth with Da Vinci CRD/DTR/PAS IGs
+- ✅ **X12 278 ↔ FHIR Mapping** - Bidirectional transformation for prior authorization workflows
+- ✅ **72-Hour SLA Tracking** - Automated decision timeline compliance monitoring
+- ✅ **Attachment Support** - Binary resource handling for clinical documents/images
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **19 Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **50+ Comprehensive Tests** - 100% pass rate, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
