@@ -69,7 +69,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **72-Hour SLA Tracking** - Automated decision timeline compliance monitoring
 - ✅ **Attachment Support** - Binary resource handling for clinical documents/images
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **50+ Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **198 Comprehensive Tests** - 100% pass rate, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)

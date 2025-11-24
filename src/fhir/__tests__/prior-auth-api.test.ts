@@ -1,6 +1,5 @@
 import {
   X12_278,
-  PriorAuthorizationRequest,
   PriorAuthorizationResponse,
   mapX12278ToFhirPriorAuth,
   mapFhirPriorAuthToX12278,
@@ -11,7 +10,8 @@ import {
   validateCRDHookRequest,
   packageForClearinghouse,
   processFromClearinghouse,
-  ClearinghouseConfig
+  ClearinghouseConfig,
+  CDSHookRequest
 } from '../prior-auth-api';
 
 describe('Prior Authorization API - CMS-0057-F Implementation', () => {
