@@ -606,9 +606,9 @@ function getReviewOutcome(outcome: string): 'A1' | 'A2' | 'A3' | 'A4' | 'A6' | '
   switch (outcome) {
     case 'complete': return 'A1'; // Certified
     case 'partial': return 'A2'; // Modified
-    case 'queued': return 'A3'; // Denied
+    case 'queued': return 'A4'; // Additional Information Requested
     case 'error': return 'A6'; // Contact Payer
-    default: return 'CT'; // Cancelled
+    default: return 'A3'; // Denied
   }
 }
 
@@ -621,7 +621,7 @@ function getServiceTypeDisplay(code: string): string {
     '30': 'Health Benefit Plan Coverage',
     '33': 'Chiropractic',
     '35': 'Dental Care',
-    '47': 'Hospital - Inpatient (CMS-0057-F)',
+    '47': 'Hospital',
     '48': 'Hospital - Inpatient',
     '49': 'Hospital - Outpatient',
     '50': 'Hospital - Emergency',
