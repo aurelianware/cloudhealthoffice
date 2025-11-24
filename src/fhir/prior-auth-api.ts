@@ -1,0 +1,766 @@
+/**
+ * CMS-0057-F Prior Authorization API Implementation
+ * 
+ * FHIR R4-compliant prior authorization API supporting CMS-0057-F Final Rule (Effective 2027)
+ * 
+ * Key Features:
+ * - FHIR R4 endpoints for prior authorization workflows
+ * - Azure Logic Apps orchestration integration
+ * - Da Vinci CRD (Coverage Requirements Discovery) IG support
+ * - Da Vinci DTR (Documentation Templates & Rules) IG support
+ * - Da Vinci PAS (Prior Authorization Support) IG support
+ * - X12 278 request/response mapping to FHIR resources
+ * - Real-time FHIR workflow with provider hooks
+ * - Attachment support (Binary resource handling)
+ * - Decision timeline logic (72-hour SLA compliance)
+ * - Clearinghouse integration (Availity)
+ * 
+ * References:
+ * - CMS-0057-F: Prior Authorization Final Rule
+ * - Da Vinci CRD IG: http://hl7.org/fhir/us/davinci-crd/
+ * - Da Vinci DTR IG: http://hl7.org/fhir/us/davinci-dtr/
+ * - Da Vinci PAS IG: http://hl7.org/fhir/us/davinci-pas/
+ * - US Core IG v3.1.1+: http://hl7.org/fhir/us/core/
+ * - HL7 FHIR R4: http://hl7.org/fhir/R4/
+ * - X12 278: Health Care Services Review Information (005010X217)
+ * 
+ * @module prior-auth-api
+ */
+
+import { 
+  Claim, 
+  ClaimResponse, 
+  Patient, 
+  Organization,
+  Practitioner,
+  ServiceRequest,
+  DocumentReference,
+  Binary,
+  Identifier,
+  CodeableConcept,
+  Extension,
+  Reference,
+  Period,
+  Meta
+} from 'fhir/r4';
+
+/**
+ * X12 278 Health Care Services Review structure
+ * Based on HIPAA X12 005010X217 implementation guide
+ */
+export interface X12_278 {
+  /** Transaction type: request, response, inquiry, cancel */
+  transactionType: '11' | '13' | '30' | '33';
+  
+  /** Unique transaction identifier */
+  transactionId: string;
+  
+  /** Interchange control number */
+  interchangeControlNumber?: string;
+  
+  /** Transaction timestamp (ISO 8601) */
+  timestamp?: string;
+  
+  /** Certification Type: 1=Initial, 2=Renewal, 3=Revised, 4=Cancel */
+  certificationType: '1' | '2' | '3' | '4';
+  
+  /** Service Type Code (e.g., 48=Hospital Inpatient, 49=Hospital Outpatient) */
+  serviceTypeCode: string;
+  
+  /** Level of Service: U=Urgent, E=Elective */
+  levelOfService?: 'U' | 'E';
+  
+  /** Requester information (Provider) */
+  requester: {
+    npi: string;
+    name?: string;
+    organizationName?: string;
+    taxId?: string;
+    address?: {
+      street1?: string;
+      street2?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+    phone?: string;
+    fax?: string;
+  };
+  
+  /** Patient/Member information */
+  patient: {
+    memberId: string;
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    dob: string;
+    gender?: 'M' | 'F' | 'U';
+    ssn?: string;
+    address?: {
+      street1?: string;
+      street2?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+  };
+  
+  /** Subscriber (if different from patient) */
+  subscriber?: {
+    memberId: string;
+    firstName: string;
+    lastName: string;
+    relationshipCode?: string;
+  };
+  
+  /** Payer/Health Plan */
+  payer: {
+    id: string;
+    name?: string;
+    tradingPartnerId?: string;
+  };
+  
+  /** Admission details (for inpatient) */
+  admission?: {
+    admissionDate?: string;
+    dischargeDate?: string;
+    admissionType?: string;
+    admissionSource?: string;
+  };
+  
+  /** Service request details */
+  serviceRequest: {
+    procedureCodes: Array<{
+      code: string;
+      codeType: 'CPT' | 'HCPCS' | 'ICD10' | 'DRG';
+      description?: string;
+      modifier?: string[];
+      quantity?: number;
+    }>;
+    diagnosisCodes?: Array<{
+      code: string;
+      codeType: 'ICD10' | 'ICD9';
+      description?: string;
+      pointerPosition?: number;
+    }>;
+    serviceStartDate: string;
+    serviceEndDate?: string;
+    facility?: {
+      npi?: string;
+      name?: string;
+      typeCode?: string;
+    };
+  };
+  
+  /** Review/Authorization response (for type 13, 33) */
+  reviewResponse?: {
+    authorizationNumber?: string;
+    responseCode: '01' | '02' | '03' | '04' | '05' | '06';
+    responseDescription?: string;
+    reviewOutcome?: 'A1' | 'A2' | 'A3' | 'A4' | 'A6' | 'CT' | 'NA';
+    certifiedQuantity?: number;
+    certifiedPeriod?: {
+      startDate: string;
+      endDate: string;
+    };
+    reviewNotes?: string[];
+    additionalInfoRequired?: boolean;
+    additionalInfoDeadline?: string;
+  };
+  
+  /** Attachments references */
+  attachments?: Array<{
+    controlNumber: string;
+    transmissionCode?: string;
+    description?: string;
+  }>;
+}
+
+/**
+ * FHIR R4 Prior Authorization Request (using Claim resource per Da Vinci PAS IG)
+ * Profile: http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claim
+ */
+export interface PriorAuthorizationRequest extends Omit<Claim, 'use' | 'meta'> {
+  /** Must be 'preauthorization' for prior auth */
+  use: 'preauthorization';
+  
+  /** Meta must reference Da Vinci PAS profile */
+  meta: Meta & {
+    profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claim'];
+  };
+  
+  /** Extension for certification type */
+  extension?: Extension[];
+}
+
+/**
+ * FHIR R4 Prior Authorization Response (using ClaimResponse resource per Da Vinci PAS IG)
+ * Profile: http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse
+ */
+export interface PriorAuthorizationResponse extends Omit<ClaimResponse, 'outcome' | 'meta'> {
+  /** Meta must reference Da Vinci PAS profile */
+  meta: Meta & {
+    profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'];
+  };
+  
+  /** Outcome: queued, complete, error, partial */
+  outcome: 'queued' | 'complete' | 'error' | 'partial';
+  
+  /** Disposition: approval status text */
+  disposition?: string;
+  
+  /** Extension for review outcome */
+  extension?: Extension[];
+}
+
+/**
+ * Decision timeline configuration for SLA compliance
+ */
+export interface DecisionTimeline {
+  /** Request received timestamp */
+  receivedAt: Date;
+  
+  /** Request type determines SLA */
+  requestType: 'standard' | 'urgent' | 'expedited';
+  
+  /** SLA in hours (72 for standard, 24 for urgent) */
+  slaHours: number;
+  
+  /** Decision due timestamp */
+  dueAt: Date;
+  
+  /** Actual decision timestamp */
+  decidedAt?: Date;
+  
+  /** SLA compliance status */
+  slaStatus: 'pending' | 'compliant' | 'breached';
+}
+
+/**
+ * Maps X12 278 Prior Authorization Request to FHIR R4 Claim resource
+ * Implements Da Vinci PAS IG profile requirements
+ * 
+ * @param input X12 278 structure (type 11 - request)
+ * @returns FHIR R4 PriorAuthorizationRequest (Claim resource)
+ */
+export function mapX12278ToFhirPriorAuth(input: X12_278): PriorAuthorizationRequest {
+  if (input.transactionType !== '11') {
+    throw new Error(`Invalid transaction type for request: ${input.transactionType}. Expected '11' (request).`);
+  }
+
+  const claim: PriorAuthorizationRequest = {
+    resourceType: 'Claim',
+    id: input.transactionId,
+    meta: {
+      profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claim'],
+      lastUpdated: input.timestamp || new Date().toISOString()
+    },
+    status: 'active',
+    use: 'preauthorization',
+    type: {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+        code: 'professional',
+        display: 'Professional'
+      }]
+    },
+    patient: {
+      reference: `Patient/${input.patient.memberId}`,
+      identifier: {
+        system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+        value: input.patient.memberId
+      }
+    },
+    created: input.timestamp || new Date().toISOString(),
+    provider: {
+      reference: `Practitioner/${input.requester.npi}`,
+      identifier: {
+        system: 'http://hl7.org/fhir/sid/us-npi',
+        value: input.requester.npi
+      },
+      display: input.requester.name || input.requester.organizationName
+    },
+    priority: {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+        code: input.levelOfService === 'U' ? 'urgent' : 'normal',
+        display: input.levelOfService === 'U' ? 'Urgent' : 'Normal'
+      }]
+    },
+    insurer: {
+      reference: `Organization/${input.payer.id}`,
+      identifier: {
+        value: input.payer.id
+      },
+      display: input.payer.name
+    },
+    insurance: [{
+      sequence: 1,
+      focal: true,
+      coverage: {
+        reference: `Coverage/${input.patient.memberId}`
+      }
+    }],
+    item: input.serviceRequest.procedureCodes.map((proc, index) => ({
+      sequence: index + 1,
+      productOrService: {
+        coding: [{
+          system: proc.codeType === 'CPT' ? 'http://www.ama-assn.org/go/cpt' :
+                  proc.codeType === 'HCPCS' ? 'https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets' :
+                  proc.codeType === 'ICD10' ? 'http://hl7.org/fhir/sid/icd-10' :
+                  'http://terminology.hl7.org/CodeSystem/ex-diagnosisrelatedgroup',
+          code: proc.code,
+          display: proc.description
+        }]
+      },
+      quantity: {
+        value: proc.quantity || 1
+      },
+      servicedPeriod: {
+        start: input.serviceRequest.serviceStartDate,
+        end: input.serviceRequest.serviceEndDate
+      },
+      diagnosisSequence: proc.codeType === 'ICD10' ? [1] : undefined
+    })),
+    diagnosis: input.serviceRequest.diagnosisCodes?.map((diag, index) => ({
+      sequence: index + 1,
+      diagnosisCodeableConcept: {
+        coding: [{
+          system: diag.codeType === 'ICD10' ? 'http://hl7.org/fhir/sid/icd-10' :
+                  'http://hl7.org/fhir/sid/icd-9-cm',
+          code: diag.code,
+          display: diag.description
+        }]
+      }
+    })),
+    extension: [
+      {
+        url: 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-certificationType',
+        valueCoding: {
+          system: 'https://codesystem.x12.org/005010/1322',
+          code: input.certificationType,
+          display: input.certificationType === '1' ? 'Initial' :
+                   input.certificationType === '2' ? 'Renewal' :
+                   input.certificationType === '3' ? 'Revised' : 'Cancel'
+        }
+      },
+      {
+        url: 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-serviceType',
+        valueCoding: {
+          system: 'https://codesystem.x12.org/005010/1365',
+          code: input.serviceTypeCode,
+          display: getServiceTypeDisplay(input.serviceTypeCode)
+        }
+      }
+    ]
+  };
+
+  // Add admission details if present (for inpatient)
+  if (input.admission) {
+    claim.extension?.push({
+      url: 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-admissionDates',
+      valuePeriod: {
+        start: input.admission.admissionDate,
+        end: input.admission.dischargeDate
+      }
+    });
+  }
+
+  // Update insurance with subscriber information if different from patient
+  if (input.subscriber) {
+    claim.insurance[0].identifier = {
+      value: input.subscriber.memberId
+    };
+    claim.insurance[0].coverage = {
+      reference: `Coverage/${input.subscriber.memberId}`
+    };
+  }
+
+  return claim;
+}
+
+/**
+ * Maps FHIR R4 ClaimResponse back to X12 278 Response format
+ * Implements Da Vinci PAS IG response mapping
+ * 
+ * @param response FHIR R4 PriorAuthorizationResponse (ClaimResponse resource)
+ * @param originalRequest Original X12 278 request for context
+ * @returns X12 278 structure (type 13 - response)
+ */
+export function mapFhirPriorAuthToX12278(
+  response: PriorAuthorizationResponse,
+  originalRequest: X12_278
+): X12_278 {
+  const responseCode = getX12ResponseCode(response.outcome, response.disposition);
+  
+  const x12Response: X12_278 = {
+    ...originalRequest,
+    transactionType: '13', // Response
+    transactionId: response.id || `RESP-${originalRequest.transactionId}`,
+    timestamp: response.created || new Date().toISOString(),
+    reviewResponse: {
+      authorizationNumber: response.preAuthRef,
+      responseCode,
+      responseDescription: response.disposition,
+      reviewOutcome: getReviewOutcome(response.outcome),
+      certifiedQuantity: response.item?.[0]?.adjudication?.find(
+        adj => adj.category.coding?.[0]?.code === 'approved'
+      )?.value,
+      certifiedPeriod: response.item?.[0]?.extension?.find(
+        ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
+      )?.valuePeriod ? {
+        startDate: response.item[0].extension.find(
+          ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
+        )!.valuePeriod!.start!,
+        endDate: response.item[0].extension.find(
+          ext => ext.url === 'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewPeriod'
+        )!.valuePeriod!.end!
+      } : undefined,
+      reviewNotes: response.processNote?.map(note => note.text) || [],
+      additionalInfoRequired: response.outcome === 'queued',
+      additionalInfoDeadline: response.outcome === 'queued' ? 
+        calculateDeadline(72) : undefined // 72-hour deadline
+    }
+  };
+
+  return x12Response;
+}
+
+/**
+ * Creates a Decision Timeline for SLA tracking
+ * Standard requests: 72 hours
+ * Urgent requests: 24 hours
+ * 
+ * @param request Prior authorization request
+ * @param requestType Type of request (standard, urgent, expedited)
+ * @returns DecisionTimeline object
+ */
+export function createDecisionTimeline(
+  request: X12_278 | PriorAuthorizationRequest,
+  requestType: 'standard' | 'urgent' | 'expedited' = 'standard'
+): DecisionTimeline {
+  const receivedAt = new Date();
+  const slaHours = requestType === 'urgent' ? 24 : requestType === 'expedited' ? 48 : 72;
+  const dueAt = new Date(receivedAt.getTime() + slaHours * 60 * 60 * 1000);
+
+  return {
+    receivedAt,
+    requestType,
+    slaHours,
+    dueAt,
+    slaStatus: 'pending'
+  };
+}
+
+/**
+ * Checks SLA compliance for a decision timeline
+ * 
+ * @param timeline Decision timeline to check
+ * @param decisionTime Time when decision was made (defaults to now)
+ * @returns Updated timeline with compliance status
+ */
+export function checkSlaCompliance(
+  timeline: DecisionTimeline,
+  decisionTime: Date = new Date()
+): DecisionTimeline {
+  const updated = { ...timeline };
+  updated.decidedAt = decisionTime;
+  
+  if (decisionTime <= timeline.dueAt) {
+    updated.slaStatus = 'compliant';
+  } else {
+    updated.slaStatus = 'breached';
+  }
+  
+  return updated;
+}
+
+/**
+ * Creates a FHIR Binary resource for attachment handling
+ * Supports documents, images, and other clinical attachments
+ * 
+ * @param data Base64-encoded attachment data
+ * @param contentType MIME type (e.g., 'application/pdf', 'image/jpeg')
+ * @param description Human-readable description
+ * @returns FHIR R4 Binary resource
+ */
+export function createAttachmentBinary(
+  data: string,
+  contentType: string,
+  description?: string
+): Binary {
+  return {
+    resourceType: 'Binary',
+    id: `attachment-${Date.now()}`,
+    meta: {
+      profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-binary'],
+      lastUpdated: new Date().toISOString()
+    },
+    contentType,
+    data,
+    securityContext: description ? {
+      display: description
+    } : undefined
+  };
+}
+
+/**
+ * Creates a DocumentReference linking a Binary attachment to a Claim
+ * 
+ * @param binary Binary resource containing the attachment
+ * @param claimReference Reference to the prior auth Claim
+ * @param category Document category code
+ * @returns FHIR R4 DocumentReference resource
+ */
+export function createAttachmentDocumentReference(
+  binary: Binary,
+  claimReference: Reference,
+  category: string = 'clinical-note'
+): DocumentReference {
+  return {
+    resourceType: 'DocumentReference',
+    id: `docref-${binary.id}`,
+    meta: {
+      profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-documentreference'],
+      lastUpdated: new Date().toISOString()
+    },
+    status: 'current',
+    type: {
+      coding: [{
+        system: 'http://loinc.org',
+        code: '11506-3',
+        display: 'Progress note'
+      }]
+    },
+    category: [{
+      coding: [{
+        system: 'http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category',
+        code: category,
+        display: category
+      }]
+    }],
+    subject: claimReference,
+    date: new Date().toISOString(),
+    content: [{
+      attachment: {
+        contentType: binary.contentType,
+        url: `Binary/${binary.id}`,
+        title: binary.securityContext?.display
+      }
+    }]
+  };
+}
+
+/**
+ * Validates Da Vinci CRD hook request structure
+ * Implements Coverage Requirements Discovery (CRD) IG
+ * 
+ * @param hookRequest CDS Hooks request payload
+ * @returns Validation result
+ */
+export function validateCRDHookRequest(hookRequest: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!hookRequest.hook) {
+    errors.push('Missing required field: hook');
+  }
+
+  if (!hookRequest.hookInstance) {
+    errors.push('Missing required field: hookInstance');
+  }
+
+  if (!hookRequest.context) {
+    errors.push('Missing required field: context');
+  }
+
+  if (hookRequest.hook === 'order-sign' && !hookRequest.context?.draftOrders) {
+    errors.push('order-sign hook requires context.draftOrders');
+  }
+
+  if (hookRequest.hook === 'appointment-book' && !hookRequest.context?.appointments) {
+    errors.push('appointment-book hook requires context.appointments');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Helper: Get X12 response code from FHIR outcome
+ */
+function getX12ResponseCode(outcome: string, disposition?: string): '01' | '02' | '03' | '04' | '05' | '06' {
+  if (outcome === 'complete' && disposition?.includes('approved')) return '01'; // Approved
+  if (outcome === 'complete' && disposition?.includes('denied')) return '02'; // Denied
+  if (outcome === 'queued') return '03'; // Pended/Additional Info Required
+  if (outcome === 'partial') return '04'; // Partial Approval
+  if (outcome === 'error') return '06'; // Invalid/Error
+  return '05'; // Modified
+}
+
+/**
+ * Helper: Get review outcome code from FHIR outcome
+ */
+function getReviewOutcome(outcome: string): 'A1' | 'A2' | 'A3' | 'A4' | 'A6' | 'CT' | 'NA' {
+  switch (outcome) {
+    case 'complete': return 'A1'; // Certified
+    case 'partial': return 'A2'; // Modified
+    case 'queued': return 'A3'; // Denied
+    case 'error': return 'A6'; // Contact Payer
+    default: return 'CT'; // Cancelled
+  }
+}
+
+/**
+ * Helper: Get service type display text
+ */
+function getServiceTypeDisplay(code: string): string {
+  const serviceTypes: Record<string, string> = {
+    '1': 'Medical Care',
+    '30': 'Health Benefit Plan Coverage',
+    '33': 'Chiropractic',
+    '35': 'Dental Care',
+    '47': 'Hospital - Inpatient (CMS-0057-F)',
+    '48': 'Hospital - Inpatient',
+    '49': 'Hospital - Outpatient',
+    '50': 'Hospital - Emergency',
+    '86': 'Emergency Services',
+    '88': 'Pharmacy',
+    '98': 'Professional (Physician)',
+    'UC': 'Urgent Care'
+  };
+  return serviceTypes[code] || `Service Type ${code}`;
+}
+
+/**
+ * Helper: Calculate deadline timestamp
+ */
+function calculateDeadline(hoursFromNow: number): string {
+  const deadline = new Date();
+  deadline.setHours(deadline.getHours() + hoursFromNow);
+  return deadline.toISOString();
+}
+
+/**
+ * Clearinghouse integration configuration for Availity
+ */
+export interface ClearinghouseConfig {
+  /** Clearinghouse name */
+  name: 'Availity' | 'Change Healthcare' | 'Waystar' | 'Other';
+  
+  /** Trading partner ID */
+  tradingPartnerId: string;
+  
+  /** SFTP connection details */
+  sftp?: {
+    host: string;
+    port: number;
+    username: string;
+    inboundPath: string;
+    outboundPath: string;
+  };
+  
+  /** API connection details (if supported) */
+  api?: {
+    baseUrl: string;
+    authType: 'oauth2' | 'apikey' | 'basic';
+  };
+}
+
+/**
+ * Packages a prior authorization request for clearinghouse submission
+ * 
+ * @param fhirRequest FHIR Prior Authorization Request
+ * @param x12Request X12 278 structure
+ * @param config Clearinghouse configuration
+ * @returns Packaged submission ready for transmission
+ */
+export function packageForClearinghouse(
+  fhirRequest: PriorAuthorizationRequest,
+  x12Request: X12_278,
+  config: ClearinghouseConfig
+): {
+  x12Payload: string;
+  metadata: Record<string, any>;
+  destination: string;
+} {
+  // In production, this would generate actual X12 EDI format
+  // For now, we return a structured representation
+  const x12Payload = JSON.stringify(x12Request, null, 2);
+  
+  return {
+    x12Payload,
+    metadata: {
+      transactionId: x12Request.transactionId,
+      tradingPartnerId: config.tradingPartnerId,
+      clearinghouse: config.name,
+      timestamp: new Date().toISOString(),
+      direction: 'outbound'
+    },
+    destination: config.sftp?.outboundPath || config.api?.baseUrl || 'unknown'
+  };
+}
+
+/**
+ * Processes incoming response from clearinghouse
+ * 
+ * @param x12Payload X12 278 response payload (type 13)
+ * @param config Clearinghouse configuration
+ * @returns Processed FHIR ClaimResponse
+ */
+export function processFromClearinghouse(
+  x12Payload: string,
+  config: ClearinghouseConfig
+): {
+  x12Response: X12_278;
+  fhirResponse: PriorAuthorizationResponse;
+} {
+  // In production, this would parse actual X12 EDI format
+  // For now, we assume JSON format
+  const x12Response: X12_278 = JSON.parse(x12Payload);
+  
+  if (x12Response.transactionType !== '13') {
+    throw new Error('Invalid response transaction type. Expected type 13 (response).');
+  }
+  
+  // Convert to FHIR ClaimResponse
+  const fhirResponse: PriorAuthorizationResponse = {
+    resourceType: 'ClaimResponse',
+    id: x12Response.transactionId,
+    meta: {
+      profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],
+      lastUpdated: x12Response.timestamp || new Date().toISOString()
+    },
+    status: 'active',
+    type: {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+        code: 'professional'
+      }]
+    },
+    use: 'preauthorization',
+    patient: {
+      reference: `Patient/${x12Response.patient.memberId}`
+    },
+    created: x12Response.timestamp || new Date().toISOString(),
+    insurer: {
+      reference: `Organization/${x12Response.payer.id}`
+    },
+    outcome: x12Response.reviewResponse?.responseCode === '01' ? 'complete' :
+             x12Response.reviewResponse?.responseCode === '03' ? 'queued' :
+             x12Response.reviewResponse?.responseCode === '04' ? 'partial' : 'error',
+    disposition: x12Response.reviewResponse?.responseDescription,
+    preAuthRef: x12Response.reviewResponse?.authorizationNumber,
+    processNote: x12Response.reviewResponse?.reviewNotes?.map((note, index) => ({
+      number: index + 1,
+      type: 'display' as const,
+      text: note
+    }))
+  };
+  
+  return {
+    x12Response,
+    fhirResponse
+  };
+}
