@@ -32,7 +32,11 @@ async function examplePatientSearch() {
     );
 
     console.log(`Found ${bundle.total} patient(s)`);
-    console.log('Patient Resource:', JSON.stringify(bundle.entry![0].resource, null, 2));
+    if (bundle.entry && bundle.entry.length > 0) {
+      console.log('Patient Resource:', JSON.stringify(bundle.entry[0].resource, null, 2));
+    } else {
+      console.log('No patient resources found in bundle.');
+    }
   } catch (error) {
     console.error('Error:', error);
   }
