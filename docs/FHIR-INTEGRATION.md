@@ -1,8 +1,8 @@
-# FHIR R4 Integration Guide - Eligibility, Claims, and Provider Access
+# FHIR R4 Integration Guide - Eligibility, Claims, Provider Access, and Payer-to-Payer Exchange
 
 **Cloud Health Office** - HIPAA-compliant FHIR R4 integration for payer systems
 
-This document details the FHIR R4 implementation for healthcare payer eligibility workflows. Supported mandates include mapping X12 EDI eligibility transactions (270/271) to FHIR resources, CMS Patient Access API requirements, and Provider Access API (CMS-0057-F) for provider data access.
+This document details the FHIR R4 implementation for healthcare payer workflows. Supported mandates include mapping X12 EDI eligibility transactions (270/271) to FHIR resources, CMS Patient Access API requirements, Provider Access API (CMS-0057-F) for provider data access, and Payer-to-Payer data exchange.
 
 ---
 
@@ -12,12 +12,16 @@ This document details the FHIR R4 implementation for healthcare payer eligibilit
 2. [CMS Interoperability Compliance](#cms-interoperability-compliance)
 3. [Architecture](#architecture)
 4. [Provider Access API (CMS-0057-F)](#provider-access-api-cms-0057-f)
-5. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
-6. [Usage Examples](#usage-examples)
-7. [fhir.js Integration](#fhirjs-integration)
-8. [API Endpoints](#api-endpoints)
-9. [Testing](#testing)
-10. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
+5. [Payer-to-Payer API (CMS-0057-F)](#payer-to-payer-api-cms-0057-f)
+6. [Bulk Data Export/Import](#bulk-data-export-import)
+7. [Member Matching](#member-matching)
+8. [Consent Management](#consent-management)
+9. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
+10. [Usage Examples](#usage-examples)
+11. [fhir.js Integration](#fhirjs-integration)
+12. [API Endpoints](#api-endpoints)
+13. [Testing](#testing)
+14. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
 
 ---
 
@@ -72,13 +76,25 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12_270_data);
 // - CoverageEligibilityRequest: Standard FHIR R4
 ```
 
+### CMS-0057-F Payer-to-Payer Exchange Rule
+
+The Payer-to-Payer Exchange rule (effective 2027) requires payers to exchange patient clinical and administrative data when members change health plans. Our implementation supports:
+
+- **Bulk Data Operations**: Export/import via FHIR Bulk Data Access IG (NDJSON format)
+- **Member Matching**: HL7 Da Vinci PDex IG compliant matching algorithm
+- **Consent Management**: Opt-in consent flows per CMS requirements
+- **5-Year History**: Support for historical data exchange
+- **Resource Types**: Patient, Claim, Encounter, ExplanationOfBenefit, PriorAuthorizationRequest
+
 ### Standards References
 
 - **CMS-9115-F**: Interoperability and Patient Access Final Rule
 - **CMS-0057-F**: Prior Authorization API (March 2023, Effective January 1, 2026)
 - **CMS-0057-F**: Provider Access API (March 2023, Effective January 1, 2027)
+- **CMS-0057-F**: Payer-to-Payer Exchange Final Rule (effective 2027)
 - **X12 005010X279A1**: Health Care Eligibility Benefit Inquiry and Response
 - **HL7 FHIR R4**: v4.0.1 Specification
+- **FHIR Bulk Data Access IG**: Flat FHIR (NDJSON) format
 - **US Core 3.1.1**: US Core Implementation Guide
 - **Da Vinci PDex**: Payer Data Exchange Implementation Guide
 - **SMART on FHIR**: Authorization framework for healthcare apps
@@ -1037,22 +1053,460 @@ app.listen(3000, () => {
 
 ---
 
+## Payer-to-Payer API (CMS-0057-F)
+
+### Overview
+
+The Payer-to-Payer API enables secure FHIR R4-compliant data exchange between health plans during member plan transitions, in compliance with CMS-0057-F requirements (effective 2027).
+
+### Key Features
+
+- **Bulk Data Export/Import**: NDJSON format per FHIR Bulk Data Access IG
+- **Azure Integration**: Service Bus for async workflows, Data Lake for storage
+- **Member Matching**: Da Vinci PDex IG compliant weighted algorithm
+- **Consent Management**: Opt-in consent flows per CMS requirements
+- **Data Reconciliation**: Automatic deduplication during import
+- **US Core Validation**: Profile compliance checking
+- **5-Year History**: Support for historical data exchange
+
+### Supported Resource Types
+
+1. **Patient** - Demographics and member information
+2. **Claim** - Professional, institutional, pharmacy claims
+3. **Encounter** - Ambulatory, emergency, inpatient visits
+4. **ExplanationOfBenefit** - Adjudicated claim details
+5. **ServiceRequest** - Prior authorization requests (278)
+
+### Architecture
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                  Source Payer System                       │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         Payer-to-Payer API                           │  │
+│  │  • exportBulkData()                                  │  │
+│  │  • manageMemberConsent()                             │  │
+│  │  • matchMember()                                     │  │
+│  └───────────────┬──────────────────────────────────────┘  │
+└──────────────────┼──────────────────────────────────────────┘
+                   │
+                   │ NDJSON files
+                   ▼
+        ┌──────────────────────┐
+        │  Azure Data Lake Gen2 │
+        │  (Blob Storage)       │
+        └──────────────────────┘
+                   │
+                   │ Service Bus notification
+                   ▼
+        ┌──────────────────────┐
+        │  Azure Service Bus    │
+        │  Topics:              │
+        │  • export-notif       │
+        │  • import-requests    │
+        └──────────────────────┘
+                   │
+                   ▼
+┌────────────────────────────────────────────────────────────┐
+│                  Target Payer System                       │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         Payer-to-Payer API                           │  │
+│  │  • importBulkData()                                  │  │
+│  │  • matchMember()                                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Configuration
+
+```typescript
+import { PayerToPayerAPI, PayerToPayerConfig } from './src/fhir/payer-to-payer-api';
+
+const config: PayerToPayerConfig = {
+  storageConnectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+  serviceBusConnectionString: process.env.AZURE_SERVICE_BUS_CONNECTION_STRING,
+  bulkDataContainerName: 'payer-exchange',
+  exportNotificationTopic: 'export-notifications',
+  importRequestTopic: 'import-requests',
+  sourcePayer: 'PAYER-001',
+  targetPayer: 'PAYER-002'
+};
+
+const api = new PayerToPayerAPI(config);
+```
+
+### Bulk Data Export
+
+Export member data in NDJSON format to Azure Data Lake:
+
+```typescript
+import { BulkExportRequest } from './src/fhir/payer-to-payer-api';
+import { Patient, Claim, ExplanationOfBenefit } from 'fhir/r4';
+
+// Prepare export request
+const request: BulkExportRequest = {
+  patientId: 'patient-001', // Optional: single patient export
+  resourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit'],
+  startDate: '2019-01-01', // 5-year history
+  endDate: '2024-12-31',
+  includeHistorical: true
+};
+
+// Gather resources to export
+const resources = [
+  { resourceType: 'Patient', data: [patient1, patient2, ...] },
+  { resourceType: 'Claim', data: [claim1, claim2, ...] },
+  { resourceType: 'ExplanationOfBenefit', data: [eob1, eob2, ...] }
+];
+
+// Perform export
+const result = await api.exportBulkData(request, resources);
+
+console.log('Export ID:', result.exportId);
+console.log('Status:', result.status); // 'completed'
+console.log('Output URLs:', result.outputUrls);
+// [
+//   { resourceType: 'Patient', url: 'https://...Patient.ndjson', count: 100 },
+//   { resourceType: 'Claim', url: 'https://...Claim.ndjson', count: 300 },
+//   ...
+// ]
+```
+
+### Bulk Data Import
+
+Import member data from NDJSON files with deduplication and validation:
+
+```typescript
+import { BulkImportRequest } from './src/fhir/payer-to-payer-api';
+
+const request: BulkImportRequest = {
+  inputUrls: [
+    {
+      resourceType: 'Patient',
+      url: 'https://storage.blob.core.windows.net/payer-exchange/exports/exp-123/Patient.ndjson'
+    },
+    {
+      resourceType: 'Claim',
+      url: 'https://storage.blob.core.windows.net/payer-exchange/exports/exp-123/Claim.ndjson'
+    }
+  ],
+  deduplicate: true, // Remove duplicates by resource ID
+  validateUsCore: true // Validate against US Core profiles
+};
+
+const result = await api.importBulkData(request);
+
+console.log('Import ID:', result.importId);
+console.log('Status:', result.status); // 'completed' or 'partial'
+console.log('Imported:', result.imported);
+// [
+//   { resourceType: 'Patient', count: 98, duplicatesSkipped: 2 },
+//   { resourceType: 'Claim', count: 295, duplicatesSkipped: 5 }
+// ]
+
+if (result.errors) {
+  console.log('Validation errors:', result.errors);
+}
+```
+
+### Member Matching
+
+Match members between payers using demographic data per Da Vinci PDex IG:
+
+```typescript
+import { MemberMatchRequest, Patient } from './src/fhir/payer-to-payer-api';
+
+// Source payer's patient data
+const sourcePatient: Patient = {
+  resourceType: 'Patient',
+  id: 'source-patient-001',
+  identifier: [{
+    system: 'http://hl7.org/fhir/sid/us-ssn',
+    value: '123-45-6789'
+  }],
+  name: [{
+    family: 'Smith',
+    given: ['Jane']
+  }],
+  gender: 'female',
+  birthDate: '1985-06-15',
+  address: [{
+    city: 'Seattle',
+    state: 'WA',
+    postalCode: '98101'
+  }],
+  telecom: [{
+    system: 'phone',
+    value: '206-555-0100'
+  }]
+};
+
+// Target payer's candidate patients
+const candidatePatients: Patient[] = [
+  // ... patients from target payer system
+];
+
+const matchRequest: MemberMatchRequest = {
+  patient: sourcePatient,
+  coverageToMatch: {
+    memberId: 'MEM123456',
+    subscriberId: 'SUB789012'
+  }
+};
+
+const matchResult = await api.matchMember(matchRequest, candidatePatients);
+
+console.log('Matched:', matchResult.matched); // true/false
+console.log('Confidence:', matchResult.confidence); // 0.0 - 1.0
+console.log('Matched Patient ID:', matchResult.matchedPatientId);
+console.log('Match Details:', matchResult.matchDetails);
+// {
+//   matchedOn: ['name', 'birthDate', 'gender', 'identifier', 'address'],
+//   score: 1.0
+// }
+```
+
+**Matching Algorithm:**
+- **Name**: 25% weight (family + given name)
+- **Birth Date**: 25% weight
+- **Identifier**: 20% weight (SSN, member ID)
+- **Gender**: 15% weight
+- **Address**: 10% weight (postal code + city)
+- **Telecom**: 5% weight
+
+**Match Threshold:** 0.8 (80% confidence required for a positive match)
+
+### Consent Management
+
+Implement opt-in consent flows per CMS requirements:
+
+```typescript
+// Request consent from member
+const consentGiven = true; // Member opts in
+
+const consent = await api.manageMemberConsent('patient-001', consentGiven);
+
+console.log('Consent Status:', consent.status); // 'active' or 'inactive'
+console.log('Source Payer:', consent.sourcePayer);
+console.log('Target Payer:', consent.targetPayer);
+console.log('Consent Date:', consent.consentDate);
+console.log('FHIR Consent:', consent.fhirConsent);
+```
+
+**FHIR Consent Resource:**
+```json
+{
+  "resourceType": "Consent",
+  "status": "active",
+  "scope": {
+    "coding": [{
+      "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+      "code": "patient-privacy"
+    }]
+  },
+  "category": [{
+    "coding": [{
+      "system": "http://loinc.org",
+      "code": "59284-0",
+      "display": "Consent Document"
+    }]
+  }],
+  "patient": {
+    "reference": "Patient/patient-001"
+  },
+  "policy": [{
+    "uri": "https://www.cms.gov/regulations-and-guidance/cms-0057-f"
+  }],
+  "provision": {
+    "type": "permit",
+    "actor": [{
+      "role": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+          "code": "IRCP",
+          "display": "Information Recipient"
+        }]
+      },
+      "reference": {
+        "reference": "Organization/PAYER-002"
+      }
+    }],
+    "action": [{
+      "coding": [{
+        "system": "http://terminology.hl7.org/CodeSystem/consentaction",
+        "code": "disclose"
+      }]
+    }]
+  }
+}
+```
+
+### NDJSON Format
+
+FHIR resources are exported in NDJSON (Newline Delimited JSON) format:
+
+```
+{"resourceType":"Patient","id":"patient-001","name":[{"family":"Smith","given":["Jane"]}],"gender":"female","birthDate":"1985-06-15"}
+{"resourceType":"Patient","id":"patient-002","name":[{"family":"Doe","given":["John"]}],"gender":"male","birthDate":"1990-03-21"}
+{"resourceType":"Patient","id":"patient-003","name":[{"family":"Johnson","given":["Robert"]}],"gender":"male","birthDate":"1975-11-08"}
+```
+
+Each line is a complete, valid JSON object representing a single FHIR resource.
+
+### Data Reconciliation
+
+The API automatically handles data reconciliation during import:
+
+**Deduplication:**
+```typescript
+// Import with deduplication enabled
+const result = await api.importBulkData({
+  inputUrls: [...],
+  deduplicate: true
+});
+
+// Result shows duplicates skipped
+console.log(result.imported[0].duplicatesSkipped); // 5
+```
+
+**US Core Validation:**
+```typescript
+// Import with US Core profile validation
+const result = await api.importBulkData({
+  inputUrls: [...],
+  validateUsCore: true
+});
+
+// Validation errors reported
+if (result.errors) {
+  result.errors.forEach(error => {
+    console.log(error.issue[0].diagnostics);
+  });
+}
+```
+
+### Generating Test Data
+
+Generate synthetic FHIR data for testing:
+
+```bash
+# Generate 50 patients with associated resources
+node dist/scripts/utils/generate-payer-exchange-data.js 50 ./test-data/payer-exchange
+
+# Output:
+# ✓ Generated 50 resources in Patient.ndjson
+# ✓ Generated 150 resources in Claim.ndjson
+# ✓ Generated 250 resources in Encounter.ndjson
+# ✓ Generated 150 resources in ExplanationOfBenefit.ndjson
+# ✓ Generated 100 resources in ServiceRequest.ndjson
+```
+
+### Error Handling
+
+The API provides comprehensive error handling:
+
+```typescript
+try {
+  const result = await api.exportBulkData(request, resources);
+  
+  if (result.status === 'error') {
+    console.error('Export failed:', result.error?.issue[0].diagnostics);
+  }
+} catch (error) {
+  console.error('Unexpected error:', error);
+}
+```
+
+### Performance Considerations
+
+**Export Performance:**
+- Batch size: 1,000 resources per NDJSON file recommended
+- Parallel uploads to Data Lake for large datasets
+- Service Bus notifications for async processing
+
+**Import Performance:**
+- Streaming NDJSON parsing for memory efficiency
+- Parallel resource processing for large datasets
+- Deduplication uses Set for O(1) lookup
+
+**Storage Costs:**
+- Data Lake Gen2: ~$0.018/GB/month (Cool tier)
+- Service Bus Standard: $0.05/million operations
+- Minimal cost for typical payer exchange volumes
+
+### Security Best Practices
+
+1. **Use Managed Identity** for Azure service authentication
+2. **Enable Private Endpoints** for Data Lake and Service Bus
+3. **Encrypt at Rest** using customer-managed keys
+4. **Enable Audit Logging** for all operations
+5. **Implement RBAC** for API access control
+6. **Validate Consent** before export operations
+7. **Redact PHI** in application logs
+
+### Compliance Checklist
+
+- ✅ CMS-0057-F payer-to-payer exchange requirements
+- ✅ FHIR R4.0.1 specification compliance
+- ✅ FHIR Bulk Data Access IG (NDJSON format)
+- ✅ HL7 Da Vinci PDex IG (member matching)
+- ✅ US Core Implementation Guide v3.1.1+
+- ✅ HIPAA Security Rule (encryption, audit, access control)
+- ✅ 5-year historical data support
+- ✅ Opt-in consent flows
+
+---
+
 ## Testing
 
 ### Running Tests
 
 ```bash
-# Run all FHIR tests
-npm test -- --testPathPattern=fhir
+# Run all FHIR tests (34 tests including payer-to-payer)
+npm run test:fhir
 
 # Run with coverage
-npm test -- --testPathPattern=fhir --coverage
+npm run test:fhir -- --coverage
 
 # Watch mode for development
-npm test -- --testPathPattern=fhir --watch
+npm run test:fhir -- --watch
+
+# Generate synthetic test data
+node dist/scripts/utils/generate-payer-exchange-data.js 50 ./test-data
 ```
 
 ### Test Coverage
+
+**X12 270 to FHIR R4 Mapping (19 tests):**
+- Basic mapping (minimal required fields)
+- Gender code mapping (M, F, U, missing)
+- Date format handling
+- Comprehensive demographics
+- Service type codes
+- Dependent vs subscriber handling
+
+**Payer-to-Payer API (15 tests):**
+- **Bulk Export** (3 tests)
+  - Single resource type export
+  - Multiple resource types export
+  - Date range filtering
+- **Bulk Import** (3 tests)
+  - Basic NDJSON import
+  - Deduplication during import
+  - US Core profile validation
+- **Consent Management** (3 tests)
+  - Active consent creation
+  - Inactive consent (opt-out)
+  - CMS policy references
+- **Member Matching** (3 tests)
+  - Exact demographic match (confidence 1.0)
+  - Partial demographic match (confidence < 0.8)
+  - No match (low confidence)
+- **Error Handling** (2 tests)
+  - Export error handling
+  - Import error handling
+- **NDJSON Format** (1 test)
+  - Proper NDJSON serialization
 
 Current test suite includes:
 
