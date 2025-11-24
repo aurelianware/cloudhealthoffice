@@ -5,7 +5,7 @@
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-The #1 open-source, Azure-native, multi-payer EDI integration platform for healthcare.
+Open-source, Azure-native, multi-payer EDI integration platform for healthcare.
 
 > **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security (9/10 score), and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
