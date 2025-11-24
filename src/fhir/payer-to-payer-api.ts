@@ -15,15 +15,10 @@
 import { 
   Patient, 
   Claim, 
-  Encounter, 
-  ExplanationOfBenefit, 
-  ServiceRequest,
-  Consent,
-  Bundle,
   Resource
 } from 'fhir/r4';
-import { ServiceBusClient, ServiceBusSender, ServiceBusReceiver } from '@azure/service-bus';
-import { BlobServiceClient, ContainerClient, BlockBlobClient } from '@azure/storage-blob';
+import { ServiceBusClient } from '@azure/service-bus';
+import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 
 /**
@@ -149,7 +144,7 @@ export class PayerToPayerAPI {
   private serviceBusClient?: ServiceBusClient;
   private blobServiceClient?: BlobServiceClient;
   private containerClient?: ContainerClient;
-  private consentRegistry: Map<string, MemberConsent[]> = new Map();
+  private consentRegistry: Map<string, MemberConsent> = new Map();
 
   constructor(config: PayerToPayerConfig) {
     this.config = config;
@@ -196,20 +191,7 @@ export class PayerToPayerAPI {
    */
   async registerConsent(consent: MemberConsent): Promise<void> {
     const key = `${consent.patientId}:${consent.targetPayerId}`;
-    const existingConsents = this.consentRegistry.get(key) || [];
-    
-    // Update or add consent
-    const index = existingConsents.findIndex(c => 
-      c.patientId === consent.patientId && c.targetPayerId === consent.targetPayerId
-    );
-    
-    if (index >= 0) {
-      existingConsents[index] = consent;
-    } else {
-      existingConsents.push(consent);
-    }
-    
-    this.consentRegistry.set(key, existingConsents);
+    this.consentRegistry.set(key, consent);
   }
 
   /**
@@ -217,17 +199,14 @@ export class PayerToPayerAPI {
    */
   async hasConsent(patientId: string, targetPayerId: string, resourceTypes: string[]): Promise<boolean> {
     const key = `${patientId}:${targetPayerId}`;
-    const consents = this.consentRegistry.get(key) || [];
+    const consent = this.consentRegistry.get(key);
     
-    const activeConsent = consents.find(c => {
-      if (c.status !== 'active') return false;
-      if (c.expirationDate && c.expirationDate < new Date()) return false;
-      
-      // Check if all requested resource types are authorized
-      return resourceTypes.every(rt => c.authorizedResourceTypes.includes(rt));
-    });
+    if (!consent) return false;
+    if (consent.status !== 'active') return false;
+    if (consent.expirationDate && consent.expirationDate < new Date()) return false;
     
-    return !!activeConsent;
+    // Check if all requested resource types are authorized
+    return resourceTypes.every(rt => consent.authorizedResourceTypes.includes(rt));
   }
 
   /**
