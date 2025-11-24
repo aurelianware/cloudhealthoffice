@@ -28,13 +28,11 @@ import {
   Encounter,
   ExplanationOfBenefit,
   ServiceRequest,
-  Bundle,
   Consent,
-  OperationOutcome,
-  Parameters
+  OperationOutcome
 } from 'fhir/r4';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
-import { ServiceBusClient, ServiceBusSender, ServiceBusReceiver } from '@azure/service-bus';
+import { ServiceBusClient, ServiceBusSender } from '@azure/service-bus';
 
 /**
  * Supported FHIR resource types for payer-to-payer exchange
@@ -542,13 +540,11 @@ export class PayerToPayerAPI {
 
     // Match on identifier (SSN, member ID)
     if (patient1.identifier && patient2.identifier) {
-      let identifierMatched = false;
       outerIdentifier: for (const id1 of patient1.identifier) {
         for (const id2 of patient2.identifier) {
           if (id1.value === id2.value && id1.system === id2.system) {
             score += weights.identifier;
             matchedOn.push('identifier');
-            identifierMatched = true;
             break outerIdentifier;
           }
         }
@@ -570,13 +566,11 @@ export class PayerToPayerAPI {
 
     // Match on telecom
     if (patient1.telecom && patient2.telecom) {
-      let telecomMatched = false;
       outerTelecom: for (const tel1 of patient1.telecom) {
         for (const tel2 of patient2.telecom) {
           if (tel1.value === tel2.value) {
             score += weights.telecom;
             matchedOn.push('telecom');
-            telecomMatched = true;
             break outerTelecom;
           }
         }
