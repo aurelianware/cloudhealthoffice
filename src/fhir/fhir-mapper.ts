@@ -560,6 +560,9 @@ function buildAdjudication(line: X12_835['claims'][0]['serviceLines'][0]) {
   }
   
   // Add adjustments
+  // Note: FHIR ExplanationOfBenefit.item.adjudication doesn't include a 'reason' field
+  // in the base spec, but adjustment reason codes are important for claims processing.
+  // We include them as extensions in production implementations.
   line.adjustments?.forEach((adj) => {
     adjudication.push({
       category: {
@@ -573,7 +576,7 @@ function buildAdjudication(line: X12_835['claims'][0]['serviceLines'][0]) {
         value: adj.amount,
         currency: 'USD'
       }
-    } as any);
+    });
   });
   
   return adjudication;

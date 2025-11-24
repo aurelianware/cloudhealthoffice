@@ -115,34 +115,36 @@ export class AzureFHIRValidator {
         'Accept': 'application/fhir+json'
       };
       
-      // Build request body
-      const requestBody: any = {
+      // Build request body for $validate operation
+      // Note: In production, uncomment the fetch/axios call below and remove simulation
+      const requestBody = {
         resourceType: 'Parameters',
         parameter: [
           {
             name: 'resource',
             resource: resource
-          }
+          },
+          ...(options.profile ? [{
+            name: 'profile',
+            valueUri: options.profile
+          }] : []),
+          ...(options.mode ? [{
+            name: 'mode',
+            valueCode: options.mode
+          }] : [])
         ]
       };
       
-      // Add profile parameter if specified
-      if (options.profile) {
-        requestBody.parameter.push({
-          name: 'profile',
-          valueUri: options.profile
-        } as any);
-      }
+      // Production implementation (uncomment when Azure credentials are available):
+      // const response = await fetch(validateUrl, {
+      //   method: 'POST',
+      //   headers,
+      //   body: JSON.stringify(requestBody)
+      // });
+      // const operationOutcome = await response.json();
+      // return this.parseValidationResult(operationOutcome);
       
-      // Add mode parameter
-      if (options.mode) {
-        requestBody.parameter.push({
-          name: 'mode',
-          valueCode: options.mode
-        } as any);
-      }
-      
-      // Make validation request (simulated - actual implementation would use fetch/axios)
+      // Simulated validation for development/testing
       const result = await this.simulateAzureFHIRValidation(resource, options);
       
       return result;
@@ -250,8 +252,12 @@ export class AzureFHIRValidator {
   }
   
   /**
-   * Simulate Azure FHIR validation (actual implementation would call Azure API)
-   * This is a local validation implementation for demonstration
+   * Simulate Azure FHIR validation for development/testing
+   * 
+   * This provides client-side validation until Azure API credentials are configured.
+   * Replace with actual Azure API call in production (see commented code in validateResource).
+   * 
+   * @private
    */
   private async simulateAzureFHIRValidation(
     resource: Resource,

@@ -85,13 +85,13 @@ const CMS_DATA_CLASSES = [
 ];
 
 /**
- * CMS-0057-F timeline requirements (days)
+ * CMS-0057-F timeline requirements
  */
 const CMS_TIMELINES = {
   priorAuthDecision: 7, // 7 calendar days for standard requests
-  urgentPriorAuthDecision: 3, // 72 hours for urgent requests
+  urgentPriorAuthDecision: 3, // 3 calendar days (72 hours) for urgent requests
   dataAvailability: 1, // 1 business day for data availability
-  notificationTimeframe: 24 // 24 hours for decision notification
+  notificationTimeframe: 1 // 1 business day (24 hours) for decision notification
 };
 
 /**
