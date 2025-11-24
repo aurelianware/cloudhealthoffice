@@ -117,7 +117,8 @@ function generateClaims(patients: Patient[], claimsPerPatient: number): Claim[] 
   const claims: Claim[] = [];
   const claimTypes = ['professional', 'institutional', 'pharmacy'];
   
-  patients.forEach((patient, patientIndex) => {
+  for (let patientIndex = 0; patientIndex < patients.length; patientIndex++) {
+    const patient = patients[patientIndex];
     for (let i = 1; i <= claimsPerPatient; i++) {
       const claimId = `CLM${patientIndex.toString().padStart(6, '0')}-${i.toString().padStart(3, '0')}`;
       const claimDate = new Date(2023, (patientIndex + i) % 12, (i % 28) + 1);
@@ -175,7 +176,7 @@ function generateClaims(patients: Patient[], claimsPerPatient: number): Claim[] 
 
       claims.push(claim);
     }
-  });
+  }
 
   return claims;
 }
@@ -187,7 +188,8 @@ function generateEncounters(patients: Patient[], encountersPerPatient: number): 
   const encounters: Encounter[] = [];
   const encounterTypes = ['ambulatory', 'emergency', 'inpatient'];
   
-  patients.forEach((patient, patientIndex) => {
+  for (let patientIndex = 0; patientIndex < patients.length; patientIndex++) {
+    const patient = patients[patientIndex];
     for (let i = 1; i <= encountersPerPatient; i++) {
       const encounterId = `ENC${patientIndex.toString().padStart(6, '0')}-${i.toString().padStart(3, '0')}`;
       const encounterDate = new Date(2023, (patientIndex + i) % 12, (i % 28) + 1);
@@ -219,7 +221,7 @@ function generateEncounters(patients: Patient[], encountersPerPatient: number): 
 
       encounters.push(encounter);
     }
-  });
+  }
 
   return encounters;
 }
@@ -234,6 +236,11 @@ function generateEOBs(claims: Claim[]): ExplanationOfBenefit[] {
     const eobId = `EOB${claim.id}`;
     const processedDate = new Date(claim.created!);
     processedDate.setDate(processedDate.getDate() + 14); // 14 days after claim submission
+
+    // Ensure claim has insurance before accessing
+    if (!claim.insurance || claim.insurance.length === 0) {
+      return; // Skip this claim if no insurance
+    }
 
     const eob: ExplanationOfBenefit = {
       resourceType: 'ExplanationOfBenefit',
@@ -253,7 +260,7 @@ function generateEOBs(claims: Claim[]): ExplanationOfBenefit[] {
       outcome: 'complete',
       insurance: [{
         focal: true,
-        coverage: claim.insurance![0].coverage
+        coverage: claim.insurance[0].coverage
       }],
       item: claim.item?.map((item, idx) => ({
         sequence: item.sequence,

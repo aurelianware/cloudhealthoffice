@@ -453,9 +453,19 @@ export class PayerToPayerAPI {
       throw new Error('Storage client not initialized');
     }
 
-    // Extract blob name from URL
-    const urlParts = blobUrl.split('/');
-    const blobName = urlParts.slice(-3).join('/'); // e.g., "exports/exportId/Patient.ndjson"
+    // Extract blob name from URL - handle both full URLs and relative paths
+    let blobName: string;
+    if (blobUrl.startsWith('http://') || blobUrl.startsWith('https://')) {
+      // Full URL - extract path after container name
+      const url = new URL(blobUrl);
+      const pathParts = url.pathname.split('/').filter(p => p);
+      // Assuming format: /containername/exports/exportId/Patient.ndjson
+      blobName = pathParts.slice(1).join('/');
+    } else {
+      // Relative path
+      blobName = blobUrl;
+    }
+    
     const resourceType = blobName.split('/').pop()?.replace('.ndjson', '') || 'Unknown';
 
     const blobClient = this.containerClient.getBlockBlobClient(blobName);
@@ -535,6 +545,9 @@ export class PayerToPayerAPI {
     if (this.serviceBusClient) {
       await this.serviceBusClient.close();
     }
+    // BlobServiceClient doesn't have a close method, clear reference
+    this.blobServiceClient = undefined;
+    this.containerClient = undefined;
   }
 }
 
@@ -606,7 +619,11 @@ export function generateSyntheticClaim(patientId: string, claimId: string): Clai
       coverage: {
         reference: 'Coverage/example'
       }
-    }]
+    }],
+    total: {
+      value: 150.00,
+      currency: 'USD'
+    }
   };
 }
 
