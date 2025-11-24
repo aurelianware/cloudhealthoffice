@@ -7,8 +7,11 @@
 
 import {
   createProviderAccessApi,
-  QnxtPatient
+  QnxtPatient,
+  QnxtClaim,
+  QnxtEncounter
 } from './provider-access-api';
+import { Claim, Condition, Observation } from 'fhir/r4';
 
 /**
  * Example 1: Basic Patient Search
@@ -61,7 +64,7 @@ async function exampleClaimSearch() {
 
     console.log(`Found ${bundle.total} claim(s)`);
     bundle.entry?.forEach((entry, index) => {
-      const claim = entry.resource as any;
+      const claim = entry.resource as Claim;
       console.log(`Claim ${index + 1}:`, {
         id: claim.id,
         status: claim.status,
@@ -98,10 +101,10 @@ async function exampleConditionSearch() {
 
     console.log(`Found ${bundle.total} active condition(s)`);
     bundle.entry?.forEach((entry, index) => {
-      const condition = entry.resource as any;
+      const condition = entry.resource as Condition;
       console.log(`Condition ${index + 1}:`, {
         id: condition.id,
-        code: condition.code.coding[0].display,
+        code: condition.code?.coding?.[0]?.display,
         onsetDate: condition.onsetDateTime
       });
     });
@@ -135,11 +138,11 @@ async function exampleObservationSearch() {
 
     console.log(`Found ${bundle.total} lab result(s)`);
     bundle.entry?.forEach((entry, index) => {
-      const obs = entry.resource as any;
+      const obs = entry.resource as Observation;
       console.log(`Lab ${index + 1}:`, {
         id: obs.id,
-        test: obs.code.coding[0].display,
-        value: `${obs.valueQuantity.value} ${obs.valueQuantity.unit}`,
+        test: obs.code?.coding?.[0]?.display,
+        value: `${obs.valueQuantity?.value} ${obs.valueQuantity?.unit}`,
         date: obs.effectiveDateTime
       });
     });
