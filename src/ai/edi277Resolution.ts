@@ -341,11 +341,11 @@ Please analyze this claim rejection and provide specific resolution steps.`;
 function getMockSuggestions(scenario: ErrorScenario, payload: EDI277Payload): string[] {
   const mockSuggestions: Record<ErrorScenario, string[]> = {
     [ErrorScenario.MEMBER_ID_INVALID]: [
-      "Verify member ID format matches payer requirements (e.g., 9 digits vs alphanumeric)",
+      "Verify subscriber identifier format matches payer requirements (e.g., 9 digits vs alphanumeric)",
       "Check if using subscriber ID instead of dependent ID or vice versa",
       "Confirm member is active on service date through real-time eligibility",
-      "Validate SSN-based vs member number-based identification",
-      "Contact payer for correct member identifier format"
+      "Validate SSN-based vs subscriber number-based identification",
+      "Contact payer for correct subscriber identifier format"
     ],
     [ErrorScenario.ELIGIBILITY_ISSUE]: [
       "Verify coverage dates align with service date",
