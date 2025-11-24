@@ -39,7 +39,7 @@
 
 ### Deployment Time
 
-**&lt;10 minutes** from configuration to live FHIR APIs using Cloud Health Office CLI wizard.
+**<10 minutes** from configuration to live FHIR APIs using Cloud Health Office CLI wizard.
 
 ---
 
@@ -178,7 +178,7 @@ Production-grade Azure Logic Apps for EDI processing:
 
 #### 4. CLI Deployment Wizard
 
-Zero-code deployment in &lt;10 minutes:
+Zero-code deployment in <10 minutes:
 
 ```bash
 # Interactive wizard mode

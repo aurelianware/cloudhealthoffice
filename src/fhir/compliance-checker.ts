@@ -651,6 +651,7 @@ function validatePatient(resource: Patient): ComplianceResult {
 /**
  * Check prior authorization timeline compliance
  * CMS-0057-F requires response within specific timeframes
+ * Note: This checks elapsed time since submission. In production, also check ServiceRequest.priority field.
  */
 function checkPriorAuthTimeline(authoredOn?: string): TimelineCompliance {
   if (!authoredOn) {
@@ -661,15 +662,15 @@ function checkPriorAuthTimeline(authoredOn?: string): TimelineCompliance {
   const now = new Date();
   const hoursDiff = (now.getTime() - authoredDate.getTime()) / (1000 * 60 * 60);
   
-  // CMS-0057-F standard: 72 hours for urgent, 7 calendar days for non-urgent
-  // For this check, we assume urgent if within 72 hours
-  const isUrgent = hoursDiff <= 72;
-  const deadline = isUrgent ? '72 hours' : '7 calendar days';
-  const compliant = isUrgent ? hoursDiff <= 72 : hoursDiff <= 168;
+  // CMS-0057-F standard: 72 hours for urgent, 7 calendar days for standard
+  // This is a time-based check; production systems should also verify ServiceRequest.priority
+  const withinUrgentWindow = hoursDiff <= 72;
+  const deadline = withinUrgentWindow ? '72 hours' : '7 calendar days';
+  const compliant = withinUrgentWindow ? hoursDiff <= 72 : hoursDiff <= 168;
   
   return {
     applicable: true,
-    requirement: `CMS-0057-F: Response within ${deadline} for ${isUrgent ? 'urgent' : 'standard'} requests`,
+    requirement: `CMS-0057-F: Response within ${deadline} for ${withinUrgentWindow ? 'urgent' : 'standard'} requests`,
     deadline,
     compliant
   };
