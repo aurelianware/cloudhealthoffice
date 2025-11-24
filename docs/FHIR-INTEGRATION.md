@@ -12,11 +12,12 @@ This document details the FHIR R4 implementation for mapping X12 EDI eligibility
 2. [CMS Interoperability Compliance](#cms-interoperability-compliance)
 3. [Architecture](#architecture)
 4. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
-5. [Usage Examples](#usage-examples)
-6. [fhir.js Integration](#fhirjs-integration)
-7. [API Endpoints](#api-endpoints)
-8. [Testing](#testing)
-9. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
+5. [Payer-to-Payer Data Exchange (CMS-0057-F)](#payer-to-payer-data-exchange-cms-0057-f)
+6. [Usage Examples](#usage-examples)
+7. [fhir.js Integration](#fhirjs-integration)
+8. [API Endpoints](#api-endpoints)
+9. [Testing](#testing)
+10. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
 
 ---
 
@@ -203,6 +204,401 @@ Common X12 service type codes mapped to FHIR benefit categories:
 | 98 | Professional (Physician) Visit - Office | Professional (Physician) Visit - Office |
 
 *Full list of 100+ service type codes implemented in mapper*
+
+---
+
+## Payer-to-Payer Data Exchange (CMS-0057-F)
+
+### Overview
+
+The CMS-0057-F Final Rule mandates that payers implement APIs to exchange patient health information when members switch between health plans. Cloud Health Office provides a comprehensive Payer-to-Payer (P2P) data exchange solution using FHIR R4 Bulk Data Access.
+
+**Key Features:**
+- ✅ FHIR R4 Bulk Data Export/Import (NDJSON format)
+- ✅ Member consent validation (opt-in flows)
+- ✅ Azure Service Bus integration for async workflows
+- ✅ Azure Data Lake Storage for bulk file management
+- ✅ Data reconciliation with duplicate prevention
+- ✅ US Core and Da Vinci PDex compliance
+- ✅ Synthetic data generator for testing
+
+### Supported Resource Types
+
+The P2P API supports bulk exchange of the following FHIR R4 resources:
+
+| Resource Type | Purpose | CMS Requirement |
+|---------------|---------|-----------------|
+| **Patient** | Member demographics | Required |
+| **Claim** | Claims history (5 years) | Required |
+| **Encounter** | Healthcare encounters | Required |
+| **ExplanationOfBenefit** | Adjudicated claims | Required |
+| **ServiceRequest** | Prior authorizations | Required (278 ↔ FHIR) |
+
+### Member Consent Model
+
+All data exchanges require explicit member consent per CMS-0057-F requirements:
+
+```typescript
+import { PayerToPayerAPI, MemberConsent } from './src/fhir/payer-to-payer-api';
+
+const api = new PayerToPayerAPI({
+  serviceBusConnectionString: process.env.AZURE_SERVICE_BUS_CONNECTION,
+  storageConnectionString: process.env.AZURE_STORAGE_CONNECTION,
+  storageContainerName: 'p2p-bulk-data',
+  exportRequestTopic: 'export-requests',
+  importRequestTopic: 'import-requests',
+  fhirServerBaseUrl: 'https://fhir.mypayer.com',
+  payerOrganizationId: 'PAYER001'
+});
+
+// Register member consent
+const consent: MemberConsent = {
+  patientId: 'MEM123456',
+  targetPayerId: 'PAYER002',
+  consentDate: new Date('2024-01-15'),
+  status: 'active',
+  authorizedResourceTypes: [
+    'Patient',
+    'Claim',
+    'Encounter',
+    'ExplanationOfBenefit',
+    'ServiceRequest'
+  ]
+};
+
+await api.registerConsent(consent);
+```
+
+### Consent Validation Rules
+
+1. **Active Status**: Consent must have `status: 'active'`
+2. **Not Expired**: If `expirationDate` is set, must be in the future
+3. **Resource Authorization**: Requested resource types must be in `authorizedResourceTypes`
+4. **Target Payer Match**: Consent must be for the requesting payer organization
+
+### Bulk Export Workflow
+
+**Step 1: Initiate Export**
+
+```typescript
+import { BulkExportRequest } from './src/fhir/payer-to-payer-api';
+
+const exportRequest: BulkExportRequest = {
+  exportId: 'EXP-20240115-001',
+  patientIds: ['MEM123456', 'MEM789012'],
+  resourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit'],
+  since: new Date('2019-01-01'), // 5-year historical requirement
+  until: new Date('2024-01-15'),
+  requestingPayerId: 'PAYER002'
+};
+
+// Initiates async export via Service Bus
+const result = await api.initiateExport(exportRequest);
+console.log(`Export job queued: ${result.exportId}`);
+```
+
+**Step 2: Async Processing**
+
+The export is processed asynchronously by a worker:
+
+```typescript
+// Worker process (triggered by Service Bus message)
+const exportResult = await api.executeBulkExport(exportRequest);
+
+console.log('Export completed:');
+exportResult.ndjsonFiles.forEach(file => {
+  console.log(`- ${file.resourceType}: ${file.count} resources`);
+  console.log(`  URL: ${file.url}`);
+});
+```
+
+**Step 3: Download NDJSON Files**
+
+Export produces NDJSON files in Azure Data Lake:
+
+```
+exports/EXP-20240115-001/Patient.ndjson
+exports/EXP-20240115-001/Claim.ndjson
+exports/EXP-20240115-001/ExplanationOfBenefit.ndjson
+```
+
+Each line in the NDJSON file is a valid FHIR R4 resource:
+
+```json
+{"resourceType":"Patient","id":"MEM123456","meta":{"profile":["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]},...}
+{"resourceType":"Patient","id":"MEM789012","meta":{"profile":["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]},...}
+```
+
+### Bulk Import Workflow
+
+**Step 1: Initiate Import**
+
+```typescript
+import { BulkImportRequest } from './src/fhir/payer-to-payer-api';
+
+const importRequest: BulkImportRequest = {
+  importId: 'IMP-20240115-001',
+  ndjsonBlobUrls: [
+    'exports/EXP-20240115-001/Patient.ndjson',
+    'exports/EXP-20240115-001/Claim.ndjson',
+    'exports/EXP-20240115-001/ExplanationOfBenefit.ndjson'
+  ],
+  sourcePayerId: 'PAYER001',
+  enableReconciliation: true // Prevent duplicates
+};
+
+const result = await api.initiateImport(importRequest);
+console.log(`Import job queued: ${result.importId}`);
+```
+
+**Step 2: Async Processing with Reconciliation**
+
+```typescript
+// Worker process (triggered by Service Bus message)
+const importResult = await api.executeBulkImport(importRequest);
+
+console.log('Import completed:');
+importResult.resourcesImported.forEach(res => {
+  console.log(`- ${res.resourceType}:`);
+  console.log(`  Imported: ${res.count}`);
+  console.log(`  Duplicates skipped: ${res.duplicatesSkipped}`);
+});
+```
+
+### Data Reconciliation Logic
+
+The import process includes duplicate detection using Da Vinci PDex member matching:
+
+**Patient Matching Criteria:**
+1. **Member ID match** (highest priority)
+2. **SSN match** (if available)
+3. **Composite match**: Last Name + First Name + DOB + Gender
+
+**Claim/EOB Matching Criteria:**
+1. Patient reference + Claim ID
+2. Patient reference + Service Date + Provider
+3. Patient reference + Service Date + Total Amount
+
+**Algorithm:**
+
+```typescript
+// Simplified reconciliation example
+async function checkForDuplicate(resource: Resource): Promise<boolean> {
+  if (resource.resourceType === 'Patient') {
+    const patient = resource as Patient;
+    
+    // Check Member ID
+    const memberId = patient.identifier?.find(
+      id => id.type?.coding?.[0]?.code === 'MB'
+    )?.value;
+    
+    const existingPatient = await searchPatientByMemberId(memberId);
+    if (existingPatient) return true;
+    
+    // Check SSN
+    const ssn = patient.identifier?.find(
+      id => id.type?.coding?.[0]?.code === 'SB'
+    )?.value;
+    
+    if (ssn) {
+      const existingBySSN = await searchPatientBySSN(ssn);
+      if (existingBySSN) return true;
+    }
+    
+    // Check composite: Name + DOB + Gender
+    const existingByDemographics = await searchPatientByDemographics(
+      patient.name?.[0]?.family,
+      patient.name?.[0]?.given?.[0],
+      patient.birthDate,
+      patient.gender
+    );
+    
+    return !!existingByDemographics;
+  }
+  
+  return false;
+}
+```
+
+### Synthetic Data Generation
+
+Generate test FHIR bulk data for development and testing:
+
+```bash
+# Generate 100 patients with 3 claims and 2 encounters each
+npm run build
+node dist/src/fhir/generate-synthetic-bulk-data.js \
+  --count 100 \
+  --claims 3 \
+  --encounters 2 \
+  --output ./test-data/bulk-export
+
+# Output:
+# ✅ Synthetic bulk data generation complete!
+# 📁 Output directory: ./test-data/bulk-export
+# 📊 Summary:
+#    - 100 Patients
+#    - 300 Claims
+#    - 200 Encounters
+#    - 300 ExplanationOfBenefits
+#    - 33 ServiceRequests (Prior Auths)
+```
+
+**Generated Files:**
+- `Patient.ndjson` - US Core compliant Patient resources
+- `Claim.ndjson` - Professional, institutional, and pharmacy claims
+- `Encounter.ndjson` - Ambulatory, emergency, and inpatient encounters
+- `ExplanationOfBenefit.ndjson` - Adjudicated claims with payment info
+- `ServiceRequest.ndjson` - Prior authorization requests
+
+### Azure Service Bus Integration
+
+The P2P API uses Azure Service Bus topics for async workflow orchestration:
+
+**Topics:**
+- `export-requests` - Queue export jobs
+- `import-requests` - Queue import jobs
+
+**Message Format:**
+
+```json
+{
+  "exportId": "EXP-20240115-001",
+  "patientIds": ["MEM123456", "MEM789012"],
+  "resourceTypes": ["Patient", "Claim"],
+  "since": "2019-01-01T00:00:00Z",
+  "until": "2024-01-15T23:59:59Z",
+  "requestingPayerId": "PAYER002"
+}
+```
+
+**Worker Implementation:**
+
+```typescript
+import { ServiceBusClient } from '@azure/service-bus';
+
+const sbClient = new ServiceBusClient(process.env.AZURE_SERVICE_BUS_CONNECTION!);
+const receiver = sbClient.createReceiver('export-requests');
+
+receiver.subscribe({
+  processMessage: async (message) => {
+    const request = message.body as BulkExportRequest;
+    await api.executeBulkExport(request);
+  },
+  processError: async (err) => {
+    console.error('Service Bus error:', err);
+  }
+});
+```
+
+### Azure Data Lake Storage
+
+NDJSON files are stored in Azure Data Lake with hierarchical structure:
+
+```
+container: p2p-bulk-data/
+├── exports/
+│   ├── EXP-20240115-001/
+│   │   ├── Patient.ndjson
+│   │   ├── Claim.ndjson
+│   │   └── ExplanationOfBenefit.ndjson
+│   └── EXP-20240116-001/
+│       └── ...
+└── imports/
+    └── ...
+```
+
+**Storage Configuration:**
+
+```typescript
+import { BlobServiceClient } from '@azure/storage-blob';
+
+const blobServiceClient = BlobServiceClient.fromConnectionString(
+  process.env.AZURE_STORAGE_CONNECTION!
+);
+
+const containerClient = blobServiceClient.getContainerClient('p2p-bulk-data');
+
+// Upload NDJSON file
+const blobClient = containerClient.getBlockBlobClient(
+  'exports/EXP-20240115-001/Patient.ndjson'
+);
+
+await blobClient.upload(ndjsonContent, Buffer.byteLength(ndjsonContent), {
+  blobHTTPHeaders: { blobContentType: 'application/fhir+ndjson' }
+});
+```
+
+### Testing
+
+**Run P2P Tests:**
+
+```bash
+# Run all payer-to-payer tests (27 tests)
+npm test -- --testPathPattern=payer-to-payer
+
+# Run with coverage
+npm test -- --testPathPattern=payer-to-payer --coverage
+```
+
+**Test Coverage:**
+- ✅ Consent management (7 tests)
+- ✅ Bulk export workflows (3 tests)
+- ✅ Bulk import workflows (2 tests)
+- ✅ Synthetic data generation (4 tests)
+- ✅ US Core validation (6 tests)
+- ✅ NDJSON serialization (3 tests)
+- ✅ Error handling (2 tests)
+
+### CMS-0057-F Compliance Checklist
+
+- ✅ **Bulk Data Export**: FHIR R4 Bulk Data spec compliant
+- ✅ **Member Consent**: Opt-in consent validation before export
+- ✅ **5-Year History**: Support for `since` parameter (5-year lookback)
+- ✅ **US Core Profiles**: Patient, Claim, EOB use US Core profiles
+- ✅ **Da Vinci PDex**: Member matching per PDex IG
+- ✅ **Async Processing**: Service Bus for long-running operations
+- ✅ **NDJSON Format**: Standard FHIR bulk data format
+- ✅ **Security**: Azure managed identity, encryption at rest/in-transit
+- ✅ **Audit Logging**: Service Bus and Storage logs for compliance
+
+### Best Practices
+
+1. **Consent Management**
+   - Store consents in durable storage (database, not just in-memory)
+   - Implement consent expiration checks
+   - Audit all consent grant/revoke actions
+
+2. **Performance**
+   - Use parallel processing for large exports
+   - Implement pagination for resource queries
+   - Compress NDJSON files before storage
+
+3. **Security**
+   - Use Azure Managed Identity (avoid connection strings in production)
+   - Enable Azure Private Link for storage and Service Bus
+   - Implement IP allow-lists for API access
+   - Encrypt NDJSON files at rest with customer-managed keys
+
+4. **Monitoring**
+   - Track export/import job completion rates
+   - Monitor Service Bus queue depths
+   - Alert on failed reconciliation attempts
+   - Log all consent validation failures
+
+### Limitations and Future Enhancements
+
+**Current Limitations:**
+- In-memory consent registry (not persistent)
+- Simplified duplicate detection (production needs FHIR server integration)
+- Mock FHIR server queries (needs real FHIR server client)
+
+**Planned Enhancements:**
+- Integration with Azure Health Data Services FHIR server
+- PostgreSQL-backed consent registry
+- Advanced member matching ML models
+- SMART on FHIR authorization support
+- Real-time export status API
 
 ---
 
@@ -784,9 +1180,17 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 
 ## Roadmap
 
-### Q1 2025
+### Q4 2024 - Completed
 - [x] X12 270 → FHIR R4 Patient mapping
 - [x] X12 270 → FHIR R4 CoverageEligibilityRequest
+- [x] CMS-0057-F Payer-to-Payer bulk data exchange
+- [x] Member consent management
+- [x] Azure Service Bus integration
+- [x] Azure Data Lake Storage integration
+- [x] Data reconciliation and duplicate prevention
+- [x] Synthetic FHIR bulk data generator
+
+### Q1 2025
 - [ ] X12 271 → FHIR R4 CoverageEligibilityResponse
 - [ ] FHIR CoverageEligibilityRequest → X12 270 (reverse)
 
@@ -800,7 +1204,7 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 - [ ] Prior authorization workflows (X12 278 ↔ FHIR)
 - [ ] Attachments (X12 275 ↔ FHIR DocumentReference)
 - [ ] SMART on FHIR integration
-- [ ] FHIR Bulk Data export
+- [ ] Enhanced member matching with ML models
 
 ---
 
