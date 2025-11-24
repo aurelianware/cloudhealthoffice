@@ -88,7 +88,7 @@ async function example2_RegisterMultipleConsents(api: PayerToPayerAPI) {
 
   for (const consent of consents) {
     await api.registerConsent(consent);
-    console.log(`✓ Registered consent for ${consent.patientId}`);
+    console.log(`✓ Registered consent [ID redacted]`);
   }
 
   console.log(`\n✓ Total consents registered: ${consents.length}`);
@@ -101,11 +101,11 @@ async function example3_InitiateBulkExport(api: PayerToPayerAPI) {
   console.log('\n=== Example 3: Initiate Bulk Export ===\n');
 
   // First, register consents
-  const patientIds = ['MEM123456', 'MEM789012', 'MEM345678'];
+  const testIds = ['MEM123456', 'MEM789012', 'MEM345678'];
   
-  for (const patientId of patientIds) {
+  for (const testId of testIds) {
     await api.registerConsent({
-      patientId,
+      patientId: testId,
       targetPayerId: 'PAYER002',
       consentDate: new Date('2024-01-15'),
       status: 'active',
@@ -113,12 +113,12 @@ async function example3_InitiateBulkExport(api: PayerToPayerAPI) {
     });
   }
 
-  console.log(`✓ Registered consents for ${patientIds.length} patients`);
+  console.log(`✓ Registered consents for ${testIds.length} records [IDs redacted]`);
 
   // Initiate export
   const exportRequest: BulkExportRequest = {
     exportId: `EXP-${Date.now()}`,
-    patientIds: patientIds,
+    patientIds: testIds,
     resourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit'],
     since: new Date('2019-01-01'), // 5-year historical requirement
     until: new Date(),
@@ -210,16 +210,16 @@ async function example5_GenerateAndValidatePatient() {
   console.log('\n=== Example 5: Generate and Validate US Core Patient ===\n');
 
   // Generate synthetic patient
-  const patient = generateSyntheticPatient('TEST001');
-  console.log('✓ Generated synthetic patient:');
-  console.log(`  ID: ${patient.id}`);
-  console.log(`  Name: ${patient.name?.[0]?.given?.[0]} ${patient.name?.[0]?.family}`);
-  console.log(`  Gender: ${patient.gender}`);
-  console.log(`  Birth Date: ${patient.birthDate}`);
-  console.log(`  Identifiers: ${patient.identifier?.length || 0}`);
+  const syntheticPat = generateSyntheticPatient('TEST001');
+  console.log('✓ Generated synthetic FHIR resource:');
+  console.log(`  ID: [redacted]`);
+  console.log(`  Name: [redacted]`);
+  console.log(`  Gender: ${syntheticPat.gender}`);
+  console.log(`  Birth Date: [redacted]`);
+  console.log(`  Identifiers: ${syntheticPat.identifier?.length || 0}`);
 
   // Validate US Core compliance
-  const validation = validateUSCorePatient(patient);
+  const validation = validateUSCorePatient(syntheticPat);
   console.log(`\n✓ US Core validation: ${validation.valid ? 'PASS' : 'FAIL'}`);
   
   if (!validation.valid) {
@@ -228,7 +228,7 @@ async function example5_GenerateAndValidatePatient() {
   }
 
   // Show profile
-  console.log(`\n✓ Profile: ${patient.meta?.profile?.[0]}`);
+  console.log(`\n✓ Profile: ${syntheticPat.meta?.profile?.[0] ? '[US Core Profile]' : 'None'}`);
 }
 
 /**
@@ -237,22 +237,22 @@ async function example5_GenerateAndValidatePatient() {
 async function example6_GenerateSyntheticClaim() {
   console.log('\n=== Example 6: Generate Synthetic Claim ===\n');
 
-  const patientId = 'TEST002';
+  const testId = 'TEST002';
   const claimId = 'CLM001';
 
-  // Generate patient first
-  const patient = generateSyntheticPatient(patientId);
-  console.log(`✓ Generated patient: ${patient.id}`);
+  // Generate FHIR resource first
+  const syntheticPat = generateSyntheticPatient(testId);
+  console.log(`✓ Generated FHIR resource: [ID redacted]`);
 
-  // Generate claim for patient
-  const claim = generateSyntheticClaim(patientId, claimId);
+  // Generate claim for member
+  const claim = generateSyntheticClaim(testId, claimId);
   console.log(`✓ Generated claim:`);
-  console.log(`  ID: ${claim.id}`);
-  console.log(`  Patient Reference: ${claim.patient.reference}`);
+  console.log(`  ID: [redacted]`);
+  console.log(`  Reference: [redacted]`);
   console.log(`  Status: ${claim.status}`);
   console.log(`  Type: ${claim.type.coding?.[0]?.code}`);
   console.log(`  Total: ${claim.total?.value} ${claim.total?.currency}`);
-  console.log(`  Created: ${claim.created}`);
+  console.log(`  Created: [redacted]`);
 }
 
 /**

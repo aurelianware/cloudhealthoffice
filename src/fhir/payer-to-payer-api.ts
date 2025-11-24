@@ -538,7 +538,7 @@ export function generateSyntheticPatient(memberId: string): Patient {
     resourceType: 'Patient',
     id: memberId,
     meta: {
-      profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+      profile: ['https://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
     },
     identifier: [
       {

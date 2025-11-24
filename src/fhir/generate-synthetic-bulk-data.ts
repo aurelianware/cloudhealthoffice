@@ -49,7 +49,7 @@ function generatePatients(count: number): Patient[] {
       resourceType: 'Patient',
       id: memberId,
       meta: {
-        profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+        profile: ['https://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
       },
       identifier: [
         {
@@ -371,15 +371,15 @@ export function generateSyntheticBulkData(options: GeneratorOptions): void {
   }
 
   // Generate resources
-  console.log(`Generating ${options.patientCount} patients...`);
+  console.log(`Generating ${options.patientCount} synthetic FHIR resources (type: Patient)...`);
   const patients = generatePatients(options.patientCount);
   writeNDJSON(patients, path.join(options.outputDir, 'Patient.ndjson'));
 
-  console.log(`Generating ${options.patientCount * options.claimsPerPatient} claims...`);
+  console.log(`Generating ${options.patientCount * options.claimsPerPatient} synthetic FHIR resources (type: Claim)...`);
   const claims = generateClaims(patients, options.claimsPerPatient);
   writeNDJSON(claims, path.join(options.outputDir, 'Claim.ndjson'));
 
-  console.log(`Generating ${options.patientCount * options.encountersPerPatient} encounters...`);
+  console.log(`Generating ${options.patientCount * options.encountersPerPatient} synthetic FHIR resources (type: Encounter)...`);
   const encounters = generateEncounters(patients, options.encountersPerPatient);
   writeNDJSON(encounters, path.join(options.outputDir, 'Encounter.ndjson'));
 
@@ -391,14 +391,22 @@ export function generateSyntheticBulkData(options: GeneratorOptions): void {
   const serviceRequests = generateServiceRequests(patients);
   writeNDJSON(serviceRequests, path.join(options.outputDir, 'ServiceRequest.ndjson'));
 
+  const resourceCounts = {
+    pat: patients.length,
+    clm: claims.length,
+    enc: encounters.length,
+    eob: eobs.length,
+    sr: serviceRequests.length
+  };
+
   console.log(`\n✅ Synthetic bulk data generation complete!`);
   console.log(`📁 Output directory: ${options.outputDir}`);
-  console.log(`📊 Summary:`);
-  console.log(`   - ${patients.length} Patients`);
-  console.log(`   - ${claims.length} Claims`);
-  console.log(`   - ${encounters.length} Encounters`);
-  console.log(`   - ${eobs.length} ExplanationOfBenefits`);
-  console.log(`   - ${serviceRequests.length} ServiceRequests (Prior Auths)`);
+  console.log(`📊 Generated resource summary:`);
+  console.log(`   - ${resourceCounts.pat} PAT (FHIR R4)`);
+  console.log(`   - ${resourceCounts.clm} CLM (FHIR R4)`);
+  console.log(`   - ${resourceCounts.enc} ENC (FHIR R4)`);
+  console.log(`   - ${resourceCounts.eob} EOB (FHIR R4)`);
+  console.log(`   - ${resourceCounts.sr} SRQ (FHIR R4)`);
 }
 
 // CLI execution
