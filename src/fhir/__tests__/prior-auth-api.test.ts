@@ -414,22 +414,24 @@ describe('Prior Authorization API - CMS-0057-F Implementation', () => {
   });
 
   describe('Attachment Handling (Binary Resource)', () => {
-    
+    // Valid base64 encoded strings for testing (proper padding)
+    const validPdfBase64 = 'JVBERi0xLjQKJeLjz9MK'; // Valid base64, 20 chars
+    const validPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const validTextBase64 = 'SGVsbG8gV29ybGQh'; // "Hello World!" in base64
+
     it('creates Binary resource for PDF attachment', () => {
-      const pdfData = 'JVBERi0xLjQKJeLjz9MKMSAwIG9iag=='; // Base64 PDF sample
-      const binary = createAttachmentBinary(pdfData, 'application/pdf', 'Clinical Notes');
+      const binary = createAttachmentBinary(validPdfBase64, 'application/pdf', 'Clinical Notes');
 
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('application/pdf');
-      expect(binary.data).toBe(pdfData);
+      expect(binary.data).toBe(validPdfBase64);
       expect(binary.securityContext?.display).toBe('Clinical Notes');
       expect(binary.meta).toBeDefined();
       expect(binary.meta?.profile).toContain('http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-binary');
     });
 
     it('creates Binary resource for image attachment', () => {
-      const imageData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-      const binary = createAttachmentBinary(imageData, 'image/png', 'X-Ray Image');
+      const binary = createAttachmentBinary(validPngBase64, 'image/png', 'X-Ray Image');
 
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('image/png');
@@ -437,7 +439,7 @@ describe('Prior Authorization API - CMS-0057-F Implementation', () => {
     });
 
     it('creates DocumentReference linking Binary to Claim', () => {
-      const binary = createAttachmentBinary('base64data', 'application/pdf', 'Lab Results');
+      const binary = createAttachmentBinary(validPdfBase64, 'application/pdf', 'Lab Results');
       const claimRef = { reference: 'Claim/PA-2024-011' };
       
       const docRef = createAttachmentDocumentReference(binary, claimRef, 'clinical-note');
@@ -451,9 +453,27 @@ describe('Prior Authorization API - CMS-0057-F Implementation', () => {
     });
 
     it('creates Binary without description', () => {
-      const binary = createAttachmentBinary('data', 'text/plain');
+      const binary = createAttachmentBinary(validTextBase64, 'text/plain');
 
       expect(binary.securityContext).toBeUndefined();
+    });
+
+    it('rejects invalid MIME type', () => {
+      expect(() => {
+        createAttachmentBinary(validTextBase64, 'application/exe');
+      }).toThrow('Invalid content type');
+    });
+
+    it('rejects invalid base64 data', () => {
+      expect(() => {
+        createAttachmentBinary('not-valid-base64!!!', 'text/plain');
+      }).toThrow('Invalid attachment data');
+    });
+
+    it('rejects empty data', () => {
+      expect(() => {
+        createAttachmentBinary('', 'text/plain');
+      }).toThrow('Invalid attachment data');
     });
   });
 
