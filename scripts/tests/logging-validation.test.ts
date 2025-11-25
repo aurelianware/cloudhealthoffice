@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { isPHI, redactPHI, validateRedaction } from '../../src/security/hipaaLogger';
+import { isPHI, redactPHI, validateRedaction, createHIPAALogger } from '../../src/security/hipaaLogger';
 
 describe('HIPAA Logging Validation', () => {
   describe('PHI Detection', () => {
@@ -175,7 +175,6 @@ describe('HIPAA Logging Validation', () => {
 
   describe('Integration Tests', () => {
     it('should log access events without PHI', () => {
-      const { createHIPAALogger } = require('../../src/security/hipaaLogger');
       const logger = createHIPAALogger('system@test.com', '127.0.0.1');
       
       // This should not throw
