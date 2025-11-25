@@ -511,7 +511,7 @@ if (!timelineResult.compliant) {
 
 ### Unit Tests
 
-Cloud Health Office includes 75+ comprehensive tests:
+Cloud Health Office includes 57+ comprehensive unit tests for CMS-0057-F features (FHIR mapping and compliance checking), plus additional integration and legacy module tests for full platform coverage:
 
 ```bash
 # Run all FHIR tests
