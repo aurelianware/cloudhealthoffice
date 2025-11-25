@@ -21,16 +21,8 @@
 
 import {
   Claim,
-  ClaimResponse,
   ExplanationOfBenefit,
   ServiceRequest,
-  Patient,
-  Practitioner,
-  Organization,
-  Coverage,
-  CodeableConcept,
-  Money,
-  Identifier,
   Reference,
   Period,
 } from 'fhir/r4';
@@ -503,8 +495,8 @@ export function mapX12_835_ToFhirExplanationOfBenefit(
       type: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/ex-paymenttype',
-          code: input.paymentMethod === 'ACH' ? 'complete' : 'partial',
-          display: input.paymentMethod === 'ACH' ? 'Complete' : 'Partial',
+          code: claimData.paidAmount === claimData.chargedAmount ? 'complete' : 'partial',
+          display: claimData.paidAmount === claimData.chargedAmount ? 'Complete' : 'Partial',
         }],
       },
       date: input.paymentDate,
@@ -756,6 +748,16 @@ function getServiceTypeDisplay(code: string): string {
 /**
  * Normalizes X12 date format (CCYYMMDD) to FHIR date format (YYYY-MM-DD)
  */
+/**
+ * Validates that a date has valid month (01-12) and day (01-31) ranges
+ * Note: Does not validate day ranges per month (e.g., Feb 30 would pass basic validation)
+ */
+function isValidDateComponents(month: string, day: string): boolean {
+  const monthNum = parseInt(month, 10);
+  const dayNum = parseInt(day, 10);
+  return monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31;
+}
+
 function normalizeX12Date(dateStr: string): string {
   // Validate and return if already in YYYY-MM-DD format
   const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -765,7 +767,16 @@ function normalizeX12Date(dateStr: string): string {
   
   // Convert CCYYMMDD to YYYY-MM-DD
   if (dateStr.length === 8 && /^\d{8}$/.test(dateStr)) {
-    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+    const month = dateStr.substring(4, 6);
+    const day = dateStr.substring(6, 8);
+    
+    // Validate date components
+    if (!isValidDateComponents(month, day)) {
+      // Return as-is if invalid - let downstream handle validation
+      return dateStr;
+    }
+    
+    return `${dateStr.substring(0, 4)}-${month}-${day}`;
   }
   
   // Fallback: return as-is if format unknown
@@ -776,6 +787,15 @@ function normalizeX12Date(dateStr: string): string {
  * Normalizes X12 date-time format to ISO 8601
  * Handles formats: CCYYMMDD-HHMM, CCYYMMDDHHMM, or YYYY-MM-DD-HH:MM
  */
+/**
+ * Validates that time components are valid (hours 00-23, minutes 00-59)
+ */
+function isValidTimeComponents(hours: string, minutes: string): boolean {
+  const hoursNum = parseInt(hours, 10);
+  const minutesNum = parseInt(minutes, 10);
+  return hoursNum >= 0 && hoursNum <= 23 && minutesNum >= 0 && minutesNum <= 59;
+}
+
 function normalizeX12DateTime(dateTime: string): string {
   // Handle formats with separator (CCYYMMDD-HHMM or YYYY-MM-DD-HH:MM)
   if (dateTime.includes('-')) {
@@ -785,7 +805,16 @@ function normalizeX12DateTime(dateTime: string): string {
     const normalizedDate = normalizeX12Date(date);
     
     if (time && time.length === 4) {
-      return `${normalizedDate}T${time.substring(0, 2)}:${time.substring(2, 4)}:00Z`;
+      const hours = time.substring(0, 2);
+      const minutes = time.substring(2, 4);
+      
+      // Validate time components
+      if (!isValidTimeComponents(hours, minutes)) {
+        // Return date with midnight time if time is invalid
+        return `${normalizedDate}T00:00:00Z`;
+      }
+      
+      return `${normalizedDate}T${hours}:${minutes}:00Z`;
     }
     
     return `${normalizedDate}T00:00:00Z`;
@@ -794,9 +823,16 @@ function normalizeX12DateTime(dateTime: string): string {
   // Handle format without separator (CCYYMMDDHHMM - 12 characters)
   if (dateTime.length === 12) {
     const date = dateTime.substring(0, 8); // CCYYMMDD
-    const time = dateTime.substring(8, 12); // HHMM
+    const hours = dateTime.substring(8, 10); // HH
+    const minutes = dateTime.substring(10, 12); // MM
     const normalizedDate = normalizeX12Date(date);
-    return `${normalizedDate}T${time.substring(0, 2)}:${time.substring(2, 4)}:00Z`;
+    
+    // Validate time components
+    if (!isValidTimeComponents(hours, minutes)) {
+      return `${normalizedDate}T00:00:00Z`;
+    }
+    
+    return `${normalizedDate}T${hours}:${minutes}:00Z`;
   }
   
   // Fallback: treat as date only
