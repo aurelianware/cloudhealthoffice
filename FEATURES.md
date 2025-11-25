@@ -85,7 +85,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Interactive Wizard** | Guided configuration in <5 minutes | ✅ Complete |
+| **Interactive Wizard** | Guided configuration typically in under 5 minutes, based on testing | ✅ Complete |
 | **Workflow Generation** | Automatic Logic App workflow.json creation | ✅ Complete |
 | **Infrastructure Templates** | Bicep templates with parameters | ✅ Complete |
 | **Documentation** | Auto-generated deployment guides | ✅ Complete |
@@ -146,7 +146,7 @@ node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config
 node dist/scripts/cli/payer-generator-cli.js validate my-config.json
 ```
 
-**Time Savings**: Multi-week project → Minutes  
+**Time Savings**: Streamline deployment processes that traditionally take weeks  
 **Documentation**: [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 ## 🏥 FHIR R4 Integration
@@ -207,7 +207,7 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
 - **Lines of Code**: 1,140 (production), 450 (tests), 1,190 (docs)
 - **Test Coverage**: 100% (FHIR module)
-- **Test Pass Rate**: 100% (19/19 tests)
+- **Test Pass Rate**: Estimated 100% pass rate in internal tests (19/19 tests)
 - **Dependencies**: @types/fhir (type definitions only)
 - **Vulnerabilities**: 0 (core mapper)
 - **Mapping Speed**: ~1ms per transaction
@@ -221,8 +221,8 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
 **Status**: ✅ Production-Ready  
 **Implementation Date**: November 2024  
-**Premium Revenue**: $10k/year per payer  
-**Provider ROI**: $69,600/year (1,000 lookups/month at 7 min savings)
+**Premium Revenue**: Potential value-add of up to $10k/year per payer (varies by implementation)  
+**Provider ROI**: May save providers time on claim lookups
 
 ### Enhanced Response Fields (60+)
 
@@ -327,8 +327,8 @@ Enable seamless cross-module workflows:
 
 **Status**: ✅ Production-Ready  
 **Implementation Date**: November 2024  
-**Security Score**: 9/10  
-**HIPAA Compliance**: 100% (§ 164.312 technical safeguards)
+**Security Score**: High security maturity (self-assessed)  
+**HIPAA Compliance**: Addresses key HIPAA technical safeguards (§ 164.312)
 
 ### Security Controls (6)
 
@@ -394,7 +394,7 @@ Lifecycle policy:
 - **Archive tier**: 91 days - 7 years (long-term retention)
 - **Delete**: After 7 years (HIPAA compliant)
 
-**Cost Impact**: $463/mo → $29/mo (94% savings)
+**Cost Impact**: Estimated 94% storage cost reduction based on lifecycle policies; actual savings vary
 
 #### 6. Customer-Managed Keys (Optional)
 
@@ -415,11 +415,11 @@ Features:
 
 | Standard | Implementation | Status |
 |----------|----------------|--------|
-| **§ 164.312(a)(1) Access Control** | Azure AD, RBAC, Key Vault, MFA | ✅ Complete |
-| **§ 164.312(b) Audit Controls** | Activity Log, Application Insights, 7-year retention | ✅ Complete |
-| **§ 164.312(c)(1) Integrity** | Blob versioning, checksums, immutability | ✅ Complete |
-| **§ 164.312(d) Authentication** | Azure AD, managed identities, OAuth 2.0 | ✅ Complete |
-| **§ 164.312(e)(1) Transmission Security** | TLS 1.2+, private endpoints, network isolation | ✅ Complete |
+| **§ 164.312(a)(1) Access Control** | Azure AD, RBAC, Key Vault, MFA | ✅ Addressed |
+| **§ 164.312(b) Audit Controls** | Activity Log, Application Insights, 7-year retention | ✅ Addressed |
+| **§ 164.312(c)(1) Integrity** | Blob versioning, checksums, immutability | ✅ Addressed |
+| **§ 164.312(d) Authentication** | Azure AD, managed identities, OAuth 2.0 | ✅ Addressed |
+| **§ 164.312(e)(1) Transmission Security** | TLS 1.2+, private endpoints, network isolation | ✅ Addressed |
 
 **Documentation**: [SECURITY-HARDENING.md](./SECURITY-HARDENING.md), [HIPAA-COMPLIANCE-MATRIX.md](./docs/HIPAA-COMPLIANCE-MATRIX.md)
 
@@ -609,27 +609,27 @@ Automatic scanning on every PR:
 
 | Metric | Before | After | Improvement |
 |--------|--------|-------|-------------|
-| **Onboarding Time** | 2-4 hours | <5 minutes | 96% reduction |
-| **Payer Deployment** | Multi-week project | Minutes | 99% reduction |
-| **Configuration Errors** | 40% | <5% | 87.5% reduction |
-| **Claim Lookup Time** | 7-21 minutes | Instant | 100% reduction |
+| **Onboarding Time** | 2-4 hours | Typically under 5 minutes, based on testing | Potential for up to 96% reduction |
+| **Payer Deployment** | Multi-week project | Streamlined to minutes | Potential for up to 99% reduction |
+| **Configuration Errors** | 40% | <5% | Potential for up to 87.5% reduction |
+| **Claim Lookup Time** | 7-21 minutes | Instant | May save providers time |
 
 ### Cost & ROI
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Storage Cost Savings** | 94% ($463/mo → $29/mo) | Lifecycle policies |
-| **Provider ROI** | $69,600/year | ValueAdds277, 1,000 lookups/month |
-| **Premium Revenue** | $10k/year per payer | ValueAdds277 add-on |
+| **Storage Cost Savings** | Estimated 94% reduction | Based on lifecycle policies; actual savings vary |
+| **Provider ROI** | May save providers time | ValueAdds277 features |
+| **Premium Revenue** | Potential value-add of up to $10k/year per payer | Varies by implementation |
 | **Sandbox Deployment** | ~$50-100/month | Azure costs |
 
 ### Quality & Compliance
 
 | Metric | Value | Target |
 |--------|-------|--------|
-| **Security Score** | 9/10 | 9/10 ✅ |
-| **HIPAA Compliance** | 100% | 100% ✅ |
-| **Test Pass Rate** | 100% (62/62) | 100% ✅ |
+| **Security Score** | High security maturity (self-assessed) | ✅ |
+| **HIPAA Compliance** | Addresses key technical safeguards | ✅ |
+| **Test Pass Rate** | Estimated 100% in internal tests (62/62) | 100% ✅ |
 | **Test Coverage** | 100% (FHIR module) | >80% ✅ |
 | **Build Success Rate** | 100% | 100% ✅ |
 | **Vulnerabilities** | 0 (core mapper) | 0 ✅ |
@@ -703,10 +703,18 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 Apache 2.0 - See [LICENSE](./LICENSE) for details.
 
+## 🤝 Integration Focus
+
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like QNXT and Facets, providing enhancements to EDI workflows without requiring full replacements.
+
 ---
 
-**Cloud Health Office** – The Future of Healthcare EDI Integration
+## 🤝 Collaboration and Integration
+
+Cloud Health Office is designed to complement leading core administrative platforms like QNXT and Facets, enabling rapid enhancements to existing workflows without disruption.
+
+---
+
+**Cloud Health Office** – Advancing Healthcare EDI Integration
 
 *Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
-
-**Just emerged from the void.**
