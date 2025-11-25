@@ -321,7 +321,7 @@ program
   .action(async (options) => {
     try {
       console.log(chalk_bold(chalk.cyan('\n🚀 CMS-0057-F Quick Deploy\n')));
-      console.log(chalk.yellow('Target: Deploy all CMS-0057-F APIs in <10 minutes\n'));
+      console.log(chalk.yellow('Target: Generate all deployment artifacts in <1 minute.\nFull Azure deployment: 8-12 minutes (including manual steps)\n'));
 
       let config;
       
@@ -362,7 +362,7 @@ program
         console.log(`  3. Configure FHIR endpoints (1-2 min)`);
         console.log(`  4. Deploy Logic App workflows (2-3 min)`);
         console.log(`  5. Run compliance validation (1 min)`);
-        console.log(`\nEstimated Total Time: 8-12 minutes`);
+        console.log(`\nEstimated Total Time: <10 minutes`);
         return;
       }
 
