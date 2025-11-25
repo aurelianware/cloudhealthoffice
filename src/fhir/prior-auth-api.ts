@@ -27,22 +27,12 @@
 
 import {
   Bundle,
-  Claim,
   ClaimResponse,
   Coding,
   CodeableConcept,
   Reference,
-  Extension,
-  Identifier,
-  Patient,
-  Practitioner,
-  Organization,
-  ServiceRequest,
   DocumentReference,
-  Binary,
-  Consent,
-  Appointment,
-  Task
+  Binary
 } from 'fhir/r4';
 
 /**
