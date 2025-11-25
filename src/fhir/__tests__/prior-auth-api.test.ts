@@ -463,7 +463,8 @@ describe('Prior Authorization API - Da Vinci CRD Integration', () => {
       expect(request.context.userId).toBe('Practitioner/123');
       expect(request.context.patientId).toBe('Patient/456');
       expect(request.prefetch.patient).toBe('Patient/456');
-      expect(request.hookInstance).toMatch(/^hook-/);
+      // UUID v4 format validation
+      expect(request.hookInstance).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     });
     
     it('should create order-sign hook request', () => {
@@ -493,7 +494,7 @@ describe('Prior Authorization API - Attachment Support', () => {
     
     it('should create FHIR Binary resource for PDF attachment', () => {
       const base64Data = 'JVBERi0xLjQKJeLjz9MK...'; // Truncated for brevity
-      const binary = createAttachmentBinary('application/pdf', base64Data, 'Clinical notes');
+      const binary = createAttachmentBinary('application/pdf', base64Data);
       
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('application/pdf');
@@ -502,7 +503,7 @@ describe('Prior Authorization API - Attachment Support', () => {
     
     it('should create Binary resource for image attachment', () => {
       const base64Image = 'iVBORw0KGgoAAAANSUhEUgA...';
-      const binary = createAttachmentBinary('image/jpeg', base64Image, 'X-ray result');
+      const binary = createAttachmentBinary('image/jpeg', base64Image);
       
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('image/jpeg');

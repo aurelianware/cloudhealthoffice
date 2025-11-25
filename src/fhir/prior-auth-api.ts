@@ -25,6 +25,8 @@
  * - X12 278: Health Care Services Review (005010X217)
  */
 
+import { randomUUID } from 'crypto';
+
 import {
   Bundle,
   ClaimResponse,
@@ -620,7 +622,7 @@ export function calculatePriorAuthSLA(
   const decisionDueBy = new Date(submittedDate.getTime() + (standardTimelineHours * 60 * 60 * 1000));
   
   const sla: PriorAuthSLA = {
-    requestId: `PA-${Date.now()}`,
+    requestId: `PA-${randomUUID()}`,
     submittedAt,
     requestType,
     decisionDueBy: decisionDueBy.toISOString(),
@@ -688,7 +690,7 @@ export function createCRDCard(
   }
   
   const card: CRDCard = {
-    uuid: `crd-${Date.now()}`,
+    uuid: randomUUID(),
     summary,
     detail,
     indicator,
@@ -842,7 +844,7 @@ export function createCDSHooksRequest(
     : context.patientId;
     
   return {
-    hookInstance: `hook-${Date.now()}`,
+    hookInstance: randomUUID(),
     hook: hookType,
     fhirServer: 'https://fhir.cloudhealthoffice.com',
     context,
