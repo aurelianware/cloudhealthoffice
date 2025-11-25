@@ -717,13 +717,11 @@ export function createCRDCard(
  * 
  * @param contentType MIME type
  * @param data Base64-encoded data
- * @param description Attachment description
  * @returns FHIR Binary resource
  */
 export function createAttachmentBinary(
   contentType: string,
-  data: string,
-  description?: string
+  data: string
 ): Binary {
   const binary: Binary = {
     resourceType: 'Binary',
