@@ -16,11 +16,8 @@
 import { describe, it, expect } from '@jest/globals';
 import {
   X12_278_Request,
-  X12_278_Response,
   PriorAuthorizationRequest,
   PriorAuthorizationResponse,
-  PriorAuthSLA,
-  CRDCard,
   mapX12278ToFHIRPriorAuth,
   mapFHIRToX12278Response,
   calculatePriorAuthSLA,

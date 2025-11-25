@@ -826,6 +826,7 @@ export function createPriorAuthConsent(
  * 
  * @param hookType Hook type (order-select, order-sign, etc.)
  * @param context Hook context with patient and order details
+ * @param fhirServer Optional FHIR server URL (defaults to cloudhealthoffice.com)
  * @returns CDS Hooks request payload
  */
 export function createCDSHooksRequest(
@@ -836,7 +837,8 @@ export function createCDSHooksRequest(
     encounterId?: string;
     draftOrders?: Bundle;
     selections?: string[];
-  }
+  },
+  fhirServer: string = 'https://fhir.cloudhealthoffice.com'
 ): any {
   // Extract patient ID if it's already in the form "Patient/123"
   const patientId = context.patientId.startsWith('Patient/')
@@ -846,7 +848,7 @@ export function createCDSHooksRequest(
   return {
     hookInstance: randomUUID(),
     hook: hookType,
-    fhirServer: 'https://fhir.cloudhealthoffice.com',
+    fhirServer,
     context,
     prefetch: {
       patient: `Patient/${patientId}`,
