@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import {
   generate837P,
   generate837I,
@@ -14,7 +15,7 @@ import {
 } from '../utils/generate-837-claims';
 
 describe('837 Claim Generator', () => {
-  const testOutputDir = '/tmp/test-claims-output';
+  const testOutputDir = path.join(os.tmpdir(), 'test-claims-output');
 
   beforeAll(() => {
     // Clean up test output directory
@@ -280,15 +281,17 @@ describe('837 Claim Generator', () => {
     });
 
     it('should generate different claims with unique control numbers', () => {
-      // Use different timestamps to ensure unique control numbers
-      const claim1 = generate837P({ claimType: '837P', claimNumber: 'TEST' + Date.now() });
+      // Use explicitly different claim numbers to ensure uniqueness
+      const uniqueId1 = 'TESTCLAIM' + Math.random().toString(36).substring(2, 15);
+      const uniqueId2 = 'TESTCLAIM' + Math.random().toString(36).substring(2, 15);
       
-      // Wait a bit to ensure different timestamp
-      const uniqueSuffix = Date.now() + 1;
-      const claim2 = generate837P({ claimType: '837P', claimNumber: 'TEST' + uniqueSuffix });
+      const claim1 = generate837P({ claimType: '837P', claimNumber: uniqueId1 });
+      const claim2 = generate837P({ claimType: '837P', claimNumber: uniqueId2 });
       
       // The entire claims should be different
       expect(claim1).not.toBe(claim2);
+      expect(claim1).toContain(uniqueId1);
+      expect(claim2).toContain(uniqueId2);
     });
   });
 });
