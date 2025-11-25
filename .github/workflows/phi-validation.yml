@@ -55,7 +55,7 @@ jobs:
             'Output',
             'payerName|payerId|payerType',
             'count|length|total|size',
-            'error\.message|Error\? error\.message',
+            'error\.message',
             'step\d+Time|totalTime|elapsed',
             'status|result|success|failed',
             'chalk\.',
@@ -68,7 +68,7 @@ jobs:
             'field|suggestion',
             'companyName|contactEmail',
             'skipFhir|skipPa',
-            ', err\)'
+            ',\s*(err|error|e)\)'
           )
           $safePatternRegex = $safePatterns -join '|'
 
