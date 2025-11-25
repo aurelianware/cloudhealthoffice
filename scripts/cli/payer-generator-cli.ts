@@ -70,7 +70,7 @@ program
   .option('-f, --force', 'Overwrite existing output directory')
   .action(async (options) => {
     try {
-      let configPath = options.config;
+      const configPath = options.config;
 
       // Interactive prompt if config not provided
       if (!configPath) {
