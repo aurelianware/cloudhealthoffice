@@ -833,8 +833,8 @@ export function createCDSHooksRequest(
   }
 ): any {
   // Extract patient ID if it's already in the form "Patient/123"
-  const patientId = context.patientId.startsWith('Patient/') 
-    ? context.patientId.split('/')[1] 
+  const patientId = context.patientId.startsWith('Patient/')
+    ? context.patientId.substring('Patient/'.length)
     : context.patientId;
     
   return {
