@@ -489,19 +489,121 @@ function generateUniqueId(prefix: string): string {
 }
 
 /**
+ * Allowed MIME types for clinical attachments per CMS-0057-F
+ */
+const ALLOWED_ATTACHMENT_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/tiff',
+  'image/gif',
+  'text/plain',
+  'text/xml',
+  'application/xml',
+  'application/json',
+  'application/dicom',
+  'application/hl7-v2',
+  'application/fhir+json',
+  'application/fhir+xml'
+];
+
+/**
+ * Maximum attachment size in bytes (10 MB default for DoS protection)
+ */
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Validates base64 string format using atob() for robust validation
+ */
+function isValidBase64(str: string): boolean {
+  if (!str || str.length === 0) {
+    return false;
+  }
+  
+  // First check basic format requirements
+  if (str.length % 4 !== 0) {
+    return false;
+  }
+  
+  // Use regex to check character set
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!base64Regex.test(str)) {
+    return false;
+  }
+
+  // Try to decode to verify it's actually valid base64
+  try {
+    // In Node.js environment, use Buffer; in browser, use atob
+    if (typeof Buffer !== 'undefined') {
+      Buffer.from(str, 'base64');
+    } else if (typeof atob !== 'undefined') {
+      atob(str);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Calculates the decoded byte size of a base64 string
+ * Accounts for padding characters correctly
+ */
+function getBase64DecodedSize(base64: string): number {
+  // Remove padding to get accurate count
+  const padding = (base64.match(/=+$/) || [''])[0].length;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+/**
+ * Validates attachment data and content type
+ * @throws Error if validation fails
+ */
+function validateAttachmentInput(data: string, contentType: string): void {
+  // Validate content type is in allowed list
+  if (!ALLOWED_ATTACHMENT_MIME_TYPES.includes(contentType)) {
+    throw new Error(
+      `Invalid content type: ${contentType}. Allowed types: ${ALLOWED_ATTACHMENT_MIME_TYPES.join(', ')}`
+    );
+  }
+
+  // Validate base64 encoding
+  if (!isValidBase64(data)) {
+    throw new Error('Invalid attachment data: must be valid base64-encoded content');
+  }
+
+  // Check size limit using accurate decoded size calculation
+  const decodedBytes = getBase64DecodedSize(data);
+  if (decodedBytes > MAX_ATTACHMENT_SIZE_BYTES) {
+    throw new Error(
+      `Attachment too large: ${decodedBytes} bytes exceeds maximum of ${MAX_ATTACHMENT_SIZE_BYTES} bytes (${MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024} MB)`
+    );
+  }
+}
+
+/**
  * Creates a FHIR Binary resource for attachment handling
  * Supports documents, images, and other clinical attachments
+ * 
+ * Validates input data for:
+ * - Valid base64 encoding
+ * - Allowed MIME content types
+ * - Size limits to prevent DoS attacks
  * 
  * @param data Base64-encoded attachment data
  * @param contentType MIME type (e.g., 'application/pdf', 'image/jpeg')
  * @param description Human-readable description
  * @returns FHIR R4 Binary resource
+ * @throws Error if validation fails
  */
 export function createAttachmentBinary(
   data: string,
   contentType: string,
   description?: string
 ): Binary {
+  // Validate input before creating resource
+  validateAttachmentInput(data, contentType);
+
   return {
     resourceType: 'Binary',
     id: generateUniqueId('attachment'),
