@@ -15,7 +15,7 @@
  * - Life-threatening situations: 24 hours
  */
 
-import { ServiceRequest, Claim, ExplanationOfBenefit, Patient, OperationOutcome } from 'fhir/r4';
+import { ServiceRequest, Claim, ExplanationOfBenefit, Patient } from 'fhir/r4';
 
 /**
  * Compliance result structure
@@ -499,7 +499,7 @@ export class CMS0057FComplianceChecker {
     const allIssues = results.flatMap(r => r.issues);
     const allRules = results.flatMap(r => r.checkedRules);
     const allCompliant = results.every(r => r.compliant);
-    const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
+    const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.score, 0) / results.length : 0;
     
     return {
       compliant: allCompliant,
@@ -564,9 +564,11 @@ export class CMS0057FComplianceChecker {
     const warningCount = this.issues.filter(i => i.severity === 'warning').length;
     
     const compliant = errorCount === 0;
-    const score = Math.round(
-      ((this.checkedRules.length - errorCount - warningCount * this.WARNING_PENALTY) / this.checkedRules.length) * 100
-    );
+    const score = this.checkedRules.length > 0
+      ? Math.round(
+          ((this.checkedRules.length - errorCount - warningCount * this.WARNING_PENALTY) / this.checkedRules.length) * 100
+        )
+      : 0;
     
     return {
       compliant,
@@ -616,7 +618,7 @@ export async function validateWithAzureFHIR(
   // If Azure FHIR endpoint provided, call $validate operation
   if (azureFhirEndpoint) {
     try {
-      // TODO: Implement Azure FHIR $validate integration (Tracked in GitHub Issue #TBD)
+      // TODO: Implement Azure FHIR $validate integration
       // Target: Q1 2025
       // Requirements:
       // 1. Authentication (managed identity or service principal)

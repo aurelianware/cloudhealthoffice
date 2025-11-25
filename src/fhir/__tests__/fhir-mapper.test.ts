@@ -885,4 +885,125 @@ describe('Edge Cases and Coverage', () => {
     const claim = mapX12_837_ToFhirClaim(x12_837);
     expect(claim.diagnosis).toBeUndefined();
   });
+
+  it('handles invalid time in datetime (hours > 23)', () => {
+    const x12_837: X12_837 = {
+      claimId: 'CLM001',
+      transactionDate: '20240115-2599', // Invalid: hour 25, minute 99
+      totalClaimChargeAmount: 100.00,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: '20240115',
+        units: 1,
+        chargeAmount: 100.00,
+      }],
+      diagnosisCodes: [],
+      payerId: 'PAYER001',
+    };
+
+    const claim = mapX12_837_ToFhirClaim(x12_837);
+    // Should default to midnight when time is invalid
+    expect(claim.created).toBe('2024-01-15T00:00:00Z');
+  });
+
+  it('handles invalid date components (month > 12, day > 31)', () => {
+    const x12_837: X12_837 = {
+      claimId: 'CLM001',
+      transactionDate: '20241332-1430', // Invalid: month 13, day 32
+      totalClaimChargeAmount: 100.00,
+      subscriber: {
+        memberId: 'MEM001',
+        firstName: 'John',
+        lastName: 'Doe',
+        dob: '19850615',
+      },
+      billingProvider: {
+        npi: '1234567890',
+      },
+      serviceLines: [{
+        lineNumber: 1,
+        procedureCode: '99213',
+        serviceDate: '20240115',
+        units: 1,
+        chargeAmount: 100.00,
+      }],
+      diagnosisCodes: [],
+      payerId: 'PAYER001',
+    };
+
+    const claim = mapX12_837_ToFhirClaim(x12_837);
+    // Should return invalid date as-is since date components are invalid
+    expect(claim.created).toContain('20241332');
+  });
+
+  it('maps X12 835 with complete payment (paidAmount equals chargedAmount)', () => {
+    const x12_835: X12_835 = {
+      transactionId: 'TXN001',
+      paymentDate: '2024-01-20',
+      paymentAmount: 100.00,
+      paymentMethod: 'CHK',
+      checkNumber: 'CHK123',
+      payer: {
+        id: 'PAYER001',
+        name: 'Test Payer',
+      },
+      payee: {
+        npi: '1234567890',
+      },
+      claims: [{
+        claimId: 'CLM001',
+        claimStatusCode: '1',
+        chargedAmount: 100.00,
+        paidAmount: 100.00, // Full payment
+        patient: {
+          firstName: 'John',
+          lastName: 'Doe',
+          memberId: 'MEM001',
+        },
+      }],
+    };
+
+    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
+    expect(eob.payment?.type?.coding?.[0].code).toBe('complete');
+  });
+
+  it('maps X12 835 with partial payment (paidAmount less than chargedAmount)', () => {
+    const x12_835: X12_835 = {
+      transactionId: 'TXN001',
+      paymentDate: '2024-01-20',
+      paymentAmount: 80.00,
+      paymentMethod: 'ACH',
+      payer: {
+        id: 'PAYER001',
+        name: 'Test Payer',
+      },
+      payee: {
+        npi: '1234567890',
+      },
+      claims: [{
+        claimId: 'CLM001',
+        claimStatusCode: '1',
+        chargedAmount: 100.00,
+        paidAmount: 80.00, // Partial payment
+        patient: {
+          firstName: 'John',
+          lastName: 'Doe',
+          memberId: 'MEM001',
+        },
+      }],
+    };
+
+    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
+    expect(eob.payment?.type?.coding?.[0].code).toBe('partial');
+  });
 });

@@ -733,3 +733,14 @@ describe('validateWithAzureFHIR', () => {
     expect(result.issues[0].message).toContain('Unsupported resource type');
   });
 });
+
+describe('Edge cases', () => {
+  it('handles empty resources object in validateCMSCompliance', () => {
+    const checker = createComplianceChecker();
+    const result = checker.validateCMSCompliance({});
+    
+    // Should return default result without NaN
+    expect(result.score).toBe(0);
+    expect(Number.isNaN(result.score)).toBe(false);
+  });
+});
