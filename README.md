@@ -67,7 +67,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **Da Vinci Implementation Guides** - PAS, PDex, CRD, DTR support
 - ✅ **Automated Compliance Validation** - Timeline checks and profile validation
 - ✅ **US Core Implementation** - US Core IG v3.1.1+ for all resources
-- ✅ **75+ Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **57+ Comprehensive Tests** - 100% pass rate, production-ready (FHIR mapper + compliance checker; full platform suite exceeds 75)
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
