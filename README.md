@@ -1,7 +1,7 @@
 # Cloud Health Office
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
-[![Tests](https://img.shields.io/badge/tests-62%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
+[![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
@@ -154,6 +154,66 @@ const matchResult = await api.matchMember(request, candidatePatients);
 - **US Core Validation**: Profile compliance checking
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
+
+### CMS-0057-F Payer-to-Payer Data Exchange
+Complete bulk data exchange API for member transitions:
+
+```typescript
+import { PayerToPayerAPI, MemberConsent } from './src/fhir/payer-to-payer-api';
+
+// Initialize API
+const api = new PayerToPayerAPI({
+  serviceBusConnectionString: process.env.AZURE_SERVICE_BUS_CONNECTION,
+  storageConnectionString: process.env.AZURE_STORAGE_CONNECTION,
+  storageContainerName: 'p2p-bulk-data',
+  exportRequestTopic: 'export-requests',
+  importRequestTopic: 'import-requests',
+  fhirServerBaseUrl: 'https://fhir.mypayer.com',
+  payerOrganizationId: 'PAYER001'
+});
+
+// Register member consent
+await api.registerConsent({
+  patientId: 'MEM123456',
+  targetPayerId: 'PAYER002',
+  consentDate: new Date(),
+  status: 'active',
+  authorizedResourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit']
+});
+
+// Export patient data
+const result = await api.initiateExport({
+  exportId: 'EXP-20240115-001',
+  patientIds: ['MEM123456'],
+  resourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit'],
+  since: new Date('2019-01-01'), // 5-year history
+  requestingPayerId: 'PAYER002'
+});
+```
+
+**Key Capabilities:**
+- ✅ FHIR R4 Bulk Data Export/Import (NDJSON)
+- ✅ Member consent validation (opt-in flows)
+- ✅ Azure Service Bus async workflows
+- ✅ Azure Data Lake bulk file storage
+- ✅ PDex-compliant duplicate prevention
+- ✅ US Core profile validation
+- ✅ 5-year historical data support
+- ✅ Synthetic data generator for testing
+
+**Generate Test Data:**
+```bash
+# Generate 100 patients with claims and encounters
+npm run generate:synthetic-bulk -- --count 100 --output ./test-data
+```
+
+**Run Examples:**
+```bash
+npm run examples:p2p  # Complete P2P workflow demonstration
+npm run test:p2p      # Run 27 comprehensive tests
+```
+
+**Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md#payer-to-payer-data-exchange-cms-0057-f)
 
 ### ValueAdds277 Enhanced Claim Status
 Premium ECS features that save providers 7-21 minutes per lookup:
