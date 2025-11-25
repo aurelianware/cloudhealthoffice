@@ -626,7 +626,7 @@ export async function validateWithAzureFHIR(
       // Reference: https://www.hl7.org/fhir/resource-operation-validate.html
       
       // For now, log that Azure validation is requested but fall back to local
-      console.warn(`Azure FHIR validation requested for ${azureFhirEndpoint} but not yet implemented. Using local validation.`);
+      console.warn('Azure FHIR validation requested but not yet implemented. Using local validation.');
     } catch (error) {
       console.error('Azure FHIR validation failed, falling back to local validation:', error);
     }
