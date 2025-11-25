@@ -365,7 +365,7 @@ logger.logHIPAAEvent({
 | Code Coverage | 100% |
 | Functions | 11 core functions |
 | Type Definitions | 10 interfaces |
-| Build Time | &lt;5 seconds |
+| Build Time | <5 seconds |
 | Test Execution Time | 1.918 seconds |
 
 ### Dependencies
