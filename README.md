@@ -1,13 +1,13 @@
 # Cloud Health Office
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
-[![Tests](https://img.shields.io/badge/tests-62%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
+[![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-The #1 open-source, Azure-native, multi-payer EDI integration platform for healthcare.
+An open-source, Azure-native platform for multi-payer EDI integration in healthcare.
 
-> **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security (9/10 score), and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
+> **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security with high security maturity, and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
 ## 🚀 Quick Start
 
@@ -16,7 +16,7 @@ Deploy a complete HIPAA-compliant EDI platform in **&lt;5 minutes**:
 1. **Click Deploy to Azure** ☝️ (button above)
 2. **Configure** basic settings (baseName, region)
 3. **Deploy workflows** via CLI
-4. **Start processing** 275/277/278 transactions
+4. **Start processing** 270/275/277/278/837 transactions
 
 See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
@@ -24,7 +24,7 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
 ### Enhanced Onboarding Experience
 
-- 🎯 **Interactive Wizard** - Guided configuration in &lt;5 minutes
+- 🎯 **Interactive Wizard** - Guided configuration typically in under 5 minutes, based on testing
 - ⚡ **One-Click Azure Deploy** - Instant sandbox environment  
 - 🧪 **Test Data Generator** - Synthetic 837 claims for testing
 - 📊 **E2E Test Suite** - Automated health checks and reporting
@@ -56,23 +56,29 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### Zero-Code Payer Onboarding
 - ✅ **Config-to-Workflow Generator** - TypeScript-based automation for deployment artifacts
-- ✅ **Interactive Configuration Wizard** - Guided setup in <5 minutes
+- ✅ **Interactive Configuration Wizard** - Guided setup typically in under 5 minutes, based on testing
 - ✅ **30+ Handlebars Template Helpers** - Comprehensive template system
 - ✅ **23-Test Suite** - Validated workflow and infrastructure generation
 - ✅ **Example Configurations** - Medicaid MCO and Regional Blues templates
 
 ### FHIR R4 Integration
 - ✅ **X12 270 → FHIR R4 Mapping** - Patient & CoverageEligibilityRequest transformation
-- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F requirements
+- ✅ **CMS Patient Access API Ready** - Compliant with CMS-9115-F and CMS-0057-F requirements
+- ✅ **Provider Access API (CMS-0057-F)** - SMART on FHIR authentication, consent management, HIPAA safeguards
+- ✅ **Payer-to-Payer API (CMS-0057-F)** - Secure bulk data exchange during plan transitions
+- ✅ **FHIR Bulk Data Operations** - NDJSON export/import with Azure Data Lake integration
+- ✅ **Member Matching** - Da Vinci PDex IG compliant with 0.8 confidence threshold
+- ✅ **Consent Management** - Opt-in consent flows per CMS requirements
 - ✅ **US Core Implementation** - US Core Patient profile v3.1.1
-- ✅ **19 Comprehensive Tests** - 100% pass rate, production-ready
+- ✅ **Clinical USCDI Data** - Condition and Observation resources for comprehensive clinical data
+- ✅ **97+ Comprehensive Tests** - Estimated 100% pass rate in internal tests, production-ready
 - ✅ **Zero External Dependencies** - Secure core mapper with no vulnerabilities
 
 ### Enhanced Claim Status (ECS)
 - ✅ **ValueAdds277 Premium Features** - 60+ enhanced response fields
 - ✅ **Cross-Module Integration Flags** - Seamless appeals, attachments, corrections
-- ✅ **Premium Product Capability** - $10k/year additional revenue per payer
-- ✅ **Provider Time Savings** - 7-21 minutes saved per claim lookup
+- ✅ **Premium Product Capability** - Potential value-add of up to $10k/year per payer (varies by implementation)
+- ✅ **Provider Time Savings** - May save providers time on claim lookups
 - ✅ **Configurable Field Groups** - Financial, clinical, demographics, remittance
 
 ### Production-Grade Security
@@ -81,7 +87,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **PHI Masking** - DCR-based redaction in Application Insights
 - ✅ **Customer-Managed Keys** - Optional BYOK for compliance
 - ✅ **Data Lifecycle Management** - 7-year retention, automated tiering
-- ✅ **HIPAA Compliance** - 100% technical safeguards addressed
+- ✅ **HIPAA Compliance** - Addresses key HIPAA technical safeguards
 
 ### Deployment & Operations
 - ✅ **One-Click Azure Deploy** - Instant sandbox environment
@@ -94,7 +100,7 @@ npm run generate -- interactive --output my-config.json --generate
 ## 🎯 Key Capabilities
 
 ### Config-to-Workflow Generator
-Transform what was previously a multi-week engineering project into minutes:
+Streamline deployment processes that traditionally take weeks:
 
 ```bash
 # Interactive wizard mode
@@ -114,22 +120,100 @@ node dist/scripts/generate-payer-deployment.js core/examples/medicaid-mco-config
 **Documentation:** [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 ### FHIR R4 Integration
-Bridge traditional X12 EDI with modern FHIR APIs:
+Bridge traditional X12 EDI with modern FHIR APIs and enable payer-to-payer data exchange:
 
 ```typescript
 import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
+import { PayerToPayerAPI } from './src/fhir/payer-to-payer-api';
 
 // Transform X12 270 to FHIR R4
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
+
+// Payer-to-Payer bulk data exchange
+const api = new PayerToPayerAPI(config);
+const exportResult = await api.exportBulkData(request, resources);
+const consent = await api.manageMemberConsent(patientId, consentGiven);
+const matchResult = await api.matchMember(request, candidatePatients);
 ```
 
 **Standards Compliance:**
 - HIPAA X12 270: 005010X279A1 ✓
 - HL7 FHIR R4: v4.0.1 ✓
 - US Core Patient: 3.1.1 ✓
-- CMS Patient Access Rule: Ready ✓
+- CMS Patient Access Rule (CMS-9115-F): Ready ✓
+- CMS Payer-to-Payer Exchange (CMS-0057-F): Ready ✓
+- FHIR Bulk Data Access IG: NDJSON format ✓
+- HL7 Da Vinci PDex IG: Member matching ✓
+
+**Key Features:**
+- **Bulk Export/Import**: NDJSON format with Azure Data Lake storage
+- **Member Matching**: Weighted algorithm with 0.8 confidence threshold
+- **Consent Management**: Opt-in consent flows per CMS requirements
+- **Resource Support**: Patient, Claim, Encounter, EOB, PriorAuthorizationRequest
+- **Deduplication**: Automatic duplicate detection during import
+- **US Core Validation**: Profile compliance checking
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
+
+### CMS-0057-F Payer-to-Payer Data Exchange
+Complete bulk data exchange API for member transitions:
+
+```typescript
+import { PayerToPayerAPI, MemberConsent } from './src/fhir/payer-to-payer-api';
+
+// Initialize API
+const api = new PayerToPayerAPI({
+  serviceBusConnectionString: process.env.AZURE_SERVICE_BUS_CONNECTION,
+  storageConnectionString: process.env.AZURE_STORAGE_CONNECTION,
+  storageContainerName: 'p2p-bulk-data',
+  exportRequestTopic: 'export-requests',
+  importRequestTopic: 'import-requests',
+  fhirServerBaseUrl: 'https://fhir.mypayer.com',
+  payerOrganizationId: 'PAYER001'
+});
+
+// Register member consent
+await api.registerConsent({
+  patientId: 'MEM123456',
+  targetPayerId: 'PAYER002',
+  consentDate: new Date(),
+  status: 'active',
+  authorizedResourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit']
+});
+
+// Export patient data
+const result = await api.initiateExport({
+  exportId: 'EXP-20240115-001',
+  patientIds: ['MEM123456'],
+  resourceTypes: ['Patient', 'Claim', 'ExplanationOfBenefit'],
+  since: new Date('2019-01-01'), // 5-year history
+  requestingPayerId: 'PAYER002'
+});
+```
+
+**Key Capabilities:**
+- ✅ FHIR R4 Bulk Data Export/Import (NDJSON)
+- ✅ Member consent validation (opt-in flows)
+- ✅ Azure Service Bus async workflows
+- ✅ Azure Data Lake bulk file storage
+- ✅ PDex-compliant duplicate prevention
+- ✅ US Core profile validation
+- ✅ 5-year historical data support
+- ✅ Synthetic data generator for testing
+
+**Generate Test Data:**
+```bash
+# Generate 100 patients with claims and encounters
+npm run generate:synthetic-bulk -- --count 100 --output ./test-data
+```
+
+**Run Examples:**
+```bash
+npm run examples:p2p  # Complete P2P workflow demonstration
+npm run test:p2p      # Run 27 comprehensive tests
+```
+
+**Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md#payer-to-payer-data-exchange-cms-0057-f)
 
 ### ValueAdds277 Enhanced Claim Status
 Premium ECS features that save providers 7-21 minutes per lookup:
@@ -146,12 +230,12 @@ Premium ECS features that save providers 7-21 minutes per lookup:
 - `eligibleForCorrection` - Resubmit corrected claims
 - `eligibleForRemittanceViewer` - View 835 remittance data
 
-**ROI:** $69,600/year for providers (1,000 lookups/month), $10k/year additional revenue per payer
+**ROI:** Potential value-add of up to $10k/year per payer (varies by implementation)
 
 **Documentation:** [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md)
 
-### Security Hardening (9/10 Security Score)
-Production-ready security for PHI workloads:
+### Security Hardening
+Production-ready security for PHI workloads with high security maturity (self-assessed):
 
 **Infrastructure:**
 - Premium Key Vault with HSM-backed keys
@@ -160,14 +244,18 @@ Production-ready security for PHI workloads:
 - Customer-managed keys (optional BYOK)
 
 **Compliance:**
-- 100% HIPAA technical safeguards ✓
+- Addresses key HIPAA technical safeguards ✓
 - Automated PHI masking in logs ✓
 - 7-year data retention with lifecycle management ✓
 - 365-day audit log retention ✓
 
-**Cost Impact:** 94% storage cost reduction ($463/mo → $29/mo) with lifecycle policies
+**Cost Impact:** Estimated 94% storage cost reduction based on lifecycle policies; actual savings vary
 
 **Documentation:** [SECURITY-HARDENING.md](./SECURITY-HARDENING.md)
+
+## 🤝 Integration Focus
+
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like QNXT and Facets, providing enhancements to EDI workflows without requiring full replacements.
 
 ## 📖 Documentation
 
@@ -235,6 +323,12 @@ Apache 2.0 - See [LICENSE](./LICENSE) for details.
 
 ---
 
-**Cloud Health Office** – The Future of Healthcare EDI Integration
+## 🤝 Collaboration and Integration
+
+Cloud Health Office is designed to complement leading core administrative platforms like QNXT and Facets, enabling rapid enhancements to existing workflows without disruption.
+
+---
+
+**Cloud Health Office** – Advancing Healthcare EDI Integration
 
 *Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
