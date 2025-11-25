@@ -759,7 +759,21 @@ export function createAttachmentDocumentReference(
     content: [{
       attachment: {
         contentType: 'application/pdf',
-        url: `Binary/${binary.reference?.split('/')[1]}`
+        url: (() => {
+          const ref = binary.reference;
+          if (typeof ref === 'string') {
+            const parts = ref.split('/');
+            if (parts.length === 2 && parts[0] === 'Binary' && parts[1]) {
+              return `Binary/${parts[1]}`;
+            }
+            // fallback: use the whole reference if it starts with Binary/
+            if (ref.startsWith('Binary/')) {
+              return ref;
+            }
+          }
+          // fallback: unknown
+          return 'Binary/unknown';
+        })()
       }
     }]
   };
