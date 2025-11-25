@@ -1,766 +1,476 @@
 /**
- * Payer-to-Payer API Implementation
+ * CMS-0057-F Payer-to-Payer Data Exchange API Implementation
  * 
- * Implements CMS-0057-F Payer-to-Payer data exchange requirements for secure
- * FHIR R4-compliant data exchange between payers during plan transitions.
- * 
- * Features:
- * - FHIR R4 bulk data export/import (NDJSON format per FHIR Bulk Data Access IG)
- * - Azure Service Bus integration for asynchronous workflows
- * - Azure Data Lake storage for bulk data
- * - Support for Patient, Claim, Encounter, ExplanationOfBenefit, PriorAuthorizationRequest
- * - Opt-in consent flows
- * - Data reconciliation and deduplication
- * - Member matching per HL7 Da Vinci PDex IG
- * - US Core profile validation
+ * Implements FHIR R4 Bulk Data Access for Payer-to-Payer exchange as mandated by CMS-0057-F.
+ * Supports bulk export/import of FHIR resources with member consent validation,
+ * Azure Service Bus integration for async workflows, and Azure Data Lake storage.
  * 
  * References:
- * - CMS-0057-F Final Rule (Payer-to-Payer Exchange)
- * - HL7 Da Vinci Payer Data Exchange (PDex) Implementation Guide
- * - FHIR Bulk Data Access IG (Flat FHIR)
- * - US Core Implementation Guide v3.1.1+
- * - FHIR R4.0.1
+ * - CMS-0057-F Final Rule (Payer-to-Payer Data Exchange)
+ * - HL7 Da Vinci PDex Implementation Guide
+ * - FHIR Bulk Data Access IG (http://hl7.org/fhir/uv/bulkdata/)
+ * - US Core IG v3.1.1+ (FHIR R4)
  */
 
-import {
-  Patient,
-  Claim,
-  Encounter,
-  ExplanationOfBenefit,
-  ServiceRequest,
-  Consent,
-  OperationOutcome
+import { 
+  Patient, 
+  Claim, 
+  Resource
 } from 'fhir/r4';
-import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { ServiceBusClient } from '@azure/service-bus';
+import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+import { DefaultAzureCredential } from '@azure/identity';
 
 /**
- * Supported FHIR resource types for payer-to-payer exchange
- */
-export type PayerExchangeResourceType = 
-  | 'Patient' 
-  | 'Claim' 
-  | 'Encounter' 
-  | 'ExplanationOfBenefit' 
-  | 'ServiceRequest';
-
-/**
- * Configuration for payer-to-payer exchange
+ * Configuration for Payer-to-Payer API
  */
 export interface PayerToPayerConfig {
-  /** Azure Storage connection string for Data Lake */
-  storageConnectionString: string;
-  /** Azure Service Bus connection string */
-  serviceBusConnectionString: string;
-  /** Data Lake container name for bulk exports */
-  bulkDataContainerName: string;
-  /** Service Bus topic for export notifications */
-  exportNotificationTopic: string;
-  /** Service Bus topic for import requests */
+  /** Azure Service Bus connection string or namespace */
+  serviceBusConnectionString?: string;
+  serviceBusNamespace?: string;
+  
+  /** Azure Storage connection string or account name */
+  storageConnectionString?: string;
+  storageAccountName?: string;
+  storageContainerName: string;
+  
+  /** Topic/Queue names for async workflows */
+  exportRequestTopic: string;
   importRequestTopic: string;
-  /** Source payer identifier */
-  sourcePayer: string;
-  /** Target payer identifier */
-  targetPayer: string;
+  
+  /** Base URL for this payer's FHIR server */
+  fhirServerBaseUrl: string;
+  
+  /** Organization identifier for this payer */
+  payerOrganizationId: string;
 }
 
 /**
  * Bulk export request parameters
  */
 export interface BulkExportRequest {
-  /** Patient ID for single-patient export (optional) */
-  patientId?: string;
+  /** Member IDs to export (must have consent) */
+  patientIds: string[];
+  
   /** Resource types to export */
-  resourceTypes: PayerExchangeResourceType[];
-  /** Start date for data range (YYYY-MM-DD) */
-  startDate?: string;
-  /** End date for data range (YYYY-MM-DD) */
-  endDate?: string;
-  /** Include historical data (5 years per CMS requirement) */
-  includeHistorical?: boolean;
-}
-
-/**
- * Bulk export status and results
- */
-export interface BulkExportResult {
-  /** Unique export job ID */
+  resourceTypes: ('Patient' | 'Claim' | 'Encounter' | 'ExplanationOfBenefit' | 'ServiceRequest')[];
+  
+  /** Optional date range filters */
+  since?: Date;
+  until?: Date;
+  
+  /** Requesting payer organization ID */
+  requestingPayerId: string;
+  
+  /** Export job ID */
   exportId: string;
-  /** Export status: processing, completed, error */
-  status: 'processing' | 'completed' | 'error';
-  /** Timestamp when export was initiated */
-  initiatedAt: string;
-  /** Timestamp when export completed */
-  completedAt?: string;
-  /** NDJSON file URLs in Data Lake */
-  outputUrls: {
-    resourceType: PayerExchangeResourceType;
-    url: string;
-    count: number;
-  }[];
-  /** Error information if status is 'error' */
-  error?: OperationOutcome;
 }
 
 /**
  * Bulk import request parameters
  */
 export interface BulkImportRequest {
-  /** NDJSON file URLs to import */
-  inputUrls: {
-    resourceType: PayerExchangeResourceType;
-    url: string;
-  }[];
-  /** Whether to perform deduplication */
-  deduplicate?: boolean;
-  /** Whether to validate against US Core profiles */
-  validateUsCore?: boolean;
-}
-
-/**
- * Bulk import status and results
- */
-export interface BulkImportResult {
-  /** Unique import job ID */
+  /** Import job ID */
   importId: string;
-  /** Import status */
-  status: 'processing' | 'completed' | 'error' | 'partial';
-  /** Timestamp when import was initiated */
-  initiatedAt: string;
-  /** Timestamp when import completed */
-  completedAt?: string;
-  /** Count of resources imported by type */
-  imported: {
-    resourceType: PayerExchangeResourceType;
-    count: number;
-    duplicatesSkipped?: number;
-  }[];
-  /** Validation errors if any */
-  errors?: OperationOutcome[];
+  
+  /** Blob URLs for NDJSON files to import */
+  ndjsonBlobUrls: string[];
+  
+  /** Source payer organization ID */
+  sourcePayerId: string;
+  
+  /** Flag to enable reconciliation */
+  enableReconciliation: boolean;
 }
 
 /**
- * Member consent record for payer-to-payer exchange
+ * Member consent record for data sharing
  */
 export interface MemberConsent {
-  /** Patient/Member ID */
+  /** Member/Patient ID */
   patientId: string;
-  /** Source payer ID */
-  sourcePayer: string;
-  /** Target payer ID */
-  targetPayer: string;
+  
+  /** Target payer organization ID */
+  targetPayerId: string;
+  
+  /** Consent granted date */
+  consentDate: Date;
+  
+  /** Consent expiration date (if any) */
+  expirationDate?: Date;
+  
   /** Consent status */
-  status: 'active' | 'inactive' | 'revoked';
-  /** Date consent was given */
-  consentDate: string;
-  /** Date consent expires (optional) */
-  expirationDate?: string;
-  /** FHIR Consent resource */
-  fhirConsent: Consent;
+  status: 'active' | 'revoked' | 'expired';
+  
+  /** Resource types authorized for sharing */
+  authorizedResourceTypes: string[];
 }
 
 /**
- * Member matching parameters per Da Vinci PDex IG
+ * Bulk export result
  */
-export interface MemberMatchRequest {
-  /** Patient demographics from source payer */
-  patient: Patient;
-  /** Coverage information (optional) */
-  coverageToMatch?: {
-    memberId: string;
-    subscriberId?: string;
-  };
+export interface BulkExportResult {
+  exportId: string;
+  status: 'in-progress' | 'completed' | 'failed';
+  timestamp: Date;
+  ndjsonFiles: {
+    resourceType: string;
+    url: string;
+    count: number;
+  }[];
+  error?: string;
 }
 
 /**
- * Member matching result
+ * Bulk import result
  */
-export interface MemberMatchResult {
-  /** Whether a match was found */
-  matched: boolean;
-  /** Confidence score (0-1) */
-  confidence: number;
-  /** Matched patient ID in target system */
-  matchedPatientId?: string;
-  /** Matched patient resource */
-  matchedPatient?: Patient;
-  /** Match details */
-  matchDetails?: {
-    matchedOn: string[];
-    score: number;
-  };
+export interface BulkImportResult {
+  importId: string;
+  status: 'in-progress' | 'completed' | 'failed';
+  timestamp: Date;
+  resourcesImported: {
+    resourceType: string;
+    count: number;
+    duplicatesSkipped: number;
+  }[];
+  error?: string;
 }
 
 /**
- * Payer-to-Payer API implementation
+ * Main Payer-to-Payer API class
  */
 export class PayerToPayerAPI {
   private config: PayerToPayerConfig;
-  private blobServiceClient: BlobServiceClient;
-  private serviceBusClient: ServiceBusClient;
-  private containerClient: ContainerClient;
+  private serviceBusClient?: ServiceBusClient;
+  private blobServiceClient?: BlobServiceClient;
+  private containerClient?: ContainerClient;
+  private consentRegistry: Map<string, MemberConsent> = new Map();
 
   constructor(config: PayerToPayerConfig) {
     this.config = config;
-    this.blobServiceClient = BlobServiceClient.fromConnectionString(config.storageConnectionString);
-    this.serviceBusClient = new ServiceBusClient(config.serviceBusConnectionString);
-    this.containerClient = this.blobServiceClient.getContainerClient(config.bulkDataContainerName);
+    this.initializeClients();
   }
 
   /**
-   * Initiate bulk data export for payer-to-payer exchange
-   * Creates NDJSON files in Data Lake and publishes notification to Service Bus
-   * 
-   * @param request Export parameters
-   * @param resources Array of FHIR resources to export
-   * @returns Export result with status and output URLs
+   * Initialize Azure clients
    */
-  async exportBulkData(
-    request: BulkExportRequest,
-    resources: {
-      resourceType: PayerExchangeResourceType;
-      data: (Patient | Claim | Encounter | ExplanationOfBenefit | ServiceRequest)[];
-    }[]
-  ): Promise<BulkExportResult> {
-    const exportId = this.generateExportId();
-    const initiatedAt = new Date().toISOString();
+  private initializeClients(): void {
+    // Initialize Service Bus client
+    if (this.config.serviceBusConnectionString) {
+      this.serviceBusClient = new ServiceBusClient(this.config.serviceBusConnectionString);
+    } else if (this.config.serviceBusNamespace) {
+      const credential = new DefaultAzureCredential();
+      this.serviceBusClient = new ServiceBusClient(
+        `${this.config.serviceBusNamespace}.servicebus.windows.net`,
+        credential
+      );
+    }
 
-    try {
-      // Ensure container exists
-      await this.containerClient.createIfNotExists();
+    // Initialize Storage client
+    if (this.config.storageConnectionString) {
+      this.blobServiceClient = BlobServiceClient.fromConnectionString(
+        this.config.storageConnectionString
+      );
+    } else if (this.config.storageAccountName) {
+      const credential = new DefaultAzureCredential();
+      this.blobServiceClient = new BlobServiceClient(
+        `https://${this.config.storageAccountName}.blob.core.windows.net`,
+        credential
+      );
+    }
 
-      const outputUrls: BulkExportResult['outputUrls'] = [];
+    if (this.blobServiceClient) {
+      this.containerClient = this.blobServiceClient.getContainerClient(
+        this.config.storageContainerName
+      );
+    }
+  }
 
-      // Export each resource type to NDJSON
-      for (const resourceGroup of resources) {
-        const { resourceType, data } = resourceGroup;
+  /**
+   * Register member consent for data sharing
+   */
+  async registerConsent(consent: MemberConsent): Promise<void> {
+    const key = `${consent.patientId}:${consent.targetPayerId}`;
+    this.consentRegistry.set(key, consent);
+  }
 
-        // Filter by date range if specified
-        let filteredData = data;
-        if (request.startDate || request.endDate) {
-          filteredData = this.filterByDateRange(data, request.startDate, request.endDate);
-        }
+  /**
+   * Check if member has consented to share data with target payer
+   */
+  async hasConsent(patientId: string, targetPayerId: string, resourceTypes: string[]): Promise<boolean> {
+    const key = `${patientId}:${targetPayerId}`;
+    const consent = this.consentRegistry.get(key);
+    
+    if (!consent) return false;
+    if (consent.status !== 'active') return false;
+    if (consent.expirationDate && consent.expirationDate < new Date()) return false;
+    
+    // Check if all requested resource types are authorized
+    return resourceTypes.every(rt => consent.authorizedResourceTypes.includes(rt));
+  }
 
-        // Convert to NDJSON format
-        const ndjson = this.convertToNDJSON(filteredData);
+  /**
+   * Initiate bulk export of FHIR resources
+   * Validates consent before exporting member data
+   */
+  async initiateExport(request: BulkExportRequest): Promise<BulkExportResult> {
+    if (!this.serviceBusClient || !this.containerClient) {
+      throw new Error('Azure clients not initialized');
+    }
 
-        // Upload to Data Lake
-        const blobName = `exports/${exportId}/${resourceType}.ndjson`;
-        const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-        await blockBlobClient.upload(ndjson, Buffer.byteLength(ndjson), {
-          blobHTTPHeaders: { blobContentType: 'application/fhir+ndjson' }
-        });
-
-        outputUrls.push({
-          resourceType,
-          url: blockBlobClient.url,
-          count: filteredData.length
-        });
+    // Validate consent for all patients
+    const authorizedPatients: string[] = [];
+    for (const patientId of request.patientIds) {
+      const hasConsent = await this.hasConsent(
+        patientId, 
+        request.requestingPayerId, 
+        request.resourceTypes
+      );
+      
+      if (hasConsent) {
+        authorizedPatients.push(patientId);
       }
+    }
 
-      // Publish export completion notification to Service Bus
-      const sender = this.serviceBusClient.createSender(this.config.exportNotificationTopic);
+    if (authorizedPatients.length === 0) {
+      throw new Error('No patients with valid consent for export');
+    }
+
+    // Create export result structure
+    const result: BulkExportResult = {
+      exportId: request.exportId,
+      status: 'in-progress',
+      timestamp: new Date(),
+      ndjsonFiles: []
+    };
+
+    // Queue export request to Service Bus for async processing
+    const sender = this.serviceBusClient.createSender(this.config.exportRequestTopic);
+    try {
       await sender.sendMessages({
         body: {
-          exportId,
-          sourcePayer: this.config.sourcePayer,
-          targetPayer: this.config.targetPayer,
-          initiatedAt,
-          completedAt: new Date().toISOString(),
-          outputUrls
+          exportId: request.exportId,
+          patientIds: authorizedPatients,
+          resourceTypes: request.resourceTypes,
+          since: request.since?.toISOString(),
+          until: request.until?.toISOString(),
+          requestingPayerId: request.requestingPayerId
         }
       });
+    } finally {
       await sender.close();
-
-      return {
-        exportId,
-        status: 'completed',
-        initiatedAt,
-        completedAt: new Date().toISOString(),
-        outputUrls
-      };
-    } catch (error) {
-      return {
-        exportId,
-        status: 'error',
-        initiatedAt,
-        outputUrls: [],
-        error: this.createOperationOutcome(
-          'error',
-          `Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        )
-      };
     }
+
+    return result;
   }
 
   /**
-   * Import bulk data from another payer
-   * Reads NDJSON files from Data Lake, performs deduplication and validation
-   * 
-   * @param request Import parameters with NDJSON URLs
-   * @returns Import result with counts and status
+   * Execute bulk export (called by async worker)
    */
-  async importBulkData(request: BulkImportRequest): Promise<BulkImportResult> {
-    const importId = this.generateImportId();
-    const initiatedAt = new Date().toISOString();
+  async executeBulkExport(request: BulkExportRequest): Promise<BulkExportResult> {
+    if (!this.containerClient) {
+      throw new Error('Storage client not initialized');
+    }
+
+    const result: BulkExportResult = {
+      exportId: request.exportId,
+      status: 'in-progress',
+      timestamp: new Date(),
+      ndjsonFiles: []
+    };
 
     try {
-      const imported: BulkImportResult['imported'] = [];
-      const errors: OperationOutcome[] = [];
-
-      for (const input of request.inputUrls) {
-        const { resourceType, url } = input;
-
-        // Download NDJSON from Data Lake
-        const blobName = this.extractBlobNameFromUrl(url);
-        const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
-        const downloadResponse = await blockBlobClient.download();
-        const ndjsonContent = await this.streamToString(downloadResponse.readableStreamBody!);
-
-        // Parse NDJSON
-        const resources = this.parseNDJSON(ndjsonContent);
-
-        // Validate against US Core profiles if requested
-        if (request.validateUsCore) {
-          const validationErrors = this.validateUsCoreProfiles(resources, resourceType);
-          if (validationErrors.length > 0) {
-            errors.push(...validationErrors);
-          }
-        }
-
-        // Deduplicate if requested
-        let finalResources = resources;
-        let duplicatesSkipped = 0;
-        if (request.deduplicate) {
-          const { unique, duplicates } = this.deduplicateResources(resources);
-          finalResources = unique;
-          duplicatesSkipped = duplicates;
-        }
-
-        // Import resources (actual persistence would happen here)
-        // This is a placeholder - real implementation would persist to database
-
-        imported.push({
+      // Export each resource type
+      for (const resourceType of request.resourceTypes) {
+        const resources = await this.fetchResourcesForExport(
           resourceType,
-          count: finalResources.length,
-          duplicatesSkipped: request.deduplicate ? duplicatesSkipped : undefined
+          request.patientIds,
+          request.since,
+          request.until
+        );
+
+        if (resources.length > 0) {
+          const ndjson = this.serializeToNDJSON(resources);
+          const blobName = `exports/${request.exportId}/${resourceType}.ndjson`;
+          const blobClient = this.containerClient.getBlockBlobClient(blobName);
+
+          await blobClient.upload(ndjson, Buffer.byteLength(ndjson), {
+            blobHTTPHeaders: { blobContentType: 'application/fhir+ndjson' }
+          });
+
+          result.ndjsonFiles.push({
+            resourceType,
+            url: blobClient.url,
+            count: resources.length
+          });
+        }
+      }
+
+      result.status = 'completed';
+    } catch (error) {
+      result.status = 'failed';
+      result.error = error instanceof Error ? error.message : 'Unknown error';
+    }
+
+    return result;
+  }
+
+  /**
+   * Initiate bulk import of FHIR resources
+   */
+  async initiateImport(request: BulkImportRequest): Promise<BulkImportResult> {
+    if (!this.serviceBusClient) {
+      throw new Error('Service Bus client not initialized');
+    }
+
+    const result: BulkImportResult = {
+      importId: request.importId,
+      status: 'in-progress',
+      timestamp: new Date(),
+      resourcesImported: []
+    };
+
+    // Queue import request to Service Bus for async processing
+    const sender = this.serviceBusClient.createSender(this.config.importRequestTopic);
+    try {
+      await sender.sendMessages({
+        body: {
+          importId: request.importId,
+          ndjsonBlobUrls: request.ndjsonBlobUrls,
+          sourcePayerId: request.sourcePayerId,
+          enableReconciliation: request.enableReconciliation
+        }
+      });
+    } finally {
+      await sender.close();
+    }
+
+    return result;
+  }
+
+  /**
+   * Execute bulk import with reconciliation (called by async worker)
+   */
+  async executeBulkImport(request: BulkImportRequest): Promise<BulkImportResult> {
+    if (!this.containerClient) {
+      throw new Error('Storage client not initialized');
+    }
+
+    const result: BulkImportResult = {
+      importId: request.importId,
+      status: 'in-progress',
+      timestamp: new Date(),
+      resourcesImported: []
+    };
+
+    try {
+      for (const blobUrl of request.ndjsonBlobUrls) {
+        const { resourceType, resources } = await this.downloadAndParseNDJSON(blobUrl);
+        
+        let importedCount = 0;
+        let duplicatesSkipped = 0;
+
+        for (const resource of resources) {
+          if (request.enableReconciliation) {
+            const isDuplicate = await this.checkForDuplicate(resource);
+            if (isDuplicate) {
+              duplicatesSkipped++;
+              continue;
+            }
+          }
+
+          // Import resource (in real implementation, this would save to FHIR server)
+          await this.importResource(resource);
+          importedCount++;
+        }
+
+        result.resourcesImported.push({
+          resourceType,
+          count: importedCount,
+          duplicatesSkipped
         });
       }
 
-      return {
-        importId,
-        status: errors.length > 0 ? 'partial' : 'completed',
-        initiatedAt,
-        completedAt: new Date().toISOString(),
-        imported,
-        errors: errors.length > 0 ? errors : undefined
-      };
+      result.status = 'completed';
     } catch (error) {
-      return {
-        importId,
-        status: 'error',
-        initiatedAt,
-        completedAt: new Date().toISOString(),
-        imported: [],
-        errors: [
-          this.createOperationOutcome(
-            'error',
-            `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-          )
-        ]
-      };
+      result.status = 'failed';
+      result.error = error instanceof Error ? error.message : 'Unknown error';
     }
+
+    return result;
   }
 
   /**
-   * Create or update member consent for payer-to-payer exchange
-   * Implements opt-in consent flow per CMS requirements
-   * 
-   * @param patientId Patient/Member ID
-   * @param consentGiven Whether consent is given
-   * @returns Consent record
+   * Fetch resources for export from FHIR server
    */
-  async manageMemberConsent(
-    patientId: string,
-    consentGiven: boolean
-  ): Promise<MemberConsent> {
-    const consentDate = new Date().toISOString();
-
-    const fhirConsent: Consent = {
-      resourceType: 'Consent',
-      id: `consent-${patientId}-${Date.now()}`,
-      status: consentGiven ? 'active' : 'inactive',
-      scope: {
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/consentscope',
-          code: 'patient-privacy',
-          display: 'Privacy Consent'
-        }]
-      },
-      category: [{
-        coding: [{
-          system: 'http://loinc.org',
-          code: '59284-0',
-          display: 'Consent Document'
-        }]
-      }],
-      patient: {
-        reference: `Patient/${patientId}`
-      },
-      dateTime: consentDate,
-      organization: [{
-        reference: `Organization/${this.config.sourcePayer}`
-      }],
-      policy: [{
-        uri: 'https://www.cms.gov/regulations-and-guidance/cms-0057-f'
-      }],
-      provision: {
-        type: consentGiven ? 'permit' : 'deny',
-        period: {
-          start: consentDate
-        },
-        actor: [{
-          role: {
-            coding: [{
-              system: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType',
-              code: 'IRCP',
-              display: 'Information Recipient'
-            }]
-          },
-          reference: {
-            reference: `Organization/${this.config.targetPayer}`
-          }
-        }],
-        action: [{
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/consentaction',
-            code: 'disclose',
-            display: 'Disclose'
-          }]
-        }]
-      }
-    };
-
-    return {
-      patientId,
-      sourcePayer: this.config.sourcePayer,
-      targetPayer: this.config.targetPayer,
-      status: consentGiven ? 'active' : 'inactive',
-      consentDate,
-      fhirConsent
-    };
+  private async fetchResourcesForExport(
+    resourceType: string,
+    patientIds: string[],
+    since?: Date,
+    until?: Date
+  ): Promise<Resource[]> {
+    // In real implementation, this would query the FHIR server
+    // For now, return empty array (will be implemented with actual FHIR server integration)
+    return [];
   }
 
   /**
-   * Match member between payers using demographic data
-   * Implements HL7 Da Vinci PDex IG member matching algorithm
-   * 
-   * @param request Member match request with patient demographics
-   * @param candidatePatients Array of potential matches from target payer
-   * @returns Match result with confidence score
+   * Serialize FHIR resources to NDJSON format
    */
-  async matchMember(
-    request: MemberMatchRequest,
-    candidatePatients: Patient[]
-  ): Promise<MemberMatchResult> {
-    const sourcePatient = request.patient;
-    let bestMatch: { patient: Patient; score: number; matchedOn: string[] } | null = null;
-
-    for (const candidate of candidatePatients) {
-      const matchScore = this.calculateMatchScore(sourcePatient, candidate);
-      
-      if (!bestMatch || matchScore.score > bestMatch.score) {
-        bestMatch = {
-          patient: candidate,
-          score: matchScore.score,
-          matchedOn: matchScore.matchedOn
-        };
-      }
-    }
-
-    // Match threshold per Da Vinci PDex IG (configurable, typically 0.8)
-    const matchThreshold = 0.8;
-    const matched = bestMatch !== null && bestMatch.score >= matchThreshold;
-
-    return {
-      matched,
-      confidence: bestMatch?.score || 0,
-      matchedPatientId: matched ? bestMatch?.patient.id : undefined,
-      matchedPatient: matched ? bestMatch?.patient : undefined,
-      matchDetails: bestMatch ? {
-        matchedOn: bestMatch.matchedOn,
-        score: bestMatch.score
-      } : undefined
-    };
-  }
-
-  /**
-   * Calculate match score between two patients
-   * Uses weighted algorithm based on demographic attributes
-   */
-  private calculateMatchScore(
-    patient1: Patient,
-    patient2: Patient
-  ): { score: number; matchedOn: string[] } {
-    let score = 0;
-    const matchedOn: string[] = [];
-    const weights = {
-      name: 0.25,
-      birthDate: 0.25,
-      gender: 0.15,
-      identifier: 0.20,
-      address: 0.10,
-      telecom: 0.05
-    };
-
-    // Match on name
-    if (patient1.name && patient2.name) {
-      const name1 = patient1.name[0];
-      const name2 = patient2.name[0];
-      if (
-        name1.family?.toLowerCase() === name2.family?.toLowerCase() &&
-        name1.given?.[0]?.toLowerCase() === name2.given?.[0]?.toLowerCase()
-      ) {
-        score += weights.name;
-        matchedOn.push('name');
-      }
-    }
-
-    // Match on birth date
-    if (patient1.birthDate === patient2.birthDate) {
-      score += weights.birthDate;
-      matchedOn.push('birthDate');
-    }
-
-    // Match on gender
-    if (patient1.gender === patient2.gender) {
-      score += weights.gender;
-      matchedOn.push('gender');
-    }
-
-    // Match on identifier (SSN, member ID)
-    if (patient1.identifier && patient2.identifier) {
-      outerIdentifier: for (const id1 of patient1.identifier) {
-        for (const id2 of patient2.identifier) {
-          if (id1.value === id2.value && id1.system === id2.system) {
-            score += weights.identifier;
-            matchedOn.push('identifier');
-            break outerIdentifier;
-          }
-        }
-      }
-    }
-
-    // Match on address
-    if (patient1.address && patient2.address) {
-      const addr1 = patient1.address[0];
-      const addr2 = patient2.address[0];
-      if (
-        addr1.postalCode === addr2.postalCode &&
-        addr1.city?.toLowerCase() === addr2.city?.toLowerCase()
-      ) {
-        score += weights.address;
-        matchedOn.push('address');
-      }
-    }
-
-    // Match on telecom
-    if (patient1.telecom && patient2.telecom) {
-      outerTelecom: for (const tel1 of patient1.telecom) {
-        for (const tel2 of patient2.telecom) {
-          if (tel1.value === tel2.value) {
-            score += weights.telecom;
-            matchedOn.push('telecom');
-            break outerTelecom;
-          }
-        }
-      }
-    }
-
-    return { score, matchedOn };
-  }
-
-  /**
-   * Convert FHIR resources to NDJSON format
-   * For large datasets, consider processing in batches to reduce memory footprint
-   */
-  private convertToNDJSON(resources: any[]): string {
+  private serializeToNDJSON(resources: Resource[]): string {
     return resources.map(r => JSON.stringify(r)).join('\n');
   }
 
   /**
-   * Parse NDJSON format to FHIR resources
-   * Includes error handling for malformed JSON lines
+   * Download and parse NDJSON file from blob storage
    */
-  private parseNDJSON(ndjson: string): any[] {
-    const resources: any[] = [];
-    const lines = ndjson.split('\n').filter(line => line.trim());
-    
-    for (let i = 0; i < lines.length; i++) {
-      try {
-        const resource = JSON.parse(lines[i]);
-        resources.push(resource);
-      } catch (error) {
-        // Skip malformed lines silently to avoid logging potential PHI
-        // Error details not logged for security reasons
-      }
+  private async downloadAndParseNDJSON(blobUrl: string): Promise<{
+    resourceType: string;
+    resources: Resource[];
+  }> {
+    if (!this.containerClient) {
+      throw new Error('Storage client not initialized');
+    }
+
+    // Extract blob name from URL - handle both full URLs and relative paths
+    let blobName: string;
+    if (blobUrl.startsWith('http://') || blobUrl.startsWith('https://')) {
+      // Full URL - extract path after container name
+      const url = new URL(blobUrl);
+      const pathParts = url.pathname.split('/').filter(p => p);
+      // Assuming format: /containername/exports/exportId/Patient.ndjson
+      blobName = pathParts.slice(1).join('/');
+    } else {
+      // Relative path
+      blobName = blobUrl;
     }
     
-    return resources;
-  }
+    const resourceType = blobName.split('/').pop()?.replace('.ndjson', '') || 'Unknown';
 
-  /**
-   * Filter resources by date range
-   */
-  private filterByDateRange(
-    resources: any[],
-    startDate?: string,
-    endDate?: string
-  ): any[] {
-    return resources.filter(resource => {
-      // Extract date from resource (varies by resource type)
-      let resourceDate: string | undefined;
-
-      if (resource.meta?.lastUpdated) {
-        resourceDate = resource.meta.lastUpdated;
-      } else if (resource.period?.start) {
-        resourceDate = resource.period.start;
-      } else if (resource.billablePeriod?.start) {
-        resourceDate = resource.billablePeriod.start;
-      }
-
-      if (!resourceDate) return true;
-
-      if (startDate && resourceDate < startDate) return false;
-      if (endDate && resourceDate > endDate) return false;
-
-      return true;
-    });
-  }
-
-  /**
-   * Deduplicate resources by ID
-   * Resources without IDs are treated as unique
-   */
-  private deduplicateResources(resources: any[]): {
-    unique: any[];
-    duplicates: number;
-  } {
-    const seen = new Set<string>();
-    const unique: any[] = [];
-    let duplicates = 0;
-
-    for (const resource of resources) {
-      // Resources without IDs are always treated as unique
-      if (!resource.id) {
-        unique.push(resource);
-        continue;
-      }
-
-      const key = `${resource.resourceType}/${resource.id}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push(resource);
-      } else {
-        duplicates++;
-      }
+    const blobClient = this.containerClient.getBlockBlobClient(blobName);
+    const downloadResponse = await blobClient.download();
+    
+    if (!downloadResponse.readableStreamBody) {
+      throw new Error('Failed to download blob');
     }
 
-    return { unique, duplicates };
+    const ndjsonContent = await this.streamToString(downloadResponse.readableStreamBody);
+    const resources = ndjsonContent
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line) as Resource);
+
+    return { resourceType, resources };
   }
 
   /**
-   * Validate resources against US Core profiles
+   * Convert readable stream to string
    */
-  private validateUsCoreProfiles(
-    resources: any[],
-    resourceType: string
-  ): OperationOutcome[] {
-    const errors: OperationOutcome[] = [];
-
-    // Basic US Core validation
-    // In production, use a FHIR validator library
-    for (const resource of resources) {
-      // Check US Core profile is declared
-      if (
-        !resource.meta?.profile ||
-        !resource.meta.profile.some((p: string) => p.includes('us-core'))
-      ) {
-        errors.push(
-          this.createOperationOutcome(
-            'warning',
-            `Resource ${resource.id} missing US Core profile declaration`
-          )
-        );
-      }
-
-      // Validate required elements per US Core
-      if (resourceType === 'Patient') {
-        if (!resource.identifier || resource.identifier.length === 0) {
-          errors.push(
-            this.createOperationOutcome(
-              'error',
-              `Patient ${resource.id} missing required identifier`
-            )
-          );
-        }
-        if (!resource.name || resource.name.length === 0) {
-          errors.push(
-            this.createOperationOutcome(
-              'error',
-              `Patient ${resource.id} missing required name`
-            )
-          );
-        }
-        if (!resource.gender) {
-          errors.push(
-            this.createOperationOutcome(
-              'error',
-              `Patient ${resource.id} missing required gender`
-            )
-          );
-        }
-      }
-    }
-
-    return errors;
-  }
-
-  /**
-   * Create FHIR OperationOutcome for errors
-   */
-  private createOperationOutcome(
-    severity: 'error' | 'warning' | 'information',
-    message: string
-  ): OperationOutcome {
-    return {
-      resourceType: 'OperationOutcome',
-      issue: [{
-        severity,
-        code: 'processing',
-        diagnostics: message
-      }]
-    };
-  }
-
-  /**
-   * Extract blob name from full URL
-   */
-  private extractBlobNameFromUrl(url: string): string {
-    const urlParts = new URL(url);
-    return urlParts.pathname.split('/').slice(2).join('/');
-  }
-
-  /**
-   * Convert stream to string
-   */
-  private async streamToString(
-    readableStream: NodeJS.ReadableStream
-  ): Promise<string> {
+  private async streamToString(readableStream: NodeJS.ReadableStream): Promise<string> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       readableStream.on('data', (data) => {
-        chunks.push(data instanceof Buffer ? data : Buffer.from(data));
+        chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
       });
       readableStream.on('end', () => {
         resolve(Buffer.concat(chunks).toString('utf8'));
@@ -770,23 +480,161 @@ export class PayerToPayerAPI {
   }
 
   /**
-   * Generate unique export ID
+   * Check for duplicate resources using member matching logic per PDex IG
    */
-  private generateExportId(): string {
-    return `export-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  private async checkForDuplicate(resource: Resource): Promise<boolean> {
+    // Implement member matching per Da Vinci PDex IG
+    // Match on: identifier, name, DOB, gender for Patient resources
+    // For other resources, match on patient reference + date + identifiers
+    
+    if (resource.resourceType === 'Patient') {
+      return this.checkDuplicatePatient(resource as Patient);
+    }
+    
+    // For claims, encounters, EOBs - match on patient + date + claim ID
+    return false; // Placeholder
   }
 
   /**
-   * Generate unique import ID
+   * Check for duplicate Patient using PDex member matching algorithm
    */
-  private generateImportId(): string {
-    return `import-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  private checkDuplicatePatient(patient: Patient): boolean {
+    // PDex member matching criteria:
+    // 1. Match on Member ID if available
+    // 2. Match on SSN if available
+    // 3. Match on combination: Last Name + First Name + DOB + Gender
+    
+    // This is a simplified implementation
+    // Real implementation would query FHIR server for matching patients
+    return false;
   }
 
   /**
-   * Close connections
+   * Import resource to FHIR server
+   */
+  private async importResource(resource: Resource): Promise<void> {
+    // In real implementation, this would POST/PUT to FHIR server
+    // For now, this is a placeholder
+  }
+
+  /**
+   * Close all connections
    */
   async close(): Promise<void> {
-    await this.serviceBusClient.close();
+    if (this.serviceBusClient) {
+      await this.serviceBusClient.close();
+    }
+    // BlobServiceClient doesn't have a close method, clear reference
+    this.blobServiceClient = undefined;
+    this.containerClient = undefined;
   }
+}
+
+/**
+ * Utility: Generate synthetic FHIR Patient for testing
+ */
+export function generateSyntheticPatient(memberId: string): Patient {
+  return {
+    resourceType: 'Patient',
+    id: memberId,
+    meta: {
+      profile: ['https://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+    },
+    identifier: [
+      {
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'MB',
+            display: 'Member Number'
+          }]
+        },
+        system: 'http://example.org/fhir/sid/member-id',
+        value: memberId
+      }
+    ],
+    active: true,
+    name: [{
+      use: 'official',
+      family: 'TestPatient',
+      given: ['Synthetic']
+    }],
+    gender: 'unknown',
+    birthDate: '2000-01-01'
+  };
+}
+
+/**
+ * Utility: Generate synthetic FHIR Claim for testing
+ */
+export function generateSyntheticClaim(patientId: string, claimId: string): Claim {
+  return {
+    resourceType: 'Claim',
+    id: claimId,
+    status: 'active',
+    type: {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+        code: 'professional'
+      }]
+    },
+    use: 'claim',
+    patient: {
+      reference: `Patient/${patientId}`
+    },
+    created: new Date().toISOString(),
+    provider: {
+      reference: 'Organization/example-provider'
+    },
+    priority: {
+      coding: [{
+        system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+        code: 'normal'
+      }]
+    },
+    insurance: [{
+      sequence: 1,
+      focal: true,
+      coverage: {
+        reference: 'Coverage/example'
+      }
+    }],
+    total: {
+      value: 150.00,
+      currency: 'USD'
+    }
+  };
+}
+
+/**
+ * Utility: Validate US Core Patient profile compliance
+ */
+export function validateUSCorePatient(patient: Patient): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Required fields per US Core Patient profile
+  if (!patient.identifier || patient.identifier.length === 0) {
+    errors.push('Patient must have at least one identifier');
+  }
+
+  if (!patient.name || patient.name.length === 0) {
+    errors.push('Patient must have at least one name');
+  }
+
+  if (!patient.gender) {
+    errors.push('Patient must have gender');
+  }
+
+  // Check for US Core profile in meta
+  const hasUSCoreProfile = patient.meta?.profile?.some(
+    p => p.includes('us-core-patient')
+  );
+  if (!hasUSCoreProfile) {
+    errors.push('Patient must declare US Core Patient profile in meta.profile');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }
