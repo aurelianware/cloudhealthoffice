@@ -24,12 +24,7 @@
 import { 
   Claim, 
   ServiceRequest, 
-  ExplanationOfBenefit,
-  Patient,
-  Identifier,
-  CodeableConcept,
-  Reference,
-  Money
+  ExplanationOfBenefit
 } from 'fhir/r4';
 import { X12_837, X12_278, X12_835 } from './x12Types';
 
@@ -43,8 +38,6 @@ import { X12_837, X12_278, X12_835 } from './x12Types';
  * @returns FHIR R4 Claim resource
  */
 export function mapX12837ToFhirClaim(input: X12_837): Claim {
-  const patient = input.patient || input.subscriber;
-  
   const claim: Claim = {
     resourceType: 'Claim',
     id: input.claimId,
@@ -87,13 +80,22 @@ export function mapX12837ToFhirClaim(input: X12_837): Claim {
     },
     
     // Billable period (from service lines)
-    billablePeriod: {
-      start: normalizeDateFormat(input.claim.serviceLines[0]?.serviceDateFrom),
-      end: normalizeDateFormat(
-        input.claim.serviceLines[input.claim.serviceLines.length - 1]?.serviceDateTo || 
-        input.claim.serviceLines[input.claim.serviceLines.length - 1]?.serviceDateFrom
-      )
-    },
+    billablePeriod: (() => {
+      const serviceLines = input.claim.serviceLines;
+      if (Array.isArray(serviceLines) && serviceLines.length > 0) {
+        const firstLine = serviceLines[0];
+        const lastLine = serviceLines[serviceLines.length - 1];
+        return {
+          start: normalizeDateFormatOptional(firstLine?.serviceDateFrom),
+          end: normalizeDateFormatOptional(lastLine?.serviceDateTo || lastLine?.serviceDateFrom)
+        };
+      } else {
+        return {
+          start: undefined,
+          end: undefined
+        };
+      }
+    })(),
     
     // Created timestamp
     created: input.transactionDate 
@@ -178,10 +180,10 @@ export function mapX12837ToFhirClaim(input: X12_837): Claim {
       } : undefined,
       
       // Unit price and net amount
-      unitPrice: {
-        value: line.chargeAmount / (line.units || 1),
+      unitPrice: (typeof line.units === 'number' && line.units > 0) ? {
+        value: line.chargeAmount / line.units,
         currency: 'USD'
-      },
+      } : undefined,
       
       net: {
         value: line.chargeAmount,
@@ -220,8 +222,6 @@ export function mapX12837ToFhirClaim(input: X12_837): Claim {
  * @returns FHIR R4 ServiceRequest resource
  */
 export function mapX12278ToFhirServiceRequest(input: X12_278): ServiceRequest {
-  const patient = input.patient || input.subscriber;
-  
   const serviceRequest: ServiceRequest = {
     resourceType: 'ServiceRequest',
     id: input.authorizationId,
@@ -385,8 +385,8 @@ export function mapX12835ToFhirExplanationOfBenefit(input: X12_835): Explanation
       
       // Billable period
       billablePeriod: {
-        start: normalizeDateFormat(claimPayment.serviceDateFrom),
-        end: normalizeDateFormat(claimPayment.serviceDateTo || claimPayment.serviceDateFrom)
+        start: normalizeDateFormatOptional(claimPayment.serviceDateFrom),
+        end: normalizeDateFormatOptional(claimPayment.serviceDateTo || claimPayment.serviceDateFrom)
       },
       
       // Created timestamp
@@ -560,9 +560,10 @@ function buildAdjudication(line: X12_835['claims'][0]['serviceLines'][0]) {
   }
   
   // Add adjustments
-  // Note: FHIR ExplanationOfBenefit.item.adjudication doesn't include a 'reason' field
-  // in the base spec, but adjustment reason codes are important for claims processing.
-  // We include them as extensions in production implementations.
+  // Note: FHIR ExplanationOfBenefit.item.adjudication does not include a 'reason' field in the base spec.
+  // Adjustment reason codes (e.g., CARC/RARC) are captured via the adjustment group code mappings (CO, PR, OA, PI)
+  // in the adjudication.category field, per FHIR and X12 standards. For additional detail, extensions may be added
+  // in production implementations (see: https://hl7.org/fhir/extensibility.html).
   line.adjustments?.forEach((adj) => {
     adjudication.push({
       category: {
@@ -609,11 +610,9 @@ function getAdjustmentCategoryDisplay(groupCode: string): string {
 }
 
 /**
- * Normalizes date format from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ * Core date normalization logic from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
  */
-function normalizeDateFormat(date?: string): string {
-  if (!date) return new Date().toISOString().split('T')[0];
-  
+function convertX12DateToFhir(date: string): string {
   // Already in YYYY-MM-DD format
   if (date.includes('-')) return date;
   
@@ -623,6 +622,28 @@ function normalizeDateFormat(date?: string): string {
   }
   
   return date;
+}
+
+/**
+ * Normalizes date format from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ * Returns a fallback date if the input is undefined or invalid.
+ */
+function normalizeDateFormat(date?: string): string {
+  if (!date) {
+    // Return current date as fallback for required date fields
+    return new Date().toISOString().split('T')[0];
+  }
+  return convertX12DateToFhir(date);
+}
+
+/**
+ * Normalizes date format from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ * Returns undefined for missing dates to allow calling code to handle appropriately.
+ * Use this variant when the date field is optional.
+ */
+function normalizeDateFormatOptional(date?: string): string | undefined {
+  if (!date) return undefined;
+  return convertX12DateToFhir(date);
 }
 
 /**

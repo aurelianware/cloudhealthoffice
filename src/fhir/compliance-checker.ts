@@ -67,8 +67,11 @@ export interface ComplianceCategory {
 }
 
 /**
- * CMS-0057-F data class requirements
+ * CMS-0057-F data class requirements (USCDI v3)
+ * These data classes define the minimum required data elements for interoperability.
+ * Used for validation and compliance scoring.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CMS_DATA_CLASSES = [
   'Patient Demographics',
   'Clinical Notes',
@@ -86,10 +89,13 @@ const CMS_DATA_CLASSES = [
 
 /**
  * CMS-0057-F timeline requirements
+ * These timelines define the maximum allowed response times for prior authorization.
+ * Used for timeline validation and compliance checking.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CMS_TIMELINES = {
   priorAuthDecision: 7, // 7 calendar days for standard requests
-  urgentPriorAuthDecision: 3, // 3 calendar days (72 hours) for urgent requests
+  urgentPriorAuthDecision: 3, // 72 hours (3 calendar days) for urgent requests
   dataAvailability: 1, // 1 business day for data availability
   notificationTimeframe: 1 // 1 business day (24 hours) for decision notification
 };

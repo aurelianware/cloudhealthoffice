@@ -157,9 +157,6 @@ console.log('Compliant:', result.compliant, 'Score:', result.score);
 - **Resource Support**: Patient, Claim, Encounter, EOB, PriorAuthorizationRequest
 - **Deduplication**: Automatic duplicate detection during import
 - **US Core Validation**: Profile compliance checking
-- US Core IG: v3.1.1+ ✓
-- Da Vinci IGs: PDex, PAS, CRD, DTR ✓
-- USCDI v3: Data class requirements ✓
 
 **Documentation:** [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md)
 

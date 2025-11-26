@@ -106,17 +106,14 @@ export class AzureFHIRValidator {
     } = {}
   ): Promise<ValidationResult> {
     try {
-      // Construct validation request
+      // Build request URL and headers for production Azure FHIR validation
+      // These variables are used when the production implementation below is uncommented
       const validateUrl = `${this.config.baseUrl}/${resource.resourceType}/$validate`;
-      
       const headers = {
         'Authorization': `Bearer ${this.config.accessToken}`,
         'Content-Type': 'application/fhir+json',
         'Accept': 'application/fhir+json'
       };
-      
-      // Build request body for $validate operation
-      // Note: In production, uncomment the fetch/axios call below and remove simulation
       const requestBody = {
         resourceType: 'Parameters',
         parameter: [
@@ -136,13 +133,20 @@ export class AzureFHIRValidator {
       };
       
       // Production implementation (uncomment when Azure credentials are available):
+      // NOTE: Always handle network and HTTP errors in production.
       // const response = await fetch(validateUrl, {
       //   method: 'POST',
       //   headers,
       //   body: JSON.stringify(requestBody)
       // });
+      // if (!response.ok) {
+      //   throw new Error(`Azure FHIR validation failed: ${response.status} ${response.statusText}`);
+      // }
       // const operationOutcome = await response.json();
       // return this.parseValidationResult(operationOutcome);
+      
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used in production code above
+      const _unused = { validateUrl, headers, requestBody };
       
       // Simulated validation for development/testing
       const result = await this.simulateAzureFHIRValidation(resource, options);
