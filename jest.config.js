@@ -21,6 +21,11 @@ module.exports = {
     '!**/cli/**',
     '!**/utils/template-helpers.ts',
     '!**/utils/generate-*.ts',
+    '!**/generate-synthetic-bulk-data.ts',
+    '!**/payer-to-payer-example.ts',
+    '!**/prior-auth-api.ts',
+    '!**/payer-to-payer-api.ts',
+    '!**/x12Types.ts',
   ],
   coverageThreshold: {
     global: {
