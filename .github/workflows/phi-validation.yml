@@ -2,55 +2,55 @@ name: PHI Validation
 
 on:
   pull_request:
-    branches: [ main, release/* ]
+    branches: [main, release/*]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   validate-phi-redaction:
     runs-on: ubuntu-latest
     name: Validate PHI Redaction in Code
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Build TypeScript
         run: npm run build
-      
+
       - name: Run PHI logging validation tests
         run: npm test -- logging-validation.test.ts
-      
+
       - name: Scan workflows for unredacted PHI
         shell: pwsh
         run: |
           $violations = @()
-          
+
           # Scan for console.log without redactPHI
           Write-Host "🔍 Scanning for unredacted console.log patterns..."
           $files = Get-ChildItem -Recurse -Include *.ts,*.js -Exclude node_modules,dist,*.test.ts
-          
+
           foreach ($file in $files) {
             $content = Get-Content $file.FullName -Raw
             $lines = Get-Content $file.FullName
-            
+
             for ($i = 0; $i -lt $lines.Count; $i++) {
               $line = $lines[$i]
-              
+
               # Check for console.log with variables but no redactPHI
-              if ($line -match 'console\.(log|info|warn|error)' -and 
+              if ($line -match 'console\.(log|info|warn|error)' -and
                   $line -match '\$\{|,\s*[a-zA-Z]' -and
                   $line -notmatch 'redactPHI') {
-                
+
                 # Skip test files and comments
                 if ($file.Name -notlike "*.test.ts" -and $line -notmatch '^\s*//') {
                   $violations += "❌ $($file.FullName):$($i+1) - Potential unredacted logging: $($line.Trim())"
@@ -58,7 +58,7 @@ jobs:
               }
             }
           }
-          
+
           if ($violations.Count -gt 0) {
             Write-Host "⚠️  Found $($violations.Count) potential PHI logging violations:" -ForegroundColor Yellow
             $violations | ForEach-Object { Write-Host $_ -ForegroundColor Red }
@@ -67,7 +67,7 @@ jobs:
           } else {
             Write-Host "✅ No PHI logging violations detected" -ForegroundColor Green
           }
-      
+
       - name: Check for hardcoded PHI patterns
         shell: pwsh
         run: |
@@ -78,20 +78,20 @@ jobs:
             # Email patterns in strings (but allow examples)
             '[\w\.-]+@(?!example\.com|test\.com|healthplan\.com)[\w\.-]+\.\w+'
           )
-          
+
           $violations = @()
           $files = Get-ChildItem -Recurse -Include *.ts,*.js,*.json -Exclude node_modules,dist,*.test.ts,package-lock.json
-          
+
           foreach ($file in $files) {
             $content = Get-Content $file.FullName -Raw
-            
+
             foreach ($pattern in $patterns) {
               if ($content -match $pattern) {
                 # Skip if in test files or clearly synthetic
-                if ($file.Name -notlike "*.test.ts" -and 
+                if ($file.Name -notlike "*.test.ts" -and
                     $file.Name -notlike "*example*" -and
                     $content -notmatch 'TEST\d+|SYNTHETIC|FAKE') {
-                  
+
                   $matches = [regex]::Matches($content, $pattern)
                   foreach ($match in $matches) {
                     $violations += "⚠️  $($file.FullName) - Potential real PHI: $($match.Value)"
@@ -100,7 +100,7 @@ jobs:
               }
             }
           }
-          
+
           if ($violations.Count -gt 0) {
             Write-Host "⚠️  Found $($violations.Count) potential hardcoded PHI:" -ForegroundColor Yellow
             $violations | ForEach-Object { Write-Host $_ -ForegroundColor Red }
@@ -109,29 +109,29 @@ jobs:
           } else {
             Write-Host "✅ No hardcoded PHI detected" -ForegroundColor Green
           }
-      
+
       - name: Verify HIPAA logger usage
         run: |
           echo "🔍 Verifying hipaaLogger is imported where needed..."
-          
+
           # Check if files that log data import hipaaLogger
           files_with_logging=$(grep -r "console\.\(log\|info\|warn\|error\)" --include="*.ts" --exclude-dir=node_modules --exclude-dir=dist --exclude="*.test.ts" -l || true)
-          
+
           if [ -n "$files_with_logging" ]; then
             echo "Files with logging:"
             echo "$files_with_logging"
-            
+
             # This is informational only - we can't enforce it everywhere
             # But we do require it in workflow files
             workflow_files=$(echo "$files_with_logging" | grep -i workflow || true)
-            
+
             if [ -n "$workflow_files" ]; then
               echo "⚠️  Workflow files contain logging - ensure hipaaLogger is used"
             fi
           fi
-          
+
           echo "✅ HIPAA logger verification complete"
-      
+
       - name: Summary
         if: success()
         run: |
