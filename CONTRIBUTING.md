@@ -753,6 +753,8 @@ This repository includes comprehensive instructions for GitHub Copilot:
 - [Repository-wide instructions](.github/copilot-instructions.md)
 - [Workflow-specific guidance](.github/instructions/)
 
+**Professional Tone for AI Contributions**: Ensure all AI-generated contributions maintain a professional, collaborative tone suitable for enterprise partnerships. Avoid hyperbolic marketing language in documentation and user-facing content.
+
 ## Getting Help
 
 If you encounter issues:
