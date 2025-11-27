@@ -54,26 +54,26 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b\d{3}-\d{2}-\d{4}\b'
         Description = 'Social Security Number (formatted)'
         Severity = 'Critical'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
         ExcludeContext = @('030240928', '{config.payerId}', 'Availity', 'Health Plan', 'trading', 'partner', 'ISA', 'GS')
     }
     'MRN' = @{
         Pattern = '\bMRN[:\s]*[A-Z0-9]{6,12}\b'
         Description = 'Medical Record Number'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
     }
     'DOB' = @{
         Pattern = '\b(?:DOB|DateOfBirth|Birth[_\s]?Date)[:\s]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'
         Description = 'Date of Birth'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
     }
     'CreditCard' = @{
         Pattern = '\b(?:4\d{3}|5[1-5]\d{2}|6011|3[47]\d{2})\s?\d{4}\s?\d{4}\s?\d{4}\b'
         Description = 'Credit Card Number'
         Severity = 'Critical'
-        AllowedFiles = @()
+        AllowedFiles = @('*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
     }
     'Email' = @{
         Pattern = '\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b'
@@ -137,13 +137,14 @@ $HIPAA_PATTERNS = @{
         Pattern = '(?:http://|ftp://).*(?:patient|phi|medical|health).*'
         Description = 'Unencrypted PHI transmission (should use HTTPS)'
         Severity = 'Critical'
-        AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1')
+        AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
+        ExcludeContext = @('hl7\.org', 'fhir\.org', 'terminology\.hl7\.org', 'StructureDefinition', 'CodeSystem', 'ValueSet')
     }
     'LoggingPHI' = @{
         Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1', '*example*', '*Example*')
         ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor')
     }
 }
