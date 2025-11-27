@@ -1,227 +1,51 @@
 /**
- * FHIR R4 Mapper for CMS-0057-F Compliance
- * Maps X12 EDI transactions to FHIR R4 resources for interoperability
+ * Comprehensive FHIR R4 Mappers for CMS-0057-F Compliance
  * 
- * Standards Compliance:
- * - CMS-0057-F: Improving Interoperability Final Rule (Prior Authorization)
- * - HL7 FHIR R4: v4.0.1
- * - US Core IG: v3.1.1+
- * - Da Vinci Implementation Guides:
- *   - PDex (Payer Data Exchange)
- *   - CRD (Coverage Requirements Discovery)
- *   - DTR (Documentation Templates and Rules)
- *   - PAS (Prior Authorization Support)
+ * This module provides mappings between X12 EDI transactions and FHIR R4 resources
+ * to support CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F).
+ * 
+ * Mappings included:
+ * - X12 837 Professional Claim → FHIR R4 Claim
+ * - X12 278 Prior Authorization → FHIR R4 ServiceRequest
+ * - X12 835 Remittance Advice → FHIR R4 ExplanationOfBenefit
  * 
  * References:
- * - CMS-0057-F Final Rule (March 2023)
- * - X12 005010X222A1 (837 Professional)
- * - X12 005010X217 (278 Health Care Services Review)
- * - X12 005010X221A1 (835 Health Care Claim Payment/Advice)
+ * - CMS-0057-F: Advancing Interoperability and Improving Prior Authorization Processes
+ * - HL7 FHIR R4 Specification (v4.0.1)
+ * - US Core Implementation Guide v3.1.1+
+ * - Da Vinci PDex (Payer Data Exchange) IG
+ * - Da Vinci PAS (Prior Authorization Support) IG
+ * - Da Vinci CRD (Coverage Requirements Discovery) IG
+ * - Da Vinci DTR (Documentation Templates and Rules) IG
+ * 
+ * @module fhir-mapper
  */
 
-import {
-  Claim,
-  ExplanationOfBenefit,
-  ServiceRequest,
-  Reference,
-  Period,
+import { 
+  Claim, 
+  ServiceRequest, 
+  ExplanationOfBenefit
 } from 'fhir/r4';
-
-/**
- * X12 837 Professional Claim structure
- * Based on HIPAA X12 005010X222A1
- */
-export interface X12_837 {
-  claimId: string;
-  transactionDate: string;
-  totalClaimChargeAmount: number;
-  
-  // Patient/Subscriber information
-  subscriber: {
-    memberId: string;
-    firstName: string;
-    lastName: string;
-    middleName?: string;
-    dob: string;
-    gender?: string;
-    address?: {
-      street1?: string;
-      street2?: string;
-      city?: string;
-      state?: string;
-      zip?: string;
-    };
-  };
-  
-  // Billing Provider
-  billingProvider: {
-    npi: string;
-    taxId?: string;
-    organizationName?: string;
-    address?: {
-      street1?: string;
-      city?: string;
-      state?: string;
-      zip?: string;
-    };
-  };
-  
-  // Service Lines
-  serviceLines: Array<{
-    lineNumber: number;
-    procedureCode: string;
-    procedureModifiers?: string[];
-    diagnosisCodes?: string[];
-    serviceDate: string;
-    placeOfService?: string;
-    units: number;
-    chargeAmount: number;
-  }>;
-  
-  // Diagnosis codes
-  diagnosisCodes?: Array<{
-    code: string;
-    type?: string; // ICD-10, etc.
-  }>;
-  
-  // Payer information
-  payerId: string;
-  payerName?: string;
-}
-
-/**
- * X12 278 Health Care Services Review structure
- * Based on HIPAA X12 005010X217
- */
-export interface X12_278 {
-  authorizationNumber?: string;
-  requestId: string;
-  requestType: 'AR' | 'HS' | 'SC'; // AR=Authorization Request, HS=Health Services Review, SC=Service Certification
-  requestCategory: string; // e.g., '1'=Admission Review, '3'=Continued Stay
-  serviceTypeCode: string;
-  levelOfService?: string;
-  
-  // Patient information
-  patient: {
-    memberId: string;
-    firstName: string;
-    lastName: string;
-    dob: string;
-    gender?: string;
-  };
-  
-  // Requester (Provider)
-  requester: {
-    npi: string;
-    organizationName?: string;
-    contactName?: string;
-  };
-  
-  // Service information
-  serviceDetails: {
-    admissionDate?: string;
-    dischargeDate?: string;
-    serviceDate?: string;
-    diagnosisCode?: string;
-    procedureCode?: string;
-    requestedQuantity?: number;
-    quantityUnit?: string; // e.g., 'UN'=Units, 'DA'=Days
-    placeOfService?: string;
-  };
-  
-  // Payer information
-  payerId: string;
-  payerName?: string;
-  
-  // Additional details
-  certificationInfo?: {
-    certType?: string;
-    beginDate?: string;
-    endDate?: string;
-  };
-}
-
-/**
- * X12 835 Health Care Claim Payment/Advice structure
- * Based on HIPAA X12 005010X221A1
- */
-export interface X12_835 {
-  transactionId: string;
-  paymentDate: string;
-  paymentAmount: number;
-  paymentMethod: string; // CHK=Check, ACH=Electronic
-  checkNumber?: string;
-  
-  // Payer information
-  payer: {
-    id: string;
-    name: string;
-    address?: {
-      street1?: string;
-      city?: string;
-      state?: string;
-      zip?: string;
-    };
-  };
-  
-  // Payee (Provider)
-  payee: {
-    npi: string;
-    taxId?: string;
-    organizationName?: string;
-  };
-  
-  // Claims included in this remittance
-  claims: Array<{
-    claimId: string;
-    patientControlNumber?: string;
-    claimStatusCode: string;
-    chargedAmount: number;
-    paidAmount: number;
-    patientResponsibility?: number;
-    
-    // Patient information
-    patient: {
-      firstName: string;
-      lastName: string;
-      memberId: string;
-    };
-    
-    // Service lines
-    serviceLines?: Array<{
-      procedureCode: string;
-      serviceDate: string;
-      chargedAmount: number;
-      paidAmount: number;
-      adjustmentReasonCodes?: Array<{
-        groupCode: string; // CO=Contractual Obligation, PR=Patient Responsibility
-        reasonCode: string;
-        amount: number;
-      }>;
-    }>;
-    
-    // Adjustments
-    adjustments?: Array<{
-      groupCode: string;
-      reasonCode: string;
-      amount: number;
-    }>;
-  }>;
-}
+import { X12_837, X12_278, X12_835 } from './x12Types';
 
 /**
  * Maps X12 837 Professional Claim to FHIR R4 Claim resource
- * Compliant with US Core and CMS-0057-F requirements
+ * 
+ * Supports CMS-0057-F requirements for claims data exchange via FHIR APIs.
+ * Conforms to US Core Claim profile and Da Vinci PDex IG.
  * 
  * @param input X12 837 claim data
  * @returns FHIR R4 Claim resource
  */
-export function mapX12_837_ToFhirClaim(input: X12_837): Claim {
+export function mapX12837ToFhirClaim(input: X12_837): Claim {
   const claim: Claim = {
     resourceType: 'Claim',
     id: input.claimId,
     meta: {
-      profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim'],
+      profile: [
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim',
+        'http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-claim'
+      ]
     },
     
     // Status: active for submitted claims
@@ -232,41 +56,87 @@ export function mapX12_837_ToFhirClaim(input: X12_837): Claim {
       coding: [{
         system: 'http://terminology.hl7.org/CodeSystem/claim-type',
         code: 'professional',
-        display: 'Professional',
-      }],
+        display: 'Professional'
+      }]
     },
     
-    // Use: claim (vs preauthorization or predetermination)
+    // Use: claim submission
     use: 'claim',
     
     // Patient reference
     patient: {
+      reference: `Patient/${input.subscriber.memberId}`,
       identifier: {
-        system: `urn:oid:${input.payerId}`,
+        system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
         value: input.subscriber.memberId,
-      },
-      display: `${input.subscriber.firstName} ${input.subscriber.lastName}`,
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'MB',
+            display: 'Member Number'
+          }]
+        }
+      }
     },
     
-    // Created date
-    created: normalizeX12DateTime(input.transactionDate),
+    // Billable period (from service lines)
+    billablePeriod: (() => {
+      const serviceLines = input.claim.serviceLines;
+      if (Array.isArray(serviceLines) && serviceLines.length > 0) {
+        const firstLine = serviceLines[0];
+        const lastLine = serviceLines[serviceLines.length - 1];
+        return {
+          start: normalizeDateFormatOptional(firstLine?.serviceDateFrom),
+          end: normalizeDateFormatOptional(lastLine?.serviceDateTo || lastLine?.serviceDateFrom)
+        };
+      } else {
+        return {
+          start: undefined,
+          end: undefined
+        };
+      }
+    })(),
+    
+    // Created timestamp
+    created: input.transactionDate 
+      ? normalizeDateFormat(input.transactionDate)
+      : new Date().toISOString(),
     
     // Insurer/Payer
     insurer: {
       identifier: {
         system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-        value: input.payerId,
+        value: input.payer.payerId,
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'NIIP',
+            display: 'National Insurance Payor Identifier (Payor)'
+          }]
+        }
       },
-      display: input.payerName,
+      display: input.payer.name
     },
     
-    // Provider (billing)
+    // Insurance (required by FHIR R4)
+    insurance: [{
+      sequence: 1,
+      focal: true,
+      coverage: {
+        identifier: {
+          system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+          value: input.payer.payerId
+        }
+      }
+    }],
+    
+    // Provider (billing provider)
     provider: {
       identifier: {
         system: 'http://hl7.org/fhir/sid/us-npi',
-        value: input.billingProvider.npi,
+        value: input.billingProvider.npi
       },
-      display: input.billingProvider.organizationName,
+      display: input.billingProvider.name
     },
     
     // Priority: normal for standard claims
@@ -274,567 +144,520 @@ export function mapX12_837_ToFhirClaim(input: X12_837): Claim {
       coding: [{
         system: 'http://terminology.hl7.org/CodeSystem/processpriority',
         code: 'normal',
-        display: 'Normal',
-      }],
+        display: 'Normal'
+      }]
     },
     
-    // Insurance (required field)
-    insurance: [{
-      sequence: 1,
-      focal: true,
-      coverage: {
-        identifier: {
-          value: input.payerId,
-        },
-      },
-    }],
-    
     // Diagnosis codes
-    diagnosis: mapDiagnosisCodes(input.diagnosisCodes),
+    diagnosis: input.diagnoses?.map((diag) => ({
+      sequence: diag.sequence,
+      diagnosisCodeableConcept: {
+        coding: [{
+          system: 'http://hl7.org/fhir/sid/icd-10',
+          code: diag.code
+        }]
+      }
+    })),
     
     // Service line items
-    item: mapServiceLines(input.serviceLines),
+    item: input.claim.serviceLines.map((line) => ({
+      sequence: line.lineNumber,
+      
+      // Procedure code (CPT/HCPCS)
+      productOrService: {
+        coding: [{
+          system: 'http://www.ama-assn.org/go/cpt',
+          code: line.procedureCode
+        }]
+      },
+      
+      // Service date
+      servicedDate: normalizeDateFormat(line.serviceDateFrom),
+      
+      // Quantity
+      quantity: line.units ? {
+        value: line.units
+      } : undefined,
+      
+      // Unit price and net amount
+      unitPrice: (typeof line.units === 'number' && line.units > 0) ? {
+        value: line.chargeAmount / line.units,
+        currency: 'USD'
+      } : undefined,
+      
+      net: {
+        value: line.chargeAmount,
+        currency: 'USD'
+      },
+      
+      // Modifiers
+      modifier: line.modifiers?.map((mod) => ({
+        coding: [{
+          system: 'http://www.ama-assn.org/go/cpt',
+          code: mod
+        }]
+      })),
+      
+      // Diagnosis linkage
+      diagnosisSequence: line.diagnosisPointers
+    })),
     
     // Total claim amount
     total: {
-      value: input.totalClaimChargeAmount,
-      currency: 'USD',
-    },
+      value: input.claim.totalChargeAmount,
+      currency: 'USD'
+    }
   };
   
   return claim;
 }
 
 /**
- * Maps X12 278 Health Care Services Review to FHIR R4 ServiceRequest
- * Implements Da Vinci PAS (Prior Authorization Support) IG
+ * Maps X12 278 Prior Authorization Request to FHIR R4 ServiceRequest resource
  * 
- * @param input X12 278 authorization request
+ * Supports CMS-0057-F requirements for prior authorization via FHIR APIs.
+ * Conforms to Da Vinci PAS (Prior Authorization Support) IG and CRD/DTR requirements.
+ * 
+ * @param input X12 278 authorization request data
  * @returns FHIR R4 ServiceRequest resource
  */
-export function mapX12_278_ToFhirServiceRequest(input: X12_278): ServiceRequest {
+export function mapX12278ToFhirServiceRequest(input: X12_278): ServiceRequest {
   const serviceRequest: ServiceRequest = {
     resourceType: 'ServiceRequest',
-    id: input.requestId,
+    id: input.authorizationId,
     meta: {
-      profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest'],
+      profile: [
+        'http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest',
+        'http://hl7.org/fhir/us/davinci-crd/StructureDefinition/profile-servicerequest'
+      ]
     },
     
     // Status: active for pending authorization requests
     status: 'active',
     
-    // Intent: order for authorization requests
+    // Intent: order (requesting authorization for a service)
     intent: 'order',
     
-    // Category: authorization
+    // Category: prior authorization
     category: [{
       coding: [{
-        system: 'http://terminology.hl7.org/CodeSystem/servicerequest-category',
-        code: 'authorization',
-        display: 'Authorization',
-      }],
+        system: 'http://terminology.hl7.org/CodeSystem/service-category',
+        code: 'auth',
+        display: 'Prior Authorization'
+      }]
     }],
     
-    // Priority based on request type
-    priority: getPriorityFromRequestType(input.requestType),
+    // Priority: routine for standard requests
+    priority: 'routine',
     
-    // Service type code
-    code: {
+    // Code: service being requested
+    code: input.serviceRequest.procedureCode ? {
       coding: [{
-        system: 'https://x12.org/codes/service-type-codes',
-        code: input.serviceTypeCode,
-        display: getServiceTypeDisplay(input.serviceTypeCode),
-      }],
+        system: 'http://www.ama-assn.org/go/cpt',
+        code: input.serviceRequest.procedureCode
+      }]
+    } : {
+      text: input.serviceRequest.serviceTypeCode
     },
     
-    // Subject (Patient)
+    // Subject (patient)
     subject: {
+      reference: `Patient/${input.subscriber.memberId}`,
       identifier: {
-        system: `urn:oid:${input.payerId}`,
-        value: input.patient.memberId,
-      },
-      display: `${input.patient.firstName} ${input.patient.lastName}`,
+        system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+        value: input.subscriber.memberId,
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'MB',
+            display: 'Member Number'
+          }]
+        }
+      }
     },
     
-    // Occurrence period
-    occurrencePeriod: buildOccurrencePeriod(input.serviceDetails),
+    // Service timing
+    occurrencePeriod: {
+      start: normalizeDateFormat(input.serviceRequest.serviceDateFrom),
+      end: input.serviceRequest.serviceDateTo 
+        ? normalizeDateFormat(input.serviceRequest.serviceDateTo)
+        : undefined
+    },
     
-    // Authored date - use certification begin date if available, otherwise current date
-    authoredOn: input.certificationInfo?.beginDate 
-      ? normalizeX12Date(input.certificationInfo.beginDate)
+    // Authored date
+    authoredOn: input.transactionDate 
+      ? parseX12DateTime(input.transactionDate)
       : new Date().toISOString(),
     
-    // Requester (Provider)
+    // Requester (provider)
     requester: {
       identifier: {
         system: 'http://hl7.org/fhir/sid/us-npi',
-        value: input.requester.npi,
+        value: input.requester.npi
       },
-      display: input.requester.organizationName || input.requester.contactName,
+      display: input.requester.name || input.requester.organizationName
     },
     
-    // Performer (if different from requester)
-    performer: [{
-      identifier: {
-        system: 'http://hl7.org/fhir/sid/us-npi',
-        value: input.requester.npi,
-      },
-    }],
-    
-    // Insurance/Coverage
+    // Insurance
     insurance: [{
       identifier: {
-        value: input.payerId,
+        system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+        value: input.payer.payerId,
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            code: 'NIIP',
+            display: 'National Insurance Payor Identifier (Payor)'
+          }]
+        }
       },
-      display: input.payerName,
+      display: input.payer.name
     }],
     
-    // Supporting info
-    supportingInfo: buildSupportingInfo(input),
+    // Quantity (units)
+    quantityQuantity: input.serviceRequest.units ? {
+      value: input.serviceRequest.units
+    } : undefined,
+    
+    // Reason code (diagnosis)
+    reasonCode: input.serviceRequest.diagnosisCode ? [{
+      coding: [{
+        system: 'http://hl7.org/fhir/sid/icd-10',
+        code: input.serviceRequest.diagnosisCode
+      }]
+    }] : undefined
   };
-  
-  // Add quantity if specified
-  if (input.serviceDetails.requestedQuantity) {
-    serviceRequest.quantityQuantity = {
-      value: input.serviceDetails.requestedQuantity,
-      unit: input.serviceDetails.quantityUnit || 'units',
-    };
-  }
   
   return serviceRequest;
 }
 
 /**
- * Maps X12 835 Health Care Claim Payment to FHIR R4 ExplanationOfBenefit
- * Compliant with US Core and CMS Interoperability requirements
+ * Maps X12 835 Electronic Remittance Advice to FHIR R4 ExplanationOfBenefit resource
  * 
- * @param input X12 835 remittance advice
- * @param claimIndex Index of specific claim in remittance (0-based)
- * @returns FHIR R4 ExplanationOfBenefit resource
+ * Supports CMS-0057-F requirements for claims adjudication data via FHIR APIs.
+ * Conforms to US Core EOB profile and Da Vinci PDex IG.
+ * 
+ * @param input X12 835 remittance advice data
+ * @returns Array of FHIR R4 ExplanationOfBenefit resources (one per claim)
  */
-export function mapX12_835_ToFhirExplanationOfBenefit(
-  input: X12_835,
-  claimIndex: number = 0
-): ExplanationOfBenefit {
-  const claimData = input.claims[claimIndex];
-  
-  if (!claimData) {
-    throw new Error(
-      `Claim index ${claimIndex} not found. X12 835 transaction contains ${input.claims.length} claim(s).`
-    );
-  }
-  
-  const eob: ExplanationOfBenefit = {
-    resourceType: 'ExplanationOfBenefit',
-    id: claimData.claimId,
-    meta: {
-      profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-explanationofbenefit'],
-    },
-    
-    // Status: active for processed claims
-    status: 'active',
-    
-    // Type: professional
-    type: {
-      coding: [{
-        system: 'http://terminology.hl7.org/CodeSystem/claim-type',
-        code: 'professional',
-        display: 'Professional',
-      }],
-    },
-    
-    // Use: claim
-    use: 'claim',
-    
-    // Patient
-    patient: {
-      identifier: {
-        value: claimData.patient.memberId,
+export function mapX12835ToFhirExplanationOfBenefit(input: X12_835): ExplanationOfBenefit[] {
+  return input.claims.map((claimPayment) => {
+    const eob: ExplanationOfBenefit = {
+      resourceType: 'ExplanationOfBenefit',
+      id: `${input.remittanceId}-${claimPayment.claimId}`,
+      meta: {
+        profile: [
+          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-explanationofbenefit',
+          'http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-eob'
+        ]
       },
-      display: `${claimData.patient.firstName} ${claimData.patient.lastName}`,
-    },
-    
-    // Created date (payment date)
-    created: input.paymentDate,
-    
-    // Insurer (Payer)
-    insurer: {
-      identifier: {
-        value: input.payer.id,
-      },
-      display: input.payer.name,
-    },
-    
-    // Provider (Payee)
-    provider: {
-      identifier: {
-        system: 'http://hl7.org/fhir/sid/us-npi',
-        value: input.payee.npi,
-      },
-      display: input.payee.organizationName,
-    },
-    
-    // Outcome: complete (claim processed)
-    outcome: 'complete',
-    
-    // Insurance (required field)
-    insurance: [{
-      focal: true,
-      coverage: {
-        identifier: {
-          value: input.payer.id,
-        },
-      },
-    }],
-    
-    // Service line items
-    item: mapEOBServiceLines(claimData.serviceLines),
-    
-    // Payment information
-    payment: {
+      
+      // Status: active for processed claims
+      status: 'active',
+      
+      // Type: professional claim
       type: {
         coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/ex-paymenttype',
-          code: claimData.paidAmount === claimData.chargedAmount ? 'complete' : 'partial',
-          display: claimData.paidAmount === claimData.chargedAmount ? 'Complete' : 'Partial',
-        }],
+          system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+          code: 'professional',
+          display: 'Professional'
+        }]
       },
-      date: input.paymentDate,
-      amount: {
-        value: claimData.paidAmount,
-        currency: 'USD',
+      
+      // Use: claim
+      use: 'claim',
+      
+      // Patient
+      patient: {
+        reference: `Patient/${claimPayment.patient.memberId}`,
+        identifier: {
+          system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+          value: claimPayment.patient.memberId,
+          type: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: 'MB',
+              display: 'Member Number'
+            }]
+          }
+        }
       },
-      identifier: input.checkNumber ? {
-        value: input.checkNumber,
-      } : undefined,
-    },
+      
+      // Billable period
+      billablePeriod: {
+        start: normalizeDateFormatOptional(claimPayment.serviceDateFrom),
+        end: normalizeDateFormatOptional(claimPayment.serviceDateTo || claimPayment.serviceDateFrom)
+      },
+      
+      // Created timestamp
+      created: normalizeDateFormat(input.transactionDate),
+      
+      // Insurer (payer)
+      insurer: {
+        identifier: {
+          system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+          value: input.payer.payerId
+        },
+        display: input.payer.name
+      },
+      
+      // Provider (payee)
+      provider: {
+        identifier: {
+          system: 'http://hl7.org/fhir/sid/us-npi',
+          value: input.payee.npi
+        },
+        display: input.payee.name
+      },
+      
+      // Insurance (required by FHIR R4)
+      insurance: [{
+        focal: true,
+        coverage: {
+          identifier: {
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+            value: input.payer.payerId
+          }
+        }
+      }],
+      
+      // Outcome: complete (claim processed)
+      outcome: 'complete',
+      
+      // Claim reference
+      claim: {
+        identifier: {
+          value: claimPayment.claimId
+        }
+      },
+      
+      // Service line items
+      item: claimPayment.serviceLines.map((line) => ({
+        sequence: line.lineNumber,
+        
+        // Procedure code
+        productOrService: {
+          coding: [{
+            system: 'http://www.ama-assn.org/go/cpt',
+            code: line.procedureCode
+          }]
+        },
+        
+        // Service date
+        servicedDate: normalizeDateFormat(line.serviceDate),
+        
+        // Modifiers
+        modifier: line.modifiers?.map((mod) => ({
+          coding: [{
+            system: 'http://www.ama-assn.org/go/cpt',
+            code: mod
+          }]
+        })),
+        
+        // Adjudication details
+        adjudication: buildAdjudication(line)
+      })),
+      
+      // Total amounts
+      total: [
+        {
+          category: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+              code: 'submitted',
+              display: 'Submitted Amount'
+            }]
+          },
+          amount: {
+            value: claimPayment.totalChargeAmount,
+            currency: 'USD'
+          }
+        },
+        {
+          category: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+              code: 'benefit',
+              display: 'Benefit Amount'
+            }]
+          },
+          amount: {
+            value: claimPayment.totalPaidAmount,
+            currency: 'USD'
+          }
+        }
+      ],
+      
+      // Payment details
+      payment: {
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/ex-paymenttype',
+            code: 'complete',
+            display: 'Complete'
+          }]
+        },
+        amount: {
+          value: claimPayment.totalPaidAmount,
+          currency: 'USD'
+        },
+        date: normalizeDateFormat(input.transactionDate)
+      }
+    };
     
-    // Total amounts
-    total: [
-      {
-        category: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/adjudication',
-            code: 'submitted',
-            display: 'Submitted Amount',
-          }],
-        },
-        amount: {
-          value: claimData.chargedAmount,
-          currency: 'USD',
-        },
-      },
-      {
-        category: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/adjudication',
-            code: 'benefit',
-            display: 'Benefit Amount',
-          }],
-        },
-        amount: {
-          value: claimData.paidAmount,
-          currency: 'USD',
-        },
-      },
-    ],
-  };
-  
-  // Add patient responsibility if present
-  if (claimData.patientResponsibility) {
-    eob.total?.push({
+    return eob;
+  });
+}
+
+/**
+ * Builds adjudication array for service line
+ */
+function buildAdjudication(line: X12_835['claims'][0]['serviceLines'][0]) {
+  const adjudication = [
+    {
       category: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/adjudication',
-          code: 'deductible',
-          display: 'Deductible',
-        }],
+          code: 'submitted',
+          display: 'Submitted Amount'
+        }]
       },
       amount: {
-        value: claimData.patientResponsibility,
-        currency: 'USD',
+        value: line.chargeAmount,
+        currency: 'USD'
+      }
+    },
+    {
+      category: {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+          code: 'benefit',
+          display: 'Benefit Amount'
+        }]
       },
+      amount: {
+        value: line.paidAmount,
+        currency: 'USD'
+      }
+    }
+  ];
+  
+  // Add allowed amount if present
+  if (line.allowedAmount !== undefined) {
+    adjudication.push({
+      category: {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+          code: 'eligible',
+          display: 'Eligible Amount'
+        }]
+      },
+      amount: {
+        value: line.allowedAmount,
+        currency: 'USD'
+      }
     });
   }
   
-  return eob;
-}
-
-/**
- * Helper function to map diagnosis codes
- */
-function mapDiagnosisCodes(
-  codes?: Array<{ code: string; type?: string }>
-): Claim['diagnosis'] {
-  if (!codes || codes.length === 0) return undefined;
-  
-  return codes.map((diag, index) => ({
-    sequence: index + 1,
-    diagnosisCodeableConcept: {
-      coding: [{
-        system: 'http://hl7.org/fhir/sid/icd-10-cm',
-        code: diag.code,
-      }],
-    },
-  }));
-}
-
-/**
- * Helper function to map service lines to FHIR Claim items
- */
-function mapServiceLines(
-  serviceLines: X12_837['serviceLines']
-): Claim['item'] {
-  return serviceLines.map((line) => ({
-    sequence: line.lineNumber,
-    productOrService: {
-      coding: [{
-        system: 'http://www.ama-assn.org/go/cpt',
-        code: line.procedureCode,
-      }],
-    },
-    servicedDate: normalizeX12Date(line.serviceDate),
-    locationCodeableConcept: line.placeOfService ? {
-      coding: [{
-        system: 'https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set',
-        code: line.placeOfService,
-      }],
-    } : undefined,
-    quantity: {
-      value: line.units,
-    },
-    net: {
-      value: line.chargeAmount,
-      currency: 'USD',
-    },
-  }));
-}
-
-/**
- * Helper function to map EOB service lines
- */
-function mapEOBServiceLines(
-  serviceLines?: X12_835['claims'][0]['serviceLines']
-): ExplanationOfBenefit['item'] {
-  if (!serviceLines || serviceLines.length === 0) return undefined;
-  
-  return serviceLines.map((line, index) => ({
-    sequence: index + 1,
-    productOrService: {
-      coding: [{
-        system: 'http://www.ama-assn.org/go/cpt',
-        code: line.procedureCode,
-      }],
-    },
-    servicedDate: normalizeX12Date(line.serviceDate),
-    net: {
-      value: line.chargedAmount,
-      currency: 'USD',
-    },
-    adjudication: [
-      {
-        category: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/adjudication',
-            code: 'submitted',
-            display: 'Submitted Amount',
-          }],
-        },
-        amount: {
-          value: line.chargedAmount,
-          currency: 'USD',
-        },
+  // Add adjustments
+  // Note: FHIR ExplanationOfBenefit.item.adjudication does not include a 'reason' field in the base spec.
+  // Adjustment reason codes (e.g., CARC/RARC) are captured via the adjustment group code mappings (CO, PR, OA, PI)
+  // in the adjudication.category field, per FHIR and X12 standards. For additional detail, extensions may be added
+  // in production implementations (see: https://hl7.org/fhir/extensibility.html).
+  line.adjustments?.forEach((adj) => {
+    adjudication.push({
+      category: {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+          code: getAdjustmentCategoryCode(adj.groupCode),
+          display: getAdjustmentCategoryDisplay(adj.groupCode)
+        }]
       },
-      {
-        category: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/adjudication',
-            code: 'benefit',
-            display: 'Benefit Amount',
-          }],
-        },
-        amount: {
-          value: line.paidAmount,
-          currency: 'USD',
-        },
-      },
-    ],
-  }));
-}
-
-/**
- * Helper function to build occurrence period for ServiceRequest
- */
-function buildOccurrencePeriod(
-  serviceDetails: X12_278['serviceDetails']
-): Period | undefined {
-  if (!serviceDetails.admissionDate && !serviceDetails.serviceDate) {
-    return undefined;
-  }
-  
-  const period: Period = {};
-  
-  if (serviceDetails.admissionDate) {
-    period.start = normalizeX12Date(serviceDetails.admissionDate);
-  } else if (serviceDetails.serviceDate) {
-    period.start = normalizeX12Date(serviceDetails.serviceDate);
-  }
-  
-  if (serviceDetails.dischargeDate) {
-    period.end = normalizeX12Date(serviceDetails.dischargeDate);
-  }
-  
-  return period;
-}
-
-/**
- * Helper function to build supporting info for ServiceRequest
- */
-function buildSupportingInfo(input: X12_278): Reference[] | undefined {
-  const supportingInfo: Reference[] = [];
-  
-  // Add diagnosis code if present
-  if (input.serviceDetails.diagnosisCode) {
-    supportingInfo.push({
-      reference: `Condition/${input.serviceDetails.diagnosisCode}`,
-      display: input.serviceDetails.diagnosisCode,
+      amount: {
+        value: adj.amount,
+        currency: 'USD'
+      }
     });
-  }
+  });
   
-  // Add procedure code if present
-  if (input.serviceDetails.procedureCode) {
-    supportingInfo.push({
-      reference: `Procedure/${input.serviceDetails.procedureCode}`,
-      display: input.serviceDetails.procedureCode,
-    });
-  }
-  
-  return supportingInfo.length > 0 ? supportingInfo : undefined;
+  return adjudication;
 }
 
 /**
- * Helper function to determine priority from request type
+ * Maps X12 adjustment group codes to FHIR adjudication categories
  */
-function getPriorityFromRequestType(requestType: string): 'routine' | 'urgent' | 'asap' | 'stat' {
-  switch (requestType) {
-    case 'HS': // Health Services Review
-      return 'urgent';
-    case 'SC': // Service Certification
-      return 'asap';
-    default:
-      return 'routine';
+function getAdjustmentCategoryCode(groupCode: string): string {
+  switch (groupCode) {
+    case 'CO': return 'contractual'; // Contractual Obligation
+    case 'PR': return 'copay'; // Patient Responsibility
+    case 'OA': return 'adjustment'; // Other Adjustments
+    case 'PI': return 'adjustment'; // Payer Initiated
+    default: return 'adjustment';
   }
 }
 
 /**
- * Helper function to get service type display name
+ * Maps X12 adjustment group codes to display text
  */
-function getServiceTypeDisplay(code: string): string {
-  const serviceTypes: Record<string, string> = {
-    '1': 'Medical Care',
-    '30': 'Health Benefit Plan Coverage',
-    '47': 'Hospital',
-    '48': 'Hospital - Inpatient',
-    '49': 'Hospital - Outpatient',
-    '86': 'Emergency Services',
-    '98': 'Professional (Physician) Visit - Inpatient',
-    'A3': 'Psychiatric',
-    'A4': 'Psychiatric - Room and Board',
-  };
-  
-  return serviceTypes[code] || `Service Type ${code}`;
-}
-
-/**
- * Normalizes X12 date format (CCYYMMDD) to FHIR date format (YYYY-MM-DD)
- */
-/**
- * Validates that a date has valid month (01-12) and day (01-31) ranges
- * Note: Does not validate day ranges per month (e.g., Feb 30 would pass basic validation)
- */
-function isValidDateComponents(month: string, day: string): boolean {
-  const monthNum = parseInt(month, 10);
-  const dayNum = parseInt(day, 10);
-  return monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31;
-}
-
-function normalizeX12Date(dateStr: string): string {
-  // Validate and return if already in YYYY-MM-DD format
-  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
-  if (isoDatePattern.test(dateStr)) {
-    return dateStr;
+function getAdjustmentCategoryDisplay(groupCode: string): string {
+  switch (groupCode) {
+    case 'CO': return 'Contractual Obligation';
+    case 'PR': return 'Patient Responsibility';
+    case 'OA': return 'Other Adjustments';
+    case 'PI': return 'Payer Initiated';
+    default: return 'Adjustment';
   }
+}
+
+/**
+ * Core date normalization logic from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ */
+function convertX12DateToFhir(date: string): string {
+  // Already in YYYY-MM-DD format
+  if (date.includes('-')) return date;
   
   // Convert CCYYMMDD to YYYY-MM-DD
-  if (dateStr.length === 8 && /^\d{8}$/.test(dateStr)) {
-    const month = dateStr.substring(4, 6);
-    const day = dateStr.substring(6, 8);
-    
-    // Validate date components
-    if (!isValidDateComponents(month, day)) {
-      // Return as-is if invalid - let downstream handle validation
-      return dateStr;
-    }
-    
-    return `${dateStr.substring(0, 4)}-${month}-${day}`;
+  if (date.length === 8) {
+    return `${date.substring(0, 4)}-${date.substring(4, 6)}-${date.substring(6, 8)}`;
   }
   
-  // Fallback: return as-is if format unknown
-  return dateStr;
+  return date;
 }
 
 /**
- * Normalizes X12 date-time format to ISO 8601
- * Handles formats: CCYYMMDD-HHMM, CCYYMMDDHHMM, or YYYY-MM-DD-HH:MM
+ * Normalizes date format from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ * Returns a fallback date if the input is undefined or invalid.
  */
-/**
- * Validates that time components are valid (hours 00-23, minutes 00-59)
- */
-function isValidTimeComponents(hours: string, minutes: string): boolean {
-  const hoursNum = parseInt(hours, 10);
-  const minutesNum = parseInt(minutes, 10);
-  return hoursNum >= 0 && hoursNum <= 23 && minutesNum >= 0 && minutesNum <= 59;
+function normalizeDateFormat(date?: string): string {
+  if (!date) {
+    // Return current date as fallback for required date fields
+    return new Date().toISOString().split('T')[0];
+  }
+  return convertX12DateToFhir(date);
 }
 
-function normalizeX12DateTime(dateTime: string): string {
-  // Handle formats with separator (CCYYMMDD-HHMM or YYYY-MM-DD-HH:MM)
-  if (dateTime.includes('-')) {
-    const parts = dateTime.split('-');
-    const date = parts[0];
-    const time = parts.length > 1 ? parts[parts.length - 1] : undefined;
-    const normalizedDate = normalizeX12Date(date);
-    
-    if (time && time.length === 4) {
-      const hours = time.substring(0, 2);
-      const minutes = time.substring(2, 4);
-      
-      // Validate time components
-      if (!isValidTimeComponents(hours, minutes)) {
-        // Return date with midnight time if time is invalid
-        return `${normalizedDate}T00:00:00Z`;
-      }
-      
-      return `${normalizedDate}T${hours}:${minutes}:00Z`;
-    }
-    
-    return `${normalizedDate}T00:00:00Z`;
+/**
+ * Normalizes date format from X12 (CCYYMMDD) to FHIR (YYYY-MM-DD)
+ * Returns undefined for missing dates to allow calling code to handle appropriately.
+ * Use this variant when the date field is optional.
+ */
+function normalizeDateFormatOptional(date?: string): string | undefined {
+  if (!date) return undefined;
+  return convertX12DateToFhir(date);
+}
+
+/**
+ * Parses X12 datetime format (CCYYMMDD-HHMM) to ISO 8601
+ */
+function parseX12DateTime(datetime: string): string {
+  if (datetime.includes('T')) return datetime; // Already ISO format
+  
+  const parts = datetime.split('-');
+  if (parts.length === 2) {
+    const date = normalizeDateFormat(parts[0]);
+    const time = `${parts[1].substring(0, 2)}:${parts[1].substring(2, 4)}:00`;
+    return `${date}T${time}Z`;
   }
   
-  // Handle format without separator (CCYYMMDDHHMM - 12 characters)
-  if (dateTime.length === 12) {
-    const date = dateTime.substring(0, 8); // CCYYMMDD
-    const hours = dateTime.substring(8, 10); // HH
-    const minutes = dateTime.substring(10, 12); // MM
-    const normalizedDate = normalizeX12Date(date);
-    
-    // Validate time components
-    if (!isValidTimeComponents(hours, minutes)) {
-      return `${normalizedDate}T00:00:00Z`;
-    }
-    
-    return `${normalizedDate}T${hours}:${minutes}:00Z`;
-  }
-  
-  // Fallback: treat as date only
-  return `${normalizeX12Date(dateTime)}T00:00:00Z`;
+  return normalizeDateFormat(datetime);
 }

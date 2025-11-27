@@ -1,1009 +1,642 @@
 /**
- * Tests for FHIR R4 Mapper - CMS-0057-F Compliance
- * Validates X12 to FHIR mappings for 837, 278, and 835 transactions
+ * Tests for CMS-0057-F FHIR Mappers
  */
 
-import {
-  mapX12_837_ToFhirClaim,
-  mapX12_278_ToFhirServiceRequest,
-  mapX12_835_ToFhirExplanationOfBenefit,
-  X12_837,
-  X12_278,
-  X12_835,
+import { 
+  mapX12837ToFhirClaim, 
+  mapX12278ToFhirServiceRequest, 
+  mapX12835ToFhirExplanationOfBenefit 
 } from '../fhir-mapper';
+import { X12_837, X12_278, X12_835 } from '../x12Types';
 
-describe('FHIR Mapper - X12 837 to FHIR Claim', () => {
-  const sampleX12_837: X12_837 = {
-    claimId: 'CLM123456',
-    transactionDate: '20240115-1430',
-    totalClaimChargeAmount: 250.00,
-    subscriber: {
-      memberId: 'MEM001',
-      firstName: 'John',
-      lastName: 'Doe',
-      middleName: 'Q',
-      dob: '19850615',
-      gender: 'M',
-      address: {
-        street1: '123 Main St',
-        city: 'Boston',
-        state: 'MA',
-        zip: '02101',
-      },
-    },
-    billingProvider: {
-      npi: '1234567890',
-      taxId: '12-3456789',
-      organizationName: 'Boston Medical Group',
-      address: {
-        street1: '456 Medical Plaza',
-        city: 'Boston',
-        state: 'MA',
-        zip: '02102',
-      },
-    },
-    serviceLines: [
-      {
-        lineNumber: 1,
-        procedureCode: '99213',
-        procedureModifiers: ['25'],
-        diagnosisCodes: ['E11.9', 'I10'],
-        serviceDate: '20240115',
-        placeOfService: '11',
-        units: 1,
-        chargeAmount: 150.00,
-      },
-      {
-        lineNumber: 2,
-        procedureCode: '80053',
-        serviceDate: '20240115',
-        placeOfService: '11',
-        units: 1,
-        chargeAmount: 100.00,
-      },
-    ],
-    diagnosisCodes: [
-      { code: 'E11.9', type: 'ICD-10' },
-      { code: 'I10', type: 'ICD-10' },
-    ],
-    payerId: 'PAYER123',
-    payerName: 'Sample Health Plan',
-  };
-
-  it('maps X12 837 to FHIR Claim with all required fields', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.resourceType).toBe('Claim');
-    expect(claim.id).toBe('CLM123456');
-    expect(claim.status).toBe('active');
-    expect(claim.type.coding![0].code).toBe('professional');
-    expect(claim.use).toBe('claim');
-  });
-
-  it('maps patient reference correctly', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.patient.identifier!.value).toBe('MEM001');
-    expect(claim.patient.display).toContain('John');
-    expect(claim.patient.display).toContain('Doe');
-  });
-
-  it('maps billing provider with NPI', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.provider.identifier!.system).toBe('http://hl7.org/fhir/sid/us-npi');
-    expect(claim.provider.identifier!.value).toBe('1234567890');
-    expect(claim.provider.display).toBe('Boston Medical Group');
-  });
-
-  it('maps insurer/payer information', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.insurer).toBeDefined();
-    expect(claim.insurer!.identifier!.value).toBe('PAYER123');
-    expect(claim.insurer!.display).toBe('Sample Health Plan');
-  });
-
-  it('maps diagnosis codes to FHIR format', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.diagnosis).toBeDefined();
-    expect(claim.diagnosis!.length).toBe(2);
-    expect(claim.diagnosis![0].sequence).toBe(1);
-    expect(claim.diagnosis![0].diagnosisCodeableConcept!.coding![0].code).toBe('E11.9');
-    expect(claim.diagnosis![0].diagnosisCodeableConcept!.coding![0].system).toBe('http://hl7.org/fhir/sid/icd-10-cm');
-  });
-
-  it('maps service line items correctly', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.item).toBeDefined();
-    expect(claim.item!.length).toBe(2);
-    
-    const firstLine = claim.item![0];
-    expect(firstLine.sequence).toBe(1);
-    expect(firstLine.productOrService.coding![0].code).toBe('99213');
-    expect(firstLine.productOrService.coding![0].system).toBe('http://www.ama-assn.org/go/cpt');
-    expect(firstLine.servicedDate).toBe('2024-01-15');
-    expect(firstLine.quantity!.value).toBe(1);
-    expect(firstLine.net!.value).toBe(150.00);
-  });
-
-  it('maps total claim charge amount', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.total).toBeDefined();
-    expect(claim.total!.value).toBe(250.00);
-    expect(claim.total!.currency).toBe('USD');
-  });
-
-  it('includes US Core profile reference', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.meta?.profile).toBeDefined();
-    expect(claim.meta?.profile![0]).toContain('us-core');
-  });
-
-  it('normalizes X12 dates to FHIR format', () => {
-    const claim = mapX12_837_ToFhirClaim(sampleX12_837);
-
-    expect(claim.created).toBe('2024-01-15T14:30:00Z');
-    expect(claim.item![0].servicedDate).toBe('2024-01-15');
-  });
-});
-
-describe('FHIR Mapper - X12 278 to FHIR ServiceRequest', () => {
-  const sampleX12_278: X12_278 = {
-    authorizationNumber: 'AUTH123456',
-    requestId: 'REQ789012',
-    requestType: 'AR',
-    requestCategory: '1',
-    serviceTypeCode: '48',
-    levelOfService: 'U',
-    patient: {
-      memberId: 'MEM002',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      dob: '19900321',
-      gender: 'F',
-    },
-    requester: {
-      npi: '9876543210',
-      organizationName: 'City Hospital',
-      contactName: 'Dr. Johnson',
-    },
-    serviceDetails: {
-      admissionDate: '20240120',
-      dischargeDate: '20240125',
-      diagnosisCode: 'S72.001A',
-      procedureCode: '27236',
-      requestedQuantity: 5,
-      quantityUnit: 'DA',
-      placeOfService: '21',
-    },
-    payerId: 'PAYER456',
-    payerName: 'Regional Health Plan',
-    certificationInfo: {
-      certType: 'I',
-      beginDate: '20240120',
-      endDate: '20240125',
-    },
-  };
-
-  it('maps X12 278 to FHIR ServiceRequest with required fields', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.resourceType).toBe('ServiceRequest');
-    expect(serviceRequest.id).toBe('REQ789012');
-    expect(serviceRequest.status).toBe('active');
-    expect(serviceRequest.intent).toBe('order');
-  });
-
-  it('includes Da Vinci PAS profile reference', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.meta?.profile).toBeDefined();
-    expect(serviceRequest.meta?.profile![0]).toContain('davinci-pas');
-  });
-
-  it('maps patient reference correctly', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.subject.identifier!.value).toBe('MEM002');
-    expect(serviceRequest.subject.display).toContain('Jane');
-    expect(serviceRequest.subject.display).toContain('Smith');
-  });
-
-  it('maps requester (provider) with NPI', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.requester!.identifier!.system).toBe('http://hl7.org/fhir/sid/us-npi');
-    expect(serviceRequest.requester!.identifier!.value).toBe('9876543210');
-    expect(serviceRequest.requester!.display).toBe('City Hospital');
-  });
-
-  it('maps service type code', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.code).toBeDefined();
-    expect(serviceRequest.code!.coding![0].code).toBe('48');
-    expect(serviceRequest.code!.coding![0].system).toBe('https://x12.org/codes/service-type-codes');
-    expect(serviceRequest.code!.coding![0].display).toContain('Hospital');
-  });
-
-  it('maps occurrence period from service dates', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.occurrencePeriod).toBeDefined();
-    expect(serviceRequest.occurrencePeriod!.start).toBe('2024-01-20');
-    expect(serviceRequest.occurrencePeriod!.end).toBe('2024-01-25');
-  });
-
-  it('maps requested quantity', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.quantityQuantity).toBeDefined();
-    expect(serviceRequest.quantityQuantity!.value).toBe(5);
-    expect(serviceRequest.quantityQuantity!.unit).toBe('DA');
-  });
-
-  it('includes insurance reference', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.insurance).toBeDefined();
-    expect(serviceRequest.insurance!.length).toBeGreaterThan(0);
-    expect(serviceRequest.insurance![0].identifier!.value).toBe('PAYER456');
-    expect(serviceRequest.insurance![0].display).toBe('Regional Health Plan');
-  });
-
-  it('sets appropriate priority based on request type', () => {
-    const urgentRequest = { ...sampleX12_278, requestType: 'HS' as const };
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(urgentRequest);
-
-    expect(serviceRequest.priority).toBe('urgent');
-  });
-
-  it('includes supporting info for diagnosis and procedure', () => {
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(sampleX12_278);
-
-    expect(serviceRequest.supportingInfo).toBeDefined();
-    expect(serviceRequest.supportingInfo!.length).toBeGreaterThan(0);
-    
-    const diagnosisInfo = serviceRequest.supportingInfo!.find(
-      si => si.reference?.includes('S72.001A')
-    );
-    expect(diagnosisInfo).toBeDefined();
-  });
-});
-
-describe('FHIR Mapper - X12 835 to FHIR ExplanationOfBenefit', () => {
-  const sampleX12_835: X12_835 = {
-    transactionId: 'TXN123456',
-    paymentDate: '2024-01-20',
-    paymentAmount: 180.00,
-    paymentMethod: 'ACH',
-    payer: {
-      id: 'PAYER789',
-      name: 'National Health Plan',
-      address: {
-        street1: '100 Insurance Blvd',
-        city: 'Hartford',
-        state: 'CT',
-        zip: '06103',
-      },
-    },
-    payee: {
-      npi: '1234567890',
-      taxId: '12-3456789',
-      organizationName: 'Boston Medical Group',
-    },
-    claims: [
-      {
-        claimId: 'CLM123456',
-        patientControlNumber: 'PCN001',
-        claimStatusCode: '1',
-        chargedAmount: 250.00,
-        paidAmount: 180.00,
-        patientResponsibility: 50.00,
-        patient: {
+describe('CMS-0057-F FHIR Mappers', () => {
+  describe('mapX12837ToFhirClaim', () => {
+    it('maps minimal X12 837 to FHIR R4 Claim', () => {
+      const input: X12_837 = {
+        claimId: 'CLM001',
+        transactionDate: '20240115',
+        billingProvider: {
+          npi: '1234567890',
+          name: 'Provider Clinic',
+          taxId: '12-3456789'
+        },
+        subscriber: {
+          memberId: 'MEM001',
           firstName: 'John',
           lastName: 'Doe',
-          memberId: 'MEM001',
+          dob: '19850615',
+          gender: 'M'
         },
-        serviceLines: [
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
+        },
+        claim: {
+          totalChargeAmount: 150.00,
+          serviceLines: [
+            {
+              lineNumber: 1,
+              procedureCode: '99213',
+              serviceDateFrom: '20240110',
+              chargeAmount: 150.00,
+              units: 1
+            }
+          ]
+        }
+      };
+      
+      const claim = mapX12837ToFhirClaim(input);
+      
+      // Verify resource structure
+      expect(claim.resourceType).toBe('Claim');
+      expect(claim.id).toBe('CLM001');
+      expect(claim.status).toBe('active');
+      expect(claim.type.coding![0].code).toBe('professional');
+      expect(claim.use).toBe('claim');
+      
+      // Verify patient reference
+      expect(claim.patient.reference).toBe('Patient/MEM001');
+      expect(claim.patient.identifier!.value).toBe('MEM001');
+      
+      // Verify provider
+      expect(claim.provider.identifier!.value).toBe('1234567890');
+      expect(claim.provider.identifier!.system).toBe('http://hl7.org/fhir/sid/us-npi');
+      
+      // Verify insurer
+      expect(claim.insurer?.identifier!.value).toBe('PAYER001');
+      
+      // Verify service lines
+      expect(claim.item).toHaveLength(1);
+      expect(claim.item![0].sequence).toBe(1);
+      expect(claim.item![0].productOrService.coding![0].code).toBe('99213');
+      expect(claim.item![0].net!.value).toBe(150.00);
+      
+      // Verify total
+      expect(claim.total!.value).toBe(150.00);
+      expect(claim.total!.currency).toBe('USD');
+    });
+    
+    it('maps X12 837 with multiple service lines', () => {
+      const input: X12_837 = {
+        claimId: 'CLM002',
+        billingProvider: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
+        },
+        subscriber: {
+          memberId: 'MEM002',
+          firstName: 'Jane',
+          lastName: 'Smith',
+          dob: '19900321'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        claim: {
+          totalChargeAmount: 450.00,
+          serviceLines: [
+            {
+              lineNumber: 1,
+              procedureCode: '99213',
+              serviceDateFrom: '20240110',
+              chargeAmount: 150.00,
+              units: 1
+            },
+            {
+              lineNumber: 2,
+              procedureCode: '80053',
+              serviceDateFrom: '20240110',
+              chargeAmount: 300.00,
+              units: 1
+            }
+          ]
+        }
+      };
+      
+      const claim = mapX12837ToFhirClaim(input);
+      
+      expect(claim.item).toHaveLength(2);
+      expect(claim.item![0].productOrService.coding![0].code).toBe('99213');
+      expect(claim.item![1].productOrService.coding![0].code).toBe('80053');
+      expect(claim.total!.value).toBe(450.00);
+    });
+    
+    it('maps X12 837 with diagnosis codes', () => {
+      const input: X12_837 = {
+        claimId: 'CLM003',
+        billingProvider: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
+        },
+        subscriber: {
+          memberId: 'MEM003',
+          firstName: 'Bob',
+          lastName: 'Johnson',
+          dob: '19750815'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        claim: {
+          totalChargeAmount: 150.00,
+          serviceLines: [
+            {
+              lineNumber: 1,
+              procedureCode: '99213',
+              serviceDateFrom: '20240110',
+              chargeAmount: 150.00,
+              diagnosisPointers: [1, 2]
+            }
+          ]
+        },
+        diagnoses: [
           {
-            procedureCode: '99213',
-            serviceDate: '20240115',
-            chargedAmount: 150.00,
-            paidAmount: 120.00,
-            adjustmentReasonCodes: [
+            sequence: 1,
+            code: 'E11.9'
+          },
+          {
+            sequence: 2,
+            code: 'I10'
+          }
+        ]
+      };
+      
+      const claim = mapX12837ToFhirClaim(input);
+      
+      expect(claim.diagnosis).toHaveLength(2);
+      expect(claim.diagnosis![0].sequence).toBe(1);
+      expect(claim.diagnosis![0].diagnosisCodeableConcept!.coding![0].code).toBe('E11.9');
+      expect(claim.diagnosis![1].diagnosisCodeableConcept!.coding![0].code).toBe('I10');
+      
+      expect(claim.item![0].diagnosisSequence).toEqual([1, 2]);
+    });
+    
+    it('maps US Core profile metadata', () => {
+      const input: X12_837 = {
+        claimId: 'CLM004',
+        billingProvider: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
+        },
+        subscriber: {
+          memberId: 'MEM004',
+          firstName: 'Alice',
+          lastName: 'Brown',
+          dob: '19880505'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        claim: {
+          totalChargeAmount: 100.00,
+          serviceLines: [
+            {
+              lineNumber: 1,
+              procedureCode: '99211',
+              serviceDateFrom: '20240110',
+              chargeAmount: 100.00
+            }
+          ]
+        }
+      };
+      
+      const claim = mapX12837ToFhirClaim(input);
+      
+      expect(claim.meta?.profile).toBeDefined();
+      expect(claim.meta!.profile!.some(p => p.includes('us-core'))).toBe(true);
+      expect(claim.meta!.profile!.some(p => p.includes('davinci-pdex'))).toBe(true);
+    });
+  });
+  
+  describe('mapX12278ToFhirServiceRequest', () => {
+    it('maps minimal X12 278 to FHIR R4 ServiceRequest', () => {
+      const input: X12_278 = {
+        authorizationId: 'AUTH001',
+        transactionDate: '20240115-1430',
+        requester: {
+          npi: '1234567890',
+          name: 'Dr. Smith'
+        },
+        subscriber: {
+          memberId: 'MEM001',
+          firstName: 'John',
+          lastName: 'Doe',
+          dob: '19850615',
+          gender: 'M'
+        },
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
+        },
+        serviceRequest: {
+          serviceTypeCode: 'HS',
+          certificationType: 'AR',
+          serviceDateFrom: '20240120',
+          procedureCode: '27447'
+        }
+      };
+      
+      const serviceRequest = mapX12278ToFhirServiceRequest(input);
+      
+      // Verify resource structure
+      expect(serviceRequest.resourceType).toBe('ServiceRequest');
+      expect(serviceRequest.id).toBe('AUTH001');
+      expect(serviceRequest.status).toBe('active');
+      expect(serviceRequest.intent).toBe('order');
+      
+      // Verify category
+      expect(serviceRequest.category).toBeDefined();
+      expect(serviceRequest.category![0].coding![0].code).toBe('auth');
+      
+      // Verify subject
+      expect(serviceRequest.subject.reference).toBe('Patient/MEM001');
+      
+      // Verify requester
+      expect(serviceRequest.requester!.identifier!.value).toBe('1234567890');
+      expect(serviceRequest.requester!.identifier!.system).toBe('http://hl7.org/fhir/sid/us-npi');
+      
+      // Verify code
+      expect(serviceRequest.code?.coding![0].code).toBe('27447');
+      
+      // Verify timing
+      expect(serviceRequest.occurrencePeriod!.start).toBe('2024-01-20');
+      
+      // Verify insurance
+      expect(serviceRequest.insurance).toBeDefined();
+      expect(serviceRequest.insurance![0].identifier!.value).toBe('PAYER001');
+    });
+    
+    it('maps X12 278 with date range', () => {
+      const input: X12_278 = {
+        authorizationId: 'AUTH002',
+        requester: {
+          npi: '1234567890',
+          organizationName: 'Hospital System'
+        },
+        subscriber: {
+          memberId: 'MEM002',
+          firstName: 'Jane',
+          lastName: 'Smith',
+          dob: '19900321'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        serviceRequest: {
+          serviceTypeCode: 'HS',
+          certificationType: 'HS',
+          serviceDateFrom: '20240201',
+          serviceDateTo: '20240203',
+          procedureCode: '99233',
+          units: 3
+        }
+      };
+      
+      const serviceRequest = mapX12278ToFhirServiceRequest(input);
+      
+      expect(serviceRequest.occurrencePeriod!.start).toBe('2024-02-01');
+      expect(serviceRequest.occurrencePeriod!.end).toBe('2024-02-03');
+      expect(serviceRequest.quantityQuantity!.value).toBe(3);
+    });
+    
+    it('maps X12 278 with diagnosis code', () => {
+      const input: X12_278 = {
+        authorizationId: 'AUTH003',
+        requester: {
+          npi: '1234567890'
+        },
+        subscriber: {
+          memberId: 'MEM003',
+          firstName: 'Bob',
+          lastName: 'Johnson',
+          dob: '19750815'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        serviceRequest: {
+          serviceTypeCode: 'HS',
+          certificationType: 'AR',
+          serviceDateFrom: '20240120',
+          procedureCode: '27447',
+          diagnosisCode: 'M17.11'
+        }
+      };
+      
+      const serviceRequest = mapX12278ToFhirServiceRequest(input);
+      
+      expect(serviceRequest.reasonCode).toBeDefined();
+      expect(serviceRequest.reasonCode![0].coding![0].code).toBe('M17.11');
+      expect(serviceRequest.reasonCode![0].coding![0].system).toBe('http://hl7.org/fhir/sid/icd-10');
+    });
+    
+    it('maps Da Vinci PAS profile metadata', () => {
+      const input: X12_278 = {
+        authorizationId: 'AUTH004',
+        requester: {
+          npi: '1234567890'
+        },
+        subscriber: {
+          memberId: 'MEM004',
+          firstName: 'Alice',
+          lastName: 'Brown',
+          dob: '19880505'
+        },
+        payer: {
+          payerId: 'PAYER001'
+        },
+        serviceRequest: {
+          serviceTypeCode: 'HS',
+          certificationType: 'AR',
+          serviceDateFrom: '20240120'
+        }
+      };
+      
+      const serviceRequest = mapX12278ToFhirServiceRequest(input);
+      
+      expect(serviceRequest.meta?.profile).toBeDefined();
+      expect(serviceRequest.meta!.profile!.some(p => p.includes('davinci-pas'))).toBe(true);
+      expect(serviceRequest.meta!.profile!.some(p => p.includes('davinci-crd'))).toBe(true);
+    });
+  });
+  
+  describe('mapX12835ToFhirExplanationOfBenefit', () => {
+    it('maps minimal X12 835 to FHIR R4 ExplanationOfBenefit', () => {
+      const input: X12_835 = {
+        remittanceId: 'REM001',
+        transactionDate: '20240115',
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
+        },
+        payee: {
+          npi: '1234567890',
+          name: 'Provider Clinic',
+          taxId: '12-3456789'
+        },
+        claims: [
+          {
+            claimId: 'CLM001',
+            patient: {
+              memberId: 'MEM001',
+              firstName: 'John',
+              lastName: 'Doe'
+            },
+            claimStatusCode: '1',
+            totalChargeAmount: 150.00,
+            totalPaidAmount: 120.00,
+            serviceDateFrom: '20240110',
+            serviceLines: [
               {
-                groupCode: 'CO',
-                reasonCode: '45',
-                amount: 30.00,
-              },
-            ],
-          },
+                lineNumber: 1,
+                procedureCode: '99213',
+                serviceDate: '20240110',
+                chargeAmount: 150.00,
+                paidAmount: 120.00,
+                allowedAmount: 130.00
+              }
+            ]
+          }
+        ]
+      };
+      
+      const eobs = mapX12835ToFhirExplanationOfBenefit(input);
+      
+      expect(eobs).toHaveLength(1);
+      
+      const eob = eobs[0];
+      
+      // Verify resource structure
+      expect(eob.resourceType).toBe('ExplanationOfBenefit');
+      expect(eob.id).toBe('REM001-CLM001');
+      expect(eob.status).toBe('active');
+      expect(eob.type.coding![0].code).toBe('professional');
+      expect(eob.use).toBe('claim');
+      expect(eob.outcome).toBe('complete');
+      
+      // Verify patient
+      expect(eob.patient.reference).toBe('Patient/MEM001');
+      
+      // Verify insurer
+      expect(eob.insurer.identifier!.value).toBe('PAYER001');
+      
+      // Verify provider
+      expect(eob.provider.identifier!.value).toBe('1234567890');
+      
+      // Verify service lines
+      expect(eob.item).toHaveLength(1);
+      expect(eob.item![0].sequence).toBe(1);
+      expect(eob.item![0].productOrService.coding![0].code).toBe('99213');
+      
+      // Verify adjudication
+      expect(eob.item![0].adjudication).toBeDefined();
+      const submittedAdj = eob.item![0].adjudication!.find(a => 
+        a.category.coding![0].code === 'submitted'
+      );
+      expect(submittedAdj?.amount?.value).toBe(150.00);
+      
+      const benefitAdj = eob.item![0].adjudication!.find(a => 
+        a.category.coding![0].code === 'benefit'
+      );
+      expect(benefitAdj?.amount?.value).toBe(120.00);
+      
+      const eligibleAdj = eob.item![0].adjudication!.find(a => 
+        a.category.coding![0].code === 'eligible'
+      );
+      expect(eligibleAdj?.amount?.value).toBe(130.00);
+      
+      // Verify totals
+      expect(eob.total).toHaveLength(2);
+      const totalSubmitted = eob.total!.find(t => 
+        t.category.coding![0].code === 'submitted'
+      );
+      expect(totalSubmitted?.amount.value).toBe(150.00);
+      
+      const totalBenefit = eob.total!.find(t => 
+        t.category.coding![0].code === 'benefit'
+      );
+      expect(totalBenefit?.amount.value).toBe(120.00);
+      
+      // Verify payment
+      expect(eob.payment?.amount?.value).toBe(120.00);
+      expect(eob.payment?.date).toBe('2024-01-15');
+    });
+    
+    it('maps X12 835 with multiple claims', () => {
+      const input: X12_835 = {
+        remittanceId: 'REM002',
+        transactionDate: '20240115',
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
+        },
+        payee: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
+        },
+        claims: [
           {
-            procedureCode: '80053',
-            serviceDate: '20240115',
-            chargedAmount: 100.00,
-            paidAmount: 60.00,
-            adjustmentReasonCodes: [
+            claimId: 'CLM001',
+            patient: {
+              memberId: 'MEM001',
+              firstName: 'John',
+              lastName: 'Doe'
+            },
+            claimStatusCode: '1',
+            totalChargeAmount: 150.00,
+            totalPaidAmount: 120.00,
+            serviceDateFrom: '20240110',
+            serviceLines: [
               {
-                groupCode: 'PR',
-                reasonCode: '1',
-                amount: 40.00,
-              },
-            ],
-          },
-        ],
-        adjustments: [
-          {
-            groupCode: 'CO',
-            reasonCode: '45',
-            amount: 30.00,
+                lineNumber: 1,
+                procedureCode: '99213',
+                serviceDate: '20240110',
+                chargeAmount: 150.00,
+                paidAmount: 120.00
+              }
+            ]
           },
           {
-            groupCode: 'PR',
-            reasonCode: '1',
-            amount: 40.00,
-          },
-        ],
-      },
-    ],
-  };
-
-  it('maps X12 835 to FHIR ExplanationOfBenefit', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.resourceType).toBe('ExplanationOfBenefit');
-    expect(eob.id).toBe('CLM123456');
-    expect(eob.status).toBe('active');
-    expect(eob.type.coding![0].code).toBe('professional');
-    expect(eob.use).toBe('claim');
-    expect(eob.outcome).toBe('complete');
-  });
-
-  it('includes US Core profile reference', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.meta?.profile).toBeDefined();
-    expect(eob.meta?.profile![0]).toContain('us-core');
-  });
-
-  it('maps patient information', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.patient.identifier!.value).toBe('MEM001');
-    expect(eob.patient.display).toContain('John');
-    expect(eob.patient.display).toContain('Doe');
-  });
-
-  it('maps insurer (payer) information', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.insurer.identifier!.value).toBe('PAYER789');
-    expect(eob.insurer.display).toBe('National Health Plan');
-  });
-
-  it('maps provider (payee) with NPI', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.provider.identifier!.system).toBe('http://hl7.org/fhir/sid/us-npi');
-    expect(eob.provider.identifier!.value).toBe('1234567890');
-    expect(eob.provider.display).toBe('Boston Medical Group');
-  });
-
-  it('maps payment information', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.payment).toBeDefined();
-    expect(eob.payment!.date).toBe('2024-01-20');
-    expect(eob.payment!.amount!.value).toBe(180.00);
-    expect(eob.payment!.amount!.currency).toBe('USD');
-  });
-
-  it('maps service line items with adjudication', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.item).toBeDefined();
-    expect(eob.item!.length).toBe(2);
+            claimId: 'CLM002',
+            patient: {
+              memberId: 'MEM002',
+              firstName: 'Jane',
+              lastName: 'Smith'
+            },
+            claimStatusCode: '1',
+            totalChargeAmount: 200.00,
+            totalPaidAmount: 180.00,
+            serviceDateFrom: '20240111',
+            serviceLines: [
+              {
+                lineNumber: 1,
+                procedureCode: '99214',
+                serviceDate: '20240111',
+                chargeAmount: 200.00,
+                paidAmount: 180.00
+              }
+            ]
+          }
+        ]
+      };
+      
+      const eobs = mapX12835ToFhirExplanationOfBenefit(input);
+      
+      expect(eobs).toHaveLength(2);
+      expect(eobs[0].claim!.identifier!.value).toBe('CLM001');
+      expect(eobs[1].claim!.identifier!.value).toBe('CLM002');
+    });
     
-    const firstLine = eob.item![0];
-    expect(firstLine.sequence).toBe(1);
-    expect(firstLine.productOrService.coding![0].code).toBe('99213');
-    expect(firstLine.servicedDate).toBe('2024-01-15');
-    expect(firstLine.net!.value).toBe(150.00);
+    it('maps X12 835 with adjustments', () => {
+      const input: X12_835 = {
+        remittanceId: 'REM003',
+        transactionDate: '20240115',
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
+        },
+        payee: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
+        },
+        claims: [
+          {
+            claimId: 'CLM003',
+            patient: {
+              memberId: 'MEM003',
+              firstName: 'Bob',
+              lastName: 'Johnson'
+            },
+            claimStatusCode: '1',
+            totalChargeAmount: 200.00,
+            totalPaidAmount: 150.00,
+            serviceDateFrom: '20240110',
+            serviceLines: [
+              {
+                lineNumber: 1,
+                procedureCode: '99214',
+                serviceDate: '20240110',
+                chargeAmount: 200.00,
+                paidAmount: 150.00,
+                allowedAmount: 175.00,
+                adjustments: [
+                  {
+                    groupCode: 'CO',
+                    reasonCode: '45',
+                    amount: 25.00
+                  },
+                  {
+                    groupCode: 'PR',
+                    reasonCode: '1',
+                    amount: 25.00
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+      
+      const eobs = mapX12835ToFhirExplanationOfBenefit(input);
+      const eob = eobs[0];
+      
+      // Check adjustments are included in adjudication
+      const contractualAdj = eob.item![0].adjudication!.find(a => 
+        a.category.coding![0].code === 'contractual'
+      );
+      expect(contractualAdj).toBeDefined();
+      expect(contractualAdj?.amount?.value).toBe(25.00);
+      
+      const copayAdj = eob.item![0].adjudication!.find(a => 
+        a.category.coding![0].code === 'copay'
+      );
+      expect(copayAdj).toBeDefined();
+      expect(copayAdj?.amount?.value).toBe(25.00);
+    });
     
-    expect(firstLine.adjudication).toBeDefined();
-    expect(firstLine.adjudication!.length).toBeGreaterThan(0);
-  });
-
-  it('maps total amounts including submitted and benefit', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    expect(eob.total).toBeDefined();
-    expect(eob.total!.length).toBeGreaterThan(0);
-    
-    const submittedTotal = eob.total!.find(
-      t => t.category.coding![0].code === 'submitted'
-    );
-    expect(submittedTotal!.amount.value).toBe(250.00);
-    
-    const benefitTotal = eob.total!.find(
-      t => t.category.coding![0].code === 'benefit'
-    );
-    expect(benefitTotal!.amount.value).toBe(180.00);
-  });
-
-  it('includes patient responsibility in totals', () => {
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 0);
-
-    const deductibleTotal = eob.total!.find(
-      t => t.category.coding![0].code === 'deductible'
-    );
-    expect(deductibleTotal).toBeDefined();
-    expect(deductibleTotal!.amount.value).toBe(50.00);
-  });
-
-  it('throws error for invalid claim index', () => {
-    expect(() => {
-      mapX12_835_ToFhirExplanationOfBenefit(sampleX12_835, 5);
-    }).toThrow('Claim index 5 not found');
-  });
-
-  it('handles multiple claims in remittance', () => {
-    const multiClaimRemittance = {
-      ...sampleX12_835,
-      claims: [
-        ...sampleX12_835.claims,
-        {
-          ...sampleX12_835.claims[0],
-          claimId: 'CLM789012',
-          patient: {
-            firstName: 'Jane',
-            lastName: 'Smith',
-            memberId: 'MEM002',
-          },
+    it('maps US Core EOB profile metadata', () => {
+      const input: X12_835 = {
+        remittanceId: 'REM004',
+        transactionDate: '20240115',
+        payer: {
+          payerId: 'PAYER001',
+          name: 'Test Health Plan'
         },
-      ],
-    };
-
-    const eob1 = mapX12_835_ToFhirExplanationOfBenefit(multiClaimRemittance, 0);
-    const eob2 = mapX12_835_ToFhirExplanationOfBenefit(multiClaimRemittance, 1);
-
-    expect(eob1.id).toBe('CLM123456');
-    expect(eob2.id).toBe('CLM789012');
-    expect(eob2.patient.display).toContain('Jane Smith');
-  });
-});
-
-describe('Date Normalization', () => {
-  it('converts X12 date format CCYYMMDD to YYYY-MM-DD', () => {
-    const x12_837: X12_837 = {
-      claimId: 'TEST',
-      transactionDate: '20240115-0000',
-      totalClaimChargeAmount: 100,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'Test',
-        lastName: 'User',
-        dob: '19850615',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '20240115',
-        units: 1,
-        chargeAmount: 100,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    expect(claim.item![0].servicedDate).toBe('2024-01-15');
-  });
-
-  it('handles dates already in YYYY-MM-DD format', () => {
-    const x12_837: X12_837 = {
-      claimId: 'TEST',
-      transactionDate: '2024-01-15-00:00',
-      totalClaimChargeAmount: 100,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'Test',
-        lastName: 'User',
-        dob: '1985-06-15',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '2024-01-15',
-        units: 1,
-        chargeAmount: 100,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    expect(claim.item![0].servicedDate).toBe('2024-01-15');
-  });
-
-  it('handles X12 datetime without separator (CCYYMMDDHHMM)', () => {
-    const x12_837 = {
-      claimId: 'TEST',
-      transactionDate: '202401151430', // 12 characters, no separator
-      totalClaimChargeAmount: 100,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'Test',
-        lastName: 'User',
-        dob: '19850615',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '20240115',
-        units: 1,
-        chargeAmount: 100,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    expect(claim.created).toBe('2024-01-15T14:30:00Z');
-  });
-
-  it('handles invalid date formats gracefully', () => {
-    const x12_837: X12_837 = {
-      claimId: 'TEST',
-      transactionDate: 'invalid-date',
-      totalClaimChargeAmount: 100,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'Test',
-        lastName: 'User',
-        dob: 'invalid',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: 'invalid',
-        units: 1,
-        chargeAmount: 100,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    // Should return as-is if format is unrecognized
-    expect(claim.created).toContain('invalid');
-    expect(claim.item![0].servicedDate).toBe('invalid');
-  });
-});
-
-describe('Edge Cases and Coverage', () => {
-  it('maps X12 278 with certification info for authoredOn', () => {
-    const x12_278: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {
-        diagnosisCode: 'A00',
-        procedureCode: '99213',
-      },
-      payerId: 'PAYER001',
-      certificationInfo: {
-        certType: 'I',
-        beginDate: '20240115',
-        endDate: '20240120',
-      },
-    };
-
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
-    expect(serviceRequest.authoredOn).toBe('2024-01-15');
-  });
-
-  it('maps X12 278 with different priority types', () => {
-    const baseRequest: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {},
-      payerId: 'PAYER001',
-    };
-
-    // Test HS request type (urgent)
-    const hsRequest = { ...baseRequest, requestType: 'HS' as const };
-    const hsSR = mapX12_278_ToFhirServiceRequest(hsRequest);
-    expect(hsSR.priority).toBe('urgent');
-
-    // Test SC request type (asap)
-    const scRequest = { ...baseRequest, requestType: 'SC' as const };
-    const scSR = mapX12_278_ToFhirServiceRequest(scRequest);
-    expect(scSR.priority).toBe('asap');
-
-    // Test AR request type (routine)
-    const arSR = mapX12_278_ToFhirServiceRequest(baseRequest);
-    expect(arSR.priority).toBe('routine');
-  });
-
-  it('maps X12 278 without occurrence period when no dates provided', () => {
-    const x12_278: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {}, // No dates
-      payerId: 'PAYER001',
-    };
-
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
-    expect(serviceRequest.occurrencePeriod).toBeUndefined();
-  });
-
-  it('maps X12 278 with only admission date', () => {
-    const x12_278: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {
-        admissionDate: '20240115',
-      },
-      payerId: 'PAYER001',
-    };
-
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
-    expect(serviceRequest.occurrencePeriod?.start).toBe('2024-01-15');
-    expect(serviceRequest.occurrencePeriod?.end).toBeUndefined();
-  });
-
-  it('maps X12 278 with only service date (no admission date)', () => {
-    const x12_278: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {
-        serviceDate: '20240115',
-      },
-      payerId: 'PAYER001',
-    };
-
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
-    expect(serviceRequest.occurrencePeriod?.start).toBe('2024-01-15');
-  });
-
-  it('maps X12 278 without supporting info when no diagnosis or procedure', () => {
-    const x12_278: X12_278 = {
-      requestId: 'REQ001',
-      requestType: 'AR',
-      requestCategory: '1',
-      serviceTypeCode: '48',
-      patient: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      requester: {
-        npi: '1234567890',
-      },
-      serviceDetails: {}, // No diagnosis or procedure
-      payerId: 'PAYER001',
-    };
-
-    const serviceRequest = mapX12_278_ToFhirServiceRequest(x12_278);
-    expect(serviceRequest.supportingInfo).toBeUndefined();
-  });
-
-  it('maps X12 835 without service lines', () => {
-    const x12_835: X12_835 = {
-      transactionId: 'TXN001',
-      paymentDate: '2024-01-20',
-      paymentAmount: 100.00,
-      paymentMethod: 'ACH',
-      payer: {
-        id: 'PAYER001',
-        name: 'Test Payer',
-      },
-      payee: {
-        npi: '1234567890',
-      },
-      claims: [{
-        claimId: 'CLM001',
-        claimStatusCode: '1',
-        chargedAmount: 100.00,
-        paidAmount: 100.00,
-        patient: {
-          firstName: 'John',
-          lastName: 'Doe',
-          memberId: 'MEM001',
+        payee: {
+          npi: '1234567890',
+          name: 'Provider Clinic'
         },
-        // No service lines
-      }],
-    };
-
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
-    expect(eob.item).toBeUndefined();
-  });
-
-  it('maps X12 835 without patient responsibility', () => {
-    const x12_835: X12_835 = {
-      transactionId: 'TXN001',
-      paymentDate: '2024-01-20',
-      paymentAmount: 100.00,
-      paymentMethod: 'ACH',
-      payer: {
-        id: 'PAYER001',
-        name: 'Test Payer',
-      },
-      payee: {
-        npi: '1234567890',
-      },
-      claims: [{
-        claimId: 'CLM001',
-        claimStatusCode: '1',
-        chargedAmount: 100.00,
-        paidAmount: 100.00,
-        patient: {
-          firstName: 'John',
-          lastName: 'Doe',
-          memberId: 'MEM001',
-        },
-        // No patientResponsibility field
-      }],
-    };
-
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
-    expect(eob.total).toBeDefined();
-    const deductible = eob.total!.find(t => t.category.coding![0].code === 'deductible');
-    expect(deductible).toBeUndefined();
-  });
-
-  it('maps X12 835 with check number', () => {
-    const x12_835: X12_835 = {
-      transactionId: 'TXN001',
-      paymentDate: '2024-01-20',
-      paymentAmount: 100.00,
-      paymentMethod: 'CHK',
-      checkNumber: 'CHK12345',
-      payer: {
-        id: 'PAYER001',
-        name: 'Test Payer',
-      },
-      payee: {
-        npi: '1234567890',
-      },
-      claims: [{
-        claimId: 'CLM001',
-        claimStatusCode: '1',
-        chargedAmount: 100.00,
-        paidAmount: 100.00,
-        patient: {
-          firstName: 'John',
-          lastName: 'Doe',
-          memberId: 'MEM001',
-        },
-      }],
-    };
-
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
-    expect(eob.payment?.identifier?.value).toBe('CHK12345');
-  });
-
-  it('maps X12 837 without diagnosis codes', () => {
-    const x12_837: X12_837 = {
-      claimId: 'CLM001',
-      transactionDate: '20240115-1430',
-      totalClaimChargeAmount: 100.00,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '20240115',
-        units: 1,
-        chargeAmount: 100.00,
-      }],
-      // No diagnosisCodes
-      payerId: 'PAYER001',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    expect(claim.diagnosis).toBeUndefined();
-  });
-
-  it('handles invalid time in datetime (hours > 23)', () => {
-    const x12_837: X12_837 = {
-      claimId: 'CLM001',
-      transactionDate: '20240115-2599', // Invalid: hour 25, minute 99
-      totalClaimChargeAmount: 100.00,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '20240115',
-        units: 1,
-        chargeAmount: 100.00,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER001',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    // Should default to midnight when time is invalid
-    expect(claim.created).toBe('2024-01-15T00:00:00Z');
-  });
-
-  it('handles invalid date components (month > 12, day > 31)', () => {
-    const x12_837: X12_837 = {
-      claimId: 'CLM001',
-      transactionDate: '20241332-1430', // Invalid: month 13, day 32
-      totalClaimChargeAmount: 100.00,
-      subscriber: {
-        memberId: 'MEM001',
-        firstName: 'John',
-        lastName: 'Doe',
-        dob: '19850615',
-      },
-      billingProvider: {
-        npi: '1234567890',
-      },
-      serviceLines: [{
-        lineNumber: 1,
-        procedureCode: '99213',
-        serviceDate: '20240115',
-        units: 1,
-        chargeAmount: 100.00,
-      }],
-      diagnosisCodes: [],
-      payerId: 'PAYER001',
-    };
-
-    const claim = mapX12_837_ToFhirClaim(x12_837);
-    // Should return invalid date as-is since date components are invalid
-    expect(claim.created).toContain('20241332');
-  });
-
-  it('maps X12 835 with complete payment (paidAmount equals chargedAmount)', () => {
-    const x12_835: X12_835 = {
-      transactionId: 'TXN001',
-      paymentDate: '2024-01-20',
-      paymentAmount: 100.00,
-      paymentMethod: 'CHK',
-      checkNumber: 'CHK123',
-      payer: {
-        id: 'PAYER001',
-        name: 'Test Payer',
-      },
-      payee: {
-        npi: '1234567890',
-      },
-      claims: [{
-        claimId: 'CLM001',
-        claimStatusCode: '1',
-        chargedAmount: 100.00,
-        paidAmount: 100.00, // Full payment
-        patient: {
-          firstName: 'John',
-          lastName: 'Doe',
-          memberId: 'MEM001',
-        },
-      }],
-    };
-
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
-    expect(eob.payment?.type?.coding?.[0].code).toBe('complete');
-  });
-
-  it('maps X12 835 with partial payment (paidAmount less than chargedAmount)', () => {
-    const x12_835: X12_835 = {
-      transactionId: 'TXN001',
-      paymentDate: '2024-01-20',
-      paymentAmount: 80.00,
-      paymentMethod: 'ACH',
-      payer: {
-        id: 'PAYER001',
-        name: 'Test Payer',
-      },
-      payee: {
-        npi: '1234567890',
-      },
-      claims: [{
-        claimId: 'CLM001',
-        claimStatusCode: '1',
-        chargedAmount: 100.00,
-        paidAmount: 80.00, // Partial payment
-        patient: {
-          firstName: 'John',
-          lastName: 'Doe',
-          memberId: 'MEM001',
-        },
-      }],
-    };
-
-    const eob = mapX12_835_ToFhirExplanationOfBenefit(x12_835, 0);
-    expect(eob.payment?.type?.coding?.[0].code).toBe('partial');
+        claims: [
+          {
+            claimId: 'CLM004',
+            patient: {
+              memberId: 'MEM004',
+              firstName: 'Alice',
+              lastName: 'Brown'
+            },
+            claimStatusCode: '1',
+            totalChargeAmount: 100.00,
+            totalPaidAmount: 90.00,
+            serviceDateFrom: '20240110',
+            serviceLines: [
+              {
+                lineNumber: 1,
+                procedureCode: '99211',
+                serviceDate: '20240110',
+                chargeAmount: 100.00,
+                paidAmount: 90.00
+              }
+            ]
+          }
+        ]
+      };
+      
+      const eobs = mapX12835ToFhirExplanationOfBenefit(input);
+      const eob = eobs[0];
+      
+      expect(eob.meta?.profile).toBeDefined();
+      expect(eob.meta!.profile!.some(p => p.includes('us-core'))).toBe(true);
+      expect(eob.meta!.profile!.some(p => p.includes('davinci-pdex'))).toBe(true);
+    });
   });
 });

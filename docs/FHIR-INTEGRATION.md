@@ -1,9 +1,8 @@
-# FHIR R4 Integration Guide - Complete CMS-0057-F Compliance
+# FHIR R4 Integration Guide - CMS-0057-F Eligibility, Claims & Prior Authorization
 
 **Cloud Health Office** - HIPAA-compliant FHIR R4 integration for payer systems
 
-This document details the FHIR R4 implementation for mapping X12 EDI transactions to FHIR resources, supporting CMS Patient Access API mandates and CMS-0057-F Prior Authorization requirements.
-This document details the FHIR R4 implementation for mapping X12 EDI transactions to FHIR resources, supporting CMS Patient Access API (CMS-9115-F) and Prior Authorization API (CMS-0057-F) mandates.
+This guide explains how Cloud Health Office maps HIPAA X12 transactions to HL7 FHIR R4 resources to satisfy CMS-0057-F Prior Authorization, CMS-9115-F Patient Access, and related interoperability mandates.
 
 **Comprehensive Coverage:**
 - **Eligibility Verification** (X12 270/271 ↔ FHIR)
@@ -16,45 +15,86 @@ This document details the FHIR R4 implementation for mapping X12 EDI transaction
 
 ## Table of Contents
 
-### Part 1: Eligibility Verification
-1. [Overview](#overview)
-2. [CMS Interoperability Compliance](#cms-interoperability-compliance)
-3. [Architecture](#architecture)
-4. [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
-5. [X12 837 to FHIR Claim Mapping](#x12-837-to-fhir-claim-mapping)
-6. [X12 278 to FHIR ServiceRequest Mapping](#x12-278-to-fhir-servicerequest-mapping)
-7. [X12 835 to FHIR ExplanationOfBenefit Mapping](#x12-835-to-fhir-explanationofbenefit-mapping)
-8. [Compliance Checker](#compliance-checker)
-9. [Usage Examples](#usage-examples)
-10. [Testing](#testing)
-11. [Security and HIPAA Compliance](#security-and-hipaa-compliance)
+- [Overview](#overview)
+- [CMS-0057-F Compliance](#cms-0057-f-compliance)
+- [Provider Access API (CMS-0057-F)](#provider-access-api-cms-0057-f)
+- [Architecture](#architecture)
+- [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
+- [Payer-to-Payer Data Exchange (CMS-0057-F)](#payer-to-payer-data-exchange-cms-0057-f)
+- [Payer-to-Payer Testing](#payer-to-payer-testing)
+- [Usage Examples](#usage-examples)
+- [Native HTTP Integration](#native-http-integration)
+- [Eligibility API Endpoints](#eligibility-api-endpoints)
+- [Provider Access Testing](#provider-access-testing)
+- [Security and HIPAA Compliance](#security-and-hipaa-compliance)
+- [Roadmap](#roadmap)
+- [Support](#support)
+- [References](#references)
+- [Prior Authorization Overview](#prior-authorization-overview)
+- [Prior Authorization Architecture](#prior-authorization-architecture)
+- [X12 278 to FHIR R4 Mapping](#x12-278-to-fhir-r4-mapping)
+- [Decision Timeline & SLA Compliance](#decision-timeline--sla-compliance)
+- [Attachment Handling](#attachment-handling)
+- [Da Vinci CRD Integration](#da-vinci-crd-integration)
+- [Clearinghouse Integration](#clearinghouse-integration)
+- [Prior Authorization API Endpoints](#api-endpoints-1)
+- [Prior Authorization Testing](#testing-1)
+- [Compliance FAQ](#compliance-faq)
 
 ---
 
 ## Overview
 
-Cloud Health Office provides comprehensive FHIR R4 integration for healthcare payer systems, enabling seamless conversion between traditional X12 EDI transactions and modern FHIR APIs. This implementation covers the complete lifecycle:
+Cloud Health Office provides comprehensive FHIR R4 integration for healthcare payer systems, enabling seamless conversion between traditional X12 EDI transactions and modern FHIR APIs. This implementation now includes full CMS-0057-F support with complete transaction coverage:
 
-- **X12 270**: Health Care Eligibility Benefit Inquiry (EDI → FHIR Patient + CoverageEligibilityRequest)
-- **X12 837**: Professional Claims (EDI → FHIR Claim)
-- **X12 278**: Prior Authorization Requests (EDI → FHIR ServiceRequest)
-- **X12 835**: Remittance Advice (EDI → FHIR ExplanationOfBenefit)
+### Supported Transactions
 
-### Key Features
+- **X12 270/271**: Health Care Eligibility Benefit Inquiry/Response (EDI ↔ FHIR)
+- **X12 837**: Professional/Institutional Claims (EDI → FHIR Claim)
+- **X12 278**: Prior Authorization Request/Response (EDI → FHIR ServiceRequest)
+- **X12 835**: Electronic Remittance Advice (EDI → FHIR ExplanationOfBenefit)
 
-✅ **CMS-0057-F Compliant**: Full Prior Authorization rule implementation  
-✅ **Standards Compliant**: HIPAA X12 standards and HL7 FHIR R4 v4.0.1  
+### Provider Access Key Features
+
+✅ **CMS-0057-F Compliant**: Full Prior Authorization Final Rule implementation  
+✅ **Standards Compliant**: HIPAA X12 005010 series and HL7 FHIR R4  
 ✅ **CMS Patient Access Ready**: Supports CMS-9115-F final rule requirements  
-✅ **US Core Profile**: Aligns with US Core IG v3.1.1+ for all resources  
-✅ **Da Vinci Implementation Guides**: PDex, PAS, CRD, DTR support  
-✅ **Comprehensive Mapping**: Complete clinical, financial, and administrative data  
-✅ **Compliance Validation**: Built-in CMS-0057-F timeline and profile checking  
-✅ **Production Ready**: Fully tested with 75+ test cases and 100% coverage  
+✅ **US Core + Da Vinci**: US Core IG v3.1.1+ and Da Vinci PAS/PDex/CRD/DTR  
+✅ **Compliance Checker**: Automated validation against CMS rules and timelines  
+✅ **Azure FHIR Integration**: Profile validation via Azure API for FHIR  
+✅ **Production Ready**: 45 comprehensive tests with 100% pass rate  
 ✅ **TypeScript Native**: Type-safe implementation with @types/fhir
 
 ---
 
-## CMS Interoperability Compliance
+## CMS-0057-F Compliance
+
+### CMS Interoperability and Prior Authorization Final Rule
+
+**CMS-0057-F** (Advancing Interoperability and Improving Prior Authorization Processes) requires payers to implement FHIR-based APIs for prior authorization and patient data exchange. Our implementation provides complete coverage:
+
+#### CMS-0057-F Requirements
+
+1. **Prior Authorization API (§438.242(c))**
+   - FHIR-based prior authorization submission and status
+   - ServiceRequest resource for authorization requests
+   - Real-time decision support (Da Vinci CRD)
+   - Documentation templates (Da Vinci DTR)
+   
+2. **Patient Access API (§438.242(b)(2))**
+   - FHIR R4-based API for patient data access
+   - Claims and encounter data via FHIR resources
+   - Prior authorization data in standardized format
+   
+3. **Provider Access API (§438.242(b)(3))**
+   - Access to patient data for in-network providers
+   - Claims status and remittance information
+   - Prior authorization status and decisions
+
+4. **Payer-to-Payer Data Exchange (§438.242(b)(4))**
+   - Interoperable patient data exchange via FHIR
+   - 5-year historical data requirement
+   - US Core Data for Interoperability (USCDI) compliance
 
 ### CMS-9115-F Patient Access Final Rule
 
@@ -143,7 +183,7 @@ The Provider Access API supports search and read operations for the following FH
 
 The Provider Access API uses SMART on FHIR for secure authentication:
 
-```
+```text
 1. Provider EHR initiates OAuth2 authorization request
    ↓
 2. Provider authenticates with Azure AD / Identity Provider
@@ -170,6 +210,7 @@ Patient consent is required before providers can access data via the Provider Ac
 - **Revocation**: Patients can revoke consent at any time
 
 **Consent Statuses:**
+
 - `active` - Provider has access to patient data
 - `inactive` - Consent not yet effective
 - `revoked` - Patient has revoked consent
@@ -178,12 +219,14 @@ Patient consent is required before providers can access data via the Provider Ac
 ### API Endpoints
 
 #### Search Resources
-```
+
+```text
 GET /[ResourceType]?patient=[patientId]&[other-params]
 Authorization: Bearer {access_token}
 ```
 
 **Supported Parameters:**
+
 - `patient` - Patient identifier (required)
 - `date` - Filter by service/effective date
 - `status` - Filter by resource status
@@ -192,12 +235,14 @@ Authorization: Bearer {access_token}
 - `_page` - Page number (pagination)
 
 **Example Request:**
+
 ```http
 GET /Condition?patient=PAT123&clinical-status=active
 Authorization: Bearer provider:NPI12345:abc123token
 ```
 
 **Example Response:**
+
 ```json
 {
   "resourceType": "Bundle",
@@ -233,18 +278,21 @@ Authorization: Bearer provider:NPI12345:abc123token
 ```
 
 #### Read Specific Resource
-```
+
+```text
 GET /[ResourceType]/[id]
 Authorization: Bearer {access_token}
 ```
 
 **Example Request:**
+
 ```http
 GET /Patient/PAT123
 Authorization: Bearer provider:NPI12345:abc123token
 ```
 
 **Example Response:**
+
 ```json
 {
   "resourceType": "Patient",
@@ -278,11 +326,12 @@ Authorization: Bearer provider:NPI12345:abc123token
 }
 ```
 
-### Error Handling
+### Payer-to-Payer Error Handling
 
 The Provider Access API returns FHIR OperationOutcome resources for errors:
 
 #### Authentication Error (401)
+
 ```json
 {
   "resourceType": "OperationOutcome",
@@ -295,6 +344,7 @@ The Provider Access API returns FHIR OperationOutcome resources for errors:
 ```
 
 #### Consent Denied (403)
+
 ```json
 {
   "resourceType": "OperationOutcome",
@@ -307,6 +357,7 @@ The Provider Access API returns FHIR OperationOutcome resources for errors:
 ```
 
 #### Resource Not Found (404)
+
 ```json
 {
   "resourceType": "OperationOutcome",
@@ -323,6 +374,7 @@ The Provider Access API returns FHIR OperationOutcome resources for errors:
 The Provider Access API includes mappers to transform backend payer system data (e.g., QNXT) to FHIR resources:
 
 **Patient Mapping:**
+
 ```typescript
 // QNXT Patient data
 const qnxtPatient = {
@@ -341,6 +393,7 @@ const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
 ```
 
 **Claim Mapping:**
+
 ```typescript
 // QNXT Claim data
 const qnxtClaim = {
@@ -361,6 +414,7 @@ const fhirClaim = api.mapQnxtClaimToFhir(qnxtClaim);
 ```
 
 **Encounter Mapping:**
+
 ```typescript
 // QNXT Encounter data
 const qnxtEncounter = {
@@ -382,6 +436,7 @@ const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
 The Provider Access API implements comprehensive HIPAA safeguards:
 
 #### 1. Encryption (AES-256-GCM)
+
 ```typescript
 // Encrypt PHI data
 const encrypted = api.encryptPhi('John Doe, SSN: 123-45-6789');
@@ -391,7 +446,9 @@ const decrypted = api.decryptPhi(encrypted);
 ```
 
 #### 2. Audit Logging
+
 All access is logged with:
+
 - Timestamp
 - Event type (access, search, read, consent_check, auth_failure)
 - User/Provider identifier
@@ -402,13 +459,15 @@ All access is logged with:
 - Details
 
 **Audit Log Example:**
-```
+
+```text
 [AUDIT] 2024-01-15T10:30:00Z - search - success - User: NPI12345 - Search: Patient with params {"patient":"PAT123"}
 [AUDIT] 2024-01-15T10:30:01Z - consent_check - success - User: NPI12345 - Patient: PAT123
 [AUDIT] 2024-01-15T10:30:02Z - read - success - User: NPI12345 - Read: Patient/PAT123
 ```
 
 #### 3. PHI Redaction
+
 ```typescript
 // Original patient resource
 const patient = { /* full PHI */ };
@@ -430,6 +489,7 @@ Deploy the Provider Access API behind Azure API Management for:
 - **Transformation**: Additional request/response processing if needed
 
 **Example API Management Policy:**
+
 ```xml
 <policies>
   <inbound>
@@ -479,7 +539,7 @@ const patient = await api.readResource('Patient', 'PAT123', token);
 const auditLogs = api.getAuditLogs();
 ```
 
-### Testing
+### Provider Access Testing
 
 The Provider Access API includes 44 comprehensive unit tests covering:
 
@@ -497,12 +557,14 @@ The Provider Access API includes 44 comprehensive unit tests covering:
 - ✅ Integration scenarios
 
 **Run Provider Access API tests:**
+
 ```bash
 npm run test:fhir
 ```
 
 **Expected Output:**
-```
+
+```text
 PASS src/fhir/__tests__/provider-access-api.test.ts
   ProviderAccessApi
     ✓ should validate SMART on FHIR tokens
@@ -518,11 +580,11 @@ Tests: 44 passed, 44 total
 
 ---
 
-## Architecture
+## Prior Authorization Architecture
 
 ### High-Level Flow
 
-```
+```text
 ┌─────────────┐      X12 270        ┌──────────────────┐
 │   Provider  │ ──────────────────> │  Cloud Health    │
 │   System    │                     │    Office        │
@@ -638,17 +700,18 @@ Common X12 service type codes mapped to FHIR benefit categories:
 | 88 | Pharmacy | Pharmacy |
 | 98 | Professional (Physician) Visit - Office | Professional (Physician) Visit - Office |
 
-*Full list of 100+ service type codes implemented in mapper*
+Full list of 100+ service type codes implemented in mapper.
 
 ---
 
 ## Payer-to-Payer Data Exchange (CMS-0057-F)
 
-### Overview
+### Payer-to-Payer Overview
 
 The CMS-0057-F Final Rule mandates that payers implement APIs to exchange patient health information when members switch between health plans. Cloud Health Office provides a comprehensive Payer-to-Payer (P2P) data exchange solution using FHIR R4 Bulk Data Access.
 
 **Key Features:**
+
 - ✅ FHIR R4 Bulk Data Export/Import (NDJSON format)
 - ✅ Member consent validation (opt-in flows)
 - ✅ Azure Service Bus integration for async workflows
@@ -713,7 +776,7 @@ await api.registerConsent(consent);
 
 ### Bulk Export Workflow
 
-**Step 1: Initiate Export**
+#### Step 1: Initiate Export
 
 ```typescript
 import { BulkExportRequest } from './src/fhir/payer-to-payer-api';
@@ -732,7 +795,7 @@ const result = await api.initiateExport(exportRequest);
 console.log(`Export job queued: ${result.exportId}`);
 ```
 
-**Step 2: Async Processing**
+#### Step 2: Async Processing
 
 The export is processed asynchronously by a worker:
 
@@ -747,11 +810,11 @@ exportResult.ndjsonFiles.forEach(file => {
 });
 ```
 
-**Step 3: Download NDJSON Files**
+#### Step 3: Download NDJSON Files
 
 Export produces NDJSON files in Azure Data Lake:
 
-```
+```text
 exports/EXP-20240115-001/Patient.ndjson
 exports/EXP-20240115-001/Claim.ndjson
 exports/EXP-20240115-001/ExplanationOfBenefit.ndjson
@@ -766,7 +829,7 @@ Each line in the NDJSON file is a valid FHIR R4 resource:
 
 ### Bulk Import Workflow
 
-**Step 1: Initiate Import**
+#### Step 1: Initiate Import
 
 ```typescript
 import { BulkImportRequest } from './src/fhir/payer-to-payer-api';
@@ -786,7 +849,7 @@ const result = await api.initiateImport(importRequest);
 console.log(`Import job queued: ${result.importId}`);
 ```
 
-**Step 2: Async Processing with Reconciliation**
+#### Step 2: Async Processing with Reconciliation
 
 ```typescript
 // Worker process (triggered by Service Bus message)
@@ -805,11 +868,13 @@ importResult.resourcesImported.forEach(res => {
 The import process includes duplicate detection using Da Vinci PDex member matching:
 
 **Patient Matching Criteria:**
+
 1. **Member ID match** (highest priority)
 2. **SSN match** (if available)
 3. **Composite match**: Last Name + First Name + DOB + Gender
 
 **Claim/EOB Matching Criteria:**
+
 1. Patient reference + Claim ID
 2. Patient reference + Service Date + Provider
 3. Patient reference + Service Date + Total Amount
@@ -880,17 +945,20 @@ node dist/src/fhir/generate-synthetic-bulk-data.js \
 ```
 
 **Generated Files:**
+
 - `Patient.ndjson` - US Core compliant Patient resources
 - `Claim.ndjson` - Professional, institutional, and pharmacy claims
 - `Encounter.ndjson` - Ambulatory, emergency, and inpatient encounters
 - `ExplanationOfBenefit.ndjson` - Adjudicated claims with payment info
 - `ServiceRequest.ndjson` - Prior authorization requests
 
+
 ### Azure Service Bus Integration
 
 The P2P API uses Azure Service Bus topics for async workflow orchestration:
 
 **Topics:**
+
 - `export-requests` - Queue export jobs
 - `import-requests` - Queue import jobs
 
@@ -930,7 +998,7 @@ receiver.subscribe({
 
 NDJSON files are stored in Azure Data Lake with hierarchical structure:
 
-```
+```text
 container: p2p-bulk-data/
 ├── exports/
 │   ├── EXP-20240115-001/
@@ -964,7 +1032,7 @@ await blobClient.upload(ndjsonContent, Buffer.byteLength(ndjsonContent), {
 });
 ```
 
-### Testing
+## Payer-to-Payer Testing
 
 **Run P2P Tests:**
 
@@ -977,6 +1045,7 @@ npm test -- --testPathPattern=payer-to-payer --coverage
 ```
 
 **Test Coverage:**
+
 - ✅ Consent management (7 tests)
 - ✅ Bulk export workflows (3 tests)
 - ✅ Bulk import workflows (2 tests)
@@ -1024,11 +1093,13 @@ npm test -- --testPathPattern=payer-to-payer --coverage
 ### Limitations and Future Enhancements
 
 **Current Limitations:**
+
 - In-memory consent registry (not persistent)
 - Simplified duplicate detection (production needs FHIR server integration)
 - Mock FHIR server queries (needs real FHIR server client)
 
 **Planned Enhancements:**
+
 - Integration with Azure Health Data Services FHIR server
 - PostgreSQL-backed consent registry
 - Advanced member matching ML models
@@ -1240,152 +1311,150 @@ console.log('Eligibility Request:', JSON.stringify(eligibility, null, 2));
 
 ---
 
-## fhir.js Integration
+## Native HTTP Integration
 
-### Installation
+The platform now uses standards-based HTTP clients (Node.js `fetch`, `axios`, or the `SecureFhirClient` helper included in this repo) instead of the deprecated `fhir.js` SDK. The examples below use global `fetch` available in Node.js 18+; adapt the same pattern for browsers or other runtimes.
 
-```bash
-npm install fhir.js @types/fhir
-```
-
-### Using fhir.js Client
-
-fhir.js provides a JavaScript/TypeScript client for interacting with FHIR servers:
+### Creating Resources with fetch
 
 ```typescript
-import Client from 'fhir.js';
 import { mapX12270ToFhirEligibility } from './src/fhir/fhirEligibilityMapper';
 
-// Initialize FHIR client
-const client = Client({
-  baseUrl: 'https://your-fhir-server.com/fhir',
-  auth: {
-    bearer: 'your-oauth-token-here'
+const fhirBaseUrl = 'https://your-fhir-server.com/fhir';
+const accessToken = await getAccessToken();
+
+function authHeaders() {
+  return {
+    'Content-Type': 'application/fhir+json',
+    Authorization: `Bearer ${accessToken}`
+  };
+}
+
+async function postResource(resourceType: string, resource: unknown) {
+  const response = await fetch(`${fhirBaseUrl}/${resourceType}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(resource)
+  });
+
+  if (!response.ok) {
+    const failure = await response.text();
+    throw new Error(`FHIR POST failed (${response.status}): ${failure}`);
   }
-});
 
-// Transform X12 to FHIR
+  return response.json();
+}
+
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
-
-// Create Patient resource on FHIR server
-client.create({
-  resource: patient
-}).then(response => {
-  console.log('Patient created:', response.id);
-}).catch(error => {
-  console.error('Error creating patient:', error);
-});
-
-// Create CoverageEligibilityRequest
-client.create({
-  resource: eligibility
-}).then(response => {
-  console.log('Eligibility request created:', response.id);
-}).catch(error => {
-  console.error('Error creating eligibility request:', error);
-});
+const createdPatient = await postResource('Patient', patient);
+const createdEligibility = await postResource('CoverageEligibilityRequest', eligibility);
 ```
 
 ### Searching for Patients
 
 ```typescript
-// Search by member ID
-client.search({
-  type: 'Patient',
-  query: {
-    identifier: 'THP123456789'
-  }
-}).then(bundle => {
-  console.log('Found patients:', bundle.entry.length);
-  bundle.entry.forEach(entry => {
-    console.log('Patient:', entry.resource);
+async function searchPatients(by: Record<string, string>) {
+  const params = new URLSearchParams(by);
+  const response = await fetch(`${fhirBaseUrl}/Patient?${params.toString()}`, {
+    headers: authHeaders()
   });
-});
 
-// Search by name and birthdate
-client.search({
-  type: 'Patient',
-  query: {
-    family: 'Doe',
-    given: 'John',
-    birthdate: '1985-06-15'
+  if (!response.ok) {
+    throw new Error(`FHIR search failed: ${response.status}`);
   }
-}).then(bundle => {
-  console.log('Matching patients:', bundle.entry);
-});
+
+  const bundle = await response.json();
+  return bundle.entry?.map((entry: { resource: unknown }) => entry.resource) ?? [];
+}
+
+const patientsByIdentifier = await searchPatients({ identifier: 'THP123456789' });
+const patientsByDemographics = await searchPatients({ family: 'Doe', given: 'John', birthdate: '1985-06-15' });
 ```
 
 ### Updating Resources
 
 ```typescript
-// Fetch existing patient
-client.read({
-  type: 'Patient',
-  id: 'THP123456789'
-}).then(patient => {
-  // Update telecom
-  patient.telecom = patient.telecom || [];
-  patient.telecom.push({
-    system: 'phone',
-    value: '512-555-9999',
-    use: 'mobile'
+async function updatePatient(patientId: string, updater: (resource: any) => any) {
+  const readResponse = await fetch(`${fhirBaseUrl}/Patient/${patientId}`, {
+    headers: authHeaders()
   });
-  
-  // Update on server
-  return client.update({
-    resource: patient
+
+  if (!readResponse.ok) {
+    throw new Error(`Unable to read patient ${patientId}: ${readResponse.status}`);
+  }
+
+  const patient = await readResponse.json();
+  const updated = updater(patient);
+
+  const updateResponse = await fetch(`${fhirBaseUrl}/Patient/${patientId}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(updated)
   });
-}).then(updated => {
-  console.log('Patient updated:', updated);
+
+  if (!updateResponse.ok) {
+    const failure = await updateResponse.text();
+    throw new Error(`FHIR update failed (${updateResponse.status}): ${failure}`);
+  }
+
+  return updateResponse.json();
+}
+
+await updatePatient('THP123456789', (patient) => {
+  const telecom = patient.telecom ?? [];
+  telecom.push({ system: 'phone', value: '512-555-9999', use: 'mobile' });
+  return { ...patient, telecom };
 });
 ```
 
 ### Handling CoverageEligibilityResponse
 
 ```typescript
-// Poll for eligibility response
-client.search({
-  type: 'CoverageEligibilityResponse',
-  query: {
-    request: `CoverageEligibilityRequest/${eligibility.id}`
+async function getEligibilityResponse(requestId: string) {
+  const params = new URLSearchParams({ request: `CoverageEligibilityRequest/${requestId}` });
+  const response = await fetch(`${fhirBaseUrl}/CoverageEligibilityResponse?${params.toString()}`, {
+    headers: authHeaders()
+  });
+
+  if (!response.ok) {
+    throw new Error(`CoverageEligibilityResponse search failed: ${response.status}`);
   }
-}).then(bundle => {
-  if (bundle.entry && bundle.entry.length > 0) {
-    const response = bundle.entry[0].resource;
-    console.log('Eligibility status:', response.outcome);
-    console.log('Insurance details:', response.insurance);
-  }
-});
-```
 
-### Validation with fhir.js
-
-```typescript
-import { validateResource } from 'fhir.js';
-
-// Validate generated FHIR resources
-const patientValidation = validateResource(patient);
-if (patientValidation.valid) {
-  console.log('✅ Patient resource is valid');
-} else {
-  console.error('❌ Patient validation errors:', patientValidation.errors);
+  const bundle = await response.json();
+  return bundle.entry?.[0]?.resource;
 }
 
-const eligibilityValidation = validateResource(eligibility);
-if (eligibilityValidation.valid) {
-  console.log('✅ Eligibility request is valid');
-} else {
-  console.error('❌ Eligibility validation errors:', eligibilityValidation.errors);
+const eligibilityResponse = await getEligibilityResponse(createdEligibility.id);
+console.log('Eligibility status:', eligibilityResponse?.outcome);
+console.log('Insurance details:', eligibilityResponse?.insurance);
+```
+
+### Validation without fhir.js
+
+```typescript
+import Ajv from 'ajv';
+import { patientSchema, coverageEligibilityRequestSchema } from './schemas';
+
+const ajv = new Ajv();
+const validatePatient = ajv.compile(patientSchema);
+const validateEligibility = ajv.compile(coverageEligibilityRequestSchema);
+
+if (!validatePatient(patient)) {
+  throw new Error(`Invalid Patient: ${JSON.stringify(validatePatient.errors)}`);
+}
+
+if (!validateEligibility(eligibility)) {
+  throw new Error(`Invalid CoverageEligibilityRequest: ${JSON.stringify(validateEligibility.errors)}`);
 }
 ```
 
 ---
 
-## API Endpoints
+## Eligibility API Endpoints
 
 ### Recommended RESTful API Structure
 
-```
+```text
 POST   /api/fhir/eligibility/inquiry
   → Accept X12 270 EDI, return FHIR CoverageEligibilityRequest ID
 
@@ -1461,11 +1530,11 @@ app.listen(3000, () => {
 
 ## Payer-to-Payer API (CMS-0057-F)
 
-### Overview
+### Payer-to-Payer API Overview
 
 The Payer-to-Payer API enables secure FHIR R4-compliant data exchange between health plans during member plan transitions, in compliance with CMS-0057-F requirements (effective 2027).
 
-### Key Features
+### Payer-to-Payer API Key Features
 
 - **Bulk Data Export/Import**: NDJSON format per FHIR Bulk Data Access IG
 - **Azure Integration**: Service Bus for async workflows, Data Lake for storage
@@ -1475,7 +1544,7 @@ The Payer-to-Payer API enables secure FHIR R4-compliant data exchange between he
 - **US Core Validation**: Profile compliance checking
 - **5-Year History**: Support for historical data exchange
 
-### Supported Resource Types
+### Payer-to-Payer Supported Resource Types
 
 1. **Patient** - Demographics and member information
 2. **Claim** - Professional, institutional, pharmacy claims
@@ -1483,9 +1552,9 @@ The Payer-to-Payer API enables secure FHIR R4-compliant data exchange between he
 4. **ExplanationOfBenefit** - Adjudicated claim details
 5. **ServiceRequest** - Prior authorization requests (278)
 
-### Architecture
+### Payer-to-Payer Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────────┐
 │                  Source Payer System                       │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -1673,6 +1742,7 @@ console.log('Match Details:', matchResult.matchDetails);
 ```
 
 **Matching Algorithm:**
+
 - **Name**: 25% weight (family + given name)
 - **Birth Date**: 25% weight
 - **Identifier**: 20% weight (SSN, member ID)
@@ -1700,6 +1770,7 @@ console.log('FHIR Consent:', consent.fhirConsent);
 ```
 
 **FHIR Consent Resource:**
+
 ```json
 {
   "resourceType": "Consent",
@@ -1751,7 +1822,7 @@ console.log('FHIR Consent:', consent.fhirConsent);
 
 FHIR resources are exported in NDJSON (Newline Delimited JSON) format:
 
-```
+```text
 {"resourceType":"Patient","id":"patient-001","name":[{"family":"Smith","given":["Jane"]}],"gender":"female","birthDate":"1985-06-15"}
 {"resourceType":"Patient","id":"patient-002","name":[{"family":"Doe","given":["John"]}],"gender":"male","birthDate":"1990-03-21"}
 {"resourceType":"Patient","id":"patient-003","name":[{"family":"Johnson","given":["Robert"]}],"gender":"male","birthDate":"1975-11-08"}
@@ -1764,6 +1835,7 @@ Each line is a complete, valid JSON object representing a single FHIR resource.
 The API automatically handles data reconciliation during import:
 
 **Deduplication:**
+
 ```typescript
 // Import with deduplication enabled
 const result = await api.importBulkData({
@@ -1776,6 +1848,7 @@ console.log(result.imported[0].duplicatesSkipped); // 5
 ```
 
 **US Core Validation:**
+
 ```typescript
 // Import with US Core profile validation
 const result = await api.importBulkData({
@@ -1826,16 +1899,19 @@ try {
 ### Performance Considerations
 
 **Export Performance:**
+
 - Batch size: 1,000 resources per NDJSON file recommended
 - Parallel uploads to Data Lake for large datasets
 - Service Bus notifications for async processing
 
 **Import Performance:**
+
 - Streaming NDJSON parsing for memory efficiency
 - Parallel resource processing for large datasets
 - Deduplication uses Set for O(1) lookup
 
 **Storage Costs:**
+
 - Data Lake Gen2: ~$0.018/GB/month (Cool tier)
 - Service Bus Standard: $0.05/million operations
 - Minimal cost for typical payer exchange volumes
@@ -1883,7 +1959,8 @@ node dist/scripts/utils/generate-payer-exchange-data.js 50 ./test-data
 
 ### Test Coverage
 
-**X12 270 to FHIR R4 Mapping (19 tests):**
+- **X12 270 to FHIR R4 Mapping (19 tests):**
+
 - Basic mapping (minimal required fields)
 - Gender code mapping (M, F, U, missing)
 - Date format handling
@@ -1892,6 +1969,7 @@ node dist/scripts/utils/generate-payer-exchange-data.js 50 ./test-data
 - Dependent vs subscriber handling
 
 **Payer-to-Payer API (15 tests):**
+
 - **Bulk Export** (3 tests)
   - Single resource type export
   - Multiple resource types export
@@ -1926,7 +2004,7 @@ Current test suite includes:
 - ✅ CMS interoperability requirements
 - ✅ Edge cases and error handling
 
-**Coverage: 19 test cases, 100% pass rate**
+Coverage: 19 test cases, 100% pass rate
 
 ### Sample Test
 
@@ -1970,6 +2048,7 @@ it('maps complete subscriber information including address and contact', () => {
 ⚠️ **CRITICAL**: FHIR resources contain Protected Health Information (PHI)
 
 **Required Safeguards**:
+
 1. ✅ Encrypt data at rest (Azure Storage encryption)
 2. ✅ Encrypt data in transit (TLS 1.2+)
 3. ✅ Access controls (RBAC, managed identity)
@@ -1998,6 +2077,7 @@ if ('ssn' in member && member.ssn) {
 ```
 
 **Best Practices**:
+
 - ❌ Never log SSN in Application Insights
 - ❌ Never return SSN in API responses (unless required for specific use case)
 - ✅ Use for patient matching only
@@ -2054,6 +2134,7 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 ## Roadmap
 
 ### Q4 2024 - Completed
+
 - [x] X12 270 → FHIR R4 Patient mapping
 - [x] X12 270 → FHIR R4 CoverageEligibilityRequest
 - [x] CMS-0057-F Payer-to-Payer bulk data exchange
@@ -2064,16 +2145,19 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 - [x] Synthetic FHIR bulk data generator
 
 ### Q1 2025
+
 - [ ] X12 271 → FHIR R4 CoverageEligibilityResponse
 - [ ] FHIR CoverageEligibilityRequest → X12 270 (reverse)
 
 ### Q2 2025
+
 - [ ] X12 837 Claims → FHIR R4 Claim resource
 - [ ] FHIR R4 Claim → X12 837 (reverse)
 - [ ] FHIR Coverage resource implementation
 - [ ] Da Vinci PDex profile compliance
 
 ### Q3 2025
+
 - [ ] Prior authorization workflows (X12 278 ↔ FHIR)
 - [ ] Attachments (X12 275 ↔ FHIR DocumentReference)
 - [ ] SMART on FHIR integration
@@ -2088,6 +2172,7 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 **License**: Apache 2.0
 
 **Contributors**:
+
 - GitHub Copilot (AI-assisted development)
 - Aurelianware development team
 
@@ -2096,17 +2181,20 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 ## References
 
 ### Standards
+
 - [HL7 FHIR R4 Specification](https://hl7.org/fhir/R4/)
 - [US Core Implementation Guide](http://hl7.org/fhir/us/core/)
 - [Da Vinci Payer Data Exchange](http://hl7.org/fhir/us/davinci-pdex/)
 - [X12 005010X279A1 Implementation Guide](https://x12.org/)
 
 ### Regulations
+
 - [CMS-9115-F: Patient Access Final Rule](https://www.cms.gov/regulations-and-guidance/legislation/hipaa/interoperability-and-patient-access)
 - [CMS-0057-F: Prior Authorization Rule](https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f)
 - [HIPAA Security Rule](https://www.hhs.gov/hipaa/for-professionals/security/index.html)
 
 ### Tools
+
 - [fhir.js](https://github.com/FHIR/fhir.js) - FHIR JavaScript library
 - [@types/fhir](https://www.npmjs.com/package/@types/fhir) - TypeScript definitions
 - [FHIR Validator](https://validator.fhir.org/) - Online resource validation
@@ -2119,7 +2207,7 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 
 ---
 
-# Prior Authorization API - CMS-0057-F Implementation
+## Prior Authorization API - CMS-0057-F Implementation
 
 **NEW**: FHIR R4 Prior Authorization Support (Effective 2027)
 
@@ -2154,7 +2242,7 @@ The CMS-0057-F Prior Authorization Final Rule (effective January 2027) requires 
 
 ### Prior Authorization Workflow
 
-```
+```text
 ┌─────────────┐      X12 278        ┌──────────────────┐
 │   Provider  │ ──────────────────> │  Clearinghouse   │
 │   System    │      Request        │   (Availity)     │
