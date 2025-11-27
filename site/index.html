@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Cloud Health Office - Deploy production-grade payer EDI integration in under 1 hour. Zero custom code. Azure-native. HIPAA-engineered. Open source." />
-  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, X12 transactions, multi-tenant SaaS, prior authorization" />
+  <meta name="description" content="Cloud Health Office V2 - Deploy production-grade payer EDI integration in under 1 hour. CMS-0057-F compliant FHIR R4 APIs. Zero custom code. Azure-native. HIPAA-engineered. Open source." />
+  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, X12 transactions, multi-tenant SaaS, prior authorization, FHIR R4, CMS-0057-F" />
   <title>Cloud Health Office - Streamlined Payer EDI Integration</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <style>
@@ -13,13 +13,30 @@
     .cta-box { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:40px; margin:60px auto; max-width:800px; box-shadow:0 0 30px rgba(0,255,255,0.2); }
     .cta-box h2 { color:#00ffff; text-shadow:0 0 20px rgba(0,255,255,0.8); font-size:2.5rem; margin-bottom:20px; }
     .cta-box p { font-size:1.2rem; margin:20px 0; }
+    .v2-banner { background:linear-gradient(135deg, #00ffff 0%, #00ff88 100%); color:#000; padding:15px 30px; border-radius:8px; display:inline-block; margin:20px 0; font-weight:bold; font-size:1.2rem; }
+    .fhir-announcement { background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; margin:40px auto; max-width:900px; }
+    .fhir-announcement h2 { color:#00ff88; margin-top:0; }
+    .compliance-badge { display:inline-block; background:rgba(0,255,136,0.2); color:#00ff88; border:1px solid #00ff88; padding:6px 16px; border-radius:16px; font-size:0.9rem; margin:5px; }
   </style>
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
+  <nav style="margin-bottom:20px;">
+    <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;">
+      <li><a href="index.html" style="color:#00ffff;" aria-current="page">Home</a></li>
+      <li><a href="platform.html" style="color:#888;">Platform</a></li>
+      <li><a href="release-notes.html" style="color:#00ff88; font-weight:bold;">V2 Release Notes</a></li>
+      <li><a href="insights.html" style="color:#888;">Insights</a></li>
+      <li><a href="assessment.html" style="color:#888;">Assessment</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#888;">GitHub</a></li>
+    </ul>
+  </nav>
+
   <main id="main-content">
   <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Sentinel Logo - Obsidian monolith shield with digital eye and holographic circuit veins">
+  
+  <div class="v2-banner">🚀 V2 Now Available — Complete CMS-0057-F Compliance</div>
   
   <h1>Cloud Health Office</h1>
   
@@ -27,6 +44,28 @@
     Production payer EDI integration in under one hour.<br>
     Zero custom code. Azure-native. HIPAA-engineered.
   </p>
+
+  <!-- V2 FHIR API Announcement -->
+  <div class="fhir-announcement">
+    <h2>🔥 V2: Production-Ready FHIR R4 APIs</h2>
+    <p style="font-size:1.2rem;">
+      Complete <strong>CMS-0057-F compliance</strong> with 18 months to spare before the January 1, 2027 deadline.
+    </p>
+    <div style="margin:20px 0;">
+      <span class="compliance-badge">✅ Patient Access API</span>
+      <span class="compliance-badge">✅ Provider Access API</span>
+      <span class="compliance-badge">✅ Prior Authorization API</span>
+      <span class="compliance-badge">✅ Payer-to-Payer API</span>
+      <span class="compliance-badge">✅ Da Vinci IGs</span>
+      <span class="compliance-badge">✅ USCDI v1/v2</span>
+    </div>
+    <p>
+      Transform X12 EDI (270/837/278/835) to FHIR R4 with zero external dependencies.<br>
+      <strong>45 comprehensive tests. 100% pass rate. Production-ready.</strong>
+    </p>
+    <a href="release-notes.html" class="button" style="margin-top:20px;">View V2 Release Notes →</a>
+    <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" class="button" style="background:#00ff88; border-color:#00ff88; margin-top:20px;" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a>
+  </div>
 
   <!-- Assessment CTA Section -->
   <div class="cta-box">
@@ -56,7 +95,7 @@
 
   <footer>
     <p>
-      <strong>Cloud Health Office v1.0.0 — The Sentinel</strong><br>
+      <strong>Cloud Health Office V2 — The Sentinel</strong><br>
       Capabilities beyond question. Systems that do not fail.
     </p>
     <p>

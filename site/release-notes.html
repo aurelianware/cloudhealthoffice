@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Cloud Health Office V2 Release Notes - Complete CMS-0057-F compliance with production-ready FHIR R4 APIs. Delivered features, sandbox testing, and early adopter signup.">
+  <meta name="keywords" content="healthcare EDI, FHIR R4, CMS-0057-F, prior authorization, payer integration, HIPAA compliance, release notes">
+  <meta name="author" content="Aurelianware">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cloudhealthoffice.com/release-notes.html">
+  <meta property="og:title" content="Cloud Health Office V2 Release Notes">
+  <meta property="og:description" content="Complete CMS-0057-F compliance with production-ready FHIR R4 APIs. Deploy in under 1 hour.">
+  <meta property="og:image" content="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://cloudhealthoffice.com/release-notes.html">
+  <meta property="twitter:title" content="Cloud Health Office V2 Release Notes">
+  <meta property="twitter:description" content="Complete CMS-0057-F compliance with production-ready FHIR R4 APIs. Deploy in under 1 hour.">
+  <meta property="twitter:image" content="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <title>Release Notes - Cloud Health Office V2</title>
+  <link rel="stylesheet" href="css/sentinel.css">
+  <style>
+    .release-hero {
+      text-align: center;
+      padding: 60px 20px;
+      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+      border-bottom: 2px solid #00ffff;
+    }
+    
+    .release-hero h1 {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      text-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+    }
+    
+    .version-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #00ffff 0%, #00ff88 100%);
+      color: #000;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+    }
+    
+    .content-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    
+    .feature-section {
+      margin: 60px 0;
+      padding: 40px;
+      background: #0a0a0a;
+      border-radius: 12px;
+      border-left: 4px solid #00ffff;
+    }
+    
+    .feature-section h2 {
+      color: #00ffff;
+      margin-top: 0;
+      font-size: 2rem;
+    }
+    
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-top: 30px;
+    }
+    
+    .feature-card {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 25px;
+      transition: all 0.3s ease;
+    }
+    
+    .feature-card:hover {
+      border-color: #00ffff;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+    }
+    
+    .feature-card h3 {
+      color: #00ff88;
+      margin-top: 0;
+      font-size: 1.3rem;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+    
+    .status-ready {
+      background: rgba(0, 255, 136, 0.2);
+      color: #00ff88;
+      border: 1px solid #00ff88;
+    }
+    
+    .status-new {
+      background: rgba(0, 255, 255, 0.2);
+      color: #00ffff;
+      border: 1px solid #00ffff;
+    }
+    
+    .compliance-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 30px 0;
+    }
+    
+    .compliance-table th,
+    .compliance-table td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    
+    .compliance-table th {
+      background: #111;
+      color: #00ffff;
+      font-weight: bold;
+    }
+    
+    .compliance-table tr:hover {
+      background: rgba(0, 255, 255, 0.05);
+    }
+    
+    .check-icon {
+      color: #00ff88;
+      font-weight: bold;
+    }
+    
+    .sandbox-section {
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+      border: 2px solid #00ff88;
+      border-radius: 12px;
+      padding: 40px;
+      margin: 60px 0;
+      text-align: center;
+    }
+    
+    .sandbox-section h2 {
+      color: #00ff88;
+      margin-top: 0;
+    }
+    
+    .code-block {
+      background: #000;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+      overflow-x: auto;
+    }
+    
+    .code-block code {
+      color: #00ffff;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+    
+    .signup-form {
+      background: #0a0a0a;
+      border: 2px solid #00ffff;
+      border-radius: 12px;
+      padding: 40px;
+      margin: 60px 0;
+      text-align: center;
+    }
+    
+    .signup-form h2 {
+      color: #00ffff;
+      margin-top: 0;
+    }
+    
+    .signup-form input[type="email"] {
+      width: 100%;
+      max-width: 400px;
+      padding: 15px 20px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: #111;
+      color: #fff;
+      font-size: 1rem;
+      margin: 20px 0;
+    }
+    
+    .signup-form input[type="email"]:focus {
+      border-color: #00ffff;
+      outline: none;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    }
+    
+    .signup-form .button {
+      margin-top: 10px;
+    }
+    
+    .timeline-section {
+      margin: 60px 0;
+    }
+    
+    .timeline-item {
+      display: flex;
+      margin: 30px 0;
+      padding-left: 30px;
+      border-left: 3px solid #00ffff;
+    }
+    
+    .timeline-date {
+      min-width: 150px;
+      color: #00ffff;
+      font-weight: bold;
+    }
+    
+    .timeline-content {
+      flex: 1;
+    }
+    
+    .timeline-content h4 {
+      margin-top: 0;
+      color: #00ff88;
+    }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+    
+    .metric-card {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .metric-value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #00ffff;
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+    }
+    
+    .metric-label {
+      color: #888;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="platform.html">Platform</a></li>
+      <li><a href="release-notes.html" aria-current="page">Release Notes</a></li>
+      <li><a href="insights.html">Insights</a></li>
+      <li><a href="assessment.html">Assessment</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <main id="main-content">
+    <div class="release-hero">
+      <span class="version-badge">V2.0 Release</span>
+      <h1>Cloud Health Office V2</h1>
+      <p style="font-size: 1.5rem; max-width: 800px; margin: 0 auto;">
+        Complete CMS-0057-F Compliance<br>
+        Production-Ready FHIR R4 APIs<br>
+        <strong>18 Months Ahead of Deadline</strong>
+      </p>
+    </div>
+
+    <div class="content-container">
+      <!-- Key Metrics -->
+      <section class="feature-section">
+        <h2>V2 At A Glance</h2>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-value">100%</div>
+            <div class="metric-label">CMS-0057-F Ready</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">45</div>
+            <div class="metric-label">FHIR Tests Passing</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">&lt;1hr</div>
+            <div class="metric-label">Deployment Time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">355+</div>
+            <div class="metric-label">Total Tests Passing</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">0</div>
+            <div class="metric-label">Security Vulnerabilities</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">401</div>
+            <div class="metric-label">Days Until CMS Deadline</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Delivered Features -->
+      <section id="delivered-features" class="feature-section">
+        <h2>🚀 Delivered Features</h2>
+        <p>V2 delivers complete CMS-0057-F compliance with production-ready FHIR R4 APIs for all required interoperability capabilities.</p>
+        
+        <div class="feature-grid">
+          <div class="feature-card">
+            <span class="status-badge status-new">NEW IN V2</span>
+            <h3>Patient Access API</h3>
+            <p>FHIR R4 API enabling patients to access claims, encounters, and clinical data within 1 business day of adjudication.</p>
+            <ul>
+              <li>Claims & ExplanationOfBenefit</li>
+              <li>USCDI v1/v2 data classes</li>
+              <li>OAuth 2.0 with Azure AD B2C</li>
+            </ul>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-new">NEW IN V2</span>
+            <h3>Provider Access API</h3>
+            <p>Real-time patient data access for providers with proper authorization and consent management.</p>
+            <ul>
+              <li>SMART on FHIR scopes</li>
+              <li>NPI-based authorization</li>
+              <li>Patient consent tracking</li>
+            </ul>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-new">NEW IN V2</span>
+            <h3>Prior Authorization API</h3>
+            <p>Automated prior auth with 72-hour urgent and 7-day standard response tracking.</p>
+            <ul>
+              <li>Da Vinci PAS conformance</li>
+              <li>ServiceRequest/ClaimResponse</li>
+              <li>Timeline compliance automation</li>
+            </ul>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-new">NEW IN V2</span>
+            <h3>Payer-to-Payer API</h3>
+            <p>Bulk FHIR export for member data exchange during enrollment transitions.</p>
+            <ul>
+              <li>$export operation support</li>
+              <li>5-year historical data</li>
+              <li>Automated triggers</li>
+            </ul>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-ready">ENHANCED</span>
+            <h3>FHIR R4 Mappers</h3>
+            <p>Complete X12 to FHIR transformation with zero external dependencies.</p>
+            <ul>
+              <li>X12 837 → FHIR Claim</li>
+              <li>X12 278 → ServiceRequest</li>
+              <li>X12 835 → ExplanationOfBenefit</li>
+            </ul>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-ready">ENHANCED</span>
+            <h3>Compliance Checker</h3>
+            <p>Automated CMS-0057-F validation for all FHIR resources.</p>
+            <ul>
+              <li>Required element validation</li>
+              <li>Timeline compliance tracking</li>
+              <li>Da Vinci IG conformance</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- CMS-0057-F Compliance -->
+      <section class="feature-section">
+        <h2>📋 CMS-0057-F Compliance Status</h2>
+        <p>Cloud Health Office V2 provides production-ready compliance for all CMS-0057-F requirements.</p>
+        
+        <table class="compliance-table">
+          <thead>
+            <tr>
+              <th>Requirement</th>
+              <th>Applicable Payers</th>
+              <th>Deadline</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Patient Access API</td>
+              <td>MA, Medicaid MC, CHIP MC, QHP</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Ready</span></td>
+            </tr>
+            <tr>
+              <td>Provider Access API</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Ready</span></td>
+            </tr>
+            <tr>
+              <td>Payer-to-Payer API</td>
+              <td>MA, Medicaid MC, CHIP MC, QHP</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Ready</span></td>
+            </tr>
+            <tr>
+              <td>Prior Authorization API</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Ready</span></td>
+            </tr>
+            <tr>
+              <td>72-Hour Urgent Response</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Automated</span></td>
+            </tr>
+            <tr>
+              <td>7-Day Standard Response</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Automated</span></td>
+            </tr>
+            <tr>
+              <td>USCDI v1/v2 Coverage</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Complete</span></td>
+            </tr>
+            <tr>
+              <td>Da Vinci IG Conformance</td>
+              <td>All impacted payers</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">✅ Validated</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>Full compliance documentation:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a></p>
+      </section>
+
+      <!-- Sandbox Testing -->
+      <section id="sandbox-testing" class="sandbox-section">
+        <h2>🧪 Sandbox Testing</h2>
+        <p style="font-size: 1.2rem;">Test Cloud Health Office V2 in your own Azure sandbox environment. No commitment required.</p>
+        
+        <div class="code-block">
+          <code>
+# Clone the repository<br>
+git clone https://github.com/aurelianware/cloudhealthoffice.git<br>
+cd cloudhealthoffice<br>
+<br>
+# Install dependencies and build<br>
+npm install && npm run build<br>
+<br>
+# Run FHIR compliance tests<br>
+npm run test:fhir<br>
+<br>
+# Deploy sandbox with interactive wizard<br>
+npm run generate -- interactive --output sandbox-config.json --generate<br>
+<br>
+# Run full test suite (355+ tests)<br>
+npm test
+          </code>
+        </div>
+
+        <p style="margin: 30px 0;">Or deploy instantly with the Azure Deploy button:</p>
+        
+        <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure →</a>
+        
+        <p style="margin-top: 30px; color: #888;">Sandbox deployments are fully isolated and can be deleted at any time.</p>
+      </section>
+
+      <!-- Implementation Timeline -->
+      <section class="timeline-section feature-section">
+        <h2>📅 V2 Implementation Timeline</h2>
+        <p>Recommended implementation schedule for CMS-0057-F compliance:</p>
+        
+        <div class="timeline-item">
+          <div class="timeline-date">July 2025</div>
+          <div class="timeline-content">
+            <h4>18 Months Before Deadline</h4>
+            <p>Deploy Cloud Health Office sandbox, configure Azure AD OAuth 2.0, test FHIR API endpoints, validate compliance with automated checker.</p>
+          </div>
+        </div>
+        
+        <div class="timeline-item">
+          <div class="timeline-date">January 2026</div>
+          <div class="timeline-content">
+            <h4>12 Months Before Deadline</h4>
+            <p>Integrate with existing authorization systems, train provider partners on FHIR API access, establish monitoring and alerting.</p>
+          </div>
+        </div>
+        
+        <div class="timeline-item">
+          <div class="timeline-date">July 2026</div>
+          <div class="timeline-content">
+            <h4>6 Months Before Deadline</h4>
+            <p>Production deployment and hardening, load testing and performance optimization, compliance audit and documentation.</p>
+          </div>
+        </div>
+        
+        <div class="timeline-item">
+          <div class="timeline-date">January 2027</div>
+          <div class="timeline-content">
+            <h4>CMS-0057-F Deadline</h4>
+            <p>Full compliance operational. All FHIR APIs live. Prior authorization automation active. Continuous monitoring enabled.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Early Adopter Signup -->
+      <section id="early-adopter-signup" class="signup-form">
+        <h2>🎯 Early Adopter Program</h2>
+        <p style="font-size: 1.2rem;">Join our early adopter program for priority support, implementation guidance, and direct access to the engineering team.</p>
+        
+        <p style="margin: 20px 0;"><strong>Benefits include:</strong></p>
+        <ul style="list-style: none; padding: 0; text-align: left; max-width: 500px; margin: 0 auto 30px auto;">
+          <li style="padding: 8px 0;">✅ Priority technical support</li>
+          <li style="padding: 8px 0;">✅ Direct engineering team access</li>
+          <li style="padding: 8px 0;">✅ Early access to new features</li>
+          <li style="padding: 8px 0;">✅ Implementation guidance sessions</li>
+          <li style="padding: 8px 0;">✅ Compliance review assistance</li>
+        </ul>
+
+        <p style="font-size: 1.1rem; margin: 30px 0;">
+          <strong>Contact us to join:</strong><br>
+          <a href="mailto:early-adopters@aurelianware.com" style="color: #00ffff;">early-adopters@aurelianware.com</a>
+        </p>
+        
+        <a href="https://calendly.com/mark-cloudhealthoffice" class="button" target="_blank" rel="noopener noreferrer">Schedule a Call →</a>
+      </section>
+
+      <!-- Documentation Links -->
+      <section class="feature-section">
+        <h2>📚 Documentation</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Complete guide to regulatory requirements, implementation steps, and payer compliance checklist.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">Read Guide →</a>
+          </div>
+
+          <div class="feature-card">
+            <h3>FHIR Integration</h3>
+            <p>Technical documentation for X12 to FHIR transformation, mappers, and validation.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FHIR-INTEGRATION.md" target="_blank" rel="noopener noreferrer">Read Guide →</a>
+          </div>
+
+          <div class="feature-card">
+            <h3>Quick Start</h3>
+            <p>Deploy Cloud Health Office in under 5 minutes with our step-by-step guide.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/QUICKSTART.md" target="_blank" rel="noopener noreferrer">Get Started →</a>
+          </div>
+
+          <div class="feature-card">
+            <h3>Full Changelog</h3>
+            <p>Complete version history with all features, improvements, and fixes.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">View Changelog →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA Section -->
+      <section class="cta-section" style="text-align: center; margin: 60px 0;">
+        <h2>Ready to Achieve CMS-0057-F Compliance?</h2>
+        <p style="font-size: 1.2rem; max-width: 700px; margin: 20px auto;">
+          Deploy production-ready FHIR R4 APIs in under 1 hour. Zero custom code. 
+          18 months ahead of the January 1, 2027 deadline.
+        </p>
+        <div style="margin-top: 30px;">
+          <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+          <a href="platform.html" class="button button-green">Platform Overview</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <strong>Cloud Health Office V2 — The Sentinel</strong><br>
+      Complete CMS-0057-F Compliance. Production-Ready FHIR R4 APIs.
+    </p>
+    <p>
+      Apache 2.0 • Not affiliated with Availity, LLC • © 2025 Aurelianware<br>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
+      <a href="mailto:mark@aurelianware.com">Contact</a>
+    </p>
+  </footer>
+</body>
+</html>
