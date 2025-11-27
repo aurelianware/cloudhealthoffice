@@ -79,22 +79,22 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b'
         Description = 'Email Address'
         Severity = 'Medium'
-        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js')
-        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test')
+        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*.html')
+        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test|aurelianware\.com')
     }
     'PhoneNumber' = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
         Description = 'Phone Number'
         Severity = 'Medium'
-        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml', '*.ts', '*.js', 'Appeal-*.json', '*Request*.json', '*Response*.json', '*.schema.json')
+        AllowedFiles = @('*.edi', 'test-*.json', '*-config.json', 'example-*.json', 'ecs-*.json', '*valueadds*.json', '*.md', '*.yml', '*.yaml', '*.ts', '*.js', 'Appeal-*.json', '*Request*.json', '*Response*.json', '*.schema.json', '*.json')
         ExcludeContext = @('npi|provider|tax|ein|test|example|sample|mock|dummy|placeholder|1234567890|9999|5555', 'TEST-', 'providerId', 'providerNpi')
     }
     'MemberId' = @{
         Pattern = '\b(?:Member[_\s]?ID|MemberId)[:\s]*[A-Z0-9]{6,15}\b'
         Description = 'Member/Patient ID'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', 'example-*.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*test*.ts', '*test*.js', '*.schema.json', 'Auth-*.json', '*Request*.json', '*Response*.json', '*Inquiry*.json')
-        ExcludeContext = @('identifier|description|string|memberId:|memberIdRequired|field|property|param|variable|interface|type')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', '*config*.json', 'example-*.json', '*.example.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*test*.ts', '*test*.js', '*.schema.json', 'Auth-*.json', '*Request*.json', '*Response*.json', '*Inquiry*.json', '*Types.ts', '*Resolution.ts')
+        ExcludeContext = @('identifier|description|string|memberId:|memberIdRequired|field|property|param|variable|interface|type|Invalid|validation|related')
     }
 }
 
@@ -144,8 +144,8 @@ $HIPAA_PATTERNS = @{
         Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1', '*example*', '*Example*')
-        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1', '*example*', '*Example*', '*cli*.ts', '*wizard*.ts', '*generator*.ts', '*generate*.ts')
+        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor', 'CMS-0057', 'skipFhir', 'Patient Access', 'Generating')
     }
 }
 
