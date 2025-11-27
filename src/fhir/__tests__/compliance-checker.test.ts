@@ -1,485 +1,455 @@
-/**
- * Tests for CMS-0057-F Compliance Checker
- */
-
-import { checkCMSCompliance, checkBatchCompliance } from '../compliance-checker';
-import { mapX12837ToFhirClaim, mapX12278ToFhirServiceRequest } from '../fhir-mapper';
-import { X12_837, X12_278 } from '../x12Types';
+import { 
+  validateCMS0057FCompliance,
+  validateBatchCompliance,
+  generateComplianceReport,
+  ComplianceResult
+} from '../compliance-checker';
+import { ServiceRequest, ExplanationOfBenefit, Claim, Patient } from 'fhir/r4';
 
 describe('CMS-0057-F Compliance Checker', () => {
-  describe('checkCMSCompliance', () => {
-    it('validates compliant ServiceRequest (Prior Auth)', () => {
-      const input: X12_278 = {
-        authorizationId: 'AUTH001',
-        transactionDate: new Date().toISOString(),
+  
+  describe('validateCMS0057FCompliance - ServiceRequest', () => {
+    it('validates compliant ServiceRequest for prior authorization', () => {
+      const serviceRequest: ServiceRequest = {
+        resourceType: 'ServiceRequest',
+        id: 'auth-001',
+        status: 'draft',
+        intent: 'order',
+        priority: 'urgent',
+        subject: {
+          reference: 'Patient/12345',
+          display: 'John Doe'
+        },
+        authoredOn: new Date().toISOString(),
         requester: {
-          npi: '1234567890',
-          name: 'Dr. Smith'
+          reference: 'Practitioner/98765',
+          identifier: {
+            system: 'http://hl7.org/fhir/sid/us-npi',
+            value: '1234567890'
+          }
         },
-        subscriber: {
-          memberId: 'MEM001',
-          firstName: 'John',
-          lastName: 'Doe',
-          dob: '19850615'
-        },
-        payer: {
-          payerId: 'PAYER001',
-          name: 'Test Health Plan'
-        },
-        serviceRequest: {
-          serviceTypeCode: 'HS',
-          certificationType: 'AR',
-          serviceDateFrom: '20240120',
-          procedureCode: '27447'
-        }
-      };
-      
-      const serviceRequest = mapX12278ToFhirServiceRequest(input);
-      const result = checkCMSCompliance(serviceRequest);
-      
-      expect(result.compliant).toBe(true);
-      expect(result.score).toBeGreaterThan(80);
-      expect(result.breakdown.dataClasses.compliant).toBe(true);
-      expect(result.breakdown.apiRequirements.compliant).toBe(true);
-    });
-    
-    it('detects missing required fields in ServiceRequest', () => {
-      const serviceRequest: any = {
-        resourceType: 'ServiceRequest',
-        id: 'AUTH001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        }
-        // Missing: status, intent, code, subject
-      };
-      
-      const result = checkCMSCompliance(serviceRequest);
-      
-      expect(result.compliant).toBe(false);
-      expect(result.issues.length).toBeGreaterThan(0);
-      
-      const statusError = result.issues.find(i => 
-        i.path === 'status' && i.severity === 'error'
-      );
-      expect(statusError).toBeDefined();
-      
-      const intentError = result.issues.find(i => 
-        i.path === 'intent' && i.severity === 'error'
-      );
-      expect(intentError).toBeDefined();
-      
-      const codeError = result.issues.find(i => 
-        i.path === 'code' && i.severity === 'error'
-      );
-      expect(codeError).toBeDefined();
-      
-      const subjectError = result.issues.find(i => 
-        i.path === 'subject' && i.severity === 'error'
-      );
-      expect(subjectError).toBeDefined();
-    });
-    
-    it('validates compliant Claim', () => {
-      const input: X12_837 = {
-        claimId: 'CLM001',
-        transactionDate: '20240115',
-        billingProvider: {
-          npi: '1234567890',
-          name: 'Provider Clinic'
-        },
-        subscriber: {
-          memberId: 'MEM001',
-          firstName: 'John',
-          lastName: 'Doe',
-          dob: '19850615'
-        },
-        payer: {
-          payerId: 'PAYER001',
-          name: 'Test Health Plan'
-        },
-        claim: {
-          totalChargeAmount: 150.00,
-          serviceLines: [
-            {
-              lineNumber: 1,
-              procedureCode: '99213',
-              serviceDateFrom: '20240110',
-              chargeAmount: 150.00
-            }
-          ]
-        }
-      };
-      
-      const claim = mapX12837ToFhirClaim(input);
-      const result = checkCMSCompliance(claim);
-      
-      expect(result.compliant).toBe(true);
-      expect(result.breakdown.dataClasses.compliant).toBe(true);
-    });
-    
-    it('detects missing required fields in Claim', () => {
-      const claim: any = {
-        resourceType: 'Claim',
-        id: 'CLM001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim']
-        }
-        // Missing: status, type, use, patient, provider, item
-      };
-      
-      const result = checkCMSCompliance(claim);
-      
-      expect(result.compliant).toBe(false);
-      
-      const statusError = result.issues.find(i => 
-        i.path === 'status' && i.severity === 'error'
-      );
-      expect(statusError).toBeDefined();
-      
-      const itemError = result.issues.find(i => 
-        i.path === 'item' && i.severity === 'error'
-      );
-      expect(itemError).toBeDefined();
-    });
-    
-    it('warns about missing profiles', () => {
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            system: 'http://www.ama-assn.org/go/cpt',
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        }
-        // Missing: meta.profile
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      const profileWarning = result.issues.find(i => 
-        i.category === 'profile' && i.severity === 'warning'
-      );
-      expect(profileWarning).toBeDefined();
-      expect(profileWarning?.message).toContain('does not declare conformance');
-    });
-    
-    it('warns about non-US Core profiles', () => {
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/StructureDefinition/ServiceRequest']
-        },
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            system: 'http://www.ama-assn.org/go/cpt',
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        }
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      const profileWarning = result.issues.find(i => 
-        i.category === 'profile' && i.message.includes('US Core or Da Vinci')
-      );
-      expect(profileWarning).toBeDefined();
-    });
-    
-    it('validates timeline compliance for recent ServiceRequest', () => {
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        },
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            system: 'http://www.ama-assn.org/go/cpt',
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        },
-        authoredOn: new Date().toISOString() // Recent date
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      expect(result.breakdown.timelines.compliant).toBe(true);
-    });
-    
-    it('warns about old ServiceRequest', () => {
-      const oldDate = new Date();
-      oldDate.setDate(oldDate.getDate() - 45); // 45 days ago
-      
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        },
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            system: 'http://www.ama-assn.org/go/cpt',
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        },
-        authoredOn: oldDate.toISOString()
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      const timelineWarning = result.issues.find(i => 
-        i.category === 'timeline' && i.severity === 'warning'
-      );
-      expect(timelineWarning).toBeDefined();
-      expect(timelineWarning?.message).toContain('days old');
-    });
-    
-    it('validates API requirements', () => {
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest'],
-          versionId: '1'
-        },
-        identifier: [{
-          system: 'http://example.org',
-          value: 'AUTH001'
+        insurance: [{
+          reference: 'Coverage/12345'
         }],
-        status: 'active',
-        intent: 'order',
         code: {
           coding: [{
             system: 'http://www.ama-assn.org/go/cpt',
             code: '99213'
           }]
         },
-        subject: {
-          reference: 'Patient/123'
-        }
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      expect(result.breakdown.apiRequirements.compliant).toBe(true);
-      expect(result.breakdown.apiRequirements.passed).toBe(3);
-    });
-    
-    it('detects missing resource ID', () => {
-      const resource: any = {
-        resourceType: 'ServiceRequest',
-        // Missing: id
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        },
-        status: 'active',
-        intent: 'order',
-        code: {
+        reasonCode: [{
           coding: [{
-            system: 'http://www.ama-assn.org/go/cpt',
-            code: '99213'
+            system: 'http://hl7.org/fhir/sid/icd-10',
+            code: 'E11.9'
           }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        }
-      };
-      
-      const result = checkCMSCompliance(resource);
-      
-      const idError = result.issues.find(i => 
-        i.path === 'id' && i.severity === 'error'
-      );
-      expect(idError).toBeDefined();
-      expect(result.breakdown.apiRequirements.compliant).toBe(false);
-    });
-    
-    it('calculates compliance score correctly', () => {
-      // Fully compliant resource
-      const compliantResource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        },
-        identifier: [{
-          value: 'AUTH001'
         }],
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
-        },
-        authoredOn: new Date().toISOString()
-      };
-      
-      const compliantResult = checkCMSCompliance(compliantResource);
-      expect(compliantResult.score).toBeGreaterThanOrEqual(90);
-      
-      // Resource with warnings
-      const warningResource: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR002',
-        status: 'active',
-        intent: 'order',
-        code: {
-          coding: [{
-            code: '99213'
-          }]
-        },
-        subject: {
-          reference: 'Patient/123'
+        occurrencePeriod: {
+          start: '2024-03-01',
+          end: '2024-03-01'
         }
-        // Missing: meta.profile (warning)
       };
-      
-      const warningResult = checkCMSCompliance(warningResource);
-      expect(warningResult.score).toBeLessThan(100);
-      expect(warningResult.score).toBeGreaterThan(80);
-      
-      // Resource with errors
-      const errorResource: any = {
-        resourceType: 'ServiceRequest'
-        // Missing many required fields (errors)
+
+      const result = validateCMS0057FCompliance(serviceRequest);
+
+      expect(result.compliant).toBe(true);
+      expect(result.issues.filter(i => i.severity === 'error')).toHaveLength(0);
+      expect(result.summary.resourceType).toBe('ServiceRequest');
+      expect(result.summary.daVinciProfiles).toContain('PAS ServiceRequest');
+      expect(result.summary.uscdiDataClasses.length).toBeGreaterThan(0);
+    });
+
+    it('flags missing required elements in ServiceRequest', () => {
+      const serviceRequest: ServiceRequest = {
+        resourceType: 'ServiceRequest',
+        id: 'auth-002',
+        status: 'draft',
+        intent: 'order',
+        subject: {
+          reference: 'Patient/12345'
+        }
+        // Missing requester, insurance, code
       };
+
+      const result = validateCMS0057FCompliance(serviceRequest);
+
+      expect(result.compliant).toBe(false);
+      expect(result.issues.filter(i => i.severity === 'error').length).toBeGreaterThan(0);
       
-      const errorResult = checkCMSCompliance(errorResource);
-      expect(errorResult.score).toBeLessThan(70);
+      const errorCodes = result.issues.map(i => i.code);
+      expect(errorCodes).toContain('MISSING_REQUESTER');
+      expect(errorCodes).toContain('MISSING_SERVICE_CODE');
+    });
+
+    it('checks prior authorization timeline compliance', () => {
+      const recentRequest: ServiceRequest = {
+        resourceType: 'ServiceRequest',
+        id: 'auth-003',
+        status: 'draft',
+        intent: 'order',
+        priority: 'urgent',
+        subject: { reference: 'Patient/12345' },
+        requester: { reference: 'Practitioner/98765' },
+        authoredOn: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 24 hours ago
+        insurance: [{ reference: 'Coverage/12345' }],
+        code: { coding: [{ code: '99213' }] }
+      };
+
+      const result = validateCMS0057FCompliance(recentRequest);
+
+      expect(result.summary.timelineCompliance.applicable).toBe(true);
+      expect(result.summary.timelineCompliance.compliant).toBe(true);
+      expect(result.summary.timelineCompliance.deadline).toBe('72 hours');
     });
   });
-  
-  describe('checkBatchCompliance', () => {
-    it('validates multiple resources and aggregates results', () => {
-      const input1: X12_278 = {
-        authorizationId: 'AUTH001',
-        requester: {
-          npi: '1234567890'
+
+  describe('validateCMS0057FCompliance - ExplanationOfBenefit', () => {
+    it('validates compliant ExplanationOfBenefit', () => {
+      const eob: ExplanationOfBenefit = {
+        resourceType: 'ExplanationOfBenefit',
+        id: 'eob-001',
+        status: 'active',
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+            code: 'professional'
+          }]
         },
-        subscriber: {
-          memberId: 'MEM001',
-          firstName: 'John',
-          lastName: 'Doe',
-          dob: '19850615'
+        use: 'claim',
+        patient: {
+          reference: 'Patient/54321'
         },
-        payer: {
-          payerId: 'PAYER001'
+        created: '2024-02-15',
+        insurer: {
+          reference: 'Organization/payer-001'
         },
-        serviceRequest: {
-          serviceTypeCode: 'HS',
-          certificationType: 'AR',
-          serviceDateFrom: '20240120',
-          procedureCode: '27447'
+        provider: {
+          reference: 'Organization/provider-001'
+        },
+        outcome: 'complete',
+        insurance: [{
+          focal: true,
+          coverage: { reference: 'Coverage/54321' }
+        }],
+        item: [{
+          sequence: 1,
+          productOrService: {
+            coding: [{
+              system: 'http://www.ama-assn.org/go/cpt',
+              code: '99213'
+            }]
+          },
+          adjudication: [{
+            category: {
+              coding: [{
+                system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+                code: 'submitted'
+              }]
+            },
+            amount: { value: 150, currency: 'USD' }
+          }]
+        }],
+        total: [{
+          category: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/adjudication',
+              code: 'submitted'
+            }]
+          },
+          amount: { value: 150, currency: 'USD' }
+        }],
+        payment: {
+          amount: { value: 135, currency: 'USD' },
+          date: '2024-02-15'
         }
       };
-      
-      const input2: X12_837 = {
-        claimId: 'CLM001',
-        billingProvider: {
-          npi: '1234567890',
-          name: 'Provider Clinic'
-        },
-        subscriber: {
-          memberId: 'MEM002',
-          firstName: 'Jane',
-          lastName: 'Smith',
-          dob: '19900321'
-        },
-        payer: {
-          payerId: 'PAYER001'
-        },
-        claim: {
-          totalChargeAmount: 150.00,
-          serviceLines: [
-            {
-              lineNumber: 1,
-              procedureCode: '99213',
-              serviceDateFrom: '20240110',
-              chargeAmount: 150.00
-            }
-          ]
-        }
-      };
-      
-      const serviceRequest = mapX12278ToFhirServiceRequest(input1);
-      const claim = mapX12837ToFhirClaim(input2);
-      
-      const result = checkBatchCompliance([serviceRequest, claim]);
-      
-      expect(result.score).toBeGreaterThan(0);
-      expect(result.breakdown.dataClasses.total).toBeGreaterThan(0);
-      expect(result.breakdown.apiRequirements.total).toBeGreaterThan(0);
-      expect(result.issues.length).toBeGreaterThanOrEqual(0);
-    });
-    
-    it('handles empty batch', () => {
-      const result = checkBatchCompliance([]);
-      
-      expect(result.score).toBe(0);
+
+      const result = validateCMS0057FCompliance(eob);
+
       expect(result.compliant).toBe(true);
-      expect(result.issues).toHaveLength(0);
+      expect(result.summary.resourceType).toBe('ExplanationOfBenefit');
+      expect(result.summary.uscdiDataClasses).toContain('Patient Demographics');
+      expect(result.summary.uscdiDataClasses).toContain('Financial');
     });
-    
-    it('aggregates issues from multiple resources', () => {
-      const incompleteResource1: any = {
-        resourceType: 'ServiceRequest',
-        id: 'SR001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest']
-        }
-        // Missing required fields
+
+    it('flags missing items in ExplanationOfBenefit', () => {
+      const eob: ExplanationOfBenefit = {
+        resourceType: 'ExplanationOfBenefit',
+        id: 'eob-002',
+        status: 'active',
+        type: {
+          coding: [{ code: 'professional' }]
+        },
+        use: 'claim',
+        patient: { reference: 'Patient/54321' },
+        created: '2024-02-15',
+        insurer: { reference: 'Organization/payer-001' },
+        provider: { reference: 'Organization/provider-001' },
+        outcome: 'complete',
+        insurance: [{
+          focal: true,
+          coverage: { reference: 'Coverage/54321' }
+        }]
+        // Missing items
       };
-      
-      const incompleteResource2: any = {
-        resourceType: 'Claim',
-        id: 'CLM001',
-        meta: {
-          profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim']
-        }
-        // Missing required fields
-      };
-      
-      const result = checkBatchCompliance([incompleteResource1, incompleteResource2]);
-      
+
+      const result = validateCMS0057FCompliance(eob);
+
       expect(result.compliant).toBe(false);
-      expect(result.issues.length).toBeGreaterThan(0);
+      const errorCodes = result.issues.filter(i => i.severity === 'error').map(i => i.code);
+      expect(errorCodes).toContain('MISSING_ITEMS');
+    });
+  });
+
+  describe('validateCMS0057FCompliance - Claim', () => {
+    it('validates compliant Claim resource', () => {
+      const claim: Claim = {
+        resourceType: 'Claim',
+        id: 'claim-001',
+        status: 'active',
+        type: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+            code: 'professional'
+          }]
+        },
+        use: 'claim',
+        patient: {
+          reference: 'Patient/67890'
+        },
+        created: '2024-01-15',
+        provider: {
+          reference: 'Organization/provider-001'
+        },
+        priority: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+            code: 'normal'
+          }]
+        },
+        insurance: [{
+          sequence: 1,
+          focal: true,
+          coverage: { reference: 'Coverage/67890' }
+        }],
+        item: [{
+          sequence: 1,
+          productOrService: {
+            coding: [{ code: '99213' }]
+          },
+          quantity: { value: 1 },
+          net: { value: 150, currency: 'USD' }
+        }],
+        diagnosis: [{
+          sequence: 1,
+          diagnosisCodeableConcept: {
+            coding: [{
+              system: 'http://hl7.org/fhir/sid/icd-10',
+              code: 'Z00.00'
+            }]
+          }
+        }]
+      };
+
+      const result = validateCMS0057FCompliance(claim);
+
+      expect(result.compliant).toBe(true);
+      expect(result.summary.uscdiDataClasses).toContain('Patient Demographics');
+      expect(result.summary.uscdiDataClasses).toContain('Procedures');
+      expect(result.summary.uscdiDataClasses).toContain('Problems');
+    });
+
+    it('validates Claim with missing diagnosis', () => {
+      const claim: Claim = {
+        resourceType: 'Claim',
+        id: 'claim-002',
+        status: 'active',
+        type: { coding: [{ code: 'professional' }] },
+        use: 'claim',
+        patient: { reference: 'Patient/67890' },
+        created: '2024-01-15',
+        provider: { reference: 'Organization/provider-001' },
+        priority: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+            code: 'normal'
+          }]
+        },
+        insurance: [{
+          sequence: 1,
+          focal: true,
+          coverage: { reference: 'Coverage/67890' }
+        }],
+        item: [{
+          sequence: 1,
+          productOrService: { coding: [{ code: '99213' }] },
+          quantity: { value: 1 }
+        }]
+        // Missing diagnosis
+      };
+
+      const result = validateCMS0057FCompliance(claim);
+
+      expect(result.compliant).toBe(true); // Diagnosis is warning, not error
+      expect(result.warnings.some(w => w.code === 'MISSING_DIAGNOSIS')).toBe(true);
+    });
+  });
+
+  describe('validateCMS0057FCompliance - Patient', () => {
+    it('validates US Core compliant Patient', () => {
+      const patient: Patient = {
+        resourceType: 'Patient',
+        id: 'pat-001',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
+        },
+        identifier: [{
+          system: 'http://hospital.example.org',
+          value: 'MRN12345'
+        }],
+        name: [{
+          family: 'Doe',
+          given: ['John']
+        }],
+        gender: 'male',
+        birthDate: '1980-01-15',
+        address: [{
+          line: ['123 Main St'],
+          city: 'Anytown',
+          state: 'CA',
+          postalCode: '90210'
+        }],
+        telecom: [{
+          system: 'phone',
+          value: '555-1234'
+        }]
+      };
+
+      const result = validateCMS0057FCompliance(patient);
+
+      expect(result.compliant).toBe(true);
+      expect(result.summary.resourceType).toBe('Patient');
+      expect(result.summary.usCoreSections).toContain('US Core Patient');
+      expect(result.summary.uscdiDataClasses).toContain('Patient Demographics');
+    });
+
+    it('flags missing US Core required elements', () => {
+      const patient: Patient = {
+        resourceType: 'Patient',
+        id: 'pat-002'
+        // Missing identifier, name, gender (required by US Core)
+      };
+
+      const result = validateCMS0057FCompliance(patient);
+
+      expect(result.compliant).toBe(false);
       
-      // Should have errors from both resources
-      const sr001Errors = result.issues.filter(i => 
-        i.severity === 'error' && i.message.includes('ServiceRequest')
-      );
-      expect(sr001Errors.length).toBeGreaterThan(0);
-      
-      const clm001Errors = result.issues.filter(i => 
-        i.severity === 'error' && i.message.includes('Claim')
-      );
-      expect(clm001Errors.length).toBeGreaterThan(0);
+      const errorCodes = result.issues.filter(i => i.severity === 'error').map(i => i.code);
+      expect(errorCodes).toContain('MISSING_IDENTIFIER');
+      expect(errorCodes).toContain('MISSING_NAME');
+      expect(errorCodes).toContain('MISSING_GENDER');
+    });
+  });
+
+  describe('validateBatchCompliance', () => {
+    it('validates multiple resources at once', () => {
+      const resources = [
+        {
+          resourceType: 'Patient',
+          id: 'pat-001',
+          identifier: [{ value: 'MRN001' }],
+          name: [{ family: 'Smith', given: ['Jane'] }],
+          gender: 'female'
+        } as Patient,
+        {
+          resourceType: 'ServiceRequest',
+          id: 'auth-001',
+          status: 'draft',
+          intent: 'order',
+          subject: { reference: 'Patient/pat-001' },
+          requester: { reference: 'Practitioner/123' },
+          code: { coding: [{ code: '99213' }] },
+          insurance: [{ reference: 'Coverage/pat-001' }]
+        } as ServiceRequest
+      ];
+
+      const results = validateBatchCompliance(resources);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].summary.resourceType).toBe('Patient');
+      expect(results[1].summary.resourceType).toBe('ServiceRequest');
+    });
+  });
+
+  describe('generateComplianceReport', () => {
+    it('generates comprehensive compliance report', () => {
+      const results: ComplianceResult[] = [
+        {
+          compliant: true,
+          issues: [],
+          warnings: [],
+          summary: {
+            resourceType: 'Patient',
+            requiredElementsPresent: 7,
+            totalRequiredElements: 7,
+            usCoreSections: ['US Core Patient'],
+            daVinciProfiles: ['PDex Patient'],
+            uscdiDataClasses: ['Patient Demographics'],
+            timelineCompliance: { applicable: false }
+          }
+        },
+        {
+          compliant: false,
+          issues: [
+            { severity: 'error' as const, code: 'MISSING_STATUS', message: 'Status required' }
+          ],
+          warnings: [
+            { code: 'MISSING_REASON', message: 'Reason recommended' }
+          ],
+          summary: {
+            resourceType: 'ServiceRequest',
+            requiredElementsPresent: 8,
+            totalRequiredElements: 10,
+            usCoreSections: ['ServiceRequest'],
+            daVinciProfiles: ['PAS ServiceRequest'],
+            uscdiDataClasses: ['Patient Demographics', 'Procedures'],
+            timelineCompliance: { applicable: true, compliant: true, deadline: '72 hours' }
+          }
+        }
+      ];
+
+      const report = generateComplianceReport(results);
+
+      expect(report).toContain('CMS-0057-F Compliance Report');
+      expect(report).toContain('Total Resources Validated: 2');
+      expect(report).toContain('Compliant Resources: 1');
+      expect(report).toContain('Patient');
+      expect(report).toContain('ServiceRequest');
+      expect(report).toContain('USCDI Data Classes');
+      expect(report).toContain('Da Vinci Profiles');
+    });
+
+    it('generates report for all compliant resources', () => {
+      const results: ComplianceResult[] = [
+        {
+          compliant: true,
+          issues: [],
+          warnings: [],
+          summary: {
+            resourceType: 'Patient',
+            requiredElementsPresent: 7,
+            totalRequiredElements: 7,
+            usCoreSections: [],
+            daVinciProfiles: [],
+            uscdiDataClasses: [],
+            timelineCompliance: { applicable: false }
+          }
+        }
+      ];
+
+      const report = generateComplianceReport(results);
+
+      expect(report).toContain('✓ No critical issues found');
+      expect(report).toContain('✓ No warnings');
     });
   });
 });

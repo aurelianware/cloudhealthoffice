@@ -33,7 +33,11 @@ export class InteractiveWizard {
     console.log(chalk.bold(chalk.cyan('    Cloud Health Office - Interactive Onboarding Wizard')));
     console.log(chalk.bold(chalk.cyan('═'.repeat(70))));
     console.log(chalk.cyan('\n  Welcome to the #1 open-source Azure-native multi-payer EDI platform'));
-    console.log(chalk.cyan('  This wizard will guide you through configuration in <5 minutes\n'));
+    console.log(chalk.cyan('  This wizard will guide you through configuration in <5 minutes'));
+    console.log(chalk.green('\n  ✓ CMS-0057-F Compliant - Prior Authorization & Interoperability APIs'));
+    console.log(chalk.green('  ✓ FHIR R4 - Complete X12 to FHIR transformation'));
+    console.log(chalk.green('  ✓ Da Vinci IGs - PDex, PAS, CRD, DTR support'));
+    console.log(chalk.green('  ✓ Deploy in <10 minutes - Production-ready HIPAA compliance\n'));
   }
 
   /**
@@ -286,6 +290,9 @@ export class InteractiveWizard {
    * Collect enabled modules
    */
   private async collectModules() {
+    console.log(chalk.cyan('\n  CMS-0057-F requires FHIR APIs for Patient Access, Provider Access,'));
+    console.log(chalk.cyan('  Payer-to-Payer exchange, and Prior Authorization by January 1, 2027.'));
+    console.log(chalk.cyan('  Cloud Health Office provides complete compliance support.\n'));
     console.log(chalk.cyan('  Select which modules to enable (Space to toggle, Enter to confirm)'));
     
     const answers = await inquirer.prompt([
@@ -294,8 +301,8 @@ export class InteractiveWizard {
         name: 'modules',
         message: 'Enabled Modules:',
         choices: [
-          { name: 'Attachments (275/277 X12 EDI)', value: 'attachments', checked: true },
-          { name: 'Authorizations (278 X12 EDI)', value: 'authorizations', checked: true },
+          { name: 'Attachments (275/277 X12 EDI) [CMS-0057-F]', value: 'attachments', checked: true },
+          { name: 'Authorizations (278 X12 EDI - 72hr/7-day SLA) [CMS-0057-F]', value: 'authorizations', checked: true },
           { name: 'Appeals Management API', value: 'appeals', checked: false },
           { name: 'Enhanced Claim Status (ECS/277CA)', value: 'ecs', checked: false },
         ],

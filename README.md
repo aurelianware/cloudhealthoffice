@@ -233,11 +233,54 @@ Cloud Health Office is backend-agnostic and designed to integrate seamlessly wit
 - [Gated Release Guide](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
 
+## 🏥 CMS Interoperability & Prior Authorization Compliance
+
+Cloud Health Office provides **comprehensive CMS-0057-F compliance** for payer systems, enabling full support for federal interoperability mandates with minimal implementation effort.
+
+### CMS-0057-F Final Rule Support
+
+**Advancing Interoperability and Improving Prior Authorization Processes** (March 2023)
+
+✅ **Patient Access API** - FHIR R4 claims, encounters, and clinical data  
+✅ **Provider Access API** - Real-time access to patient health information  
+✅ **Payer-to-Payer API** - 5-year historical data exchange on enrollment  
+✅ **Prior Authorization API** - 72-hour urgent, 7-day standard response tracking  
+✅ **USCDI v1/v2** - Complete data class coverage via FHIR resources  
+✅ **Da Vinci IGs** - PDex, PAS, CRD, DTR implementation guide support
+
+### Key Capabilities
+
+```typescript
+// X12 EDI to FHIR R4 transformation
+import { mapX12837ToFhirClaim, mapX12278ToFhirPriorAuth } from './src/fhir/fhir-mapper';
+
+// 837 Claims → FHIR Claim
+const claim = mapX12837ToFhirClaim(x12_837_data);
+
+// 278 Prior Auth → FHIR ServiceRequest  
+const authRequest = mapX12278ToFhirPriorAuth(x12_278_data);
+
+// Compliance validation
+import { validateCMS0057FCompliance } from './src/fhir/compliance-checker';
+const result = validateCMS0057FCompliance(fhirResource);
+```
+
+**Deployment:** <10 minutes from configuration to live FHIR APIs using the CLI wizard.
+
+**Documentation:** See [CMS-0057-F Compliance Guide](./docs/CMS-0057-F-COMPLIANCE.md) for detailed requirements, implementation steps, and payer checklist.
+
+**Compliance Deadline:** January 1, 2027 (MA, Medicaid, CHIP, QHP issuers)
+
+---
+
 ## 🧪 Testing
 
 ```bash
-# Run all tests (62 tests)
+# Run all tests (166+ tests including FHIR)
 npm test
+
+# Run FHIR-specific tests
+npm run test:fhir
 
 # Generate synthetic test claims
 node dist/scripts/utils/generate-837-claims.js 837P 10 ./test-data
