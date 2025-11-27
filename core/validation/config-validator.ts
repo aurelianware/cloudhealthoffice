@@ -4,6 +4,7 @@
  */
 
 import Ajv, { ValidateFunction } from 'ajv';
+import addFormats from 'ajv-formats';
 import { PayerConfig, ValidationResult, ValidationError, ValidationWarning } from '../types/payer-config';
 
 export class ConfigValidator {
@@ -12,6 +13,7 @@ export class ConfigValidator {
 
   constructor() {
     this.ajv = new Ajv({ allErrors: true, strict: false });
+    addFormats(this.ajv); // enables standard format validators like email
     this.initializeSchema();
   }
 
