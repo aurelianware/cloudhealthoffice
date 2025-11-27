@@ -9,6 +9,74 @@ An open-source, Azure-native platform for multi-payer EDI integration in healthc
 
 > **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security with high security maturity, and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
+## 🎯 What's New in V2
+
+Cloud Health Office V2 delivers **complete CMS-0057-F compliance** with production-ready FHIR R4 APIs, positioning payers for the January 1, 2027 regulatory deadline with **18 months to spare**.
+
+### V2 Highlights
+
+| Capability | Description | Status |
+|------------|-------------|--------|
+| **FHIR R4 APIs** | Complete X12 → FHIR transformation (270/837/278/835) | ✅ Production Ready |
+| **Patient Access API** | Claims, encounters, clinical data via FHIR R4 | ✅ CMS-0057-F Compliant |
+| **Provider Access API** | Real-time patient data with SMART on FHIR | ✅ Ready |
+| **Prior Authorization API** | 72-hour urgent, 7-day standard response tracking | ✅ Automated |
+| **Payer-to-Payer API** | Bulk FHIR export, 5-year historical data | ✅ Ready |
+| **Da Vinci IGs** | PDex, PAS, CRD, DTR profile conformance | ✅ Validated |
+
+### CMS-0057-F Compliance Dashboard
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│               CMS-0057-F Compliance Status                      │
+├─────────────────────────────────────────────────────────────────┤
+│  Patient Access API ..................... ✅ READY              │
+│  Provider Access API .................... ✅ READY              │
+│  Payer-to-Payer API .................... ✅ READY              │
+│  Prior Authorization API ................ ✅ READY              │
+│  72-Hour Urgent Response ................ ✅ AUTOMATED          │
+│  7-Day Standard Response ................ ✅ AUTOMATED          │
+│  USCDI v1/v2 Data Classes ............... ✅ COMPLETE           │
+│  Da Vinci IG Conformance ................ ✅ VALIDATED          │
+├─────────────────────────────────────────────────────────────────┤
+│  Overall Readiness: ██████████████████████ 100%                │
+│  Days Until Deadline: 401 (January 1, 2027)                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### V2 FHIR Transformation Coverage
+
+| X12 Transaction | FHIR Resource | Profile | Tests |
+|-----------------|---------------|---------|-------|
+| 270 Eligibility | Patient, CoverageEligibilityRequest | US Core 3.1.1 | 19 |
+| 837 Claims | Claim | Da Vinci PDex | 12 |
+| 278 Prior Auth | ServiceRequest | Da Vinci PAS | 8 |
+| 835 Remittance | ExplanationOfBenefit | Da Vinci PDex | 6 |
+| **Total** | — | — | **45** |
+
+### Quick Links
+
+- 📋 **[Release Notes](./site/release-notes.html)** - Detailed feature breakdown and sandbox access
+- 📖 **[CMS-0057-F Compliance Guide](./docs/CMS-0057-F-COMPLIANCE.md)** - Implementation checklist
+- 🔗 **[FHIR Integration Guide](./docs/FHIR-INTEGRATION.md)** - Technical documentation
+- 🧪 **[Sandbox Testing](./site/release-notes.html#sandbox-testing)** - Try before you deploy
+
+### Early Adopter Program
+
+Join our early adopter program for priority support and implementation guidance:
+
+```bash
+# Deploy sandbox environment
+npm run generate -- interactive --output my-config.json --generate
+
+# Run FHIR compliance validation
+npm run test:fhir
+```
+
+**Contact**: [early-adopters@aurelianware.com](mailto:early-adopters@aurelianware.com)
+
+---
+
 ## 🚀 Quick Start
 
 Deploy a complete HIPAA-compliant EDI platform in **&lt;5 minutes**:
