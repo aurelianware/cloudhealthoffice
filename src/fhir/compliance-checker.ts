@@ -664,9 +664,13 @@ function checkPriorAuthTimeline(authoredOn?: string): TimelineCompliance {
   
   // CMS-0057-F standard: 72 hours for urgent, 7 calendar days for standard
   // This is a time-based check; production systems should also verify ServiceRequest.priority
+  // If request is still within 72-hour urgent window, apply urgent deadline; otherwise apply standard 7-day deadline
   const withinUrgentWindow = hoursDiff <= 72;
   const deadline = withinUrgentWindow ? '72 hours' : '7 calendar days';
-  const compliant = withinUrgentWindow ? hoursDiff <= 72 : hoursDiff <= 168;
+  // For urgent requests (within 72 hours), check against 72-hour deadline
+  // For standard requests (past 72 hours), check against 7-day (168 hours) deadline
+  const maxAllowedHours = withinUrgentWindow ? 72 : 168;
+  const compliant = hoursDiff <= maxAllowedHours;
   
   return {
     applicable: true,
@@ -692,13 +696,17 @@ export function generateComplianceReport(results: ComplianceResult[]): string {
   const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
   const totalWarnings = results.reduce((sum, r) => sum + r.warnings.length, 0);
   
+  const compliancePercentage = totalResources > 0 
+    ? Math.round(compliantResources / totalResources * 100) 
+    : 0;
+  
   const report = `
 CMS-0057-F Compliance Report
 ============================
 
 Overall Summary:
 - Total Resources Validated: ${totalResources}
-- Compliant Resources: ${compliantResources} (${Math.round(compliantResources / totalResources * 100)}%)
+- Compliant Resources: ${compliantResources} (${compliancePercentage}%)
 - Total Issues: ${totalIssues}
 - Total Warnings: ${totalWarnings}
 

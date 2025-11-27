@@ -10,8 +10,7 @@
 
 import { 
   validateCMS0057FCompliance, 
-  validateBatchCompliance,
-  ComplianceResult 
+  validateBatchCompliance
 } from '../compliance-checker';
 import { 
   mapX12837ToFhirClaim, 
@@ -19,7 +18,7 @@ import {
   mapX12835ToFhirEOB 
 } from '../fhir-mapper';
 import { X12_837_Claim, X12_278_Request, X12_835_Remittance } from '../x12ClaimTypes';
-import { Patient, Bundle, ExplanationOfBenefit } from 'fhir/r4';
+import { Bundle } from 'fhir/r4';
 
 describe('CMS-0057-F Integration Tests', () => {
   
@@ -489,8 +488,6 @@ describe('CMS-0057-F Integration Tests', () => {
   describe('Patient Access API Integration', () => {
     it('validates patient can access their claims and EOBs', () => {
       // Simulate patient requesting their data
-      const patientId = 'PAT-ACCESS-001';
-      
       // Patient should have access to:
       // - Patient resource (demographics)
       // - Coverage resource (insurance info)
