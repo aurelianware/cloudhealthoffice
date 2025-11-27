@@ -28,7 +28,7 @@ const PHI_FIELD_NAMES = [
  * Note: These are conservative patterns to avoid false positives with business identifiers
  */
 const PHI_PATTERNS = {
-  // SSN: 123-45-6789 (with dashes) or standalone 9-digit numbers that look like SSN
+  // SSN: XXX-XX-XXXX format (with dashes) or standalone 9-digit numbers that look like SSN
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   
   // Email: user@example.com
