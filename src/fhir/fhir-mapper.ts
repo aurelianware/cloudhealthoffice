@@ -21,6 +21,7 @@ import {
   CodeableConcept
 } from 'fhir/r4';
 import { X12_837_Claim, X12_278_Request, X12_835_Remittance } from './x12ClaimTypes';
+import { redactPHI } from '../security/hipaaLogger';
 
 /**
  * Maps X12 837 claim to FHIR R4 Claim resource
@@ -622,6 +623,6 @@ function formatDate(date: string): string {
   }
   
   // Invalid format - log warning and return empty string
-  console.warn(`[Cloud Health Office] Invalid date format received: "${date}". Expected CCYYMMDD or YYYY-MM-DD.`);
+  console.warn(`[Cloud Health Office] Invalid date format received: "${redactPHI(date)}". Expected CCYYMMDD or YYYY-MM-DD.`);
   return '';
 }
