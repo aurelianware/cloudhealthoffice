@@ -32,6 +32,3 @@ Thumbs.db
 
 # Downloaded tools
 actionlint
-node_modules/
-dist/
-tsconfig.json
