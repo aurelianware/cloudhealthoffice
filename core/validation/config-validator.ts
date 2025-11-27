@@ -13,7 +13,7 @@ export class ConfigValidator {
 
   constructor() {
     this.ajv = new Ajv({ allErrors: true, strict: false });
-    addFormats(this.ajv, ['email']);
+    addFormats(this.ajv); // enables standard format validators like email
     this.initializeSchema();
   }
 

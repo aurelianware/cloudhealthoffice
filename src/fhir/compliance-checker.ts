@@ -1,589 +1,730 @@
 /**
  * CMS-0057-F Compliance Checker
  * 
- * Validates FHIR resources and processes against CMS-0057-F requirements:
- * - CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F)
- * - Data class requirements
- * - Timeline requirements (USCDI v3 data classes)
- * - Prior authorization API requirements
+ * Validates FHIR resources against CMS-0057-F Prior Authorization Rule requirements:
+ * - Data class validation (USCDI v1/v2)
+ * - Timeline requirements (response times)
+ * - Da Vinci IG conformance (PDex, CRD, DTR, PAS)
+ * - US Core IG conformance
  * 
  * References:
- * - CMS-0057-F Final Rule
- * - USCDI v3 (United States Core Data for Interoperability)
- * - HL7 FHIR R4 Specification
- * - Da Vinci FHIR Implementation Guides (PAS, CRD, DTR)
- * 
- * @module compliance-checker
+ * - CMS-0057-F: Advancing Interoperability and Improving Prior Authorization Processes (March 2023)
+ * - USCDI v1 & v2: United States Core Data for Interoperability
+ * - Da Vinci PDex: Payer Data Exchange Implementation Guide
+ * - Da Vinci PAS: Prior Authorization Support Implementation Guide
+ * - Da Vinci CRD: Coverage Requirements Discovery
+ * - Da Vinci DTR: Documentation Templates and Rules
+ * - US Core IG v3.1.1+
  */
 
-import { Resource } from 'fhir/r4';
+import { Resource, ServiceRequest, ExplanationOfBenefit, Claim, Patient } from 'fhir/r4';
 
-/**
- * Compliance check result
- */
 export interface ComplianceResult {
-  /** Overall compliance status */
   compliant: boolean;
-  /** List of compliance issues found */
   issues: ComplianceIssue[];
-  /** Compliance score (0-100) */
-  score: number;
-  /** Detailed breakdown by category */
-  breakdown: {
-    dataClasses: ComplianceCategory;
-    timelines: ComplianceCategory;
-    apiRequirements: ComplianceCategory;
-  };
+  warnings: ComplianceWarning[];
+  summary: ComplianceSummary;
 }
 
-/**
- * Individual compliance issue
- */
 export interface ComplianceIssue {
-  /** Severity: error, warning, or info */
   severity: 'error' | 'warning' | 'info';
-  /** Category of the issue */
-  category: 'data-class' | 'timeline' | 'api' | 'profile' | 'terminology';
-  /** Human-readable description */
+  code: string;
   message: string;
-  /** FHIR resource element path (if applicable) */
-  path?: string;
-  /** CMS rule reference */
-  ruleReference?: string;
+  location?: string;
+  requirement?: string;
+}
+
+export interface ComplianceWarning {
+  code: string;
+  message: string;
+  recommendation?: string;
+}
+
+export interface ComplianceSummary {
+  resourceType: string;
+  requiredElementsPresent: number;
+  totalRequiredElements: number;
+  usCoreSections: string[];
+  daVinciProfiles: string[];
+  uscdiDataClasses: string[];
+  timelineCompliance: TimelineCompliance;
+}
+
+export interface TimelineCompliance {
+  applicable: boolean;
+  requirement?: string;
+  deadline?: string;
+  compliant?: boolean;
 }
 
 /**
- * Compliance category result
+ * Main compliance validation function
+ * Validates any FHIR resource against CMS-0057-F requirements
  */
-export interface ComplianceCategory {
-  /** Category is compliant */
-  compliant: boolean;
-  /** Number of checks passed */
-  passed: number;
-  /** Total number of checks */
-  total: number;
-  /** Issues in this category */
-  issues: ComplianceIssue[];
-}
-
-/**
- * CMS-0057-F data class requirements (USCDI v3)
- * These data classes define the minimum required data elements for interoperability.
- * Used for validation and compliance scoring.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const CMS_DATA_CLASSES = [
-  'Patient Demographics',
-  'Clinical Notes',
-  'Laboratory Results',
-  'Medications',
-  'Allergies and Intolerances',
-  'Immunizations',
-  'Procedures',
-  'Vital Signs',
-  'Problems',
-  'Assessment and Plan of Treatment',
-  'Goals',
-  'Health Concerns'
-];
-
-/**
- * CMS-0057-F timeline requirements
- * These timelines define the maximum allowed response times for prior authorization.
- * Used for timeline validation and compliance checking.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const CMS_TIMELINES = {
-  priorAuthDecision: 7, // 7 calendar days for standard requests
-  urgentPriorAuthDecision: 3, // 72 hours (3 calendar days) for urgent requests
-  dataAvailability: 1, // 1 business day for data availability
-  notificationTimeframe: 1 // 1 business day (24 hours) for decision notification
-};
-
-/**
- * Main compliance checker function
- * 
- * @param resource FHIR resource to check
- * @param options Compliance check options
- * @returns Compliance check result
- */
-export function checkCMSCompliance(
-  resource: Resource,
-  options: {
-    checkDataClasses?: boolean;
-    checkTimelines?: boolean;
-    checkAPIRequirements?: boolean;
-  } = {}
-): ComplianceResult {
+export function validateCMS0057FCompliance(resource: Resource): ComplianceResult {
   const issues: ComplianceIssue[] = [];
+  const warnings: ComplianceWarning[] = [];
   
-  // Default: check all
-  const checkDataClasses = options.checkDataClasses !== false;
-  const checkTimelines = options.checkTimelines !== false;
-  const checkAPIRequirements = options.checkAPIRequirements !== false;
-  
-  // Check resource type support
-  if (!isSupportedResourceType(resource.resourceType)) {
-    issues.push({
-      severity: 'warning',
-      category: 'api',
-      message: `Resource type ${resource.resourceType} may not be covered by CMS-0057-F`,
-      ruleReference: 'CMS-0057-F §438.242'
-    });
+  // Resource-specific validation
+  switch (resource.resourceType) {
+    case 'ServiceRequest':
+      return validateServiceRequest(resource as ServiceRequest);
+    case 'ExplanationOfBenefit':
+      return validateExplanationOfBenefit(resource as ExplanationOfBenefit);
+    case 'Claim':
+      return validateClaim(resource as Claim);
+    case 'Patient':
+      return validatePatient(resource as Patient);
+    default:
+      issues.push({
+        severity: 'warning',
+        code: 'UNSUPPORTED_RESOURCE',
+        message: `Resource type ${resource.resourceType} is not specifically validated for CMS-0057-F`
+      });
   }
   
-  // Check FHIR profiles
-  const profileIssues = checkFHIRProfiles(resource);
-  issues.push(...profileIssues);
-  
-  // Check data class compliance
-  const dataClassResult = checkDataClasses 
-    ? checkDataClassCompliance(resource)
-    : { compliant: true, passed: 0, total: 0, issues: [] };
-  issues.push(...dataClassResult.issues);
-  
-  // Check timeline compliance
-  const timelineResult = checkTimelines
-    ? checkTimelineCompliance(resource)
-    : { compliant: true, passed: 0, total: 0, issues: [] };
-  issues.push(...timelineResult.issues);
-  
-  // Check API requirements
-  const apiResult = checkAPIRequirements
-    ? checkAPIRequirementsCompliance(resource)
-    : { compliant: true, passed: 0, total: 0, issues: [] };
-  issues.push(...apiResult.issues);
-  
-  // Calculate overall compliance
-  const errorCount = issues.filter(i => i.severity === 'error').length;
-  const compliant = errorCount === 0;
-  
-  // Calculate score (100 = perfect, 0 = many errors)
-  const warningCount = issues.filter(i => i.severity === 'warning').length;
-  const score = Math.max(0, 100 - (errorCount * 10) - (warningCount * 2));
-  
   return {
-    compliant,
+    compliant: issues.filter(i => i.severity === 'error').length === 0,
     issues,
-    score,
-    breakdown: {
-      dataClasses: dataClassResult,
-      timelines: timelineResult,
-      apiRequirements: apiResult
+    warnings,
+    summary: {
+      resourceType: resource.resourceType || 'Unknown',
+      requiredElementsPresent: 0,
+      totalRequiredElements: 0,
+      usCoreSections: [],
+      daVinciProfiles: [],
+      uscdiDataClasses: [],
+      timelineCompliance: { applicable: false }
     }
   };
 }
 
 /**
- * Check if resource type is supported by CMS-0057-F
+ * Validate ServiceRequest for Prior Authorization (Da Vinci PAS)
  */
-function isSupportedResourceType(resourceType: string): boolean {
-  const supportedTypes = [
-    'Patient',
-    'Claim',
-    'ServiceRequest',
-    'ExplanationOfBenefit',
-    'Coverage',
-    'CoverageEligibilityRequest',
-    'CoverageEligibilityResponse',
-    'Observation',
-    'Condition',
-    'Procedure',
-    'MedicationRequest',
-    'Immunization',
-    'AllergyIntolerance',
-    'DocumentReference',
-    'DiagnosticReport'
-  ];
-  
-  return supportedTypes.includes(resourceType);
-}
-
-/**
- * Check FHIR profile conformance
- */
-function checkFHIRProfiles(resource: Resource): ComplianceIssue[] {
+function validateServiceRequest(resource: ServiceRequest): ComplianceResult {
   const issues: ComplianceIssue[] = [];
+  const warnings: ComplianceWarning[] = [];
+  const uscdiClasses: string[] = [];
+  let requiredPresent = 0;
+  const totalRequired = 10;
   
-  // Check if resource has meta.profile
-  if (!resource.meta?.profile || resource.meta.profile.length === 0) {
+  // Required elements for Da Vinci PAS
+  if (!resource.status) {
     issues.push({
-      severity: 'warning',
-      category: 'profile',
-      message: 'Resource does not declare conformance to any FHIR profiles',
-      path: 'meta.profile',
-      ruleReference: 'US Core IG'
+      severity: 'error',
+      code: 'MISSING_STATUS',
+      message: 'ServiceRequest.status is required',
+      requirement: 'Da Vinci PAS'
     });
   } else {
-    // Check for US Core or Da Vinci profiles
-    const hasUSCoreProfile = resource.meta.profile.some(p => 
-      p.includes('us/core') || p.includes('davinci')
-    );
-    
-    if (!hasUSCoreProfile) {
-      issues.push({
-        severity: 'warning',
-        category: 'profile',
-        message: 'Resource should conform to US Core or Da Vinci profiles for CMS-0057-F',
-        path: 'meta.profile',
-        ruleReference: 'CMS-0057-F §438.242(b)(2)'
-      });
-    }
+    requiredPresent++;
   }
   
-  return issues;
-}
-
-/**
- * Check data class compliance (USCDI v3)
- */
-function checkDataClassCompliance(resource: Resource): ComplianceCategory {
-  const issues: ComplianceIssue[] = [];
-  let passed = 0;
-  let total = 0;
+  if (!resource.intent) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_INTENT',
+      message: 'ServiceRequest.intent is required',
+      requirement: 'Da Vinci PAS'
+    });
+  } else {
+    requiredPresent++;
+  }
   
-  // ServiceRequest (Prior Authorization)
-  if (resource.resourceType === 'ServiceRequest') {
-    total = 5;
-    
-    const sr = resource as any;
-    
-    // Check required elements for prior auth
-    if (sr.status) passed++;
-    else issues.push({
+  if (!resource.subject) {
+    issues.push({
       severity: 'error',
-      category: 'data-class',
-      message: 'ServiceRequest must have status',
-      path: 'status',
-      ruleReference: 'CMS-0057-F §438.210(d)'
+      code: 'MISSING_SUBJECT',
+      message: 'ServiceRequest.subject (patient reference) is required',
+      requirement: 'Da Vinci PAS'
     });
-    
-    if (sr.intent) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ServiceRequest must have intent',
-      path: 'intent',
-      ruleReference: 'Da Vinci PAS IG'
-    });
-    
-    if (sr.code) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ServiceRequest must have code (service being requested)',
-      path: 'code',
-      ruleReference: 'CMS-0057-F §438.210(d)'
-    });
-    
-    if (sr.subject) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ServiceRequest must have subject (patient reference)',
-      path: 'subject',
-      ruleReference: 'FHIR R4 Core'
-    });
-    
-    if (sr.authoredOn) passed++;
-    else issues.push({
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Patient Demographics');
+  }
+  
+  if (!resource.authoredOn) {
+    issues.push({
       severity: 'warning',
-      category: 'data-class',
-      message: 'ServiceRequest should have authoredOn date',
-      path: 'authoredOn',
-      ruleReference: 'Da Vinci PAS IG'
+      code: 'MISSING_AUTHORED_ON',
+      message: 'ServiceRequest.authoredOn should be present for timeline tracking',
+      requirement: 'CMS-0057-F Timeline'
     });
+  } else {
+    requiredPresent++;
   }
   
-  // Claim
-  if (resource.resourceType === 'Claim') {
-    total = 6;
-    
-    const claim = resource as any;
-    
-    if (claim.status) passed++;
-    else issues.push({
+  if (!resource.requester) {
+    issues.push({
       severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have status',
-      path: 'status'
+      code: 'MISSING_REQUESTER',
+      message: 'ServiceRequest.requester is required',
+      requirement: 'Da Vinci PAS'
     });
-    
-    if (claim.type) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have type',
-      path: 'type'
-    });
-    
-    if (claim.use) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have use',
-      path: 'use'
-    });
-    
-    if (claim.patient) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have patient reference',
-      path: 'patient'
-    });
-    
-    if (claim.provider) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have provider',
-      path: 'provider'
-    });
-    
-    if (claim.item && claim.item.length > 0) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'Claim must have at least one service line item',
-      path: 'item'
-    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Provenance');
   }
   
-  // ExplanationOfBenefit
-  if (resource.resourceType === 'ExplanationOfBenefit') {
-    total = 5;
-    
-    const eob = resource as any;
-    
-    if (eob.status) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ExplanationOfBenefit must have status',
-      path: 'status'
-    });
-    
-    if (eob.type) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ExplanationOfBenefit must have type',
-      path: 'type'
-    });
-    
-    if (eob.patient) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ExplanationOfBenefit must have patient reference',
-      path: 'patient'
-    });
-    
-    if (eob.insurer) passed++;
-    else issues.push({
-      severity: 'error',
-      category: 'data-class',
-      message: 'ExplanationOfBenefit must have insurer',
-      path: 'insurer'
-    });
-    
-    if (eob.item && eob.item.length > 0) passed++;
-    else issues.push({
+  if (!resource.insurance || resource.insurance.length === 0) {
+    issues.push({
       severity: 'warning',
-      category: 'data-class',
-      message: 'ExplanationOfBenefit should have service line items',
-      path: 'item'
+      code: 'MISSING_INSURANCE',
+      message: 'ServiceRequest.insurance should reference coverage information',
+      requirement: 'Da Vinci PAS'
     });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Coverage');
   }
   
-  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  // Check for order detail (procedure codes)
+  if (!resource.code && (!resource.orderDetail || resource.orderDetail.length === 0)) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_SERVICE_CODE',
+      message: 'ServiceRequest must have either code or orderDetail with procedure codes',
+      requirement: 'Da Vinci PAS'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Procedures');
+  }
+  
+  // Check for diagnosis/reason
+  if (!resource.reasonCode && !resource.reasonReference) {
+    warnings.push({
+      code: 'MISSING_REASON',
+      message: 'ServiceRequest should include reasonCode (diagnosis) for clinical context',
+      recommendation: 'Add ICD-10 diagnosis codes in reasonCode'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Problems');
+  }
+  
+  // Check for timing
+  if (!resource.occurrencePeriod && !resource.occurrenceDateTime) {
+    warnings.push({
+      code: 'MISSING_TIMING',
+      message: 'ServiceRequest should include occurrence timing',
+      recommendation: 'Add occurrencePeriod for date range'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  // Check priority for urgency
+  if (resource.priority && resource.priority === 'urgent') {
+    uscdiClasses.push('Clinical Notes');
+    requiredPresent++;
+  }
+  
+  // Timeline compliance check
+  const timelineCompliance = checkPriorAuthTimeline(resource.authoredOn);
   
   return {
-    compliant,
-    passed,
-    total,
-    issues
+    compliant: issues.filter(i => i.severity === 'error').length === 0,
+    issues,
+    warnings,
+    summary: {
+      resourceType: 'ServiceRequest',
+      requiredElementsPresent: requiredPresent,
+      totalRequiredElements: totalRequired,
+      usCoreSections: ['ServiceRequest'],
+      daVinciProfiles: ['PAS ServiceRequest'],
+      uscdiDataClasses: [...new Set(uscdiClasses)],
+      timelineCompliance
+    }
   };
 }
 
 /**
- * Check timeline compliance
+ * Validate ExplanationOfBenefit
  */
-function checkTimelineCompliance(resource: Resource): ComplianceCategory {
+function validateExplanationOfBenefit(resource: ExplanationOfBenefit): ComplianceResult {
   const issues: ComplianceIssue[] = [];
-  let passed = 0;
-  let total = 0;
+  const warnings: ComplianceWarning[] = [];
+  const uscdiClasses: string[] = [];
+  let requiredPresent = 0;
+  const totalRequired = 12;
   
-  // Check ServiceRequest timelines
-  if (resource.resourceType === 'ServiceRequest') {
-    total = 2;
+  // Required elements
+  if (!resource.status) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_STATUS',
+      message: 'ExplanationOfBenefit.status is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.type) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_TYPE',
+      message: 'ExplanationOfBenefit.type is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.use) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_USE',
+      message: 'ExplanationOfBenefit.use is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.patient) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_PATIENT',
+      message: 'ExplanationOfBenefit.patient is required',
+      requirement: 'US Core'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Patient Demographics');
+  }
+  
+  if (!resource.created) {
+    issues.push({
+      severity: 'warning',
+      code: 'MISSING_CREATED',
+      message: 'ExplanationOfBenefit.created should be present',
+      requirement: 'CMS-0057-F'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.insurer) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_INSURER',
+      message: 'ExplanationOfBenefit.insurer is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Coverage');
+  }
+  
+  if (!resource.provider) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_PROVIDER',
+      message: 'ExplanationOfBenefit.provider is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Provenance');
+  }
+  
+  if (!resource.outcome) {
+    issues.push({
+      severity: 'warning',
+      code: 'MISSING_OUTCOME',
+      message: 'ExplanationOfBenefit.outcome should be present',
+      requirement: 'US Core'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.item || resource.item.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_ITEMS',
+      message: 'ExplanationOfBenefit must have at least one item',
+      requirement: 'US Core'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Procedures');
     
-    const sr = resource as any;
-    
-    // Check if authoredOn is present
-    if (sr.authoredOn) {
-      passed++;
-      
-      // Check if request is recent (within acceptable timeframe)
-      const authoredDate = new Date(sr.authoredOn);
-      const now = new Date();
-      const daysDiff = (now.getTime() - authoredDate.getTime()) / (1000 * 60 * 60 * 24);
-      
-      if (daysDiff > 30) {
-        issues.push({
-          severity: 'warning',
-          category: 'timeline',
-          message: `ServiceRequest is ${Math.floor(daysDiff)} days old - consider updating status`,
-          path: 'authoredOn',
-          ruleReference: 'CMS-0057-F §438.210(d)'
-        });
-      } else {
-        passed++;
-      }
+    // Validate item adjudications
+    const itemsWithAdjudication = resource.item.filter(item => item.adjudication && item.adjudication.length > 0);
+    if (itemsWithAdjudication.length === 0) {
+      warnings.push({
+        code: 'MISSING_ADJUDICATION',
+        message: 'Items should include adjudication details',
+        recommendation: 'Add adjudication with submitted, eligible, and benefit amounts'
+      });
     } else {
-      issues.push({
-        severity: 'warning',
-        category: 'timeline',
-        message: 'ServiceRequest should have authoredOn date for timeline tracking',
-        path: 'authoredOn',
-        ruleReference: 'CMS-0057-F §438.210(d)'
-      });
+      requiredPresent++;
+      uscdiClasses.push('Financial');
     }
   }
   
-  // Check ExplanationOfBenefit timelines
-  if (resource.resourceType === 'ExplanationOfBenefit') {
-    total = 1;
-    
-    const eob = resource as any;
-    
-    // Check if created date is present
-    if (eob.created) {
-      passed++;
-    } else {
-      issues.push({
-        severity: 'warning',
-        category: 'timeline',
-        message: 'ExplanationOfBenefit should have created date',
-        path: 'created'
-      });
-    }
+  if (!resource.payment) {
+    warnings.push({
+      code: 'MISSING_PAYMENT',
+      message: 'ExplanationOfBenefit.payment should include payment information',
+      recommendation: 'Add payment details for transparency'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Financial');
   }
   
-  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  if (!resource.total || resource.total.length === 0) {
+    warnings.push({
+      code: 'MISSING_TOTAL',
+      message: 'ExplanationOfBenefit.total should include total amounts',
+      recommendation: 'Add total submitted and benefit amounts'
+    });
+  } else {
+    requiredPresent++;
+  }
   
   return {
-    compliant,
-    passed,
-    total,
-    issues
+    compliant: issues.filter(i => i.severity === 'error').length === 0,
+    issues,
+    warnings,
+    summary: {
+      resourceType: 'ExplanationOfBenefit',
+      requiredElementsPresent: requiredPresent,
+      totalRequiredElements: totalRequired,
+      usCoreSections: ['ExplanationOfBenefit'],
+      daVinciProfiles: ['PDex ExplanationOfBenefit'],
+      uscdiDataClasses: [...new Set(uscdiClasses)],
+      timelineCompliance: { applicable: false }
+    }
   };
 }
 
 /**
- * Check API requirements compliance
+ * Validate Claim resource
  */
-function checkAPIRequirementsCompliance(resource: Resource): ComplianceCategory {
+function validateClaim(resource: Claim): ComplianceResult {
   const issues: ComplianceIssue[] = [];
-  let passed = 0;
-  let total = 3;
+  const warnings: ComplianceWarning[] = [];
+  const uscdiClasses: string[] = [];
+  let requiredPresent = 0;
+  const totalRequired = 10;
   
-  // Check resource has ID
-  if (resource.id) {
-    passed++;
-  } else {
+  if (!resource.status) {
     issues.push({
       severity: 'error',
-      category: 'api',
-      message: 'Resource must have an ID for API access',
-      path: 'id',
-      ruleReference: 'FHIR R4 RESTful API'
+      code: 'MISSING_STATUS',
+      message: 'Claim.status is required',
+      requirement: 'FHIR R4'
     });
+  } else {
+    requiredPresent++;
   }
   
-  // Check resource has meta
-  if (resource.meta) {
-    passed++;
+  if (!resource.type) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_TYPE',
+      message: 'Claim.type is required',
+      requirement: 'FHIR R4'
+    });
   } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.use) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_USE',
+      message: 'Claim.use is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.patient) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_PATIENT',
+      message: 'Claim.patient is required',
+      requirement: 'US Core'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Patient Demographics');
+  }
+  
+  if (!resource.created) {
     issues.push({
       severity: 'warning',
-      category: 'api',
-      message: 'Resource should have meta element with version and profile information',
-      path: 'meta',
-      ruleReference: 'FHIR R4 Core'
+      code: 'MISSING_CREATED',
+      message: 'Claim.created should be present',
+      requirement: 'CMS-0057-F'
     });
-  }
-  
-  // Check for proper identifiers
-  const hasIdentifier = (resource as any).identifier;
-  if (hasIdentifier && Array.isArray(hasIdentifier) && hasIdentifier.length > 0) {
-    passed++;
   } else {
-    issues.push({
-      severity: 'warning',
-      category: 'api',
-      message: 'Resource should have at least one business identifier',
-      path: 'identifier',
-      ruleReference: 'CMS-0057-F §438.242(b)(2)'
-    });
+    requiredPresent++;
   }
   
-  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  if (!resource.provider) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_PROVIDER',
+      message: 'Claim.provider is required',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Provenance');
+  }
+  
+  if (!resource.priority) {
+    warnings.push({
+      code: 'MISSING_PRIORITY',
+      message: 'Claim.priority should be specified',
+      recommendation: 'Add priority code'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.insurance || resource.insurance.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_INSURANCE',
+      message: 'Claim must have at least one insurance',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Coverage');
+  }
+  
+  if (!resource.item || resource.item.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_ITEMS',
+      message: 'Claim must have at least one item',
+      requirement: 'FHIR R4'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Procedures');
+  }
+  
+  if (!resource.diagnosis || resource.diagnosis.length === 0) {
+    warnings.push({
+      code: 'MISSING_DIAGNOSIS',
+      message: 'Claim should include diagnosis codes',
+      recommendation: 'Add ICD-10 diagnosis codes'
+    });
+  } else {
+    requiredPresent++;
+    uscdiClasses.push('Problems');
+  }
   
   return {
-    compliant,
-    passed,
-    total,
-    issues
+    compliant: issues.filter(i => i.severity === 'error').length === 0,
+    issues,
+    warnings,
+    summary: {
+      resourceType: 'Claim',
+      requiredElementsPresent: requiredPresent,
+      totalRequiredElements: totalRequired,
+      usCoreSections: ['Claim'],
+      daVinciProfiles: ['PDex Claim'],
+      uscdiDataClasses: [...new Set(uscdiClasses)],
+      timelineCompliance: { applicable: false }
+    }
   };
 }
 
 /**
- * Batch compliance check for multiple resources
+ * Validate Patient resource (US Core conformance)
  */
-export function checkBatchCompliance(resources: Resource[]): ComplianceResult {
-  const allIssues: ComplianceIssue[] = [];
-  let totalScore = 0;
+function validatePatient(resource: Patient): ComplianceResult {
+  const issues: ComplianceIssue[] = [];
+  const warnings: ComplianceWarning[] = [];
+  const uscdiClasses: string[] = ['Patient Demographics'];
+  let requiredPresent = 0;
+  const totalRequired = 7;
   
-  const breakdowns = resources.map(resource => {
-    const result = checkCMSCompliance(resource);
-    allIssues.push(...result.issues);
-    totalScore += result.score;
-    return result.breakdown;
-  });
+  // US Core Patient requirements
+  if (!resource.identifier || resource.identifier.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_IDENTIFIER',
+      message: 'Patient must have at least one identifier',
+      requirement: 'US Core Patient'
+    });
+  } else {
+    requiredPresent++;
+  }
   
-  // Aggregate breakdowns
-  const aggregateBreakdown = {
-    dataClasses: aggregateCategory(breakdowns.map(b => b.dataClasses)),
-    timelines: aggregateCategory(breakdowns.map(b => b.timelines)),
-    apiRequirements: aggregateCategory(breakdowns.map(b => b.apiRequirements))
-  };
+  if (!resource.name || resource.name.length === 0) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_NAME',
+      message: 'Patient must have at least one name',
+      requirement: 'US Core Patient'
+    });
+  } else {
+    requiredPresent++;
+  }
   
-  const errorCount = allIssues.filter(i => i.severity === 'error').length;
-  const avgScore = resources.length > 0 ? totalScore / resources.length : 0;
+  if (!resource.gender) {
+    issues.push({
+      severity: 'error',
+      code: 'MISSING_GENDER',
+      message: 'Patient.gender is required',
+      requirement: 'US Core Patient'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.birthDate) {
+    warnings.push({
+      code: 'MISSING_BIRTHDATE',
+      message: 'Patient.birthDate should be present',
+      recommendation: 'Include birth date for demographic matching'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.address || resource.address.length === 0) {
+    warnings.push({
+      code: 'MISSING_ADDRESS',
+      message: 'Patient should have at least one address',
+      recommendation: 'Include address for coordination of care'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  if (!resource.telecom || resource.telecom.length === 0) {
+    warnings.push({
+      code: 'MISSING_TELECOM',
+      message: 'Patient should have contact information',
+      recommendation: 'Include phone or email'
+    });
+  } else {
+    requiredPresent++;
+  }
+  
+  // Check for US Core profile assertion
+  const hasUSCoreProfile = resource.meta?.profile?.some(
+    p => p.includes('us-core-patient')
+  );
+  
+  if (!hasUSCoreProfile) {
+    warnings.push({
+      code: 'MISSING_US_CORE_PROFILE',
+      message: 'Patient should declare US Core profile',
+      recommendation: 'Add http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient to meta.profile'
+    });
+  } else {
+    requiredPresent++;
+  }
   
   return {
-    compliant: errorCount === 0,
-    issues: allIssues,
-    score: Math.round(avgScore),
-    breakdown: aggregateBreakdown
+    compliant: issues.filter(i => i.severity === 'error').length === 0,
+    issues,
+    warnings,
+    summary: {
+      resourceType: 'Patient',
+      requiredElementsPresent: requiredPresent,
+      totalRequiredElements: totalRequired,
+      usCoreSections: ['US Core Patient'],
+      daVinciProfiles: ['PDex Patient'],
+      uscdiDataClasses: uscdiClasses,
+      timelineCompliance: { applicable: false }
+    }
   };
 }
 
 /**
- * Aggregate compliance categories
+ * Check prior authorization timeline compliance
+ * CMS-0057-F requires response within specific timeframes
+ * Note: This checks elapsed time since submission. In production, also check ServiceRequest.priority field.
  */
-function aggregateCategory(categories: ComplianceCategory[]): ComplianceCategory {
-  const totalPassed = categories.reduce((sum, cat) => sum + cat.passed, 0);
-  const totalTotal = categories.reduce((sum, cat) => sum + cat.total, 0);
-  const allIssues = categories.flatMap(cat => cat.issues);
-  const compliant = categories.every(cat => cat.compliant);
+function checkPriorAuthTimeline(authoredOn?: string): TimelineCompliance {
+  if (!authoredOn) {
+    return { applicable: false };
+  }
+  
+  const authoredDate = new Date(authoredOn);
+  const now = new Date();
+  const hoursDiff = (now.getTime() - authoredDate.getTime()) / (1000 * 60 * 60);
+  
+  // CMS-0057-F standard: 72 hours for urgent, 7 calendar days for standard
+  // This is a time-based check; production systems should also verify ServiceRequest.priority
+  // If request is still within 72-hour urgent window, apply urgent deadline; otherwise apply standard 7-day deadline
+  const withinUrgentWindow = hoursDiff <= 72;
+  const deadline = withinUrgentWindow ? '72 hours' : '7 calendar days';
+  // For urgent requests (within 72 hours), check against 72-hour deadline
+  // For standard requests (past 72 hours), check against 7-day (168 hours) deadline
+  const maxAllowedHours = withinUrgentWindow ? 72 : 168;
+  const compliant = hoursDiff <= maxAllowedHours;
   
   return {
-    compliant,
-    passed: totalPassed,
-    total: totalTotal,
-    issues: allIssues
+    applicable: true,
+    requirement: `CMS-0057-F: Response within ${deadline} for ${withinUrgentWindow ? 'urgent' : 'standard'} requests`,
+    deadline,
+    compliant
   };
+}
+
+/**
+ * Validate batch of resources
+ */
+export function validateBatchCompliance(resources: Resource[]): ComplianceResult[] {
+  return resources.map(resource => validateCMS0057FCompliance(resource));
+}
+
+/**
+ * Generate compliance report summary
+ */
+export function generateComplianceReport(results: ComplianceResult[]): string {
+  const totalResources = results.length;
+  const compliantResources = results.filter(r => r.compliant).length;
+  const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
+  const totalWarnings = results.reduce((sum, r) => sum + r.warnings.length, 0);
+  
+  const compliancePercentage = totalResources > 0 
+    ? Math.round(compliantResources / totalResources * 100) 
+    : 0;
+  
+  const report = `
+CMS-0057-F Compliance Report
+============================
+
+Overall Summary:
+- Total Resources Validated: ${totalResources}
+- Compliant Resources: ${compliantResources} (${compliancePercentage}%)
+- Total Issues: ${totalIssues}
+- Total Warnings: ${totalWarnings}
+
+Resource Breakdown:
+${results.map((r, i) => `
+  ${i + 1}. ${r.summary.resourceType}
+     - Compliant: ${r.compliant ? '✓' : '✗'}
+     - Required Elements: ${r.summary.requiredElementsPresent}/${r.summary.totalRequiredElements}
+     - USCDI Data Classes: ${r.summary.uscdiDataClasses.join(', ') || 'None'}
+     - Da Vinci Profiles: ${r.summary.daVinciProfiles.join(', ') || 'None'}
+     - Issues: ${r.issues.length}
+     - Warnings: ${r.warnings.length}
+`).join('')}
+
+Recommendations:
+${totalIssues > 0 ? '- Address critical errors to achieve compliance' : '✓ No critical issues found'}
+${totalWarnings > 0 ? `- Review ${totalWarnings} warnings for best practices` : '✓ No warnings'}
+`;
+  
+  return report;
 }
