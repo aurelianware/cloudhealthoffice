@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### V2 Release Notes Infrastructure (November 2024)
+- **Release Notes Portal**: New `site/release-notes.html` with delivered features, sandbox testing, and early adopter signup
+- **Documentation Updates**: Enhanced CMS-0057-F compliance documentation with post-FHIR implementation status
+- **Site Navigation**: Added release notes links across all platform landing pages
+- **V2 Announcements**: Updated site/index.html with v2 banners and CMS-0057-F/FHIR API announcements
+
+**Documentation**: [Release Notes](./site/release-notes.html), [CMS-0057-F Compliance](./docs/CMS-0057-F-COMPLIANCE.md)
+
+#### Complete FHIR R4 API Coverage (November 2024)
+- **X12 837 → FHIR Claim**: Professional, Institutional, and Dental claims with Da Vinci PDex profiles
+- **X12 278 → FHIR ServiceRequest**: Prior authorization with Da Vinci PAS/CRD compliance
+- **X12 835 → FHIR ExplanationOfBenefit**: Remittance advice with complete adjudication details
+- **X12 275 → FHIR DocumentReference**: Clinical attachments and supporting documentation
+- **CMS-0057-F Compliance Checker**: Automated validation of data classes and timeline requirements
+- **Azure FHIR Validator**: Profile validation integration with Azure API for FHIR
+- **US Core + Da Vinci IGs**: Full PDex, PAS, CRD, DTR implementation guide conformance
+- **45 Comprehensive Tests**: All FHIR mappers validated with 100% pass rate
+- **Zero External Dependencies**: Secure core mappers with no runtime vulnerabilities
+
+**Compliance Status**: Ready for January 1, 2027 CMS-0057-F deadline  
+**Documentation**: [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md), [CMS-0057-F-COMPLIANCE.md](./docs/CMS-0057-F-COMPLIANCE.md)
+
+#### Provider Access API (November 2024)
+- **Real-Time Patient Data Access**: FHIR R4 API for providers with patient authorization
+- **SMART on FHIR Scopes**: `user/*.read`, `system/*.read` for provider/system access
+- **NPI-Based Authorization**: Provider identity verification and access control
+- **Consent Management**: Patient authorization tracking and revocation support
+
+**Documentation**: [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md#provider-access-api)
+
+#### Payer-to-Payer Data Exchange (November 2024)
+- **Bulk FHIR Export**: `$export` operation for efficient data exchange
+- **5-Year Historical Data**: Configurable retention via Azure Data Lake lifecycle policies
+- **Enrollment-Triggered Transfers**: Automated data exchange on member transitions
+- **USCDI v1/v2 Coverage**: Complete data class support for interoperability
+
+**Documentation**: [CMS-0057-F-COMPLIANCE.md](./docs/CMS-0057-F-COMPLIANCE.md#payer-to-payer-api)
+
 #### Config-to-Workflow Generator (November 2024)
 - **Zero-Code Payer Onboarding System**: Transform JSON configuration into complete deployment artifacts
 - **Interactive Configuration Wizard**: Guided setup experience completing in <5 minutes
