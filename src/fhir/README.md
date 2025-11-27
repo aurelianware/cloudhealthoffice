@@ -196,24 +196,39 @@ const result = mapX12270ToFhirEligibility({
 });
 ```
 
-## Integration with fhir.js
+## Integration with native fetch
 
 ```typescript
-import Client from 'fhir.js';
 import { mapX12270ToFhirEligibility } from './fhirEligibilityMapper';
 
-// Initialize FHIR client
-const fhirClient = Client({
-  baseUrl: 'https://your-fhir-server.com/fhir',
-  auth: { bearer: 'your-token' }
-});
+const fhirBaseUrl = 'https://your-fhir-server.com/fhir';
+const accessToken = 'your-oauth-token';
 
-// Transform and create resources
+// Transform X12 to FHIR
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
+// Helper for authenticated requests
+async function postResource(resourceType: string, body: unknown) {
+  const response = await fetch(`${fhirBaseUrl}/${resourceType}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/fhir+json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`FHIR POST failed (${response.status}): ${errorBody}`);
+  }
+
+  return response.json();
+}
+
 // Store on FHIR server
-await fhirClient.create({ resource: patient });
-await fhirClient.create({ resource: eligibility });
+await postResource('Patient', patient);
+await postResource('CoverageEligibilityRequest', eligibility);
 ```
 
 ## Azure Logic Apps Integration

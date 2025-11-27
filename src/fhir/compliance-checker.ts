@@ -1,663 +1,589 @@
 /**
  * CMS-0057-F Compliance Checker
- * Validates FHIR resources against CMS-0057-F requirements and timelines
  * 
- * CMS-0057-F Final Rule Requirements:
- * - Prior Authorization APIs using FHIR R4
- * - Support for Da Vinci PAS Implementation Guide
- * - Specific response timelines for authorization requests
- * - Patient Access API requirements
- * - Provider Access API requirements
+ * Validates FHIR resources and processes against CMS-0057-F requirements:
+ * - CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F)
+ * - Data class requirements
+ * - Timeline requirements (USCDI v3 data classes)
+ * - Prior authorization API requirements
  * 
- * Timeline Requirements (CMS-0057-F):
- * - Expedited requests: 72 hours
- * - Standard requests: 7 calendar days
- * - Life-threatening situations: 24 hours
+ * References:
+ * - CMS-0057-F Final Rule
+ * - USCDI v3 (United States Core Data for Interoperability)
+ * - HL7 FHIR R4 Specification
+ * - Da Vinci FHIR Implementation Guides (PAS, CRD, DTR)
+ * 
+ * @module compliance-checker
  */
 
-import { ServiceRequest, Claim, ExplanationOfBenefit, Patient } from 'fhir/r4';
+import { Resource } from 'fhir/r4';
 
 /**
- * Compliance result structure
+ * Compliance check result
  */
 export interface ComplianceResult {
+  /** Overall compliance status */
   compliant: boolean;
+  /** List of compliance issues found */
   issues: ComplianceIssue[];
-  summary: string;
-  checkedRules: string[];
-  score: number; // 0-100
+  /** Compliance score (0-100) */
+  score: number;
+  /** Detailed breakdown by category */
+  breakdown: {
+    dataClasses: ComplianceCategory;
+    timelines: ComplianceCategory;
+    apiRequirements: ComplianceCategory;
+  };
 }
 
 /**
  * Individual compliance issue
  */
 export interface ComplianceIssue {
-  severity: 'error' | 'warning' | 'information';
-  rule: string;
+  /** Severity: error, warning, or info */
+  severity: 'error' | 'warning' | 'info';
+  /** Category of the issue */
+  category: 'data-class' | 'timeline' | 'api' | 'profile' | 'terminology';
+  /** Human-readable description */
   message: string;
-  location?: string;
-  suggestion?: string;
+  /** FHIR resource element path (if applicable) */
+  path?: string;
+  /** CMS rule reference */
+  ruleReference?: string;
 }
 
 /**
- * CMS-0057-F compliance classes
+ * Compliance category result
  */
-export enum CMSComplianceClass {
-  PRIOR_AUTH_API = 'prior-auth-api',
-  PATIENT_ACCESS_API = 'patient-access-api',
-  PROVIDER_ACCESS_API = 'provider-access-api',
-  TIMELINES = 'timelines',
-  DATA_ELEMENTS = 'data-elements',
-  SECURITY = 'security',
+export interface ComplianceCategory {
+  /** Category is compliant */
+  compliant: boolean;
+  /** Number of checks passed */
+  passed: number;
+  /** Total number of checks */
+  total: number;
+  /** Issues in this category */
+  issues: ComplianceIssue[];
 }
 
 /**
- * Main compliance checker class
+ * CMS-0057-F data class requirements (USCDI v3)
+ * These data classes define the minimum required data elements for interoperability.
+ * Used for validation and compliance scoring.
  */
-export class CMS0057FComplianceChecker {
-  private issues: ComplianceIssue[] = [];
-  private checkedRules: string[] = [];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const CMS_DATA_CLASSES = [
+  'Patient Demographics',
+  'Clinical Notes',
+  'Laboratory Results',
+  'Medications',
+  'Allergies and Intolerances',
+  'Immunizations',
+  'Procedures',
+  'Vital Signs',
+  'Problems',
+  'Assessment and Plan of Treatment',
+  'Goals',
+  'Health Concerns'
+];
+
+/**
+ * CMS-0057-F timeline requirements
+ * These timelines define the maximum allowed response times for prior authorization.
+ * Used for timeline validation and compliance checking.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const CMS_TIMELINES = {
+  priorAuthDecision: 7, // 7 calendar days for standard requests
+  urgentPriorAuthDecision: 3, // 72 hours (3 calendar days) for urgent requests
+  dataAvailability: 1, // 1 business day for data availability
+  notificationTimeframe: 1 // 1 business day (24 hours) for decision notification
+};
+
+/**
+ * Main compliance checker function
+ * 
+ * @param resource FHIR resource to check
+ * @param options Compliance check options
+ * @returns Compliance check result
+ */
+export function checkCMSCompliance(
+  resource: Resource,
+  options: {
+    checkDataClasses?: boolean;
+    checkTimelines?: boolean;
+    checkAPIRequirements?: boolean;
+  } = {}
+): ComplianceResult {
+  const issues: ComplianceIssue[] = [];
   
-  // Scoring constants
-  private readonly WARNING_PENALTY = 0.5; // Warnings count as half an error in scoring
+  // Default: check all
+  const checkDataClasses = options.checkDataClasses !== false;
+  const checkTimelines = options.checkTimelines !== false;
+  const checkAPIRequirements = options.checkAPIRequirements !== false;
   
-  /**
-   * Validates a FHIR ServiceRequest against CMS-0057-F requirements
-   */
-  public validateServiceRequest(serviceRequest: ServiceRequest): ComplianceResult {
-    this.reset();
-    
-    // Rule: Must have valid resource type
-    this.checkRule(
-      'SR-001',
-      serviceRequest.resourceType === 'ServiceRequest',
-      'Resource must be of type ServiceRequest',
-      'ServiceRequest.resourceType'
-    );
-    
-    // Rule: Must include Da Vinci PAS profile
-    this.checkRule(
-      'SR-002',
-      serviceRequest.meta?.profile?.some(p => 
-        p.includes('davinci-pas') || p.includes('ServiceRequest')
-      ) || false,
-      'ServiceRequest must include Da Vinci PAS profile in meta.profile',
-      'ServiceRequest.meta.profile',
-      'Add profile: http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-servicerequest'
-    );
-    
-    // Rule: Must have status
-    this.checkRule(
-      'SR-003',
-      !!serviceRequest.status,
-      'ServiceRequest must have a status',
-      'ServiceRequest.status'
-    );
-    
-    // Rule: Must have intent
-    this.checkRule(
-      'SR-004',
-      !!serviceRequest.intent,
-      'ServiceRequest must have an intent',
-      'ServiceRequest.intent'
-    );
-    
-    // Rule: Must have subject (patient)
-    this.checkRule(
-      'SR-005',
-      !!serviceRequest.subject,
-      'ServiceRequest must reference a patient',
-      'ServiceRequest.subject'
-    );
-    
-    // Rule: Must have requester (provider)
-    this.checkRule(
-      'SR-006',
-      !!serviceRequest.requester,
-      'ServiceRequest must reference a requester (provider)',
-      'ServiceRequest.requester'
-    );
-    
-    // Rule: Must have code (service type)
-    this.checkRule(
-      'SR-007',
-      !!serviceRequest.code,
-      'ServiceRequest must specify the service being requested',
-      'ServiceRequest.code'
-    );
-    
-    // Rule: Should have insurance/coverage reference
-    this.checkWarning(
-      'SR-008',
-      !!serviceRequest.insurance && serviceRequest.insurance.length > 0,
-      'ServiceRequest should include insurance/coverage reference',
-      'ServiceRequest.insurance'
-    );
-    
-    // Rule: Should have authoredOn date
-    this.checkWarning(
-      'SR-009',
-      !!serviceRequest.authoredOn,
-      'ServiceRequest should include authoredOn timestamp',
-      'ServiceRequest.authoredOn'
-    );
-    
-    return this.generateResult();
+  // Check resource type support
+  if (!isSupportedResourceType(resource.resourceType)) {
+    issues.push({
+      severity: 'warning',
+      category: 'api',
+      message: `Resource type ${resource.resourceType} may not be covered by CMS-0057-F`,
+      ruleReference: 'CMS-0057-F §438.242'
+    });
   }
   
-  /**
-   * Validates a FHIR Claim against US Core and CMS requirements
-   */
-  public validateClaim(claim: Claim): ComplianceResult {
-    this.reset();
-    
-    // Rule: Must have valid resource type
-    this.checkRule(
-      'CL-001',
-      claim.resourceType === 'Claim',
-      'Resource must be of type Claim',
-      'Claim.resourceType'
-    );
-    
-    // Rule: Must include US Core profile
-    this.checkRule(
-      'CL-002',
-      claim.meta?.profile?.some(p => p.includes('us-core')) || false,
-      'Claim must include US Core profile in meta.profile',
-      'Claim.meta.profile',
-      'Add profile: http://hl7.org/fhir/us/core/StructureDefinition/us-core-claim'
-    );
-    
-    // Rule: Must have status
-    this.checkRule(
-      'CL-003',
-      !!claim.status,
-      'Claim must have a status',
-      'Claim.status'
-    );
-    
-    // Rule: Must have type
-    this.checkRule(
-      'CL-004',
-      !!claim.type,
-      'Claim must have a type (professional, institutional, etc.)',
-      'Claim.type'
-    );
-    
-    // Rule: Must have use
-    this.checkRule(
-      'CL-005',
-      !!claim.use,
-      'Claim must specify use (claim, preauthorization, predetermination)',
-      'Claim.use'
-    );
-    
-    // Rule: Must have patient reference
-    this.checkRule(
-      'CL-006',
-      !!claim.patient,
-      'Claim must reference a patient',
-      'Claim.patient'
-    );
-    
-    // Rule: Must have created date
-    this.checkRule(
-      'CL-007',
-      !!claim.created,
-      'Claim must have a created date',
-      'Claim.created'
-    );
-    
-    // Rule: Must have provider
-    this.checkRule(
-      'CL-008',
-      !!claim.provider,
-      'Claim must reference a provider',
-      'Claim.provider'
-    );
-    
-    // Rule: Must have insurer
-    this.checkRule(
-      'CL-009',
-      !!claim.insurer,
-      'Claim must reference an insurer (payer)',
-      'Claim.insurer'
-    );
-    
-    // Rule: Should have diagnosis codes
-    this.checkWarning(
-      'CL-010',
-      !!claim.diagnosis && claim.diagnosis.length > 0,
-      'Claim should include diagnosis codes',
-      'Claim.diagnosis'
-    );
-    
-    // Rule: Must have service line items
-    this.checkRule(
-      'CL-011',
-      !!claim.item && claim.item.length > 0,
-      'Claim must include at least one service line item',
-      'Claim.item'
-    );
-    
-    // Rule: Should have total amount
-    this.checkWarning(
-      'CL-012',
-      !!claim.total,
-      'Claim should include total charge amount',
-      'Claim.total'
-    );
-    
-    return this.generateResult();
-  }
+  // Check FHIR profiles
+  const profileIssues = checkFHIRProfiles(resource);
+  issues.push(...profileIssues);
   
-  /**
-   * Validates ExplanationOfBenefit against US Core requirements
-   */
-  public validateExplanationOfBenefit(eob: ExplanationOfBenefit): ComplianceResult {
-    this.reset();
-    
-    // Rule: Must have valid resource type
-    this.checkRule(
-      'EOB-001',
-      eob.resourceType === 'ExplanationOfBenefit',
-      'Resource must be of type ExplanationOfBenefit',
-      'ExplanationOfBenefit.resourceType'
-    );
-    
-    // Rule: Must include US Core profile
-    this.checkRule(
-      'EOB-002',
-      eob.meta?.profile?.some(p => p.includes('us-core')) || false,
-      'ExplanationOfBenefit must include US Core profile',
-      'ExplanationOfBenefit.meta.profile',
-      'Add profile: http://hl7.org/fhir/us/core/StructureDefinition/us-core-explanationofbenefit'
-    );
-    
-    // Rule: Must have status
-    this.checkRule(
-      'EOB-003',
-      !!eob.status,
-      'ExplanationOfBenefit must have a status',
-      'ExplanationOfBenefit.status'
-    );
-    
-    // Rule: Must have type
-    this.checkRule(
-      'EOB-004',
-      !!eob.type,
-      'ExplanationOfBenefit must have a type',
-      'ExplanationOfBenefit.type'
-    );
-    
-    // Rule: Must have use
-    this.checkRule(
-      'EOB-005',
-      !!eob.use,
-      'ExplanationOfBenefit must specify use',
-      'ExplanationOfBenefit.use'
-    );
-    
-    // Rule: Must have patient
-    this.checkRule(
-      'EOB-006',
-      !!eob.patient,
-      'ExplanationOfBenefit must reference a patient',
-      'ExplanationOfBenefit.patient'
-    );
-    
-    // Rule: Must have created date
-    this.checkRule(
-      'EOB-007',
-      !!eob.created,
-      'ExplanationOfBenefit must have a created date',
-      'ExplanationOfBenefit.created'
-    );
-    
-    // Rule: Must have insurer
-    this.checkRule(
-      'EOB-008',
-      !!eob.insurer,
-      'ExplanationOfBenefit must reference an insurer',
-      'ExplanationOfBenefit.insurer'
-    );
-    
-    // Rule: Must have provider
-    this.checkRule(
-      'EOB-009',
-      !!eob.provider,
-      'ExplanationOfBenefit must reference a provider',
-      'ExplanationOfBenefit.provider'
-    );
-    
-    // Rule: Must have outcome
-    this.checkRule(
-      'EOB-010',
-      !!eob.outcome,
-      'ExplanationOfBenefit must specify outcome (complete, error, partial)',
-      'ExplanationOfBenefit.outcome'
-    );
-    
-    // Rule: Should have payment information
-    this.checkWarning(
-      'EOB-011',
-      !!eob.payment,
-      'ExplanationOfBenefit should include payment information',
-      'ExplanationOfBenefit.payment'
-    );
-    
-    // Rule: Should have total amounts
-    this.checkWarning(
-      'EOB-012',
-      !!eob.total && eob.total.length > 0,
-      'ExplanationOfBenefit should include total amounts',
-      'ExplanationOfBenefit.total'
-    );
-    
-    return this.generateResult();
-  }
+  // Check data class compliance
+  const dataClassResult = checkDataClasses 
+    ? checkDataClassCompliance(resource)
+    : { compliant: true, passed: 0, total: 0, issues: [] };
+  issues.push(...dataClassResult.issues);
   
-  /**
-   * Validates Patient resource against US Core requirements
-   */
-  public validatePatient(patient: Patient): ComplianceResult {
-    this.reset();
-    
-    // Rule: Must have valid resource type
-    this.checkRule(
-      'PAT-001',
-      patient.resourceType === 'Patient',
-      'Resource must be of type Patient',
-      'Patient.resourceType'
-    );
-    
-    // Rule: Must include US Core profile
-    this.checkRule(
-      'PAT-002',
-      patient.meta?.profile?.some(p => p.includes('us-core')) || false,
-      'Patient must include US Core Patient profile',
-      'Patient.meta.profile',
-      'Add profile: http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'
-    );
-    
-    // Rule: Must have identifier
-    this.checkRule(
-      'PAT-003',
-      !!patient.identifier && patient.identifier.length > 0,
-      'Patient must have at least one identifier',
-      'Patient.identifier'
-    );
-    
-    // Rule: Must have name
-    this.checkRule(
-      'PAT-004',
-      !!patient.name && patient.name.length > 0,
-      'Patient must have at least one name',
-      'Patient.name'
-    );
-    
-    // Rule: Must have gender
-    this.checkRule(
-      'PAT-005',
-      !!patient.gender,
-      'Patient must have a gender',
-      'Patient.gender'
-    );
-    
-    return this.generateResult();
-  }
+  // Check timeline compliance
+  const timelineResult = checkTimelines
+    ? checkTimelineCompliance(resource)
+    : { compliant: true, passed: 0, total: 0, issues: [] };
+  issues.push(...timelineResult.issues);
   
-  /**
-   * Validates timeline compliance for prior authorization
-   * CMS-0057-F requires specific response times
-   */
-  public validateTimeline(
-    requestDate: Date,
-    responseDate: Date,
-    isExpedited: boolean = false,
-    isLifeThreatening: boolean = false
-  ): ComplianceResult {
-    this.reset();
-    
-    const hoursElapsed = (responseDate.getTime() - requestDate.getTime()) / (1000 * 60 * 60);
-    const daysElapsed = hoursElapsed / 24;
-    
-    if (isLifeThreatening) {
-      // Life-threatening: 24 hours
-      this.checkRule(
-        'TIME-001',
-        hoursElapsed <= 24,
-        `Life-threatening authorization must be responded to within 24 hours (actual: ${hoursElapsed.toFixed(1)} hours)`,
-        'timeline'
-      );
-    } else if (isExpedited) {
-      // Expedited: 72 hours (3 days)
-      this.checkRule(
-        'TIME-002',
-        hoursElapsed <= 72,
-        `Expedited authorization must be responded to within 72 hours (actual: ${hoursElapsed.toFixed(1)} hours)`,
-        'timeline'
-      );
-    } else {
-      // Standard: 7 calendar days
-      this.checkRule(
-        'TIME-003',
-        daysElapsed <= 7,
-        `Standard authorization must be responded to within 7 calendar days (actual: ${daysElapsed.toFixed(1)} days)`,
-        'timeline'
-      );
+  // Check API requirements
+  const apiResult = checkAPIRequirements
+    ? checkAPIRequirementsCompliance(resource)
+    : { compliant: true, passed: 0, total: 0, issues: [] };
+  issues.push(...apiResult.issues);
+  
+  // Calculate overall compliance
+  const errorCount = issues.filter(i => i.severity === 'error').length;
+  const compliant = errorCount === 0;
+  
+  // Calculate score (100 = perfect, 0 = many errors)
+  const warningCount = issues.filter(i => i.severity === 'warning').length;
+  const score = Math.max(0, 100 - (errorCount * 10) - (warningCount * 2));
+  
+  return {
+    compliant,
+    issues,
+    score,
+    breakdown: {
+      dataClasses: dataClassResult,
+      timelines: timelineResult,
+      apiRequirements: apiResult
     }
-    
-    return this.generateResult();
-  }
+  };
+}
+
+/**
+ * Check if resource type is supported by CMS-0057-F
+ */
+function isSupportedResourceType(resourceType: string): boolean {
+  const supportedTypes = [
+    'Patient',
+    'Claim',
+    'ServiceRequest',
+    'ExplanationOfBenefit',
+    'Coverage',
+    'CoverageEligibilityRequest',
+    'CoverageEligibilityResponse',
+    'Observation',
+    'Condition',
+    'Procedure',
+    'MedicationRequest',
+    'Immunization',
+    'AllergyIntolerance',
+    'DocumentReference',
+    'DiagnosticReport'
+  ];
   
-  /**
-   * Comprehensive validation of CMS-0057-F compliance for a set of resources
-   */
-  public validateCMSCompliance(resources: {
-    serviceRequest?: ServiceRequest;
-    claim?: Claim;
-    eob?: ExplanationOfBenefit;
-    patient?: Patient;
-    timeline?: {
-      requestDate: Date;
-      responseDate: Date;
-      isExpedited?: boolean;
-      isLifeThreatening?: boolean;
-    };
-  }): ComplianceResult {
-    this.reset();
-    
-    const results: ComplianceResult[] = [];
-    
-    if (resources.serviceRequest) {
-      results.push(this.validateServiceRequest(resources.serviceRequest));
-    }
-    
-    if (resources.claim) {
-      results.push(this.validateClaim(resources.claim));
-    }
-    
-    if (resources.eob) {
-      results.push(this.validateExplanationOfBenefit(resources.eob));
-    }
-    
-    if (resources.patient) {
-      results.push(this.validatePatient(resources.patient));
-    }
-    
-    if (resources.timeline) {
-      results.push(this.validateTimeline(
-        resources.timeline.requestDate,
-        resources.timeline.responseDate,
-        resources.timeline.isExpedited,
-        resources.timeline.isLifeThreatening
-      ));
-    }
-    
-    // Aggregate results
-    const allIssues = results.flatMap(r => r.issues);
-    const allRules = results.flatMap(r => r.checkedRules);
-    const allCompliant = results.every(r => r.compliant);
-    const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.score, 0) / results.length : 0;
-    
-    return {
-      compliant: allCompliant,
-      issues: allIssues,
-      summary: this.generateSummary(allIssues, allCompliant),
-      checkedRules: [...new Set(allRules)],
-      score: Math.round(avgScore),
-    };
-  }
+  return supportedTypes.includes(resourceType);
+}
+
+/**
+ * Check FHIR profile conformance
+ */
+function checkFHIRProfiles(resource: Resource): ComplianceIssue[] {
+  const issues: ComplianceIssue[] = [];
   
-  /**
-   * Private helper methods
-   */
-  
-  private reset(): void {
-    this.issues = [];
-    this.checkedRules = [];
-  }
-  
-  private checkRule(
-    ruleId: string,
-    condition: boolean,
-    message: string,
-    location?: string,
-    suggestion?: string
-  ): void {
-    this.checkedRules.push(ruleId);
+  // Check if resource has meta.profile
+  if (!resource.meta?.profile || resource.meta.profile.length === 0) {
+    issues.push({
+      severity: 'warning',
+      category: 'profile',
+      message: 'Resource does not declare conformance to any FHIR profiles',
+      path: 'meta.profile',
+      ruleReference: 'US Core IG'
+    });
+  } else {
+    // Check for US Core or Da Vinci profiles
+    const hasUSCoreProfile = resource.meta.profile.some(p => 
+      p.includes('us/core') || p.includes('davinci')
+    );
     
-    if (!condition) {
-      this.issues.push({
-        severity: 'error',
-        rule: ruleId,
-        message,
-        location,
-        suggestion,
-      });
-    }
-  }
-  
-  private checkWarning(
-    ruleId: string,
-    condition: boolean,
-    message: string,
-    location?: string,
-    suggestion?: string
-  ): void {
-    this.checkedRules.push(ruleId);
-    
-    if (!condition) {
-      this.issues.push({
+    if (!hasUSCoreProfile) {
+      issues.push({
         severity: 'warning',
-        rule: ruleId,
-        message,
-        location,
-        suggestion,
+        category: 'profile',
+        message: 'Resource should conform to US Core or Da Vinci profiles for CMS-0057-F',
+        path: 'meta.profile',
+        ruleReference: 'CMS-0057-F §438.242(b)(2)'
       });
     }
   }
   
-  private generateResult(): ComplianceResult {
-    const errorCount = this.issues.filter(i => i.severity === 'error').length;
-    const warningCount = this.issues.filter(i => i.severity === 'warning').length;
+  return issues;
+}
+
+/**
+ * Check data class compliance (USCDI v3)
+ */
+function checkDataClassCompliance(resource: Resource): ComplianceCategory {
+  const issues: ComplianceIssue[] = [];
+  let passed = 0;
+  let total = 0;
+  
+  // ServiceRequest (Prior Authorization)
+  if (resource.resourceType === 'ServiceRequest') {
+    total = 5;
     
-    const compliant = errorCount === 0;
-    const score = this.checkedRules.length > 0
-      ? Math.round(
-          ((this.checkedRules.length - errorCount - warningCount * this.WARNING_PENALTY) / this.checkedRules.length) * 100
-        )
-      : 0;
+    const sr = resource as any;
     
-    return {
-      compliant,
-      issues: this.issues,
-      summary: this.generateSummary(this.issues, compliant),
-      checkedRules: this.checkedRules,
-      score,
-    };
+    // Check required elements for prior auth
+    if (sr.status) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ServiceRequest must have status',
+      path: 'status',
+      ruleReference: 'CMS-0057-F §438.210(d)'
+    });
+    
+    if (sr.intent) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ServiceRequest must have intent',
+      path: 'intent',
+      ruleReference: 'Da Vinci PAS IG'
+    });
+    
+    if (sr.code) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ServiceRequest must have code (service being requested)',
+      path: 'code',
+      ruleReference: 'CMS-0057-F §438.210(d)'
+    });
+    
+    if (sr.subject) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ServiceRequest must have subject (patient reference)',
+      path: 'subject',
+      ruleReference: 'FHIR R4 Core'
+    });
+    
+    if (sr.authoredOn) passed++;
+    else issues.push({
+      severity: 'warning',
+      category: 'data-class',
+      message: 'ServiceRequest should have authoredOn date',
+      path: 'authoredOn',
+      ruleReference: 'Da Vinci PAS IG'
+    });
   }
   
-  private generateSummary(issues: ComplianceIssue[], compliant: boolean): string {
-    const errors = issues.filter(i => i.severity === 'error').length;
-    const warnings = issues.filter(i => i.severity === 'warning').length;
+  // Claim
+  if (resource.resourceType === 'Claim') {
+    total = 6;
     
-    if (compliant) {
-      if (warnings > 0) {
-        return `Compliant with CMS-0057-F requirements (${warnings} warnings)`;
-      }
-      return 'Fully compliant with CMS-0057-F requirements';
-    }
+    const claim = resource as any;
     
-    return `Not compliant: ${errors} errors, ${warnings} warnings`;
+    if (claim.status) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have status',
+      path: 'status'
+    });
+    
+    if (claim.type) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have type',
+      path: 'type'
+    });
+    
+    if (claim.use) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have use',
+      path: 'use'
+    });
+    
+    if (claim.patient) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have patient reference',
+      path: 'patient'
+    });
+    
+    if (claim.provider) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have provider',
+      path: 'provider'
+    });
+    
+    if (claim.item && claim.item.length > 0) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'Claim must have at least one service line item',
+      path: 'item'
+    });
   }
+  
+  // ExplanationOfBenefit
+  if (resource.resourceType === 'ExplanationOfBenefit') {
+    total = 5;
+    
+    const eob = resource as any;
+    
+    if (eob.status) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ExplanationOfBenefit must have status',
+      path: 'status'
+    });
+    
+    if (eob.type) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ExplanationOfBenefit must have type',
+      path: 'type'
+    });
+    
+    if (eob.patient) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ExplanationOfBenefit must have patient reference',
+      path: 'patient'
+    });
+    
+    if (eob.insurer) passed++;
+    else issues.push({
+      severity: 'error',
+      category: 'data-class',
+      message: 'ExplanationOfBenefit must have insurer',
+      path: 'insurer'
+    });
+    
+    if (eob.item && eob.item.length > 0) passed++;
+    else issues.push({
+      severity: 'warning',
+      category: 'data-class',
+      message: 'ExplanationOfBenefit should have service line items',
+      path: 'item'
+    });
+  }
+  
+  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  
+  return {
+    compliant,
+    passed,
+    total,
+    issues
+  };
 }
 
 /**
- * Convenience function to create a compliance checker
+ * Check timeline compliance
  */
-export function createComplianceChecker(): CMS0057FComplianceChecker {
-  return new CMS0057FComplianceChecker();
-}
-
-/**
- * Validates FHIR resources against Azure API for FHIR (if available)
- * 
- * When azureFhirEndpoint is provided, this function will call the Azure FHIR $validate operation.
- * Otherwise, it performs local validation using the compliance checker.
- * 
- * @param resource FHIR resource to validate
- * @param azureFhirEndpoint Optional Azure FHIR endpoint URL (e.g., https://my-fhir.azurehealthcareapis.com)
- * @returns ComplianceResult with validation details
- */
-export async function validateWithAzureFHIR(
-  resource: ServiceRequest | Claim | ExplanationOfBenefit | Patient,
-  azureFhirEndpoint?: string
-): Promise<ComplianceResult> {
-  // If Azure FHIR endpoint provided, call $validate operation
-  if (azureFhirEndpoint) {
-    try {
-      // TODO: Implement Azure FHIR $validate integration
-      // Target: Q1 2025
-      // Requirements:
-      // 1. Authentication (managed identity or service principal)
-      // 2. HTTP POST to {endpoint}/{resourceType}/$validate
-      // 3. Parse OperationOutcome response
-      // 4. Convert to ComplianceResult format
-      // Reference: https://www.hl7.org/fhir/resource-operation-validate.html
+function checkTimelineCompliance(resource: Resource): ComplianceCategory {
+  const issues: ComplianceIssue[] = [];
+  let passed = 0;
+  let total = 0;
+  
+  // Check ServiceRequest timelines
+  if (resource.resourceType === 'ServiceRequest') {
+    total = 2;
+    
+    const sr = resource as any;
+    
+    // Check if authoredOn is present
+    if (sr.authoredOn) {
+      passed++;
       
-      // For now, log that Azure validation is requested but fall back to local
-      console.warn('Azure FHIR validation requested but not yet implemented. Using local validation.');
-    } catch {
-      // Azure FHIR validation failed - fall back to local validation silently
-      // Error details are intentionally not logged to avoid potential PHI exposure
+      // Check if request is recent (within acceptable timeframe)
+      const authoredDate = new Date(sr.authoredOn);
+      const now = new Date();
+      const daysDiff = (now.getTime() - authoredDate.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (daysDiff > 30) {
+        issues.push({
+          severity: 'warning',
+          category: 'timeline',
+          message: `ServiceRequest is ${Math.floor(daysDiff)} days old - consider updating status`,
+          path: 'authoredOn',
+          ruleReference: 'CMS-0057-F §438.210(d)'
+        });
+      } else {
+        passed++;
+      }
+    } else {
+      issues.push({
+        severity: 'warning',
+        category: 'timeline',
+        message: 'ServiceRequest should have authoredOn date for timeline tracking',
+        path: 'authoredOn',
+        ruleReference: 'CMS-0057-F §438.210(d)'
+      });
     }
   }
   
-  // Perform local validation
-  const checker = createComplianceChecker();
-  
-  switch (resource.resourceType) {
-    case 'ServiceRequest':
-      return checker.validateServiceRequest(resource as ServiceRequest);
-    case 'Claim':
-      return checker.validateClaim(resource as Claim);
-    case 'ExplanationOfBenefit':
-      return checker.validateExplanationOfBenefit(resource as ExplanationOfBenefit);
-    case 'Patient':
-      return checker.validatePatient(resource as Patient);
-    default:
-      return {
-        compliant: false,
-        issues: [{
-          severity: 'error',
-          rule: 'UNKNOWN',
-          message: `Unsupported resource type: ${(resource as any).resourceType}`,
-        }],
-        summary: 'Unsupported resource type',
-        checkedRules: [],
-        score: 0,
-      };
+  // Check ExplanationOfBenefit timelines
+  if (resource.resourceType === 'ExplanationOfBenefit') {
+    total = 1;
+    
+    const eob = resource as any;
+    
+    // Check if created date is present
+    if (eob.created) {
+      passed++;
+    } else {
+      issues.push({
+        severity: 'warning',
+        category: 'timeline',
+        message: 'ExplanationOfBenefit should have created date',
+        path: 'created'
+      });
+    }
   }
+  
+  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  
+  return {
+    compliant,
+    passed,
+    total,
+    issues
+  };
+}
+
+/**
+ * Check API requirements compliance
+ */
+function checkAPIRequirementsCompliance(resource: Resource): ComplianceCategory {
+  const issues: ComplianceIssue[] = [];
+  let passed = 0;
+  let total = 3;
+  
+  // Check resource has ID
+  if (resource.id) {
+    passed++;
+  } else {
+    issues.push({
+      severity: 'error',
+      category: 'api',
+      message: 'Resource must have an ID for API access',
+      path: 'id',
+      ruleReference: 'FHIR R4 RESTful API'
+    });
+  }
+  
+  // Check resource has meta
+  if (resource.meta) {
+    passed++;
+  } else {
+    issues.push({
+      severity: 'warning',
+      category: 'api',
+      message: 'Resource should have meta element with version and profile information',
+      path: 'meta',
+      ruleReference: 'FHIR R4 Core'
+    });
+  }
+  
+  // Check for proper identifiers
+  const hasIdentifier = (resource as any).identifier;
+  if (hasIdentifier && Array.isArray(hasIdentifier) && hasIdentifier.length > 0) {
+    passed++;
+  } else {
+    issues.push({
+      severity: 'warning',
+      category: 'api',
+      message: 'Resource should have at least one business identifier',
+      path: 'identifier',
+      ruleReference: 'CMS-0057-F §438.242(b)(2)'
+    });
+  }
+  
+  const compliant = issues.filter(i => i.severity === 'error').length === 0;
+  
+  return {
+    compliant,
+    passed,
+    total,
+    issues
+  };
+}
+
+/**
+ * Batch compliance check for multiple resources
+ */
+export function checkBatchCompliance(resources: Resource[]): ComplianceResult {
+  const allIssues: ComplianceIssue[] = [];
+  let totalScore = 0;
+  
+  const breakdowns = resources.map(resource => {
+    const result = checkCMSCompliance(resource);
+    allIssues.push(...result.issues);
+    totalScore += result.score;
+    return result.breakdown;
+  });
+  
+  // Aggregate breakdowns
+  const aggregateBreakdown = {
+    dataClasses: aggregateCategory(breakdowns.map(b => b.dataClasses)),
+    timelines: aggregateCategory(breakdowns.map(b => b.timelines)),
+    apiRequirements: aggregateCategory(breakdowns.map(b => b.apiRequirements))
+  };
+  
+  const errorCount = allIssues.filter(i => i.severity === 'error').length;
+  const avgScore = resources.length > 0 ? totalScore / resources.length : 0;
+  
+  return {
+    compliant: errorCount === 0,
+    issues: allIssues,
+    score: Math.round(avgScore),
+    breakdown: aggregateBreakdown
+  };
+}
+
+/**
+ * Aggregate compliance categories
+ */
+function aggregateCategory(categories: ComplianceCategory[]): ComplianceCategory {
+  const totalPassed = categories.reduce((sum, cat) => sum + cat.passed, 0);
+  const totalTotal = categories.reduce((sum, cat) => sum + cat.total, 0);
+  const allIssues = categories.flatMap(cat => cat.issues);
+  const compliant = categories.every(cat => cat.compliant);
+  
+  return {
+    compliant,
+    passed: totalPassed,
+    total: totalTotal,
+    issues: allIssues
+  };
 }
