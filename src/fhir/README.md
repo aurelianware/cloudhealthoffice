@@ -37,21 +37,35 @@ console.log('Eligibility Request:', eligibility);
 
 - **`x12Types.ts`**: TypeScript interfaces for X12 270 structure
 - **`fhirEligibilityMapper.ts`**: Main mapping logic (X12 → FHIR)
+- **`provider-access-api.ts`**: Provider Access API (CMS-0057-F) with SMART on FHIR authentication
 - **`examples.ts`**: Runnable usage examples (9 scenarios)
+- **`provider-access-examples.ts`**: Provider Access API examples (10 scenarios)
 
 ### Testing
 
 - **`__tests__/fhirEligibilityMapper.test.ts`**: Comprehensive test suite (19 tests)
+- **`__tests__/provider-access-api.test.ts`**: Provider Access API tests (44 tests)
 
 ## Features
 
+### Eligibility Mapping
 ✅ HIPAA X12 005010X279A1 compliant  
 ✅ HL7 FHIR R4 v4.0.1 compliant  
 ✅ US Core Patient profile support  
 ✅ CMS Patient Access API ready  
 ✅ 100+ service type codes mapped  
 ✅ Comprehensive test coverage  
-✅ Production-ready error handling  
+✅ Production-ready error handling
+
+### Provider Access API (CMS-0057-F)
+✅ SMART on FHIR authentication (OpenID Connect/OAuth2)  
+✅ Patient consent management  
+✅ Search & read for 6 FHIR resource types (Patient, Claim, Encounter, EOB, Condition, Observation)  
+✅ Backend data mapping (QNXT → FHIR)  
+✅ HIPAA safeguards (AES-256-GCM encryption, audit logging, PHI redaction)  
+✅ US Core v3.1.1 compliance  
+✅ Da Vinci PDex alignment  
+✅ 44 comprehensive unit tests  
 
 ## Running Examples
 
@@ -59,14 +73,24 @@ console.log('Eligibility Request:', eligibility);
 # Build the project
 npm run build
 
-# Run all examples
+# Run eligibility mapping examples
+npm run examples:fhir
+
+# Run Provider Access API examples
+npm run examples:provider-access
+
+# Or run directly:
 node dist/src/fhir/examples.js
+node dist/src/fhir/provider-access-examples.js
 ```
 
 ## Running Tests
 
 ```bash
-# Run FHIR tests only
+# Run all FHIR tests (63 tests total: 19 eligibility + 44 provider access)
+npm run test:fhir
+
+# Or with Jest directly:
 npm test -- --testPathPattern=fhir
 
 # Run with coverage
@@ -172,24 +196,39 @@ const result = mapX12270ToFhirEligibility({
 });
 ```
 
-## Integration with fhir.js
+## Integration with native fetch
 
 ```typescript
-import Client from 'fhir.js';
 import { mapX12270ToFhirEligibility } from './fhirEligibilityMapper';
 
-// Initialize FHIR client
-const fhirClient = Client({
-  baseUrl: 'https://your-fhir-server.com/fhir',
-  auth: { bearer: 'your-token' }
-});
+const fhirBaseUrl = 'https://your-fhir-server.com/fhir';
+const accessToken = 'your-oauth-token';
 
-// Transform and create resources
+// Transform X12 to FHIR
 const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
+// Helper for authenticated requests
+async function postResource(resourceType: string, body: unknown) {
+  const response = await fetch(`${fhirBaseUrl}/${resourceType}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/fhir+json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`FHIR POST failed (${response.status}): ${errorBody}`);
+  }
+
+  return response.json();
+}
+
 // Store on FHIR server
-await fhirClient.create({ resource: patient });
-await fhirClient.create({ resource: eligibility });
+await postResource('Patient', patient);
+await postResource('CoverageEligibilityRequest', eligibility);
 ```
 
 ## Azure Logic Apps Integration

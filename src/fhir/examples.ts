@@ -7,7 +7,7 @@
  * Examples include:
  * - Basic X12 270 to FHIR transformation
  * - Integration with Azure Logic Apps
- * - Using fhir.js client library
+ * - Posting resources with native fetch clients
  * - Handling different member scenarios
  * - Error handling and validation
  */
@@ -229,13 +229,10 @@ export function example_pharmacyEligibility(): void {
   });
 }
 
-// Example 6: Using with fhir.js Client
-export async function example_fhirjsIntegration(): Promise<void> {
-  console.log('\n=== Example 6: Integration with fhir.js Client ===\n');
-  
-  // Note: This is a code example - actual execution would require a FHIR server
-  // const Client = require('fhir.js'); // Would need: npm install fhir.js
-  
+// Example 6: Posting to a FHIR server with native fetch
+export async function example_fetchIntegration(): Promise<void> {
+  console.log('\n=== Example 6: Integration with native fetch ===\n');
+
   const x12Input: X12_270 = {
     inquiryId: 'INQ20240115-FHIRJS-001',
     informationSource: { id: '030240928' },
@@ -255,17 +252,23 @@ export async function example_fhirjsIntegration(): Promise<void> {
     console.log('Example: Transforming X12 270 to FHIR resources...');
     console.log(`Generated Patient resource: ${patient.id}`);
     console.log(`Generated Eligibility request: ${eligibility.id}`);
-    
-    console.log('\nIn a real implementation with fhir.js, you would:');
-    console.log('1. Initialize FHIR client:');
-    console.log('   const Client = require("fhir.js");');
-    console.log('   const client = Client({ baseUrl: "https://your-fhir-server.com/fhir", auth: { bearer: "token" } });');
-    console.log('2. Create Patient resource:');
-    console.log('   const patientResponse = await client.create({ resource: patient });');
-    console.log('3. Create CoverageEligibilityRequest:');
-    console.log('   const eligibilityResponse = await client.create({ resource: eligibility });');
-    
-    console.log('\n(This is a code example - actual client usage requires FHIR server and fhir.js in devDependencies)');
+    console.log('\nIn a real implementation using native fetch (Node.js 18+ or any WHATWG fetch API), you would:');
+    console.log('1. Define your FHIR server details and auth token:');
+    console.log('   const fhirBaseUrl = "https://your-fhir-server.com/fhir";');
+    console.log('   const accessToken = "your-oauth-token";');
+    console.log('2. POST the Patient resource:');
+    console.log('   await fetch(`${fhirBaseUrl}/Patient`, {');
+    console.log('     method: "POST",');
+    console.log('     headers: {');
+    console.log('       "Content-Type": "application/fhir+json",');
+    console.log('       Authorization: `Bearer ${accessToken}`');
+    console.log('     },');
+    console.log('     body: JSON.stringify(patient)');
+    console.log('   });');
+    console.log('3. POST the CoverageEligibilityRequest resource:');
+    console.log('   await fetch(`${fhirBaseUrl}/CoverageEligibilityRequest`, { ...same headers..., body: JSON.stringify(eligibility) });');
+    console.log('4. Handle non-2xx responses and parse the JSON body as needed.');
+    console.log('\n(This is a console walkthrough – uncomment the fetch calls and provide real credentials to execute against your FHIR server.)');
   } catch (error) {
     console.error('Error in FHIR transformation:', error);
   }
