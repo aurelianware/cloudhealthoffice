@@ -40,13 +40,13 @@ jobs:
           # Use -File to only get files (not directories) and exclude node_modules/dist from the path
           # Also exclude example files which demonstrate logging patterns
           $files = Get-ChildItem -Path ./src,./scripts -Recurse -File -Include *.ts,*.js |
-                   Where-Object { 
-                     $_.FullName -notmatch 'node_modules|dist' -and 
+                   Where-Object {
+                     $_.FullName -notmatch 'node_modules|dist' -and
                      $_.Name -notlike '*.test.ts' -and
                      $_.Name -notlike '*example*' -and
                      $_.Name -notlike '*Example*'
                    }
-          
+
           # Safe patterns that are NOT PHI - allowed in console logs
           $safePatterns = @(
             'Path|Dir|Directory|File',
