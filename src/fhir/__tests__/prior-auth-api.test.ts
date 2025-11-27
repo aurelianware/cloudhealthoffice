@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { Binary } from 'fhir/r4';
 import {
   X12_278_Request,
   PriorAuthorizationRequest,
@@ -77,9 +78,14 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
       expect(fhirClaim.patient.reference).toBe('Patient/MEM123456');
       expect(fhirClaim.provider.identifier?.value).toBe('1234567890');
       expect(fhirClaim.diagnosis).toHaveLength(1);
-      expect(fhirClaim.diagnosis[0].diagnosisCodeableConcept.coding?.[0].code).toBe('I50.9');
+      const firstDiagnosis = fhirClaim.diagnosis?.[0];
+      expect(firstDiagnosis).toBeDefined();
+      expect(firstDiagnosis!.diagnosisCodeableConcept?.coding?.[0]?.code).toBe('I50.9');
+
       expect(fhirClaim.item).toHaveLength(1);
-      expect(fhirClaim.item[0].productOrService.coding?.[0].code).toBe('99213');
+      const firstItem = fhirClaim.item?.[0];
+      expect(firstItem).toBeDefined();
+      expect(firstItem!.productOrService.coding?.[0]?.code).toBe('99213');
     });
     
     it('should map inpatient request (AR) as institutional claim', () => {
@@ -121,9 +127,11 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
       
       expect(fhirClaim.type.coding?.[0].code).toBe('institutional');
       expect(fhirClaim.priority.coding?.[0].code).toBe('stat');
-      expect(fhirClaim.item[0].locationCodeableConcept?.coding?.[0].code).toBe('21');
-      expect(fhirClaim.item[0].quantity?.value).toBe(5);
-      expect(fhirClaim.item[0].quantity?.unit).toBe('days');
+      const inpatientItem = fhirClaim.item?.[0];
+      expect(inpatientItem).toBeDefined();
+      expect(inpatientItem!.locationCodeableConcept?.coding?.[0]?.code).toBe('21');
+      expect(inpatientItem!.quantity?.value).toBe(5);
+      expect(inpatientItem!.quantity?.unit).toBe('days');
     });
     
     it('should handle cancellation request (certificationType=3)', () => {
@@ -202,9 +210,13 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
       
       expect(fhirClaim.item).toHaveLength(2);
       expect(fhirClaim.diagnosis).toHaveLength(2);
-      expect(fhirClaim.item[0].quantity?.value).toBe(12);
-      expect(fhirClaim.item[0].quantity?.unit).toBe('visits');
-      expect(fhirClaim.item[1].quantity?.value).toBe(8);
+      const firstService = fhirClaim.item?.[0];
+      const secondService = fhirClaim.item?.[1];
+      expect(firstService).toBeDefined();
+      expect(secondService).toBeDefined();
+      expect(firstService!.quantity?.value).toBe(12);
+      expect(firstService!.quantity?.unit).toBe('visits');
+      expect(secondService!.quantity?.value).toBe(8);
     });
     
     it('should include Da Vinci PAS profile in meta', () => {
@@ -240,6 +252,10 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
         resourceType: 'ClaimResponse',
         id: 'CR001',
         status: 'active',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],
+          lastUpdated: '2024-11-24T10:00:00Z'
+        },
         type: {
           coding: [{
             system: 'http://terminology.hl7.org/CodeSystem/claim-type',
@@ -271,6 +287,10 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
         resourceType: 'ClaimResponse',
         id: 'CR002',
         status: 'active',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],
+          lastUpdated: '2024-11-24T10:00:00Z'
+        },
         type: {
           coding: [{
             system: 'http://terminology.hl7.org/CodeSystem/claim-type',
@@ -296,6 +316,10 @@ describe('Prior Authorization API - X12 278 to FHIR Mapping', () => {
         resourceType: 'ClaimResponse',
         id: 'CR003',
         status: 'active',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],
+          lastUpdated: '2024-11-24T10:00:00Z'
+        },
         type: {
           coding: [{
             system: 'http://terminology.hl7.org/CodeSystem/claim-type',
@@ -490,8 +514,8 @@ describe('Prior Authorization API - Attachment Support', () => {
   describe('createAttachmentBinary', () => {
     
     it('should create FHIR Binary resource for PDF attachment', () => {
-      const base64Data = 'JVBERi0xLjQKJeLjz9MK...'; // Truncated for brevity
-      const binary = createAttachmentBinary('application/pdf', base64Data);
+      const base64Data = 'VGhpcyBpcyBhIHRlc3QgZG9jdW1lbnQ='; // "This is a test document"
+      const binary = createAttachmentBinary(base64Data, 'application/pdf');
       
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('application/pdf');
@@ -499,8 +523,8 @@ describe('Prior Authorization API - Attachment Support', () => {
     });
     
     it('should create Binary resource for image attachment', () => {
-      const base64Image = 'iVBORw0KGgoAAAANSUhEUgA...';
-      const binary = createAttachmentBinary('image/jpeg', base64Image);
+      const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
+      const binary = createAttachmentBinary(base64Image, 'image/jpeg');
       
       expect(binary.resourceType).toBe('Binary');
       expect(binary.contentType).toBe('image/jpeg');
@@ -510,7 +534,12 @@ describe('Prior Authorization API - Attachment Support', () => {
   describe('createAttachmentDocumentReference', () => {
     
     it('should create DocumentReference for clinical notes', () => {
-      const binaryRef = { reference: 'Binary/12345' };
+      const binaryRef: Binary = {
+        resourceType: 'Binary',
+        id: '12345',
+        contentType: 'application/pdf',
+        data: 'VGhpcyBpcyBhIHRlc3QgZG9jdW1lbnQ='
+      };
       const patientRef = { reference: 'Patient/67890' };
       
       const docRef = createAttachmentDocumentReference(binaryRef, patientRef, 'clinical-notes');
@@ -520,11 +549,16 @@ describe('Prior Authorization API - Attachment Support', () => {
       expect(docRef.subject).toBe(patientRef);
       expect(docRef.type?.coding?.[0].system).toBe('http://loinc.org');
       expect(docRef.type?.coding?.[0].code).toBe('11506-3'); // Progress note
-      expect(docRef.content[0].attachment.url).toContain('Binary/12345');
+      expect(docRef.content[0].attachment.url).toBe('Binary/12345');
     });
     
     it('should create DocumentReference for lab results', () => {
-      const binaryRef = { reference: 'Binary/lab001' };
+      const binaryRef: Binary = {
+        resourceType: 'Binary',
+        id: 'lab001',
+        contentType: 'application/pdf',
+        data: 'VGhpcyBpcyBhIHRlc3QgZG9jdW1lbnQ='
+      };
       const patientRef = { reference: 'Patient/pat001' };
       
       const docRef = createAttachmentDocumentReference(binaryRef, patientRef, 'lab-results');
@@ -533,7 +567,12 @@ describe('Prior Authorization API - Attachment Support', () => {
     });
     
     it('should create DocumentReference for imaging', () => {
-      const binaryRef = { reference: 'Binary/img001' };
+      const binaryRef: Binary = {
+        resourceType: 'Binary',
+        id: 'img001',
+        contentType: 'image/jpeg',
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=='
+      };
       const patientRef = { reference: 'Patient/pat002' };
       
       const docRef = createAttachmentDocumentReference(binaryRef, patientRef, 'imaging');
@@ -747,6 +786,9 @@ describe('Prior Authorization API - Validation', () => {
     it('should validate complete FHIR Claim', () => {
       const claim: PriorAuthorizationRequest = {
         resourceType: 'Claim',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claim']
+        },
         status: 'active',
         type: {
           coding: [{
@@ -771,6 +813,11 @@ describe('Prior Authorization API - Validation', () => {
             code: 'normal'
           }]
         },
+        insurance: [{
+          sequence: 1,
+          focal: true,
+          coverage: { reference: 'Coverage/123' }
+        }],
         diagnosis: [{
           sequence: 1,
           diagnosisCodeableConcept: {
@@ -800,6 +847,9 @@ describe('Prior Authorization API - Validation', () => {
     it('should fail validation when patient reference is missing', () => {
       const claim: PriorAuthorizationRequest = {
         resourceType: 'Claim',
+        meta: {
+          profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claim']
+        },
         status: 'active',
         type: {
           coding: [{
@@ -824,6 +874,11 @@ describe('Prior Authorization API - Validation', () => {
             code: 'normal'
           }]
         },
+        insurance: [{
+          sequence: 1,
+          focal: true,
+          coverage: { reference: 'Coverage/123' }
+        }],
         diagnosis: [{
           sequence: 1,
           diagnosisCodeableConcept: {

@@ -624,6 +624,13 @@ export function createAttachmentBinary(
   };
 }
 
+const DOCUMENT_TYPE_MAP: Record<string, { code: string; display: string }> = {
+  'clinical-note': { code: '11506-3', display: 'Progress note' },
+  'clinical-notes': { code: '11506-3', display: 'Progress note' },
+  'lab-results': { code: '11502-2', display: 'Laboratory report' },
+  imaging: { code: '18748-4', display: 'Diagnostic imaging study' }
+};
+
 /**
  * Creates a DocumentReference linking a Binary attachment to a Claim
  * 
@@ -637,6 +644,8 @@ export function createAttachmentDocumentReference(
   claimReference: Reference,
   category: string = 'clinical-note'
 ): DocumentReference {
+  const documentType = DOCUMENT_TYPE_MAP[category] ?? DOCUMENT_TYPE_MAP['clinical-note'];
+
   return {
     resourceType: 'DocumentReference',
     id: `docref-${binary.id}`,
@@ -648,8 +657,8 @@ export function createAttachmentDocumentReference(
     type: {
       coding: [{
         system: 'http://loinc.org',
-        code: '11506-3',
-        display: 'Progress note'
+        code: documentType.code,
+        display: documentType.display
       }]
     },
     category: [{
