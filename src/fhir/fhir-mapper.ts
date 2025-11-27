@@ -18,15 +18,7 @@ import {
   Claim, 
   ExplanationOfBenefit, 
   ServiceRequest,
-  Patient,
-  Identifier,
-  HumanName,
-  Address,
-  Reference,
-  CodeableConcept,
-  Money,
-  Quantity,
-  Period
+  CodeableConcept
 } from 'fhir/r4';
 import { X12_837_Claim, X12_278_Request, X12_835_Remittance } from './x12ClaimTypes';
 
@@ -129,7 +121,7 @@ export function mapX12837ToFhirClaim(input: X12_837_Claim): Claim {
       
       // Unit price and net amount
       unitPrice: {
-        value: line.chargeAmount / line.units,
+        value: line.units > 0 ? line.chargeAmount / line.units : line.chargeAmount,
         currency: 'USD'
       },
       
@@ -629,5 +621,7 @@ function formatDate(date: string): string {
     return `${date.substring(0, 4)}-${date.substring(4, 6)}-${date.substring(6, 8)}`;
   }
   
-  return date;
+  // Invalid format - log warning and return empty string
+  console.warn(`[Cloud Health Office] Invalid date format received: "${date}". Expected CCYYMMDD or YYYY-MM-DD.`);
+  return '';
 }

@@ -707,8 +707,8 @@ az monitor metrics alert create \
 
 ### Performance Requirements
 
-- **API Response Time**: &lt;500ms (p95)
-- **Bulk Export**: &lt;1 hour for 1M resources
+- **API Response Time**: <500ms (p95)
+- **Bulk Export**: <1 hour for 1M resources
 - **Concurrent Users**: 1,000+ supported
 - **Prior Auth Timeline**: 72hr urgent, 7-day standard (automated tracking)
 - **Uptime SLA**: 99.9% (Azure Logic Apps Standard)
@@ -783,4 +783,4 @@ For questions about CMS-0057-F compliance with Cloud Health Office:
 
 **Cloud Health Office** – Production-Ready CMS-0057-F Compliance
 
-*Open Source | Azure-Native | FHIR R4 | Da Vinci IGs | &lt;10 Minute Deployment*
+*Open Source | Azure-Native | FHIR R4 | Da Vinci IGs | <10 Minute Deployment*
