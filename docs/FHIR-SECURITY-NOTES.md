@@ -162,10 +162,8 @@ const client = await Client.authorize({
 ```json
 {
   "dependencies": {
-    "@types/fhir": "^0.0.x",  // ✅ Safe, types only
-    "node-fetch": "^3.x.x"    // ✅ Safe, modern HTTP client (optional)
+    "@types/fhir": "^0.0.x" // ✅ Safe, types only (optional)
   }
-  // fhir.js excluded automatically with npm install --production
 }
 ```
 
@@ -173,25 +171,34 @@ const client = await Client.authorize({
 
 #### 1. Production Deployment ✅
 
-**fhir.js is automatically excluded from production deployments**:
+**Use the platform HTTP client (Node.js fetch, Azure ManagedIdentity clients, etc.) instead of legacy SDKs**:
 
-```bash
-# Development (includes fhir.js for examples)
-npm install
+```typescript
+// ✅ Recommended: native fetch with explicit headers
+const response = await fetch('https://fhir-server.com/fhir/Patient', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/fhir+json',
+    Authorization: `Bearer ${accessToken}`
+  },
+  body: JSON.stringify(patient)
+});
 
-# Production (excludes fhir.js automatically)
-npm install --production
+if (!response.ok) {
+  throw new Error(`FHIR POST failed: ${response.status}`);
+}
 ```
 
 ```typescript
-// ❌ DON'T: Use fhir.js in production code
-import Client from 'fhir.js';
-
-// ✅ DO: Use SecureFhirClient or native fetch
+// ✅ Alternative: SecureFhirClient helper in this repo
 import { SecureFhirClient } from './src/fhir/secureExamples';
-// OR
-import { Patient } from 'fhir/r4';
-const response = await fetch(...);
+
+const client = await SecureFhirClient.connect({
+  baseUrl: 'https://fhir-server.com/fhir',
+  credential
+});
+
+await client.create(patient);
 ```
 
 #### 2. Use Managed Identity for Azure
@@ -255,7 +262,7 @@ jobs:
 If you discover security vulnerabilities:
 
 1. **Do NOT** create public GitHub issue
-2. Email: security@aurelianware.com
+2. Email: [security@aurelianware.com](mailto:security@aurelianware.com)
 3. Include: vulnerability details, reproduction steps, impact assessment
 
 ### References
