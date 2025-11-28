@@ -8,6 +8,9 @@
   "integrationaccount": {
     "connectionId": "[resourceId('Microsoft.Web/connections', 'integrationaccount')]"
   },
+  "documentdb": {
+    "connectionId": "[resourceId('Microsoft.Web/connections', 'documentdb')]"
+  },
   "sftpwithssh": {
     "connectionId": "[resourceId('Microsoft.Web/connections', 'sftpwithssh')]"
   }

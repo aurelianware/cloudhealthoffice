@@ -719,22 +719,23 @@ export class ProviderAccessApi {
   /**
    * Redact PHI from resource for logging
    */
-  redactPhi(resource: Resource): Resource {
-    const redacted = JSON.parse(JSON.stringify(resource)); // Deep clone
+  redactPhi<T extends Resource>(resource: T): T {
+    const redacted = JSON.parse(JSON.stringify(resource)) as T;
+    const mutable = redacted as unknown as Record<string, any>;
 
     // Redact common PHI fields
-    if (redacted.resourceType === 'Patient') {
-      if (redacted.name) {
-        redacted.name = redacted.name.map((n: any) => ({ ...n, family: '***', given: ['***'] }));
+    if (mutable.resourceType === 'Patient') {
+      if (mutable.name) {
+        mutable.name = mutable.name.map((n: any) => ({ ...n, family: '***', given: ['***'] }));
       }
-      if (redacted.birthDate) {
-        redacted.birthDate = '****-**-**';
+      if (mutable.birthDate) {
+        mutable.birthDate = '****-**-**';
       }
-      if (redacted.address) {
-        redacted.address = redacted.address.map((a: any) => ({ ...a, line: ['***'], city: '***', postalCode: '***' }));
+      if (mutable.address) {
+        mutable.address = mutable.address.map((a: any) => ({ ...a, line: ['***'], city: '***', postalCode: '***' }));
       }
-      if (redacted.telecom) {
-        redacted.telecom = redacted.telecom.map((t: any) => ({ ...t, value: '***' }));
+      if (mutable.telecom) {
+        mutable.telecom = mutable.telecom.map((t: any) => ({ ...t, value: '***' }));
       }
     }
 
