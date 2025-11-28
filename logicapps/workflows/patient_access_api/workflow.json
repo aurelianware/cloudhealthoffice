@@ -1,0 +1,664 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "cosmosAccountName": {
+        "type": "String",
+        "metadata": {
+          "description": "Cosmos DB account hosting cloudhealthoffice database"
+        }
+      },
+      "cosmosDatabaseName": {
+        "type": "String",
+        "defaultValue": "cloudhealthoffice"
+      },
+      "membersContainer": {
+        "type": "String",
+        "defaultValue": "Members"
+      },
+      "claimsContainer": {
+        "type": "String",
+        "defaultValue": "Claims"
+      },
+      "paymentsContainer": {
+        "type": "String",
+        "defaultValue": "Payments"
+      },
+      "rateLimitContainer": {
+        "type": "String",
+        "defaultValue": "rate_limits"
+      },
+      "b2cIssuer": {
+        "type": "String",
+        "metadata": {
+          "description": "Azure AD B2C issuer URL"
+        }
+      },
+      "b2cAudience": {
+        "type": "String",
+        "metadata": {
+          "description": "Azure AD B2C audience/application ID URI"
+        }
+      },
+      "perMemberHourlyLimit": {
+        "type": "Int",
+        "defaultValue": 1000
+      },
+      "rateLimitWindowSeconds": {
+        "type": "Int",
+        "defaultValue": 3600
+      },
+      "capabilityStatementUrl": {
+        "type": "String",
+        "defaultValue": ""
+      },
+      "openApiSpecificationUrl": {
+        "type": "String",
+        "defaultValue": ""
+      }
+    },
+    "triggers": {
+      "HTTP_PatientAccess": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "GET",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "authentication": {
+            "type": "OAuthV2",
+            "audience": "@parameters('b2cAudience')",
+            "issuer": "@parameters('b2cIssuer')",
+            "scope": "patient/*.read user/*.read openid profile"
+          },
+          "metadata": {
+            "openApi": {
+              "info": {
+                "title": "CMS-0057-F Patient Access API",
+                "version": "1.0.0",
+                "description": "FHIR R4 Patient Access API exposing Patient, Coverage, ExplanationOfBenefit, and Claim resources"
+              },
+              "servers": [
+                {
+                  "url": "https://{host}",
+                  "variables": {
+                    "host": {
+                      "default": "example.azurelogicapps.net"
+                    }
+                  }
+                }
+              ],
+              "paths": {
+                "/Patient": {
+                  "get": {
+                    "operationId": "ListPatients",
+                    "summary": "Search for Patient resources",
+                    "parameters": [
+                      {
+                        "name": "_id",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "identifier",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_lastUpdated",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Patient/{id}": {
+                  "get": {
+                    "operationId": "ReadPatient",
+                    "summary": "Read a Patient resource",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                },
+                "/Coverage": {
+                  "get": {
+                    "operationId": "ListCoverage",
+                    "summary": "Search for Coverage resources",
+                    "parameters": [
+                      {
+                        "name": "patient",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_lastUpdated",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/ExplanationOfBenefit": {
+                  "get": {
+                    "operationId": "ListEOB",
+                    "summary": "Search for ExplanationOfBenefit resources",
+                    "parameters": [
+                      {
+                        "name": "patient",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_lastUpdated",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Claim": {
+                  "get": {
+                    "operationId": "ListClaims",
+                    "summary": "Search for Claim resources",
+                    "parameters": [
+                      {
+                        "name": "patient",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_lastUpdated",
+                        "in": "query",
+                        "schema": { "type": "string", "format": "date-time" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                }
+              },
+              "components": {
+                "securitySchemes": {
+                  "smartOnFhir": {
+                    "type": "oauth2",
+                    "flows": {
+                      "authorizationCode": {
+                        "authorizationUrl": "https://{tenant}/oauth2/v2.0/authorize",
+                        "tokenUrl": "https://{tenant}/oauth2/v2.0/token",
+                        "scopes": {
+                          "patient/*.read": "Read patient-specific resources",
+                          "user/*.read": "Read user-scoped resources",
+                          "openid": "OpenID Connect",
+                          "profile": "User profile"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "security": [
+                [
+                  {
+                    "smartOnFhir": [
+                      "patient/*.read",
+                      "user/*.read",
+                      "openid",
+                      "profile"
+                    ]
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Context": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "resourceType",
+              "type": "String",
+              "value": "@coalesce(triggerOutputs()['queries']?['resourceType'], first(split(triggerOutputs()['path'], '/')) )"
+            },
+            {
+              "name": "memberId",
+              "type": "String",
+              "value": "@coalesce(triggerOutputs()['queries']?['patient'], triggerOutputs()['queries']?['identifier'], triggerOutputs()['queries']?['_id'], triggerOutputs()['queries']?['memberId'], triggerOutputs()['headers']?['x-hco-member-id'])"
+            },
+            {
+              "name": "preferHeader",
+              "type": "String",
+              "value": "@triggerOutputs()['headers']?['Prefer']"
+            }
+          ]
+        }
+      },
+      "Derive_Since": {
+        "type": "Compose",
+        "inputs": "@coalesce(triggerOutputs()['queries']?['_since'], if(not(empty(triggerOutputs()['queries']?['_lastUpdated'])), triggerOutputs()['queries']?['_lastUpdated'], formatDateTime(addMonths(utcNow(), -24), 'yyyy-MM-ddTHH:mm:ssZ')))"
+      },
+      "Validate_Scopes": {
+        "type": "InlineCode",
+        "runAfter": {
+          "Derive_Since": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "language": "JavaScript",
+          "code": "const header = workflowContext.trigger.outputs.headers['Authorization'] || '';\nconst token = header.split(' ')[1] || '';\nif (!token) {\n  return { valid: false, reason: 'missing_token' };\n}\nconst parts = token.split('.');\nif (parts.length < 2) {\n  return { valid: false, reason: 'invalid_token' };\n}\nconst decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));\nconst scopes = (decoded.scp || decoded.scope || '').split(' ');\nconst hasPatientRead = scopes.includes('patient/*.read');\nconst hasUserRead = scopes.includes('user/*.read');\nconst hasOidc = scopes.includes('openid') && scopes.includes('profile');\nreturn { valid: (hasPatientRead || hasUserRead) && hasOidc, scopes, decoded };"
+        }
+      },
+      "Check_Scope_Compliance": {
+        "type": "If",
+        "runAfter": {
+          "Validate_Scopes": [
+            "Succeeded"
+          ]
+        },
+        "expression": {
+          "equals": [
+            "@outputs('Validate_Scopes')?['valid']",
+            true
+          ]
+        },
+        "actions": {},
+        "else": {
+          "actions": {
+            "Return_Unauthorized": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 403,
+                "headers": {
+                  "Content-Type": "application/fhir+json"
+                },
+                "body": {
+                  "resourceType": "OperationOutcome",
+                  "issue": [
+                    {
+                      "severity": "error",
+                      "code": "forbidden",
+                      "diagnostics": "Missing required SMART on FHIR scopes"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Rate_Limit_Scope": {
+        "type": "Scope",
+        "runAfter": {
+          "Check_Scope_Compliance": [
+            "Succeeded"
+          ]
+        },
+        "actions": {
+          "Build_Rate_Key": {
+            "type": "Compose",
+            "inputs": "@concat(variables('memberId'), '-', utcNow('yyyyMMddHH'))"
+          },
+          "Fetch_Rate_Document": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Build_Rate_Key": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['documentdb']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/getdocument",
+              "body": {
+                "databaseId": "@parameters('cosmosDatabaseName')",
+                "collectionId": "@parameters('rateLimitContainer')",
+                "id": "@outputs('Build_Rate_Key')",
+                "partitionKey": "@variables('memberId')"
+              }
+            }
+          },
+          "Update_Rate_Document": {
+            "type": "InlineCode",
+            "runAfter": {
+              "Fetch_Rate_Document": [
+                "Succeeded",
+                "Failed"
+              ]
+            },
+            "inputs": {
+              "language": "JavaScript",
+              "code": "const { evaluateRateLimit } = require('../../dist/src/logicapps/patient-access-rate-limit');\nconst existing = workflowContext.actions.Fetch_Rate_Document?.outputs?.body || null;\nconst limit = workflowContext.workflow.parameters.perMemberHourlyLimit;\nconst ttl = workflowContext.workflow.parameters.rateLimitWindowSeconds;\nreturn evaluateRateLimit(\n  workflowContext.actions.Build_Rate_Key.outputs,\n  workflowContext.variables.memberId,\n  existing,\n  limit,\n  ttl,\n  new Date()\n);"
+            }
+          },
+          "Persist_Rate_Document": {
+            "type": "ApiConnection",
+            "runAfter": {
+              "Update_Rate_Document": [
+                "Succeeded"
+              ]
+            },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['documentdb']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/upsertdocument",
+              "body": {
+                "databaseId": "@parameters('cosmosDatabaseName')",
+                "collectionId": "@parameters('rateLimitContainer')",
+                "document": "@outputs('Update_Rate_Document')?['document']",
+                "partitionKey": "@variables('memberId')"
+              }
+            }
+          },
+          "Rate_Limit_Breach": {
+            "type": "If",
+            "runAfter": {
+              "Persist_Rate_Document": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "equals": [
+                "@outputs('Update_Rate_Document')?['breached']",
+                true
+              ]
+            },
+            "actions": {
+              "Respond_429": {
+                "type": "Response",
+                "inputs": {
+                  "statusCode": 429,
+                  "headers": {
+                    "Content-Type": "application/fhir+json",
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": "@outputs('Update_Rate_Document')?['reset']"
+                  },
+                  "body": {
+                    "resourceType": "OperationOutcome",
+                    "issue": [
+                      {
+                        "severity": "error",
+                        "code": "too-many-requests",
+                        "diagnostics": "Hourly member rate limit exceeded"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Switch_Resource": {
+        "type": "Switch",
+        "runAfter": {
+          "Rate_Limit_Scope": [
+            "Succeeded"
+          ]
+        },
+        "expression": "@toLower(variables('resourceType'))",
+        "cases": {
+          "patient": {
+            "case": "patient",
+            "actions": {
+              "Query_Patient": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['documentdb']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                  "body": {
+                    "databaseId": "@parameters('cosmosDatabaseName')",
+                    "collectionId": "@parameters('membersContainer')",
+                    "query": "SELECT * FROM c WHERE c.memberId = @member AND c.lastUpdated >= @since",
+                    "parameters": [
+                      {
+                        "name": "@member",
+                        "value": "@variables('memberId')"
+                      },
+                      {
+                        "name": "@since",
+                        "value": "@outputs('Derive_Since')"
+                      }
+                    ]
+                  }
+                }
+              },
+              "Transform_Patient": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Query_Patient": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const { patientsToBundle } = require('../../dist/src/fhir/patient-access-mapper');\nconst rows = workflowContext.actions.Query_Patient.outputs.body?.Documents || [];\nconst selfLink = workflowContext.trigger.outputs.headers['x-ms-original-url'] || '';\nreturn patientsToBundle(rows, selfLink);"
+                }
+              }
+            }
+          },
+          "coverage": {
+            "case": "coverage",
+            "actions": {
+              "Query_Coverage": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['documentdb']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                  "body": {
+                    "databaseId": "@parameters('cosmosDatabaseName')",
+                    "collectionId": "@parameters('membersContainer')",
+                    "query": "SELECT * FROM c WHERE c.memberId = @member",
+                    "parameters": [
+                      {
+                        "name": "@member",
+                        "value": "@variables('memberId')"
+                      }
+                    ]
+                  }
+                }
+              },
+              "Transform_Coverage": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Query_Coverage": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const { coverageToBundle } = require('../../dist/src/fhir/patient-access-mapper');\nconst rows = workflowContext.actions.Query_Coverage.outputs.body?.Documents || [];\nconst selfLink = workflowContext.trigger.outputs.headers['x-ms-original-url'] || '';\nreturn coverageToBundle(rows, selfLink);"
+                }
+              }
+            }
+          },
+          "explanationofbenefit": {
+            "case": "explanationofbenefit",
+            "actions": {
+              "Query_EOB": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['documentdb']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                  "body": {
+                    "databaseId": "@parameters('cosmosDatabaseName')",
+                    "collectionId": "@parameters('paymentsContainer')",
+                    "query": "SELECT * FROM c WHERE c.memberId = @member AND c.lastUpdated >= @since",
+                    "parameters": [
+                      {
+                        "name": "@member",
+                        "value": "@variables('memberId')"
+                      },
+                      {
+                        "name": "@since",
+                        "value": "@outputs('Derive_Since')"
+                      }
+                    ]
+                  }
+                }
+              },
+              "Transform_EOB": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Query_EOB": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const { paymentsToEobBundle } = require('../../dist/src/fhir/patient-access-mapper');\nconst rows = workflowContext.actions.Query_EOB.outputs.body?.Documents || [];\nconst selfLink = workflowContext.trigger.outputs.headers['x-ms-original-url'] || '';\nreturn paymentsToEobBundle(rows, selfLink);"
+                }
+              }
+            }
+          },
+          "claim": {
+            "case": "claim",
+            "actions": {
+              "Query_Claim": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['documentdb']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                  "body": {
+                    "databaseId": "@parameters('cosmosDatabaseName')",
+                    "collectionId": "@parameters('claimsContainer')",
+                    "query": "SELECT * FROM c WHERE c.memberId = @member AND c.lastUpdated >= @since",
+                    "parameters": [
+                      {
+                        "name": "@member",
+                        "value": "@variables('memberId')"
+                      },
+                      {
+                        "name": "@since",
+                        "value": "@outputs('Derive_Since')"
+                      }
+                    ]
+                  }
+                }
+              },
+              "Transform_Claim": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Query_Claim": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const { claimsToBundle } = require('../../dist/src/fhir/patient-access-mapper');\nconst rows = workflowContext.actions.Query_Claim.outputs.body?.Documents || [];\nconst selfLink = workflowContext.trigger.outputs.headers['x-ms-original-url'] || '';\nreturn claimsToBundle(rows, selfLink);"
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Return_Unsupported": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/fhir+json"
+                },
+                "body": {
+                  "resourceType": "OperationOutcome",
+                  "issue": [
+                    {
+                      "severity": "error",
+                      "code": "not-supported",
+                      "diagnostics": "Unsupported resource type"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Build_Response": {
+        "type": "InlineCode",
+        "runAfter": {
+          "Switch_Resource": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "language": "JavaScript",
+          "code": "const switchOutputs = workflowContext.actions.Switch_Resource.outputs || {};\nconst prefer = (workflowContext.variables.preferHeader || '').toLowerCase();\nconst preferMinimal = prefer.includes('return=minimal');\nconst preferAsync = prefer.includes('respond-async');\nconst bundle = switchOutputs.body || switchOutputs || { resourceType: 'Bundle', entry: [] };\nconst headers = {\n  'Content-Type': 'application/fhir+json',\n  'X-RateLimit-Remaining': String(workflowContext.actions.Update_Rate_Document.outputs.remaining ?? 0),\n  'X-RateLimit-Reset': workflowContext.actions.Update_Rate_Document.outputs.reset || ''\n};\nconst preferences = [];\nif (preferAsync) {\n  preferences.push('respond-async');\n  const selfLink = bundle?.link?.[0]?.url || workflowContext.trigger.outputs.headers['x-ms-original-url'] || '';\n  if (selfLink) {\n    headers['Content-Location'] = selfLink;\n  }\n}\nif (preferMinimal) {\n  preferences.push('return=minimal');\n}\nif (preferences.length) {\n  headers['Preference-Applied'] = preferences.join(', ');\n}\nconst status = preferAsync ? 202 : 200;\nif (preferMinimal) {\n  return { status, headers, body: { resourceType: 'OperationOutcome', issue: [{ severity: 'information', code: 'informational', diagnostics: 'Request accepted with return=minimal preference' }] } };\n}\nreturn { status, headers, body: bundle };"
+        }
+      },
+      "Respond": {
+        "type": "Response",
+        "runAfter": {
+          "Build_Response": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "statusCode": "@outputs('Build_Response')?['status']",
+          "headers": "@outputs('Build_Response')?['headers']",
+          "body": "@outputs('Build_Response')?['body']"
+        }
+      }
+    },
+    "outputs": {}
+  }
+}
