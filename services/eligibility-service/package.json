@@ -1,0 +1,68 @@
+{
+  "name": "@cloudhealthoffice/eligibility-service",
+  "version": "1.0.0",
+  "description": "Cloud Health Office Eligibility Service - Dual interface supporting X12 270/271 and FHIR CoverageEligibilityRequest/Response",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "clean": "rm -rf dist",
+    "migrate": "ts-node src/migration.ts",
+    "migrate:sample": "ts-node src/migration.ts sample sample-rules.csv",
+    "migrate:import": "ts-node src/migration.ts import",
+    "migrate:validate": "ts-node src/migration.ts validate"
+  },
+  "keywords": [
+    "healthcare",
+    "eligibility",
+    "x12",
+    "270",
+    "271",
+    "fhir",
+    "coverage",
+    "hipaa",
+    "edi",
+    "azure",
+    "dapr",
+    "cosmos"
+  ],
+  "author": "Cloud Health Office Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@azure/cosmos": "^4.2.0",
+    "@azure/eventgrid": "^5.7.0",
+    "@azure/identity": "^4.13.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/fhir": "^0.0.41",
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cloudhealthoffice/cloudhealthoffice.git",
+    "directory": "services/eligibility-service"
+  },
+  "bugs": {
+    "url": "https://github.com/cloudhealthoffice/cloudhealthoffice/issues"
+  },
+  "homepage": "https://github.com/cloudhealthoffice/cloudhealthoffice/tree/main/services/eligibility-service#readme"
+}

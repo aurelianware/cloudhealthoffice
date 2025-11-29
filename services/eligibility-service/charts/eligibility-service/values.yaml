@@ -1,0 +1,239 @@
+# Cloud Health Office - Eligibility Service Helm Values
+# Default configuration for Kubernetes deployment
+
+# Image configuration
+image:
+  repository: ghcr.io/cloudhealthoffice/eligibility-service
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets (for private registries)
+imagePullSecrets: []
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations
+podAnnotations:
+  dapr.io/enabled: "true"
+  dapr.io/app-id: "eligibility-service"
+  dapr.io/app-port: "3000"
+  dapr.io/app-protocol: "http"
+  dapr.io/enable-api-logging: "true"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: eligibility.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: eligibility-tls
+    #   hosts:
+    #     - eligibility.example.com
+
+# Resource limits
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Autoscaling configuration
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - eligibility-service
+          topologyKey: kubernetes.io/hostname
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /livez
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Application configuration
+config:
+  # Server port
+  port: 3000
+  
+  # Cosmos DB configuration
+  cosmosDb:
+    endpoint: ""  # Set via secret or environment
+    database: "eligibility-db"
+    container: "eligibility-cache"
+    # Key should be stored in a secret
+  
+  # Event Grid configuration
+  eventGrid:
+    endpoint: ""  # Set via secret or environment
+    # Key should be stored in a secret
+  
+  # Cache configuration
+  cache:
+    enabled: true
+    activeTtl: 86400      # 24 hours for active members
+    inactiveTtl: 3600     # 1 hour for inactive members
+    maxAge: 43200         # 12 hours max cache age
+  
+  # QNXT configuration (optional)
+  qnxt:
+    baseUrl: ""           # Set via secret or environment
+    timeout: 30000
+  
+  # FHIR server configuration (optional)
+  fhirServer:
+    baseUrl: ""           # Set via secret or environment
+    authType: "managed_identity"
+  
+  # Dapr configuration
+  dapr:
+    enabled: true
+    httpPort: 3500
+    grpcPort: 50001
+    appId: "eligibility-service"
+    stateStoreName: "eligibility-state"
+    pubSubName: "eligibility-pubsub"
+
+# External secrets configuration (for Azure Key Vault, AWS Secrets Manager, etc.)
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    name: azure-keyvault
+    kind: ClusterSecretStore
+  target:
+    name: eligibility-secrets
+  data:
+    - secretKey: COSMOS_ENDPOINT
+      remoteRef:
+        key: cosmos-endpoint
+    - secretKey: COSMOS_KEY
+      remoteRef:
+        key: cosmos-key
+    - secretKey: EVENT_GRID_ENDPOINT
+      remoteRef:
+        key: eventgrid-endpoint
+    - secretKey: EVENT_GRID_KEY
+      remoteRef:
+        key: eventgrid-key
+
+# Existing secrets to use
+existingSecrets:
+  cosmos: ""              # Name of existing secret with Cosmos DB credentials
+  eventGrid: ""           # Name of existing secret with Event Grid credentials
+  qnxt: ""                # Name of existing secret with QNXT credentials
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Service monitor for Prometheus
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  path: /metrics
+  labels: {}
+
+# Dapr components (for non-ACA deployments)
+daprComponents:
+  stateStore:
+    enabled: true
+    name: eligibility-state
+    type: state.azure.cosmosdb
+    version: v1
+    metadata:
+      - name: url
+        secretKeyRef:
+          name: cosmos-credentials
+          key: endpoint
+      - name: database
+        value: eligibility-db
+      - name: collection
+        value: dapr-state
+      - name: masterKey
+        secretKeyRef:
+          name: cosmos-credentials
+          key: key
+  
+  pubSub:
+    enabled: true
+    name: eligibility-pubsub
+    type: pubsub.azure.servicebus
+    version: v1
+    metadata:
+      - name: connectionString
+        secretKeyRef:
+          name: servicebus-credentials
+          key: connectionString

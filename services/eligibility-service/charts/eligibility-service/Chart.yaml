@@ -1,0 +1,23 @@
+apiVersion: v2
+name: eligibility-service
+description: Cloud Health Office Eligibility Service - Dual interface X12 270/271 and FHIR CoverageEligibilityRequest
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - healthcare
+  - eligibility
+  - x12
+  - fhir
+  - hipaa
+  - edi
+  - dapr
+maintainers:
+  - name: Cloud Health Office Team
+    email: support@cloudhealthoffice.com
+home: https://github.com/cloudhealthoffice/cloudhealthoffice
+sources:
+  - https://github.com/cloudhealthoffice/cloudhealthoffice
+annotations:
+  category: Healthcare
+  licenses: Apache-2.0
