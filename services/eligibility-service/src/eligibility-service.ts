@@ -511,7 +511,9 @@ export class EligibilityService {
     // If no rules found, assume active for demo purposes
     if (overallStatus === 'unknown' && benefits.every(b => b.eligibilityInfoCode === 'U')) {
       overallStatus = 'active';
-      benefits.forEach(b => b.eligibilityInfoCode = '1');
+      for (const benefit of benefits) {
+        benefit.eligibilityInfoCode = '1';
+      }
     }
 
     return {
