@@ -540,7 +540,7 @@ let total = customEvents
 | where name contains 'Member' or name contains 'Enrollment'
 | summarize TotalCount = dcount(tostring(customDimensions.memberId));
 enabled
-| join kind=inner total on 1==1
+| join kind=cross total
 | extend EnablementPct = 100.0 * EnabledCount / TotalCount
 | where EnablementPct < 80
 ```
