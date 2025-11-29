@@ -40,7 +40,7 @@ export class EligibilityService {
   private cosmosClient: CosmosClient;
   private database: Database;
   private container: Container;
-  private eventGridClient: EventGridPublisherClient | null = null;
+  private eventGridClient: EventGridPublisherClient<"EventGrid"> | null = null;
   private x12Mapper: X12EligibilityMapper;
   private fhirMapper: FHIREligibilityMapper;
   private config: EligibilityServiceConfig;
@@ -471,7 +471,10 @@ export class EligibilityService {
     const planCode = request.subscriber.groupNumber || 'DEFAULT';
     const serviceTypes = request.serviceTypeCodes || ['30'];
     const memberAge = this.calculateAge(request.subscriber.dateOfBirth);
-    const gender = request.subscriber.gender;
+    // Map gender for rule matching - 'U' is treated as undefined (unknown)
+    const gender = request.subscriber.gender === 'M' || request.subscriber.gender === 'F' 
+      ? request.subscriber.gender 
+      : undefined;
 
     const benefits: EligibilityBenefit[] = [];
     let overallStatus: 'active' | 'inactive' | 'terminated' | 'pending' | 'unknown' = 'unknown';
@@ -566,11 +569,12 @@ export class EligibilityService {
   ): Promise<void> {
     if (!this.eventGridClient) return;
 
-    const event: EligibilityCheckedEvent = {
+    // Create event in the format expected by Azure Event Grid
+    const event = {
       id: uuidv4(),
       eventType: 'EligibilityChecked',
       subject: memberId,
-      eventTime: new Date().toISOString(),
+      eventTime: new Date(),
       dataVersion: '1.0',
       data: {
         memberId,

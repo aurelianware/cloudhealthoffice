@@ -393,7 +393,7 @@ export class FHIREligibilityMapper {
     return codes;
   }
   
-  private convertBenefitsToItems(benefits: EligibilityBenefit[]): NonNullable<CoverageEligibilityResponse['insurance']>[0]['item'] {
+  private convertBenefitsToItems(benefits: EligibilityBenefit[]): NonNullable<NonNullable<CoverageEligibilityResponse['insurance']>[0]['item']> {
     return benefits.map(benefit => {
       const categoryMapping = X12_TO_BENEFIT_CATEGORY[benefit.serviceTypeCode] || {
         code: benefit.serviceTypeCode,
@@ -401,7 +401,7 @@ export class FHIREligibilityMapper {
         system: 'https://x12.org/codes/service-type-codes'
       };
       
-      const item: NonNullable<CoverageEligibilityResponse['insurance']>[0]['item'][0] = {
+      const item: NonNullable<NonNullable<CoverageEligibilityResponse['insurance']>[0]['item']>[0] = {
         category: {
           coding: [{
             system: categoryMapping.system,
