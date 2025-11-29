@@ -660,5 +660,12 @@
       }
     },
     "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    }
   }
 }
