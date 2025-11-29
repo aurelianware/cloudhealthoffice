@@ -434,9 +434,11 @@ output staticWebAppId string = staticWebApp.id
 output ediTransactionMetricsWorkbookId string = workbooks.outputs.ediTransactionMetricsWorkbookId
 output payerIntegrationHealthWorkbookId string = workbooks.outputs.payerIntegrationHealthWorkbookId
 output hipaaComplianceWorkbookId string = workbooks.outputs.hipaaComplianceWorkbookId
+output cms0057fComplianceWorkbookId string = workbooks.outputs.cms0057fComplianceWorkbookId
 output ediTransactionMetricsUrl string = workbooks.outputs.ediTransactionMetricsUrl
 output payerIntegrationHealthUrl string = workbooks.outputs.payerIntegrationHealthUrl
 output hipaaComplianceUrl string = workbooks.outputs.hipaaComplianceUrl
+output cms0057fComplianceUrl string = workbooks.outputs.cms0057fComplianceUrl
 
 // Cosmos DB outputs
 output cosmosDbAccountName string = enableCosmosDb ? cosmosDb.outputs.cosmosAccountName : 'disabled'

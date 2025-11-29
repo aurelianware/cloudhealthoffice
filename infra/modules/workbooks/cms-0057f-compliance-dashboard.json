@@ -1,0 +1,601 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## CMS-0057-F Compliance Dashboard\n\n**Real-time monitoring of CMS Prior Authorization Rule compliance metrics**\n\n📋 **CMS-0057-F Requirements**: Patient Access API, Provider Access API, Prior Authorization API, Payer-to-Payer API\n\n🔒 **PHI Redaction Active**: All patient identifiers are automatically excluded from this dashboard.\n\n📥 **Export**: Use the workbook export button (top-right) to download as PDF for compliance reporting.\n\n---"
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange-cms0057f",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "payerId-cms0057f",
+            "version": "KqlParameterItem/1.0",
+            "name": "PayerId",
+            "label": "Payer ID",
+            "type": 2,
+            "isRequired": false,
+            "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.payerId != ''\n| distinct tostring(customDimensions.payerId)\n| order by customDimensions_payerId asc",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 0
+            },
+            "timeContextFromParameter": "TimeRange",
+            "defaultValue": "value::all",
+            "queryType": 0,
+            "resourceType": "microsoft.insights/components"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### 📊 CMS-0057-F Compliance Summary\n\n*Overall compliance status with January 2027 deadline requirements*"
+      },
+      "name": "complianceSummaryHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let patientAccessEnabled = customEvents\n| where timestamp {TimeRange}\n| where name == 'PatientAccessAPI_Enabled' or name == 'FHIR_Patient_Access'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize EnabledMembers = dcount(tostring(customDimensions.memberId));\nlet totalMembers = customEvents\n| where timestamp {TimeRange}\n| where name contains 'Member' or name contains 'Patient' or name contains 'Enrollment'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize TotalMembers = dcount(tostring(customDimensions.memberId));\nlet priorAuthMetrics = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or name contains '278' or customDimensions.transactionType == '278'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    AvgResponseTimeMs = avg(duration),\n    P95ResponseTimeMs = percentile(duration, 95),\n    TotalPriorAuthRequests = count(),\n    SuccessfulPriorAuth = countif(success == true);\nlet urgentCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority == 'urgent'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    UrgentWithin72h = countif(duration < 259200000),\n    TotalUrgent = count();\nlet standardCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority != 'urgent' or isempty(customDimensions.priority)\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    StandardWithin7d = countif(duration < 604800000),\n    TotalStandard = count();\npatientAccessEnabled\n| extend dummy = 1\n| join kind=leftouter (totalMembers | extend dummy = 1) on dummy\n| join kind=leftouter (priorAuthMetrics | extend dummy = 1) on dummy\n| join kind=leftouter (urgentCompliance | extend dummy = 1) on dummy\n| join kind=leftouter (standardCompliance | extend dummy = 1) on dummy\n| extend \n    PatientAccessPct = round(100.0 * coalesce(EnabledMembers, 0) / max_of(coalesce(TotalMembers, 1), 1), 1),\n    PriorAuthSuccessRate = round(100.0 * coalesce(SuccessfulPriorAuth, 0) / max_of(coalesce(TotalPriorAuthRequests, 1), 1), 1),\n    Urgent72hCompliance = round(100.0 * coalesce(UrgentWithin72h, 0) / max_of(coalesce(TotalUrgent, 1), 1), 1),\n    Standard7dCompliance = round(100.0 * coalesce(StandardWithin7d, 0) / max_of(coalesce(TotalStandard, 1), 1), 1)\n| project \n    PatientAccessPct,\n    AvgResponseTimeSec = round(coalesce(AvgResponseTimeMs, 0) / 1000, 2),\n    P95ResponseTimeSec = round(coalesce(P95ResponseTimeMs, 0) / 1000, 2),\n    Urgent72hCompliance,\n    Standard7dCompliance,\n    TotalPriorAuthRequests = coalesce(TotalPriorAuthRequests, 0)",
+        "size": 4,
+        "title": "CMS-0057-F Compliance Overview",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "PatientAccessPct",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "PatientAccessPct",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "greenRed"
+            },
+            "numberFormat": {
+              "unit": 1,
+              "options": {
+                "style": "decimal",
+                "useGrouping": false
+              }
+            }
+          },
+          "secondaryContent": {
+            "columnMatch": "AvgResponseTimeSec",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "blue"
+            }
+          },
+          "showBorder": true
+        }
+      },
+      "name": "complianceOverviewTiles"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### 👥 Patient Access API Enablement\n\n*Percentage of members with Patient Access API enabled (CMS-0057-F §1)*"
+      },
+      "name": "patientAccessHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let enabledMembers = customEvents\n| where timestamp {TimeRange}\n| where name in ('PatientAccessAPI_Enabled', 'FHIR_Patient_Access', 'Patient_API_Registered', 'MemberPortal_Activated')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize EnabledCount = dcount(tostring(customDimensions.memberId)) by bin(timestamp, 1d);\nlet totalMembers = customEvents\n| where timestamp {TimeRange}\n| where name contains 'Member' or name contains 'Enrollment' or name contains 'Coverage'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize TotalCount = dcount(tostring(customDimensions.memberId)) by bin(timestamp, 1d);\nenabledMembers\n| join kind=leftouter totalMembers on timestamp\n| extend \n    EnablementPct = round(100.0 * EnabledCount / max_of(TotalCount, 1), 1),\n    EnabledCount = EnabledCount,\n    TotalCount = coalesce(TotalCount, 0)\n| project timestamp, EnablementPct, EnabledCount, TotalCount\n| order by timestamp asc",
+        "size": 0,
+        "title": "Patient Access API Enablement Trend",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "linechart",
+        "chartSettings": {
+          "yAxis": [
+            "EnablementPct"
+          ],
+          "ySettings": {
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      "customWidth": "50",
+      "name": "patientAccessTrendChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('PatientAccessAPI_Enabled', 'FHIR_Patient_Access', 'Patient_API_Registered', 'PatientAccessAPI_Request')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    UniqueMembers = dcount(tostring(customDimensions.memberId)),\n    TotalRequests = count(),\n    SuccessfulRequests = countif(tostring(customDimensions.status) == 'success' or isempty(customDimensions.status))\n    by PayerId = tostring(customDimensions.payerId)\n| extend SuccessRate = round(100.0 * SuccessfulRequests / max_of(TotalRequests, 1), 1)\n| project PayerId, UniqueMembers, TotalRequests, SuccessfulRequests, SuccessRate\n| order by UniqueMembers desc",
+        "size": 0,
+        "title": "Patient Access API by Payer",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "UniqueMembers",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "SuccessRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "patientAccessByPayerTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### ⏱️ Prior Authorization Response Time\n\n*Average response time for prior authorization requests (CMS-0057-F §3)*\n\n**CMS Requirements**: 72 hours for urgent requests, 7 calendar days for standard requests"
+      },
+      "name": "priorAuthHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or name contains '278' or customDimensions.transactionType == '278' or name contains 'prior'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    AvgResponseMs = avg(duration),\n    P50ResponseMs = percentile(duration, 50),\n    P95ResponseMs = percentile(duration, 95),\n    P99ResponseMs = percentile(duration, 99)\n    by bin(timestamp, 1h)\n| extend \n    AvgResponseSec = round(AvgResponseMs / 1000, 2),\n    P50ResponseSec = round(P50ResponseMs / 1000, 2),\n    P95ResponseSec = round(P95ResponseMs / 1000, 2),\n    P99ResponseSec = round(P99ResponseMs / 1000, 2)\n| project timestamp, AvgResponseSec, P50ResponseSec, P95ResponseSec, P99ResponseSec\n| order by timestamp asc",
+        "size": 0,
+        "title": "Prior Auth Response Time Trend (seconds)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "priorAuthResponseTimeChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or name contains '278' or customDimensions.transactionType == '278' or name contains 'prior'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    Priority = coalesce(tostring(customDimensions.priority), 'standard'),\n    ResponseTimeHours = duration / 3600000\n| summarize \n    TotalRequests = count(),\n    AvgResponseHours = round(avg(ResponseTimeHours), 2),\n    P95ResponseHours = round(percentile(ResponseTimeHours, 95), 2),\n    CompliantCount = countif(\n        (Priority == 'urgent' and ResponseTimeHours <= 72) or \n        (Priority != 'urgent' and ResponseTimeHours <= 168)\n    )\n    by Priority\n| extend \n    ComplianceRate = round(100.0 * CompliantCount / TotalRequests, 1),\n    SLATarget = case(\n        Priority == 'urgent', '72 hours',\n        '7 days (168 hours)'\n    )\n| project Priority, TotalRequests, AvgResponseHours, P95ResponseHours, CompliantCount, ComplianceRate, SLATarget\n| order by Priority asc",
+        "size": 0,
+        "title": "Prior Auth SLA Compliance by Priority",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TotalRequests",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ComplianceRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            },
+            {
+              "columnMatch": "Priority",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "urgent",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "blue",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "priorAuthSlaTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### ❌ Transaction Error Rates\n\n*Error rates for X12 EDI transactions (270/271 Eligibility, 278 Prior Auth, 837 Claims)*"
+      },
+      "name": "errorRatesHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend TransactionType = case(\n    name contains '270' or name contains '271' or customDimensions.transactionType == '270' or customDimensions.transactionType == '271', '270/271 (Eligibility)',\n    name contains '278' or customDimensions.transactionType == '278', '278 (Prior Auth)',\n    name contains '837' or customDimensions.transactionType == '837', '837 (Claims)',\n    name contains '275' or customDimensions.transactionType == '275', '275 (Attachments)',\n    name contains '277' or customDimensions.transactionType == '277', '277 (Status)',\n    name contains '835' or customDimensions.transactionType == '835', '835 (Remittance)',\n    'Other'\n)\n| where TransactionType != 'Other'\n| summarize \n    TotalTransactions = count(),\n    SuccessfulTransactions = countif(success == true),\n    FailedTransactions = countif(success == false)\n    by TransactionType\n| extend ErrorRate = round(100.0 * FailedTransactions / TotalTransactions, 2)\n| project TransactionType, TotalTransactions, SuccessfulTransactions, FailedTransactions, ErrorRate\n| order by ErrorRate desc",
+        "size": 0,
+        "title": "Error Rates by Transaction Type",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TotalTransactions",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "ErrorRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "redGreen",
+                "min": 0,
+                "max": 10
+              }
+            },
+            {
+              "columnMatch": "FailedTransactions",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "red"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "errorRatesByTypeTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend TransactionType = case(\n    name contains '270' or name contains '271' or customDimensions.transactionType in ('270', '271'), '270/271',\n    name contains '278' or customDimensions.transactionType == '278', '278',\n    name contains '837' or customDimensions.transactionType == '837', '837',\n    name contains '275' or customDimensions.transactionType == '275', '275',\n    name contains '277' or customDimensions.transactionType == '277', '277',\n    'Other'\n)\n| where TransactionType != 'Other'\n| where success == false\n| summarize ErrorCount = count() by bin(timestamp, 1h), TransactionType\n| project timestamp, TransactionType, ErrorCount\n| order by timestamp asc",
+        "size": 0,
+        "title": "Error Trend Over Time",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "errorTrendChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp {TimeRange}\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| where success == false\n| extend TransactionType = case(\n    name contains '270' or name contains '271' or customDimensions.transactionType in ('270', '271'), '270/271 (Eligibility)',\n    name contains '278' or customDimensions.transactionType == '278', '278 (Prior Auth)',\n    name contains '837' or customDimensions.transactionType == '837', '837 (Claims)',\n    name contains '275' or customDimensions.transactionType == '275', '275 (Attachments)',\n    name contains '277' or customDimensions.transactionType == '277', '277 (Status)',\n    'Other'\n)\n| where TransactionType != 'Other'\n| extend \n    ErrorCategory = case(\n        resultCode startswith '4', 'Client Error (4xx)',\n        resultCode startswith '5', 'Server Error (5xx)',\n        'Other Error'\n    ),\n    ErrorMessage = substring(tostring(customDimensions.errorMessage), 0, 100)\n| project \n    timestamp,\n    TransactionType,\n    ErrorCode = resultCode,\n    ErrorCategory,\n    ErrorMessage,\n    PayerId = tostring(customDimensions.payerId)\n| order by timestamp desc\n| take 50",
+        "size": 0,
+        "title": "Recent Transaction Errors (Last 50)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "timestamp",
+              "formatter": 6
+            },
+            {
+              "columnMatch": "ErrorCode",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "startsWith",
+                    "thresholdValue": "4",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "startsWith",
+                    "thresholdValue": "5",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "yellow",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "ErrorCategory",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Server",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Client",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "yellow",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "recentErrorsTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### 🔐 PHI Redaction Audit Log (Key Vault)\n\n*Audit trail for PHI access and redaction events from Azure Key Vault diagnostic logs*"
+      },
+      "name": "phiAuditHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureDiagnostics\n| where timestamp {TimeRange}\n| where ResourceProvider == 'MICROSOFT.KEYVAULT'\n| where Category == 'AuditEvent'\n| extend \n    Operation = OperationName,\n    KeyName = tostring(properties_s) ,\n    CallerIPAddress = CallerIPAddress,\n    ResultType = ResultType\n| where Operation contains 'Secret' or Operation contains 'Key' or Operation contains 'Certificate'\n| summarize \n    TotalOperations = count(),\n    SuccessfulOps = countif(ResultType == 'Success'),\n    FailedOps = countif(ResultType != 'Success')\n    by bin(timestamp, 1h), Operation\n| project timestamp, Operation, TotalOperations, SuccessfulOps, FailedOps\n| order by timestamp asc",
+        "size": 0,
+        "title": "Key Vault Operations Timeline",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "keyVaultOpsChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureDiagnostics\n| where timestamp {TimeRange}\n| where ResourceProvider == 'MICROSOFT.KEYVAULT'\n| where Category == 'AuditEvent'\n| extend \n    Operation = OperationName,\n    ResultType = ResultType,\n    CallerIPAddress = CallerIPAddress\n| summarize \n    TotalOps = count(),\n    SuccessRate = round(100.0 * countif(ResultType == 'Success') / count(), 1)\n    by Operation\n| project Operation, TotalOps, SuccessRate\n| order by TotalOps desc",
+        "size": 0,
+        "title": "Key Vault Operations Summary",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TotalOps",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "SuccessRate",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed",
+                "min": 0,
+                "max": 100
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "keyVaultOpsSummaryTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "union \n    (AzureDiagnostics\n    | where timestamp {TimeRange}\n    | where ResourceProvider == 'MICROSOFT.KEYVAULT'\n    | where Category == 'AuditEvent'\n    | extend \n        EventType = 'Key Vault',\n        Operation = OperationName,\n        Status = ResultType,\n        CallerIP = CallerIPAddress,\n        Resource = Resource\n    | project timestamp, EventType, Operation, Status, CallerIP, Resource),\n    (customEvents\n    | where timestamp {TimeRange}\n    | where name in ('PHI_Access', 'PHI_Redaction', 'Data_Export', 'Encryption_Key_Access')\n    | where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n    | extend \n        EventType = 'Application',\n        Operation = name,\n        Status = tostring(customDimensions.status),\n        CallerIP = tostring(customDimensions.clientIp),\n        Resource = tostring(customDimensions.resourceId)\n    | project timestamp, EventType, Operation, Status, CallerIP, Resource)\n| order by timestamp desc\n| take 100",
+        "size": 0,
+        "title": "PHI Access Audit Trail (Last 100 Events)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "timestamp",
+              "formatter": 6
+            },
+            {
+              "columnMatch": "EventType",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Key Vault",
+                    "representation": "purple",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Application",
+                    "representation": "blue",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "gray",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Status",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Success",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "success",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "phiAuditTrailTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### 📧 Alert Configuration\n\n*Recommended Azure Monitor alerts for CMS-0057-F compliance monitoring*\n\n**Configure these alerts in Azure Monitor > Alerts > Create alert rule:**\n\n| Alert Name | Condition | Severity | Action |\n|------------|-----------|----------|--------|\n| **Prior Auth SLA Violation (Urgent)** | Prior auth urgent request > 72 hours | Critical | Page on-call |\n| **Prior Auth SLA Violation (Standard)** | Prior auth standard request > 7 days | High | Email ops team |\n| **Patient Access API Low Enablement** | Patient Access enablement < 80% | Medium | Email compliance |\n| **High Transaction Error Rate** | Error rate > 5% for 270/271, 278, 837 | High | Email ops team |\n| **Key Vault Access Failure** | Failed Key Vault operations | Critical | Page security |\n| **PHI Access Anomaly** | Unusual PHI access patterns | High | Email security team |\n\n**Scheduled Email Reports:**\n\nConfigure weekly compliance reports via Azure Monitor > Workbooks > Share > Schedule:\n1. Click **Share** button in workbook toolbar\n2. Select **Schedule** tab\n3. Set schedule: Weekly on Monday at 8:00 AM\n4. Add recipients: compliance@yourorg.com\n5. Select **PDF** format for regulatory documentation"
+      },
+      "name": "alertConfigSection"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n\n### 📋 CMS-0057-F Compliance Checklist\n\n**January 1, 2027 Deadline Requirements:**\n\n| Requirement | Status | This Dashboard Section |\n|-------------|--------|------------------------|\n| ✅ **Patient Access API** | Monitor enablement % | Patient Access API Enablement |\n| ✅ **Provider Access API** | Track via Patient Access metrics | Patient Access API Enablement |\n| ✅ **Prior Authorization API** | Monitor response times & SLAs | Prior Auth Response Time |\n| ✅ **72-Hour Urgent Response** | Track compliance rate | Prior Auth SLA Compliance |\n| ✅ **7-Day Standard Response** | Track compliance rate | Prior Auth SLA Compliance |\n| ✅ **Transaction Monitoring** | Error rates by type | Transaction Error Rates |\n| ✅ **PHI Audit Logging** | Key Vault audit trail | PHI Redaction Audit Log |\n| ✅ **HIPAA Compliance** | PHI redaction validation | PHI Redaction Audit Log |\n\n---\n\n**📥 Export to PDF**: Click the export button (top-right corner) to generate a compliance report.\n\n**📧 Schedule Reports**: Use Azure Monitor's workbook scheduling to send weekly compliance summaries.\n\n**⚠️ PHI Redaction Notice**: All patient identifiers are automatically excluded from this dashboard."
+      },
+      "name": "complianceChecklistFooter"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "sentinel-UserWorkbook",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
