@@ -474,7 +474,7 @@
         },
         "timeContextFromParameter": "TimeRange",
         "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceType": "microsoft.insights/components",
         "visualization": "table",
         "gridSettings": {
           "formatters": [
