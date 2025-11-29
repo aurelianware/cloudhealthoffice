@@ -1,0 +1,724 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "cosmosAccountName": {
+        "type": "String",
+        "metadata": {
+          "description": "Cosmos DB account hosting cloudhealthoffice database"
+        }
+      },
+      "cosmosDatabaseName": {
+        "type": "String",
+        "defaultValue": "cloudhealthoffice"
+      },
+      "priorAuthContainer": {
+        "type": "String",
+        "defaultValue": "PriorAuthorizations"
+      },
+      "slaTimerTopicName": {
+        "type": "String",
+        "defaultValue": "prior-auth-sla-timer"
+      },
+      "clearinghouseTopic": {
+        "type": "String",
+        "defaultValue": "prior-auth-requests"
+      },
+      "responseTopic": {
+        "type": "String",
+        "defaultValue": "prior-auth-responses"
+      },
+      "urgentSlaHours": {
+        "type": "Int",
+        "defaultValue": 72
+      },
+      "standardSlaHours": {
+        "type": "Int",
+        "defaultValue": 168
+      },
+      "availityTradingPartnerId": {
+        "type": "String",
+        "defaultValue": "AVAILITY"
+      }
+    },
+    "triggers": {
+      "HTTP_PriorAuth_API": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "metadata": {
+            "openApi": {
+              "info": {
+                "title": "CMS-0057-F Prior Authorization API",
+                "version": "1.0.0",
+                "description": "Da Vinci PAS CDex compliant Prior Authorization API with $submit operation, 72-hour SLA timer, and ClaimResponse bundling"
+              },
+              "servers": [
+                {
+                  "url": "https://{host}",
+                  "variables": {
+                    "host": {
+                      "default": "example.azurelogicapps.net"
+                    }
+                  }
+                }
+              ],
+              "paths": {
+                "/Claim/$submit": {
+                  "post": {
+                    "operationId": "SubmitPriorAuth",
+                    "summary": "Submit a prior authorization request",
+                    "description": "Da Vinci PAS $submit operation for prior authorization. Accepts a FHIR Bundle containing Claim and supporting resources.",
+                    "requestBody": {
+                      "required": true,
+                      "content": {
+                        "application/fhir+json": {
+                          "schema": {
+                            "$ref": "#/components/schemas/PASRequestBundle"
+                          }
+                        }
+                      }
+                    },
+                    "responses": {
+                      "200": {
+                        "description": "Prior authorization response",
+                        "content": {
+                          "application/fhir+json": {
+                            "schema": {
+                              "$ref": "#/components/schemas/PASResponseBundle"
+                            }
+                          }
+                        }
+                      },
+                      "202": {
+                        "description": "Request accepted for async processing (pended)",
+                        "headers": {
+                          "Content-Location": {
+                            "description": "URL to poll for status"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "/Claim/{id}/$status": {
+                  "get": {
+                    "operationId": "GetPriorAuthStatus",
+                    "summary": "Get status of a prior authorization request",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                },
+                "/ClaimResponse": {
+                  "get": {
+                    "operationId": "SearchClaimResponses",
+                    "summary": "Search for ClaimResponse resources",
+                    "parameters": [
+                      {
+                        "name": "patient",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "request",
+                        "in": "query",
+                        "description": "Reference to original Claim",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "status",
+                        "in": "query",
+                        "schema": { "type": "string", "enum": ["active", "cancelled", "draft", "entered-in-error"] }
+                      },
+                      {
+                        "name": "_lastUpdated",
+                        "in": "query",
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                },
+                "/ClaimResponse/{id}": {
+                  "get": {
+                    "operationId": "ReadClaimResponse",
+                    "summary": "Read a ClaimResponse by ID",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                }
+              },
+              "components": {
+                "schemas": {
+                  "PASRequestBundle": {
+                    "type": "object",
+                    "description": "Da Vinci PAS Request Bundle containing Claim and supporting resources",
+                    "properties": {
+                      "resourceType": { "type": "string", "enum": ["Bundle"] },
+                      "type": { "type": "string", "enum": ["collection"] },
+                      "entry": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": { "type": "object" }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "PASResponseBundle": {
+                    "type": "object",
+                    "description": "Da Vinci PAS Response Bundle containing ClaimResponse",
+                    "properties": {
+                      "resourceType": { "type": "string", "enum": ["Bundle"] },
+                      "type": { "type": "string", "enum": ["collection"] },
+                      "entry": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "resource": { "type": "object" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Variables": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "operationType",
+              "type": "String",
+              "value": "@if(contains(triggerOutputs()['relativePath'], '$submit'), 'submit', if(contains(triggerOutputs()['relativePath'], '$status'), 'status', if(contains(triggerOutputs()['relativePath'], 'ClaimResponse'), 'claimresponse', 'unknown')))"
+            },
+            {
+              "name": "resourceId",
+              "type": "String",
+              "value": "@if(contains(triggerOutputs()['relativePath'], '/Claim/'), first(split(last(split(triggerOutputs()['relativePath'], '/Claim/')), '/')), '')"
+            },
+            {
+              "name": "requestTimestamp",
+              "type": "String",
+              "value": "@utcNow()"
+            }
+          ]
+        }
+      },
+      "Switch_Operation": {
+        "type": "Switch",
+        "runAfter": {
+          "Initialize_Variables": ["Succeeded"]
+        },
+        "expression": "@variables('operationType')",
+        "cases": {
+          "submit": {
+            "case": "submit",
+            "actions": {
+              "Parse_PAS_Request_Bundle": {
+                "type": "Compose",
+                "inputs": "@triggerBody()"
+              },
+              "Validate_PAS_Bundle": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Parse_PAS_Request_Bundle": ["Succeeded"]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const bundle = workflowContext.actions.Parse_PAS_Request_Bundle.outputs;\nconst errors = [];\n\n// Validate bundle structure\nif (!bundle || bundle.resourceType !== 'Bundle') {\n  errors.push('Request must be a FHIR Bundle');\n}\n\nif (bundle.type !== 'collection') {\n  errors.push('Bundle type must be collection');\n}\n\n// Find Claim resource\nconst claimEntry = (bundle.entry || []).find(e => e.resource?.resourceType === 'Claim');\nif (!claimEntry) {\n  errors.push('Bundle must contain a Claim resource');\n}\n\nconst claim = claimEntry?.resource;\n\n// Validate Claim\nif (claim) {\n  if (claim.use !== 'preauthorization') {\n    errors.push('Claim.use must be preauthorization');\n  }\n  if (!claim.patient?.reference) {\n    errors.push('Claim.patient reference is required');\n  }\n  if (!claim.provider?.reference && !claim.provider?.identifier) {\n    errors.push('Claim.provider is required');\n  }\n  if (!claim.insurance || claim.insurance.length === 0) {\n    errors.push('Claim.insurance is required');\n  }\n  if (!claim.item || claim.item.length === 0) {\n    errors.push('Claim.item is required');\n  }\n}\n\nreturn {\n  valid: errors.length === 0,\n  errors,\n  claim,\n  bundle\n};"
+                }
+              },
+              "Check_Validation_Result": {
+                "type": "If",
+                "runAfter": {
+                  "Validate_PAS_Bundle": ["Succeeded"]
+                },
+                "expression": {
+                  "equals": [
+                    "@outputs('Validate_PAS_Bundle')?['valid']",
+                    true
+                  ]
+                },
+                "actions": {
+                  "Generate_Request_ID": {
+                    "type": "Compose",
+                    "inputs": "@concat('PA-', guid())"
+                  },
+                  "Extract_Claim_Details": {
+                    "type": "InlineCode",
+                    "runAfter": {
+                      "Generate_Request_ID": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const { calculatePriorAuthSLA } = require('../../dist/src/fhir/prior-auth-api');\nconst validation = workflowContext.actions.Validate_PAS_Bundle.outputs;\nconst claim = validation.claim;\nconst requestId = workflowContext.actions.Generate_Request_ID.outputs;\nconst requestTimestamp = workflowContext.variables.requestTimestamp;\n\n// Determine request type from priority\nconst priorityCode = claim.priority?.coding?.[0]?.code || 'normal';\nconst requestType = (priorityCode === 'urgent' || priorityCode === 'stat') ? 'urgent' : 'standard';\n\n// Calculate SLA\nconst sla = calculatePriorAuthSLA(requestType, requestTimestamp);\n\n// Extract patient info\nconst patientRef = claim.patient?.reference || '';\nconst patientId = patientRef.replace('Patient/', '');\n\n// Extract provider info\nconst providerNpi = claim.provider?.identifier?.value || claim.provider?.reference?.replace('Practitioner/', '') || '';\n\n// Extract service info\nconst services = (claim.item || []).map(item => ({\n  sequence: item.sequence,\n  code: item.productOrService?.coding?.[0]?.code,\n  system: item.productOrService?.coding?.[0]?.system,\n  display: item.productOrService?.coding?.[0]?.display,\n  quantity: item.quantity?.value,\n  servicedPeriod: item.servicedPeriod\n}));\n\n// Extract diagnoses\nconst diagnoses = (claim.diagnosis || []).map(dx => ({\n  sequence: dx.sequence,\n  code: dx.diagnosisCodeableConcept?.coding?.[0]?.code,\n  system: dx.diagnosisCodeableConcept?.coding?.[0]?.system\n}));\n\nreturn {\n  requestId,\n  patientId,\n  providerNpi,\n  requestType,\n  sla,\n  services,\n  diagnoses,\n  originalClaim: claim,\n  createdAt: requestTimestamp\n};"
+                    }
+                  },
+                  "Store_Prior_Auth_Request": {
+                    "type": "ApiConnection",
+                    "runAfter": {
+                      "Extract_Claim_Details": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['documentdb']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/upsertdocument",
+                      "body": {
+                        "databaseId": "@parameters('cosmosDatabaseName')",
+                        "collectionId": "@parameters('priorAuthContainer')",
+                        "document": {
+                          "id": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                          "partitionKey": "@{outputs('Extract_Claim_Details')?['patientId']}",
+                          "requestId": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                          "patientId": "@{outputs('Extract_Claim_Details')?['patientId']}",
+                          "providerNpi": "@{outputs('Extract_Claim_Details')?['providerNpi']}",
+                          "requestType": "@{outputs('Extract_Claim_Details')?['requestType']}",
+                          "status": "pending",
+                          "sla": "@outputs('Extract_Claim_Details')?['sla']",
+                          "services": "@outputs('Extract_Claim_Details')?['services']",
+                          "diagnoses": "@outputs('Extract_Claim_Details')?['diagnoses']",
+                          "originalBundle": "@outputs('Parse_PAS_Request_Bundle')",
+                          "createdAt": "@{outputs('Extract_Claim_Details')?['createdAt']}",
+                          "updatedAt": "@{utcNow()}",
+                          "ttl": -1
+                        },
+                        "partitionKey": "@{outputs('Extract_Claim_Details')?['patientId']}"
+                      }
+                    }
+                  },
+                  "Start_SLA_Timer": {
+                    "type": "ApiConnection",
+                    "runAfter": {
+                      "Store_Prior_Auth_Request": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/@{encodeURIComponent(parameters('slaTimerTopicName'))}/messages",
+                      "body": {
+                        "contentData": "@{base64(string(json(concat('{\"requestId\":\"', outputs('Extract_Claim_Details')?['requestId'], '\",\"patientId\":\"', outputs('Extract_Claim_Details')?['patientId'], '\",\"slaDeadline\":\"', outputs('Extract_Claim_Details')?['sla']?['decisionDueBy'], '\",\"requestType\":\"', outputs('Extract_Claim_Details')?['requestType'], '\"}'))))}",
+                        "contentType": "application/json",
+                        "sessionId": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                        "scheduledEnqueueTimeUtc": "@{outputs('Extract_Claim_Details')?['sla']?['decisionDueBy']}"
+                      }
+                    }
+                  },
+                  "Queue_For_Clearinghouse": {
+                    "type": "ApiConnection",
+                    "runAfter": {
+                      "Start_SLA_Timer": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['servicebus']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/@{encodeURIComponent(parameters('clearinghouseTopic'))}/messages",
+                      "body": {
+                        "contentData": "@{base64(string(outputs('Parse_PAS_Request_Bundle')))}",
+                        "contentType": "application/fhir+json",
+                        "sessionId": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                        "properties": {
+                          "requestId": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                          "patientId": "@{outputs('Extract_Claim_Details')?['patientId']}",
+                          "providerNpi": "@{outputs('Extract_Claim_Details')?['providerNpi']}",
+                          "requestType": "@{outputs('Extract_Claim_Details')?['requestType']}",
+                          "tradingPartnerId": "@{parameters('availityTradingPartnerId')}"
+                        }
+                      }
+                    }
+                  },
+                  "Build_Initial_ClaimResponse": {
+                    "type": "InlineCode",
+                    "runAfter": {
+                      "Queue_For_Clearinghouse": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const details = workflowContext.actions.Extract_Claim_Details.outputs;\nconst requestId = details.requestId;\nconst claim = details.originalClaim;\nconst timestamp = new Date().toISOString();\n\nconst claimResponse = {\n  resourceType: 'ClaimResponse',\n  id: `CR-${requestId}`,\n  meta: {\n    profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],\n    lastUpdated: timestamp\n  },\n  identifier: [{\n    system: 'urn:cloudhealthoffice:prior-auth',\n    value: requestId\n  }],\n  status: 'active',\n  type: claim.type,\n  use: 'preauthorization',\n  patient: claim.patient,\n  created: timestamp,\n  insurer: claim.insurer || { display: 'Cloud Health Office' },\n  request: {\n    reference: `Claim/${claim.id || requestId}`\n  },\n  outcome: 'queued',\n  disposition: 'Prior authorization request received and pending review. Decision due by ' + details.sla.decisionDueBy,\n  preAuthRef: requestId,\n  preAuthPeriod: {\n    start: timestamp\n  },\n  processNote: [{\n    number: 1,\n    type: 'display',\n    text: `Request submitted at ${timestamp}. ${details.requestType === 'urgent' ? '72-hour' : '7-day'} SLA applies. Decision due by ${details.sla.decisionDueBy}.`\n  }]\n};\n\n// Build response bundle\nconst responseBundle = {\n  resourceType: 'Bundle',\n  type: 'collection',\n  timestamp: timestamp,\n  entry: [\n    {\n      fullUrl: `ClaimResponse/${claimResponse.id}`,\n      resource: claimResponse\n    }\n  ]\n};\n\nreturn {\n  claimResponse,\n  responseBundle,\n  requestId,\n  statusUrl: `/Claim/${requestId}/$status`\n};"
+                    }
+                  },
+                  "Update_Document_With_Response": {
+                    "type": "ApiConnection",
+                    "runAfter": {
+                      "Build_Initial_ClaimResponse": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['documentdb']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/upsertdocument",
+                      "body": {
+                        "databaseId": "@parameters('cosmosDatabaseName')",
+                        "collectionId": "@parameters('priorAuthContainer')",
+                        "document": {
+                          "id": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                          "partitionKey": "@{outputs('Extract_Claim_Details')?['patientId']}",
+                          "requestId": "@{outputs('Extract_Claim_Details')?['requestId']}",
+                          "patientId": "@{outputs('Extract_Claim_Details')?['patientId']}",
+                          "providerNpi": "@{outputs('Extract_Claim_Details')?['providerNpi']}",
+                          "requestType": "@{outputs('Extract_Claim_Details')?['requestType']}",
+                          "status": "queued",
+                          "sla": "@outputs('Extract_Claim_Details')?['sla']",
+                          "services": "@outputs('Extract_Claim_Details')?['services']",
+                          "diagnoses": "@outputs('Extract_Claim_Details')?['diagnoses']",
+                          "originalBundle": "@outputs('Parse_PAS_Request_Bundle')",
+                          "claimResponse": "@outputs('Build_Initial_ClaimResponse')?['claimResponse']",
+                          "createdAt": "@{outputs('Extract_Claim_Details')?['createdAt']}",
+                          "updatedAt": "@{utcNow()}",
+                          "ttl": -1
+                        },
+                        "partitionKey": "@{outputs('Extract_Claim_Details')?['patientId']}"
+                      }
+                    }
+                  },
+                  "Return_Accepted_Response": {
+                    "type": "Response",
+                    "runAfter": {
+                      "Update_Document_With_Response": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "statusCode": 202,
+                      "headers": {
+                        "Content-Type": "application/fhir+json",
+                        "Content-Location": "@{outputs('Build_Initial_ClaimResponse')?['statusUrl']}",
+                        "X-Prior-Auth-Request-Id": "@{outputs('Build_Initial_ClaimResponse')?['requestId']}",
+                        "X-SLA-Deadline": "@{outputs('Extract_Claim_Details')?['sla']?['decisionDueBy']}"
+                      },
+                      "body": "@outputs('Build_Initial_ClaimResponse')?['responseBundle']"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Return_Validation_Error": {
+                      "type": "Response",
+                      "inputs": {
+                        "statusCode": 400,
+                        "headers": {
+                          "Content-Type": "application/fhir+json"
+                        },
+                        "body": {
+                          "resourceType": "OperationOutcome",
+                          "issue": "@outputs('Validate_PAS_Bundle')?['errors']?.map(e => ({ severity: 'error', code: 'invalid', diagnostics: e }))"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "status": {
+            "case": "status",
+            "actions": {
+              "Query_Prior_Auth_Status": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['documentdb']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                  "body": {
+                    "databaseId": "@parameters('cosmosDatabaseName')",
+                    "collectionId": "@parameters('priorAuthContainer')",
+                    "query": "SELECT * FROM c WHERE c.requestId = @requestId",
+                    "parameters": [
+                      {
+                        "name": "@requestId",
+                        "value": "@variables('resourceId')"
+                      }
+                    ]
+                  }
+                }
+              },
+              "Check_Status_Found": {
+                "type": "If",
+                "runAfter": {
+                  "Query_Prior_Auth_Status": ["Succeeded"]
+                },
+                "expression": {
+                  "greater": [
+                    "@length(body('Query_Prior_Auth_Status')?['Documents'])",
+                    0
+                  ]
+                },
+                "actions": {
+                  "Build_Status_Response": {
+                    "type": "InlineCode",
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const docs = workflowContext.actions.Query_Prior_Auth_Status.outputs.body.Documents;\nconst doc = docs[0];\nconst timestamp = new Date().toISOString();\n\n// Check SLA status\nconst slaDeadline = new Date(doc.sla?.decisionDueBy);\nconst now = new Date();\nconst slaStatus = doc.status === 'complete' || doc.status === 'approved' || doc.status === 'denied' \n  ? (doc.sla?.slaCompliant ? 'compliant' : 'unknown')\n  : (now > slaDeadline ? 'breached' : 'pending');\n\n// Get or build ClaimResponse\nconst claimResponse = doc.claimResponse || {\n  resourceType: 'ClaimResponse',\n  id: `CR-${doc.requestId}`,\n  meta: {\n    profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],\n    lastUpdated: timestamp\n  },\n  status: 'active',\n  type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claim-type', code: 'professional' }] },\n  use: 'preauthorization',\n  patient: { reference: `Patient/${doc.patientId}` },\n  created: doc.createdAt,\n  insurer: { display: 'Cloud Health Office' },\n  outcome: doc.status === 'approved' ? 'complete' : doc.status === 'denied' ? 'error' : 'queued',\n  preAuthRef: doc.requestId\n};\n\n// Build bundle\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'collection',\n  timestamp: timestamp,\n  entry: [{\n    fullUrl: `ClaimResponse/${claimResponse.id}`,\n    resource: claimResponse\n  }]\n};\n\nreturn {\n  bundle,\n  status: doc.status,\n  slaStatus,\n  found: true\n};"
+                    }
+                  },
+                  "Return_Status": {
+                    "type": "Response",
+                    "runAfter": {
+                      "Build_Status_Response": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "statusCode": 200,
+                      "headers": {
+                        "Content-Type": "application/fhir+json",
+                        "X-Prior-Auth-Status": "@{outputs('Build_Status_Response')?['status']}",
+                        "X-SLA-Status": "@{outputs('Build_Status_Response')?['slaStatus']}"
+                      },
+                      "body": "@outputs('Build_Status_Response')?['bundle']"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Return_Status_Not_Found": {
+                      "type": "Response",
+                      "inputs": {
+                        "statusCode": 404,
+                        "headers": {
+                          "Content-Type": "application/fhir+json"
+                        },
+                        "body": {
+                          "resourceType": "OperationOutcome",
+                          "issue": [
+                            {
+                              "severity": "error",
+                              "code": "not-found",
+                              "diagnostics": "Prior authorization request not found"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "claimresponse": {
+            "case": "claimresponse",
+            "actions": {
+              "Parse_ClaimResponse_Query": {
+                "type": "Compose",
+                "inputs": {
+                  "isRead": "@not(empty(split(triggerOutputs()['relativePath'], '/')[2]))",
+                  "resourceId": "@if(greater(length(split(triggerOutputs()['relativePath'], '/')), 2), split(triggerOutputs()['relativePath'], '/')[2], '')",
+                  "patient": "@coalesce(triggerOutputs()['queries']?['patient'], '')",
+                  "request": "@coalesce(triggerOutputs()['queries']?['request'], '')",
+                  "status": "@coalesce(triggerOutputs()['queries']?['status'], '')"
+                }
+              },
+              "Check_Read_Or_Search": {
+                "type": "If",
+                "runAfter": {
+                  "Parse_ClaimResponse_Query": ["Succeeded"]
+                },
+                "expression": {
+                  "equals": [
+                    "@outputs('Parse_ClaimResponse_Query')?['isRead']",
+                    true
+                  ]
+                },
+                "actions": {
+                  "Query_ClaimResponse_By_Id": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['documentdb']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                      "body": {
+                        "databaseId": "@parameters('cosmosDatabaseName')",
+                        "collectionId": "@parameters('priorAuthContainer')",
+                        "query": "SELECT * FROM c WHERE c.requestId = @requestId OR CONCAT('CR-', c.requestId) = @requestId",
+                        "parameters": [
+                          {
+                            "name": "@requestId",
+                            "value": "@replace(outputs('Parse_ClaimResponse_Query')?['resourceId'], 'CR-', '')"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "Return_ClaimResponse_Read": {
+                    "type": "If",
+                    "runAfter": {
+                      "Query_ClaimResponse_By_Id": ["Succeeded"]
+                    },
+                    "expression": {
+                      "greater": [
+                        "@length(body('Query_ClaimResponse_By_Id')?['Documents'])",
+                        0
+                      ]
+                    },
+                    "actions": {
+                      "Return_ClaimResponse": {
+                        "type": "Response",
+                        "inputs": {
+                          "statusCode": 200,
+                          "headers": {
+                            "Content-Type": "application/fhir+json"
+                          },
+                          "body": "@body('Query_ClaimResponse_By_Id')?['Documents']?[0]?['claimResponse']"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {
+                        "Return_ClaimResponse_Not_Found": {
+                          "type": "Response",
+                          "inputs": {
+                            "statusCode": 404,
+                            "headers": {
+                              "Content-Type": "application/fhir+json"
+                            },
+                            "body": {
+                              "resourceType": "OperationOutcome",
+                              "issue": [
+                                {
+                                  "severity": "error",
+                                  "code": "not-found",
+                                  "diagnostics": "ClaimResponse not found"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Build_Search_Query": {
+                      "type": "Compose",
+                      "inputs": "@concat('SELECT * FROM c WHERE 1=1', if(not(empty(outputs('Parse_ClaimResponse_Query')?['patient'])), concat(' AND c.patientId = \"', replace(outputs('Parse_ClaimResponse_Query')?['patient'], 'Patient/', ''), '\"'), ''), if(not(empty(outputs('Parse_ClaimResponse_Query')?['status'])), concat(' AND c.status = \"', outputs('Parse_ClaimResponse_Query')?['status'], '\"'), ''))"
+                    },
+                    "Search_ClaimResponses": {
+                      "type": "ApiConnection",
+                      "runAfter": {
+                        "Build_Search_Query": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['documentdb']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "path": "/v2/apps/@{encodeURIComponent(parameters('cosmosAccountName'))}/querydocuments",
+                        "body": {
+                          "databaseId": "@parameters('cosmosDatabaseName')",
+                          "collectionId": "@parameters('priorAuthContainer')",
+                          "query": "@outputs('Build_Search_Query')"
+                        }
+                      }
+                    },
+                    "Build_ClaimResponse_Bundle": {
+                      "type": "InlineCode",
+                      "runAfter": {
+                        "Search_ClaimResponses": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "language": "JavaScript",
+                        "code": "const docs = workflowContext.actions.Search_ClaimResponses.outputs.body.Documents || [];\nconst timestamp = new Date().toISOString();\n\nconst entries = docs.map(doc => {\n  const claimResponse = doc.claimResponse || {\n    resourceType: 'ClaimResponse',\n    id: `CR-${doc.requestId}`,\n    meta: {\n      profile: ['http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse'],\n      lastUpdated: doc.updatedAt\n    },\n    status: 'active',\n    type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claim-type', code: 'professional' }] },\n    use: 'preauthorization',\n    patient: { reference: `Patient/${doc.patientId}` },\n    created: doc.createdAt,\n    insurer: { display: 'Cloud Health Office' },\n    outcome: doc.status === 'approved' ? 'complete' : doc.status === 'denied' ? 'error' : 'queued',\n    preAuthRef: doc.requestId\n  };\n  return {\n    fullUrl: `ClaimResponse/${claimResponse.id}`,\n    resource: claimResponse,\n    search: { mode: 'match' }\n  };\n});\n\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'searchset',\n  total: entries.length,\n  timestamp: timestamp,\n  entry: entries\n};\n\nreturn bundle;"
+                      }
+                    },
+                    "Return_ClaimResponse_Search": {
+                      "type": "Response",
+                      "runAfter": {
+                        "Build_ClaimResponse_Bundle": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "statusCode": 200,
+                        "headers": {
+                          "Content-Type": "application/fhir+json"
+                        },
+                        "body": "@outputs('Build_ClaimResponse_Bundle')"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Return_Unknown_Operation": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/fhir+json"
+                },
+                "body": {
+                  "resourceType": "OperationOutcome",
+                  "issue": [
+                    {
+                      "severity": "error",
+                      "code": "not-supported",
+                      "diagnostics": "Unknown operation. Supported operations: POST /Claim/$submit, GET /Claim/{id}/$status, GET /ClaimResponse, GET /ClaimResponse/{id}"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    }
+  }
+}
