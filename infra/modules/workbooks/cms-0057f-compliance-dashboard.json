@@ -90,7 +90,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "let patientAccessEnabled = customEvents\n| where timestamp {TimeRange}\n| where name == 'PatientAccessAPI_Enabled' or name == 'FHIR_Patient_Access'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize EnabledMembers = dcount(tostring(customDimensions.memberId));\nlet totalMembers = customEvents\n| where timestamp {TimeRange}\n| where name contains 'Member' or name contains 'Patient' or name contains 'Enrollment'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize TotalMembers = dcount(tostring(customDimensions.memberId));\nlet priorAuthMetrics = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or name contains '278' or customDimensions.transactionType == '278'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    AvgResponseTimeMs = avg(duration),\n    P95ResponseTimeMs = percentile(duration, 95),\n    TotalPriorAuthRequests = count(),\n    SuccessfulPriorAuth = countif(success == true);\nlet urgentCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority == 'urgent'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    UrgentWithin72h = countif(duration < 259200000),\n    TotalUrgent = count();\nlet standardCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority != 'urgent' or isempty(customDimensions.priority)\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    StandardWithin7d = countif(duration < 604800000),\n    TotalStandard = count();\npatientAccessEnabled\n| extend dummy = 1\n| join kind=leftouter (totalMembers | extend dummy = 1) on dummy\n| join kind=leftouter (priorAuthMetrics | extend dummy = 1) on dummy\n| join kind=leftouter (urgentCompliance | extend dummy = 1) on dummy\n| join kind=leftouter (standardCompliance | extend dummy = 1) on dummy\n| extend \n    PatientAccessPct = round(100.0 * coalesce(EnabledMembers, 0) / max_of(coalesce(TotalMembers, 1), 1), 1),\n    PriorAuthSuccessRate = round(100.0 * coalesce(SuccessfulPriorAuth, 0) / max_of(coalesce(TotalPriorAuthRequests, 1), 1), 1),\n    Urgent72hCompliance = round(100.0 * coalesce(UrgentWithin72h, 0) / max_of(coalesce(TotalUrgent, 1), 1), 1),\n    Standard7dCompliance = round(100.0 * coalesce(StandardWithin7d, 0) / max_of(coalesce(TotalStandard, 1), 1), 1)\n| project \n    PatientAccessPct,\n    AvgResponseTimeSec = round(coalesce(AvgResponseTimeMs, 0) / 1000, 2),\n    P95ResponseTimeSec = round(coalesce(P95ResponseTimeMs, 0) / 1000, 2),\n    Urgent72hCompliance,\n    Standard7dCompliance,\n    TotalPriorAuthRequests = coalesce(TotalPriorAuthRequests, 0)",
+        "query": "// CMS-0057-F SLA Constants: 72h urgent (259200000ms), 7 days standard (604800000ms)\nlet patientAccessEnabled = customEvents\n| where timestamp {TimeRange}\n| where name == 'PatientAccessAPI_Enabled' or name == 'FHIR_Patient_Access'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize EnabledMembers = dcount(tostring(customDimensions.memberId));\nlet totalMembers = customEvents\n| where timestamp {TimeRange}\n| where name contains 'Member' or name contains 'Patient' or name contains 'Enrollment'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize TotalMembers = dcount(tostring(customDimensions.memberId));\nlet priorAuthMetrics = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or name contains '278' or customDimensions.transactionType == '278'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    AvgResponseTimeMs = avg(duration),\n    P95ResponseTimeMs = percentile(duration, 95),\n    TotalPriorAuthRequests = count(),\n    SuccessfulPriorAuth = countif(success == true);\nlet urgentSlaMs = 72 * 60 * 60 * 1000; // 72 hours in ms\nlet standardSlaMs = 7 * 24 * 60 * 60 * 1000; // 7 days in ms\nlet urgentCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority == 'urgent'\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    UrgentWithin72h = countif(duration < urgentSlaMs),\n    TotalUrgent = count();\nlet standardCompliance = requests\n| where timestamp {TimeRange}\n| where name contains 'auth' or customDimensions.transactionType == '278'\n| where customDimensions.priority != 'urgent' or isempty(customDimensions.priority)\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| summarize \n    StandardWithin7d = countif(duration < standardSlaMs),\n    TotalStandard = count();\npatientAccessEnabled\n| extend dummy = 1\n| join kind=leftouter (totalMembers | extend dummy = 1) on dummy\n| join kind=leftouter (priorAuthMetrics | extend dummy = 1) on dummy\n| join kind=leftouter (urgentCompliance | extend dummy = 1) on dummy\n| join kind=leftouter (standardCompliance | extend dummy = 1) on dummy\n| extend \n    PatientAccessPct = round(100.0 * coalesce(EnabledMembers, 0) / max_of(coalesce(TotalMembers, 1), 1), 1),\n    PriorAuthSuccessRate = round(100.0 * coalesce(SuccessfulPriorAuth, 0) / max_of(coalesce(TotalPriorAuthRequests, 1), 1), 1),\n    Urgent72hCompliance = round(100.0 * coalesce(UrgentWithin72h, 0) / max_of(coalesce(TotalUrgent, 1), 1), 1),\n    Standard7dCompliance = round(100.0 * coalesce(StandardWithin7d, 0) / max_of(coalesce(TotalStandard, 1), 1), 1)\n| project \n    PatientAccessPct,\n    AvgResponseTimeSec = round(coalesce(AvgResponseTimeMs, 0) / 1000, 2),\n    P95ResponseTimeSec = round(coalesce(P95ResponseTimeMs, 0) / 1000, 2),\n    Urgent72hCompliance,\n    Standard7dCompliance,\n    TotalPriorAuthRequests = coalesce(TotalPriorAuthRequests, 0)",
         "size": 4,
         "title": "CMS-0057-F Compliance Overview",
         "timeContext": {
@@ -440,7 +440,7 @@
     {
       "type": 1,
       "content": {
-        "json": "### 🔐 PHI Redaction Audit Log (Key Vault)\n\n*Audit trail for PHI access and redaction events from Azure Key Vault diagnostic logs*"
+        "json": "### 🔐 PHI Redaction Audit Log\n\n*Audit trail for PHI access and redaction events tracked via Application Insights*\n\n**Note**: Key Vault diagnostic logs are available in Log Analytics workspace. Configure Key Vault diagnostic settings to enable detailed audit logging."
       },
       "name": "phiAuditHeader"
     },
@@ -448,15 +448,15 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "AzureDiagnostics\n| where timestamp {TimeRange}\n| where ResourceProvider == 'MICROSOFT.KEYVAULT'\n| where Category == 'AuditEvent'\n| extend \n    Operation = OperationName,\n    KeyName = tostring(properties_s) ,\n    CallerIPAddress = CallerIPAddress,\n    ResultType = ResultType\n| where Operation contains 'Secret' or Operation contains 'Key' or Operation contains 'Certificate'\n| summarize \n    TotalOperations = count(),\n    SuccessfulOps = countif(ResultType == 'Success'),\n    FailedOps = countif(ResultType != 'Success')\n    by bin(timestamp, 1h), Operation\n| project timestamp, Operation, TotalOperations, SuccessfulOps, FailedOps\n| order by timestamp asc",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('KeyVault_Secret_Access', 'KeyVault_Key_Access', 'Encryption_Key_Access', 'PHI_Key_Retrieved', 'Secret_Retrieved')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    Operation = name,\n    Status = tostring(customDimensions.status),\n    KeyName = tostring(customDimensions.keyName)\n| summarize \n    TotalOperations = count(),\n    SuccessfulOps = countif(Status == 'success' or isempty(Status)),\n    FailedOps = countif(Status == 'failed')\n    by bin(timestamp, 1h), Operation\n| project timestamp, Operation, TotalOperations, SuccessfulOps, FailedOps\n| order by timestamp asc",
         "size": 0,
-        "title": "Key Vault Operations Timeline",
+        "title": "Security Operations Timeline",
         "timeContext": {
           "durationMs": 0
         },
         "timeContextFromParameter": "TimeRange",
         "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceType": "microsoft.insights/components",
         "visualization": "linechart"
       },
       "customWidth": "50",
@@ -466,9 +466,9 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "AzureDiagnostics\n| where timestamp {TimeRange}\n| where ResourceProvider == 'MICROSOFT.KEYVAULT'\n| where Category == 'AuditEvent'\n| extend \n    Operation = OperationName,\n    ResultType = ResultType,\n    CallerIPAddress = CallerIPAddress\n| summarize \n    TotalOps = count(),\n    SuccessRate = round(100.0 * countif(ResultType == 'Success') / count(), 1)\n    by Operation\n| project Operation, TotalOps, SuccessRate\n| order by TotalOps desc",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('KeyVault_Secret_Access', 'KeyVault_Key_Access', 'Encryption_Key_Access', 'PHI_Key_Retrieved', 'Secret_Retrieved', 'PHI_Access', 'PHI_Redaction')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    Operation = name,\n    Status = tostring(customDimensions.status)\n| summarize \n    TotalOps = count(),\n    SuccessRate = round(100.0 * countif(Status == 'success' or isempty(Status)) / count(), 1)\n    by Operation\n| project Operation, TotalOps, SuccessRate\n| order by TotalOps desc",
         "size": 0,
-        "title": "Key Vault Operations Summary",
+        "title": "Security Operations Summary",
         "timeContext": {
           "durationMs": 0
         },
@@ -504,7 +504,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "union \n    (AzureDiagnostics\n    | where timestamp {TimeRange}\n    | where ResourceProvider == 'MICROSOFT.KEYVAULT'\n    | where Category == 'AuditEvent'\n    | extend \n        EventType = 'Key Vault',\n        Operation = OperationName,\n        Status = ResultType,\n        CallerIP = CallerIPAddress,\n        Resource = Resource\n    | project timestamp, EventType, Operation, Status, CallerIP, Resource),\n    (customEvents\n    | where timestamp {TimeRange}\n    | where name in ('PHI_Access', 'PHI_Redaction', 'Data_Export', 'Encryption_Key_Access')\n    | where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n    | extend \n        EventType = 'Application',\n        Operation = name,\n        Status = tostring(customDimensions.status),\n        CallerIP = tostring(customDimensions.clientIp),\n        Resource = tostring(customDimensions.resourceId)\n    | project timestamp, EventType, Operation, Status, CallerIP, Resource)\n| order by timestamp desc\n| take 100",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('PHI_Access', 'PHI_Redaction', 'Data_Export', 'Encryption_Key_Access', 'KeyVault_Secret_Access', 'KeyVault_Key_Access', 'Security_Alert')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    EventType = case(\n        name contains 'KeyVault', 'Key Vault',\n        name contains 'PHI', 'PHI Access',\n        name contains 'Security', 'Security',\n        'Application'\n    ),\n    Operation = name,\n    Status = coalesce(tostring(customDimensions.status), 'success'),\n    CallerIP = tostring(customDimensions.clientIp),\n    Resource = tostring(customDimensions.resourceId)\n| project timestamp, EventType, Operation, Status, CallerIP, Resource\n| order by timestamp desc\n| take 100",
         "size": 0,
         "title": "PHI Access Audit Trail (Last 100 Events)",
         "timeContext": {
@@ -512,7 +512,7 @@
         },
         "timeContextFromParameter": "TimeRange",
         "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
+        "resourceType": "microsoft.insights/components",
         "visualization": "table",
         "gridSettings": {
           "formatters": [
