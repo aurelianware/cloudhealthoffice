@@ -448,7 +448,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('KeyVault_Secret_Access', 'KeyVault_Key_Access', 'Encryption_Key_Access', 'PHI_Key_Retrieved', 'Secret_Retrieved')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    Operation = name,\n    Status = tostring(customDimensions.status),\n    KeyName = tostring(customDimensions.keyName)\n| summarize \n    TotalOperations = count(),\n    SuccessfulOps = countif(Status == 'success' or isempty(Status)),\n    FailedOps = countif(Status == 'failed')\n    by bin(timestamp, 1h), Operation\n| project timestamp, Operation, TotalOperations, SuccessfulOps, FailedOps\n| order by timestamp asc",
+        "query": "customEvents\n| where timestamp {TimeRange}\n| where name in ('KeyVault_Secret_Access', 'KeyVault_Key_Access', 'Encryption_Key_Access', 'PHI_Key_Retrieved', 'Secret_Retrieved')\n| where customDimensions.payerId == '{PayerId}' or '{PayerId}' == 'value::all'\n| extend \n    Operation = name,\n    Status = tostring(customDimensions.status)\n| summarize \n    TotalOperations = count(),\n    SuccessfulOps = countif(Status == 'success' or isempty(Status)),\n    FailedOps = countif(Status == 'failed')\n    by bin(timestamp, 1h), Operation\n| project timestamp, Operation, TotalOperations, SuccessfulOps, FailedOps\n| order by timestamp asc",
         "size": 0,
         "title": "Security Operations Timeline",
         "timeContext": {
