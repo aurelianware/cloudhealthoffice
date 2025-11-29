@@ -1,0 +1,742 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/schemas/2023-01-31-preview/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "cosmosAccountName": {
+        "type": "String",
+        "metadata": {
+          "description": "Cosmos DB account hosting cloudhealthoffice database"
+        }
+      },
+      "cosmosDatabaseName": {
+        "type": "String",
+        "defaultValue": "cloudhealthoffice"
+      },
+      "providerDirectoryContainer": {
+        "type": "String",
+        "defaultValue": "ProviderDirectory"
+      },
+      "nppesApiBaseUrl": {
+        "type": "String",
+        "defaultValue": "https://npiregistry.cms.hhs.gov/api"
+      },
+      "cacheExpirationHours": {
+        "type": "Int",
+        "defaultValue": 24
+      },
+      "enableNppesCache": {
+        "type": "Bool",
+        "defaultValue": true
+      }
+    },
+    "triggers": {
+      "HTTP_ProviderDirectory": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "GET",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "metadata": {
+            "openApi": {
+              "info": {
+                "title": "CMS-0057-F Provider Directory API",
+                "version": "1.0.0",
+                "description": "FHIR R4 Provider Directory API exposing Practitioner, PractitionerRole, Organization, and Location resources with NPPES integration"
+              },
+              "servers": [
+                {
+                  "url": "https://{host}",
+                  "variables": {
+                    "host": {
+                      "default": "example.azurelogicapps.net"
+                    }
+                  }
+                }
+              ],
+              "paths": {
+                "/Practitioner": {
+                  "get": {
+                    "operationId": "SearchPractitioners",
+                    "summary": "Search for Practitioner resources",
+                    "description": "Search for healthcare practitioners by NPI, name, location, or specialty",
+                    "parameters": [
+                      {
+                        "name": "identifier",
+                        "in": "query",
+                        "description": "NPI number (e.g., http://hl7.org/fhir/sid/us-npi|1234567890)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Provider name (partial match)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "family",
+                        "in": "query",
+                        "description": "Provider family/last name",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "given",
+                        "in": "query",
+                        "description": "Provider given/first name",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-city",
+                        "in": "query",
+                        "description": "City",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-state",
+                        "in": "query",
+                        "description": "State (2-letter code)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-postalcode",
+                        "in": "query",
+                        "description": "Postal/ZIP code",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Practitioner/{id}": {
+                  "get": {
+                    "operationId": "ReadPractitioner",
+                    "summary": "Read a Practitioner resource by NPI",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Practitioner NPI",
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                },
+                "/PractitionerRole": {
+                  "get": {
+                    "operationId": "SearchPractitionerRoles",
+                    "summary": "Search for PractitionerRole resources",
+                    "description": "Search for practitioner roles by practitioner, organization, or specialty",
+                    "parameters": [
+                      {
+                        "name": "practitioner",
+                        "in": "query",
+                        "description": "Practitioner reference (e.g., Practitioner/1234567890)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "organization",
+                        "in": "query",
+                        "description": "Organization reference",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "specialty",
+                        "in": "query",
+                        "description": "Specialty/taxonomy code or description",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Organization": {
+                  "get": {
+                    "operationId": "SearchOrganizations",
+                    "summary": "Search for Organization resources",
+                    "description": "Search for healthcare organizations by NPI, name, or location",
+                    "parameters": [
+                      {
+                        "name": "identifier",
+                        "in": "query",
+                        "description": "Organization NPI",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Organization name (partial match)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-city",
+                        "in": "query",
+                        "description": "City",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-state",
+                        "in": "query",
+                        "description": "State (2-letter code)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-postalcode",
+                        "in": "query",
+                        "description": "Postal/ZIP code",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Organization/{id}": {
+                  "get": {
+                    "operationId": "ReadOrganization",
+                    "summary": "Read an Organization resource by NPI",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Organization NPI",
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                },
+                "/Location": {
+                  "get": {
+                    "operationId": "SearchLocations",
+                    "summary": "Search for Location resources",
+                    "description": "Search for healthcare delivery locations",
+                    "parameters": [
+                      {
+                        "name": "organization",
+                        "in": "query",
+                        "description": "Managing organization reference",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Location name",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-city",
+                        "in": "query",
+                        "description": "City",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-state",
+                        "in": "query",
+                        "description": "State (2-letter code)",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "address-postalcode",
+                        "in": "query",
+                        "description": "Postal/ZIP code",
+                        "schema": { "type": "string" }
+                      },
+                      {
+                        "name": "_count",
+                        "in": "query",
+                        "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+                      }
+                    ]
+                  }
+                },
+                "/Location/{id}": {
+                  "get": {
+                    "operationId": "ReadLocation",
+                    "summary": "Read a Location resource by ID",
+                    "parameters": [
+                      {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "description": "Location ID (format: {NPI}-loc-{index})",
+                        "schema": { "type": "string" }
+                      }
+                    ]
+                  }
+                }
+              },
+              "components": {
+                "schemas": {
+                  "Practitioner": {
+                    "$ref": "http://hl7.org/fhir/R4/practitioner.html"
+                  },
+                  "PractitionerRole": {
+                    "$ref": "http://hl7.org/fhir/R4/practitionerrole.html"
+                  },
+                  "Organization": {
+                    "$ref": "http://hl7.org/fhir/R4/organization.html"
+                  },
+                  "Location": {
+                    "$ref": "http://hl7.org/fhir/R4/location.html"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Initialize_Context": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "resourceType",
+              "type": "String",
+              "value": "@first(skip(split(triggerOutputs()['relativePath'], '/'), 1))"
+            },
+            {
+              "name": "resourceId",
+              "type": "String",
+              "value": "@if(greater(length(skip(split(triggerOutputs()['relativePath'], '/'), 2)), 0), first(skip(split(triggerOutputs()['relativePath'], '/'), 2)), '')"
+            },
+            {
+              "name": "npiIdentifier",
+              "type": "String",
+              "value": "@coalesce(triggerOutputs()['queries']?['identifier'], triggerOutputs()['queries']?['_id'], '')"
+            }
+          ]
+        }
+      },
+      "Parse_Request_Path": {
+        "type": "Compose",
+        "runAfter": {
+          "Initialize_Context": ["Succeeded"]
+        },
+        "inputs": {
+          "resourceType": "@variables('resourceType')",
+          "resourceId": "@variables('resourceId')",
+          "isReadOperation": "@not(empty(variables('resourceId')))",
+          "queryParams": {
+            "identifier": "@coalesce(triggerOutputs()['queries']?['identifier'], '')",
+            "name": "@coalesce(triggerOutputs()['queries']?['name'], '')",
+            "family": "@coalesce(triggerOutputs()['queries']?['family'], '')",
+            "given": "@coalesce(triggerOutputs()['queries']?['given'], '')",
+            "city": "@coalesce(triggerOutputs()['queries']?['address-city'], '')",
+            "state": "@coalesce(triggerOutputs()['queries']?['address-state'], '')",
+            "postalCode": "@coalesce(triggerOutputs()['queries']?['address-postalcode'], '')",
+            "specialty": "@coalesce(triggerOutputs()['queries']?['specialty'], '')",
+            "practitioner": "@coalesce(triggerOutputs()['queries']?['practitioner'], '')",
+            "organization": "@coalesce(triggerOutputs()['queries']?['organization'], '')",
+            "_count": "@coalesce(triggerOutputs()['queries']?['_count'], '50')"
+          }
+        }
+      },
+      "Extract_NPI_From_Identifier": {
+        "type": "Compose",
+        "runAfter": {
+          "Parse_Request_Path": ["Succeeded"]
+        },
+        "inputs": "@if(contains(outputs('Parse_Request_Path')?['queryParams']?['identifier'], '|'), last(split(outputs('Parse_Request_Path')?['queryParams']?['identifier'], '|')), outputs('Parse_Request_Path')?['queryParams']?['identifier'])"
+      },
+      "Switch_Resource_Type": {
+        "type": "Switch",
+        "runAfter": {
+          "Extract_NPI_From_Identifier": ["Succeeded"]
+        },
+        "expression": "@toLower(variables('resourceType'))",
+        "cases": {
+          "practitioner": {
+            "case": "practitioner",
+            "actions": {
+              "Check_Practitioner_Read_Or_Search": {
+                "type": "If",
+                "expression": {
+                  "equals": [
+                    "@outputs('Parse_Request_Path')?['isReadOperation']",
+                    true
+                  ]
+                },
+                "actions": {
+                  "Read_Practitioner_From_NPPES": {
+                    "type": "Http",
+                    "inputs": {
+                      "method": "GET",
+                      "uri": "@{parameters('nppesApiBaseUrl')}/?version=2.1&number=@{variables('resourceId')}",
+                      "headers": {
+                        "Accept": "application/json"
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "retry": {
+                        "count": 3,
+                        "type": "exponential",
+                        "interval": "PT5S"
+                      }
+                    }
+                  },
+                  "Map_NPPES_To_Practitioner": {
+                    "type": "InlineCode",
+                    "runAfter": {
+                      "Read_Practitioner_From_NPPES": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Read_Practitioner_From_NPPES.outputs.body;\nif (!nppesResponse.results || nppesResponse.results.length === 0 || nppesResponse.results[0].enumeration_type !== 'NPI-1') {\n  return { found: false, resource: null };\n}\nconst api = createProviderDirectoryApi();\nconst practitioner = api.mapNPPESToPractitioner(nppesResponse.results[0]);\nreturn { found: true, resource: practitioner };"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Build_NPPES_Practitioner_Search_URL": {
+                      "type": "Compose",
+                      "inputs": "@concat(parameters('nppesApiBaseUrl'), '/?version=2.1&enumeration_type=NPI-1', if(not(empty(outputs('Extract_NPI_From_Identifier'))), concat('&number=', outputs('Extract_NPI_From_Identifier')), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['family'])), concat('&last_name=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['family'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['given'])), concat('&first_name=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['given'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['city'])), concat('&city=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['city'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['state'])), concat('&state=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['state'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), concat('&postal_code=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['specialty'])), concat('&taxonomy_description=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['specialty'])), ''), '&limit=', outputs('Parse_Request_Path')?['queryParams']?['_count'])"
+                    },
+                    "Search_NPPES_Practitioners": {
+                      "type": "Http",
+                      "runAfter": {
+                        "Build_NPPES_Practitioner_Search_URL": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@outputs('Build_NPPES_Practitioner_Search_URL')",
+                        "headers": {
+                          "Accept": "application/json"
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "retry": {
+                          "count": 3,
+                          "type": "exponential",
+                          "interval": "PT5S"
+                        }
+                      }
+                    },
+                    "Map_NPPES_To_Practitioner_Bundle": {
+                      "type": "InlineCode",
+                      "runAfter": {
+                        "Search_NPPES_Practitioners": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "language": "JavaScript",
+                        "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Search_NPPES_Practitioners.outputs.body;\nconst results = (nppesResponse.results || []).filter(r => r.enumeration_type === 'NPI-1');\nconst api = createProviderDirectoryApi();\nconst practitioners = results.map(r => api.mapNPPESToPractitioner(r));\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'searchset',\n  total: practitioners.length,\n  entry: practitioners.map(p => ({\n    fullUrl: `Practitioner/${p.id}`,\n    resource: p,\n    search: { mode: 'match' }\n  }))\n};\nreturn { found: true, resource: bundle };"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "practitionerrole": {
+            "case": "practitionerrole",
+            "actions": {
+              "Get_Practitioner_For_Role": {
+                "type": "Http",
+                "inputs": {
+                  "method": "GET",
+                  "uri": "@{parameters('nppesApiBaseUrl')}/?version=2.1&enumeration_type=NPI-1@{if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['practitioner'])), concat('&number=', last(split(outputs('Parse_Request_Path')?['queryParams']?['practitioner'], '/'))), '')}@{if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['specialty'])), concat('&taxonomy_description=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['specialty'])), '')}&limit=@{outputs('Parse_Request_Path')?['queryParams']?['_count']}",
+                  "headers": {
+                    "Accept": "application/json"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "retry": {
+                    "count": 3,
+                    "type": "exponential",
+                    "interval": "PT5S"
+                  }
+                }
+              },
+              "Map_NPPES_To_PractitionerRole_Bundle": {
+                "type": "InlineCode",
+                "runAfter": {
+                  "Get_Practitioner_For_Role": ["Succeeded"]
+                },
+                "inputs": {
+                  "language": "JavaScript",
+                  "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Get_Practitioner_For_Role.outputs.body;\nconst results = (nppesResponse.results || []).filter(r => r.enumeration_type === 'NPI-1');\nconst api = createProviderDirectoryApi();\nconst orgRef = workflowContext.actions.Parse_Request_Path.outputs.queryParams.organization;\nconst roles = results.map(r => api.mapNPPESToPractitionerRole(r, orgRef ? { reference: orgRef } : undefined));\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'searchset',\n  total: roles.length,\n  entry: roles.map(r => ({\n    fullUrl: `PractitionerRole/${r.id}`,\n    resource: r,\n    search: { mode: 'match' }\n  }))\n};\nreturn { found: true, resource: bundle };"
+                }
+              }
+            }
+          },
+          "organization": {
+            "case": "organization",
+            "actions": {
+              "Check_Organization_Read_Or_Search": {
+                "type": "If",
+                "expression": {
+                  "equals": [
+                    "@outputs('Parse_Request_Path')?['isReadOperation']",
+                    true
+                  ]
+                },
+                "actions": {
+                  "Read_Organization_From_NPPES": {
+                    "type": "Http",
+                    "inputs": {
+                      "method": "GET",
+                      "uri": "@{parameters('nppesApiBaseUrl')}/?version=2.1&number=@{variables('resourceId')}",
+                      "headers": {
+                        "Accept": "application/json"
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "retry": {
+                        "count": 3,
+                        "type": "exponential",
+                        "interval": "PT5S"
+                      }
+                    }
+                  },
+                  "Map_NPPES_To_Organization": {
+                    "type": "InlineCode",
+                    "runAfter": {
+                      "Read_Organization_From_NPPES": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Read_Organization_From_NPPES.outputs.body;\nif (!nppesResponse.results || nppesResponse.results.length === 0 || nppesResponse.results[0].enumeration_type !== 'NPI-2') {\n  return { found: false, resource: null };\n}\nconst api = createProviderDirectoryApi();\nconst organization = api.mapNPPESToOrganization(nppesResponse.results[0]);\nreturn { found: true, resource: organization };"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Build_NPPES_Organization_Search_URL": {
+                      "type": "Compose",
+                      "inputs": "@concat(parameters('nppesApiBaseUrl'), '/?version=2.1&enumeration_type=NPI-2', if(not(empty(outputs('Extract_NPI_From_Identifier'))), concat('&number=', outputs('Extract_NPI_From_Identifier')), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['name'])), concat('&organization_name=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['name'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['city'])), concat('&city=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['city'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['state'])), concat('&state=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['state'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), concat('&postal_code=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), ''), '&limit=', outputs('Parse_Request_Path')?['queryParams']?['_count'])"
+                    },
+                    "Search_NPPES_Organizations": {
+                      "type": "Http",
+                      "runAfter": {
+                        "Build_NPPES_Organization_Search_URL": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@outputs('Build_NPPES_Organization_Search_URL')",
+                        "headers": {
+                          "Accept": "application/json"
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "retry": {
+                          "count": 3,
+                          "type": "exponential",
+                          "interval": "PT5S"
+                        }
+                      }
+                    },
+                    "Map_NPPES_To_Organization_Bundle": {
+                      "type": "InlineCode",
+                      "runAfter": {
+                        "Search_NPPES_Organizations": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "language": "JavaScript",
+                        "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Search_NPPES_Organizations.outputs.body;\nconst results = (nppesResponse.results || []).filter(r => r.enumeration_type === 'NPI-2');\nconst api = createProviderDirectoryApi();\nconst organizations = results.map(r => api.mapNPPESToOrganization(r));\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'searchset',\n  total: organizations.length,\n  entry: organizations.map(o => ({\n    fullUrl: `Organization/${o.id}`,\n    resource: o,\n    search: { mode: 'match' }\n  }))\n};\nreturn { found: true, resource: bundle };"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "location": {
+            "case": "location",
+            "actions": {
+              "Check_Location_Read_Or_Search": {
+                "type": "If",
+                "expression": {
+                  "equals": [
+                    "@outputs('Parse_Request_Path')?['isReadOperation']",
+                    true
+                  ]
+                },
+                "actions": {
+                  "Parse_Location_ID": {
+                    "type": "Compose",
+                    "inputs": {
+                      "npi": "@first(split(variables('resourceId'), '-loc-'))",
+                      "index": "@if(contains(variables('resourceId'), '-loc-'), last(split(variables('resourceId'), '-loc-')), '0')"
+                    }
+                  },
+                  "Read_Location_From_NPPES": {
+                    "type": "Http",
+                    "runAfter": {
+                      "Parse_Location_ID": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "method": "GET",
+                      "uri": "@{parameters('nppesApiBaseUrl')}/?version=2.1&number=@{outputs('Parse_Location_ID')?['npi']}",
+                      "headers": {
+                        "Accept": "application/json"
+                      }
+                    },
+                    "runtimeConfiguration": {
+                      "retry": {
+                        "count": 3,
+                        "type": "exponential",
+                        "interval": "PT5S"
+                      }
+                    }
+                  },
+                  "Map_NPPES_To_Location": {
+                    "type": "InlineCode",
+                    "runAfter": {
+                      "Read_Location_From_NPPES": ["Succeeded"]
+                    },
+                    "inputs": {
+                      "language": "JavaScript",
+                      "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Read_Location_From_NPPES.outputs.body;\nconst locationIndex = parseInt(workflowContext.actions.Parse_Location_ID.outputs.index || '0', 10);\nif (!nppesResponse.results || nppesResponse.results.length === 0) {\n  return { found: false, resource: null };\n}\nconst nppes = nppesResponse.results[0];\nif (locationIndex >= nppes.addresses.length) {\n  return { found: false, resource: null };\n}\nconst api = createProviderDirectoryApi();\nconst location = api.mapNPPESToLocation(nppes, locationIndex);\nreturn { found: true, resource: location };"
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Build_NPPES_Location_Search_URL": {
+                      "type": "Compose",
+                      "inputs": "@concat(parameters('nppesApiBaseUrl'), '/?version=2.1', if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['organization'])), concat('&number=', last(split(outputs('Parse_Request_Path')?['queryParams']?['organization'], '/'))), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['city'])), concat('&city=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['city'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['state'])), concat('&state=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['state'])), ''), if(not(empty(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), concat('&postal_code=', encodeUriComponent(outputs('Parse_Request_Path')?['queryParams']?['postalCode'])), ''), '&limit=', outputs('Parse_Request_Path')?['queryParams']?['_count'])"
+                    },
+                    "Search_NPPES_For_Locations": {
+                      "type": "Http",
+                      "runAfter": {
+                        "Build_NPPES_Location_Search_URL": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@outputs('Build_NPPES_Location_Search_URL')",
+                        "headers": {
+                          "Accept": "application/json"
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "retry": {
+                          "count": 3,
+                          "type": "exponential",
+                          "interval": "PT5S"
+                        }
+                      }
+                    },
+                    "Map_NPPES_To_Location_Bundle": {
+                      "type": "InlineCode",
+                      "runAfter": {
+                        "Search_NPPES_For_Locations": ["Succeeded"]
+                      },
+                      "inputs": {
+                        "language": "JavaScript",
+                        "code": "const { createProviderDirectoryApi } = require('../../dist/src/fhir/provider-directory-api');\nconst nppesResponse = workflowContext.actions.Search_NPPES_For_Locations.outputs.body;\nconst results = nppesResponse.results || [];\nconst api = createProviderDirectoryApi();\nconst locations = [];\nresults.forEach(r => {\n  r.addresses.forEach((_, index) => {\n    locations.push(api.mapNPPESToLocation(r, index));\n  });\n});\nconst bundle = {\n  resourceType: 'Bundle',\n  type: 'searchset',\n  total: locations.length,\n  entry: locations.map(l => ({\n    fullUrl: `Location/${l.id}`,\n    resource: l,\n    search: { mode: 'match' }\n  }))\n};\nreturn { found: true, resource: bundle };"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Return_Unsupported_Resource": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 400,
+                "headers": {
+                  "Content-Type": "application/fhir+json"
+                },
+                "body": {
+                  "resourceType": "OperationOutcome",
+                  "issue": [
+                    {
+                      "severity": "error",
+                      "code": "not-supported",
+                      "diagnostics": "Unsupported resource type. Supported types: Practitioner, PractitionerRole, Organization, Location"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Build_Response": {
+        "type": "Compose",
+        "runAfter": {
+          "Switch_Resource_Type": ["Succeeded"]
+        },
+        "inputs": "@coalesce(outputs('Map_NPPES_To_Practitioner')?['resource'], outputs('Map_NPPES_To_Practitioner_Bundle')?['resource'], outputs('Map_NPPES_To_PractitionerRole_Bundle')?['resource'], outputs('Map_NPPES_To_Organization')?['resource'], outputs('Map_NPPES_To_Organization_Bundle')?['resource'], outputs('Map_NPPES_To_Location')?['resource'], outputs('Map_NPPES_To_Location_Bundle')?['resource'])"
+      },
+      "Check_Resource_Found": {
+        "type": "If",
+        "runAfter": {
+          "Build_Response": ["Succeeded"]
+        },
+        "expression": {
+          "not": {
+            "equals": [
+              "@outputs('Build_Response')",
+              null
+            ]
+          }
+        },
+        "actions": {
+          "Return_Success": {
+            "type": "Response",
+            "inputs": {
+              "statusCode": 200,
+              "headers": {
+                "Content-Type": "application/fhir+json",
+                "X-Provider-Directory-Source": "NPPES"
+              },
+              "body": "@outputs('Build_Response')"
+            }
+          }
+        },
+        "else": {
+          "actions": {
+            "Return_Not_Found": {
+              "type": "Response",
+              "inputs": {
+                "statusCode": 404,
+                "headers": {
+                  "Content-Type": "application/fhir+json"
+                },
+                "body": {
+                  "resourceType": "OperationOutcome",
+                  "issue": [
+                    {
+                      "severity": "error",
+                      "code": "not-found",
+                      "diagnostics": "Resource not found in NPPES registry"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    }
+  }
+}
