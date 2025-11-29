@@ -42,6 +42,9 @@ param cacheTtlSeconds int = 86400
 @description('Application Insights connection string')
 param appInsightsConnectionString string = ''
 
+@description('CORS allowed origins (comma-separated list)')
+param corsAllowedOrigins string = 'https://${baseName}-eligibility-svc.azurecontainerapps.io'
+
 // =========================
 // Variables
 // =========================
@@ -376,11 +379,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             latestRevision: true
           }
         ]
-        corsPolicy: {
-          allowedOrigins: ['*']
-          allowedMethods: ['GET', 'POST', 'OPTIONS']
-          allowedHeaders: ['*']
-        }
+        // Note: CORS is handled by the application using CORS_ALLOWED_ORIGINS env var
+        // Do not configure corsPolicy here to avoid double CORS headers
       }
       dapr: enableDapr ? {
         enabled: true
@@ -394,6 +394,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'cosmos-endpoint'
           value: cosmosAccount.properties.documentEndpoint
         }
+        // Note: Using managed identity for Cosmos DB access is preferred
+        // This key is provided for backward compatibility
         {
           name: 'cosmos-key'
           value: cosmosAccount.listKeys().primaryMasterKey
@@ -402,6 +404,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'eventgrid-endpoint'
           value: eventGridTopic.properties.endpoint
         }
+        // Note: Using managed identity for Event Grid access is preferred
         {
           name: 'eventgrid-key'
           value: eventGridTopic.listKeys().key1
@@ -481,6 +484,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               value: appInsightsConnectionString
+            }
+            {
+              name: 'CORS_ALLOWED_ORIGINS'
+              value: corsAllowedOrigins
             }
           ]
           probes: [

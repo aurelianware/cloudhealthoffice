@@ -14,12 +14,7 @@ import {
   CoverageEligibilityRequest, 
   CoverageEligibilityResponse,
   Patient,
-  Coverage,
-  Organization,
-  Identifier,
-  CodeableConcept,
-  Reference,
-  Period
+  Reference
 } from 'fhir/r4';
 import { v4 as uuidv4 } from 'uuid';
 import { 
