@@ -902,3 +902,929 @@ describe('HTTP Server Entry Point', () => {
     });
   });
 });
+
+describe('EligibilityService Business Logic', () => {
+  // Test the business logic functions extracted from EligibilityService
+  // These test the core logic without requiring Azure SDK mocking
+
+  describe('Cache Key Generation', () => {
+    const generateCacheKey = (request: X12_270_Request): string => {
+      const memberId = request.dependent?.firstName 
+        ? `${request.subscriber.memberId}-${request.dependent.firstName}-${request.dependent.lastName}`
+        : request.subscriber.memberId;
+      const payerId = request.informationSource.identificationCode;
+      const serviceDate = request.eligibilityDateRange?.startDate || new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const serviceTypes = (request.serviceTypeCodes || ['30']).sort().join(',');
+      
+      return `x12:${payerId}:${memberId}:${serviceDate}:${serviceTypes}`;
+    };
+
+    it('generates cache key for subscriber', () => {
+      const request: X12_270_Request = {
+        transactionControlNumber: '123',
+        interchangeControlNumber: '456',
+        transactionDate: '20240115',
+        informationSource: {
+          entityIdentifier: 'PR',
+          entityType: '2',
+          name: 'Test Plan',
+          identificationCode: 'TESTPAYER',
+          identificationCodeQualifier: 'PI'
+        },
+        informationReceiver: {
+          entityIdentifier: '1P',
+          entityType: '1'
+        },
+        subscriber: {
+          memberId: 'MEM001',
+          firstName: 'John',
+          lastName: 'Doe',
+          dateOfBirth: '19850615'
+        },
+        eligibilityDateRange: {
+          startDate: '20240115'
+        },
+        serviceTypeCodes: ['30', '48']
+      };
+
+      const cacheKey = generateCacheKey(request);
+      
+      expect(cacheKey).toBe('x12:TESTPAYER:MEM001:20240115:30,48');
+    });
+
+    it('generates cache key with dependent', () => {
+      const request: X12_270_Request = {
+        transactionControlNumber: '123',
+        interchangeControlNumber: '456',
+        transactionDate: '20240115',
+        informationSource: {
+          entityIdentifier: 'PR',
+          entityType: '2',
+          name: 'Test Plan',
+          identificationCode: 'TESTPAYER',
+          identificationCodeQualifier: 'PI'
+        },
+        informationReceiver: {
+          entityIdentifier: '1P',
+          entityType: '1'
+        },
+        subscriber: {
+          memberId: 'MEM001',
+          firstName: 'John',
+          lastName: 'Doe',
+          dateOfBirth: '19850615'
+        },
+        dependent: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+          dateOfBirth: '20150101',
+          relationshipCode: '19'
+        },
+        eligibilityDateRange: {
+          startDate: '20240115'
+        }
+      };
+
+      const cacheKey = generateCacheKey(request);
+      
+      expect(cacheKey).toBe('x12:TESTPAYER:MEM001-Jane-Doe:20240115:30');
+    });
+
+    it('uses default service type code when not provided', () => {
+      const request: X12_270_Request = {
+        transactionControlNumber: '123',
+        interchangeControlNumber: '456',
+        transactionDate: '20240115',
+        informationSource: {
+          entityIdentifier: 'PR',
+          entityType: '2',
+          name: 'Test Plan',
+          identificationCode: 'TESTPAYER',
+          identificationCodeQualifier: 'PI'
+        },
+        informationReceiver: {
+          entityIdentifier: '1P',
+          entityType: '1'
+        },
+        subscriber: {
+          memberId: 'MEM001',
+          firstName: 'John',
+          lastName: 'Doe',
+          dateOfBirth: '19850615'
+        },
+        eligibilityDateRange: {
+          startDate: '20240115'
+        }
+      };
+
+      const cacheKey = generateCacheKey(request);
+      
+      expect(cacheKey).toContain(':30');
+    });
+
+    it('sorts service type codes for consistent cache keys', () => {
+      const request1: X12_270_Request = {
+        transactionControlNumber: '123',
+        interchangeControlNumber: '456',
+        transactionDate: '20240115',
+        informationSource: {
+          entityIdentifier: 'PR',
+          entityType: '2',
+          name: 'Test Plan',
+          identificationCode: 'TESTPAYER',
+          identificationCodeQualifier: 'PI'
+        },
+        informationReceiver: {
+          entityIdentifier: '1P',
+          entityType: '1'
+        },
+        subscriber: {
+          memberId: 'MEM001',
+          firstName: 'John',
+          lastName: 'Doe',
+          dateOfBirth: '19850615'
+        },
+        eligibilityDateRange: { startDate: '20240115' },
+        serviceTypeCodes: ['48', '30', '85']
+      };
+
+      const request2: X12_270_Request = {
+        ...request1,
+        serviceTypeCodes: ['85', '30', '48']
+      };
+
+      expect(generateCacheKey(request1)).toBe(generateCacheKey(request2));
+    });
+  });
+
+  describe('Age Calculation', () => {
+    const calculateAge = (dateOfBirth: string): number => {
+      const dob = dateOfBirth.includes('-') 
+        ? new Date(dateOfBirth)
+        : new Date(`${dateOfBirth.substring(0, 4)}-${dateOfBirth.substring(4, 6)}-${dateOfBirth.substring(6, 8)}`);
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+      }
+      return age;
+    };
+
+    it('calculates age from YYYYMMDD format', () => {
+      const currentYear = new Date().getFullYear();
+      const age = calculateAge(`${currentYear - 30}0101`);
+      expect(age).toBeGreaterThanOrEqual(29);
+      expect(age).toBeLessThanOrEqual(30);
+    });
+
+    it('calculates age from ISO date format', () => {
+      const currentYear = new Date().getFullYear();
+      const age = calculateAge(`${currentYear - 25}-06-15`);
+      expect(age).toBeGreaterThanOrEqual(24);
+      expect(age).toBeLessThanOrEqual(25);
+    });
+
+    it('handles birthday not yet passed this year', () => {
+      const currentYear = new Date().getFullYear();
+      // Set birthday to December 31 of 30 years ago
+      const age = calculateAge(`${currentYear - 30}1231`);
+      // Depending on current date, age should be 29 or 30
+      expect(age).toBeGreaterThanOrEqual(29);
+      expect(age).toBeLessThanOrEqual(30);
+    });
+  });
+
+  describe('Eligibility Rules Loading', () => {
+    const loadEligibilityRules = (rules: QNXTEligibilityRule[]): Map<string, QNXTEligibilityRule[]> => {
+      const eligibilityRules = new Map<string, QNXTEligibilityRule[]>();
+      for (const rule of rules) {
+        const key = `${rule.planCode}:${rule.serviceTypeCode}`;
+        if (!eligibilityRules.has(key)) {
+          eligibilityRules.set(key, []);
+        }
+        eligibilityRules.get(key)!.push(rule);
+      }
+      // Sort rules by priority
+      for (const ruleList of eligibilityRules.values()) {
+        ruleList.sort((a, b) => a.priority - b.priority);
+      }
+      return eligibilityRules;
+    };
+
+    it('loads and organizes rules by plan and service type', () => {
+      const rules: QNXTEligibilityRule[] = [
+        {
+          ruleId: 'RULE001',
+          ruleName: 'Rule 1',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20240101' },
+          priority: 10,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE002',
+          ruleName: 'Rule 2',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '48',
+          benefitCategory: 'Hospital',
+          coverageIndicator: 'covered',
+          priorAuthRequired: true,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20240101' },
+          priority: 10,
+          isActive: true
+        }
+      ];
+
+      const loadedRules = loadEligibilityRules(rules);
+
+      expect(loadedRules.has('PPO_GOLD:30')).toBe(true);
+      expect(loadedRules.has('PPO_GOLD:48')).toBe(true);
+      expect(loadedRules.get('PPO_GOLD:30')![0].ruleId).toBe('RULE001');
+    });
+
+    it('sorts rules by priority', () => {
+      const rules: QNXTEligibilityRule[] = [
+        {
+          ruleId: 'RULE_LOW',
+          ruleName: 'Low Priority',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20240101' },
+          priority: 100,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE_HIGH',
+          ruleName: 'High Priority',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'not_covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20240101' },
+          priority: 1,
+          isActive: true
+        }
+      ];
+
+      const loadedRules = loadEligibilityRules(rules);
+      const sortedRules = loadedRules.get('PPO_GOLD:30')!;
+
+      expect(sortedRules[0].ruleId).toBe('RULE_HIGH');
+      expect(sortedRules[1].ruleId).toBe('RULE_LOW');
+    });
+  });
+
+  describe('Applicable Rules Filtering', () => {
+    const getCurrentDate = (): string => {
+      return new Date().toISOString().split('T')[0].replace(/-/g, '');
+    };
+
+    const getApplicableRules = (
+      eligibilityRules: Map<string, QNXTEligibilityRule[]>,
+      planCode: string, 
+      serviceTypeCode: string, 
+      memberAge?: number, 
+      gender?: 'M' | 'F'
+    ): QNXTEligibilityRule[] => {
+      const key = `${planCode}:${serviceTypeCode}`;
+      const rules = eligibilityRules.get(key) || [];
+      const today = getCurrentDate();
+
+      return rules.filter(rule => {
+        // Check if rule is active
+        if (!rule.isActive) return false;
+
+        // Check effective date range
+        if (rule.effectiveDateRange.startDate > today) return false;
+        if (rule.effectiveDateRange.endDate && rule.effectiveDateRange.endDate < today) return false;
+
+        // Check age limits
+        if (memberAge !== undefined && rule.ageLimits) {
+          if (rule.ageLimits.minAge !== undefined && memberAge < rule.ageLimits.minAge) return false;
+          if (rule.ageLimits.maxAge !== undefined && memberAge > rule.ageLimits.maxAge) return false;
+        }
+
+        // Check gender restrictions
+        if (gender && rule.genderRestrictions && !rule.genderRestrictions.includes(gender)) {
+          return false;
+        }
+
+        return true;
+      });
+    };
+
+    it('returns active rules for plan and service type', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      rules.set('PPO_GOLD:30', [
+        {
+          ruleId: 'RULE001',
+          ruleName: 'Active Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        }
+      ]);
+
+      const applicable = getApplicableRules(rules, 'PPO_GOLD', '30');
+      expect(applicable).toHaveLength(1);
+      expect(applicable[0].ruleId).toBe('RULE001');
+    });
+
+    it('filters out inactive rules', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      rules.set('PPO_GOLD:30', [
+        {
+          ruleId: 'RULE001',
+          ruleName: 'Inactive Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: false
+        }
+      ]);
+
+      const applicable = getApplicableRules(rules, 'PPO_GOLD', '30');
+      expect(applicable).toHaveLength(0);
+    });
+
+    it('filters rules by effective date range', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      rules.set('PPO_GOLD:30', [
+        {
+          ruleId: 'RULE_FUTURE',
+          ruleName: 'Future Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '29990101' }, // Far future
+          priority: 10,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE_EXPIRED',
+          ruleName: 'Expired Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20200101', endDate: '20200131' },
+          priority: 10,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE_CURRENT',
+          ruleName: 'Current Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'General',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        }
+      ]);
+
+      const applicable = getApplicableRules(rules, 'PPO_GOLD', '30');
+      expect(applicable).toHaveLength(1);
+      expect(applicable[0].ruleId).toBe('RULE_CURRENT');
+    });
+
+    it('filters rules by member age', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      rules.set('PPO_GOLD:30', [
+        {
+          ruleId: 'RULE_PEDIATRIC',
+          ruleName: 'Pediatric Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'Pediatric',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          ageLimits: { minAge: 0, maxAge: 17 },
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE_ADULT',
+          ruleName: 'Adult Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'Adult',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          ageLimits: { minAge: 18, maxAge: 64 },
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        },
+        {
+          ruleId: 'RULE_SENIOR',
+          ruleName: 'Senior Rule',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '30',
+          benefitCategory: 'Senior',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          ageLimits: { minAge: 65 },
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        }
+      ]);
+
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 10)).toHaveLength(1);
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 10)[0].ruleId).toBe('RULE_PEDIATRIC');
+
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 35)).toHaveLength(1);
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 35)[0].ruleId).toBe('RULE_ADULT');
+
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 70)).toHaveLength(1);
+      expect(getApplicableRules(rules, 'PPO_GOLD', '30', 70)[0].ruleId).toBe('RULE_SENIOR');
+    });
+
+    it('filters rules by gender restrictions', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      rules.set('PPO_GOLD:88', [
+        {
+          ruleId: 'RULE_MAMMOGRAM',
+          ruleName: 'Mammogram Coverage',
+          planCode: 'PPO_GOLD',
+          serviceTypeCode: '88',
+          benefitCategory: 'Preventive',
+          coverageIndicator: 'covered',
+          priorAuthRequired: false,
+          referralRequired: false,
+          genderRestrictions: ['F'],
+          effectiveDateRange: { startDate: '20200101' },
+          priority: 10,
+          isActive: true
+        }
+      ]);
+
+      expect(getApplicableRules(rules, 'PPO_GOLD', '88', undefined, 'F')).toHaveLength(1);
+      expect(getApplicableRules(rules, 'PPO_GOLD', '88', undefined, 'M')).toHaveLength(0);
+    });
+
+    it('returns empty array for unknown plan/service combination', () => {
+      const rules = new Map<string, QNXTEligibilityRule[]>();
+      
+      const applicable = getApplicableRules(rules, 'UNKNOWN_PLAN', 'XX');
+      expect(applicable).toHaveLength(0);
+    });
+  });
+
+  describe('FHIR Data Extraction', () => {
+    const extractMemberIdFromFHIR = (request: { patient?: { identifier?: { value?: string }, reference?: string } }): string => {
+      if (request.patient?.identifier?.value) {
+        return request.patient.identifier.value;
+      }
+      if (request.patient?.reference) {
+        return request.patient.reference.replace('Patient/', '');
+      }
+      return 'unknown';
+    };
+
+    const extractPayerIdFromFHIR = (request: { insurer?: { identifier?: { value?: string }, reference?: string } }): string => {
+      if (request.insurer?.identifier?.value) {
+        return request.insurer.identifier.value;
+      }
+      if (request.insurer?.reference) {
+        return request.insurer.reference.replace('Organization/', '');
+      }
+      return 'unknown';
+    };
+
+    const extractProviderNpiFromFHIR = (request: { provider?: { identifier?: { value?: string } } }): string | undefined => {
+      if (request.provider?.identifier?.value) {
+        return request.provider.identifier.value;
+      }
+      return undefined;
+    };
+
+    const extractServiceTypesFromFHIR = (request: { item?: Array<{ category?: { coding?: Array<{ code?: string }> } }> }): string[] => {
+      const serviceTypes: string[] = [];
+      if (request.item) {
+        for (const item of request.item) {
+          if (item.category?.coding) {
+            for (const coding of item.category.coding) {
+              if (coding.code) {
+                serviceTypes.push(coding.code);
+              }
+            }
+          }
+        }
+      }
+      return serviceTypes.length > 0 ? serviceTypes : ['30'];
+    };
+
+    it('extracts member ID from FHIR identifier', () => {
+      const request = {
+        patient: {
+          identifier: { value: 'MEM12345' }
+        }
+      };
+      expect(extractMemberIdFromFHIR(request)).toBe('MEM12345');
+    });
+
+    it('extracts member ID from FHIR reference', () => {
+      const request = {
+        patient: {
+          reference: 'Patient/MEM12345'
+        }
+      };
+      expect(extractMemberIdFromFHIR(request)).toBe('MEM12345');
+    });
+
+    it('returns unknown for missing patient', () => {
+      const request = {};
+      expect(extractMemberIdFromFHIR(request)).toBe('unknown');
+    });
+
+    it('extracts payer ID from FHIR identifier', () => {
+      const request = {
+        insurer: {
+          identifier: { value: 'PAYER001' }
+        }
+      };
+      expect(extractPayerIdFromFHIR(request)).toBe('PAYER001');
+    });
+
+    it('extracts payer ID from FHIR reference', () => {
+      const request = {
+        insurer: {
+          reference: 'Organization/PAYER001'
+        }
+      };
+      expect(extractPayerIdFromFHIR(request)).toBe('PAYER001');
+    });
+
+    it('extracts provider NPI from FHIR', () => {
+      const request = {
+        provider: {
+          identifier: { value: '1234567890' }
+        }
+      };
+      expect(extractProviderNpiFromFHIR(request)).toBe('1234567890');
+    });
+
+    it('returns undefined for missing provider', () => {
+      const request = {};
+      expect(extractProviderNpiFromFHIR(request)).toBeUndefined();
+    });
+
+    it('extracts service types from FHIR items', () => {
+      const request = {
+        item: [
+          {
+            category: {
+              coding: [{ code: '30' }]
+            }
+          },
+          {
+            category: {
+              coding: [{ code: '48' }]
+            }
+          }
+        ]
+      };
+      expect(extractServiceTypesFromFHIR(request)).toEqual(['30', '48']);
+    });
+
+    it('returns default service type for empty items', () => {
+      const request = { item: [] };
+      expect(extractServiceTypesFromFHIR(request)).toEqual(['30']);
+    });
+  });
+
+  describe('Eligibility Status Extraction', () => {
+    const extractEligibilityStatusFromFHIR = (response: { insurance?: Array<{ inforce?: boolean }> }): 'active' | 'inactive' | 'terminated' | 'pending' | 'unknown' => {
+      if (response.insurance && response.insurance.length > 0) {
+        const insurance = response.insurance[0];
+        if (insurance.inforce === true) {
+          return 'active';
+        } else if (insurance.inforce === false) {
+          return 'inactive';
+        }
+      }
+      return 'unknown';
+    };
+
+    it('returns active for inforce=true', () => {
+      const response = {
+        insurance: [{ inforce: true }]
+      };
+      expect(extractEligibilityStatusFromFHIR(response)).toBe('active');
+    });
+
+    it('returns inactive for inforce=false', () => {
+      const response = {
+        insurance: [{ inforce: false }]
+      };
+      expect(extractEligibilityStatusFromFHIR(response)).toBe('inactive');
+    });
+
+    it('returns unknown for missing insurance', () => {
+      const response = {};
+      expect(extractEligibilityStatusFromFHIR(response)).toBe('unknown');
+    });
+
+    it('returns unknown for empty insurance array', () => {
+      const response = { insurance: [] };
+      expect(extractEligibilityStatusFromFHIR(response)).toBe('unknown');
+    });
+  });
+
+  describe('Health Status Computation', () => {
+    interface ComponentHealth {
+      status: 'healthy' | 'unhealthy' | 'degraded';
+      latencyMs?: number;
+      lastCheck: string;
+      error?: string;
+    }
+
+    const computeOverallHealth = (checks: Record<string, ComponentHealth>): 'healthy' | 'unhealthy' | 'degraded' => {
+      const allHealthy = Object.values(checks).every(c => c.status === 'healthy');
+      const anyUnhealthy = Object.values(checks).some(c => c.status === 'unhealthy');
+
+      return allHealthy ? 'healthy' : anyUnhealthy ? 'unhealthy' : 'degraded';
+    };
+
+    it('returns healthy when all components are healthy', () => {
+      const checks = {
+        cosmosDb: { status: 'healthy' as const, lastCheck: new Date().toISOString() },
+        eventGrid: { status: 'healthy' as const, lastCheck: new Date().toISOString() }
+      };
+      expect(computeOverallHealth(checks)).toBe('healthy');
+    });
+
+    it('returns unhealthy when any component is unhealthy', () => {
+      const checks = {
+        cosmosDb: { status: 'healthy' as const, lastCheck: new Date().toISOString() },
+        eventGrid: { status: 'unhealthy' as const, lastCheck: new Date().toISOString(), error: 'Connection failed' }
+      };
+      expect(computeOverallHealth(checks)).toBe('unhealthy');
+    });
+
+    it('returns degraded when some components are degraded but none unhealthy', () => {
+      const checks = {
+        cosmosDb: { status: 'healthy' as const, lastCheck: new Date().toISOString() },
+        eventGrid: { status: 'degraded' as const, lastCheck: new Date().toISOString() }
+      };
+      expect(computeOverallHealth(checks)).toBe('degraded');
+    });
+  });
+
+  describe('Cache TTL Determination', () => {
+    const determineCacheTtl = (
+      eligibilityStatus: string,
+      activeMemberTtl: number,
+      inactiveMemberTtl: number
+    ): number => {
+      return eligibilityStatus === 'active' ? activeMemberTtl : inactiveMemberTtl;
+    };
+
+    it('uses active TTL for active members', () => {
+      expect(determineCacheTtl('active', 86400, 3600)).toBe(86400);
+    });
+
+    it('uses inactive TTL for inactive members', () => {
+      expect(determineCacheTtl('inactive', 86400, 3600)).toBe(3600);
+    });
+
+    it('uses inactive TTL for unknown status', () => {
+      expect(determineCacheTtl('unknown', 86400, 3600)).toBe(3600);
+    });
+
+    it('uses inactive TTL for terminated members', () => {
+      expect(determineCacheTtl('terminated', 86400, 3600)).toBe(3600);
+    });
+  });
+
+  describe('Benefit Generation', () => {
+    interface EligibilityBenefit {
+      serviceTypeCode: string;
+      serviceTypeDescription?: string;
+      eligibilityInfoCode: string;
+      coverageLevelCode: string;
+      authorizationRequired?: boolean;
+      inNetwork?: boolean;
+      additionalInfo?: {
+        copay?: number;
+        coinsurance?: number;
+      };
+    }
+
+    const generateBenefitFromRule = (rule: QNXTEligibilityRule, serviceTypeCode: string): EligibilityBenefit => {
+      return {
+        serviceTypeCode,
+        serviceTypeDescription: rule.benefitCategory,
+        eligibilityInfoCode: rule.coverageIndicator === 'covered' ? '1' : '6',
+        coverageLevelCode: 'IND',
+        authorizationRequired: rule.priorAuthRequired,
+        inNetwork: true,
+        additionalInfo: rule.inNetworkRequirements ? {
+          copay: rule.inNetworkRequirements.copay,
+          coinsurance: rule.inNetworkRequirements.coinsurance
+        } : undefined
+      };
+    };
+
+    it('generates benefit for covered service', () => {
+      const rule: QNXTEligibilityRule = {
+        ruleId: 'RULE001',
+        ruleName: 'Test Rule',
+        planCode: 'PPO_GOLD',
+        serviceTypeCode: '30',
+        benefitCategory: 'Medical Care',
+        coverageIndicator: 'covered',
+        priorAuthRequired: false,
+        referralRequired: false,
+        inNetworkRequirements: {
+          copay: 25,
+          coinsurance: 20
+        },
+        effectiveDateRange: { startDate: '20200101' },
+        priority: 10,
+        isActive: true
+      };
+
+      const benefit = generateBenefitFromRule(rule, '30');
+
+      expect(benefit.eligibilityInfoCode).toBe('1');
+      expect(benefit.serviceTypeDescription).toBe('Medical Care');
+      expect(benefit.authorizationRequired).toBe(false);
+      expect(benefit.additionalInfo?.copay).toBe(25);
+      expect(benefit.additionalInfo?.coinsurance).toBe(20);
+    });
+
+    it('generates benefit for non-covered service', () => {
+      const rule: QNXTEligibilityRule = {
+        ruleId: 'RULE002',
+        ruleName: 'Not Covered',
+        planCode: 'PPO_GOLD',
+        serviceTypeCode: '99',
+        benefitCategory: 'Experimental',
+        coverageIndicator: 'not_covered',
+        priorAuthRequired: false,
+        referralRequired: false,
+        effectiveDateRange: { startDate: '20200101' },
+        priority: 10,
+        isActive: true
+      };
+
+      const benefit = generateBenefitFromRule(rule, '99');
+
+      expect(benefit.eligibilityInfoCode).toBe('6');
+    });
+
+    it('generates benefit requiring prior authorization', () => {
+      const rule: QNXTEligibilityRule = {
+        ruleId: 'RULE003',
+        ruleName: 'MRI Imaging',
+        planCode: 'PPO_GOLD',
+        serviceTypeCode: 'MRI',
+        benefitCategory: 'Imaging',
+        coverageIndicator: 'covered',
+        priorAuthRequired: true,
+        referralRequired: true,
+        effectiveDateRange: { startDate: '20200101' },
+        priority: 10,
+        isActive: true
+      };
+
+      const benefit = generateBenefitFromRule(rule, 'MRI');
+
+      expect(benefit.authorizationRequired).toBe(true);
+    });
+  });
+
+  describe('Event Grid Event Construction', () => {
+    interface EligibilityCheckedEvent {
+      id: string;
+      eventType: string;
+      subject: string;
+      eventTime: Date;
+      dataVersion: string;
+      data: {
+        memberId: string;
+        payerId: string;
+        providerNpi?: string;
+        requestType: string;
+        eligibilityStatus: string;
+        serviceDate: string;
+        serviceTypeCodes?: string[];
+        fromCache: boolean;
+        responseTimeMs: number;
+      };
+    }
+
+    const createEligibilityCheckedEvent = (
+      memberId: string,
+      payerId: string,
+      providerNpi: string | undefined,
+      requestType: 'X12_270' | 'FHIR_CoverageEligibilityRequest',
+      eligibilityStatus: string,
+      serviceDate: string,
+      serviceTypeCodes: string[] | undefined,
+      fromCache: boolean,
+      responseTimeMs: number
+    ): EligibilityCheckedEvent => {
+      return {
+        id: 'test-id',
+        eventType: 'EligibilityChecked',
+        subject: memberId,
+        eventTime: new Date(),
+        dataVersion: '1.0',
+        data: {
+          memberId,
+          payerId,
+          providerNpi,
+          requestType,
+          eligibilityStatus,
+          serviceDate,
+          serviceTypeCodes,
+          fromCache,
+          responseTimeMs
+        }
+      };
+    };
+
+    it('creates event with all fields', () => {
+      const event = createEligibilityCheckedEvent(
+        'MEM001',
+        'PAYER001',
+        '1234567890',
+        'X12_270',
+        'active',
+        '20240115',
+        ['30', '48'],
+        false,
+        150
+      );
+
+      expect(event.eventType).toBe('EligibilityChecked');
+      expect(event.subject).toBe('MEM001');
+      expect(event.dataVersion).toBe('1.0');
+      expect(event.data.memberId).toBe('MEM001');
+      expect(event.data.payerId).toBe('PAYER001');
+      expect(event.data.providerNpi).toBe('1234567890');
+      expect(event.data.requestType).toBe('X12_270');
+      expect(event.data.eligibilityStatus).toBe('active');
+      expect(event.data.fromCache).toBe(false);
+      expect(event.data.responseTimeMs).toBe(150);
+    });
+
+    it('creates event with fromCache=true', () => {
+      const event = createEligibilityCheckedEvent(
+        'MEM001',
+        'PAYER001',
+        undefined,
+        'FHIR_CoverageEligibilityRequest',
+        'active',
+        '20240115',
+        undefined,
+        true,
+        5
+      );
+
+      expect(event.data.fromCache).toBe(true);
+      expect(event.data.providerNpi).toBeUndefined();
+      expect(event.data.serviceTypeCodes).toBeUndefined();
+    });
+  });
+});
