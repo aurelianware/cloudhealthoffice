@@ -5,7 +5,7 @@
  * both X12 270/271 EDI and FHIR R4 CoverageEligibilityRequest/Response.
  */
 
-import { CoverageEligibilityRequest, CoverageEligibilityResponse, Patient, Coverage, Organization } from 'fhir/r4';
+import { CoverageEligibilityRequest, CoverageEligibilityResponse } from 'fhir/r4';
 
 // ============================================================================
 // X12 270/271 Types (based on HIPAA X12 005010X279A1)
