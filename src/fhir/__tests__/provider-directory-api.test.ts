@@ -408,7 +408,7 @@ describe('Provider Directory API', () => {
       // Index 10 is out of range for an array with 1 element
       expect(() => {
         api.mapNPPESToLocation(nppesWithMailingOnly, 10);
-      }).toThrow(/No address found/);
+      }).toThrow(/No address found.*at index 10/);
     });
   });
 

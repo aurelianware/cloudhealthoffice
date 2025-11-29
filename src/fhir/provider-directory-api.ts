@@ -269,6 +269,12 @@ export interface LocationSearchParams {
  * Exposes FHIR R4 provider directory resources with NPPES integration
  */
 export class ProviderDirectoryApi {
+  /**
+   * NPI Luhn validation prefix - CMS-assigned prefix for NPI check digit calculation
+   * Per CMS specification: https://www.cms.gov/Regulations-and-Guidance/Administrative-Simplification/NationalProvIdentStand/Downloads/NPIcheckdigit.pdf
+   */
+  private static readonly NPI_LUHN_PREFIX = '80840';
+
   private nppesBaseUrl: string;
   private cosmosEndpoint: string;
   private cosmosDatabase: string;
@@ -483,7 +489,7 @@ export class ProviderDirectoryApi {
     const address = nppes.addresses.find(a => a.address_purpose === 'LOCATION') || nppes.addresses[addressIndex];
     
     if (!address) {
-      throw new Error(`No address found for NPI ${nppes.number}`);
+      throw new Error(`No address found for NPI ${nppes.number} at index ${addressIndex}. Available addresses: ${nppes.addresses.length}`);
     }
 
     const location: Location = {
@@ -724,8 +730,8 @@ export class ProviderDirectoryApi {
     if (!/^\d{10}$/.test(npi)) {
       return false;
     }
-    // NPI Luhn validation (using 80840 prefix)
-    const npiWithPrefix = '80840' + npi;
+    // NPI Luhn validation using CMS-assigned prefix
+    const npiWithPrefix = ProviderDirectoryApi.NPI_LUHN_PREFIX + npi;
     return this.luhnCheck(npiWithPrefix);
   }
 
