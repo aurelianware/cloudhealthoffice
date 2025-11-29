@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eligibility-service.fullname" . }}
+  labels:
+    {{- include "eligibility-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount | default 2 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "eligibility-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "eligibility-service.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "eligibility-service.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.config.port | quote }}
+            - name: COSMOS_DATABASE
+              value: {{ .Values.config.cosmosDb.database | quote }}
+            - name: COSMOS_CONTAINER
+              value: {{ .Values.config.cosmosDb.container | quote }}
+            - name: CACHE_ENABLED
+              value: {{ .Values.config.cache.enabled | quote }}
+            - name: CACHE_ACTIVE_TTL
+              value: {{ .Values.config.cache.activeTtl | quote }}
+            - name: CACHE_INACTIVE_TTL
+              value: {{ .Values.config.cache.inactiveTtl | quote }}
+            - name: CACHE_MAX_AGE
+              value: {{ .Values.config.cache.maxAge | quote }}
+            - name: DAPR_ENABLED
+              value: {{ .Values.config.dapr.enabled | quote }}
+            - name: DAPR_HTTP_PORT
+              value: {{ .Values.config.dapr.httpPort | quote }}
+            - name: DAPR_GRPC_PORT
+              value: {{ .Values.config.dapr.grpcPort | quote }}
+            - name: DAPR_APP_ID
+              value: {{ .Values.config.dapr.appId | quote }}
+            - name: DAPR_STATE_STORE
+              value: {{ .Values.config.dapr.stateStoreName | quote }}
+            - name: DAPR_PUBSUB
+              value: {{ .Values.config.dapr.pubSubName | quote }}
+            {{- if .Values.config.cosmosDb.endpoint }}
+            - name: COSMOS_ENDPOINT
+              value: {{ .Values.config.cosmosDb.endpoint | quote }}
+            {{- else if .Values.existingSecrets.cosmos }}
+            - name: COSMOS_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.cosmos }}
+                  key: endpoint
+            - name: COSMOS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.cosmos }}
+                  key: key
+            {{- end }}
+            {{- if .Values.config.eventGrid.endpoint }}
+            - name: EVENT_GRID_ENDPOINT
+              value: {{ .Values.config.eventGrid.endpoint | quote }}
+            {{- else if .Values.existingSecrets.eventGrid }}
+            - name: EVENT_GRID_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.eventGrid }}
+                  key: endpoint
+            - name: EVENT_GRID_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.eventGrid }}
+                  key: key
+            {{- end }}
+            {{- if .Values.config.qnxt.baseUrl }}
+            - name: QNXT_BASE_URL
+              value: {{ .Values.config.qnxt.baseUrl | quote }}
+            {{- else if .Values.existingSecrets.qnxt }}
+            - name: QNXT_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.qnxt }}
+                  key: baseUrl
+            - name: QNXT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.qnxt }}
+                  key: apiKey
+            {{- end }}
+            {{- if .Values.config.fhirServer.baseUrl }}
+            - name: FHIR_SERVER_URL
+              value: {{ .Values.config.fhirServer.baseUrl | quote }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
