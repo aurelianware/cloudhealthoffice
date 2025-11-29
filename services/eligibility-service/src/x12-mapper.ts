@@ -66,7 +66,7 @@ const SERVICE_TYPE_DESCRIPTIONS: Record<string, string> = {
   '54': 'Major Medical',
   '55': 'Medically Related Transportation',
   '56': 'Air Transportation',
-  '57': 'Cabulance',
+  '57': 'Ambulance',
   '58': 'Licensed Ambulance',
   '59': 'General Benefits',
   '60': 'In-vitro Fertilization',

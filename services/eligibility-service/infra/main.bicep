@@ -130,23 +130,20 @@ resource daprStateStore 'Microsoft.App/managedEnvironments/daprComponents@2024-0
   }
 }
 
-// Dapr Pub/Sub Component (using Service Bus or Event Grid)
+// Dapr Pub/Sub Component - Note: Event Grid is accessed directly via SDK with managed identity
+// This component is disabled in favor of direct Event Grid SDK usage for better security
+// If you need Dapr pubsub, uncomment and configure for Service Bus instead
+/*
 resource daprPubSub 'Microsoft.App/managedEnvironments/daprComponents@2024-03-01' = if (enableDapr) {
   parent: containerAppEnv
   name: 'eligibility-pubsub'
   properties: {
-    componentType: 'pubsub.azure.eventhubs'
+    componentType: 'pubsub.azure.servicebus.topics'
     version: 'v1'
     metadata: [
       {
-        name: 'connectionString'
-        secretRef: 'eventgrid-connection'
-      }
-    ]
-    secrets: [
-      {
-        name: 'eventgrid-connection'
-        value: 'Endpoint=${eventGridTopic.properties.endpoint};SharedAccessKey=${eventGridTopic.listKeys().key1}'
+        name: 'namespaceName'
+        value: '<your-service-bus-namespace>'
       }
     ]
     scopes: [
@@ -154,6 +151,7 @@ resource daprPubSub 'Microsoft.App/managedEnvironments/daprComponents@2024-03-01
     ]
   }
 }
+*/
 
 // =========================
 // Cosmos DB Account
