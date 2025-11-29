@@ -364,7 +364,6 @@ export class X12EligibilityMapper {
    */
   generateX12271(response: X12_271_Response): string {
     const segments: string[] = [];
-    const elementSeparator = '*';
     const segmentSeparator = '~';
     const date = response.transactionDate;
     const time = response.transactionTime || '1200';
