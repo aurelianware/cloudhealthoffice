@@ -2,7 +2,7 @@
 
 ## Overview
 
-Cloud Health Office includes three production-grade Azure Monitor Workbooks for real-time monitoring of HIPAA X12 EDI transaction processing across all payers. These dashboards provide comprehensive visibility into transaction latency, error rates, volume, payer integration health, and HIPAA compliance validation.
+Cloud Health Office includes four production-grade Azure Monitor Workbooks for real-time monitoring of HIPAA X12 EDI transaction processing across all payers. These dashboards provide comprehensive visibility into transaction latency, error rates, volume, payer integration health, HIPAA compliance validation, and CMS-0057-F regulatory compliance.
 
 **All dashboards include automatic PHI redaction to ensure HIPAA compliance.**
 
@@ -16,6 +16,7 @@ Cloud Health Office includes three production-grade Azure Monitor Workbooks for 
   - [EDI Transaction Metrics](#1-edi-transaction-metrics-dashboard)
   - [Payer Integration Health](#2-payer-integration-health-dashboard)
   - [HIPAA Compliance Monitoring](#3-hipaa-compliance-monitoring-dashboard)
+  - [CMS-0057-F Compliance Dashboard](#4-cms-0057-f-compliance-dashboard)
 - [Alerting Rules](#alerting-rules)
 - [PHI Redaction](#phi-redaction)
 - [Multi-Tenant Configuration](#multi-tenant-configuration)
@@ -31,6 +32,7 @@ Cloud Health Office includes three production-grade Azure Monitor Workbooks for 
 1. **EDI Transaction Metrics** - Real-time monitoring of all transaction types (275, 277, 278)
 2. **Payer Integration Health** - Per-payer health monitoring with scoring
 3. **HIPAA Compliance Monitoring** - PHI redaction validation and security audit logging
+4. **CMS-0057-F Compliance Dashboard** - CMS Prior Authorization Rule compliance metrics (NEW)
 
 ### Key Features
 
@@ -40,6 +42,8 @@ Cloud Health Office includes three production-grade Azure Monitor Workbooks for 
 - ✅ **Alerting Ready**: Pre-configured KQL queries for Azure Monitor alerts
 - ✅ **HIPAA Compliant**: All queries comply with HIPAA privacy requirements
 - ✅ **Parameterized**: Flexible time ranges and filtering options
+- ✅ **Export to PDF**: All workbooks support PDF export for compliance reporting
+- ✅ **Scheduled Email Alerts**: Configure weekly compliance summaries via Azure Monitor
 
 ---
 
@@ -83,6 +87,7 @@ Workbooks are available in the Azure Portal:
    - `{baseName}-edi-metrics`
    - `{baseName}-payer-health`
    - `{baseName}-hipaa-compliance`
+   - `{baseName}-cms0057f-compliance`
 
 **Direct URLs** are provided in deployment outputs:
 
@@ -263,6 +268,114 @@ The dashboard automatically scans for:
 
 ---
 
+### 4. CMS-0057-F Compliance Dashboard
+
+**Purpose**: Monitor compliance with CMS Prior Authorization Rule (CMS-0057-F) requirements for the January 2027 deadline.
+
+#### Key Metrics
+
+| Metric | Description | Target |
+|--------|-------------|--------|
+| **Patient Access API Enablement** | % of members with Patient Access API enabled | ≥ 80% |
+| **Avg Prior Auth Response Time** | Average response time for prior auth requests | < 72h urgent, < 7d standard |
+| **72-Hour Urgent Compliance** | % of urgent requests responded within 72 hours | 100% |
+| **7-Day Standard Compliance** | % of standard requests responded within 7 days | 100% |
+| **270/271 Error Rate** | Error rate for eligibility transactions | < 2% |
+| **278 Error Rate** | Error rate for prior authorization transactions | < 2% |
+| **837 Error Rate** | Error rate for claims transactions | < 2% |
+| **Key Vault Audit Events** | PHI access and encryption key operations | Monitored |
+
+#### Visualizations
+
+1. **CMS-0057-F Compliance Overview**: High-level KPIs with compliance status tiles
+2. **Patient Access API Enablement Trend**: Daily trend of member API enablement
+3. **Patient Access API by Payer**: Per-payer breakdown of enabled members
+4. **Prior Auth Response Time Trend**: Hourly P50/P95/P99 response times
+5. **Prior Auth SLA Compliance**: Compliance by priority (urgent vs. standard)
+6. **Error Rates by Transaction Type**: 270/271, 278, 837 error breakdown
+7. **Error Trend Over Time**: Hourly error counts by transaction type
+8. **Recent Transaction Errors**: Last 50 errors with categorization
+9. **Key Vault Operations Timeline**: PHI encryption key access patterns
+10. **Key Vault Operations Summary**: Success rates by operation type
+11. **PHI Access Audit Trail**: Combined Key Vault and application audit events
+
+#### Parameters
+
+- **Time Range**: Selectable (1 hour to 30 days)
+- **Payer ID**: Filter by specific payer or "All"
+
+#### CMS-0057-F Requirements Covered
+
+| Requirement | Dashboard Section |
+|-------------|-------------------|
+| Patient Access API | Patient Access API Enablement |
+| Provider Access API | Patient Access API Enablement (shared metrics) |
+| Prior Authorization API | Prior Auth Response Time |
+| 72-Hour Urgent Response | Prior Auth SLA Compliance |
+| 7-Day Standard Response | Prior Auth SLA Compliance |
+| Transaction Error Monitoring | Transaction Error Rates |
+| PHI Audit Logging | PHI Redaction Audit Log |
+
+#### Export to PDF
+
+To export the dashboard for compliance reporting:
+
+1. Open the workbook in Azure Portal
+2. Click the **Export** button (top-right toolbar)
+3. Select **Export to PDF**
+4. Save the PDF for regulatory documentation
+
+#### Scheduled Email Alerts
+
+Configure weekly compliance reports:
+
+1. Navigate to **Azure Monitor** → **Workbooks**
+2. Open the CMS-0057-F Compliance Dashboard
+3. Click **Share** → **Schedule**
+4. Configure schedule: Weekly on Monday at 8:00 AM
+5. Add recipients (e.g., compliance@yourorg.com)
+6. Select **PDF** format
+
+#### Sample KQL Queries
+
+**Patient Access API Enablement:**
+```kql
+customEvents
+| where timestamp > ago(24h)
+| where name in ('PatientAccessAPI_Enabled', 'FHIR_Patient_Access')
+| summarize EnabledMembers = dcount(tostring(customDimensions.memberId))
+```
+
+**Prior Auth Response Time:**
+```kql
+requests
+| where timestamp > ago(24h)
+| where name contains 'auth' or customDimensions.transactionType == '278'
+| summarize 
+    AvgResponseMs = avg(duration),
+    P95ResponseMs = percentile(duration, 95)
+```
+
+**Transaction Error Rates:**
+```kql
+requests
+| where timestamp > ago(24h)
+| extend TransactionType = case(
+    customDimensions.transactionType in ('270', '271'), '270/271',
+    customDimensions.transactionType == '278', '278',
+    customDimensions.transactionType == '837', '837',
+    'Other'
+)
+| where TransactionType != 'Other'
+| summarize 
+    Total = count(),
+    Errors = countif(success == false)
+    by TransactionType
+| extend ErrorRate = round(100.0 * Errors / Total, 2)
+```
+
+---
+
 ## Alerting Rules
 
 ### Recommended Alert Configuration
@@ -369,6 +482,86 @@ dependencies
     by DependencyName = name
 | extend SuccessRate = 100.0 * Success / Total
 | where SuccessRate < 95
+```
+
+**Action**: Email operations team
+
+---
+
+#### 7. Prior Auth SLA Violation (Urgent) - CMS-0057-F
+
+**Condition**: Prior auth urgent request exceeds 72-hour SLA
+
+```kql
+requests
+| where timestamp > ago(1h)
+| where name contains "auth" or customDimensions.transactionType == "278"
+| where customDimensions.priority == "urgent"
+| extend ResponseTimeHours = duration / 3600000
+| where ResponseTimeHours > 72
+| count
+| where Count > 0
+```
+
+**Action**: **CRITICAL** - Page on-call immediately
+
+---
+
+#### 8. Prior Auth SLA Violation (Standard) - CMS-0057-F
+
+**Condition**: Prior auth standard request exceeds 7-day SLA
+
+```kql
+requests
+| where timestamp > ago(24h)
+| where name contains "auth" or customDimensions.transactionType == "278"
+| where customDimensions.priority != "urgent" or isempty(customDimensions.priority)
+| extend ResponseTimeHours = duration / 3600000
+| where ResponseTimeHours > 168
+| count
+| where Count > 0
+```
+
+**Action**: Email compliance team
+
+---
+
+#### 9. Low Patient Access API Enablement - CMS-0057-F
+
+**Condition**: Patient Access API enablement below 80%
+
+```kql
+let enabled = customEvents
+| where timestamp > ago(24h)
+| where name in ('PatientAccessAPI_Enabled', 'FHIR_Patient_Access')
+| summarize EnabledCount = dcount(tostring(customDimensions.memberId));
+let total = customEvents
+| where timestamp > ago(24h)
+| where name contains 'Member' or name contains 'Enrollment'
+| summarize TotalCount = dcount(tostring(customDimensions.memberId));
+enabled
+| join kind=cross total
+| extend EnablementPct = 100.0 * EnabledCount / TotalCount
+| where EnablementPct < 80
+```
+
+**Action**: Email compliance team
+
+---
+
+#### 10. High Transaction Error Rate (270/271, 278, 837) - CMS-0057-F
+
+**Condition**: Error rate > 5% for key transaction types
+
+```kql
+requests
+| where timestamp > ago(1h)
+| where customDimensions.transactionType in ('270', '271', '278', '837')
+| summarize 
+    Total = count(),
+    Errors = countif(success == false)
+| extend ErrorRate = 100.0 * Errors / Total
+| where ErrorRate > 5
 ```
 
 **Action**: Email operations team
