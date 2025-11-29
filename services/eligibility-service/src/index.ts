@@ -51,6 +51,9 @@ const DEFAULT_CONFIG: EligibilityServiceConfig = {
   }
 };
 
+// CORS allowed origins (comma-separated list, defaults to localhost for security)
+const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000';
+
 // Initialize service
 let eligibilityService: EligibilityService;
 const x12Mapper = new X12EligibilityMapper();
@@ -286,8 +289,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const path = url.pathname;
   const method = req.method || 'GET';
   
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS headers - use configured allowed origins
+  const origin = req.headers.origin || '';
+  const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim());
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    res.setHeader('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
   

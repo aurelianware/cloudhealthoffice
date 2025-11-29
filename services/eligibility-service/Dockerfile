@@ -43,9 +43,9 @@ EXPOSE 3000
 # Switch to non-root user
 USER appuser
 
-# Health check
+# Health check - using node to make HTTP request since wget/curl not available in alpine
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/livez || exit 1
+  CMD node -e "require('http').get('http://localhost:3000/livez', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # Start application
 CMD ["node", "dist/index.js"]

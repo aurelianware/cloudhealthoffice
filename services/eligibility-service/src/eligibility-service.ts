@@ -15,13 +15,12 @@
 import { CosmosClient, Container, Database } from '@azure/cosmos';
 import { EventGridPublisherClient, AzureKeyCredential } from '@azure/eventgrid';
 import { DefaultAzureCredential } from '@azure/identity';
-import { CoverageEligibilityRequest, CoverageEligibilityResponse, Patient, Coverage } from 'fhir/r4';
+import { CoverageEligibilityRequest, CoverageEligibilityResponse } from 'fhir/r4';
 import { v4 as uuidv4 } from 'uuid';
 import {
   X12_270_Request,
   X12_271_Response,
   EligibilityCacheRecord,
-  EligibilityCheckedEvent,
   EligibilityServiceConfig,
   EligibilityCheckRequest,
   EligibilityCheckResponse,
@@ -262,7 +261,7 @@ export class EligibilityService {
       this.eligibilityRules.get(key)!.push(rule);
     }
     // Sort rules by priority
-    for (const [key, ruleList] of this.eligibilityRules) {
+    for (const ruleList of this.eligibilityRules.values()) {
       ruleList.sort((a, b) => a.priority - b.priority);
     }
   }
@@ -499,17 +498,17 @@ export class EligibilityService {
           } : undefined
         });
       } else {
-        // Default benefit response
+        // Default benefit response - use 'V' (Cannot Process) for unknown rules
         benefits.push({
           serviceTypeCode: serviceType,
-          eligibilityInfoCode: 'U', // Unknown
+          eligibilityInfoCode: 'V', // Cannot Process
           coverageLevelCode: 'IND'
         });
       }
     }
 
     // If no rules found, assume active for demo purposes
-    if (overallStatus === 'unknown' && benefits.every(b => b.eligibilityInfoCode === 'U')) {
+    if (overallStatus === 'unknown' && benefits.every(b => b.eligibilityInfoCode === 'V')) {
       overallStatus = 'active';
       for (const benefit of benefits) {
         benefit.eligibilityInfoCode = '1';

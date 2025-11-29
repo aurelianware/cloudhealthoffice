@@ -282,44 +282,47 @@ export async function loadQNXTRulesFromCSV(filePath: string): Promise<QNXTEligib
 export function validateRules(rules: QNXTEligibilityRule[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  for (const rule of rules) {
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i];
+    const ruleIdentifier = rule.ruleId || `(row ${i + 1})`;
+    
     // Check required fields
     if (!rule.ruleId) {
-      errors.push(`Rule missing ruleId`);
+      errors.push(`Rule at row ${i + 1}: missing ruleId (planCode: ${rule.planCode || 'unknown'}, serviceTypeCode: ${rule.serviceTypeCode || 'unknown'})`);
     }
     if (!rule.planCode) {
-      errors.push(`Rule ${rule.ruleId}: missing planCode`);
+      errors.push(`Rule ${ruleIdentifier}: missing planCode`);
     }
     if (!rule.serviceTypeCode) {
-      errors.push(`Rule ${rule.ruleId}: missing serviceTypeCode`);
+      errors.push(`Rule ${ruleIdentifier}: missing serviceTypeCode`);
     }
     if (!rule.effectiveDateRange?.startDate) {
-      errors.push(`Rule ${rule.ruleId}: missing effectiveStartDate`);
+      errors.push(`Rule ${ruleIdentifier}: missing effectiveStartDate`);
     }
     
     // Validate date format
     const dateRegex = /^\d{8}$|^\d{4}-\d{2}-\d{2}$/;
     if (rule.effectiveDateRange?.startDate && !dateRegex.test(rule.effectiveDateRange.startDate)) {
-      errors.push(`Rule ${rule.ruleId}: invalid effectiveStartDate format`);
+      errors.push(`Rule ${ruleIdentifier}: invalid effectiveStartDate format`);
     }
     if (rule.effectiveDateRange?.endDate && !dateRegex.test(rule.effectiveDateRange.endDate)) {
-      errors.push(`Rule ${rule.ruleId}: invalid effectiveEndDate format`);
+      errors.push(`Rule ${ruleIdentifier}: invalid effectiveEndDate format`);
     }
     
     // Validate priority
     if (rule.priority < 0) {
-      errors.push(`Rule ${rule.ruleId}: priority must be non-negative`);
+      errors.push(`Rule ${ruleIdentifier}: priority must be non-negative`);
     }
     
     // Validate percentages
     if (rule.inNetworkRequirements?.coinsurance !== undefined) {
       if (rule.inNetworkRequirements.coinsurance < 0 || rule.inNetworkRequirements.coinsurance > 100) {
-        errors.push(`Rule ${rule.ruleId}: in-network coinsurance must be between 0 and 100`);
+        errors.push(`Rule ${ruleIdentifier}: in-network coinsurance must be between 0 and 100`);
       }
     }
     if (rule.outOfNetworkRequirements?.coinsurance !== undefined) {
       if (rule.outOfNetworkRequirements.coinsurance < 0 || rule.outOfNetworkRequirements.coinsurance > 100) {
-        errors.push(`Rule ${rule.ruleId}: out-of-network coinsurance must be between 0 and 100`);
+        errors.push(`Rule ${ruleIdentifier}: out-of-network coinsurance must be between 0 and 100`);
       }
     }
   }
