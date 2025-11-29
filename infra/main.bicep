@@ -149,6 +149,43 @@ resource sbTopicDeadLetter 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-pr
   properties: {}
 }
 
+// Prior Auth API Service Bus Topics
+resource sbTopicPriorAuthRequests 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'prior-auth-requests'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+  }
+}
+
+resource sbTopicPriorAuthResponses 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'prior-auth-responses'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+  }
+}
+
+resource sbTopicPriorAuthSlaTimer 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'prior-auth-sla-timer'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+  }
+}
+
+resource sbTopicPriorAuthSlaTimerSub 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
+  parent: sbTopicPriorAuthSlaTimer
+  name: 'sla-monitor'
+  properties: {
+    maxDeliveryCount: 5
+    lockDuration: 'PT5M'
+  }
+}
+
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
@@ -325,6 +362,38 @@ module workbooks 'modules/workbooks.bicep' = {
 }
 
 // =========================
+// Cosmos DB Module (for Prior Auth and Provider Directory APIs)
+// =========================
+param enableCosmosDb bool = true
+param cosmosDbThroughput int = 400
+
+module cosmosDb 'modules/cosmos-db.bicep' = if (enableCosmosDb) {
+  name: 'cosmos-db-module'
+  params: {
+    baseName: baseName
+    location: location
+    throughput: cosmosDbThroughput
+    enableServerless: false
+  }
+}
+
+// Cosmos DB managed API connection
+resource connCosmosDb 'Microsoft.Web/connections@2016-06-01' = if (enableCosmosDb) {
+  name: 'documentdb'
+  location: connectorLocation
+  properties: {
+    displayName: 'documentdb'
+    api: {
+      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'documentdb')
+    }
+    parameterValues: {
+      databaseAccount: cosmosDb.outputs.cosmosAccountName
+      accessKey: cosmosDb.outputs.cosmosPrimaryKey
+    }
+  }
+}
+
+// =========================
 // Azure Static Web App (for marketing site)
 // =========================
 resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
@@ -368,3 +437,11 @@ output hipaaComplianceWorkbookId string = workbooks.outputs.hipaaComplianceWorkb
 output ediTransactionMetricsUrl string = workbooks.outputs.ediTransactionMetricsUrl
 output payerIntegrationHealthUrl string = workbooks.outputs.payerIntegrationHealthUrl
 output hipaaComplianceUrl string = workbooks.outputs.hipaaComplianceUrl
+
+// Cosmos DB outputs
+output cosmosDbAccountName string = enableCosmosDb ? cosmosDb.outputs.cosmosAccountName : 'disabled'
+output cosmosDbEndpoint string = enableCosmosDb ? cosmosDb.outputs.cosmosAccountEndpoint : 'disabled'
+output cosmosDbDatabaseName string = enableCosmosDb ? cosmosDb.outputs.cosmosDatabaseName : 'disabled'
+output priorAuthContainerName string = enableCosmosDb ? cosmosDb.outputs.priorAuthContainerName : 'disabled'
+output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs.providerDirectoryContainerName : 'disabled'
+output cosmosDbConnectionId string = enableCosmosDb ? connCosmosDb.id : 'disabled'
