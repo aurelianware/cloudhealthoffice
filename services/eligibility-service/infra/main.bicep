@@ -96,7 +96,7 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // Dapr Components
 // =========================
 
-// Dapr State Store Component (using Cosmos DB)
+// Dapr State Store Component (using Cosmos DB with Azure AD authentication)
 resource daprStateStore 'Microsoft.App/managedEnvironments/daprComponents@2024-03-01' = if (enableDapr) {
   parent: containerAppEnv
   name: 'eligibility-state'
@@ -116,15 +116,10 @@ resource daprStateStore 'Microsoft.App/managedEnvironments/daprComponents@2024-0
         name: 'collection'
         value: 'dapr-state'
       }
+      // Using Azure AD authentication instead of masterKey
       {
-        name: 'masterKey'
-        secretRef: 'cosmos-key'
-      }
-    ]
-    secrets: [
-      {
-        name: 'cosmos-key'
-        value: cosmosAccount.listKeys().primaryMasterKey
+        name: 'azureClientId'
+        value: '' // Empty string uses system-assigned managed identity
       }
     ]
     scopes: [
@@ -389,27 +384,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         appProtocol: 'http'
         enableApiLogging: true
       } : null
-      secrets: [
-        {
-          name: 'cosmos-endpoint'
-          value: cosmosAccount.properties.documentEndpoint
-        }
-        // Note: Using managed identity for Cosmos DB access is preferred
-        // This key is provided for backward compatibility
-        {
-          name: 'cosmos-key'
-          value: cosmosAccount.listKeys().primaryMasterKey
-        }
-        {
-          name: 'eventgrid-endpoint'
-          value: eventGridTopic.properties.endpoint
-        }
-        // Note: Using managed identity for Event Grid access is preferred
-        {
-          name: 'eventgrid-key'
-          value: eventGridTopic.listKeys().key1
-        }
-      ]
+      // Using managed identity for authentication - no secrets needed
+      // The Container App's system-assigned managed identity has:
+      // - Cosmos DB Data Contributor role (see cosmosRoleAssignment)
+      // - Event Grid Data Sender role (see eventGridRoleAssignment)
+      secrets: []
     }
     template: {
       containers: [
@@ -427,12 +406,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'COSMOS_ENDPOINT'
-              secretRef: 'cosmos-endpoint'
+              value: cosmosAccount.properties.documentEndpoint
             }
-            {
-              name: 'COSMOS_KEY'
-              secretRef: 'cosmos-key'
-            }
+            // COSMOS_KEY is not set - using managed identity authentication
             {
               name: 'COSMOS_DATABASE'
               value: 'eligibility-db'
@@ -443,12 +419,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'EVENT_GRID_ENDPOINT'
-              secretRef: 'eventgrid-endpoint'
+              value: eventGridTopic.properties.endpoint
             }
-            {
-              name: 'EVENT_GRID_KEY'
-              secretRef: 'eventgrid-key'
-            }
+            // EVENT_GRID_KEY is not set - using managed identity authentication
             {
               name: 'CACHE_ENABLED'
               value: 'true'
