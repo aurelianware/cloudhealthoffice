@@ -433,13 +433,19 @@ Thank you to [acknowledgments].
 
 ### Media List (To Build)
 
-| Outlet | Reporter | Beat | Contact | Relationship |
-|--------|----------|------|---------|--------------|
-| Healthcare IT News | TBD | Interoperability | | ⬜ None |
-| Health Data Management | TBD | Data/Analytics | | ⬜ None |
-| Modern Healthcare | TBD | Technology | | ⬜ None |
-| TechCrunch | TBD | Health tech | | ⬜ None |
-| Fierce Healthcare | TBD | Technology | | ⬜ None |
+**How to Research Reporter Contacts:**
+1. Visit publication websites and identify bylines on relevant articles
+2. Use LinkedIn to find reporters covering healthcare IT
+3. Follow reporters on Twitter/X for engagement opportunities
+4. Use tools like Muck Rack or Cision for verified contacts
+
+| Outlet | Beat | Research Action | Relationship |
+|--------|------|-----------------|--------------|
+| Healthcare IT News | Interoperability | Search recent articles on EDI/FHIR | ⬜ None |
+| Health Data Management | Data/Analytics | Find healthcare data reporters | ⬜ None |
+| Modern Healthcare | Technology | Identify health tech columnist | ⬜ None |
+| TechCrunch | Health tech | Research health section editor | ⬜ None |
+| Fierce Healthcare | Technology | Find healthcare IT beat reporter | ⬜ None |
 
 ---
 

@@ -396,7 +396,7 @@ This document identifies and prioritizes venture capital firms for Cloud Health 
 | Firm | Priority | Action | Target Partner | Status |
 |------|----------|--------|----------------|--------|
 | Optum Ventures | P2 | Warm intro via healthcare network | Lisa Maki | ⬜ Not Started |
-| Transformation Capital | P2 | Warm intro via payer network | TBD | ⬜ Not Started |
+| Transformation Capital | P2 | Warm intro via payer network | Research via LinkedIn | ⬜ Not Started |
 | Bessemer | P2 | Warm intro request | Charles Birnbaum | ⬜ Not Started |
 | Battery Ventures | P2 | Warm intro request | Neeraj Agrawal | ⬜ Not Started |
 
