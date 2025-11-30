@@ -1,0 +1,145 @@
+name: Bug Report
+description: Report a bug or issue with Cloud Health Office
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us investigate and fix the issue.
+        
+        **Important**: Never include Protected Health Information (PHI), real patient data, or production credentials in bug reports.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to ensure this bug has not already been reported
+          required: true
+        - label: I have reviewed the [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) guide
+          required: true
+        - label: This report does not contain any PHI, real patient data, or production credentials
+          required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which component of Cloud Health Office is affected?
+      options:
+        - Logic Apps Workflows (ingest275, ingest278, rfai277, replay278)
+        - Infrastructure (Bicep/ARM)
+        - Service Bus Messaging
+        - Data Lake Storage
+        - Integration Account (X12/EDI)
+        - GitHub Actions / CI/CD
+        - Documentation
+        - API Connections
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: In which environment did you encounter this bug?
+      options:
+        - Development (local)
+        - DEV (Azure)
+        - UAT (Azure)
+        - Production (Azure)
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: A clear and concise description of what actually happened.
+      placeholder: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs/Error Messages
+      description: |
+        Please copy and paste any relevant log output or error messages.
+        **Important**: Redact any sensitive information before pasting.
+      render: shell
+      placeholder: |
+        Paste error logs here (redact any sensitive information)...
+
+  - type: dropdown
+    id: edi-type
+    attributes:
+      label: EDI Transaction Type (if applicable)
+      description: If this bug involves EDI processing, which transaction type?
+      options:
+        - Not applicable
+        - X12 275 (Attachment)
+        - X12 277 (RFAI)
+        - X12 278 (Prior Authorization)
+        - Other X12 transaction
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (screenshots, configuration details, etc.)
+      placeholder: Any additional information that might help us investigate...
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - Critical (system down, data loss, security issue)
+        - High (major feature broken, significant impact)
+        - Medium (feature partially broken, workaround exists)
+        - Low (minor issue, cosmetic)
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: If you've found a workaround, please share it to help others.
+      placeholder: Describe any workaround you've found...
