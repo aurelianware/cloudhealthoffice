@@ -68,14 +68,18 @@ class ClaimRiskModel:
         "out_of_network",
     ]
     
-    def __init__(self, model_path: str = "/ml/claim-fraud-v1.pt"):
+    # Default model path for Azure Functions runtime
+    DEFAULT_MODEL_PATH = "./ml/claim-fraud-v1.pt"
+    
+    def __init__(self, model_path: str = None):
         """
         Initialize the risk scoring model.
         
         Args:
-            model_path: Path to the PyTorch model file.
+            model_path: Path to the PyTorch model file. If not provided,
+                       uses DEFAULT_MODEL_PATH.
         """
-        self.model_path = model_path
+        self.model_path = model_path or self.DEFAULT_MODEL_PATH
         self.model = None
         self.model_version = "rule-based-v1"
         self._use_pytorch = False

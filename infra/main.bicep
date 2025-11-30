@@ -511,6 +511,6 @@ output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs
 output cosmosDbConnectionId string = enableCosmosDb ? connCosmosDb.id : 'disabled'
 
 // ClaimRiskScorer outputs
-output claimRiskScorerFunctionName string = enableClaimRiskScorer && claimRiskScorerFunc != null ? claimRiskScorerFunc.name : 'disabled'
-output claimRiskScorerFunctionUrl string = enableClaimRiskScorer && claimRiskScorerFunc != null ? 'https://${claimRiskScorerFunc.properties.defaultHostName}' : 'disabled'
+output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'
+output claimRiskScorerFunctionUrl string = enableClaimRiskScorer ? 'https://${claimRiskScorerFunc.properties.defaultHostName}' : 'disabled'
 output edi837ClaimsTopicName string = sbTopicEdi837Claims.name
