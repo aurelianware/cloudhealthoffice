@@ -8,6 +8,7 @@ A Blazor web application for migrating members, providers, and benefit plans fro
 - **Data Export**: Export members, providers, and benefit plans to Cloud Health Office Cosmos DB
 - **Mapping Report**: Generate comprehensive mapping reports with 95%+ auto-match capability
 - **One-Click Cutover**: Flip API Management routing keys to switch traffic to Cloud Health Office
+- **Azure Key Vault Integration**: Securely retrieve credentials from Azure Key Vault
 
 ## Prerequisites
 
@@ -15,28 +16,71 @@ A Blazor web application for migrating members, providers, and benefit plans fro
 - Azure subscription with:
   - Cosmos DB account (using the Cloud Health Office database schema)
   - API Management instance (for traffic routing)
+  - Azure Key Vault (for secure credential storage)
 - Access to TriZetto Open Access SOAP APIs (QNXT)
 
 ## Configuration
 
-Update `appsettings.json` with your credentials:
+### Azure Key Vault Setup (Recommended for Production)
+
+1. Create an Azure Key Vault and add the following secrets:
+
+   | Secret Name | Description |
+   |-------------|-------------|
+   | `TriZetto--Username` | TriZetto Open Access username |
+   | `TriZetto--Password` | TriZetto Open Access password |
+   | `CosmosDb--Key` | Cosmos DB primary access key |
+
+2. Grant access to the Key Vault:
+   - If running locally: Add your Azure AD user to the Key Vault Access Policy
+   - If running in Azure: Enable Managed Identity and grant it "Key Vault Secrets User" role
+
+3. Update `appsettings.json` with your Key Vault URI:
+
+   ```json
+   {
+     "KeyVault": {
+       "VaultUri": "https://your-keyvault.vault.azure.net/"
+     }
+   }
+   ```
+
+### Local Development Configuration
+
+For local development without Key Vault, you can use `appsettings.Development.json` (not committed to source control):
 
 ```json
 {
   "TriZetto": {
+    "Username": "your-dev-username",
+    "Password": "your-dev-password"
+  },
+  "CosmosDb": {
+    "Key": "your-cosmos-primary-key"
+  }
+}
+```
+
+### Full Configuration Reference
+
+```json
+{
+  "KeyVault": {
+    "VaultUri": "https://your-keyvault.vault.azure.net/"
+  },
+  "TriZetto": {
     "EndpointUrl": "https://qnxt-server.example.com/OpenAccess/Services",
-    "Username": "your-username",
-    "Password": "your-password",
     "TenantId": "default-tenant",
-    "TimeoutSeconds": 120
+    "TimeoutSeconds": 120,
+    "BypassCertificateValidation": false
   },
   "CosmosDb": {
     "Endpoint": "https://your-cosmos-account.documents.azure.com:443/",
-    "Key": "your-cosmos-primary-key",
     "DatabaseName": "cloudhealthoffice",
     "MembersContainer": "Members",
     "ProvidersContainer": "ProviderDirectory",
-    "BenefitPlansContainer": "BenefitPlans"
+    "BenefitPlansContainer": "BenefitPlans",
+    "DefaultThroughput": 400
   },
   "ApiManagement": {
     "ServiceName": "your-apim-service-name",
@@ -49,7 +93,7 @@ Update `appsettings.json` with your credentials:
 }
 ```
 
-> **Security Note**: In production, store credentials in Azure Key Vault and use Managed Identity for authentication.
+> **Security Note**: In production, always use Azure Key Vault with Managed Identity for credential management.
 
 ## Running the Application
 
