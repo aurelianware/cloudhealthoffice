@@ -16,7 +16,7 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 | **ARR** | $1.8M | $6.0M | $13.5M |
 | **Gross Margin** | 75% | 78% | 82% |
 | **Net Revenue Retention** | 115% | 120% | 125% |
-| **CAC Payback** | 14 months | 10 months | 8 months |
+| **CAC Payback** | 6.0 months | 5.8 months | 5.6 months |
 
 ---
 
