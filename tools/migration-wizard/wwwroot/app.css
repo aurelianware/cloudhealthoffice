@@ -1,0 +1,389 @@
+/* Cloud Health Office Migration Wizard - Sentinel Theme */
+/* Absolute black backgrounds, holographic circuit veins, neon cyan/green accents */
+
+/* === ROOT VARIABLES - Sentinel Brand Identity === */
+:root {
+    --absolute-black: #000000;
+    --dark-gray: #0a0a0a;
+    --medium-gray: #808080;
+    --light-gray: #b0b0b0;
+    --neon-cyan: #00ffff;
+    --neon-green: #00ff88;
+    --cyan-glow: rgba(0, 255, 255, 0.8);
+    --green-glow: rgba(0, 255, 136, 0.8);
+    --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* === BASE STYLES === */
+html, body {
+    font-family: var(--font-family);
+    background: var(--absolute-black);
+    color: var(--light-gray);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* === TYPOGRAPHY === */
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-family);
+    font-weight: 700;
+    color: var(--neon-cyan) !important;
+    text-shadow: 0 0 20px var(--cyan-glow);
+}
+
+h1 {
+    font-size: 2.5rem;
+    letter-spacing: 1px;
+}
+
+p, .lead {
+    color: var(--light-gray) !important;
+}
+
+/* === LINKS === */
+a, .btn-link {
+    color: var(--neon-cyan);
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+a:hover, .btn-link:hover {
+    color: var(--neon-green);
+    text-shadow: 0 0 10px var(--cyan-glow);
+}
+
+/* === BUTTONS === */
+.btn-primary {
+    background: var(--neon-cyan) !important;
+    color: var(--absolute-black) !important;
+    border: 2px solid var(--neon-cyan) !important;
+    font-weight: 700;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background: var(--absolute-black) !important;
+    color: var(--neon-cyan) !important;
+    box-shadow: 0 0 30px var(--cyan-glow);
+    transform: translateY(-2px);
+}
+
+.btn-success {
+    background: var(--neon-green) !important;
+    color: var(--absolute-black) !important;
+    border: 2px solid var(--neon-green) !important;
+    font-weight: 700;
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.btn-success:hover {
+    background: var(--absolute-black) !important;
+    color: var(--neon-green) !important;
+    box-shadow: 0 0 30px var(--green-glow);
+}
+
+.btn-warning {
+    background: #ffc107 !important;
+    color: var(--absolute-black) !important;
+    border: 2px solid #ffc107 !important;
+    font-weight: 700;
+}
+
+.btn-danger {
+    background: #ff4444 !important;
+    color: var(--absolute-black) !important;
+    border: 2px solid #ff4444 !important;
+    font-weight: 700;
+}
+
+.btn-outline-secondary {
+    background: transparent !important;
+    color: var(--light-gray) !important;
+    border: 2px solid var(--medium-gray) !important;
+}
+
+.btn-outline-secondary:hover {
+    background: var(--dark-gray) !important;
+    color: var(--neon-cyan) !important;
+    border-color: var(--neon-cyan) !important;
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem var(--absolute-black), 0 0 0 0.25rem var(--neon-cyan);
+}
+
+/* === CARDS - Sentinel Style === */
+.card {
+    background: var(--dark-gray) !important;
+    border: 1px solid var(--neon-cyan) !important;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    border-color: var(--neon-green) !important;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background: rgba(0, 255, 255, 0.1) !important;
+    border-bottom: 1px solid var(--neon-cyan) !important;
+    color: var(--neon-cyan) !important;
+}
+
+.card-title {
+    color: var(--neon-cyan) !important;
+    text-shadow: 0 0 10px var(--cyan-glow);
+}
+
+.card-text {
+    color: var(--light-gray) !important;
+}
+
+.card.border-primary {
+    border-color: var(--neon-cyan) !important;
+}
+
+.card.border-success {
+    border-color: var(--neon-green) !important;
+}
+
+.card.border-danger {
+    border-color: #ff4444 !important;
+}
+
+.bg-primary {
+    background: var(--neon-cyan) !important;
+    color: var(--absolute-black) !important;
+}
+
+/* === ALERTS === */
+.alert-success {
+    background: rgba(0, 255, 136, 0.1) !important;
+    border: 1px solid var(--neon-green) !important;
+    color: var(--neon-green) !important;
+}
+
+.alert-warning {
+    background: rgba(255, 193, 7, 0.1) !important;
+    border: 1px solid #ffc107 !important;
+    color: #ffc107 !important;
+}
+
+.alert-danger {
+    background: rgba(255, 68, 68, 0.1) !important;
+    border: 1px solid #ff4444 !important;
+    color: #ff4444 !important;
+}
+
+.alert-info {
+    background: rgba(0, 255, 255, 0.1) !important;
+    border: 1px solid var(--neon-cyan) !important;
+    color: var(--neon-cyan) !important;
+}
+
+/* === PROGRESS BARS === */
+.progress {
+    background: var(--dark-gray);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 4px;
+    height: 8px;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green));
+    box-shadow: 0 0 10px var(--cyan-glow);
+}
+
+.progress-bar.bg-success {
+    background: var(--neon-green) !important;
+}
+
+.progress-bar.bg-info {
+    background: var(--neon-cyan) !important;
+}
+
+.progress-bar.bg-warning {
+    background: #ffc107 !important;
+}
+
+/* === TABLES === */
+.table {
+    color: var(--light-gray);
+}
+
+.table th {
+    background: rgba(0, 255, 255, 0.1);
+    color: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+}
+
+.table td {
+    border-color: rgba(0, 255, 255, 0.3);
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background: rgba(0, 255, 255, 0.03);
+}
+
+/* === BADGES === */
+.badge.bg-success {
+    background: var(--neon-green) !important;
+    color: var(--absolute-black) !important;
+}
+
+.badge.bg-primary {
+    background: var(--neon-cyan) !important;
+    color: var(--absolute-black) !important;
+}
+
+.badge.bg-warning {
+    background: #ffc107 !important;
+    color: var(--absolute-black) !important;
+}
+
+.badge.bg-danger {
+    background: #ff4444 !important;
+    color: var(--absolute-black) !important;
+}
+
+.badge.bg-secondary {
+    background: var(--medium-gray) !important;
+    color: var(--absolute-black) !important;
+}
+
+/* === CODE === */
+code {
+    background: var(--dark-gray);
+    color: var(--neon-green);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+}
+
+/* === LISTS === */
+.list-group-item {
+    background: var(--dark-gray);
+    border-color: var(--neon-cyan);
+    color: var(--light-gray);
+}
+
+.list-group-item-danger {
+    background: rgba(255, 68, 68, 0.1) !important;
+    border-color: #ff4444 !important;
+    color: #ff8888 !important;
+}
+
+/* === TEXT UTILITIES === */
+.text-primary {
+    color: var(--neon-cyan) !important;
+}
+
+.text-success {
+    color: var(--neon-green) !important;
+}
+
+.text-warning {
+    color: #ffc107 !important;
+}
+
+.text-danger {
+    color: #ff4444 !important;
+}
+
+.text-muted {
+    color: var(--medium-gray) !important;
+}
+
+/* === FORMS === */
+.form-control {
+    background: var(--dark-gray);
+    border: 1px solid var(--neon-cyan);
+    color: var(--light-gray);
+}
+
+.form-control:focus {
+    background: var(--dark-gray);
+    border-color: var(--neon-green);
+    color: var(--light-gray);
+    box-shadow: 0 0 0 0.25rem rgba(0, 255, 255, 0.25);
+}
+
+/* === SPINNERS === */
+.spinner-border {
+    color: var(--neon-cyan);
+}
+
+/* === CONTENT AREA === */
+.content {
+    padding-top: 1.1rem;
+    background: var(--absolute-black);
+}
+
+main {
+    background: var(--absolute-black);
+}
+
+article {
+    background: var(--absolute-black);
+}
+
+h1:focus {
+    outline: none;
+}
+
+/* === VALIDATION === */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--neon-green);
+}
+
+.invalid {
+    outline: 1px solid #ff4444;
+}
+
+.validation-message {
+    color: #ff4444;
+}
+
+/* === ERROR BOUNDARY === */
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #ff4444;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred."
+}
+
+.darker-border-checkbox.form-check-input {
+    border-color: var(--medium-gray);
+}
+
+/* === SENTINEL LOGO IMAGE === */
+.sentinel-logo {
+    max-width: 300px;
+    margin-bottom: 1rem;
+}
+
+/* === GLOW EFFECTS === */
+.glow-cyan {
+    color: var(--neon-cyan);
+    text-shadow: 0 0 20px var(--cyan-glow);
+}
+
+.glow-green {
+    color: var(--neon-green);
+    text-shadow: 0 0 20px var(--green-glow);
+}
+
+/* === CIRCUIT VEINS BACKGROUND === */
+.circuit-bg {
+    background-image: 
+        linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+}
