@@ -1,0 +1,191 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/viewdefinition/0.0.1-preview/ViewDefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "views": [
+    {
+      "kind": "Overview",
+      "properties": {
+        "header": "Cloud Health Office",
+        "description": "Azure-native HIPAA-compliant EDI integration platform",
+        "commands": [
+          {
+            "displayName": "Open Logic App",
+            "path": "/providers/Microsoft.Web/sites/[outputs('logicAppName')]"
+          },
+          {
+            "displayName": "View Application Insights",
+            "path": "/providers/Microsoft.Insights/components/[outputs('applicationInsightsName')]"
+          },
+          {
+            "displayName": "Open Key Vault",
+            "path": "/providers/Microsoft.KeyVault/vaults/[outputs('keyVaultName')]"
+          }
+        ],
+        "cards": [
+          {
+            "displayName": "Deployment Status",
+            "width": "Full",
+            "content": [
+              {
+                "displayName": "Logic App",
+                "value": "[outputs('logicAppName')]"
+              },
+              {
+                "displayName": "Logic App URL",
+                "value": "[outputs('logicAppUrl')]"
+              },
+              {
+                "displayName": "Deployment Tier",
+                "value": "[outputs('deploymentTier')]"
+              },
+              {
+                "displayName": "Integration Account",
+                "value": "[outputs('integrationAccountName')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Storage & Messaging",
+            "width": "Medium",
+            "content": [
+              {
+                "displayName": "Storage Account",
+                "value": "[outputs('storageAccountName')]"
+              },
+              {
+                "displayName": "Service Bus Namespace",
+                "value": "[outputs('serviceBusNamespace')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Security",
+            "width": "Medium",
+            "content": [
+              {
+                "displayName": "Key Vault",
+                "value": "[outputs('keyVaultName')]"
+              },
+              {
+                "displayName": "Managed Identity Principal ID",
+                "value": "[outputs('managedIdentityPrincipalId')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Database",
+            "width": "Medium",
+            "content": [
+              {
+                "displayName": "Cosmos DB Account",
+                "value": "[outputs('cosmosDbAccountName')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Monitoring",
+            "width": "Medium",
+            "content": [
+              {
+                "displayName": "Application Insights",
+                "value": "[outputs('applicationInsightsName')]"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Metrics",
+      "properties": {
+        "displayName": "Performance Metrics",
+        "charts": [
+          {
+            "displayName": "Workflow Runs",
+            "chartType": "Area",
+            "metrics": [
+              {
+                "name": "WorkflowRunsStarted",
+                "resourceId": "/providers/Microsoft.Web/sites/[outputs('logicAppName')]"
+              },
+              {
+                "name": "WorkflowRunsCompleted",
+                "resourceId": "/providers/Microsoft.Web/sites/[outputs('logicAppName')]"
+              },
+              {
+                "name": "WorkflowRunsFailure",
+                "resourceId": "/providers/Microsoft.Web/sites/[outputs('logicAppName')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Service Bus Messages",
+            "chartType": "Bar",
+            "metrics": [
+              {
+                "name": "IncomingMessages",
+                "resourceId": "/providers/Microsoft.ServiceBus/namespaces/[outputs('serviceBusNamespace')]"
+              },
+              {
+                "name": "OutgoingMessages",
+                "resourceId": "/providers/Microsoft.ServiceBus/namespaces/[outputs('serviceBusNamespace')]"
+              }
+            ]
+          },
+          {
+            "displayName": "Storage Operations",
+            "chartType": "Line",
+            "metrics": [
+              {
+                "name": "BlobCount",
+                "resourceId": "/providers/Microsoft.Storage/storageAccounts/[outputs('storageAccountName')]"
+              },
+              {
+                "name": "UsedCapacity",
+                "resourceId": "/providers/Microsoft.Storage/storageAccounts/[outputs('storageAccountName')]"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "CustomResources",
+      "properties": {
+        "displayName": "Configuration",
+        "version": "1.0.0.0",
+        "resourceType": "configurations",
+        "createUIDefinition": {
+          "parameters": {
+            "steps": [],
+            "outputs": {}
+          }
+        },
+        "commands": [
+          {
+            "displayName": "Configure X12 Schemas",
+            "path": "configureSchemas"
+          },
+          {
+            "displayName": "Configure Trading Partners",
+            "path": "configureTradingPartners"
+          }
+        ],
+        "columns": [
+          {
+            "name": "Name",
+            "displayName": "Configuration Name"
+          },
+          {
+            "name": "Type",
+            "displayName": "Type"
+          },
+          {
+            "name": "Status",
+            "displayName": "Status"
+          }
+        ]
+      }
+    }
+  ]
+}
