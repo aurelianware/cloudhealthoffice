@@ -26,8 +26,10 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | **Compliance Updates** | $200,000 | $50,000 | $0 (included) |
 | **Infrastructure (3-year)** | $180,000 | $90,000 | $36,000 |
 | **Total 3-Year TCO** | **$2,630,000** | **$1,065,000** | **$159,000** |
-| **Additional Cost vs. CHO** | $2,471,000 | $906,000 | — |
-| **Savings with CHO** | **94%** | **85%** | — |
+| **Additional Cost vs. Cloud Health Office** | $2,471,000 | $906,000 | — |
+| **Savings with Cloud Health Office** | **94%** | **85%** | — |
+
+> **Note:** The Cost Comparison Matrix uses conservative estimates for Custom Development. The Detailed Cost Breakdown reflects typical implementation costs, including common overruns and delays observed in real-world payer integrations.
 
 > **Note:** The Cost Comparison Matrix uses conservative estimates for Custom Development. The Detailed Cost Breakdown reflects typical implementation costs, including common overruns and delays observed in real-world payer integrations. This distinction ensures transparent, future-proof financial modeling for decision-makers.
 ### Detailed Cost Breakdown
@@ -73,7 +75,7 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 ### TCO Comparison by Organization Size
 
-| Organization Size | Custom Dev | Enterprise Vendor | Cloud Health Office | CHO Savings |
+| Organization Size | Custom Dev | Enterprise Vendor | Cloud Health Office | Savings |
 |-------------------|------------|-------------------|---------------------|-------------|
 | **Small (50K members)** | $1,500,000 | $500,000 | $36,000 | 93-98% |
 | **Medium (200K members)** | $2,630,000 | $1,065,000 | $108,000 | 90-96% |
@@ -281,7 +283,7 @@ Annual Platform Savings = Current EDI Spend - Cloud Health Office Subscription
 
 Example:
   Current: $150,000/year
-  CHO Professional: $36,000/year
+  Cloud Health Office Professional: $36,000/year
   Savings: $114,000/year
 ```
 
@@ -320,7 +322,7 @@ Example:
 
 ```
 Total Annual Benefit = Platform Savings + Labor Savings + Call Center Savings + Risk Value
-ROI = (Total Annual Benefit / Annual CHO Investment) × 100
+ROI = (Total Annual Benefit / Annual Cloud Health Office Investment) × 100
 
 Example:
   ($114,000 + $1,400,000 + $200,000 + $1,500,000) / $36,000 × 100 = 8,928% ROI
@@ -344,7 +346,7 @@ Example:
 | Call Center Reduction | $80,000 |
 | Risk Mitigation | $500,000 |
 | **Total Benefit** | **$1,203,000** |
-| **CHO Investment** | **$12,000** (Starter) |
+| **Cloud Health Office Investment** | **$12,000** (Starter) |
 | **ROI** | **10,025%** |
 
 #### Scenario B: Mid-Market TPA (300,000 members managed)
@@ -363,7 +365,7 @@ Example:
 | Call Center Reduction | $360,000 |
 | Risk Mitigation | $1,500,000 |
 | **Total Benefit** | **$4,544,000** |
-| **CHO Investment** | **$36,000** (Professional) |
+| **Cloud Health Office Investment** | **$36,000** (Professional) |
 | **ROI** | **12,622%** |
 
 #### Scenario C: Large Medicaid MCO (800,000 members)
@@ -382,7 +384,7 @@ Example:
 | Call Center Reduction | $1,000,000 |
 | Risk Mitigation | $3,000,000 |
 | **Total Benefit** | **$11,404,000** |
-| **CHO Investment** | **$96,000** (Enterprise) |
+| **Cloud Health Office Investment** | **$96,000** (Enterprise) |
 | **ROI** | **11,879%** |
 
 ---

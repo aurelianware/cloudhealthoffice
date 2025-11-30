@@ -7,7 +7,7 @@
 ## Slide 1: Cover
 
 ### Visual Elements
-- [PLACEHOLDER: Cloud Health Office Sentinel logo centered on absolute black background]
+- [PLACEHOLDER: Cloud Health Office Sentinel logo (docs/images/logo-cloudhealthoffice-sentinel-primary.png) centered on absolute black background]
 - [PLACEHOLDER: Holographic circuit vein pattern as background texture]
 
 ### Content
@@ -100,7 +100,7 @@
 **Mandatory compliance creates unprecedented demand:**
 
 - **900+ health plans** must achieve CMS-0057-F compliance
-- **January 1, 2027 deadline** leaves 18 months
+- **January 1, 2027 deadline** leaves limited time remaining <!-- NOTE: Update time reference before each presentation -->
 - **All Medicare, Medicaid, CHIP, QHP** issuers affected
 - **No extensions** announced by CMS
 
@@ -377,6 +377,8 @@ npm run generate -- interactive --output my-config.json --generate
 | **Starter** | $999 | $10,788 | Regional payers, evaluation |
 | **Professional** | $2,999 | $32,388 | Mid-market, production |
 | **Enterprise** | $7,999 | $86,388 | Large plans, unlimited scale |
+
+*Annual pricing includes a 10% discount compared to monthly billing.*
 
 ### Revenue Streams
 
