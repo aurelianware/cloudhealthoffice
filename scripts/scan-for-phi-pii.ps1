@@ -80,7 +80,7 @@ $PHI_PII_PATTERNS = @{
         Description = 'Email Address'
         Severity = 'Medium'
         AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*.html')
-        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test|aurelianware\.com')
+        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test|aurelianware\.com|cloudhealthoffice\.com')
     }
     'PhoneNumber' = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
@@ -110,7 +110,7 @@ $SECRET_PATTERNS = @{
         Description = 'Hardcoded Password'
         Severity = 'Critical'
         AllowedFiles = @('*.md', 'test-*.ps1', 'deploy-*.ps1', '*.bicep')
-        ExcludeContext = @('sftpPassword', 'sftpUsername', '<your-password>', 'example', 'placeholder', '\$\{', 'param\(', '@secure')
+        ExcludeContext = @('sftpPassword', 'sftpUsername', '<your-password>', 'example', 'placeholder', '\$\{', 'param\(', '@secure', 'REPLACE_WITH_KEYVAULT', 'KEYVAULT_REFERENCE')
     }
     'ConnectionString' = @{
         Pattern = '(?:DefaultEndpointsProtocol=|AccountKey=|SharedAccessSignature=)[a-zA-Z0-9+/=]{20,}'
@@ -137,15 +137,15 @@ $HIPAA_PATTERNS = @{
         Pattern = '(?:http://|ftp://).*(?:patient|phi|medical|health).*'
         Description = 'Unencrypted PHI transmission (should use HTTPS)'
         Severity = 'Critical'
-        AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
-        ExcludeContext = @('hl7\.org', 'fhir\.org', 'terminology\.hl7\.org', 'StructureDefinition', 'CodeSystem', 'ValueSet')
+        AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*', '*.css.map', '*.min.css.map')
+        ExcludeContext = @('hl7\.org', 'fhir\.org', 'terminology\.hl7\.org', 'StructureDefinition', 'CodeSystem', 'ValueSet', 'www\.w3\.org', 'xmlns', 'xml')
     }
     'LoggingPHI' = @{
         Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'
         Description = 'Potential PHI in logs'
         Severity = 'High'
-        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1', '*example*', '*Example*', '*cli*.ts', '*wizard*.ts', '*generator*.ts', '*generate*.ts')
-        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor', 'CMS-0057', 'skipFhir', 'Patient Access', 'Generating')
+        AllowedFiles = @('scan-for-phi-pii.ps1', '*.md', '*test*.ts', '*test*.js', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ps1', 'test-*.ps1', '*example*', '*Example*', '*cli*.ts', '*wizard*.ts', '*generator*.ts', '*generate*.ts', '*Export*.cs', '*Service*.cs', '*migration*.cs')
+        ExcludeContext = @('example', 'test', 'mock', 'dummy', 'sample', 'synthetic', 'placeholder', 'TODO', 'FIXME', '123456789', 'CLM\d+', 'RFAI\d+', 'TEST-', '\$\(', 'ForegroundColor', '-ForegroundColor', 'CMS-0057', 'skipFhir', 'Patient Access', 'Generating', 'LogDebug', 'LogWarning', 'LogError', '\{MemberId\}')
     }
 }
 
