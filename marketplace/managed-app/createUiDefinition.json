@@ -1,0 +1,304 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "**Cloud Health Office** - The #1 open-source Azure-native multi-payer EDI platform.\n\nDeploy a complete HIPAA-compliant EDI integration solution in minutes. This managed application includes:\n\n- ✅ X12 EDI Processing (275, 277, 278, 837)\n- ✅ FHIR R4 Integration (CMS-0057-F Compliant)\n- ✅ Prior Authorization APIs\n- ✅ Zero-Code Payer Onboarding\n- ✅ Enterprise Security (HSM-backed keys)",
+        "location": {
+          "label": "Region",
+          "toolTip": "Select the Azure region for deployment.",
+          "resourceTypes": [
+            "Microsoft.Web/sites",
+            "Microsoft.Storage/storageAccounts",
+            "Microsoft.ServiceBus/namespaces"
+          ],
+          "allowedValues": [
+            "eastus",
+            "eastus2",
+            "westus",
+            "westus2",
+            "centralus",
+            "northcentralus",
+            "southcentralus"
+          ]
+        },
+        "resourceGroup": {
+          "constraints": {
+            "validations": [
+              {
+                "isValid": "[not(contains(steps('basics').resourceScope.resourceGroup.name, 'test'))]",
+                "message": "Resource group name should not contain 'test' for production deployments."
+              }
+            ]
+          }
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "baseName",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Deployment Name",
+        "toolTip": "Base name for all resources (3-20 characters, alphanumeric). Example: 'myhealthplan'",
+        "placeholder": "myhealthplan",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^[a-z0-9]{3,20}$",
+              "message": "Must be 3-20 lowercase alphanumeric characters."
+            }
+          ]
+        }
+      },
+      {
+        "name": "organizationName",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Organization Name",
+        "toolTip": "Your organization name for branding and compliance documentation.",
+        "placeholder": "Acme Healthcare",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^.{2,100}$",
+              "message": "Organization name must be 2-100 characters."
+            }
+          ]
+        }
+      },
+      {
+        "name": "adminEmail",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Administrator Email",
+        "toolTip": "Email address for notifications and alerts.",
+        "placeholder": "admin@example.com",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+              "message": "Please enter a valid email address."
+            }
+          ]
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "deploymentTier",
+        "label": "Deployment Tier",
+        "elements": [
+          {
+            "name": "tierInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "Select a deployment tier based on your organization's needs. All tiers include full platform functionality - tiers differ in performance, redundancy, and compliance features."
+            }
+          },
+          {
+            "name": "tier",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Deployment Tier",
+            "toolTip": "Select the deployment tier that matches your requirements.",
+            "defaultValue": "Standard",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Sandbox (Development/Testing)",
+                  "description": "Ideal for development and testing. Lower costs, reduced redundancy.",
+                  "value": "Sandbox"
+                },
+                {
+                  "label": "Standard (Production)",
+                  "description": "Recommended for production. Geo-redundant storage, 365-day log retention.",
+                  "value": "Standard"
+                },
+                {
+                  "label": "Enterprise (High Availability)",
+                  "description": "Maximum availability and security. Zone redundancy, HSM-backed keys.",
+                  "value": "Enterprise"
+                }
+              ]
+            }
+          },
+          {
+            "name": "tierComparison",
+            "type": "Microsoft.Common.Section",
+            "label": "Tier Comparison",
+            "elements": [
+              {
+                "name": "comparisonTable",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "None",
+                  "text": "**Sandbox**: WS1 Logic App, Free Integration Account, Standard_LRS Storage, 30-day logs\n\n**Standard**: WS2 Logic App, Basic Integration Account, Standard_GRS Storage, 365-day logs\n\n**Enterprise**: WS3 Logic App, Standard Integration Account, Standard_RAGRS Storage, 365-day logs, Zone Redundancy, Premium Key Vault (HSM)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "features",
+        "label": "Features",
+        "elements": [
+          {
+            "name": "featureInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "Enable or disable platform features. All features are recommended for full CMS-0057-F compliance."
+            }
+          },
+          {
+            "name": "enableB2B",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable X12 B2B Integration Account",
+            "toolTip": "Required for HIPAA X12 EDI transaction processing (275, 277, 278, 837).",
+            "defaultValue": true
+          },
+          {
+            "name": "enableFhirIntegration",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable FHIR R4 Integration",
+            "toolTip": "Enable FHIR R4 APIs for CMS-0057-F compliance (Patient Access, Provider Access, Payer-to-Payer).",
+            "defaultValue": true
+          },
+          {
+            "name": "enableCosmosDb",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable Cosmos DB",
+            "toolTip": "Required for Prior Authorization and Provider Directory APIs.",
+            "defaultValue": true
+          }
+        ]
+      },
+      {
+        "name": "connectivity",
+        "label": "Connectivity",
+        "elements": [
+          {
+            "name": "connectivityInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "Configure SFTP connectivity for EDI file exchange. Leave blank for sandbox mode - credentials can be configured post-deployment."
+            }
+          },
+          {
+            "name": "sftpConfig",
+            "type": "Microsoft.Common.Section",
+            "label": "SFTP Configuration (Optional)",
+            "elements": [
+              {
+                "name": "sftpHost",
+                "type": "Microsoft.Common.TextBox",
+                "label": "SFTP Host",
+                "toolTip": "SFTP server hostname (e.g., sftp.availity.com)",
+                "placeholder": "sftp.availity.com",
+                "constraints": {
+                  "required": false,
+                  "validations": [
+                    {
+                      "regex": "^$|^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+                      "message": "Enter a valid hostname or leave blank."
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "sftpUsername",
+                "type": "Microsoft.Common.TextBox",
+                "label": "SFTP Username",
+                "toolTip": "SFTP username for authentication.",
+                "placeholder": "username",
+                "constraints": {
+                  "required": false
+                }
+              },
+              {
+                "name": "sftpPassword",
+                "type": "Microsoft.Common.PasswordBox",
+                "label": {
+                  "password": "SFTP Password",
+                  "confirmPassword": "Confirm SFTP Password"
+                },
+                "toolTip": "SFTP password for authentication. Will be stored securely in Key Vault.",
+                "constraints": {
+                  "required": false
+                },
+                "options": {
+                  "hideConfirmation": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "review",
+        "label": "Review + Create",
+        "elements": [
+          {
+            "name": "reviewSummary",
+            "type": "Microsoft.Common.Section",
+            "label": "Deployment Summary",
+            "elements": [
+              {
+                "name": "summaryInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "Info",
+                  "text": "Review your configuration before deployment. The managed application will deploy the following resources:\n\n- Logic App Standard (Workflow Runtime)\n- Azure Data Lake Storage Gen2\n- Service Bus Namespace with Topics\n- Application Insights & Log Analytics\n- Key Vault for Secrets Management\n- Integration Account (if B2B enabled)\n- Cosmos DB (if enabled)"
+                }
+              }
+            ]
+          },
+          {
+            "name": "legalSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Legal",
+            "elements": [
+              {
+                "name": "legalInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "Warning",
+                  "text": "By deploying this application, you agree to the [Privacy Policy](https://aurelianware.com/privacy), [Service Level Agreement](https://aurelianware.com/sla), and [Support Terms](https://aurelianware.com/support). This application processes Protected Health Information (PHI) and requires appropriate Business Associate Agreements."
+                }
+              },
+              {
+                "name": "acceptTerms",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "I accept the terms and conditions",
+                "constraints": {
+                  "required": true,
+                  "validationMessage": "You must accept the terms and conditions to proceed."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "baseName": "[basics('baseName')]",
+      "organizationName": "[basics('organizationName')]",
+      "adminEmail": "[basics('adminEmail')]",
+      "location": "[location()]",
+      "deploymentTier": "[steps('deploymentTier').tier]",
+      "enableB2B": "[steps('features').enableB2B]",
+      "enableFhirIntegration": "[steps('features').enableFhirIntegration]",
+      "enableCosmosDb": "[steps('features').enableCosmosDb]",
+      "sftpHost": "[coalesce(steps('connectivity').sftpConfig.sftpHost, '')]",
+      "sftpUsername": "[coalesce(steps('connectivity').sftpConfig.sftpUsername, '')]",
+      "sftpPassword": "[coalesce(steps('connectivity').sftpConfig.sftpPassword, '')]"
+    }
+  }
+}
