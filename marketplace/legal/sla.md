@@ -342,8 +342,8 @@ In the event of conflict between this SLA and other agreements:
 
 **Support Portal**: https://support.cloudhealthoffice.com  
 **Status Page**: https://status.cloudhealthoffice.com  
-**Support Email**: support@aurelianware.com  
-**Enterprise Support**: enterprise-support@aurelianware.com
+**Support Email**: support@cloudhealthoffice.com  
+**Enterprise Support**: enterprise-support@cloudhealthoffice.com
 
 ---
 
