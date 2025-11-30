@@ -291,26 +291,26 @@ Your continued use of the Services after changes become effective constitutes ac
 
 ### Privacy Inquiries
 
-**Aurelianware Privacy Office**  
-Email: privacy@aurelianware.com  
+**Cloud Health Office Privacy Office**  
+Email: privacy@cloudhealthoffice.com  
 Address: [Company Address]
 
 ### HIPAA Compliance
 
 **HIPAA Privacy Officer**  
-Email: hipaa-privacy@aurelianware.com
+Email: hipaa-privacy@cloudhealthoffice.com
 
 **HIPAA Security Officer**  
-Email: hipaa-security@aurelianware.com
+Email: hipaa-security@cloudhealthoffice.com
 
 ### Data Protection Officer (for GDPR inquiries)
 
-Email: dpo@aurelianware.com
+Email: dpo@cloudhealthoffice.com
 
 ### General Support
 
-Email: support@aurelianware.com  
-Website: https://support.aurelianware.com
+Email: support@cloudhealthoffice.com  
+Website: https://support.cloudhealthoffice.com
 
 ---
 

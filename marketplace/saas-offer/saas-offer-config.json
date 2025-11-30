@@ -212,24 +212,24 @@
     }
   ],
   "technicalConfiguration": {
-    "landingPageUrl": "https://cloudhealthoffice.aurelianware.com/saas/landing",
-    "connectionWebhookUrl": "https://cloudhealthoffice.aurelianware.com/saas/webhook",
+    "landingPageUrl": "https://cloudhealthoffice.com/saas/landing",
+    "connectionWebhookUrl": "https://cloudhealthoffice.com/saas/webhook",
     "azureActiveDirectoryTenantId": "{tenantId}",
     "azureActiveDirectoryApplicationId": "{applicationId}",
     "supportsMarketplaceMeteringService": true,
     "supportsSubscriptionNotifications": true
   },
   "legalTerms": {
-    "privacyPolicyUrl": "https://aurelianware.com/privacy",
-    "termsOfServiceUrl": "https://aurelianware.com/terms",
-    "slaUrl": "https://aurelianware.com/sla",
-    "hipaaComplianceUrl": "https://aurelianware.com/hipaa"
+    "privacyPolicyUrl": "https://cloudhealthoffice.com/privacy",
+    "termsOfServiceUrl": "https://cloudhealthoffice.com/terms",
+    "slaUrl": "https://cloudhealthoffice.com/sla",
+    "hipaaComplianceUrl": "https://cloudhealthoffice.com/hipaa"
   },
   "supportConfiguration": {
-    "supportUrl": "https://support.aurelianware.com",
-    "supportEmail": "support@aurelianware.com",
+    "supportUrl": "https://support.cloudhealthoffice.com",
+    "supportEmail": "support@cloudhealthoffice.com",
     "supportPhone": "+1-928-940-2410",
-    "engineeringContactEmail": "engineering@aurelianware.com",
+    "engineeringContactEmail": "engineering@cloudhealthoffice.com",
     "publicDocumentationUrl": "https://docs.cloudhealthoffice.com"
   }
 }
