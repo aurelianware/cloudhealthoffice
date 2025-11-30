@@ -8,7 +8,7 @@
     "build:site": "node site/js/markdown-converter.js",
     "validate:site": "node site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
-    "generate-pdf": "npx ts-node scripts/generate-whitepaper-pdf.ts",
+    "generate-pdf": "./scripts/generate-whitepaper-pdf.sh",
     "test": "jest",
     "test:fhir": "jest --testPathPattern=fhir",
     "test:p2p": "jest --testPathPattern=payer-to-payer",
