@@ -1,8 +1,18 @@
+using Azure.Identity;
 using migration_wizard.Components;
 using MigrationWizard.Models;
 using MigrationWizard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault configuration if configured
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri) && keyVaultUri != "https://your-keyvault.vault.azure.net/")
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUri),
+        new DefaultAzureCredential());
+}
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
