@@ -114,7 +114,6 @@
     "logAnalyticsName": "[concat(parameters('baseName'), '-law')]",
     "keyVaultName": "[concat(parameters('baseName'), '-kv-', take(variables('uniqueSuffix'), 8))]",
     "cosmosDbAccountName": "[concat(parameters('baseName'), '-cosmos-', variables('uniqueSuffix'))]",
-    "connectorLocation": "eastus",
     "iaSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Free', if(equals(parameters('deploymentTier'), 'Standard'), 'Basic', 'Standard'))]",
     "storageSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Standard_LRS', if(equals(parameters('deploymentTier'), 'Standard'), 'Standard_GRS', 'Standard_RAGRS'))]",
     "appServicePlanSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'WS1', if(equals(parameters('deploymentTier'), 'Standard'), 'WS2', 'WS3'))]",
@@ -146,7 +145,7 @@
           "keySource": "Microsoft.Storage"
         },
         "networkAcls": {
-          "defaultAction": "Allow",
+          "defaultAction": "Deny",
           "bypass": "AzureServices"
         }
       },
@@ -327,7 +326,7 @@
         "softDeleteRetentionInDays": 90,
         "enableRbacAuthorization": true,
         "networkAcls": {
-          "defaultAction": "Allow",
+          "defaultAction": "Deny",
           "bypass": "AzureServices"
         }
       },

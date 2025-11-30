@@ -26,14 +26,7 @@
           ]
         },
         "resourceGroup": {
-          "constraints": {
-            "validations": [
-              {
-                "isValid": "[not(contains(steps('basics').resourceScope.resourceGroup.name, 'test'))]",
-                "message": "Resource group name should not contain 'test' for production deployments."
-              }
-            ]
-          }
+          "allowExisting": true
         }
       }
     },
