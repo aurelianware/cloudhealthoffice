@@ -170,7 +170,7 @@ The platform does not replace QNXT or Facets for core claims processing. Instead
 
 ---
 
-## Page 4: Cloud Health Office Architecture
+## Cloud Health Office: The Inevitable Evolution
 
 ### Platform Capabilities
 
