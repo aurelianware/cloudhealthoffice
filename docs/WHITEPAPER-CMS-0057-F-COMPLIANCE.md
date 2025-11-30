@@ -360,7 +360,7 @@ Beyond direct cost savings, Cloud Health Office delivers:
 
 ### The Path Forward Is Clear
 
-CMS-0057-F compliance is not optional. The deadline is immutable. The technical requirements are specific. Organizations relying on legacy QNXT and Facets customization face a $14 million cost premium and an 18-36 month implementation timeline that risks missing the compliance deadline entirely.
+CMS-0057-F compliance is not optional. The deadline is immutable. The technical requirements are specific. Organizations relying on legacy QNXT and Facets customization face a $14.1 million cost premium and an 18-36 month implementation timeline that risks missing the compliance deadline entirely.
 
 Cloud Health Office provides the inevitable solution:
 
