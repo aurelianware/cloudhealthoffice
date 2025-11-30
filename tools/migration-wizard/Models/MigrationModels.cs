@@ -320,6 +320,12 @@ public class TriZettoOpenAccessConfig
     /// Request timeout in seconds
     /// </summary>
     public int TimeoutSeconds { get; set; } = 120;
+    
+    /// <summary>
+    /// Bypass SSL certificate validation. WARNING: Only use in development environments.
+    /// In production, proper SSL certificates should be configured.
+    /// </summary>
+    public bool BypassCertificateValidation { get; set; } = false;
 }
 
 /// <summary>
@@ -333,6 +339,11 @@ public class CosmosDbConfig
     public string MembersContainer { get; set; } = "Members";
     public string ProvidersContainer { get; set; } = "ProviderDirectory";
     public string BenefitPlansContainer { get; set; } = "BenefitPlans";
+    
+    /// <summary>
+    /// Default throughput in RU/s for new containers. Set to 0 to use serverless.
+    /// </summary>
+    public int DefaultThroughput { get; set; } = 400;
 }
 
 /// <summary>

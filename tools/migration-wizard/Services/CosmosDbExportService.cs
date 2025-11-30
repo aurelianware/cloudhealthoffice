@@ -48,10 +48,12 @@ public class CosmosDbExportService : IAsyncDisposable
             _providersContainer = _database.GetContainer(_config.ProvidersContainer);
             
             // Create BenefitPlans container if it doesn't exist
+            // Use configured throughput (0 for serverless)
+            var throughput = _config.DefaultThroughput > 0 ? _config.DefaultThroughput : (int?)null;
             _benefitPlansContainer = await _database.CreateContainerIfNotExistsAsync(
                 _config.BenefitPlansContainer,
                 "/planCode",
-                throughput: 400);
+                throughput: throughput);
 
             _initialized = true;
             _logger.LogInformation("Cosmos DB connection initialized successfully");

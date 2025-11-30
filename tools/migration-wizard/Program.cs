@@ -36,7 +36,8 @@ static void ConfigureMigrationServices(IServiceCollection services, IConfigurati
         Username = configuration["TriZetto:Username"] ?? "your-username",
         Password = configuration["TriZetto:Password"] ?? "your-password",
         TenantId = configuration["TriZetto:TenantId"] ?? "default-tenant",
-        TimeoutSeconds = int.TryParse(configuration["TriZetto:TimeoutSeconds"], out var timeout) ? timeout : 120
+        TimeoutSeconds = int.TryParse(configuration["TriZetto:TimeoutSeconds"], out var timeout) ? timeout : 120,
+        BypassCertificateValidation = bool.TryParse(configuration["TriZetto:BypassCertificateValidation"], out var bypass) && bypass
     };
     services.AddSingleton(trizettoConfig);
     services.AddSingleton<TriZettoOpenAccessClient>();
@@ -49,7 +50,8 @@ static void ConfigureMigrationServices(IServiceCollection services, IConfigurati
         DatabaseName = configuration["CosmosDb:DatabaseName"] ?? "cloudhealthoffice",
         MembersContainer = configuration["CosmosDb:MembersContainer"] ?? "Members",
         ProvidersContainer = configuration["CosmosDb:ProvidersContainer"] ?? "ProviderDirectory",
-        BenefitPlansContainer = configuration["CosmosDb:BenefitPlansContainer"] ?? "BenefitPlans"
+        BenefitPlansContainer = configuration["CosmosDb:BenefitPlansContainer"] ?? "BenefitPlans",
+        DefaultThroughput = int.TryParse(configuration["CosmosDb:DefaultThroughput"], out var throughput) ? throughput : 400
     };
     services.AddSingleton(cosmosConfig);
     services.AddSingleton<CosmosDbExportService>();
