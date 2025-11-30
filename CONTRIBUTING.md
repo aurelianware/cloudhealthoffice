@@ -779,15 +779,114 @@ For questions or clarifications:
 
 ## Legal and Licensing
 
-### Contributor License Agreement
+### Developer Certificate of Origin (DCO)
 
-By submitting a pull request or contribution to this project, you certify that:
+All contributions to this project must be signed off under the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). The DCO is a lightweight way to certify that you have the right to submit your contribution.
 
-1. **Original Work**: Your contribution is your original work or you have rights to submit it
-2. **License Agreement**: You agree to license your contribution under the Apache License 2.0
-3. **Patent Grant**: You grant a patent license as specified in the Apache License 2.0
-4. **No Conflicts**: Your contribution does not violate any third-party rights or licenses
-5. **Compliance Awareness**: You understand this project handles PHI and have reviewed security guidelines
+**What is the DCO?**
+
+The DCO is a statement that you, as a contributor, have the legal right to make your contribution and are willing to have it distributed under the project's license.
+
+**Full text of the DCO (v1.1):**
+
+```
+Developer Certificate of Origin
+Version 1.1
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+
+Developer's Certificate of Origin 1.1
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I
+    have the right to submit it under the open source license
+    indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best
+    of my knowledge, is covered under an appropriate open source
+    license and I have the right under that license to submit that
+    work with modifications, whether created in whole or in part
+    by me, under the same open source license (unless I am
+    permitted to submit under a different license), as indicated
+    in the file; or
+
+(c) The contribution was provided directly to me by some other
+    person who certified (a), (b) or (c) and I have not modified
+    it.
+
+(d) I understand and agree that this project and the contribution
+    are public and that a record of the contribution (including all
+    personal information I submit with it, including my sign-off) is
+    maintained indefinitely and may be redistributed consistent with
+    this project or the open source license(s) involved.
+```
+
+**How to Sign Off Your Commits**
+
+Add a `Signed-off-by` line to your commit messages. The easiest way is to use the `-s` flag when committing:
+
+```bash
+git commit -s -m "feat(workflows): Add new 278 processing workflow"
+```
+
+This will automatically add a line like:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+**Retroactively Signing Off Commits**
+
+If you forgot to sign off, you can amend your commit:
+
+```bash
+# Amend the most recent commit
+git commit --amend -s --no-edit
+
+# For multiple commits, use interactive rebase
+git rebase -i HEAD~N  # where N is the number of commits
+# Then mark commits as 'edit' and run: git commit --amend -s --no-edit && git rebase --continue
+```
+
+**Configuring Git for Sign-off**
+
+Ensure your Git identity is configured correctly:
+
+```bash
+git config --global user.name "Your Full Name"
+git config --global user.email "your.email@example.com"
+```
+
+### Contributor License Agreement (CLA)
+
+By submitting a pull request or contribution to this project, you agree to the following terms:
+
+**Summary of CLA Terms:**
+
+1. **Original Work**: Your contribution is your original work, or you have obtained all necessary rights and permissions to submit it
+2. **License Grant**: You agree to license your contribution under the Apache License 2.0, the same license as the project
+3. **Patent Grant**: You grant a perpetual, worldwide, royalty-free patent license as specified in the Apache License 2.0 for any patents you own that are necessarily infringed by your contribution
+4. **No Conflicts**: Your contribution does not violate any third-party intellectual property rights, contractual obligations, or other legal restrictions
+5. **Compliance Awareness**: You understand this project handles Protected Health Information (PHI) and have reviewed the [SECURITY.md](SECURITY.md) guidelines
+6. **Right to Grant**: You have the legal authority to enter into this agreement and grant these licenses
+
+**Corporate Contributions:**
+
+If you are contributing on behalf of your employer or another entity:
+- You must have authorization to submit contributions on their behalf
+- You represent that your employer has waived any rights to the work you contribute
+- Please contact the maintainers if your organization requires a separate corporate CLA
+
+**What the CLA Covers:**
+
+- All code, documentation, and other materials you contribute
+- All modifications and additions to existing project files
+- All new files you create as part of your contributions
 
 ### Third-Party Code
 
