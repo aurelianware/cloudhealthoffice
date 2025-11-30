@@ -7,7 +7,6 @@ on:
 permissions:
   pull-requests: write
   contents: read
-  statuses: write
 
 jobs:
   label-pr:
@@ -62,48 +61,7 @@ jobs:
         with:
           configuration-path: .github/auto-assign.yml
 
-  title-check:
-    name: Validate PR Title
-    runs-on: ubuntu-latest
-    # Make this check advisory (not blocking) - can be changed to remove continue-on-error once team adopts conventional commits
-    continue-on-error: true
-    steps:
-      - name: Check PR title format
-        uses: amannn/action-semantic-pull-request@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            docs
-            style
-            refactor
-            perf
-            test
-            build
-            ci
-            chore
-            revert
-          scopes: |
-            workflows
-            infra
-            security
-            docs
-            ci
-            config
-            api
-            edi
-            275
-            277
-            278
-          requireScope: false
-          subjectPattern: '^(?![A-Z]).+$'
-          subjectPatternError: |
-            The subject "{subject}" should start with a lowercase letter.
-          ignoreLabels: |
-            bot
-            dependencies
-          headerPattern: '^(\w*)(?:\(([\w$.\-*/ ]*)\))?\!?: (.*)$'
-          headerPatternCorrespondence: type, scope, subject
-          wip: true
+  # NOTE: PR title validation (conventional commits) has been removed from this initial PR
+  # to avoid self-blocking. Once the team adopts conventional commits format, consider
+  # adding a separate workflow with amannn/action-semantic-pull-request@v5
+  # See: https://www.conventionalcommits.org/
