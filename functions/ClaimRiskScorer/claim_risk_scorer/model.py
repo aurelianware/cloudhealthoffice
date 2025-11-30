@@ -96,7 +96,7 @@ class ClaimRiskModel:
                 file_size = os.path.getsize(self.model_path)
                 
                 if file_size > 1000:  # Real model would be larger than 1KB
-                    self.model = torch.load(self.model_path, map_location="cpu")
+                    self.model = torch.load(self.model_path, map_location="cpu", weights_only=True)
                     self._use_pytorch = True
                     self.model_version = "pytorch-v1"
                     logger.info(f"Loaded PyTorch model from {self.model_path}")
