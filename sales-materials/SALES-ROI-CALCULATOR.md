@@ -29,6 +29,7 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | **Additional Cost vs. CHO** | $2,471,000 | $906,000 | — |
 | **Savings with CHO** | **94%** | **85%** | — |
 
+> **Note:** The Cost Comparison Matrix uses conservative estimates for Custom Development. The Detailed Cost Breakdown reflects typical implementation costs, including common overruns and delays observed in real-world payer integrations. This distinction ensures transparent, future-proof financial modeling for decision-makers.
 ### Detailed Cost Breakdown
 
 #### Custom Development Path
