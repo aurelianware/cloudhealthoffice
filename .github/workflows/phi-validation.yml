@@ -109,8 +109,8 @@ jobs:
           $patterns = @(
             # SSN patterns (but allow test cases)
             '(?<!\w)\d{3}-\d{2}-\d{4}(?!\w)',
-            # Email patterns in strings (but allow examples)
-            '[\w\.-]+@(?!example\.com|test\.com|healthplan\.com)[\w\.-]+\.\w+'
+            # Email patterns in strings (but allow examples and company domains)
+            '[\w\.-]+@(?!example\.com|test\.com|healthplan\.com|cloudhealthoffice\.com|aurelianware\.com)[\w\.-]+\.\w+'
           )
 
           $violations = @()
