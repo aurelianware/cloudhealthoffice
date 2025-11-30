@@ -1,0 +1,161 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for Cloud Health Office
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature for Cloud Health Office! Please fill out the form below to help us understand your request.
+        
+        Before submitting, please:
+        - Search existing issues to see if this feature has already been requested
+        - Review the [ROADMAP.md](../ROADMAP.md) to see if this is already planned
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues and discussions to ensure this feature has not already been requested
+          required: true
+        - label: I have reviewed the project roadmap
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: Which area of Cloud Health Office would this feature affect?
+      options:
+        - EDI Processing (275, 277, 278 transactions)
+        - Integration Account / Trading Partners
+        - Workflow Automation
+        - API / Integrations
+        - Infrastructure / Deployment
+        - Monitoring / Observability
+        - Security / Compliance
+        - Developer Experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: |
+        Describe the problem or pain point this feature would solve.
+        A clear problem statement helps us understand the "why" behind your request.
+      placeholder: |
+        As a [type of user], I want [goal] so that [benefit].
+        
+        Currently, I have to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: Describe your proposed solution in detail...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: Describe any alternatives you've considered...
+
+  - type: dropdown
+    id: edi-standard
+    attributes:
+      label: EDI Standard Impact (if applicable)
+      description: If this feature involves EDI processing, which standards are affected?
+      options:
+        - Not applicable
+        - X12 275 (Additional Information to Support a Health Care Claim)
+        - X12 277 (Health Care Claim Status Request for Additional Information)
+        - X12 278 (Health Care Services Review)
+        - Multiple X12 transaction types
+        - New EDI standard support
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: Compliance Considerations
+      description: Does this feature have HIPAA or other compliance implications?
+      options:
+        - No compliance impact
+        - May affect PHI handling
+        - May affect audit logging
+        - May affect access controls
+        - May affect encryption
+        - Multiple compliance areas
+        - Unsure - needs review
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: |
+        Describe specific use cases or scenarios where this feature would be valuable.
+        Include any real-world examples (without PHI or sensitive data).
+      placeholder: |
+        Use Case 1: ...
+        Use Case 2: ...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested Priority
+      description: How important is this feature to you?
+      options:
+        - Critical (blocking production use)
+        - High (significantly improves workflow)
+        - Medium (nice to have, improves efficiency)
+        - Low (minor enhancement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Ideas
+      description: |
+        If you have ideas about how this could be implemented, share them here.
+        This could include technical approaches, Azure services to use, workflow designs, etc.
+      placeholder: Technical implementation suggestions...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution Interest
+      description: Would you be interested in contributing to this feature?
+      options:
+        - label: I would be willing to submit a PR implementing this feature
+        - label: I would be willing to help test this feature
+        - label: I would be willing to help document this feature
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or mockups about the feature request here.
+      placeholder: Any additional information...
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: |
+        Links to relevant documentation, similar features in other projects, or supporting materials.
+      placeholder: |
+        - Link 1
+        - Link 2

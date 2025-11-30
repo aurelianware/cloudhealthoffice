@@ -1,0 +1,108 @@
+# Configuration for kentaro-m/auto-assign-action
+# Automatically assigns reviewers and assignees to PRs
+
+# Set to true to add reviewers to PRs
+addReviewers: true
+
+# Set to true to add assignees to PRs
+addAssignees: true
+
+# A list of reviewers to be added to PRs (GitHub usernames)
+# These are example usernames - replace with actual maintainers
+reviewers:
+  # Add your team's GitHub usernames here
+  # - maintainer1
+  # - maintainer2
+
+# A list of assignees to be added to PRs (GitHub usernames)
+# Set to 'author' to assign the PR author
+assignees:
+  - author
+
+# A number of reviewers added to the PR
+# Set 0 to add all the reviewers
+numberOfReviewers: 2
+
+# A list of keywords to identify PRs that should skip review assignment
+# Example: ["WIP", "DO NOT MERGE"]
+skipKeywords:
+  - WIP
+  - "[WIP]"
+  - DO NOT MERGE
+  - "[DO NOT MERGE]"
+  - DRAFT
+  - "[DRAFT]"
+
+# Filter reviewers based on changed files
+# Group reviewers by area of expertise
+reviewGroups:
+  # Core Logic Apps maintainers
+  workflows-team:
+    - # Add workflow specialists here
+  
+  # Infrastructure maintainers
+  infra-team:
+    - # Add infrastructure specialists here
+  
+  # Security reviewers
+  security-team:
+    - # Add security specialists here
+  
+  # Documentation reviewers
+  docs-team:
+    - # Add documentation specialists here
+
+# Assign specific teams based on file patterns
+assigneeGroups:
+  # Core Logic Apps maintainers
+  workflows-team:
+    - # Add workflow specialists here
+  
+  # Infrastructure maintainers
+  infra-team:
+    - # Add infrastructure specialists here
+
+# Use review groups based on changed files
+useReviewGroups: true
+
+# A list of files that trigger specific review groups
+# When files matching these patterns are changed, the corresponding group is assigned
+filterReviewerGroups:
+  workflows-team:
+    - "logicapps/**/*"
+    - "*.json"
+  
+  infra-team:
+    - "infra/**/*"
+    - "*.bicep"
+    - ".github/workflows/**/*"
+  
+  security-team:
+    - "SECURITY.md"
+    - "**/security/**/*"
+    - "infra/**/*"
+  
+  docs-team:
+    - "**/*.md"
+    - "docs/**/*"
+
+# Use assignee groups based on changed files
+useAssigneeGroups: true
+
+# Filter assignee groups by file patterns
+filterAssigneeGroups:
+  workflows-team:
+    - "logicapps/**/*"
+  
+  infra-team:
+    - "infra/**/*"
+    - ".github/workflows/**/*"
+
+# Skip assigning reviewers when PR author is in the list
+skipUsers:
+  - dependabot[bot]
+  - github-actions[bot]
+  - renovate[bot]
+
+# Run only when PR is opened (not on synchronize)
+runOnDraft: false
