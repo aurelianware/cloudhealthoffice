@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="815" height="290" viewBox="0 0 815 290">
+  <defs>
+    <linearGradient id="circuitGlowHero" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ffff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#00ff88;stop-opacity:1"/>
+    </linearGradient>
+    <filter id="glowHero" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="circuitPattern" width="50" height="50" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="25" x2="50" y2="25" stroke="#00ffff" stroke-width="0.3" opacity="0.2"/>
+      <line x1="25" y1="0" x2="25" y2="50" stroke="#00ffff" stroke-width="0.3" opacity="0.2"/>
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="815" height="290" fill="#000000"/>
+  
+  <!-- Circuit Pattern Overlay -->
+  <rect width="815" height="290" fill="url(#circuitPattern)"/>
+  
+  <!-- Horizontal Accent Lines -->
+  <line x1="0" y1="50" x2="815" y2="50" stroke="#00ffff" stroke-width="0.5" opacity="0.3"/>
+  <line x1="0" y1="240" x2="815" y2="240" stroke="#00ffff" stroke-width="0.5" opacity="0.3"/>
+  
+  <!-- Shield/Sentinel Icon (Left Side) -->
+  <g transform="translate(50, 35)">
+    <!-- Outer Shield -->
+    <path d="M80 10 L145 38 L145 115 C145 155 115 190 80 190 C45 190 15 155 15 115 L15 38 Z" 
+          fill="none" 
+          stroke="url(#circuitGlowHero)" 
+          stroke-width="3"
+          filter="url(#glowHero)"/>
+    <!-- Inner Shield -->
+    <path d="M80 30 L125 50 L125 105 C125 135 105 160 80 160 C55 160 35 135 35 105 L35 50 Z" 
+          fill="none" 
+          stroke="#00ffff" 
+          stroke-width="1"
+          opacity="0.4"/>
+    <!-- All-Seeing Eye -->
+    <ellipse cx="80" cy="90" rx="28" ry="20" fill="none" stroke="#00ffff" stroke-width="2.5"/>
+    <circle cx="80" cy="90" r="10" fill="#00ff88"/>
+    <circle cx="80" cy="90" r="4" fill="#000000"/>
+    <circle cx="78" cy="88" r="2" fill="#ffffff" opacity="0.5"/>
+    <!-- Circuit Extensions -->
+    <line x1="25" y1="70" x2="52" y2="70" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+    <line x1="108" y1="70" x2="135" y2="70" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+    <line x1="80" y1="125" x2="80" y2="155" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+    <!-- Connection Nodes -->
+    <circle cx="25" cy="70" r="4" fill="#00ff88"/>
+    <circle cx="135" cy="70" r="4" fill="#00ff88"/>
+    <circle cx="80" cy="155" r="4" fill="#00ff88"/>
+  </g>
+  
+  <!-- Main Title -->
+  <text x="250" y="110" font-family="Segoe UI, Arial, sans-serif" font-weight="bold" font-size="52" fill="#00ffff" filter="url(#textGlow)">
+    CLOUD HEALTH OFFICE
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="250" y="150" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#b0b0b0">
+    Azure-Native HIPAA-Compliant Multi-Payer EDI Platform
+  </text>
+  
+  <!-- Accent Line -->
+  <line x1="250" y1="170" x2="750" y2="170" stroke="url(#circuitGlowHero)" stroke-width="2" opacity="0.5"/>
+  
+  <!-- Feature Badges -->
+  <g transform="translate(250, 190)">
+    <!-- Badge 1: CMS-0057-F -->
+    <rect x="0" y="0" width="110" height="32" rx="4" fill="none" stroke="#00ff88" stroke-width="1"/>
+    <text x="55" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#00ff88" text-anchor="middle">
+      CMS-0057-F
+    </text>
+    
+    <!-- Badge 2: FHIR R4 -->
+    <rect x="125" y="0" width="90" height="32" rx="4" fill="none" stroke="#00ffff" stroke-width="1"/>
+    <text x="170" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#00ffff" text-anchor="middle">
+      FHIR R4
+    </text>
+    
+    <!-- Badge 3: HIPAA -->
+    <rect x="230" y="0" width="80" height="32" rx="4" fill="none" stroke="#00ff88" stroke-width="1"/>
+    <text x="270" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#00ff88" text-anchor="middle">
+      HIPAA
+    </text>
+    
+    <!-- Badge 4: X12 EDI -->
+    <rect x="325" y="0" width="85" height="32" rx="4" fill="none" stroke="#00ffff" stroke-width="1"/>
+    <text x="367" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#00ffff" text-anchor="middle">
+      X12 EDI
+    </text>
+  </g>
+  
+  <!-- Tagline -->
+  <text x="250" y="260" font-family="Segoe UI, Arial, sans-serif" font-style="italic" font-size="16" fill="#808080">
+    Just emerged from the void
+  </text>
+  
+  <!-- Connection Lines (decorative) -->
+  <line x1="750" y1="90" x2="780" y2="90" stroke="#00ffff" stroke-width="1" opacity="0.5"/>
+  <line x1="780" y1="90" x2="780" y2="200" stroke="#00ffff" stroke-width="1" opacity="0.5"/>
+  <circle cx="780" cy="90" r="3" fill="#00ff88"/>
+  <circle cx="780" cy="200" r="3" fill="#00ff88"/>
+</svg>
