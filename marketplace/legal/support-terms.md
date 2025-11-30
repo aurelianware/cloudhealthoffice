@@ -145,7 +145,7 @@ Available for all plans. Emails create tickets automatically.
 
 ### 5.3 Phone Support
 
-**Number**: +1-888-CHO-HLTH (+1-888-246-4584)
+**Number**: +1-928-940-2410
 
 Available for Professional and Enterprise plans during support hours.
 
@@ -396,7 +396,7 @@ Customers will be notified via email to designated support contacts.
 
 **Support Portal**: https://support.cloudhealthoffice.com  
 **Support Email**: support@aurelianware.com  
-**Phone (Professional/Enterprise)**: +1-888-CHO-HLTH  
+**Phone (Professional/Enterprise)**: +1-928-940-2410  
 **Escalations**: escalations@aurelianware.com  
 **Feedback**: feedback@aurelianware.com
 
