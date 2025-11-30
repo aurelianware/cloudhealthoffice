@@ -1,0 +1,25 @@
+# Azure Functions dependencies for ClaimRiskScorer
+# Python version: 3.11
+
+# Azure Functions core
+azure-functions>=1.18.0
+
+# Azure Service Bus for message processing
+azure-servicebus>=7.12.0
+
+# Azure Application Insights for telemetry
+opencensus-ext-azure>=1.1.13
+applicationinsights>=0.11.10
+
+# PyTorch for ML model inference (CPU-only for cost optimization)
+torch>=2.1.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Numerical computing
+numpy>=1.26.0
+
+# JSON schema validation
+jsonschema>=4.20.0
+
+# Typing extensions for Python 3.11
+typing-extensions>=4.8.0
