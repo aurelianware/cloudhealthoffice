@@ -26,11 +26,15 @@ public class TriZettoOpenAccessClient : IDisposable
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         
-        var handler = new HttpClientHandler
+        var handler = new HttpClientHandler();
+        
+        // Only bypass certificate validation in development environments
+        // In production, proper SSL/TLS certificates should be configured
+        if (_config.BypassCertificateValidation)
         {
-            // In production, configure proper certificate validation
-            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-        };
+            _logger.LogWarning("Certificate validation is bypassed. This should only be used in development environments.");
+            handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+        }
         
         _httpClient = new HttpClient(handler)
         {
