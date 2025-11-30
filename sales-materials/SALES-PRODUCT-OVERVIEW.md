@@ -138,6 +138,8 @@ Production-grade HIPAA infrastructure:
 | **Professional** | $2,999 | $32,388 | Mid-market, multiple payers |
 | **Enterprise** | $7,999 | $86,388 | Large plans, unlimited scale |
 
+*Annual pricing includes a 10% discount compared to monthly billing.*
+
 ### What's Included
 
 **All Tiers**:

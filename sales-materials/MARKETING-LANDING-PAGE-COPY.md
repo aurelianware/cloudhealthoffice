@@ -217,6 +217,7 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 ### Pricing Notes
 
 - **30-day free trial** on all tiers
+- **Annual pricing includes a 10% discount** compared to monthly billing
 - **No per-transaction fees** — usage included in subscription
 - **No implementation fees** — self-service deployment
 - **Cancel anytime** — no long-term contracts required
