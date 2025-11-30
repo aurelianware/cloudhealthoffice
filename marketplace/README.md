@@ -161,4 +161,4 @@ convert -background none logo-48x48.svg logo-48x48.png
 **Cloud Health Office** – Advancing Healthcare EDI Integration  
 **Open Source | Azure-Native | HIPAA-Compliant**
 
-© 2025 Aurelianware. All rights reserved.
+© 2025 Cloud Health Office. All rights reserved.

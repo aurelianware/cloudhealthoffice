@@ -51,18 +51,18 @@
   "contacts": {
     "engineering": {
       "name": "Cloud Health Office Engineering",
-      "email": "engineering@aurelianware.com",
+      "email": "engineering@cloudhealthoffice.com",
       "phone": "+1-928-940-2410"
     },
     "support": {
       "name": "Cloud Health Office Support",
-      "email": "support@aurelianware.com",
+      "email": "support@cloudhealthoffice.com",
       "phone": "+1-928-940-2410",
       "url": "https://support.cloudhealthoffice.com"
     },
     "cspProgram": {
       "name": "Partner Program",
-      "email": "partners@aurelianware.com"
+      "email": "partners@cloudhealthoffice.com"
     }
   },
   "marketingAssets": {
@@ -132,7 +132,7 @@
   },
   "supportInformation": {
     "publicDocumentUrl": "https://github.com/aurelianware/cloudhealthoffice",
-    "privacyPolicyUrl": "https://aurelianware.com/privacy",
+    "privacyPolicyUrl": "https://cloudhealthoffice.com/privacy",
     "helpUrl": "https://docs.cloudhealthoffice.com",
     "supportUrl": "https://support.cloudhealthoffice.com"
   },
@@ -218,7 +218,7 @@
     {
       "name": "HIPAA Compliance",
       "description": "Implements HIPAA technical safeguards including encryption, access controls, audit logging, and breach notification procedures",
-      "documentUrl": "https://aurelianware.com/certifications/hipaa"
+      "documentUrl": "https://cloudhealthoffice.com/certifications/hipaa"
     },
     {
       "name": "Azure Certified",

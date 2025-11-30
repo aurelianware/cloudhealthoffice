@@ -139,7 +139,7 @@ The primary channel for all support requests. Features:
 
 ### 5.2 Email Support
 
-**Address**: support@aurelianware.com
+**Address**: support@cloudhealthoffice.com
 
 Available for all plans. Emails create tickets automatically.
 
@@ -224,7 +224,7 @@ Issues are automatically escalated based on:
 ### 7.3 How to Escalate
 
 - Update ticket with "ESCALATION REQUEST" and reason
-- Email: escalations@aurelianware.com
+- Email: escalations@cloudhealthoffice.com
 - Phone (Enterprise): Contact your TAM directly
 - Reference ticket number in all communications
 
@@ -379,7 +379,7 @@ After ticket resolution:
 
 - Ticket comments: Direct feedback on specific issues
 - Survey responses: Post-resolution feedback
-- Email: feedback@aurelianware.com
+- Email: feedback@cloudhealthoffice.com
 - TAM conversations: Strategic feedback (Enterprise)
 
 ## 14. Changes to Support Terms
@@ -395,10 +395,10 @@ Customers will be notified via email to designated support contacts.
 ## 15. Contact Information
 
 **Support Portal**: https://support.cloudhealthoffice.com  
-**Support Email**: support@aurelianware.com  
+**Support Email**: support@cloudhealthoffice.com  
 **Phone (Professional/Enterprise)**: +1-928-940-2410  
-**Escalations**: escalations@aurelianware.com  
-**Feedback**: feedback@aurelianware.com
+**Escalations**: escalations@cloudhealthoffice.com  
+**Feedback**: feedback@cloudhealthoffice.com
 
 ---
 

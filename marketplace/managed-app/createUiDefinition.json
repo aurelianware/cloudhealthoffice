@@ -263,7 +263,7 @@
                 "type": "Microsoft.Common.InfoBox",
                 "options": {
                   "icon": "Warning",
-                  "text": "By deploying this application, you agree to the [Privacy Policy](https://aurelianware.com/privacy), [Service Level Agreement](https://aurelianware.com/sla), and [Support Terms](https://aurelianware.com/support). This application processes Protected Health Information (PHI) and requires appropriate Business Associate Agreements."
+                  "text": "By deploying this application, you agree to the [Privacy Policy](https://cloudhealthoffice.com/privacy), [Service Level Agreement](https://cloudhealthoffice.com/sla), and [Support Terms](https://cloudhealthoffice.com/support). This application processes Protected Health Information (PHI) and requires appropriate Business Associate Agreements."
                 }
               },
               {
