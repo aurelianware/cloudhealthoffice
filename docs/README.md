@@ -65,13 +65,16 @@ The CMS-0057-F compliance whitepaper can be converted to a professional PDF docu
 From the repository root:
 
 ```bash
-# Using npm script
+# Using npm script (recommended)
 npm run generate-pdf
 
-# Or directly with ts-node
+# Or directly with bash script
+./scripts/generate-whitepaper-pdf.sh
+
+# Or with TypeScript (alternative)
 npx ts-node scripts/generate-whitepaper-pdf.ts
 
-# View help
+# View help (TypeScript version)
 npx ts-node scripts/generate-whitepaper-pdf.ts --help
 ```
 
