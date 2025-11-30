@@ -217,7 +217,7 @@
   "certifications": [
     {
       "name": "HIPAA Compliance",
-      "description": "Designed to support HIPAA technical safeguards",
+      "description": "Implements HIPAA technical safeguards including encryption, access controls, audit logging, and breach notification procedures",
       "documentUrl": "https://aurelianware.com/certifications/hipaa"
     },
     {
