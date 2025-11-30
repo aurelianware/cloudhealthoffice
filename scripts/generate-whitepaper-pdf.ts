@@ -148,7 +148,7 @@ function generatePDF(): boolean {
     }
 
     const command = pandocCmd.join(' ');
-    console.log(`Running: ${command}\n`);
+    console.log('Running pandoc conversion...\n');
 
     const result = runCommand(command);
 
