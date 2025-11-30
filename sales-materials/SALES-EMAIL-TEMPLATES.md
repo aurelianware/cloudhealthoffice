@@ -67,7 +67,8 @@ P.S. We're offering 5 free 60-day pilots this quarter for qualifying organizatio
 **Follow-Up (Day 3, if no response)**:
 
 ```
-Subject: Re: CMS-0057-F Deadline: 18 Months to Compliance
+Subject: Re: CMS-0057-F Deadline: [Months to Compliance] to Compliance
+*[NOTE: Update time reference based on current date before sending]*
 
 Hi [First Name],
 
