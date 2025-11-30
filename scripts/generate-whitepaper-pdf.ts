@@ -15,8 +15,8 @@
  *   npm run generate-pdf
  */
 
-import { exec, execSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { execSync } from 'child_process';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 const DOCS_DIR = join(__dirname, '..', 'docs');
@@ -118,7 +118,7 @@ function generatePDF(): boolean {
     // Check if CSS file exists
     if (!existsSync(CSS_FILE)) {
         console.error(`❌ CSS file not found: ${CSS_FILE}`);
-        console.log('   Creating default stylesheet...');
+        console.log('   Ensure docs/whitepaper-style.css exists before running.');
         return false;
     }
 
@@ -161,10 +161,27 @@ function generatePDF(): boolean {
         
         // Try alternative without weasyprint
         console.log('\n🔄 Trying alternative PDF engine (pdflatex)...');
-        const altCmd = pandocCmd
-            .filter(arg => !arg.includes('weasyprint') && !arg.includes('css'))
-            .join(' ')
-            .replace('--pdf-engine=weasyprint', '--pdf-engine=pdflatex');
+        const altPandocCmd = [
+            'pandoc',
+            `"${INPUT_FILE}"`,
+            '-o', `"${OUTPUT_FILE}"`,
+            '--from', 'markdown+footnotes+pipe_tables+strikeout',
+            '--to', 'pdf',
+            '--pdf-engine=pdflatex',
+            '--metadata', 'title="CloudHealthOffice CMS-0057-F Compliance Whitepaper"',
+            '--metadata', 'author="Aurelianware"',
+            '--metadata', 'date="November 2025"',
+            '--toc',
+            '--toc-depth=3',
+            '--standalone',
+            '--highlight-style=tango',
+        ];
+        
+        if (hasMermaidFilter) {
+            altPandocCmd.push('--filter', 'mermaid-filter');
+        }
+        
+        const altCmd = altPandocCmd.join(' ');
         
         const altResult = runCommand(altCmd);
         if (altResult.success) {
