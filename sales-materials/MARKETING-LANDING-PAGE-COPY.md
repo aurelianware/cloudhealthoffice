@@ -401,7 +401,7 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 | Variant | Headline |
 |---------|----------|
 | A (Control) | CMS-0057-F Compliance in 5 Minutes, Not 18 Months |
-| B | Your CMS Compliance Deadline is 401 Days Away |
+| B | Your CMS Compliance Deadline is [DYNAMIC: Days to 2027-01-01] |
 | C | The Open-Source Answer to Healthcare Interoperability |
 | D | Stop Paying $500K for EDI Compliance |
 
