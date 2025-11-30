@@ -229,7 +229,7 @@ Best regards,
 Cloud Health Office | Aurelianware
 [Phone] | [Email]
 
-P.S. The January 1, 2027 CMS deadline is 18 months away. Organizations that achieve compliance early gain significant competitive advantage in provider network negotiations. Let's make [Company Name] one of them.
+P.S. The January 1, 2027 CMS deadline is [DYNAMIC: Calculate days to 2027-01-01]. Organizations that achieve compliance early gain significant competitive advantage in provider network negotiations. Let's make [Company Name] one of them.
 ```
 
 ---
