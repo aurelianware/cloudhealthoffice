@@ -1,0 +1,15 @@
+{
+    "scriptFile": "__init__.py",
+    "bindings": [
+        {
+            "name": "msg",
+            "type": "serviceBusTrigger",
+            "direction": "in",
+            "topicName": "edi-837-claims",
+            "subscriptionName": "claim-risk-scorer",
+            "connection": "ServiceBusConnection",
+            "isSessionsEnabled": false,
+            "cardinality": "one"
+        }
+    ]
+}
