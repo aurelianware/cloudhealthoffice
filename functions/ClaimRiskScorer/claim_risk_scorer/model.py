@@ -76,8 +76,8 @@ class ClaimRiskModel:
         Initialize the risk scoring model.
         
         Args:
-            model_path: Path to the PyTorch model file. If not provided,
-                       uses DEFAULT_MODEL_PATH.
+            model_path: Optional[str] = None. Path to the PyTorch model file. If None,
+                uses DEFAULT_MODEL_PATH ("./ml/claim-fraud-v1.pt").
         """
         self.model_path = model_path or self.DEFAULT_MODEL_PATH
         self.model = None
