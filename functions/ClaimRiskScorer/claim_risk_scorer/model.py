@@ -173,7 +173,7 @@ class ClaimRiskModel:
         # Run inference
         with torch.no_grad():
             output = self.model(input_tensor)
-            risk_score = float(output[0].item())
+            risk_score = float(output.squeeze().item())
         
         # Clamp to 0-100
         risk_score = max(0.0, min(100.0, risk_score))
