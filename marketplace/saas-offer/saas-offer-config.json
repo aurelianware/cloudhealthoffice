@@ -1,0 +1,235 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/saas-offer/1.0.0/saas-offer.json",
+  "offerId": "cloudhealthoffice-saas",
+  "publisherId": "aurelianware",
+  "version": "1.0.0",
+  "metadata": {
+    "displayName": "Cloud Health Office - SaaS",
+    "description": "Azure-native HIPAA-compliant EDI integration platform as a service",
+    "shortDescription": "Multi-payer EDI platform with meter-based billing",
+    "offerType": "SaaS",
+    "listingType": "Marketplace"
+  },
+  "plans": [
+    {
+      "planId": "cho-starter",
+      "displayName": "Starter",
+      "description": "Ideal for small healthcare organizations with lower transaction volumes.",
+      "isPrivate": false,
+      "hasFreeTrials": true,
+      "freeTrialDurationInDays": 30,
+      "pricing": {
+        "model": "flatRate",
+        "pricePerMonth": 499,
+        "currency": "USD",
+        "billingTerm": "monthly",
+        "includedQuantities": {
+          "edi_837_transactions": 1000,
+          "edi_278_transactions": 500,
+          "edi_275_transactions": 500,
+          "fhir_api_calls": 10000
+        }
+      },
+      "features": [
+        "Up to 1,000 837 claims/month included",
+        "Up to 500 prior auth transactions/month",
+        "FHIR R4 APIs (10K calls/month)",
+        "Email support",
+        "Standard SLA (99.5%)"
+      ],
+      "limits": {
+        "maxPayers": 3,
+        "maxConcurrentWorkflows": 5,
+        "dataRetentionDays": 90
+      }
+    },
+    {
+      "planId": "cho-professional",
+      "displayName": "Professional",
+      "description": "For mid-size organizations with moderate transaction volumes and multiple payers.",
+      "isPrivate": false,
+      "hasFreeTrials": true,
+      "freeTrialDurationInDays": 14,
+      "pricing": {
+        "model": "flatRateWithMeters",
+        "pricePerMonth": 1999,
+        "currency": "USD",
+        "billingTerm": "monthly",
+        "includedQuantities": {
+          "edi_837_transactions": 10000,
+          "edi_278_transactions": 5000,
+          "edi_275_transactions": 2500,
+          "fhir_api_calls": 100000
+        },
+        "overage": {
+          "edi_837_transactions": {
+            "pricePerUnit": 0.05,
+            "unitDescription": "per 837 claim processed"
+          },
+          "edi_278_transactions": {
+            "pricePerUnit": 0.10,
+            "unitDescription": "per 278 prior auth transaction"
+          },
+          "edi_275_transactions": {
+            "pricePerUnit": 0.08,
+            "unitDescription": "per 275 attachment processed"
+          },
+          "fhir_api_calls": {
+            "pricePerUnit": 0.001,
+            "unitDescription": "per FHIR API call"
+          }
+        }
+      },
+      "features": [
+        "Up to 10,000 837 claims/month included",
+        "Up to 5,000 prior auth transactions/month",
+        "FHIR R4 APIs (100K calls/month)",
+        "Priority email & phone support",
+        "Enhanced SLA (99.9%)",
+        "Custom dashboards",
+        "ValueAdds277 Enhanced Claim Status"
+      ],
+      "limits": {
+        "maxPayers": 10,
+        "maxConcurrentWorkflows": 20,
+        "dataRetentionDays": 365
+      }
+    },
+    {
+      "planId": "cho-enterprise",
+      "displayName": "Enterprise",
+      "description": "For large healthcare organizations with high volumes and enterprise requirements.",
+      "isPrivate": false,
+      "hasFreeTrials": false,
+      "pricing": {
+        "model": "meterBased",
+        "pricePerMonth": 4999,
+        "currency": "USD",
+        "billingTerm": "monthly",
+        "includedQuantities": {
+          "edi_837_transactions": 50000,
+          "edi_278_transactions": 25000,
+          "edi_275_transactions": 10000,
+          "fhir_api_calls": 500000
+        },
+        "overage": {
+          "edi_837_transactions": {
+            "pricePerUnit": 0.03,
+            "unitDescription": "per 837 claim processed",
+            "tieredPricing": [
+              { "fromQuantity": 50001, "toQuantity": 100000, "pricePerUnit": 0.03 },
+              { "fromQuantity": 100001, "toQuantity": 500000, "pricePerUnit": 0.02 },
+              { "fromQuantity": 500001, "toQuantity": null, "pricePerUnit": 0.01 }
+            ]
+          },
+          "edi_278_transactions": {
+            "pricePerUnit": 0.08,
+            "unitDescription": "per 278 prior auth transaction",
+            "tieredPricing": [
+              { "fromQuantity": 25001, "toQuantity": 100000, "pricePerUnit": 0.08 },
+              { "fromQuantity": 100001, "toQuantity": null, "pricePerUnit": 0.05 }
+            ]
+          },
+          "edi_275_transactions": {
+            "pricePerUnit": 0.05,
+            "unitDescription": "per 275 attachment processed"
+          },
+          "fhir_api_calls": {
+            "pricePerUnit": 0.0005,
+            "unitDescription": "per FHIR API call"
+          }
+        }
+      },
+      "features": [
+        "50,000 837 claims/month included",
+        "25,000 prior auth transactions/month",
+        "FHIR R4 APIs (500K calls/month)",
+        "24/7 dedicated support",
+        "Enterprise SLA (99.95%)",
+        "Custom integrations",
+        "ValueAdds277 Enhanced Claim Status",
+        "HSM-backed encryption keys",
+        "Private endpoints",
+        "Dedicated account manager"
+      ],
+      "limits": {
+        "maxPayers": "unlimited",
+        "maxConcurrentWorkflows": 100,
+        "dataRetentionDays": 2557
+      }
+    }
+  ],
+  "meters": [
+    {
+      "meterId": "edi_837_transactions",
+      "displayName": "837 Claims Processed",
+      "description": "Number of HIPAA X12 837 Professional, Institutional, and Dental claims processed",
+      "unit": "claims",
+      "includedInBase": true,
+      "isRecurring": true
+    },
+    {
+      "meterId": "edi_278_transactions",
+      "displayName": "278 Prior Auth Transactions",
+      "description": "Number of HIPAA X12 278 prior authorization request and response transactions",
+      "unit": "transactions",
+      "includedInBase": true,
+      "isRecurring": true
+    },
+    {
+      "meterId": "edi_275_transactions",
+      "displayName": "275 Attachments Processed",
+      "description": "Number of HIPAA X12 275 clinical and administrative attachments processed",
+      "unit": "attachments",
+      "includedInBase": true,
+      "isRecurring": true
+    },
+    {
+      "meterId": "fhir_api_calls",
+      "displayName": "FHIR API Calls",
+      "description": "Number of FHIR R4 API calls (Patient Access, Provider Access, Payer-to-Payer)",
+      "unit": "calls",
+      "includedInBase": true,
+      "isRecurring": true
+    },
+    {
+      "meterId": "ecs_enhanced_queries",
+      "displayName": "Enhanced Claim Status Queries",
+      "description": "ValueAdds277 enhanced claim status queries with 60+ fields",
+      "unit": "queries",
+      "includedInBase": false,
+      "isRecurring": true,
+      "pricePerUnit": 0.25
+    },
+    {
+      "meterId": "additional_payers",
+      "displayName": "Additional Payer Configurations",
+      "description": "Additional payer configurations beyond plan limit",
+      "unit": "payers",
+      "includedInBase": false,
+      "isRecurring": true,
+      "pricePerUnit": 199
+    }
+  ],
+  "technicalConfiguration": {
+    "landingPageUrl": "https://cloudhealthoffice.com/saas/landing",
+    "connectionWebhookUrl": "https://cloudhealthoffice.com/saas/webhook",
+    "azureActiveDirectoryTenantId": "{tenantId}",
+    "azureActiveDirectoryApplicationId": "{applicationId}",
+    "supportsMarketplaceMeteringService": true,
+    "supportsSubscriptionNotifications": true
+  },
+  "legalTerms": {
+    "privacyPolicyUrl": "https://cloudhealthoffice.com/privacy",
+    "termsOfServiceUrl": "https://cloudhealthoffice.com/terms",
+    "slaUrl": "https://cloudhealthoffice.com/sla",
+    "hipaaComplianceUrl": "https://cloudhealthoffice.com/hipaa"
+  },
+  "supportConfiguration": {
+    "supportUrl": "https://support.cloudhealthoffice.com",
+    "supportEmail": "support@cloudhealthoffice.com",
+    "supportPhone": "+1-928-940-2410",
+    "engineeringContactEmail": "engineering@cloudhealthoffice.com",
+    "publicDocumentationUrl": "https://docs.cloudhealthoffice.com"
+  }
+}
