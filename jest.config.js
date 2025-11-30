@@ -22,6 +22,7 @@ module.exports = {
     '!**/utils/template-helpers.ts',
     '!**/utils/generate-*.ts',
     '!**/generate-synthetic-bulk-data.ts',
+    '!**/generate-whitepaper-pdf.ts',
     '!**/payer-to-payer-example.ts',
     '!**/prior-auth-api.ts',
     '!**/payer-to-payer-api.ts',
