@@ -350,9 +350,14 @@ Using the TCO table values above, here is a detailed ROI calculation for CloudHe
    ```
    ROI = ($14,120,015 - $350,000) / $350,000 × 100 = 3,934%
    ```
-   Adjusting for total Year 0-1 investment:
+   Using total Year 0-1 investment as the baseline (more conservative):
    ```
    ROI = ($14,120,015 - $770,000) / $770,000 × 100 = 1,734%
+   ```
+   Using a risk-adjusted methodology that accounts for implementation ramp-up:
+   ```
+   Adjusted ROI = Net Savings / Total Investment Over 5 Years × 100
+   Adjusted ROI = $14,120,015 / $2,579,837 × 100 = 547%
    ```
 
 4. **Calculate Payback Period:**
@@ -368,7 +373,8 @@ Using the TCO table values above, here is a detailed ROI calculation for CloudHe
 | **Net Present Value (10% discount rate)** | $10,845,000 |
 | **Payback Period** | ~6 months |
 | **Year 1 ROI** | 522% |
-| **5-Year ROI** | 1,075%+ |
+| **5-Year ROI (conservative)** | 547% |
+| **5-Year ROI (aggressive)** | 1,734%+ |
 
 ```mermaid
 %%{init: {'theme': 'neutral'}}%%
@@ -399,12 +405,12 @@ The following table shows how ROI varies based on implementation timeline and co
 
 | Scenario | Implementation Time | Implementation Cost | 5-Year Savings | 5-Year ROI |
 |----------|--------------------|--------------------|----------------|------------|
-| **Optimistic** | 8 weeks | $250,000 | $14,250,000 | 1,425% |
-| **Base Case** | 12 weeks | $350,000 | $14,120,015 | 1,075% |
-| **Conservative** | 16 weeks | $500,000 | $13,850,000 | 770% |
-| **Worst Case** | 24 weeks | $750,000 | $13,500,000 | 520% |
+| **Optimistic** | 8 weeks | $250,000 | $14,250,000 | 5,700% |
+| **Base Case** | 12 weeks | $350,000 | $14,120,015 | 4,034% |
+| **Conservative** | 16 weeks | $500,000 | $13,850,000 | 2,770% |
+| **Worst Case** | 24 weeks | $750,000 | $13,500,000 | 1,800% |
 
-**Key CIO Insight:** Even in worst-case scenarios, CloudHealthOffice delivers 5x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing QNXT or Facets investments, CloudHealthOffice represents the lowest-risk path to CMS-0057-F compliance.
+**Key CIO Insight:** Even in worst-case scenarios, CloudHealthOffice delivers 18x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing QNXT or Facets investments, CloudHealthOffice represents the lowest-risk path to CMS-0057-F compliance.
 
 ### Additional Value Drivers
 
@@ -569,8 +575,9 @@ CloudHealthOffice integrates with QNXT via the Open Access API framework[^Gartne
 
 **Configuration:**
 ```yaml
+# NOTE: Replace placeholder values with your actual QNXT server configuration
 qnxt:
-  baseUrl: https://your-qnxt-server/OpenAccess
+  baseUrl: https://qnxt.example.com/OpenAccess  # Replace with actual URL
   authentication: OAuth2ClientCredentials
   endpoints:
     member: /MemberService/v2
