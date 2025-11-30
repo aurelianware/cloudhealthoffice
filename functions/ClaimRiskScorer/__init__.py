@@ -14,7 +14,7 @@ HIPAA Compliance:
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+import threading
 from typing import Any, Optional
 
 import azure.functions as func
@@ -27,27 +27,33 @@ from claim_risk_scorer.zzz_segment import generate_zzz_segment
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Thread lock for singleton initialization
+_init_lock = threading.Lock()
+
 # Initialize Application Insights telemetry client
 _telemetry_client: Optional[TelemetryClient] = None
 
 
 def get_telemetry_client() -> Optional[TelemetryClient]:
-    """Get or create Application Insights telemetry client."""
+    """Get or create Application Insights telemetry client (thread-safe)."""
     global _telemetry_client
     
     if _telemetry_client is None:
-        instrumentation_key = os.environ.get("APPINSIGHTS_INSTRUMENTATIONKEY")
-        connection_string = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
-        
-        if connection_string:
-            # Use connection string (preferred)
-            _telemetry_client = TelemetryClient(connection_string=connection_string)
-        elif instrumentation_key:
-            # Fall back to instrumentation key
-            _telemetry_client = TelemetryClient(instrumentation_key)
-        else:
-            logger.warning("Application Insights not configured - telemetry will be disabled")
-            return None
+        with _init_lock:
+            # Double-check locking pattern
+            if _telemetry_client is None:
+                instrumentation_key = os.environ.get("APPINSIGHTS_INSTRUMENTATIONKEY")
+                connection_string = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+                
+                if connection_string:
+                    # Use connection string (preferred)
+                    _telemetry_client = TelemetryClient(connection_string=connection_string)
+                elif instrumentation_key:
+                    # Fall back to instrumentation key
+                    _telemetry_client = TelemetryClient(instrumentation_key)
+                else:
+                    logger.warning("Application Insights not configured - telemetry will be disabled")
+                    return None
     
     return _telemetry_client
 
@@ -57,13 +63,16 @@ _risk_model: Optional[ClaimRiskModel] = None
 
 
 def get_risk_model() -> ClaimRiskModel:
-    """Get or create the risk scoring model instance."""
+    """Get or create the risk scoring model instance (thread-safe)."""
     global _risk_model
     
     if _risk_model is None:
-        # Use environment variable for model path, with sensible default
-        model_path = os.environ.get("MODEL_PATH", "./ml/claim-fraud-v1.pt")
-        _risk_model = ClaimRiskModel(model_path)
+        with _init_lock:
+            # Double-check locking pattern
+            if _risk_model is None:
+                # Use environment variable for model path, with sensible default
+                model_path = os.environ.get("MODEL_PATH", "./ml/claim-fraud-v1.pt")
+                _risk_model = ClaimRiskModel(model_path)
     
     return _risk_model
 
@@ -92,7 +101,7 @@ def main(msg: func.ServiceBusMessage) -> None:
         
         if claim is None:
             logger.warning("Could not parse claim from message")
-            return
+            raise ValueError("Failed to parse claim from message - invalid format")
         
         # Get risk model and score the claim
         model = get_risk_model()

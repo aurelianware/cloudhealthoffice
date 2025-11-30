@@ -2,7 +2,6 @@
 Unit tests for claim_parser module.
 """
 
-import pytest
 from claim_risk_scorer.claim_parser import parse_837_claim, Claim837
 
 
@@ -139,7 +138,20 @@ SE*3*0001~"""
         
         assert claim is not None
         assert claim.service_date == "20230101-20230105"
-        assert claim.service_days >= 1  # Should calculate days
+        assert claim.service_days == 5  # Jan 1 to Jan 5 = 5 days
+    
+    def test_parse_claim_with_cross_month_date_range(self):
+        """Test parsing claim with date range crossing month boundary."""
+        edi = """ST*837*0001~
+CLM*CLM112*7500.00***11:B:1~
+DTP*472*RD8*20230131-20230205~
+SE*3*0001~"""
+        
+        claim = parse_837_claim(edi)
+        
+        assert claim is not None
+        assert claim.service_date == "20230131-20230205"
+        assert claim.service_days == 6  # Jan 31 to Feb 5 = 6 days
     
     def test_parse_invalid_edi(self):
         """Test parsing invalid EDI returns None."""

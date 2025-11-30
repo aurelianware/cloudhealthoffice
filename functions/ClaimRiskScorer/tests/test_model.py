@@ -2,7 +2,6 @@
 Unit tests for ClaimRiskModel.
 """
 
-import pytest
 from claim_risk_scorer.model import ClaimRiskModel, RiskResult, RiskReasonCode
 from claim_risk_scorer.claim_parser import Claim837
 

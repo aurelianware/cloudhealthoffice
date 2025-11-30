@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 # Risk reason codes

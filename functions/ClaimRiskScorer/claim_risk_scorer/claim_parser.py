@@ -12,6 +12,7 @@ HIPAA Compliance:
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -176,7 +177,9 @@ def _parse_clm(elements: List[str], claim: Claim837) -> None:
         try:
             claim.bill_amount = float(elements[2])
         except ValueError:
-            pass
+            logger.warning(
+                f"Failed to parse bill_amount from CLM segment: '{elements[2]}'. Defaulting to 0.0."
+            )
 
 
 def _parse_nm1(elements: List[str], claim: Claim837) -> None:
@@ -251,13 +254,12 @@ def _parse_dtp(elements: List[str], claim: Claim837) -> None:
         if elements[2] == "RD8" and "-" in elements[3]:
             try:
                 start, end = elements[3].split("-")
-                # Simple date diff (YYYYMMDD format)
-                start_int = int(start)
-                end_int = int(end)
-                # Rough calculation - not precise but good enough for risk scoring
-                claim.service_days = max(1, (end_int - start_int) % 100 + 1)
-            except ValueError:
-                pass
+                # Parse dates using proper datetime parsing (YYYYMMDD format)
+                start_date = datetime.strptime(start, "%Y%m%d")
+                end_date = datetime.strptime(end, "%Y%m%d")
+                claim.service_days = max(1, (end_date - start_date).days + 1)
+            except ValueError as e:
+                logger.warning(f"Failed to parse service date range '{elements[3]}' in DTP segment: {e}")
 
 
 def _parse_n4(elements: List[str], claim: Claim837) -> None:
