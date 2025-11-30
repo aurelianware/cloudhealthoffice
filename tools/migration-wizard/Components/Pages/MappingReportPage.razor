@@ -1,0 +1,240 @@
+@page "/mapping-report"
+@using MigrationWizard.Models
+@using MigrationWizard.Services
+@inject MigrationOrchestrator MigrationOrchestrator
+
+<PageTitle>Mapping Report - Migration Wizard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>📊 Mapping Report</h1>
+            <p class="text-muted">Detailed data mapping analysis for QNXT to Cloud Health Office migration</p>
+        </div>
+    </div>
+
+    @if (_report == null)
+    {
+        <div class="alert alert-info">
+            <h5>No Report Available</h5>
+            <p>Complete the migration export first to generate a mapping report.</p>
+            <a href="/" class="btn btn-primary">Go to Migration Dashboard</a>
+        </div>
+    }
+    else
+    {
+        <!-- Summary -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Summary</h5>
+                        <small class="text-muted">Generated: @_report.GeneratedAt.ToString("g")</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3">
+                                <div class="display-4 text-primary">@_report.Summary.TotalRecords</div>
+                                <div class="text-muted">Total Records</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="display-4 text-success">@_report.Summary.AutoMatched</div>
+                                <div class="text-muted">Auto-Matched (Exact/High)</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="display-4 text-warning">@_report.Summary.PartialMatch</div>
+                                <div class="text-muted">Partial Match</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="display-4 @(_report.Summary.AutoMatchPercentage >= 95 ? "text-success" : "text-warning")">
+                                    @_report.Summary.AutoMatchPercentage.ToString("F1")%
+                                </div>
+                                <div class="text-muted">Auto-Match Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Members Tab -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">👥 Member Mappings (@_report.MemberMappings.Count)</h5>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => _showMembers = !_showMembers">
+                            @(_showMembers ? "Hide" : "Show") Details
+                        </button>
+                    </div>
+                    @if (_showMembers)
+                    {
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-striped">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>Source ID</th>
+                                        <th>Target ID</th>
+                                        <th>Confidence</th>
+                                        <th>Fields Mapped</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mapping in _report.MemberMappings.Take(100))
+                                    {
+                                        <tr>
+                                            <td>@mapping.SourceId</td>
+                                            <td>@mapping.TargetId</td>
+                                            <td>
+                                                <span class="badge @GetConfidenceBadgeClass(mapping.Confidence)">
+                                                    @mapping.Confidence
+                                                </span>
+                                            </td>
+                                            <td>@mapping.FieldMappings.Count(f => f.IsMatched) / @mapping.FieldMappings.Count</td>
+                                            <td><small>@mapping.ReviewNote</small></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            @if (_report.MemberMappings.Count > 100)
+                            {
+                                <p class="text-muted">Showing first 100 of @_report.MemberMappings.Count records</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Providers Tab -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">🏥 Provider Mappings (@_report.ProviderMappings.Count)</h5>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => _showProviders = !_showProviders">
+                            @(_showProviders ? "Hide" : "Show") Details
+                        </button>
+                    </div>
+                    @if (_showProviders)
+                    {
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-striped">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>NPI</th>
+                                        <th>Target ID</th>
+                                        <th>Confidence</th>
+                                        <th>Fields Mapped</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mapping in _report.ProviderMappings.Take(100))
+                                    {
+                                        <tr>
+                                            <td>@mapping.SourceId</td>
+                                            <td>@mapping.TargetId</td>
+                                            <td>
+                                                <span class="badge @GetConfidenceBadgeClass(mapping.Confidence)">
+                                                    @mapping.Confidence
+                                                </span>
+                                            </td>
+                                            <td>@mapping.FieldMappings.Count(f => f.IsMatched) / @mapping.FieldMappings.Count</td>
+                                            <td><small>@mapping.ReviewNote</small></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            @if (_report.ProviderMappings.Count > 100)
+                            {
+                                <p class="text-muted">Showing first 100 of @_report.ProviderMappings.Count records</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Benefit Plans Tab -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">📋 Benefit Plan Mappings (@_report.BenefitPlanMappings.Count)</h5>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => _showPlans = !_showPlans">
+                            @(_showPlans ? "Hide" : "Show") Details
+                        </button>
+                    </div>
+                    @if (_showPlans)
+                    {
+                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-striped">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>Plan Code</th>
+                                        <th>Target ID</th>
+                                        <th>Confidence</th>
+                                        <th>Fields Mapped</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mapping in _report.BenefitPlanMappings)
+                                    {
+                                        <tr>
+                                            <td>@mapping.SourceId</td>
+                                            <td>@mapping.TargetId</td>
+                                            <td>
+                                                <span class="badge @GetConfidenceBadgeClass(mapping.Confidence)">
+                                                    @mapping.Confidence
+                                                </span>
+                                            </td>
+                                            <td>@mapping.FieldMappings.Count(f => f.IsMatched) / @mapping.FieldMappings.Count</td>
+                                            <td><small>@mapping.ReviewNote</small></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Back to Dashboard -->
+        <div class="row">
+            <div class="col">
+                <a href="/" class="btn btn-primary">
+                    ← Back to Migration Dashboard
+                </a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private MigrationWizard.Models.MappingReport? _report;
+    private bool _showMembers;
+    private bool _showProviders;
+    private bool _showPlans;
+
+    protected override void OnInitialized()
+    {
+        _report = MigrationOrchestrator.GetLatestReport();
+    }
+
+    private string GetConfidenceBadgeClass(MappingConfidence confidence)
+    {
+        return confidence switch
+        {
+            MappingConfidence.Exact => "bg-success",
+            MappingConfidence.High => "bg-primary",
+            MappingConfidence.Medium => "bg-warning text-dark",
+            MappingConfidence.Low => "bg-danger",
+            MappingConfidence.NoMatch => "bg-secondary",
+            _ => "bg-secondary"
+        };
+    }
+}
