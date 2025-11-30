@@ -30,7 +30,9 @@ This document contains 5 targeted email templates for Cloud Health Office commer
 ```
 Hi [First Name],
 
-With the CMS-0057-F compliance deadline now 18 months away, health plans across the country are racing to implement Patient Access, Provider Access, and Prior Authorization APIs. Based on [Company Name]'s position in [State/Region], I imagine this is top of mind for your team.
+With the CMS-0057-F compliance deadline of January 1, 2027 rapidly approaching, health plans across the country are racing to implement Patient Access, Provider Access, and Prior Authorization APIs. Based on [Company Name]'s position in [State/Region], I imagine this is top of mind for your team.
+
+*[NOTE: Update time reference based on current date before sending]*
 
 The challenge we're hearing from organizations like yours:
 

@@ -26,7 +26,7 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | **Compliance Updates** | $200,000 | $50,000 | $0 (included) |
 | **Infrastructure (3-year)** | $180,000 | $90,000 | $36,000 |
 | **Total 3-Year TCO** | **$2,630,000** | **$1,065,000** | **$159,000** |
-| **vs. Cloud Health Office** | +$2,471,000 | +$906,000 | — |
+| **Additional Cost vs. CHO** | $2,471,000 | $906,000 | — |
 | **Savings with CHO** | **94%** | **85%** | — |
 
 ### Detailed Cost Breakdown
