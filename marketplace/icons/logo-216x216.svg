@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="216" height="216" viewBox="0 0 216 216">
+  <defs>
+    <linearGradient id="circuitGlow216" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ffff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#00ff88;stop-opacity:1"/>
+    </linearGradient>
+    <filter id="glow216" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="216" height="216" fill="#000000"/>
+  <!-- Circuit Grid Background -->
+  <g opacity="0.15">
+    <line x1="0" y1="36" x2="216" y2="36" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="0" y1="72" x2="216" y2="72" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="0" y1="144" x2="216" y2="144" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="0" y1="180" x2="216" y2="180" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="36" y1="0" x2="36" y2="216" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="72" y1="0" x2="72" y2="216" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="144" y1="0" x2="144" y2="216" stroke="#00ffff" stroke-width="0.5"/>
+    <line x1="180" y1="0" x2="180" y2="216" stroke="#00ffff" stroke-width="0.5"/>
+  </g>
+  <!-- Shield/Monolith Shape -->
+  <path d="M108 18 L180 52 L180 124 C180 162 144 196 108 196 C72 196 36 162 36 124 L36 52 Z" 
+        fill="none" 
+        stroke="url(#circuitGlow216)" 
+        stroke-width="4"
+        filter="url(#glow216)"/>
+  <!-- Inner Shield Detail -->
+  <path d="M108 34 L164 60 L164 118 C164 148 136 174 108 174 C80 174 52 148 52 118 L52 60 Z" 
+        fill="none" 
+        stroke="#00ffff" 
+        stroke-width="1"
+        opacity="0.4"/>
+  <!-- All-Seeing Eye -->
+  <ellipse cx="108" cy="95" rx="36" ry="26" fill="none" stroke="#00ffff" stroke-width="3" filter="url(#innerGlow)"/>
+  <circle cx="108" cy="95" r="13" fill="#00ff88"/>
+  <circle cx="108" cy="95" r="5" fill="#000000"/>
+  <circle cx="106" cy="93" r="2" fill="#ffffff" opacity="0.6"/>
+  <!-- Circuit Lines -->
+  <line x1="46" y1="75" x2="72" y2="75" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+  <line x1="144" y1="75" x2="170" y2="75" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+  <line x1="108" y1="138" x2="108" y2="168" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+  <!-- Horizontal Circuit Extensions -->
+  <line x1="46" y1="75" x2="46" y2="95" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+  <line x1="170" y1="75" x2="170" y2="95" stroke="#00ffff" stroke-width="2" opacity="0.7"/>
+  <!-- Connection Nodes -->
+  <circle cx="46" cy="75" r="4" fill="#00ff88"/>
+  <circle cx="170" cy="75" r="4" fill="#00ff88"/>
+  <circle cx="108" cy="168" r="4" fill="#00ff88"/>
+  <circle cx="46" cy="95" r="3" fill="#00ffff"/>
+  <circle cx="170" cy="95" r="3" fill="#00ffff"/>
+  <!-- Data Flow Dots -->
+  <circle cx="58" cy="75" r="1.5" fill="#00ffff" opacity="0.8"/>
+  <circle cx="66" cy="75" r="1.5" fill="#00ffff" opacity="0.6"/>
+  <circle cx="150" cy="75" r="1.5" fill="#00ffff" opacity="0.8"/>
+  <circle cx="158" cy="75" r="1.5" fill="#00ffff" opacity="0.6"/>
+</svg>
