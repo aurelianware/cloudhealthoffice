@@ -13,7 +13,7 @@ class TestClaimRiskModel:
     def setup_method(self):
         """Set up test fixtures."""
         # Model with non-existent path will use rule-based scoring
-        self.model = ClaimRiskModel(model_path="/nonexistent/model.pt")
+        self.model = ClaimRiskModel(model_path="./nonexistent/model.pt")
     
     def test_model_initialization(self):
         """Test model initializes correctly."""
@@ -172,7 +172,7 @@ class TestClaimRiskModelFeatures:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.model = ClaimRiskModel(model_path="/nonexistent/model.pt")
+        self.model = ClaimRiskModel(model_path="./nonexistent/model.pt")
     
     def test_extract_features_complete_claim(self):
         """Test feature extraction from a complete claim."""

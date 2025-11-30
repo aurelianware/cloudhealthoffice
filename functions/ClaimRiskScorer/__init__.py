@@ -62,7 +62,8 @@ def get_risk_model() -> ClaimRiskModel:
     global _risk_model
     
     if _risk_model is None:
-        model_path = os.environ.get("MODEL_PATH", "/ml/claim-fraud-v1.pt")
+        # Use environment variable for model path, with sensible default
+        model_path = os.environ.get("MODEL_PATH", "./ml/claim-fraud-v1.pt")
         _risk_model = ClaimRiskModel(model_path)
     
     return _risk_model
