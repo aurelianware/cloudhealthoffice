@@ -371,7 +371,9 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 | **CAC Payback** | 6 months | <12 months |
 | **Gross Margin** | 75-82% | >70% |
 | **Net Revenue Retention** | 115-125% | >100% |
-| **Rule of 40** | 68% (Year 3) | >40% |
+| **Rule of 40*** | 68% (Year 3) | >40% |
+
+*Rule of 40 Calculation (Year 3): Revenue Growth Rate (42%) + Operating Margin (26%) = 68%
 
 ### Exit Potential
 

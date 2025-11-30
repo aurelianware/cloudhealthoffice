@@ -345,6 +345,8 @@ We accept **5 pilot customers per quarter** to ensure dedicated attention and su
 
 **Current Quarter Availability**: [X] slots remaining
 
+*[UPDATE QUARTERLY: Refresh slot count at start of each quarter or after pilot acceptance. Contact pilots@aurelianware.com for current availability.]*
+
 ### First-Mover Advantage
 
 Organizations that achieve CMS compliance early gain:

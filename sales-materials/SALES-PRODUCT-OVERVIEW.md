@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Cloud Health Office is the industry's first open-source, Azure-native EDI platform delivering **complete CMS-0057-F compliance** 18 months ahead of the January 1, 2027 deadline. Where enterprise vendors require 6-18 months of implementation, Cloud Health Office deploys production-ready HIPAA infrastructure in under 5 minutes.
+Cloud Health Office is the industry's first open-source, Azure-native EDI platform delivering **complete CMS-0057-F compliance** well ahead of the January 1, 2027 deadline. Where enterprise vendors require 6-18 months of implementation, Cloud Health Office deploys production-ready HIPAA infrastructure in under 5 minutes.
 
 ### The Compliance Imperative
 

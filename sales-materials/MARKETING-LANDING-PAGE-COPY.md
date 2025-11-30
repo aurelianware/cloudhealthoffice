@@ -99,21 +99,29 @@ HSM-backed Key Vault. Private endpoints. PHI masking. 7-year retention with auto
 **The Clock is Ticking**
 
 ### Countdown Display
+
+**[DYNAMIC CONTENT - Implement JavaScript countdown timer]**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                   │
 │                    DAYS UNTIL CMS-0057-F DEADLINE                │
 │                                                                   │
 │         ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐                      │
-│         │ 401 │  │  :  │  │ 00  │  │ 00  │                      │
+│         │[DYN]│  │  :  │  │[DYN]│  │[DYN]│                      │
 │         │DAYS │  │     │  │HOURS│  │MINS │                      │
 │         └─────┘  └─────┘  └─────┘  └─────┘                      │
 │                                                                   │
 │                    January 1, 2027                               │
 │                                                                   │
-│  ████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░    │
+│  [DYNAMIC PROGRESS BAR - Calculate percentage remaining]        │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
+
+Implementation Note: Calculate days/hours/minutes dynamically using:
+const deadline = new Date('2027-01-01T00:00:00Z');
+const now = new Date();
+const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 ```
 
 ### Urgency Copy
