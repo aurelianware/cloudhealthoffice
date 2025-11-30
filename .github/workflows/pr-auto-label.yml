@@ -65,6 +65,8 @@ jobs:
   title-check:
     name: Validate PR Title
     runs-on: ubuntu-latest
+    # Make this check advisory (not blocking) - can be changed to remove continue-on-error once team adopts conventional commits
+    continue-on-error: true
     steps:
       - name: Check PR title format
         uses: amannn/action-semantic-pull-request@v5
