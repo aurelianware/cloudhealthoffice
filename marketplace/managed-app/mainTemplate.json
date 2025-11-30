@@ -475,13 +475,13 @@
           {
             "locationName": "[parameters('location')]",
             "failoverPriority": 0,
-            "isZoneRedundant": "[if(equals(parameters('deploymentTier'), 'Enterprise'), true(), false())]"
+            "isZoneRedundant": "[equals(parameters('deploymentTier'), 'Enterprise')]"
           }
         ],
         "consistencyPolicy": {
           "defaultConsistencyLevel": "Session"
         },
-        "enableAutomaticFailover": "[if(equals(parameters('deploymentTier'), 'Enterprise'), true(), false())]"
+        "enableAutomaticFailover": "[equals(parameters('deploymentTier'), 'Enterprise')]"
       },
       "tags": {
         "Project": "CloudHealthOffice",

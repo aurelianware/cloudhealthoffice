@@ -246,7 +246,7 @@ Provider maintains a public status page at: https://status.cloudhealthoffice.com
 
 ### 9.1 Data Durability
 
-- **Durability Target**: 99.999999999% (11 nines)
+- **Durability Target**: 99.99999999999% (11 nines)
 - **Technology**: Azure Geo-Redundant Storage (Standard/Enterprise plans)
 - **Replication**: Synchronous within region, asynchronous across regions
 
