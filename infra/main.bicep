@@ -186,6 +186,25 @@ resource sbTopicPriorAuthSlaTimerSub 'Microsoft.ServiceBus/namespaces/topics/sub
   }
 }
 
+// EDI 837 Claims topic for ClaimRiskScorer
+resource sbTopicEdi837Claims 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+  parent: sb
+  name: 'edi-837-claims'
+  properties: {
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P14D'
+  }
+}
+
+resource sbTopicEdi837ClaimsSubRiskScorer 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
+  parent: sbTopicEdi837Claims
+  name: 'claim-risk-scorer'
+  properties: {
+    maxDeliveryCount: 5
+    lockDuration: 'PT5M'
+  }
+}
+
 // Build SB connection string AFTER sbAuth exists
 var serviceBusConnectionStringGenerated = empty(serviceBusConnectionString)
   ? sbAuth.listKeys().primaryConnectionString
@@ -236,6 +255,49 @@ resource la 'Microsoft.Web/sites@2022-03-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
         { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
+      ]
+    }
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+}
+
+// =========================
+// ClaimRiskScorer Azure Function (Python)
+// =========================
+param enableClaimRiskScorer bool = true
+
+resource claimRiskScorerPlan 'Microsoft.Web/serverfarms@2022-03-01' = if (enableClaimRiskScorer) {
+  name: '${baseName}-claimrisk-plan'
+  location: location
+  sku: {
+    name: 'Y1'
+    tier: 'Dynamic'
+  }
+  kind: 'functionapp'
+  properties: {
+    reserved: true  // Required for Linux
+  }
+}
+
+resource claimRiskScorerFunc 'Microsoft.Web/sites@2022-03-01' = if (enableClaimRiskScorer) {
+  name: '${baseName}-claimrisk-func'
+  location: location
+  kind: 'functionapp,linux'
+  properties: {
+    serverFarmId: claimRiskScorerPlan.id
+    siteConfig: {
+      linuxFxVersion: 'PYTHON|3.11'
+      appSettings: [
+        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
+        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
+        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
+        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'python' }
+        { name: 'ServiceBusConnection', value: serviceBusConnectionStringGenerated }
+        { name: 'MODEL_PATH', value: '/home/site/wwwroot/ml/claim-fraud-v1.pt' }
       ]
     }
   }
@@ -447,3 +509,8 @@ output cosmosDbDatabaseName string = enableCosmosDb ? cosmosDb.outputs.cosmosDat
 output priorAuthContainerName string = enableCosmosDb ? cosmosDb.outputs.priorAuthContainerName : 'disabled'
 output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs.providerDirectoryContainerName : 'disabled'
 output cosmosDbConnectionId string = enableCosmosDb ? connCosmosDb.id : 'disabled'
+
+// ClaimRiskScorer outputs
+output claimRiskScorerFunctionName string = enableClaimRiskScorer && claimRiskScorerFunc != null ? claimRiskScorerFunc.name : 'disabled'
+output claimRiskScorerFunctionUrl string = enableClaimRiskScorer && claimRiskScorerFunc != null ? 'https://${claimRiskScorerFunc.properties.defaultHostName}' : 'disabled'
+output edi837ClaimsTopicName string = sbTopicEdi837Claims.name

@@ -1,0 +1,12 @@
+# Placeholder for PyTorch model file
+# This is a placeholder file representing where the actual trained PyTorch model should be placed.
+# In production, this file should contain a serialized PyTorch model saved with torch.save()
+# 
+# Expected model input: Claim features tensor (batch_size x num_features)
+# Expected model output: Risk score tensor (batch_size x 1) in range [0, 100]
+#
+# To create a real model:
+# 1. Train a fraud detection model using historical claim data
+# 2. Save with: torch.save(model.state_dict(), 'ml/claim-fraud-v1.pt')
+#
+# Note: For testing, the ClaimRiskScorer will use a mock scoring function if model loading fails.
