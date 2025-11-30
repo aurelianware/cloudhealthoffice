@@ -19,7 +19,7 @@ This document contains 5 targeted email templates for Cloud Health Office commer
 ---
 
 **Subject Lines (A/B Test)**:
-- A: CMS-0057-F Deadline: 18 Months to Compliance
+- A: CMS-0057-F Deadline: Fast-Track to Compliance
 - B: [Company Name] - Your CMS Compliance Gap Analysis
 - C: How [Similar Organization] Achieved CMS Compliance in 30 Days
 
