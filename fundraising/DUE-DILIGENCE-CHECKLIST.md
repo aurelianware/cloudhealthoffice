@@ -55,7 +55,7 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
   - **Status**: ⬜ Not Started / 🔄 In Progress / ✅ Complete
 
 - [ ] **Patent/Trademark Status**
-  - Trademark applications (Cloud Health Office, CHO)
+  - Trademark applications (Cloud Health Office)
   - Patent strategy documentation (if any)
   - Prior art research (if claiming patents)
   - **Status**: ⬜ Not Started / 🔄 In Progress / ✅ Complete
