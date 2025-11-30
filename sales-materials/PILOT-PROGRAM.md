@@ -327,7 +327,7 @@ _________________________________________________________
 │                                                                   │
 │              Days Until CMS-0057-F Deadline                      │
 │                                                                   │
-│                    [401 DAYS REMAINING]                          │
+│                    [DYNAMIC: Calculate days to 2027-01-01]       │
 │                                                                   │
 │                    January 1, 2027                               │
 │                                                                   │
