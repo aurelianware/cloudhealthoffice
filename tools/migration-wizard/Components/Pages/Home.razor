@@ -7,13 +7,14 @@
 
 <PageTitle>Cloud Health Office - QNXT Migration Wizard</PageTitle>
 
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col">
-            <h1 class="display-5">
-                <span class="text-primary">☁️</span> Cloud Health Office Migration Wizard
-            </h1>
-            <p class="lead text-muted">
+<div class="container-fluid circuit-bg" style="min-height: 100vh; padding-bottom: 2rem;">
+    <div class="row mb-4 pt-3">
+        <div class="col text-center">
+            <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" 
+                 alt="Cloud Health Office Sentinel" 
+                 class="sentinel-logo mb-3" />
+            <h1 class="glow-cyan">Migration Wizard</h1>
+            <p class="lead" style="color: #00ff88;">
                 Migrate members, providers, and benefit plans from QNXT to Cloud Health Office
             </p>
         </div>
@@ -83,13 +84,13 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card border-primary">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">📊 Mapping Report Summary</h5>
+                    <div class="card-header">
+                        <h5 class="mb-0 glow-cyan">📊 Mapping Report Summary</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-3 text-center">
-                                <h2 class="text-success">@_report.Summary.AutoMatched</h2>
+                                <h2 class="text-success glow-green">@_report.Summary.AutoMatched</h2>
                                 <p class="text-muted">Auto-Matched</p>
                             </div>
                             <div class="col-md-3 text-center">
@@ -198,8 +199,8 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card border-danger">
-                    <div class="card-header bg-danger text-white">
-                        <h5 class="mb-0">⚠️ Errors (@_status.Errors.Count)</h5>
+                    <div class="card-header" style="background: rgba(255, 68, 68, 0.2) !important; border-color: #ff4444 !important;">
+                        <h5 class="mb-0" style="color: #ff4444 !important;">⚠️ Errors (@_status.Errors.Count)</h5>
                     </div>
                     <div class="card-body" style="max-height: 200px; overflow-y: auto;">
                         <ul class="list-group">
@@ -222,21 +223,29 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">📋 Migration Instructions</h5>
+                    <h5 class="mb-0 glow-cyan">📋 Migration Instructions</h5>
                 </div>
                 <div class="card-body">
-                    <ol>
-                        <li><strong>Configure Settings:</strong> Update <code>appsettings.json</code> with your TriZetto Open Access, Cosmos DB, and API Management credentials.</li>
-                        <li><strong>Start Migration:</strong> Click "Start Migration" to export members, providers, and benefit plans from QNXT to Cloud Health Office Cosmos DB.</li>
-                        <li><strong>Review Mapping Report:</strong> Verify the auto-match rate is 95% or higher. Review any records that need manual attention.</li>
-                        <li><strong>Start Cutover:</strong> When ready, click "Start Cutover" to flip the API Management routing keys and redirect traffic to Cloud Health Office.</li>
-                        <li><strong>Monitor:</strong> Watch the application for any issues. Use "Rollback Cutover" if problems occur.</li>
+                    <ol style="color: #b0b0b0;">
+                        <li><strong style="color: #00ffff;">Configure Settings:</strong> Update <code>appsettings.json</code> with your TriZetto Open Access, Cosmos DB, and API Management credentials.</li>
+                        <li><strong style="color: #00ffff;">Start Migration:</strong> Click "Start Migration" to export members, providers, and benefit plans from QNXT to Cloud Health Office Cosmos DB.</li>
+                        <li><strong style="color: #00ffff;">Review Mapping Report:</strong> Verify the auto-match rate is 95% or higher. Review any records that need manual attention.</li>
+                        <li><strong style="color: #00ffff;">Start Cutover:</strong> When ready, click "Start Cutover" to flip the API Management routing keys and redirect traffic to Cloud Health Office.</li>
+                        <li><strong style="color: #00ffff;">Monitor:</strong> Watch the application for any issues. Use "Rollback Cutover" if problems occur.</li>
                     </ol>
                     <div class="alert alert-info">
                         <strong>💡 Tip:</strong> For production deployments, store credentials in Azure Key Vault and use Managed Identity for authentication.
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="row mt-4">
+        <div class="col text-center" style="color: #808080; font-size: 0.9rem;">
+            <p><strong style="color: #00ffff;">Cloud Health Office — The Sentinel</strong><br>
+            Capabilities beyond question. Systems that do not fail.</p>
         </div>
     </div>
 </div>
