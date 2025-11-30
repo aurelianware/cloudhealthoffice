@@ -189,7 +189,7 @@ def _parse_nm1(elements: List[str], claim: Claim837) -> None:
     # Billing/Rendering Provider
     if entity_code in ("85", "82"):
         # NM109 = Provider NPI (if qualifier is XX)
-        if len(elements) > 9 and len(elements) > 8 and elements[8] == "XX":
+        if len(elements) > 9 and elements[8] == "XX":
             claim.provider_npi = elements[9]
 
 
