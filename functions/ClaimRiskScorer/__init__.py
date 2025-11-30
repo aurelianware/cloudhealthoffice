@@ -19,7 +19,6 @@ from typing import Any, Optional
 
 import azure.functions as func
 from applicationinsights import TelemetryClient
-from applicationinsights.channel import TelemetryChannel, SynchronousQueue, SynchronousSender
 
 from claim_risk_scorer.model import ClaimRiskModel
 from claim_risk_scorer.claim_parser import parse_837_claim, Claim837
