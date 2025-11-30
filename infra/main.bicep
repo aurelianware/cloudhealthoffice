@@ -290,7 +290,7 @@ resource claimRiskScorerFunc 'Microsoft.Web/sites@2022-03-01' = if (enableClaimR
     siteConfig: {
       linuxFxVersion: 'PYTHON|3.11'
       appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
+        { name: 'AzureWebJobsStorage__accountName', value: stg.name }
         { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
@@ -303,6 +303,18 @@ resource claimRiskScorerFunc 'Microsoft.Web/sites@2022-03-01' = if (enableClaimR
   }
   identity: {
     type: 'SystemAssigned'
+  }
+}
+
+// Role assignment for ClaimRiskScorer to access Storage Account using Managed Identity
+// Storage Blob Data Owner role - allows full blob access
+resource claimRiskScorerStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableClaimRiskScorer) {
+  name: guid(stg.id, claimRiskScorerFunc.id, 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+  scope: stg
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
+    principalId: claimRiskScorerFunc.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
