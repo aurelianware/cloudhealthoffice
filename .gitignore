@@ -47,3 +47,14 @@ Thumbs.db
 
 # Downloaded tools
 actionlint
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.csproj.user
+*.dll
+*.pdb
+*.exe
+*.cache

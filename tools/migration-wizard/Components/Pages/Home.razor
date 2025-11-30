@@ -1,0 +1,376 @@
+﻿@page "/"
+@using MigrationWizard.Models
+@using MigrationWizard.Services
+@inject MigrationOrchestrator MigrationOrchestrator
+@inject ILogger<Home> Logger
+@implements IDisposable
+
+<PageTitle>Cloud Health Office - QNXT Migration Wizard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">
+                <span class="text-primary">☁️</span> Cloud Health Office Migration Wizard
+            </h1>
+            <p class="lead text-muted">
+                Migrate members, providers, and benefit plans from QNXT to Cloud Health Office
+            </p>
+        </div>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card @GetStatusCardClass()">
+                <div class="card-body">
+                    <h5 class="card-title">Migration Status</h5>
+                    <p class="card-text fs-4">@_status.CurrentPhase</p>
+                    @if (_status.StartedAt.HasValue)
+                    {
+                        <small class="text-muted">Started: @_status.StartedAt.Value.ToString("g")</small>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Members</h5>
+                    <p class="card-text fs-4">@_status.MigratedMembers / @_status.TotalMembers</p>
+                    @if (_status.TotalMembers > 0)
+                    {
+                        <div class="progress">
+                            <div class="progress-bar bg-success" style="width: @((_status.MigratedMembers * 100 / _status.TotalMembers))%"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Providers</h5>
+                    <p class="card-text fs-4">@_status.MigratedProviders / @_status.TotalProviders</p>
+                    @if (_status.TotalProviders > 0)
+                    {
+                        <div class="progress">
+                            <div class="progress-bar bg-info" style="width: @((_status.MigratedProviders * 100 / _status.TotalProviders))%"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Benefit Plans</h5>
+                    <p class="card-text fs-4">@_status.MigratedBenefitPlans / @_status.TotalBenefitPlans</p>
+                    @if (_status.TotalBenefitPlans > 0)
+                    {
+                        <div class="progress">
+                            <div class="progress-bar bg-warning" style="width: @((_status.MigratedBenefitPlans * 100 / _status.TotalBenefitPlans))%"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mapping Report Summary -->
+    @if (_status.CurrentPhase >= MigrationPhase.ReadyForCutover && _report != null)
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">📊 Mapping Report Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 text-center">
+                                <h2 class="text-success">@_report.Summary.AutoMatched</h2>
+                                <p class="text-muted">Auto-Matched</p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h2 class="text-warning">@_report.Summary.PartialMatch</h2>
+                                <p class="text-muted">Partial Match</p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h2 class="text-danger">@_report.Summary.NoMatch</h2>
+                                <p class="text-muted">No Match</p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h2 class="@GetMatchPercentageClass()">@_report.Summary.AutoMatchPercentage.ToString("F1")%</h2>
+                                <p class="text-muted">Auto-Match Rate</p>
+                            </div>
+                        </div>
+                        @if (_report.Summary.AutoMatchPercentage >= 95)
+                        {
+                            <div class="alert alert-success mt-3 mb-0">
+                                <strong>✅ Excellent!</strong> Auto-match rate exceeds 95%. Ready for cutover.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning mt-3 mb-0">
+                                <strong>⚠️ Review Required:</strong> Auto-match rate is below 95%. Please review @(_report.Summary.PartialMatch + _report.Summary.NoMatch) records before cutover.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Actions</h5>
+                    <div class="btn-group" role="group">
+                        @if (_status.CurrentPhase == MigrationPhase.NotStarted || _status.CurrentPhase == MigrationPhase.Failed)
+                        {
+                            <button class="btn btn-primary btn-lg" @onclick="StartMigration" disabled="@_isRunning">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" style="display: @(_isRunning ? "inline-block" : "none")"></span>
+                                🚀 Start Migration
+                            </button>
+                        }
+                        
+                        @if (_status.CurrentPhase != MigrationPhase.NotStarted && 
+                             _status.CurrentPhase != MigrationPhase.Completed && 
+                             _status.CurrentPhase != MigrationPhase.Failed)
+                        {
+                            <button class="btn btn-warning" @onclick="CancelMigration">
+                                ⏹️ Cancel
+                            </button>
+                        }
+
+                        @if (_status.CurrentPhase == MigrationPhase.ReadyForCutover)
+                        {
+                            <button class="btn btn-success btn-lg" @onclick="StartCutover" disabled="@_isCutoverRunning">
+                                <span class="spinner-border spinner-border-sm me-2" role="status" style="display: @(_isCutoverRunning ? "inline-block" : "none")"></span>
+                                ⚡ Start Cutover
+                            </button>
+                        }
+
+                        @if (_status.IsCutoverComplete)
+                        {
+                            <button class="btn btn-danger" @onclick="RollbackCutover" disabled="@_isCutoverRunning">
+                                🔄 Rollback Cutover
+                            </button>
+                        }
+
+                        <button class="btn btn-outline-secondary" @onclick="Reset" disabled="@_isRunning">
+                            🔃 Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cutover Status -->
+    @if (_cutoverResult != null)
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="alert @(_cutoverResult.Success ? "alert-success" : "alert-danger")">
+                    <h5>@(_cutoverResult.Success ? "✅ Cutover Successful" : "❌ Cutover Failed")</h5>
+                    @if (_cutoverResult.Success)
+                    {
+                        <p>Traffic is now routed to <strong>Cloud Health Office</strong>.</p>
+                        <p>Previous backend: @_cutoverResult.PreviousBackendId → New backend: @_cutoverResult.NewBackendId</p>
+                    }
+                    else
+                    {
+                        <p>Error: @_cutoverResult.ErrorMessage</p>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Error Log -->
+    @if (_status.Errors.Count > 0)
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">⚠️ Errors (@_status.Errors.Count)</h5>
+                    </div>
+                    <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                        <ul class="list-group">
+                            @foreach (var error in _status.Errors.TakeLast(10))
+                            {
+                                <li class="list-group-item list-group-item-danger">
+                                    <strong>@error.EntityType:</strong> @error.ErrorMessage
+                                    <small class="text-muted ms-2">@error.OccurredAt.ToString("HH:mm:ss")</small>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Instructions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📋 Migration Instructions</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li><strong>Configure Settings:</strong> Update <code>appsettings.json</code> with your TriZetto Open Access, Cosmos DB, and API Management credentials.</li>
+                        <li><strong>Start Migration:</strong> Click "Start Migration" to export members, providers, and benefit plans from QNXT to Cloud Health Office Cosmos DB.</li>
+                        <li><strong>Review Mapping Report:</strong> Verify the auto-match rate is 95% or higher. Review any records that need manual attention.</li>
+                        <li><strong>Start Cutover:</strong> When ready, click "Start Cutover" to flip the API Management routing keys and redirect traffic to Cloud Health Office.</li>
+                        <li><strong>Monitor:</strong> Watch the application for any issues. Use "Rollback Cutover" if problems occur.</li>
+                    </ol>
+                    <div class="alert alert-info">
+                        <strong>💡 Tip:</strong> For production deployments, store credentials in Azure Key Vault and use Managed Identity for authentication.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private MigrationStatus _status = new();
+    private MigrationWizard.Models.MappingReport? _report;
+    private CutoverResult? _cutoverResult;
+    private bool _isRunning;
+    private bool _isCutoverRunning;
+
+    protected override void OnInitialized()
+    {
+        _status = MigrationOrchestrator.GetStatus();
+        _report = MigrationOrchestrator.GetLatestReport();
+        MigrationOrchestrator.OnStatusChanged += HandleStatusChanged;
+    }
+
+    private void HandleStatusChanged(MigrationStatus status)
+    {
+        _status = status;
+        _report = MigrationOrchestrator.GetLatestReport();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StartMigration()
+    {
+        _isRunning = true;
+        _cutoverResult = null;
+        StateHasChanged();
+
+        try
+        {
+            await MigrationOrchestrator.StartMigrationAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Migration failed");
+        }
+        finally
+        {
+            _isRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelMigration()
+    {
+        MigrationOrchestrator.CancelMigration();
+        _isRunning = false;
+    }
+
+    private async Task StartCutover()
+    {
+        _isCutoverRunning = true;
+        StateHasChanged();
+
+        try
+        {
+            _cutoverResult = await MigrationOrchestrator.ExecuteCutoverAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Cutover failed");
+            _cutoverResult = new CutoverResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            };
+        }
+        finally
+        {
+            _isCutoverRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RollbackCutover()
+    {
+        _isCutoverRunning = true;
+        StateHasChanged();
+
+        try
+        {
+            _cutoverResult = await MigrationOrchestrator.RollbackCutoverAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Rollback failed");
+            _cutoverResult = new CutoverResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            };
+        }
+        finally
+        {
+            _isCutoverRunning = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Reset()
+    {
+        MigrationOrchestrator.Reset();
+        _cutoverResult = null;
+        _isRunning = false;
+        _isCutoverRunning = false;
+    }
+
+    private string GetStatusCardClass()
+    {
+        return _status.CurrentPhase switch
+        {
+            MigrationPhase.NotStarted => "",
+            MigrationPhase.Completed => "border-success",
+            MigrationPhase.Failed => "border-danger",
+            MigrationPhase.ReadyForCutover => "border-primary",
+            _ => "border-warning"
+        };
+    }
+
+    private string GetMatchPercentageClass()
+    {
+        return _report?.Summary.AutoMatchPercentage switch
+        {
+            >= 95 => "text-success",
+            >= 80 => "text-warning",
+            _ => "text-danger"
+        };
+    }
+
+    public void Dispose()
+    {
+        MigrationOrchestrator.OnStatusChanged -= HandleStatusChanged;
+    }
+}

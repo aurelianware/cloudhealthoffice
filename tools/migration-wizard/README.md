@@ -1,0 +1,225 @@
+# Cloud Health Office - QNXT Migration Wizard
+
+A Blazor web application for migrating members, providers, and benefit plans from TriZetto QNXT to Cloud Health Office's Cosmos DB.
+
+## Features
+
+- **TriZetto Open Access SOAP API Integration**: Connect to QNXT via TriZetto Open Access SOAP APIs
+- **Data Export**: Export members, providers, and benefit plans to Cloud Health Office Cosmos DB
+- **Mapping Report**: Generate comprehensive mapping reports with 95%+ auto-match capability
+- **One-Click Cutover**: Flip API Management routing keys to switch traffic to Cloud Health Office
+
+## Prerequisites
+
+- .NET 8.0 SDK or later
+- Azure subscription with:
+  - Cosmos DB account (using the Cloud Health Office database schema)
+  - API Management instance (for traffic routing)
+- Access to TriZetto Open Access SOAP APIs (QNXT)
+
+## Configuration
+
+Update `appsettings.json` with your credentials:
+
+```json
+{
+  "TriZetto": {
+    "EndpointUrl": "https://qnxt-server.example.com/OpenAccess/Services",
+    "Username": "your-username",
+    "Password": "your-password",
+    "TenantId": "default-tenant",
+    "TimeoutSeconds": 120
+  },
+  "CosmosDb": {
+    "Endpoint": "https://your-cosmos-account.documents.azure.com:443/",
+    "Key": "your-cosmos-primary-key",
+    "DatabaseName": "cloudhealthoffice",
+    "MembersContainer": "Members",
+    "ProvidersContainer": "ProviderDirectory",
+    "BenefitPlansContainer": "BenefitPlans"
+  },
+  "ApiManagement": {
+    "ServiceName": "your-apim-service-name",
+    "ResourceGroup": "your-resource-group",
+    "SubscriptionId": "your-azure-subscription-id",
+    "RoutingKeyName": "backend-routing",
+    "QnxtBackendId": "qnxt-backend",
+    "CloudHealthOfficeBackendId": "cloudhealthoffice-backend"
+  }
+}
+```
+
+> **Security Note**: In production, store credentials in Azure Key Vault and use Managed Identity for authentication.
+
+## Running the Application
+
+```bash
+# Navigate to the migration wizard directory
+cd tools/migration-wizard
+
+# Build the application
+dotnet build
+
+# Run the application
+dotnet run
+```
+
+The application will be available at `http://localhost:5000`.
+
+## Migration Process
+
+### 1. Configure Settings
+Update `appsettings.json` with your TriZetto Open Access, Cosmos DB, and API Management credentials.
+
+### 2. Start Migration
+Click **"Start Migration"** to begin the export process:
+- Members are exported from QNXT and written to the `Members` container
+- Providers are exported and written to the `ProviderDirectory` container
+- Benefit plans are exported and written to the `BenefitPlans` container
+
+### 3. Review Mapping Report
+After export completes, review the mapping report:
+- **Auto-Matched (Exact/High)**: Records that mapped with 98%+ field match
+- **Partial Match**: Records requiring review with 75-97% field match
+- **No Match**: Records with <75% field match requiring manual intervention
+
+Target: 95%+ auto-match rate before cutover.
+
+### 4. Start Cutover
+When ready, click **"Start Cutover"** to flip the API Management routing:
+- Named value `backend-routing` is updated to point to Cloud Health Office
+- Traffic is immediately routed to the new system
+
+### 5. Monitor and Rollback
+If issues occur after cutover:
+- Click **"Rollback Cutover"** to revert traffic to QNXT
+- Review errors and address issues before re-attempting cutover
+
+## TriZetto Open Access SOAP APIs
+
+The migration wizard connects to the following SOAP endpoints:
+
+| Service | Endpoint | Description |
+|---------|----------|-------------|
+| Member Service | `/MemberService.svc` | Export member/subscriber data |
+| Provider Service | `/ProviderService.svc` | Export provider directory |
+| Benefit Service | `/BenefitService.svc` | Export benefit plan configurations |
+| System Service | `/SystemService.svc` | Connection test and health checks |
+
+### Sample SOAP Request
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" 
+               xmlns:tns="http://trizetto.com/openaccess">
+    <soap:Header>
+        <tns:AuthenticationHeader>
+            <tns:Username>your-username</tns:Username>
+            <tns:Password>your-password</tns:Password>
+            <tns:TenantId>default-tenant</tns:TenantId>
+        </tns:AuthenticationHeader>
+    </soap:Header>
+    <soap:Body>
+        <tns:GetMembers>
+            <EffectiveDate>2024-01-01</EffectiveDate>
+            <PageNumber>1</PageNumber>
+            <PageSize>1000</PageSize>
+        </tns:GetMembers>
+    </soap:Body>
+</soap:Envelope>
+```
+
+## Data Mapping
+
+### Member Mapping
+
+| QNXT Field | Cloud Health Office Field | Transformation |
+|------------|---------------------------|----------------|
+| MemberId | memberId | Direct |
+| SubscriberId | subscriberId | Direct |
+| FirstName | firstName | Direct |
+| LastName | lastName | Direct |
+| DateOfBirth | dateOfBirth | ISO 8601 format |
+| Gender | gender | Normalized to M/F/U |
+| PlanCode | planCode | Direct |
+| GroupNumber | groupNumber | Direct |
+
+### Provider Mapping
+
+| QNXT Field | Cloud Health Office Field | Transformation |
+|------------|---------------------------|----------------|
+| ProviderId | providerId | Direct |
+| Npi | npi | Luhn validated |
+| TaxId | taxId | EIN format |
+| TaxonomyCode | taxonomyCode | NUCC validated |
+| ProviderType | providerType | Normalized |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Migration Wizard                              │
+│                 (Blazor Web App)                                 │
+└──────────────┬──────────────────────┬───────────────────────────┘
+               │                      │
+               ▼                      ▼
+┌──────────────────────┐    ┌────────────────────────┐
+│  TriZetto Open Access │    │    Cosmos DB           │
+│    (QNXT SOAP API)    │    │  (Cloud Health Office) │
+│                       │    │                        │
+│  • Members            │───▶│  • Members             │
+│  • Providers          │    │  • ProviderDirectory   │
+│  • Benefit Plans      │    │  • BenefitPlans        │
+└──────────────────────┘    └────────────────────────┘
+                                      │
+                                      ▼
+                            ┌────────────────────────┐
+                            │   API Management       │
+                            │   (Routing Cutover)    │
+                            │                        │
+                            │  Named Value:          │
+                            │  backend-routing       │
+                            │  ↓                     │
+                            │  qnxt-backend →        │
+                            │  cloudhealthoffice-    │
+                            │  backend               │
+                            └────────────────────────┘
+```
+
+## Troubleshooting
+
+### Connection Failures
+
+1. Verify network connectivity to QNXT server
+2. Check firewall rules allow HTTPS traffic
+3. Validate credentials in appsettings.json
+4. Ensure tenant ID matches your QNXT configuration
+
+### Low Auto-Match Rate
+
+1. Review field transformations in mapping report
+2. Check for data quality issues in source system
+3. Verify date formats and code normalizations
+4. Contact support for custom mapping rules
+
+### Cutover Failures
+
+1. Ensure Azure credentials have API Management Contributor role
+2. Verify named value exists in API Management
+3. Check subscription ID and resource group are correct
+4. Review Azure Activity Log for detailed error messages
+
+## Security Considerations
+
+- **Credentials**: Never commit credentials to source control. Use Azure Key Vault.
+- **Network**: Deploy within Azure Virtual Network for private connectivity.
+- **Logging**: PHI is not logged. Only record counts and metadata are captured.
+- **Audit**: All cutover operations are logged to Application Insights.
+
+## License
+
+Apache 2.0 - See [LICENSE](../../LICENSE) for details.
+
+---
+
+**Cloud Health Office** – Advancing Healthcare EDI Integration
