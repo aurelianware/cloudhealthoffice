@@ -1,6 +1,6 @@
 # Configuration Examples
 
-This directory contains example configuration files demonstrating various Availity integration scenarios.
+This directory contains example configuration files demonstrating various Clearinghouse integration scenarios.
 
 ## ValueAdds277 Example
 
@@ -40,7 +40,7 @@ To validate configuration files against the schema:
 
 ```bash
 # Using Node.js with Ajv (if installed)
-node -e "const Ajv = require('ajv'); const ajv = new Ajv(); const schema = require('./core/schemas/availity-integration-config.schema.json'); const config = require('./config/examples/valueadds277-example-config.json'); console.log(ajv.validate(schema, config) ? '✓ Valid' : '✗ Invalid');"
+node -e "const Ajv = require('ajv'); const ajv = new Ajv(); const schema = require('./core/schemas/clearinghouse-integration-config.schema.json'); const config = require('./config/examples/valueadds277-example-config.json'); console.log(ajv.validate(schema, config) ? '✓ Valid' : '✗ Invalid');"
 
 # Using jq for basic JSON validation
 jq . config/examples/valueadds277-example-config.json > /dev/null && echo "✓ Valid JSON"

@@ -30,7 +30,7 @@ This guide outlines the step-by-step process for manually deploying the Cloud He
 ### Customer Information Gathered
 - [ ] Customer organization name and contact info
 - [ ] Payer ID for X12 transactions
-- [ ] Availity SFTP credentials (host, username, password, folders)
+- [ ] Clearinghouse SFTP credentials (host, username, password, folders)
 - [ ] Claims system details (vendor, version, API documentation)
 - [ ] Claims system API credentials (endpoint, auth method)
 - [ ] Volume estimates (monthly attachments)
@@ -83,7 +83,7 @@ This guide outlines the step-by-step process for manually deploying the Cloud He
 #### Day 3-5: Technical Discovery
 
 **Activities:**
-1. **Availity SFTP Setup**
+1. **Clearinghouse SFTP Setup**
    - Test SFTP connection with provided credentials
    - Identify inbound folder structure
    - Document file naming conventions
@@ -123,19 +123,19 @@ This guide outlines the step-by-step process for manually deploying the Cloud He
          "name": "Customer Health Plan",
          "payerId": "CUSTOMER001",
          "x12Id": "1234567890",
-         "availitySenderId": "030240928"
+         "clearinghouseSenderId": "030240928"
        },
        "modules": {
          "attachments275": {
            "enabled": true,
-           "sftpHost": "sftp.availity.net",
+           "sftpHost": "sftp.clearinghouse.net",
            "sftpUsername": "customer_user",
            "sftpInboundFolder": "/inbound/275",
            "pollingIntervalMinutes": 15
          }
        },
        "backendSystem": {
-         "type": "QNXT",
+         "type": "claims backend",
          "apiEndpoint": "https://api.customer.com/claims",
          "authMethod": "OAuth2",
          "fieldMappings": {
@@ -255,8 +255,8 @@ az keyvault set-policy \
 
 # Navigate to: Azure Portal → API Connections → Create
 # Connection Type: sftp-ssh
-# Connection Name: availity-sftp
-# Host: sftp.availity.net
+# Connection Name: clearinghouse-sftp
+# Host: sftp.clearinghouse.net
 # Username: @Microsoft.KeyVault(SecretUri=https://${KV_NAME}.vault.azure.net/secrets/AvilitySftpUsername)
 # Password: @Microsoft.KeyVault(SecretUri=https://${KV_NAME}.vault.azure.net/secrets/AvilitySftpPassword)
 ```
@@ -316,10 +316,10 @@ pwsh -File ./configure-hipaa-trading-partners.ps1 `
 ```
 
 **Verify:**
-- Partner 1: Availity (030240928)
+- Partner 1: Clearinghouse (030240928)
 - Partner 2: Customer Payer ([customer-payer-id])
-- Agreement: Availity-to-Customer (receive 275)
-- Agreement: Customer-to-Availity (send 277)
+- Agreement: Clearinghouse-to-Customer (receive 275)
+- Agreement: Customer-to-Clearinghouse (send 277)
 
 ---
 
@@ -332,7 +332,7 @@ pwsh -File ./configure-hipaa-trading-partners.ps1 `
 Create custom connector for customer's claims system:
 
 ```typescript
-// Located in: scripts/templates/connectors/qnxt-connector.ts
+// Located in: scripts/templates/connectors/backend-connector.ts
 // (Customize based on customer's specific API)
 
 export class CustomerClaimsConnector {
@@ -383,7 +383,7 @@ Modify `logicapps/workflows/ingest275/workflow.json`:
      "inputs": {
        "host": {
          "connection": {
-           "name": "@parameters('$connections')['availity-sftp']['connectionId']"
+           "name": "@parameters('$connections')['clearinghouse-sftp']['connectionId']"
          }
        },
        "method": "get",
@@ -397,7 +397,7 @@ Modify `logicapps/workflows/ingest275/workflow.json`:
    ```
 
 2. **Update Claims API Action:**
-   - Replace QNXT endpoint with customer endpoint
+   - Replace claims backend endpoint with customer endpoint
    - Update field mappings based on customer config
    - Add custom headers/authentication
 
@@ -451,9 +451,9 @@ az webapp restart \
 **Test 1: Happy Path - Valid 275 File**
 ```bash
 # Upload test file to SFTP
-sftp customer_user@sftp.availity.net
+sftp customer_user@sftp.clearinghouse.net
 cd /inbound/275
-put test-x12-275-availity-to-pchp.edi
+put test-x12-275-clearinghouse-inbound.edi
 
 # Expected Results:
 # 1. File downloaded within 15 minutes

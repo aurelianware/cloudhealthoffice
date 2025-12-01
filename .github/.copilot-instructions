@@ -2,11 +2,11 @@
 
 ## Repository Context
 
-This repository implements a HIPAA-compliant Azure Logic Apps solution for processing healthcare EDI attachments between Availity (clearinghouse) and PCHP-QNXT (claims system). The system processes X12 275 (attachment requests), 277 (status notifications), and 278 (services review) transactions with complete audit trails and encryption.
+This repository implements a HIPAA-compliant Azure Logic Apps solution for processing healthcare EDI attachments between clearinghouse and claims system. The system processes X12 275 (attachment requests), 277 (status notifications), and 278 (services review) transactions with complete audit trails and encryption.
 
 **Trading Partners:**
-- Availity (Sender ID: 030240928) - EDI clearinghouse
-- PCHP-QNXT (Receiver ID: 66917) - Parkland Community Health Plan
+- Clearinghouse (Sender ID: {config.clearinghouseId}) - EDI clearinghouse
+- Health Plan Backend (Receiver ID: {config.payerId}) - Parkland Community Health Plan
 
 **Key Infrastructure:**
 - Azure Logic Apps Standard (WS1 SKU) - Stateful workflow orchestration
@@ -16,7 +16,7 @@ This repository implements a HIPAA-compliant Azure Logic Apps solution for proce
 - Application Insights - Monitoring and telemetry
 
 **Current Workflows:**
-1. **ingest275** - SFTP polling → Data Lake archive → X12 decode → QNXT API → Service Bus
+1. **ingest275** - SFTP polling → Data Lake archive → X12 decode → claims backend API → Service Bus
 2. **ingest278** - 278 transaction processing → Data Lake → Service Bus topic `edi-278`
 3. **replay278** - HTTP endpoint for deterministic transaction replay
 4. **rfai277** - Service Bus consumer → X12 encode → SFTP outbound
@@ -182,7 +182,7 @@ output principalId string = logicApp.identity.principalId
 - `parameters` - Workflow parameter definitions
 
 **Action Naming:**
-- Use descriptive names: `Store_Raw_in_Blob`, `Decode_X12_275`, `Call_QNXT_API`
+- Use descriptive names: `Store_Raw_in_Blob`, `Decode_X12_275`, `Call_Claims_Backend_API`
 - PascalCase with underscores
 - Verb-Object pattern
 
@@ -496,12 +496,12 @@ az webapp show -g $RG_NAME -n $LOGIC_APP_NAME --query "state"
 
 | File | Purpose | Trigger | Flow |
 |------|---------|---------|------|
-| `logicapps/workflows/ingest275/workflow.json` | 275 attachment ingestion | SFTP poll | SFTP → Data Lake → X12 → QNXT → Service Bus |
+| `logicapps/workflows/ingest275/workflow.json` | 275 attachment ingestion | SFTP poll | SFTP → Data Lake → X12 → claims backend → Service Bus |
 | `logicapps/workflows/ingest278/workflow.json` | 278 services review | SFTP poll | SFTP → Data Lake → X12 → Service Bus |
 | `logicapps/workflows/replay278/workflow.json` | 278 replay endpoint | HTTP POST | Validate → Queue to Service Bus |
 | `logicapps/workflows/rfai277/workflow.json` | 277 RFAI outbound | Service Bus | Consume → X12 encode → SFTP send |
-| `logicapps/workflows/process_appeals/workflow.json` | Appeals processing | Service Bus | Detect appeals → QNXT API → RFAI publish |
-| `logicapps/workflows/process_authorizations/workflow.json` | Authorization processing | Service Bus | 278 decode → QNXT → 277 encode |
+| `logicapps/workflows/process_appeals/workflow.json` | Appeals processing | Service Bus | Detect appeals → claims backend API → RFAI publish |
+| `logicapps/workflows/process_authorizations/workflow.json` | Authorization processing | Service Bus | 278 decode → claims backend → 277 encode |
 
 ### Script Files
 
@@ -570,7 +570,7 @@ if (!blobUrl || !blobUrl.includes('hipaa-attachments')) {
 - 401: Unauthorized (authentication required)
 - 500: Internal server error (log details, return generic message)
 
-### QNXT API Integration
+### claims backend API Integration
 
 **Base URL:** Environment-specific (DEV/UAT/PROD)
 
@@ -579,7 +579,7 @@ if (!blobUrl || !blobUrl.includes('hipaa-attachments')) {
 **Endpoints:**
 - `POST /api/claims/attachments/link` - Link attachment to claim
 - `POST /claims/correlate-appeal` - Correlate appeal with claim
-- `POST /appeals/register` - Register appeal in QNXT
+- `POST /appeals/register` - Register appeal in claims backend
 
 **Retry Policy:**
 ```json
@@ -587,9 +587,9 @@ if (!blobUrl || !blobUrl.includes('hipaa-attachments')) {
   "type": "Http",
   "inputs": {
     "method": "POST",
-    "uri": "@{parameters('qnxt_base_url')}/api/claims/attachments/link",
+    "uri": "@{parameters('backend_base_url')}/api/claims/attachments/link",
     "headers": {
-      "Authorization": "Bearer @{parameters('qnxt_api_token')}",
+      "Authorization": "Bearer @{parameters('backend_api_token')}",
       "Content-Type": "application/json"
     },
     "body": "@body('Extract_Metadata')",
@@ -755,9 +755,9 @@ traces
 | where message contains "workflow"
 | project timestamp, message, severityLevel
 
-// QNXT API performance
+// claims backend API performance
 dependencies
-| where name contains "QNXT"
+| where name contains "backend"
 | summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
 
 // PHI access audit
@@ -863,7 +863,7 @@ git push origin release/v1.0.0  # Triggers UAT deployment
 3. **Never hardcode secrets** - Use Key Vault or managed identity
 4. **Mask PHI in logs** - Never log full member IDs, SSNs, or claim details
 5. **Validate all inputs** - Especially for HTTP endpoints
-6. **Use retry policies** - QNXT API and SFTP can have transient failures
+6. **Use retry policies** - claims backend API and SFTP can have transient failures
 7. **Encryption everywhere** - TLS 1.2+ for transit, SSE for rest
 8. **Audit everything** - Log PHI access with correlation IDs
 
@@ -920,13 +920,13 @@ Invoke-RestMethod -Uri $url -Authentication Bearer -Token $(ConvertTo-SecureStri
 - "How do I add a new Service Bus topic to the infrastructure?"
 - "Create a Stateful Logic Apps workflow for processing 999 transactions"
 - "Show me how to mask PHI in Application Insights logs"
-- "What's the retry policy configuration for QNXT API calls?"
+- "What's the retry policy configuration for claims backend API calls?"
 
 **Better:**
 - "Add a new Service Bus topic called 'auth-responses' to infra/main.bicep with 14-day TTL and duplicate detection"
 - "Create a Stateful workflow in logicapps/workflows/ingest999/ that polls SFTP, archives to Data Lake, and publishes to Service Bus"
 - "Update the logging in ingest275 workflow to mask claim numbers (show first 3 chars) and member IDs (show last 4 chars)"
-- "Show the retry policy we use for QNXT API in ingest275 workflow and explain why we use 4 retries with 15-second intervals"
+- "Show the retry policy we use for claims backend API in ingest275 workflow and explain why we use 4 retries with 15-second intervals"
 
 ### Context to Provide
 
@@ -940,11 +940,11 @@ When asking Copilot for help, include:
 
 ### Example Interaction
 
-**User:** "The ingest275 workflow is failing with an X12 decode error in UAT. I've verified the trading partners are configured correctly (Availity: 030240928, PCHP: 66917). The error says 'Schema not found for transaction set 275'."
+**User:** "The ingest275 workflow is failing with an X12 decode error in UAT. I've verified the trading partners are configured correctly (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId}). The error says 'Schema not found for transaction set 275'."
 
 **Copilot should respond with:**
 1. Check if X12_005010X210_275 schema is uploaded to Integration Account
-2. Verify agreement Availity-to-PCHP-275-Receive is active
+2. Verify agreement Clearinghouse-to-HealthPlan-275-Receive is active
 3. Check ISA/GS identifiers in the actual EDI file
 4. Review Application Insights for detailed error
 5. Provide commands to verify schema and agreement configuration
@@ -972,8 +972,8 @@ When asking Copilot for help, include:
 - **ingest278:** 5-15 seconds per file
 - **rfai277:** 3-8 seconds per message
 - **replay278:** 1-2 seconds (just queueing)
-- **process_appeals:** 10-20 seconds (includes QNXT API calls)
-- **process_authorizations:** 15-30 seconds (includes QNXT API and 277 generation)
+- **process_appeals:** 10-20 seconds (includes claims backend API calls)
+- **process_authorizations:** 15-30 seconds (includes claims backend API and 277 generation)
 
 ### NEVER CANCEL
 
@@ -992,12 +992,12 @@ When asking Copilot for help, include:
 - X12_005010X217_278 (Services Review)
 
 **Trading Partners:**
-- Availity: Qualifier=ZZ, Value=030240928
-- PCHP-QNXT: Qualifier=ZZ, Value=66917
+- Clearinghouse: Qualifier=ZZ, Value={config.clearinghouseId}
+- Health Plan: Qualifier=ZZ, Value={config.payerId}
 
 **Agreements:**
-1. Availity-to-PCHP-275-Receive (Inbound 275)
-2. PCHP-to-Availity-277-Send (Outbound 277)
+1. Clearinghouse-to-HealthPlan-275-Receive (Inbound 275)
+2. HealthPlan-to-Clearinghouse-277-Send (Outbound 277)
 3. PCHP-278-Processing (Internal 278)
 
 ### Data Lake Structure
@@ -1019,7 +1019,7 @@ hipaa-attachments/
 | Topic | Purpose | Publishers | Subscribers |
 |-------|---------|------------|-------------|
 | `attachments-in` | Processed 275 events | ingest275 | process_appeals, analytics |
-| `rfai-requests` | RFAI generation requests | QNXT, process_appeals | rfai277 |
+| `rfai-requests` | RFAI generation requests | claims backend, process_appeals | rfai277 |
 | `edi-278` | 278 transaction queue | ingest278, replay278 | process_authorizations |
 | `appeals-auth` | Appeals and auth events | process_appeals | Downstream systems |
 | `auth-statuses` | Authorization status events | process_authorizations | Tracking systems |
@@ -1027,7 +1027,7 @@ hipaa-attachments/
 
 ### Error Codes
 
-**QNXT API:**
+**claims backend API:**
 - 400: Invalid request (check payload)
 - 401: Authentication failure (check token)
 - 404: Claim not found (verify claim number)

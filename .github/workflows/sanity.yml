@@ -245,8 +245,8 @@ jobs:
           echo "🔍 Validating test data files..."
 
           test_files=(
-            "test-x12-275-availity-to-pchp.edi:275 test data"
-            "test-qnxt-response-payload.json:QNXT response"
+            "test-x12-275-clearinghouse-inbound.edi:275 test data"
+            "test-backend-response-payload.json:claims backend response"
           )
 
           for test_info in "${test_files[@]}"; do

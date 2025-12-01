@@ -4,7 +4,7 @@
 # HIPAA Transaction: 005010X210 (275) - Additional Information to Support a Health Care Claim
 #
 # Workflow Steps:
-#   1. sftp-fetch - Download 275 file from Availity SFTP
+#   1. sftp-fetch - Download 275 file from Clearinghouse SFTP
 #   2. parse-x12-275 - Parse EDI to JSON
 #   3. validate-schema - Validate X12 structure
 #   4. extract-metadata - Extract claim/attachment metadata
@@ -12,7 +12,7 @@
 #   6. publish-kafka - Publish to 'attachments-in' topic
 #
 # Trading Partners:
-#   - Sender: Availity (030240928)
+#   - Sender: Clearinghouse (030240928)
 #   - Receiver: Health Plan ({config.payerId})
 
 apiVersion: argoproj.io/v1alpha1
@@ -57,7 +57,7 @@ spec:
   arguments:
     parameters:
       - name: sftp-host
-        value: "sftp.availity.com"
+        value: "sftp.clearinghouse.example.com"
       - name: sftp-folder
         value: "/inbound/attachments"
       - name: file-pattern
@@ -78,7 +78,7 @@ spec:
         sizeLimit: "1Gi"
     - name: sftp-credentials
       secret:
-        secretName: availity-sftp-secret
+        secretName: clearinghouse-sftp-secret
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
@@ -199,12 +199,12 @@ spec:
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: username
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: password
                 optional: true
           - name: SSH_KEY_PATH
@@ -490,12 +490,12 @@ spec:
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: username
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: password
                 optional: true
         volumeMounts:

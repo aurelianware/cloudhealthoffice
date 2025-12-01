@@ -11,7 +11,7 @@ Use this checklist to track progress through the customer onboarding process fro
 - [ ] Initial discovery call completed
 - [ ] Current process documented (hours per attachment, volume, pain points)
 - [ ] Claims system identified and validated (API availability confirmed)
-- [ ] Availity SFTP access confirmed
+- [ ] Clearinghouse SFTP access confirmed
 - [ ] Decision makers identified
 - [ ] Budget and timeline confirmed
 - [ ] Compliance requirements documented
@@ -47,7 +47,7 @@ Use this checklist to track progress through the customer onboarding process fro
 - [ ] Project charter signed off
 
 ### Technical Discovery
-- [ ] Availity SFTP credentials received
+- [ ] Clearinghouse SFTP credentials received
   - Host: ___________________________
   - Username: ________________________
   - Inbound folder: __________________
@@ -151,11 +151,11 @@ Use this checklist to track progress through the customer onboarding process fro
   - [ ] X12_005010X212_277
   - [ ] X12_005010X217_278
 - [ ] Trading partners configured:
-  - [ ] Availity (030240928)
+  - [ ] Clearinghouse (030240928)
   - [ ] Customer Payer ([payer-id])
 - [ ] X12 agreements created:
-  - [ ] Availity-to-Customer (receive 275)
-  - [ ] Customer-to-Availity (send 277)
+  - [ ] Clearinghouse-to-Customer (receive 275)
+  - [ ] Customer-to-Clearinghouse (send 277)
 
 ### Monitoring Setup
 - [ ] Application Insights workspace configured

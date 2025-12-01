@@ -1,5 +1,5 @@
 # SFTP Fetcher Container
-# Downloads files from Availity SFTP server for X12 EDI processing
+# Downloads files from Clearinghouse SFTP server for X12 EDI processing
 #
 # Features:
 #   - SSH key-based authentication
@@ -8,12 +8,12 @@
 #   - Kubernetes Secret integration
 #
 # Build: docker build -t cloudhealthoffice/sftp-fetcher:latest .
-# Run: docker run -v /data:/data cloudhealthoffice/sftp-fetcher --host sftp.availity.com --folder /inbound
+# Run: docker run -v /data:/data cloudhealthoffice/sftp-fetcher --host sftp.clearinghouse.example.com --folder /inbound
 
 FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="Cloud Health Office SFTP Fetcher"
-LABEL org.opencontainers.image.description="SFTP client for downloading X12 EDI files from Availity"
+LABEL org.opencontainers.image.description="SFTP client for downloading X12 EDI files from clearinghouse"
 LABEL org.opencontainers.image.vendor="Aurelianware"
 LABEL org.opencontainers.image.source="https://github.com/aurelianware/cloudhealthoffice"
 

@@ -10,7 +10,7 @@ All requirements from the problem statement have been successfully implemented.
 
 ## Files Created (8)
 
-1. **config/schemas/availity-integration-config.schema.json** (4KB)
+1. **config/schemas/clearinghouse-integration-config.schema.json** (4KB)
    - Complete configuration schema for ValueAdds277
    - Field group controls (financial, clinical, demographics, remittance)
    - Integration flag configuration
@@ -76,7 +76,7 @@ All requirements from the problem statement have been successfully implemented.
 3. **docs/ECS-INTEGRATION.md**
    - Added comprehensive ValueAdds277 section (400+ lines)
    - Complete field reference with descriptions and data types
-   - QNXT to ValueAdds277 mapping table
+   - claims backend to ValueAdds277 mapping table
    - Integration flag logic documentation
    - Provider workflow examples (3 scenarios)
    - Configuration guide
@@ -171,7 +171,7 @@ appealType = "Reconsideration" (default, configurable per payer)
 
 ## Configuration Schema
 
-Complete configuration structure at `config/schemas/availity-integration-config.schema.json`:
+Complete configuration structure at `config/schemas/clearinghouse-integration-config.schema.json`:
 
 ```json
 {
@@ -223,7 +223,7 @@ All components validated successfully:
 
 1. **Technical Documentation** (docs/ECS-INTEGRATION.md)
    - Complete field reference
-   - QNXT mapping table
+   - claims backend mapping table
    - Integration examples
    - Configuration guide
 
@@ -260,7 +260,7 @@ All components validated successfully:
 All acceptance criteria from problem statement met:
 
 - ✅ ECS response schema includes all 60+ ValueAdds277 fields with correct data types
-- ✅ Workflow maps QNXT response to ValueAdds277 format correctly
+- ✅ Workflow maps claims backend response to ValueAdds277 format correctly
 - ✅ Configuration schema allows enabling/disabling field groups per payer
 - ✅ Integration flags populate correctly based on claim status
 - ✅ Appeals module can consume `eligibleForAppeal` flag
@@ -314,7 +314,7 @@ All documentation cross-referenced and complete:
 - [VALUEADDS277-TESTING.md](./VALUEADDS277-TESTING.md) - Testing guide
 - [ECS-OPENAPI.yaml](./api/ECS-OPENAPI.yaml) - API specification
 - Example responses: `docs/examples/ecs-valueadds277-*.json`
-- Configuration: `config/schemas/availity-integration-config.schema.json`
+- Configuration: `config/schemas/clearinghouse-integration-config.schema.json`
 - Workflow: `logicapps/workflows/ecs_summary_search/workflow.json`
 - Response schema: `schemas/ECS-SummarySearch-Response.json`
 

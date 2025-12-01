@@ -32,11 +32,11 @@ This document provides a comprehensive overview of all features available in Clo
 ### Features by Transaction
 
 #### 275 Attachments
-- ✅ SFTP polling from clearinghouses (Availity, Change Healthcare)
+- ✅ SFTP polling from clearinghouses (Clearinghouse, Change Healthcare)
 - ✅ X12 decode via Integration Account
 - ✅ Metadata extraction (claim, member, provider)
 - ✅ Data Lake archival with date partitioning (`yyyy/MM/dd`)
-- ✅ QNXT API correlation (link attachment to claim)
+- ✅ claims backend API correlation (link attachment to claim)
 - ✅ Service Bus event publishing
 - ✅ Automatic file deletion after processing
 
@@ -45,7 +45,7 @@ This document provides a comprehensive overview of all features available in Clo
 - ✅ X12 277 message generation
 - ✅ SFTP delivery to clearinghouse
 - ✅ Data Lake archival of sent files
-- ✅ QNXT status update
+- ✅ claims backend status update
 
 #### 278 Authorizations
 - ✅ SFTP polling for incoming requests
@@ -705,13 +705,13 @@ Apache 2.0 - See [LICENSE](./LICENSE) for details.
 
 ## 🤝 Integration Focus
 
-Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like QNXT and Facets, providing enhancements to EDI workflows without requiring full replacements.
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like claims adjudication systems, providing enhancements to EDI workflows without requiring full replacements.
 
 ---
 
 ## 🤝 Collaboration and Integration
 
-Cloud Health Office is designed to complement leading core administrative platforms like QNXT and Facets, enabling rapid enhancements to existing workflows without disruption.
+Cloud Health Office is designed to complement leading core administrative platforms like claims adjudication systems, enabling rapid enhancements to existing workflows without disruption.
 
 ---
 

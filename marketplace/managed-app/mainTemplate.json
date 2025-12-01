@@ -52,7 +52,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "SFTP host for EDI file exchange (e.g., sftp.availity.com). Leave empty for sandbox mode."
+        "description": "SFTP host for EDI file exchange (e.g., sftp.clearinghouse.example.com). Leave empty for sandbox mode."
       }
     },
     "sftpUsername": {

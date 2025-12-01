@@ -31,9 +31,9 @@
     },
     "sftpHost": {
       "type": "string",
-      "defaultValue": "sftp.availity.com",
+      "defaultValue": "sftp.clearinghouse.example.com",
       "metadata": {
-        "description": "SFTP host for EDI file exchange (e.g., sftp.availity.com)"
+        "description": "SFTP host for EDI file exchange (e.g., sftp.clearinghouse.example.com)"
       }
     },
     "sftpUsername": {

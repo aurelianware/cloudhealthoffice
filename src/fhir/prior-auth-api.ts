@@ -13,7 +13,7 @@
  * - Real-time FHIR workflow with provider hooks
  * - Attachment support (Binary resource handling)
  * - Decision timeline logic (72-hour SLA compliance)
- * - Clearinghouse integration (Availity)
+ * - Clearinghouse integration (Clearinghouse)
  * 
  * References:
  * - CMS-0057-F: Prior Authorization Final Rule
@@ -814,11 +814,11 @@ function calculateDeadline(hoursFromNow: number): string {
 }
 
 /**
- * Clearinghouse integration configuration for Availity
+ * Clearinghouse integration configuration for Clearinghouse
  */
 export interface ClearinghouseConfig {
   /** Clearinghouse name */
-  name: 'Availity' | 'Change Healthcare' | 'Waystar' | 'Other';
+  name: 'Clearinghouse' | 'Change Healthcare' | 'Waystar' | 'Other';
   
   /** Trading partner ID */
   tradingPartnerId: string;
@@ -959,7 +959,7 @@ export function processFromClearinghouse(
  * - Attachment support via Binary resources
  * - CDS Hooks for provider-facing requirements discovery
  * - Azure Logic Apps orchestration
- * - Availity clearinghouse integration
+ * - Clearinghouse clearinghouse integration
  * - Patient consent management
  * 
  * References:
@@ -1050,7 +1050,7 @@ export interface X12_278_Request {
   /** Payer/Health Plan ID */
   payerId: string;
   
-  /** Trading partner ID (e.g., Availity) */
+  /** Trading partner ID (e.g., Clearinghouse) */
   tradingPartnerId?: string;
 }
 
@@ -1712,8 +1712,8 @@ export interface PriorAuthOrchestrationConfig {
     attachmentTopic: string;
   };
   
-  /** Availity clearinghouse configuration */
-  availity: {
+  /** Clearinghouse clearinghouse configuration */
+  clearinghouse: {
     /** Trading partner ID */
     tradingPartnerId: string;
     /** SFTP endpoint for outbound 278 */
@@ -1758,9 +1758,9 @@ export function createOrchestrationConfig(
       responseTopic: `prior-auth-responses-${environment}`,
       attachmentTopic: `prior-auth-attachments-${environment}`
     },
-    availity: {
-      tradingPartnerId: 'AVAILITY',
-      sftpEndpoint: `sftp.availity.com`,
+    clearinghouse: {
+      tradingPartnerId: 'CLEARINGHOUSE',
+      sftpEndpoint: `sftp.clearinghouse.example.com`,
       outboundFolder: `/outbound/278`,
       inboundFolder: `/inbound/278`
     },

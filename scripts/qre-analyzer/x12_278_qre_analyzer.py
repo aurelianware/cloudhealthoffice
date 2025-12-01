@@ -3,11 +3,11 @@
 X12 278 X215 QRE Analyzer
 
 Validates X12 278 Healthcare Services Review - Inquiry and Response (X215) transactions
-against Availity QRE (Query and Response for Eligibility) requirements and best practices.
+against Clearinghouse QRE (Query and Response for Eligibility) requirements and best practices.
 
 This analyzer ensures compliance with:
 - X12 TR3 005010X215 specifications
-- Availity QRE minimal data requirements
+- Clearinghouse QRE minimal data requirements
 - Best practices for authorization inquiry transactions
 """
 

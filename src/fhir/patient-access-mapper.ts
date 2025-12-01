@@ -14,8 +14,8 @@ import {
 } from 'fhir/r4';
 import {
   ProviderAccessApi,
-  QnxtPatient,
-  QnxtClaim
+  BackendPatient,
+  BackendClaim
 } from './provider-access-api';
 import { redactPHI } from '../security/hipaaLogger';
 
@@ -31,9 +31,9 @@ function buildBundle(entries: BundleEntry[], selfLink: string): Bundle {
   };
 }
 
-export function patientsToBundle(patients: QnxtPatient[], selfLink: string): Bundle {
+export function patientsToBundle(patients: BackendPatient[], selfLink: string): Bundle {
   const bundleEntries: BundleEntry[] = patients.map(patient => {
-    const fhirPatient = providerApi.mapQnxtPatientToFhir(patient);
+    const fhirPatient = providerApi.mapBackendPatientToFhir(patient);
     return {
       fullUrl: `Patient/${fhirPatient.id}`,
       resource: providerApi.redactPhi(fhirPatient)
@@ -43,7 +43,7 @@ export function patientsToBundle(patients: QnxtPatient[], selfLink: string): Bun
   return buildBundle(bundleEntries, selfLink);
 }
 
-export function coverageToBundle(patients: QnxtPatient[], selfLink: string): Bundle {
+export function coverageToBundle(patients: BackendPatient[], selfLink: string): Bundle {
   const bundleEntries: BundleEntry[] = patients.map(patient => {
     const coverage: Coverage = {
       resourceType: 'Coverage',
@@ -76,9 +76,9 @@ export function coverageToBundle(patients: QnxtPatient[], selfLink: string): Bun
   return buildBundle(bundleEntries, selfLink);
 }
 
-export function claimsToBundle(claims: QnxtClaim[], selfLink: string): Bundle {
+export function claimsToBundle(claims: BackendClaim[], selfLink: string): Bundle {
   const bundleEntries: BundleEntry[] = claims.map(claim => {
-    const fhirClaim: Claim = providerApi.mapQnxtClaimToFhir(claim);
+    const fhirClaim: Claim = providerApi.mapBackendClaimToFhir(claim);
     return {
       fullUrl: `Claim/${fhirClaim.id}`,
       resource: providerApi.redactPhi(fhirClaim)

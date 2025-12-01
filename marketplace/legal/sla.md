@@ -160,7 +160,7 @@ The SLA does not apply to Downtime caused by:
 ### 6.2 External Factors
 
 - Internet connectivity issues outside Provider's control
-- Third-party service provider failures (e.g., Availity SFTP, customer backend systems)
+- Third-party service provider failures (e.g., Clearinghouse SFTP, customer backend systems)
 - Force majeure events (natural disasters, war, government actions)
 - DNS issues outside Provider's control
 

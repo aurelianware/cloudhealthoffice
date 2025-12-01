@@ -71,7 +71,7 @@ All HIPAA technical safeguard requirements are addressed:
         │  - Purge protection                           │
         │  - RBAC authorization                         │
         │  - Network ACL: Deny by default               │
-        │  - Secrets: SFTP, QNXT API, Connection strings│
+        │  - Secrets: SFTP, claims backend API, Connection strings│
         └───────────────────────────────────────────────┘
                                │
         ┌──────────────────────┴──────────────────────┐
@@ -91,7 +91,7 @@ All HIPAA technical safeguard requirements are addressed:
 
 | Zone | Components | Access Level | PHI Present |
 |------|------------|--------------|-------------|
-| **External** | Availity SFTP, QNXT API | Public (encrypted) | Yes |
+| **External** | Clearinghouse SFTP, claims backend API | Public (encrypted) | Yes |
 | **DMZ** | Logic App HTTP endpoint | Azure AD auth required | No (validation only) |
 | **Private Network** | Logic Apps, Storage, Service Bus, Key Vault | Private endpoints only | Yes |
 | **Management** | Azure Portal, Azure CLI | Azure AD + MFA | Read-only access |
@@ -145,13 +145,13 @@ Store these secrets in Key Vault:
 
 | Secret Name | Description | Example Value | Rotation Frequency |
 |-------------|-------------|---------------|-------------------|
-| `sftp-host` | Availity SFTP hostname | `sftp.availity.com` | N/A (non-secret) |
+| `sftp-host` | Clearinghouse SFTP hostname | `sftp.clearinghouse.example.com` | N/A (non-secret) |
 | `sftp-username` | SFTP service account username | `payer-hipaa-prod` | Annually |
 | `sftp-password` | SFTP service account password | `<secure-password>` | Quarterly |
 | `sftp-private-key` | SSH private key for SFTP | `<PEM-formatted-private-key>` | Annually |
-| `qnxt-api-base-url` | QNXT API endpoint | `https://qnxt-api.example.com` | N/A (non-secret) |
-| `qnxt-api-client-id` | QNXT OAuth client ID | `payer-hipaa-client` | As needed |
-| `qnxt-api-client-secret` | QNXT OAuth client secret | `<secure-secret>` | Quarterly |
+| `claims-backend-api-base-url` | claims backend API endpoint | `https://claims-backend-api.example.com` | N/A (non-secret) |
+| `claims-backend-api-client-id` | claims backend OAuth client ID | `payer-hipaa-client` | As needed |
+| `claims-backend-api-client-secret` | claims backend OAuth client secret | `<secure-secret>` | Quarterly |
 | `service-bus-connection-string` | Service Bus connection string (if not using MI) | `Endpoint=sb://...` | N/A (prefer MI) |
 | `storage-account-key` | Storage account key (if not using MI) | `<account-key>` | N/A (prefer MI) |
 
@@ -166,7 +166,7 @@ KV_NAME="hipaa-attachments-prod-kv"
 az keyvault secret set \
   --vault-name "$KV_NAME" \
   --name "sftp-host" \
-  --value "sftp.availity.com"
+  --value "sftp.clearinghouse.example.com"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
@@ -178,20 +178,20 @@ az keyvault secret set \
   --name "sftp-password" \
   --value "<secure-password>"
 
-# Add QNXT API credentials
+# Add claims backend API credentials
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-base-url" \
-  --value "https://qnxt-api-prod.example.com"
+  --name "claims-backend-api-base-url" \
+  --value "https://claims-backend-api-prod.example.com"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-id" \
+  --name "claims-backend-api-client-id" \
   --value "payer-hipaa-client"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-secret" \
+  --name "claims-backend-api-client-secret" \
   --value "<secure-client-secret>"
 ```
 
@@ -204,12 +204,12 @@ Logic App workflows can reference Key Vault secrets using the `@keyvault()` expr
   "type": "Http",
   "inputs": {
     "method": "POST",
-    "uri": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-base-url')/claims/attach",
+    "uri": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-base-url')/claims/attach",
     "authentication": {
       "type": "ClientCredentials",
       "tenant": "@parameters('$authentication').tenant",
-      "audience": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-client-id')",
-      "secret": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/qnxt-api-client-secret')"
+      "audience": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-client-id')",
+      "secret": "@keyvault('https://hipaa-attachments-prod-kv.vault.azure.net/secrets/claims-backend-api-client-secret')"
     }
   }
 }
@@ -274,17 +274,17 @@ az keyvault secret set \
 # Update SFTP server with new password
 # (Implementation specific to your SFTP provider)
 
-# Rotate QNXT API client secret
+# Rotate claims backend API client secret
 NEW_CLIENT_SECRET=$(openssl rand -base64 32)
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-secret" \
+  --name "claims-backend-api-client-secret" \
   --value "$NEW_CLIENT_SECRET"
 
-# Update QNXT API with new client secret
-# (Call QNXT API to update OAuth client)
+# Update claims backend API with new client secret
+# (Call claims backend API to update OAuth client)
 
-echo "✅ Key Vault secrets updated. Remember to update SFTP server and QNXT API with new credentials."
+echo "✅ Key Vault secrets updated. Remember to update SFTP server and claims backend API with new credentials."
 EOF
 
 chmod +x rotate-secrets.sh
@@ -295,7 +295,7 @@ chmod +x rotate-secrets.sh
 1. Generate new secret value (use strong random generator)
 2. Add new secret to Key Vault with version
 3. Test new secret with Logic App workflow
-4. Update external system (SFTP, QNXT) with new secret
+4. Update external system (SFTP, claims backend) with new secret
 5. Verify all workflows succeed with new secret
 6. Archive old secret version (soft delete retains for 90 days)
 
@@ -305,7 +305,7 @@ chmod +x rotate-secrets.sh
 |-------------|-----------|-------|------------|
 | SFTP Password | Quarterly | Security Team | Automated script |
 | SFTP SSH Key | Annually | Security Team | Manual process |
-| QNXT API Client Secret | Quarterly | Integration Team | Automated script |
+| claims backend API Client Secret | Quarterly | Integration Team | Automated script |
 | OAuth Tokens | Daily (automatic) | Azure AD | Built-in Azure AD |
 | Storage Account Keys | Annually | DevOps Team | Manual (prefer managed identity) |
 
@@ -1376,11 +1376,11 @@ az deployment group create \
 
 ```bash
 # Add secrets to Key Vault
-az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "sftp-host" --value "sftp.availity.com"
+az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "sftp-host" --value "sftp.clearinghouse.example.com"
 az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "sftp-username" --value "<username>"
 az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "sftp-password" --value "<password>"
-az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "qnxt-api-base-url" --value "https://qnxt-api-prod.example.com"
-az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "qnxt-api-client-secret" --value "<secret>"
+az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "claims-backend-api-base-url" --value "https://claims-backend-api-prod.example.com"
+az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "claims-backend-api-client-secret" --value "<secret>"
 ```
 
 #### 4. Configure RBAC

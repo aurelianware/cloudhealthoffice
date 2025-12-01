@@ -8,7 +8,7 @@
 
 **GATEKEEPER:** "What is this regarding?"
 
-**YOU:** "We work with healthcare payers to automate their 275 attachment processing through Availity. I wanted to have a brief conversation about how we've helped similar organizations reduce processing time by 80%. Who handles that at your organization?"
+**YOU:** "We work with healthcare payers to automate their 275 attachment processing through Clearinghouse. I wanted to have a brief conversation about how we've helped similar organizations reduce processing time by 80%. Who handles that at your organization?"
 
 **GATEKEEPER:** "That would be [Name/Title]. Let me see if they're available."
 
@@ -30,7 +30,7 @@
 
 **YOU:** "I'll be brief. We work with healthcare payers like [Competitor/Similar Payer] to automate their medical attachment processing. They were spending 2+ hours per attachment with manual SFTP downloads and data entry. We reduced that to 5 minutes with full automation."
 
-**YOU:** "Quick question: Are you currently processing 275 attachments through Availity?"
+**YOU:** "Quick question: Are you currently processing 275 attachments through Clearinghouse?"
 
 **PROSPECT:** "Yes, we are." **[If NO, ask: "Are you handling attachments through another clearinghouse or process?"]**
 
@@ -50,7 +50,7 @@
 
 **PROSPECT:** "Sure."
 
-**YOU:** "Perfect. And just to make sure I send relevant information—what claims system are you using? QNXT, FacetsRx, or something else?"
+**YOU:** "Perfect. And just to make sure I send relevant information—what claims system are you using? claims adjudication systems such as or something else?"
 
 **PROSPECT:** "[Claims System]"
 
@@ -62,7 +62,7 @@
 
 **PROSPECT:** "We already have a process for handling attachments."
 
-**YOU:** "That's exactly why I'm calling. Most payers do have a process, but it's typically manual. Let me ask—when a 275 comes in through Availity, how long does it take from file download to having it linked to a claim in your system?"
+**YOU:** "That's exactly why I'm calling. Most payers do have a process, but it's typically manual. Let me ask—when a 275 comes in through Clearinghouse, how long does it take from file download to having it linked to a claim in your system?"
 
 **PROSPECT:** "I'm not sure exactly..."
 
@@ -196,7 +196,7 @@
 
 **YOU:** "Hi [Name], this is [Your Name] from Cloud Health Office Platform. My number is [Phone Number]."
 
-**YOU:** "I'm calling because we work with healthcare payers to automate their 275 attachment processing through Availity. We've helped organizations like [Similar Payer] reduce processing time from 2 hours per attachment to about 5 minutes."
+**YOU:** "I'm calling because we work with healthcare payers to automate their 275 attachment processing through Clearinghouse. We've helped organizations like [Similar Payer] reduce processing time from 2 hours per attachment to about 5 minutes."
 
 **YOU:** "If you're processing attachments manually and would like to see how we can save you 80% in operational costs, give me a call back at [Phone Number]. Or I can send you a quick one-pager via email—my address is [Email]."
 
@@ -296,13 +296,13 @@
 ## Key Talking Points
 
 ### Elevator Pitch (30 seconds):
-"We help healthcare payers automate their medical attachment processing through Availity. Instead of spending 2+ hours manually downloading, decoding, and linking each 275 attachment to claims, our platform does it automatically in 5 minutes. Most payers save around $180K annually and get an 18x ROI."
+"We help healthcare payers automate their medical attachment processing through Clearinghouse. Instead of spending 2+ hours manually downloading, decoding, and linking each 275 attachment to claims, our platform does it automatically in 5 minutes. Most payers save around $180K annually and get an 18x ROI."
 
 ### Value Propositions:
 1. **Time Savings:** 80% reduction in processing time (2 hours → 5 minutes)
 2. **Cost Savings:** $180K+ annually in operational costs
 3. **Compliance:** Built-in HIPAA compliance with Premium Key Vault and audit trails
-4. **Integration:** Works with any claims system (QNXT, FacetsRx, TriZetto, etc.)
+4. **Integration:** Works with any claims system (claims adjudication systems such as TriZetto, etc.)
 5. **Speed to Value:** 90-day implementation, no custom development required
 
 ### Competitive Differentiators:

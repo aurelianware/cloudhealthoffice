@@ -449,7 +449,7 @@ This phase delivered complete sales, marketing, and customer onboarding material
 - [HIPAA Compliance Guide](https://www.hhs.gov/hipaa/index.html)
 - [Azure Logic Apps Documentation](https://learn.microsoft.com/en-us/azure/logic-apps/)
 - [X12 EDI Standards](https://x12.org/)
-- [Availity Developer Portal](https://www.availity.com/)
+- [Clearinghouse Developer Portal](https://www.clearinghouse.com/)
 
 ---
 

@@ -15,7 +15,7 @@
 
 ## Overview
 
-The Enhanced Claim Status (ECS) integration enables providers to query claim status information from any claims adjudication system (QNXT, FacetsRx, TriZetto, etc.). The integration implements four search methods to support various claim lookup scenarios and is **fully configuration-driven for multi-payer platformization**.
+The Enhanced Claim Status (ECS) integration enables providers to query claim status information from any claims adjudication system (claims adjudication systems such as TriZetto, etc.). The integration implements four search methods to support various claim lookup scenarios and is **fully configuration-driven for multi-payer platformization**.
 
 ### Platform Architecture
 
@@ -32,9 +32,9 @@ For adding a new payer, see the [Developer Onboarding Guide](#developer-onboardi
 ### Features
 
 - **Four Search Methods**: Service Date, Member, Check Number, and Claim History
-- **QNXT Backend Integration**: Direct integration with QNXT Claims API
+- **claims backend Backend Integration**: Direct integration with claims backend Claims API
 - **Request Validation**: Schema-based validation of incoming requests
-- **Response Transformation**: Converts QNXT responses to Availity ECS format
+- **Response Transformation**: Converts claims backend responses to the clearinghouse ECS format
 - **Retry Logic**: Automatic retries for transient failures (4 retries @ 15s intervals)
 - **Error Handling**: Comprehensive error handling with detailed error messages
 - **Audit Logging**: All searches logged to Application Insights
@@ -56,7 +56,7 @@ logicapps/workflows/ecs_summary_search/workflow.json
 
 ```
 ┌─────────────┐      ┌──────────────────┐      ┌──────────────┐      ┌─────────────────┐
-│   Provider  │ ───> │  ECS Logic App   │ ───> │  QNXT API    │ ───> │  Claims Database│
+│   Provider  │ ───> │  ECS Logic App   │ ───> │  claims backend API    │ ───> │  Claims Database│
 │   System    │ <─── │  (Workflow)      │ <─── │              │ <─── │                 │
 └─────────────┘      └──────────────────┘      └──────────────┘      └─────────────────┘
                               │
@@ -69,8 +69,8 @@ logicapps/workflows/ecs_summary_search/workflow.json
 1. **HTTP Trigger**: Receives ECS search requests
 2. **Request Validation**: Validates incoming request schema
 3. **Search Router**: Routes to appropriate search method
-4. **QNXT Client**: Makes API calls to QNXT backend with retry logic
-5. **Response Transformer**: Converts QNXT format to Availity ECS format
+4. **claims backend Client**: Makes API calls to claims backend backend with retry logic
+5. **Response Transformer**: Converts claims backend format to the clearinghouse ECS format
 6. **Error Handler**: Catches and formats errors
 7. **Logger**: Records all operations to Application Insights
 
@@ -317,25 +317,25 @@ The ECS workflow handles the following error scenarios:
    - **Response**: 400 Bad Request with error details
    - **Example**: `searchMethod: "InvalidMethod"`
 
-3. **QNXT API Unavailable**
-   - **Cause**: QNXT backend system is down or unreachable
+3. **claims backend API Unavailable**
+   - **Cause**: claims backend backend system is down or unreachable
    - **Response**: 500 Internal Server Error
    - **Retry**: Automatic retry (4 attempts @ 15s intervals)
 
-4. **QNXT Authentication Failure**
+4. **claims backend Authentication Failure**
    - **Cause**: Invalid or expired API token
    - **Response**: 401 Unauthorized
    - **Action**: Token refresh required
 
 5. **Rate Limit Exceeded**
-   - **Cause**: Too many requests to QNXT API
+   - **Cause**: Too many requests to claims backend API
    - **Response**: 429 Too Many Requests
    - **Action**: Implement exponential backoff
 
 6. **Timeout**
-   - **Cause**: QNXT API response took too long
+   - **Cause**: claims backend API response took too long
    - **Response**: 504 Gateway Timeout
-   - **Action**: Check QNXT system performance
+   - **Action**: Check claims backend system performance
 
 ### Error Response Format
 
@@ -371,17 +371,17 @@ All errors follow this standard format:
 | `DATE_RANGE_INVALID` | Invalid date range | 400 |
 | `AUTHENTICATION_FAILED` | API token invalid | 401 |
 | `RATE_LIMIT_EXCEEDED` | Too many requests | 429 |
-| `QNXT_UNAVAILABLE` | Backend unavailable | 503 |
+| `claims backend_UNAVAILABLE` | Backend unavailable | 503 |
 | `INTERNAL_ERROR` | Unexpected error | 500 |
 | `TIMEOUT` | Request timeout | 504 |
 
 ## API Mappings
 
-### QNXT to Availity ECS Mapping
+### claims backend to the clearinghouse ECS Mapping
 
 #### Claim Status Mapping
 
-| QNXT Status Code | QNXT Status | ECS Status | ECS Status Code |
+| claims backend Status Code | claims backend Status | ECS Status | ECS Status Code |
 |------------------|-------------|------------|-----------------|
 | 01 | Received | Pending | F0 |
 | 02 | In Process | In Process | F1 |
@@ -394,14 +394,14 @@ All errors follow this standard format:
 
 #### Date Format Mapping
 
-| QNXT Format | ECS Format | Example |
+| claims backend Format | ECS Format | Example |
 |-------------|------------|---------|
 | YYYY-MM-DD | CCYYMMDD | 2024-01-15 → 20240115 |
 | ISO 8601 | CCYYMMDD | 2024-01-15T10:30:00Z → 20240115 |
 
 #### Amount Mapping
 
-| QNXT Field | ECS Field | Notes |
+| claims backend Field | ECS Field | Notes |
 |------------|-----------|-------|
 | `billed_amount` | `billedAmount` | Convert to decimal |
 | `allowed_amount` | `allowedAmount` | Convert to decimal |
@@ -411,7 +411,7 @@ All errors follow this standard format:
 
 #### Field Mapping
 
-| QNXT Field | ECS Field | Transformation |
+| claims backend Field | ECS Field | Transformation |
 |------------|-----------|----------------|
 | `claim_id` | `claimNumber` | Direct mapping |
 | `patient_acct_num` | `patientAccountNumber` | Direct mapping |
@@ -447,15 +447,15 @@ Content-Type: application/json
 
 **Note**: Replace `YOUR_JWT_TOKEN_HERE` with your actual JWT token obtained from Azure AD OAuth 2.0.
 
-### QNXT API Authentication
+### claims backend API Authentication
 
-QNXT API calls use a separate Bearer token:
+claims backend API calls use a separate Bearer token:
 
 ```http
-Authorization: Bearer YOUR_QNXT_TOKEN_HERE
+Authorization: Bearer YOUR_claims backend_TOKEN_HERE
 ```
 
-**Note**: The QNXT token is stored securely in Azure Key Vault and referenced via Logic App parameters.
+**Note**: The claims backend token is stored securely in Azure Key Vault and referenced via Logic App parameters.
 
 **Token Management**:
 - Tokens are stored as secure parameters in Logic App configuration
@@ -523,11 +523,11 @@ Sample test data is available in:
 - `test-data/ecs-check-number-request.json`
 - `test-data/ecs-claim-history-request.json`
 
-### Mock QNXT Backend
+### Mock claims backend Backend
 
-For testing without QNXT connectivity:
+For testing without claims backend connectivity:
 
-1. Deploy mock QNXT API (Azure Function or API Management)
+1. Deploy mock claims backend API (Azure Function or API Management)
 2. Configure Logic App to use mock URL
 3. Mock returns predictable test data
 4. Supports all search methods and error scenarios
@@ -550,23 +550,23 @@ For testing without QNXT connectivity:
 - Use JSON schema validator in client code
 - Check date format (CCYYMMDD, not YYYY-MM-DD)
 
-#### 2. QNXT Connection Timeouts
+#### 2. claims backend Connection Timeouts
 
 **Symptom**: 504 Gateway Timeout
 
 **Causes**:
-- QNXT API is slow to respond
+- claims backend API is slow to respond
 - Network connectivity issues
 - Large result sets
 
 **Solution**:
-- Check QNXT system status
+- Check claims backend system status
 - Narrow date ranges to reduce result size
-- Contact QNXT support if persistent
+- Contact claims backend support if persistent
 
 #### 3. Authentication Failures
 
-**Symptom**: 401 Unauthorized from QNXT
+**Symptom**: 401 Unauthorized from claims backend
 
 **Causes**:
 - Expired API token
@@ -591,7 +591,7 @@ For testing without QNXT connectivity:
 **Solution**:
 - Verify search criteria are correct
 - Broaden date range
-- Confirm IDs exist in QNXT
+- Confirm IDs exist in claims backend
 - Check for typos in identifiers
 
 ### Debugging
@@ -625,10 +625,10 @@ traces
 | order by timestamp desc
 ```
 
-**QNXT API Performance**:
+**claims backend API Performance**:
 ```kusto
 dependencies
-| where name contains "QNXT"
+| where name contains "claims backend"
 | summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
 | order by timestamp desc
 ```
@@ -657,7 +657,7 @@ In Logic App configuration, set:
 **Monitor Performance Metrics**:
 - Average response time by search method
 - 95th percentile response times
-- QNXT API call duration
+- claims backend API call duration
 - Retry frequency
 - Error rates by type
 
@@ -691,7 +691,7 @@ Enhanced claim status tracking:
 | `statusCode` | string | X12 status code | ValueAdds277 |
 | `statusCodeDescription` | string | Human-readable status | ValueAdds277 |
 | `effectiveDate` | date | Last status update date | **REQUIRED** |
-| `exchangeDate` | datetime | Availity received data timestamp | ValueAdds277 |
+| `exchangeDate` | datetime | Clearinghouse received data timestamp | ValueAdds277 |
 | `comment` | string | Payer-provided comment | ValueAdds277 |
 
 #### 3. Clinical Fields (4 fields)
@@ -769,11 +769,11 @@ Support for appeal workflows:
 | `appealType` | string | Type of appeal allowed | Default: "Reconsideration" |
 | `appealTimelyFilingDate` | date | Last date to file appeal | Default: +180 days from finalized |
 
-### QNXT to ValueAdds277 Mapping
+### claims backend to ValueAdds277 Mapping
 
-Complete field mapping from QNXT backend to ValueAdds277 response:
+Complete field mapping from claims backend backend to ValueAdds277 response:
 
-| ValueAdds277 Field | QNXT Field | Transformation | Notes |
+| ValueAdds277 Field | claims backend Field | Transformation | Notes |
 |-------------------|------------|----------------|-------|
 | `BILLED` | `billed_amount` or `billedAmount` | Direct or fallback | **REQUIRED** |
 | `ALLOWED` | `allowed_amount` or `allowedAmount` | Direct or fallback | Best practice |
@@ -891,7 +891,7 @@ ValueAdds277 features are controlled via configuration schema:
 }
 ```
 
-**Configuration Location:** `config/schemas/availity-integration-config.schema.json`
+**Configuration Location:** `config/schemas/clearinghouse-integration-config.schema.json`
 
 ### Provider Workflow Examples
 
@@ -1150,8 +1150,8 @@ Create a configuration file with ECS-specific settings:
 Map backend-specific field names to standard ECS fields using `fieldMappings` configuration. This enables the platform to translate between backend schemas and the standard ECS interface.
 
 **Common Mapping Scenarios**:
-- QNXT: `claim_id` → `claimNumber`
-- FacetsRx: `claim_num` → `claimNumber`
+- claims backend: `claim_id` → `claimNumber`
+- claims adjudication system: `claim_num` → `claimNumber`
 - TriZetto: `clm_nbr` → `claimNumber`
 
 #### Step 3: Enable ValueAdds277 Features
@@ -1250,6 +1250,6 @@ Best for: Complex transformations, rate-limited backends
 - [COMMERCIALIZATION.md](./COMMERCIALIZATION.md) - Enhanced Claim Status Plus product details
 - [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Configuration schema reference
 - [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Generator documentation
-- [Availity ECS Documentation](https://www.availity.com/ecs) - ECS standard reference
-- [Availity ValueAdds277 QRE](https://www.availity.com/valueadds277) - ValueAdds277 specification
+- [Clearinghouse ECS Documentation](https://www.clearinghouse.com/ecs) - ECS standard reference
+- [Clearinghouse ValueAdds277 QRE](https://www.clearinghouse.com/valueadds277) - ValueAdds277 specification
 - [X12 277 Implementation Guide](https://x12.org/products/277) - Health Care Claim Status Response
