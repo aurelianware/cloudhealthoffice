@@ -1,0 +1,132 @@
+# Cloud Health Office — Investment Summary
+
+---
+
+## The Company
+
+**Cloud Health Office** is the first open-source, Azure-native EDI platform delivering complete CMS-0057-F compliance to health plans in under 5 minutes—not 6-18 months.
+
+---
+
+## The Problem
+
+| Challenge | Impact |
+|-----------|--------|
+| **900+ health plans** face mandatory CMS compliance | January 1, 2027 deadline |
+| **Traditional vendors** require 6-18 month implementations | $500K-$2M+ cost |
+| **Build internally** takes 18-36 months | $2M+ development cost |
+| **Non-compliance penalty** | Up to $10K/day + program exclusion |
+
+---
+
+## The Solution
+
+| Capability | Status |
+|------------|--------|
+| Patient Access API (FHIR R4) | ✅ Production Ready |
+| Provider Access API | ✅ Production Ready |
+| Prior Authorization API (72hr/7-day) | ✅ Automated |
+| Payer-to-Payer API | ✅ Ready |
+| Complete X12 ↔ FHIR Transformation | ✅ 45 Tests Passing |
+| Deployment Time | **< 5 minutes** |
+
+---
+
+## Market Opportunity
+
+| Segment | Size |
+|---------|------|
+| **TAM**: US Healthcare EDI | $8.2B (8% CAGR) |
+| **SAM**: Cloud-Native EDI | $2.1B (15% CAGR) |
+| **SOM**: 3-Year Target | $50M |
+
+**Regulatory Catalyst**: CMS-0057-F creates mandatory, urgent demand across 900+ Medicare, Medicaid, CHIP, and QHP payers.
+
+---
+
+## Traction
+
+| Metric | Current | Year 1 Target |
+|--------|---------|---------------|
+| Platform Status | ✅ 100% CMS-Ready | Maintained |
+| Test Suite | 193 tests passing | 250+ |
+| Pilot Pipeline | Active conversations | 25 customers |
+| GitHub Stars | Growing | 1,000 |
+
+**Product Milestones Achieved**: Complete FHIR R4 transformation, ValueAdds277 enhanced claim status, production-grade HIPAA security, zero-code payer onboarding.
+
+---
+
+## Financial Snapshot
+
+| Year | Customers | ARR | Gross Margin |
+|------|-----------|-----|--------------|
+| **Year 1** | 50 | $1.8M | 75% |
+| **Year 2** | 150 | $6.0M | 78% |
+| **Year 3** | 300 | $13.5M | 82% |
+
+**Unit Economics**: LTV:CAC 25:1 | CAC Payback: 6 months | NRR: 115-125%
+
+---
+
+## Business Model
+
+| Tier | Annual | Target Segment |
+|------|--------|----------------|
+| **Starter** | $10,788 | Regional payers, evaluation |
+| **Professional** | $32,388 | Mid-market, production |
+| **Enterprise** | $86,388 | Large plans, unlimited scale |
+
+**Revenue Streams**: 80% Subscription | 12% Professional Services | 5% Premium Support | 3% Partner Revenue Share
+
+---
+
+## Team
+
+Experienced leadership in healthcare IT, Azure platform architecture, and SaaS sales. Advisory board includes former payer executives and regulatory compliance experts.
+
+**Key Hires Planned**: Sr. AI/ML Engineer (Q1), Developer Advocate (Q1), Sr. Backend Engineer (Q2)
+
+---
+
+## The Ask
+
+**$2M Seed Round**
+
+| Use of Funds | Allocation |
+|--------------|------------|
+| Engineering | 50% |
+| Sales & Marketing | 30% |
+| Operations | 20% |
+
+---
+
+## Investment Highlights
+
+- **Market Timing**: CMS deadline creates $8B+ market urgency
+- **Product-Market Fit**: Only open-source, Azure-native solution
+- **Capital Efficiency**: LTV:CAC > 25:1, profitability Year 3
+- **Defensibility**: Open source community, compliance expertise, Azure partnership
+- **Exit Potential**: 8-12x ARR ($108M-$162M Year 3)
+
+---
+
+## Contact
+
+**Aurelianware — Cloud Health Office**
+
+| Channel | Contact |
+|---------|---------|
+| Website | cloudhealthoffice.com |
+| Investors | investors@aurelianware.com |
+| GitHub | github.com/aurelianware/cloudhealthoffice |
+
+---
+
+*Cloud Health Office — The inevitable evolution of healthcare EDI*
+
+*Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+
+---
+
+**Confidential**: This document contains forward-looking statements. Financial projections are estimates based on current assumptions.
