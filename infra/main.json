@@ -76,11 +76,11 @@
       "type": "bool",
       "defaultValue": true
     },
-    "qnxtBaseUrl": {
+    "backendBaseUrl": {
       "type": "string",
-      "defaultValue": "https://qnxt-api.example.com"
+      "defaultValue": "https://claims-backend-api.example.com"
     },
-    "qnxtApiToken": {
+    "backendApiToken": {
       "type": "securestring",
       "defaultValue": ""
     }
@@ -403,11 +403,11 @@
           "appInsightsConnectionString": {
             "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-ai', parameters('baseName'))), '2020-02-02').ConnectionString]"
           },
-          "qnxtBaseUrl": {
-            "value": "[parameters('qnxtBaseUrl')]"
+          "backendBaseUrl": {
+            "value": "[parameters('backendBaseUrl')]"
           },
-          "qnxtApiToken": {
-            "value": "[parameters('qnxtApiToken')]"
+          "backendApiToken": {
+            "value": "[parameters('backendApiToken')]"
           },
           "enableEcs": {
             "value": "[parameters('enableEcs')]"
@@ -448,18 +448,18 @@
                 "description": "Application Insights connection string"
               }
             },
-            "qnxtBaseUrl": {
+            "backendBaseUrl": {
               "type": "string",
-              "defaultValue": "https://qnxt-api.example.com",
+              "defaultValue": "https://claims-backend-api.example.com",
               "metadata": {
-                "description": "QNXT API base URL"
+                "description": "claims backend API base URL"
               }
             },
-            "qnxtApiToken": {
+            "backendApiToken": {
               "type": "securestring",
               "defaultValue": "",
               "metadata": {
-                "description": "QNXT API authentication token"
+                "description": "claims backend API authentication token"
               }
             },
             "enableEcs": {
@@ -479,7 +479,7 @@
               "type": "object",
               "value": {
                 "workflowName": "[variables('ecsWorkflowName')]",
-                "qnxtBaseUrl": "[parameters('qnxtBaseUrl')]",
+                "backendBaseUrl": "[parameters('backendBaseUrl')]",
                 "enabled": "[parameters('enableEcs')]"
               }
             },
@@ -487,8 +487,8 @@
               "type": "array",
               "value": [
                 {
-                  "name": "ECS_QNXT_BASE_URL",
-                  "value": "[parameters('qnxtBaseUrl')]"
+                  "name": "ECS_BACKEND_BASE_URL",
+                  "value": "[parameters('backendBaseUrl')]"
                 },
                 {
                   "name": "ECS_WORKFLOW_ENABLED",
@@ -519,9 +519,9 @@
             "ecsWorkflowParameters": {
               "type": "object",
               "value": {
-                "qnxt_base_url": {
+                "backend_base_url": {
                   "type": "String",
-                  "value": "[parameters('qnxtBaseUrl')]"
+                  "value": "[parameters('backendBaseUrl')]"
                 }
               }
             },
@@ -530,7 +530,7 @@
               "value": {
                 "Component": "ECS",
                 "WorkflowType": "SummarySearch",
-                "IntegrationType": "QNXT",
+                "IntegrationType": "claims backend",
                 "Environment": "[if(contains(parameters('baseName'), 'prod'), 'Production', if(contains(parameters('baseName'), 'uat'), 'UAT', 'Development'))]"
               }
             }

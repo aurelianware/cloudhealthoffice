@@ -8,7 +8,7 @@ describe('mapX12270ToFhirEligibility', () => {
         inquiryId: 'INQ123456',
         informationSource: {
           id: '030240928',
-          name: 'Availity Health Plan'
+          name: 'Clearinghouse Health Plan'
         },
         subscriber: {
           memberId: 'MEM1001',
@@ -149,7 +149,7 @@ describe('mapX12270ToFhirEligibility', () => {
         transactionDate: '20240115-1430',
         informationSource: {
           id: '030240928',
-          name: 'Availity Health Network',
+          name: 'Clearinghouse Health Network',
           taxId: '12-3456789'
         },
         informationReceiver: {

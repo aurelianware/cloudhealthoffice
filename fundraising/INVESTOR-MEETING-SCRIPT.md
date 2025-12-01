@@ -97,7 +97,7 @@ npm run generate -- interactive --output demo-config.json --generate
 > "Once deployed, payers can process their first transaction the same day. Here's what a 275 attachment flow looks like..."
 
 *Walk through a sample transaction:*
-- Attachment received via SFTP from Availity
+- Attachment received via SFTP from the clearinghouse
 - Decoded and validated via Integration Account
 - Linked to claim in backend system
 - Status published to Service Bus

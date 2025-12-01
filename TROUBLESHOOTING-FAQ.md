@@ -257,9 +257,9 @@ az webapp show -g <rg> -n <la> --query "outboundIpAddresses"
 
 # Provide IPs to SFTP host for allowlist
 
-# For Availity specifically
-# Contact Availity support to allowlist Azure IPs
-# Availity support: 1-800-AVAILITY
+# For Clearinghouse specifically
+# Contact Clearinghouse support to allowlist Azure IPs
+# Clearinghouse support: 1-800-CLEARINGHOUSE
 ```
 
 ### Issue: X12 decode fails
@@ -480,16 +480,16 @@ az keyvault show --name <keyvault> --query "properties.accessPolicies"
 # Look for slow dependencies:
 # 1. SFTP download
 # 2. X12 decode
-# 3. QNXT API call
+# 3. claims backend API call
 # 4. Blob upload
 
 # Scale Logic App
 az webapp update -g <rg> -n <la> --set properties.reserved=true
 az webapp plan update -g <rg> -n <asp> --sku WS2
 
-# Enable caching for QNXT API
+# Enable caching for claims backend API
 # Configure connection pooling
-# Consider QNXT API rate limits
+# Consider claims backend API rate limits
 ```
 
 ### Issue: Service Bus throttling

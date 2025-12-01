@@ -2,12 +2,12 @@
 """
 SFTP Fetcher for Cloud Health Office
 
-Downloads X12 EDI files from Availity SFTP server for processing.
+Downloads X12 EDI files from Clearinghouse SFTP server for processing.
 Supports SSH key-based authentication, connection pooling, retry logic,
 and Kubernetes Secret integration for credentials.
 
 Usage:
-    python fetch_sftp.py --host sftp.availity.com --folder /inbound --output /data/downloads
+    python fetch_sftp.py --host sftp.clearinghouse.example.com --folder /inbound --output /data/downloads
     python fetch_sftp.py --list-only  # List files without downloading
 
 Environment Variables:
@@ -311,7 +311,7 @@ def load_config_from_env() -> SFTPConfig:
 def main():
     """Main entry point for SFTP fetcher"""
     parser = argparse.ArgumentParser(
-        description="Download X12 EDI files from Availity SFTP server"
+        description="Download X12 EDI files from Clearinghouse SFTP server"
     )
     
     # Connection options

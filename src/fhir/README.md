@@ -61,7 +61,7 @@ console.log('Eligibility Request:', eligibility);
 ✅ SMART on FHIR authentication (OpenID Connect/OAuth2)  
 ✅ Patient consent management  
 ✅ Search & read for 6 FHIR resource types (Patient, Claim, Encounter, EOB, Condition, Observation)  
-✅ Backend data mapping (QNXT → FHIR)  
+✅ Backend data mapping (claims backend → FHIR)  
 ✅ HIPAA safeguards (AES-256-GCM encryption, audit logging, PHI redaction)  
 ✅ US Core v3.1.1 compliance  
 ✅ Da Vinci PDex alignment  

@@ -95,7 +95,7 @@
                       "providerIdQualifier": "@coalesce(triggerBody()?['serviceDateSearch']?['providerIdQualifier'], 'NPI')"
                     }
                   },
-                  "Query_QNXT_by_ServiceDate": {
+                  "Query_claims backend_by_ServiceDate": {
                     "type": "Http",
                     "runAfter": {
                       "Extract_ServiceDate_Parameters": [
@@ -104,10 +104,10 @@
                     },
                     "inputs": {
                       "method": "POST",
-                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/service-date",
+                      "uri": "@{parameters('backend_base_url')}/api/v1/claims/search/service-date",
                       "headers": {
                         "Content-Type": "application/json",
-                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                        "Authorization": "Bearer @{parameters('claims_backend_api_token')}"
                       },
                       "body": {
                         "serviceFromDate": "@outputs('Extract_ServiceDate_Parameters')?['serviceFromDate']",
@@ -125,13 +125,13 @@
                   "Set_ServiceDate_Results": {
                     "type": "SetVariable",
                     "runAfter": {
-                      "Query_QNXT_by_ServiceDate": [
+                      "Query_claims backend_by_ServiceDate": [
                         "Succeeded"
                       ]
                     },
                     "inputs": {
-                      "name": "qnxtResults",
-                      "value": "@body('Query_QNXT_by_ServiceDate')"
+                      "name": "backendResults",
+                      "value": "@body('Query_claims backend_by_ServiceDate')"
                     }
                   }
                 }
@@ -151,7 +151,7 @@
                       "serviceToDate": "@triggerBody()?['memberSearch']?['serviceToDate']"
                     }
                   },
-                  "Query_QNXT_by_Member": {
+                  "Query_claims backend_by_Member": {
                     "type": "Http",
                     "runAfter": {
                       "Extract_Member_Parameters": [
@@ -160,10 +160,10 @@
                     },
                     "inputs": {
                       "method": "POST",
-                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/member",
+                      "uri": "@{parameters('backend_base_url')}/api/v1/claims/search/member",
                       "headers": {
                         "Content-Type": "application/json",
-                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                        "Authorization": "Bearer @{parameters('claims_backend_api_token')}"
                       },
                       "body": {
                         "memberId": "@outputs('Extract_Member_Parameters')?['memberId']",
@@ -183,13 +183,13 @@
                   "Set_Member_Results": {
                     "type": "SetVariable",
                     "runAfter": {
-                      "Query_QNXT_by_Member": [
+                      "Query_claims backend_by_Member": [
                         "Succeeded"
                       ]
                     },
                     "inputs": {
-                      "name": "qnxtResults",
-                      "value": "@body('Query_QNXT_by_Member')"
+                      "name": "backendResults",
+                      "value": "@body('Query_claims backend_by_Member')"
                     }
                   }
                 }
@@ -206,7 +206,7 @@
                       "checkDate": "@triggerBody()?['checkNumberSearch']?['checkDate']"
                     }
                   },
-                  "Query_QNXT_by_CheckNumber": {
+                  "Query_claims backend_by_CheckNumber": {
                     "type": "Http",
                     "runAfter": {
                       "Extract_CheckNumber_Parameters": [
@@ -215,10 +215,10 @@
                     },
                     "inputs": {
                       "method": "POST",
-                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/check-number",
+                      "uri": "@{parameters('backend_base_url')}/api/v1/claims/search/check-number",
                       "headers": {
                         "Content-Type": "application/json",
-                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                        "Authorization": "Bearer @{parameters('claims_backend_api_token')}"
                       },
                       "body": {
                         "checkNumber": "@outputs('Extract_CheckNumber_Parameters')?['checkNumber']",
@@ -235,13 +235,13 @@
                   "Set_CheckNumber_Results": {
                     "type": "SetVariable",
                     "runAfter": {
-                      "Query_QNXT_by_CheckNumber": [
+                      "Query_claims backend_by_CheckNumber": [
                         "Succeeded"
                       ]
                     },
                     "inputs": {
-                      "name": "qnxtResults",
-                      "value": "@body('Query_QNXT_by_CheckNumber')"
+                      "name": "backendResults",
+                      "value": "@body('Query_claims backend_by_CheckNumber')"
                     }
                   }
                 }
@@ -258,7 +258,7 @@
                       "memberId": "@triggerBody()?['claimHistorySearch']?['memberId']"
                     }
                   },
-                  "Query_QNXT_by_ClaimHistory": {
+                  "Query_claims backend_by_ClaimHistory": {
                     "type": "Http",
                     "runAfter": {
                       "Extract_ClaimHistory_Parameters": [
@@ -267,10 +267,10 @@
                     },
                     "inputs": {
                       "method": "POST",
-                      "uri": "@{parameters('qnxt_base_url')}/api/v1/claims/search/claim-history",
+                      "uri": "@{parameters('backend_base_url')}/api/v1/claims/search/claim-history",
                       "headers": {
                         "Content-Type": "application/json",
-                        "Authorization": "Bearer @{parameters('qnxt_api_token')}"
+                        "Authorization": "Bearer @{parameters('claims_backend_api_token')}"
                       },
                       "body": {
                         "claimNumber": "@outputs('Extract_ClaimHistory_Parameters')?['claimNumber']",
@@ -287,13 +287,13 @@
                   "Set_ClaimHistory_Results": {
                     "type": "SetVariable",
                     "runAfter": {
-                      "Query_QNXT_by_ClaimHistory": [
+                      "Query_claims backend_by_ClaimHistory": [
                         "Succeeded"
                       ]
                     },
                     "inputs": {
-                      "name": "qnxtResults",
-                      "value": "@body('Query_QNXT_by_ClaimHistory')"
+                      "name": "backendResults",
+                      "value": "@body('Query_claims backend_by_ClaimHistory')"
                     }
                   }
                 }
@@ -322,7 +322,7 @@
             "inputs": {
               "enrichedClaims": "@body('Map_Claims_with_ValueAdds277')"
             },
-            "description": "Enriches QNXT claims with ValueAdds277 fields including financial, clinical, demographic, remittance data, and integration flags"
+            "description": "Enriches claims backend claims with ValueAdds277 fields including financial, clinical, demographic, remittance data, and integration flags"
           },
           "Map_Claims_with_ValueAdds277": {
             "type": "Select",
@@ -332,7 +332,7 @@
               ]
             },
             "inputs": {
-              "from": "@variables('qnxtResults')?['claims']",
+              "from": "@variables('backendResults')?['claims']",
               "select": {
                 "claimNumber": "@item()?['claimNumber']",
                 "patientAccountNumber": "@item()?['patientAccountNumber']",
@@ -397,9 +397,9 @@
                 "appealTimelyFilingDate": "@if(and(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid'))), coalesce(item()?['appealTimelyFilingDate'], addDays(coalesce(item()?['finalizedDate'], item()?['processedDate'], utcNow()), 180)), null())"
               }
             },
-            "description": "Maps each claim from QNXT to ValueAdds277 format with all enhanced fields"
+            "description": "Maps each claim from claims backend to ValueAdds277 format with all enhanced fields"
           },
-          "Transform_QNXT_to_Availity_ECS_Format": {
+          "Transform_claims backend_to_Clearinghouse_ECS_Format": {
             "type": "Compose",
             "runAfter": {
               "Map_ValueAdds277_Fields": [
@@ -418,7 +418,7 @@
           "Log_ECS_Search_Success": {
             "type": "ApiConnection",
             "runAfter": {
-              "Transform_QNXT_to_Availity_ECS_Format": [
+              "Transform_claims backend_to_Clearinghouse_ECS_Format": [
                 "Succeeded"
               ]
             },
@@ -435,7 +435,7 @@
                 "properties": {
                   "requestId": "@triggerBody()?['requestId']",
                   "searchMethod": "@triggerBody()?['searchMethod']",
-                  "totalResults": "@length(variables('qnxtResults')?['claims'])",
+                  "totalResults": "@length(variables('backendResults')?['claims'])",
                   "timestamp": "@utcNow()"
                 }
               }
@@ -454,7 +454,7 @@
               "headers": {
                 "Content-Type": "application/json"
               },
-              "body": "@outputs('Transform_QNXT_to_Availity_ECS_Format')"
+              "body": "@outputs('Transform_claims backend_to_Clearinghouse_ECS_Format')"
             }
           }
         }
@@ -538,11 +538,11 @@
         "type": "Object",
         "defaultValue": {}
       },
-      "qnxt_base_url": {
+      "backend_base_url": {
         "type": "String",
-        "defaultValue": "https://qnxt-api.example.com"
+        "defaultValue": "https://claims-backend-api.example.com"
       },
-      "qnxt_api_token": {
+      "claims_backend_api_token": {
         "type": "SecureString"
       },
       "includeFinancialFields": {
@@ -571,7 +571,7 @@
       }
     },
     "variables": {
-      "qnxtResults": {
+      "backendResults": {
         "type": "Object",
         "value": {}
       }
@@ -588,8 +588,8 @@
         }
       }
     },
-    "qnxt_base_url": {
-      "value": "https://qnxt-api.example.com"
+    "backend_base_url": {
+      "value": "https://claims-backend-api.example.com"
     }
   }
 }

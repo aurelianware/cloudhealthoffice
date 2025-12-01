@@ -10,7 +10,7 @@ This guide covers day-to-day operations of the Cloud Health Office X12 EDI proce
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────────┐     ┌──────────────┐     ┌─────────────────────────────┐   │
-│  │   Availity  │────▶│ Argo Events  │────▶│     Argo Workflows          │   │
+│  │   Clearinghouse  │────▶│ Argo Events  │────▶│     Argo Workflows          │   │
 │  │    SFTP     │     │  (Sensors)   │     │                             │   │
 │  └─────────────┘     └──────────────┘     │  ┌─────────┐ ┌─────────┐   │   │
 │                                            │  │x12-275  │ │x12-278  │   │   │
@@ -224,9 +224,9 @@ kubectl logs -l sensor-name=sftp-sensor -n cloudhealthoffice
 ```bash
 # Test SFTP connection
 kubectl run sftp-test --rm -it --image=cloudhealthoffice/sftp-fetcher \
-  --env="SFTP_HOST=sftp.availity.com" \
-  --env="SFTP_USERNAME=$(kubectl get secret availity-sftp-secret -n cloudhealthoffice -o jsonpath='{.data.username}' | base64 -d)" \
-  --env="SFTP_PASSWORD=$(kubectl get secret availity-sftp-secret -n cloudhealthoffice -o jsonpath='{.data.password}' | base64 -d)" \
+  --env="SFTP_HOST=sftp.clearinghouse.example.com" \
+  --env="SFTP_USERNAME=$(kubectl get secret clearinghouse-sftp-secret -n cloudhealthoffice -o jsonpath='{.data.username}' | base64 -d)" \
+  --env="SFTP_PASSWORD=$(kubectl get secret clearinghouse-sftp-secret -n cloudhealthoffice -o jsonpath='{.data.password}' | base64 -d)" \
   -- --list-only --folder /inbound/attachments
 ```
 
@@ -309,7 +309,7 @@ argo resubmit <workflow-name> -n cloudhealthoffice
 # Submit new workflow with specific file
 argo submit argo-workflows/x12-275-ingest.yaml \
   -n cloudhealthoffice \
-  -p sftp-host=sftp.availity.com \
+  -p sftp-host=sftp.clearinghouse.example.com \
   -p sftp-folder=/inbound/attachments
 ```
 
@@ -359,7 +359,7 @@ resources:
 
 ```bash
 # Rotate SFTP password
-kubectl create secret generic availity-sftp-secret \
+kubectl create secret generic clearinghouse-sftp-secret \
   --from-literal=username=$SFTP_USERNAME \
   --from-literal=password=$NEW_PASSWORD \
   -n cloudhealthoffice --dry-run=client -o yaml | kubectl apply -f -

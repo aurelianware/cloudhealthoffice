@@ -52,12 +52,12 @@
     },
     "qreRequirements": {
       "type": "object",
-      "description": "QRE-specific requirements (Availity best practices)",
+      "description": "QRE-specific requirements (Clearinghouse best practices)",
       "additionalProperties": false,
       "properties": {
         "minimalDataPrinciple": {
           "type": "boolean",
-          "description": "Enforce minimal data principle per Availity QRE best practice",
+          "description": "Enforce minimal data principle per Clearinghouse QRE best practice",
           "default": true
         },
         "requiredSegments": {

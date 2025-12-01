@@ -333,7 +333,7 @@ Checks all `.ps1` files for:
 #### 5. EDI X12 Validation
 Validates all `.edi` files for:
 - X12 envelope structure (ISA/GS/ST/SE/GE/IEA)
-- Trading partner identifiers (Availity/Health Plan)
+- Trading partner identifiers (Clearinghouse/Health Plan)
 - Transaction types (275/277/278)
 - Segment counts and format
 
@@ -398,7 +398,7 @@ The repository includes specialized validation scripts:
 **EDI X12 Validator** (`scripts/validate-edi-x12.ps1`):
 ```powershell
 # Validate a single EDI file
-pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-clearinghouse-inbound.edi
 
 # Validate all EDI files with strict checking
 pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
@@ -411,7 +411,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
 - ISA/IEA envelope validation
 - GS/GE functional group validation
 - ST/SE transaction set validation
-- Trading partner ID verification (Availity: 030240928, Health Plan: {config.payerId})
+- Trading partner ID verification (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId})
 - Segment count validation
 - Transaction type detection (275/277/278)
 
@@ -494,8 +494,8 @@ pwsh -c "./test-workflows.ps1 -TestFullWorkflow"
 ```
 
 **Test Files Available:**
-- `test-x12-275-availity-to-pchp.edi` - Sample 275 EDI file
-- `test-qnxt-response-payload.json` - Sample QNXT API response
+- `test-x12-275-clearinghouse-inbound.edi` - Sample 275 EDI file
+- `test-backend-response-payload.json` - Sample claims backend API response
 - `test-plan-trading-partners.md` - Detailed test plan
 
 ### Pre-Commit Checklist
@@ -582,7 +582,7 @@ Before committing, ensure:
 - Acknowledge good solutions
 
 **Examples:**
-- ✅ "Consider adding retry logic here for transient failures (QNXT API can timeout)"
+- ✅ "Consider adding retry logic here for transient failures (claims backend API can timeout)"
 - ✅ "This workflow should be Stateful instead of Stateless for Logic Apps Standard"
 - ❌ "This is wrong" (not specific enough)
 - ❌ "Rewrite everything" (not constructive)
@@ -697,7 +697,7 @@ For more troubleshooting guidance, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 - Use meaningful action names that describe their purpose
 - Include error handling for all external calls
-- Add retry policies for transient failures (QNXT API, SFTP)
+- Add retry policies for transient failures (claims backend API, SFTP)
 - Use Service Bus for async/decoupled processing
 - Archive all files to Data Lake with date partitioning
 

@@ -7,7 +7,7 @@
     - ISA/IEA envelope segments
     - GS/GE functional group segments
     - ST/SE transaction set segments
-    - Trading partner identifiers (Availity/Health Plan)
+    - Trading partner identifiers (Clearinghouse/Health Plan)
     - Segment structure and delimiters
     - Transaction types (275/277/278)
 
@@ -21,7 +21,7 @@
     Enable strict validation mode with additional checks.
 
 .EXAMPLE
-    .\validate-edi-x12.ps1 -Path "test-x12-275-availity-to-pchp.edi"
+    .\validate-edi-x12.ps1 -Path "test-x12-275-clearinghouse-inbound.edi"
     Validates a single EDI file.
 
 .EXAMPLE
@@ -48,7 +48,7 @@ $ErrorActionPreference = "Stop"
 
 # HIPAA X12 constants
 $VALID_ISA_QUALIFIERS = @('ZZ', '01', '14', '20', '27', '28', '29', '30')
-$AVAILITY_ID = '030240928'
+$CLEARINGHOUSE_ID = '030240928'
 $PAYER_ID = '{config.payerId}'
 
 # Transaction type identifiers
@@ -144,8 +144,8 @@ function Test-ISASegment {
     $receiverId = $elements[8].Trim()
     
     $validPairs = @(
-        @($AVAILITY_ID, $PAYER_ID),
-        @($PAYER_ID, $AVAILITY_ID)
+        @($CLEARINGHOUSE_ID, $PAYER_ID),
+        @($PAYER_ID, $CLEARINGHOUSE_ID)
     )
     
     $found = $false
@@ -158,7 +158,7 @@ function Test-ISASegment {
     }
     
     if (-not $found -and $Strict) {
-        Write-ValidationWarning "Trading partner IDs don't match expected Availity/Health Plan pairs: $senderId -> $receiverId" $File $Line
+        Write-ValidationWarning "Trading partner IDs don't match expected Clearinghouse/Health Plan pairs: $senderId -> $receiverId" $File $Line
     }
     
     return $true

@@ -113,8 +113,8 @@ pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppNa
 ```
 
 **Trading Partners**:
-- Sender: Availity (030240928)
-- Receiver: Health Plan-QNXT ({config.payerId})
+- Sender: Clearinghouse (030240928)
+- Receiver: Health Plan Backend ({config.payerId})
 
 ### bootstrap_repo.ps1
 **Purpose**: Creates new repository from template  
@@ -228,8 +228,8 @@ az webapp restart `
 ## Testing Workflows
 
 ### Test File References
-- `test-x12-275-availity-to-pchp.edi`: Sample 275 EDI file
-- `test-qnxt-response-payload.json`: Sample QNXT API response
+- `test-x12-275-clearinghouse-inbound.edi`: Sample 275 EDI file
+- `test-backend-response-payload.json`: Sample claims backend API response
 - `test-plan-trading-partners.md`: Detailed test plan
 - `testing-status-report.md`: Testing status and results
 

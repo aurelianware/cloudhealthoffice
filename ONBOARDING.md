@@ -62,7 +62,7 @@ Before getting started, ensure you have:
 
 - Contributor role on Azure subscription or resource group
 - Ability to create service principals (for CI/CD)
-- Access to trading partner SFTP credentials (e.g., Availity)
+- Access to trading partner SFTP credentials (e.g., Clearinghouse)
 
 ---
 
@@ -227,7 +227,7 @@ Cloud Health Office uses a modern, event-driven architecture:
 ### Data Flow
 
 ```
-SFTP → Logic App → Integration Account (X12 Decode) → Service Bus → QNXT API
+SFTP → Logic App → Integration Account (X12 Decode) → Service Bus → claims backend API
                                                               ↓
                                                         Data Lake Archive
 ```
@@ -249,7 +249,7 @@ Each payer requires a configuration file with the following structure:
   
   tradingPartners: {
     clearinghouse: {
-      name: string;          // e.g., "Availity"
+      name: string;          // e.g., "Clearinghouse"
       senderId: string;      // X12 sender ID
       receiverId: string;    // X12 receiver ID
       sftpHost: string;      // SFTP endpoint
@@ -353,8 +353,8 @@ node dist/scripts/utils/generate-837-claims.js 837I 5 ./test-data
 ### Test Data Files
 
 Sample test files are included:
-- `test-x12-275-availity-to-healthplan.edi`: Sample 275 transaction
-- `test-qnxt-response-payload.json`: Mock QNXT API response
+- `test-x12-275-clearinghouse-inbound.edi`: Sample 275 transaction
+- `test-backend-response-payload.json`: Mock claims backend API response
 - `test-x12-278-review-request.edi`: Sample 278 authorization request
 - Generated claims in `./test-data/`: Synthetic 837 claims
 

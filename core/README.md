@@ -1,6 +1,6 @@
-# Unified Availity Integration Configuration
+# Unified Clearinghouse Integration Configuration
 
-This directory contains the complete unified configuration schema for Availity health plan integrations.
+This directory contains the complete unified configuration schema for Clearinghouse health plan integrations.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ This directory contains the complete unified configuration schema for Availity h
 
 ```json
 {
-  "$schema": "../schemas/availity-integration-config.schema.json",
+  "$schema": "../schemas/clearinghouse-integration-config.schema.json",
   "organizationName": "Your Health Plan",
   "payerId": "YOUR_PAYER_ID",
   "payerName": "Display Name",
@@ -52,7 +52,7 @@ This directory contains the complete unified configuration schema for Availity h
 
 ```typescript
 import { validateConfig } from './validation/config-validator';
-import schema from './schemas/availity-integration-config.schema.json';
+import schema from './schemas/clearinghouse-integration-config.schema.json';
 import config from './your-payer-config.json';
 
 const result = validateConfig(config, schema);
@@ -70,7 +70,7 @@ if (result.valid) {
 const { ConfigValidator } = require('./validation/config-validator');
 const fs = require('fs');
 
-const schema = JSON.parse(fs.readFileSync('./schemas/availity-integration-config.schema.json', 'utf8'));
+const schema = JSON.parse(fs.readFileSync('./schemas/clearinghouse-integration-config.schema.json', 'utf8'));
 const config = JSON.parse(fs.readFileSync('./your-payer-config.json', 'utf8'));
 
 const validator = new ConfigValidator(schema);
@@ -82,10 +82,10 @@ console.log(ConfigValidator.formatValidationResult(result));
 ### 3. Use in Your Application
 
 ```typescript
-import { AvailityIntegrationConfig } from './interfaces/availity-integration-config.interface';
+import { ClearinghouseIntegrationConfig } from './interfaces/clearinghouse-integration-config.interface';
 
 // Load configuration
-const config: AvailityIntegrationConfig = loadConfig('payer-config.json');
+const config: ClearinghouseIntegrationConfig = loadConfig('payer-config.json');
 
 // Access configuration values
 const appealsEnabled = config.modules?.appeals?.enabled;
@@ -98,9 +98,9 @@ const maxFileSize = config.modules?.appeals?.maxFileSize;
 ```
 core/
 ├── schemas/
-│   └── availity-integration-config.schema.json  # JSON Schema Draft-07
+│   └── clearinghouse-integration-config.schema.json  # JSON Schema Draft-07
 ├── interfaces/
-│   └── availity-integration-config.interface.ts # TypeScript interfaces
+│   └── clearinghouse-integration-config.interface.ts # TypeScript interfaces
 ├── examples/
 │   ├── medicaid-mco-config.json                 # Example: Medicaid MCO
 │   └── regional-blues-config.json               # Example: Regional BCBS
@@ -201,15 +201,15 @@ The interfaces provide full TypeScript support:
 
 ```typescript
 import {
-  AvailityIntegrationConfig,
+  ClearinghouseIntegrationConfig,
   AppealsModule,
   Claims837Module,
   TransactionMode,
   Contact
-} from './interfaces/availity-integration-config.interface';
+} from './interfaces/clearinghouse-integration-config.interface';
 
 // Create type-safe configuration
-const config: AvailityIntegrationConfig = {
+const config: ClearinghouseIntegrationConfig = {
   organizationName: "My Health Plan",
   payerId: "12345",
   payerName: "My Payer",
@@ -235,7 +235,7 @@ import {
   EligibilitySearchOption,
   ECSQueryMethod,
   ConnectivityProtocol
-} from './interfaces/availity-integration-config.interface';
+} from './interfaces/clearinghouse-integration-config.interface';
 
 // Use enums for type safety
 const subStatus: AppealSubStatus = AppealSubStatus.IN_PROGRESS;
@@ -303,8 +303,8 @@ Document payer-specific customizations:
 
 To add new modules or fields:
 
-1. Update the JSON Schema in `schemas/availity-integration-config.schema.json`
-2. Update TypeScript interfaces in `interfaces/availity-integration-config.interface.ts`
+1. Update the JSON Schema in `schemas/clearinghouse-integration-config.schema.json`
+2. Update TypeScript interfaces in `interfaces/clearinghouse-integration-config.interface.ts`
 3. Add validation rules in `validation/config-validator.ts`
 4. Update documentation in `../docs/UNIFIED-CONFIG-SCHEMA.md`
 5. Create example configurations demonstrating the new features

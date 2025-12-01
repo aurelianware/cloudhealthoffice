@@ -1,6 +1,6 @@
 # The Open Path to CMS-0057-F Compliance
 
-## Replacing QNXT & Facets Modules with CloudHealthOffice
+## Replacing claims backend & claims adjudication system Modules with CloudHealthOffice
 
 ---
 
@@ -29,7 +29,7 @@
 
 **January 1, 2027.** This date marks the mandatory compliance deadline for CMS-0057-F (Advancing Interoperability and Improving Prior Authorization Processes)[^CMS2023]. Every Medicare Advantage, Medicaid managed care, CHIP, and Qualified Health Plan issuer must implement FHIR R4 APIs for patient access, provider access, payer-to-payer data exchange, and prior authorization.
 
-Organizations relying on legacy core administrative processing systems (CAPS) such as TriZetto QNXT and Cognizant Facets face a stark reality: these platforms were not architected for modern interoperability requirements. Custom development projects to retrofit compliance onto legacy systems routinely exceed $2-5 million[^Gartner2024] and require 18-36 months of implementation time[^Forrester2024].
+Organizations relying on legacy core administrative processing systems (CAPS) such as core administrative system and Core System Vendor claims adjudication system face a stark reality: these platforms were not architected for modern interoperability requirements. Custom development projects to retrofit compliance onto legacy systems routinely exceed $2-5 million[^Gartner2024] and require 18-36 months of implementation time[^Forrester2024].
 
 **CloudHealthOffice eliminates this burden.**
 
@@ -48,12 +48,12 @@ Organizations relying on legacy core administrative processing systems (CAPS) su
 CloudHealthOffice is the #1 open-source Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, CloudHealthOffice provides:
 
 - **100% CMS-0057-F compliance** with production-ready FHIR R4 APIs
-- **Backend-agnostic architecture** that integrates with existing QNXT and Facets investments
+- **Backend-agnostic architecture** that integrates with existing claims adjudication systems investments
 - **Zero-code onboarding** completing configuration in under one hour
 - **Open source transparency** eliminating vendor dependency concerns
 - **Proven ROI** with 5-year TCO savings exceeding $14 million
 
-The transformation does not require wholesale replacement of existing systems. CloudHealthOffice augments and extends QNXT and Facets with the interoperability layer CMS-0057-F demands. Legacy investments remain protected while compliance becomes absolute.
+The transformation does not require wholesale replacement of existing systems. CloudHealthOffice augments and extends claims adjudication systems with the interoperability layer CMS-0057-F demands. Legacy investments remain protected while compliance becomes absolute.
 
 > **Note for Diverse Payer Types:** Whether you operate a large Medicare Advantage plan, a regional Medicaid managed care organization, or a commercial QHP on the federal marketplace, CloudHealthOffice scales to your transaction volume and regulatory requirements. Medicaid-specific considerations (e.g., state-level reporting, dual-eligible coordination) are fully supported.
 
@@ -108,15 +108,15 @@ CMS-0057-F requires specific FHIR R4 implementation[^USCore]:
 - **US Core IG v3.1.1+** for patient and clinical resource profiles[^USCore]
 - **USCDI v1/v2** data class coverage for interoperability[^USCDI]
 
-Legacy CAPS platforms like QNXT and Facets communicate via X12 EDI transactions (837, 835, 270/271, 276/277, 278, 275). They lack native FHIR capabilities. The interoperability gap is architectural, not superficial.
+Legacy CAPS platforms like claims adjudication systems communicate via X12 EDI transactions (837, 835, 270/271, 276/277, 278, 275). They lack native FHIR capabilities. The interoperability gap is architectural, not superficial.
 
 ---
 
 ## Page 3: The Legacy System Burden
 
-### The Hidden Costs of QNXT and Facets Customization
+### The Hidden Costs of claims adjudication systems Customization
 
-Organizations operating QNXT and Facets face substantial obstacles when pursuing CMS-0057-F compliance through custom development[^Gartner2024]:
+Organizations operating claims adjudication systems face substantial obstacles when pursuing CMS-0057-F compliance through custom development[^Gartner2024]:
 
 #### Development Complexity
 
@@ -140,7 +140,7 @@ Organizations operating QNXT and Facets face substantial obstacles when pursuing
 - Typical project team: 8-15 FTEs
 
 **Vendor Professional Services:**
-- TriZetto/Cognizant implementation partners: $200-350/hour
+- core system vendors implementation partners: $200-350/hour
 - FHIR consulting firms: $250-400/hour
 - Security and compliance auditors: $300-500/hour
 
@@ -150,7 +150,7 @@ Organizations operating QNXT and Facets face substantial obstacles when pursuing
 - Monitoring and observability: $30,000-75,000/year
 
 **Ongoing Maintenance:**
-- Annual vendor maintenance (QNXT/Facets): $500,000-2,000,000
+- Annual vendor maintenance (claims adjudication systems): $500,000-2,000,000
 - Custom code maintenance: $200,000-500,000/year
 - Regulatory update implementation: $100,000-300,000/year
 
@@ -158,12 +158,12 @@ Organizations operating QNXT and Facets face substantial obstacles when pursuing
 
 The following chart illustrates the dramatic 5-year total cost of ownership difference between legacy custom development and CloudHealthOffice deployment:
 
-<!-- Alt text: Bar chart comparing 5-year TCO showing Legacy QNXT/Facets at $16.7M vs CloudHealthOffice at $2.6M -->
+<!-- Alt text: Bar chart comparing 5-year TCO showing Legacy claims adjudication systems at $16.7M vs CloudHealthOffice at $2.6M -->
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#3498db', 'secondaryColor': '#27ae60' }}}%%
 xychart-beta
     title "5-Year Total Cost of Ownership ($M)"
-    x-axis ["Legacy QNXT/Facets ($16.7M)", "CloudHealthOffice ($2.6M)"]
+    x-axis ["Legacy claims adjudication systems ($16.7M)", "CloudHealthOffice ($2.6M)"]
     y-axis "Cost in Millions USD" 0 --> 20
     bar [16.7, 2.6]
 ```
@@ -175,8 +175,8 @@ xychart-beta
 Legacy CAPS vendors profit from complexity. Each customization creates dependency. Each integration point requires vendor involvement. The total cost of ownership compounds annually while technical debt accumulates.
 
 **Industry benchmarks indicate[^Gartner2024]:**
-- Average QNXT annual licensing: $800,000-2,500,000
-- Average Facets annual licensing: $1,000,000-3,500,000
+- Average claims backend annual licensing: $800,000-2,500,000
+- Average claims adjudication system annual licensing: $1,000,000-3,500,000
 - Custom module development: $500,000-2,000,000 per module
 - Typical time to implement regulatory changes: 12-24 months
 
@@ -184,7 +184,7 @@ Legacy CAPS vendors profit from complexity. Each customization creates dependenc
 
 CloudHealthOffice inverts this model. Open source transparency eliminates vendor lock-in concerns. Configuration-driven deployment replaces custom development. Azure-native architecture provides enterprise-grade reliability without proprietary infrastructure.
 
-The platform does not replace QNXT or Facets for core claims processing. Instead, it provides the interoperability layer these systems cannot deliver natively. Existing investments remain protected. Compliance becomes achievable.
+The platform does not replace claims backend or claims adjudication system for core claims processing. Instead, it provides the interoperability layer these systems cannot deliver natively. Existing investments remain protected. Compliance becomes achievable.
 
 ---
 
@@ -228,8 +228,8 @@ The platform performs bi-directional transformation between X12 EDI and FHIR R4[
 
 CloudHealthOffice connects to existing CAPS platforms via:
 
-- **QNXT:** TriZetto Open Access SOAP APIs for member, provider, and claim data
-- **Facets:** Cognizant APIs and database views for claims and authorization data
+- **claims backend:** TriZetto Open Access SOAP APIs for member, provider, and claim data
+- **claims adjudication system:** Core System Vendor APIs and database views for claims and authorization data
 - **Custom Systems:** REST API, database direct, sFTP, and message queue integrations
 
 The Migration Wizard automates data extraction with 95%+ auto-match capability for members, providers, and benefit plans.
@@ -250,8 +250,8 @@ skinparam componentStyle rectangle
 title CloudHealthOffice CMS-0057-F Integration Architecture
 
 package "Legacy CAPS Systems" {
-  [QNXT\n(TriZetto)] as QNXT
-  [Facets\n(Cognizant)] as Facets
+  [claims backend\n(TriZetto)] as claims backend
+  [claims adjudication system\n(Core System Vendor)] as claims adjudication system
   [Custom Systems] as Custom
 }
 
@@ -292,8 +292,8 @@ package "External Consumers" {
   [CMS Compliance] as CMS
 }
 
-QNXT --> E270 : Open Access APIs
-Facets --> E270 : Database Views
+claims backend --> E270 : Open Access APIs
+claims adjudication system --> E270 : Database Views
 Custom --> E270 : REST/sFTP
 
 E270 --> Mapper
@@ -347,7 +347,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 #### Phase 1: Discovery and Planning (Weeks 1-2)
 
 - Project kickoff and requirements validation
-- QNXT/Facets API connectivity assessment
+- claims adjudication systems API connectivity assessment
 - Azure infrastructure planning
 - Security and compliance review
 - Test data preparation
@@ -358,7 +358,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 
 - Azure infrastructure deployment via Bicep templates
 - Logic Apps workflow configuration
-- QNXT/Facets API integration
+- claims adjudication systems API integration
 - FHIR endpoint deployment
 - Security controls implementation
 
@@ -499,7 +499,7 @@ The following table shows how ROI varies based on implementation timeline and co
 | **Conservative** | 16 weeks | $500,000 | $13,850,000 | 2,770% |
 | **Worst Case** | 24 weeks | $750,000 | $13,500,000 | 1,800% |
 
-**Key CIO Insight:** Even in worst-case scenarios, CloudHealthOffice delivers 18x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing QNXT or Facets investments, CloudHealthOffice represents the lowest-risk path to CMS-0057-F compliance.
+**Key CIO Insight:** Even in worst-case scenarios, CloudHealthOffice delivers 18x+ returns while eliminating compliance risk. The risk-adjusted return is significantly higher when factoring in potential CMS fines ($1M+ annually), audit costs, and reputational damage from non-compliance. For organizations with existing claims backend or claims adjudication system investments, CloudHealthOffice represents the lowest-risk path to CMS-0057-F compliance.
 
 ### Additional Value Drivers
 
@@ -537,7 +537,7 @@ CloudHealthOffice implementation follows a structured 12-16 week timeline design
 
 **Objectives:**
 - Complete technical gap analysis against CMS-0057-F requirements
-- Document existing QNXT/Facets API endpoints and data flows
+- Document existing claims adjudication systems API endpoints and data flows
 - Design target-state architecture for FHIR integration
 - Identify security and compliance requirements
 
@@ -547,7 +547,7 @@ CloudHealthOffice implementation follows a structured 12-16 week timeline design
 
 **Deliverables:**
 - Technical Architecture Document
-- Integration Specification (QNXT Open Access APIs / Facets database views)
+- Integration Specification (core system APIs / claims adjudication system database views)
 - Security Requirements Matrix
 - Project Timeline with Resource Allocation
 
@@ -657,18 +657,18 @@ gantt
 
 | Risk | Impact | Mitigation Strategy |
 |------|--------|---------------------|
-| **QNXT/Facets API Instability** | High | Hybrid EDI/FHIR mode for rollback; maintain legacy pathways for 90 days post-go-live |
+| **claims adjudication systems API Instability** | High | Hybrid EDI/FHIR mode for rollback; maintain legacy pathways for 90 days post-go-live |
 | **FHIR Certification Delays** | Medium | Pre-certified components; early engagement with ONC-ACB testing labs |
 | **Staff Skill Gaps** | Medium | Comprehensive training program; CloudHealthOffice managed services option |
 | **Data Migration Issues** | High | Incremental migration with validation gates; parallel processing during transition |
 | **Performance Degradation** | Medium | Auto-scaling Azure infrastructure; pre-production load testing at 2x expected volume |
 | **Compliance Audit Findings** | High | Continuous compliance monitoring; automated Da Vinci IG validation |
 
-### Integration Notes for QNXT and Facets
+### Integration Notes for claims adjudication systems
 
-#### QNXT Integration (TriZetto Open Access APIs)
+#### claims backend Integration (TriZetto Open Access APIs)
 
-CloudHealthOffice integrates with QNXT via the Open Access API framework[^Gartner2024]:
+CloudHealthOffice integrates with claims backend via the Open Access API framework[^Gartner2024]:
 
 - **Member Services:** Real-time eligibility lookup via `MemberService` SOAP endpoint
 - **Provider Services:** Provider directory and credentialing via `ProviderService`
@@ -677,9 +677,9 @@ CloudHealthOffice integrates with QNXT via the Open Access API framework[^Gartne
 
 **Configuration:**
 ```yaml
-# NOTE: Replace placeholder values with your actual QNXT server configuration
-qnxt:
-  baseUrl: https://qnxt.example.com/OpenAccess  # Replace with actual URL
+# NOTE: Replace placeholder values with your actual claims backend server configuration
+backend:
+  baseUrl: https://backend.example.com/OpenAccess  # Replace with actual URL
   authentication: OAuth2ClientCredentials
   endpoints:
     member: /MemberService/v2
@@ -688,18 +688,18 @@ qnxt:
     authorization: /AuthorizationService/v2
 ```
 
-#### Facets Integration (Cognizant APIs)
+#### claims adjudication system Integration (Core System Vendor APIs)
 
-CloudHealthOffice supports Facets integration via database views and REST APIs:
+CloudHealthOffice supports claims adjudication system integration via database views and REST APIs:
 
-- **Database Views:** Direct access to `FACETS_MEMBER_VW`, `FACETS_CLAIM_VW`, `FACETS_AUTH_VW`
-- **REST APIs:** Cognizant Enterprise Integration Layer (EIL) for real-time operations
+- **Database Views:** Direct access to `BACKEND_MEMBER_VW`, `BACKEND_CLAIM_VW`, `BACKEND_AUTH_VW`
+- **REST APIs:** Core System Vendor Enterprise Integration Layer (EIL) for real-time operations
 - **Batch Processing:** sFTP-based file exchange for bulk operations
 
 **Hybrid EDI/FHIR Mode:**
 
 For risk mitigation, CloudHealthOffice supports a hybrid mode where:
-1. Legacy X12 EDI continues processing through existing QNXT/Facets pathways
+1. Legacy X12 EDI continues processing through existing claims adjudication systems pathways
 2. FHIR APIs operate in parallel for CMS-0057-F compliance
 3. Traffic can be routed between systems based on transaction type or provider
 4. Rollback to 100% legacy is available within minutes if issues arise
@@ -738,7 +738,7 @@ CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmo
 |---------|-----------------|----------------------------|
 | **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Open-source agility; no vendor lock-in |
 | **CMS Compliance** | 18-36 month uncertain timeline | 100% compliant by January 2027, 90-day deployment |
-| **QNXT/Facets Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
+| **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
 | **5-Year TCO** | $16.7M+ | $2.6M ($10M+ savings) |
 | **Technical Debt** | Compounds annually | Zero; open-source community-maintained |
 
@@ -761,7 +761,7 @@ Take the next step toward CMS-0057-F compliance today:
 
 - **🔗 Fork the Repository:** Start exploring at [github.com/aurelianware/cloudhealthoffice](https://github.com/aurelianware/cloudhealthoffice)
 - **🚀 Join Our Early Adopter Program:** Priority support, dedicated implementation assistance, and influence on roadmap priorities. Contact: [contact@aurelianware.com](mailto:contact@aurelianware.com)
-- **📅 Schedule a Demo:** See CloudHealthOffice in action with your specific QNXT/Facets environment. [Book via Calendly](https://calendly.com/aurelianware/cloudhealthoffice-demo)
+- **📅 Schedule a Demo:** See CloudHealthOffice in action with your specific claims adjudication systems environment. [Book via Calendly](https://calendly.com/aurelianware/cloudhealthoffice-demo)
 - **🤝 Contribute to Governance:** Shape custom features, propose enhancements, and participate in community roadmap decisions. See [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ### Final Thought
@@ -822,7 +822,7 @@ The January 2027 deadline is not a threat. With CloudHealthOffice, it's an oppor
 
 ---
 
-*CloudHealthOffice is an independent EDI integration platform. References to QNXT (TriZetto/Cognizant) and Facets (Cognizant) are for illustrative purposes only. CloudHealthOffice is not affiliated with, endorsed by, or sponsored by TriZetto, Cognizant, or any other vendor mentioned in this document.*
+*CloudHealthOffice is an independent EDI integration platform. References to claims backend (core system vendors) and claims adjudication system (Core System Vendor) are for illustrative purposes only. CloudHealthOffice is not affiliated with, endorsed by, or sponsored by TriZetto, Core System Vendor, or any other vendor mentioned in this document.*
 
 ---
 

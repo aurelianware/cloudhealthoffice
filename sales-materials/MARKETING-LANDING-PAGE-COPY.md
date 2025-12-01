@@ -287,7 +287,7 @@ On average, **85% lower total cost of ownership**. Enterprise vendors typically 
 
 ### FAQ 6: Can this integrate with our existing claims system?
 
-**Yes.** Cloud Health Office is backend-agnostic and designed to integrate with QNXT, Facets, and other major claims platforms. We provide pre-built connectors and configuration templates for common integrations.
+**Yes.** Cloud Health Office is backend-agnostic and designed to integrate with claims adjudication systems such as and other major claims platforms. We provide pre-built connectors and configuration templates for common integrations.
 
 ### FAQ 7: What's included in the free pilot program?
 

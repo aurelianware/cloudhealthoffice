@@ -137,30 +137,30 @@ storage:
     raw278: "raw/278"
     outbound277: "outbound/277"
 
-# SFTP configuration (Availity)
+# SFTP configuration (Clearinghouse)
 sftp:
-  host: "sftp.availity.com"
+  host: "sftp.clearinghouse.example.com"
   port: 22
   inboundFolder: "/inbound/attachments"
   inbound278Folder: "/inbound/278"
   outboundFolder: "/outbound/277"
   # Credentials stored in Kubernetes Secret
-  secretName: "availity-sftp-secret"
+  secretName: "clearinghouse-sftp-secret"
 
 # Trading partner configuration
 tradingPartners:
-  availity:
+  clearinghouse:
     id: "030240928"
     qualifier: "ZZ"
-    name: "Availity"
+    name: "Clearinghouse"
   healthPlan:
     id: ""  # Set via ConfigMap or Secret
     qualifier: "ZZ"
     name: "Health Plan"
 
-# QNXT API configuration
-qnxt:
-  baseUrl: "https://qnxt.api.local"
+# claims backend API configuration
+backend:
+  baseUrl: "https://backend.api.local"
   endpoints:
     linkAttachment: "/claims/link-attachment"
     process278: "/claims/process-278"
@@ -169,7 +169,7 @@ qnxt:
   retries: 4
   retryDelay: 15
   # API token stored in Kubernetes Secret
-  secretName: "qnxt-api-secret"
+  secretName: "claims-backend-api-secret"
 
 # Monitoring configuration
 monitoring:
@@ -305,12 +305,12 @@ vault:
             SFTP_USERNAME={{ .Data.data.username }}
             SFTP_PASSWORD={{ .Data.data.password }}
             {{- end -}}
-        - name: qnxt
-          path: "cloudhealthoffice/data/qnxt"
+        - name: backend
+          path: "cloudhealthoffice/data/backend"
           template: |
-            {{- with secret "cloudhealthoffice/data/qnxt" -}}
-            QNXT_API_TOKEN={{ .Data.data.apiToken }}
-            QNXT_BASE_URL={{ .Data.data.baseUrl }}
+            {{- with secret "cloudhealthoffice/data/backend" -}}
+            CLAIMS_BACKEND_API_TOKEN={{ .Data.data.apiToken }}
+            claims backend_BASE_URL={{ .Data.data.baseUrl }}
             {{- end -}}
         - name: kafka
           path: "cloudhealthoffice/data/kafka"

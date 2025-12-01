@@ -13,7 +13,7 @@
   "status": "received",
   "processingDate": "2025-09-24T14:25:00Z",
   "attachmentPath": "/processed/275/2025/09/24/attachment001.pdf",
-  "qnxtClaimId": "QNX20250924001",
+  "backendClaimId": "QNX20250924001",
   "memberId": "{config.payerId}123456",
   "attachmentRequested": "Chest X-Ray",
   "responseRequired": true,

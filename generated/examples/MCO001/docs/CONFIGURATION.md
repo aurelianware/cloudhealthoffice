@@ -85,7 +85,7 @@ This document describes the configuration for State Medicaid MCO (MCO001).
 #### X12 Configuration
 
 - **Sender ID**: MCO001
-- **Receiver ID**: AVAILITY
+- **Receiver ID**: CLEARINGHOUSE
 - **Transaction Sets**: 275, 277, 278
 
 

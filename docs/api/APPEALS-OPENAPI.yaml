@@ -2,15 +2,15 @@ openapi: 3.0.3
 info:
   title: Health Plan Appeals Integration API
   description: |
-    RESTful API for claim appeals integration between providers and health plans via Availity platform.
+    RESTful API for claim appeals integration between providers and health plans via the clearinghouse platform.
     
     This API enables:
     - Submission of claim appeals from providers to health plans
     - Retrieval of appeal status and decision information
     - Download of appeal-related documents (provider uploads and decision letters)
-    - Push notifications of appeal status updates to Availity
+    - Push notifications of appeal status updates to the clearinghouse
     
-    **Compliance**: Fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements.
+    **Compliance**: Fully compliant with the clearinghouse QRE (Qualified RESTful Endpoint) requirements.
     
     **Authentication**: All endpoints require Bearer token authentication via OAuth 2.0.
     
@@ -245,12 +245,12 @@ paths:
     post:
       tags:
         - Status
-      summary: Push appeal status update to Availity (Webhook)
+      summary: Push appeal status update to the clearinghouse (Webhook)
       description: |
         **Internal use only** - This endpoint is called by the health plan system to push
-        appeal status updates to Availity's Bedlam API.
+        appeal status updates to the clearinghouse's Bedlam API.
         
-        **Direction**: Health Plan → Availity
+        **Direction**: Health Plan → Clearinghouse
         
         **Trigger**: Service Bus topic subscription on `payer-appeal-status-updates`
         
@@ -259,7 +259,7 @@ paths:
         - FINALIZED status requires `decision` and `decisionReason` fields
         - Includes retry logic (3 retries, 30-second intervals)
         
-        This is implemented as a Logic App workflow: `appeal_update_from_payer_to_availity`
+        This is implemented as a Logic App workflow: `appeal_update_from_payer_outbound`
       operationId: pushAppealUpdateToAvality
       security:
         - bearerAuth: []
@@ -271,7 +271,7 @@ paths:
               $ref: '#/components/schemas/AppealStatusUpdate'
       responses:
         '200':
-          description: Status update successfully pushed to Availity
+          description: Status update successfully pushed to the clearinghouse
           content:
             application/json:
               schema:
@@ -384,10 +384,10 @@ components:
             $ref: '#/components/schemas/AttachmentInfo'
         ecsAdditionalProperties:
           $ref: '#/components/schemas/EcsAdditionalProperties'
-        availityTraceId:
+        clearinghouseTraceId:
           type: string
           maxLength: 100
-          description: Availity transaction trace identifier
+          description: Clearinghouse transaction trace identifier
         submissionDate:
           type: string
           format: date-time
@@ -455,7 +455,7 @@ components:
             type: string
         contactInfo:
           $ref: '#/components/schemas/ContactInfo'
-        availityTraceId:
+        clearinghouseTraceId:
           type: string
         payerTraceId:
           type: string
@@ -489,13 +489,13 @@ components:
     AppealStatusUpdate:
       type: object
       required:
-        - availityTraceId
+        - clearinghouseTraceId
         - payerTraceId
         - status
       properties:
-        availityTraceId:
+        clearinghouseTraceId:
           type: string
-          description: Availity transaction trace identifier
+          description: Clearinghouse transaction trace identifier
         payerTraceId:
           type: string
           description: Health plan internal trace identifier
@@ -648,7 +648,7 @@ components:
           description: Use {config.payerId} placeholder for generic implementation
         dataSource:
           type: string
-          enum: [AVAILITY, PROVIDER_PORTAL, EDI, MANUAL_ENTRY, OTHER]
+          enum: [CLEARINGHOUSE, PROVIDER_PORTAL, EDI, MANUAL_ENTRY, OTHER]
         planId:
           type: string
           maxLength: 50

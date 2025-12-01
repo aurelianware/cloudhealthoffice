@@ -1,7 +1,7 @@
 /**
- * Cloud Health Office - QNXT Eligibility Rules Migration
+ * Cloud Health Office - Backend Eligibility Rules Migration
  * 
- * Script to import existing QNXT eligibility rules from CSV format.
+ * Script to import existing backend eligibility rules from CSV format.
  * Supports bulk import and validation of eligibility rules.
  * 
  * CSV Format Expected:
@@ -16,7 +16,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { QNXTEligibilityRule } from './types';
+import { BackendEligibilityRule } from './types';
 
 /**
  * Parse CSV line handling quoted values
@@ -138,15 +138,15 @@ function parseGenderRestrictions(value: string): ('M' | 'F')[] | undefined {
 }
 
 /**
- * Convert CSV row to QNXTEligibilityRule
+ * Convert CSV row to BackendEligibilityRule
  */
-function csvRowToRule(headers: string[], values: string[]): QNXTEligibilityRule {
+function csvRowToRule(headers: string[], values: string[]): BackendEligibilityRule {
   const getValue = (key: string): string => {
     const index = headers.findIndex(h => h.toLowerCase().replace(/[_\s]/g, '') === key.toLowerCase().replace(/[_\s]/g, ''));
     return index >= 0 && index < values.length ? values[index] : '';
   };
   
-  const rule: QNXTEligibilityRule = {
+  const rule: BackendEligibilityRule = {
     ruleId: getValue('ruleid') || getValue('rule_id') || `rule_${Date.now()}`,
     ruleName: getValue('rulename') || getValue('rule_name') || 'Unnamed Rule',
     description: getValue('description') || undefined,
@@ -235,9 +235,9 @@ function csvRowToRule(headers: string[], values: string[]): QNXTEligibilityRule 
 }
 
 /**
- * Load QNXT eligibility rules from CSV file
+ * Load backend eligibility rules from CSV file
  */
-export async function loadQNXTRulesFromCSV(filePath: string): Promise<QNXTEligibilityRule[]> {
+export async function loadBackendRulesFromCSV(filePath: string): Promise<BackendEligibilityRule[]> {
   const absolutePath = path.resolve(filePath);
   
   if (!fs.existsSync(absolutePath)) {
@@ -252,7 +252,7 @@ export async function loadQNXTRulesFromCSV(filePath: string): Promise<QNXTEligib
   }
   
   const headers = parseCSVLine(lines[0]);
-  const rules: QNXTEligibilityRule[] = [];
+  const rules: BackendEligibilityRule[] = [];
   const errors: string[] = [];
   
   for (let i = 1; i < lines.length; i++) {
@@ -279,7 +279,7 @@ export async function loadQNXTRulesFromCSV(filePath: string): Promise<QNXTEligib
 /**
  * Validate eligibility rules
  */
-export function validateRules(rules: QNXTEligibilityRule[]): { valid: boolean; errors: string[] } {
+export function validateRules(rules: BackendEligibilityRule[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
   for (let i = 0; i < rules.length; i++) {
@@ -336,7 +336,7 @@ export function validateRules(rules: QNXTEligibilityRule[]): { valid: boolean; e
 /**
  * Export rules to JSON format
  */
-export function exportRulesToJSON(rules: QNXTEligibilityRule[], outputPath: string): void {
+export function exportRulesToJSON(rules: BackendEligibilityRule[], outputPath: string): void {
   const absolutePath = path.resolve(outputPath);
   fs.writeFileSync(absolutePath, JSON.stringify(rules, null, 2), 'utf-8');
 }
@@ -511,7 +511,7 @@ async function main(): Promise<void> {
   
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
     console.log(`
-QNXT Eligibility Rules Migration Tool
+Backend Eligibility Rules Migration Tool
 
 Usage:
   npx ts-node migration.ts import <csv-file> [--output <json-file>] [--validate]
@@ -529,9 +529,9 @@ Options:
   --help, -h      Show this help message
 
 Examples:
-  npx ts-node migration.ts import qnxt-rules.csv --output rules.json --validate
+  npx ts-node migration.ts import backend-rules.csv --output rules.json --validate
   npx ts-node migration.ts sample sample-rules.csv
-  npx ts-node migration.ts validate qnxt-rules.csv
+  npx ts-node migration.ts validate backend-rules.csv
     `);
     return;
   }
@@ -553,7 +553,7 @@ Examples:
     }
     
     try {
-      const rules = await loadQNXTRulesFromCSV(csvFile);
+      const rules = await loadBackendRulesFromCSV(csvFile);
       console.log(`Loaded ${rules.length} rules from ${csvFile}`);
       
       // Validate

@@ -9,8 +9,8 @@
 ### Trading Partners - CONFIGURED ✅
 | Partner | Role | ID | Qualifier | Status |
 |---------|------|----|-----------|----- |
-| **Availity** | EDI Clearinghouse | 030240928 | ZZ | ✅ Active |
-| **Health Plan-QNXT** | Health Plan System | {config.payerId} | ZZ | ✅ Active |
+| **Clearinghouse** | EDI Clearinghouse | 030240928 | ZZ | ✅ Active |
+| **Health Plan Backend** | Health Plan System | {config.payerId} | ZZ | ✅ Active |
 
 ### Azure Infrastructure - DEPLOYED ✅
 | Resource | Name | Status | Purpose |
@@ -24,8 +24,8 @@
 ### Test Data - READY ✅
 | File | Purpose | Status |
 |------|---------|--------|
-| **test-x12-275-availity-to-pchp.edi** | Inbound 275 from Availity | ✅ Created |
-| **test-qnxt-response-payload.json** | QNXT response for 277 | ✅ Created |
+| **test-x12-275-clearinghouse-inbound.edi** | Inbound 275 from the clearinghouse | ✅ Created |
+| **test-backend-response-payload.json** | claims backend response for 277 | ✅ Created |
 
 ## ⚠️ MISSING: X12 Agreements
 
@@ -34,16 +34,16 @@
 ### Required Agreements:
 
 #### 1️⃣ X12 275 Receive Agreement
-- **Name**: `Availity-to-Health Plan-275-Receive`
-- **Host Partner**: Health Plan-QNXT ({config.payerId}) 
-- **Guest Partner**: Availity (030240928)
+- **Name**: `Clearinghouse-to-Health Plan-275-Receive`
+- **Host Partner**: Health Plan Backend ({config.payerId}) 
+- **Guest Partner**: Clearinghouse (030240928)
 - **Direction**: Receive (Inbound)
 - **Message Type**: 275 (Attachment Request)
 
 #### 2️⃣ X12 277 Send Agreement  
-- **Name**: `Health Plan-to-Availity-277-Send`
-- **Host Partner**: Health Plan-QNXT ({config.payerId})
-- **Guest Partner**: Availity (030240928) 
+- **Name**: `Health Plan-to-Clearinghouse-277-Send`
+- **Host Partner**: Health Plan Backend ({config.payerId})
+- **Guest Partner**: Clearinghouse (030240928) 
 - **Direction**: Send (Outbound)
 - **Message Type**: 277 (Status Response)
 
@@ -63,8 +63,8 @@
    - Service Bus → X12 Encode → Outbound Transmission
 
 ### Phase 3: Integration Testing ⏳
-1. **QNXT API Integration**
-2. **Availity Endpoint Configuration** 
+1. **claims backend API Integration**
+2. **Clearinghouse Endpoint Configuration** 
 3. **HIPAA Compliance Validation**
 4. **Error Handling & Monitoring**
 
@@ -87,7 +87,7 @@ The workflows need these connections configured:
 ### Step 3: Test Message Flow
 ```
 Test Sequence:
-1. Place test-x12-275-availity-to-pchp.edi in SFTP folder
+1. Place test-x12-275-clearinghouse-inbound.edi in SFTP folder
 2. Monitor Logic Apps run history
 3. Verify X12 decode with trading partners
 4. Check Data Lake storage
@@ -98,16 +98,16 @@ Test Sequence:
 ## 💡 Key Validation Points
 
 ### X12 Message Validation:
-- ✅ **ISA06**: 030240928 (Availity Sender)
+- ✅ **ISA06**: 030240928 (Clearinghouse Sender)
 - ✅ **ISA08**: {config.payerId} (Health Plan Receiver)  
-- ✅ **GS02**: 030240928 (Availity Application Sender)
+- ✅ **GS02**: 030240928 (Clearinghouse Application Sender)
 - ✅ **GS03**: {config.payerId} (Health Plan Application Receiver)
 - ✅ **ST01**: 275 (Transaction Type)
 - ✅ **BHT**: Attachment request header
 
 ### Trading Partner Mapping:
-- ✅ **Inbound 275**: Availity (030240928) → Health Plan-QNXT ({config.payerId})
-- ✅ **Outbound 277**: Health Plan-QNXT ({config.payerId}) → Availity (030240928)
+- ✅ **Inbound 275**: Clearinghouse (030240928) → Health Plan Backend ({config.payerId})
+- ✅ **Outbound 277**: Health Plan Backend ({config.payerId}) → Clearinghouse (030240928)
 - ✅ **Qualifier**: ZZ (Mutually Defined) for both partners
 
 ## 🌐 Monitoring & Troubleshooting

@@ -13,7 +13,7 @@ Validates HIPAA X12 EDI files (275/277/278) for format compliance.
 
 ```powershell
 # Validate a single EDI file
-pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-clearinghouse-inbound.edi
 
 # Validate with specific transaction type
 pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
@@ -27,7 +27,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
 - ✅ ISA/IEA envelope segments
 - ✅ GS/GE functional group segments
 - ✅ ST/SE transaction set segments
-- ✅ Trading partner identifiers (Availity: 030240928, Health Plan: {config.payerId})
+- ✅ Trading partner identifiers (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId})
 - ✅ Transaction types (275/277/278)
 - ✅ Segment counts
 - ✅ X12 structure and format
@@ -38,7 +38,7 @@ pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
 🏥 HIPAA X12 EDI Validator
 ==========================
 
-📄 Validating: test-x12-275-availity-to-pchp.edi
+📄 Validating: test-x12-275-clearinghouse-inbound.edi
 ℹ️  Found 20 segments
 ℹ️  Trading partners validated: 030240928 -> {config.payerId}
 ℹ️  Detected transaction type: 275 (Attachment Request)
@@ -229,7 +229,7 @@ az bicep build --file infra/main.bicep --outfile /tmp/arm.json
 pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
 
 # EDI only
-pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi
+pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-clearinghouse-inbound.edi
 
 # Security only
 pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
@@ -254,7 +254,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 **Solution**: Add patterns to `AllowedFiles` or adjust `ExcludeContext`
 
 **Problem**: Trading partner IDs flagged as SSN  
-**Solution**: Already handled by context-aware filtering. Ensure file name or context contains "trading", "partner", "Availity", or "Health Plan"
+**Solution**: Already handled by context-aware filtering. Ensure file name or context contains "trading", "partner", "Clearinghouse", or "Health Plan"
 
 ### Workflow Issues
 
@@ -274,7 +274,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 
 2. **Test EDI files after changes**
    ```powershell
-   pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-availity-to-pchp.edi -Strict
+   pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-clearinghouse-inbound.edi -Strict
    ```
 
 3. **Scan before pushing sensitive code**

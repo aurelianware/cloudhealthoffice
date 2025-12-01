@@ -55,7 +55,7 @@ $PHI_PII_PATTERNS = @{
         Description = 'Social Security Number (formatted)'
         Severity = 'Critical'
         AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.md', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
-        ExcludeContext = @('030240928', '{config.payerId}', 'Availity', 'Health Plan', 'trading', 'partner', 'ISA', 'GS')
+        ExcludeContext = @('030240928', '{config.payerId}', 'Clearinghouse', 'Health Plan', 'trading', 'partner', 'ISA', 'GS')
     }
     'MRN' = @{
         Pattern = '\bMRN[:\s]*[A-Z0-9]{6,12}\b'

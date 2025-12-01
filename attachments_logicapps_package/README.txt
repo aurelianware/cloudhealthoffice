@@ -1,4 +1,4 @@
-# HIPAA Attachments Logic Apps Package This package contains: - workflow.ingest275.json — **Inbound 275 ingestion** workflow (SFTP → Blob → Decode X12 → SB → QNXT) - workflow.rfai277.json — **Outbound 277 RFAI** workflow (SB → Encode X12 → SFTP) - main.bicep — Starter infrastructure template (Storage, Service Bus, App Insights, Logic App Standard plan/app) ## Deploy (starter)
+# HIPAA Attachments Logic Apps Package This package contains: - workflow.ingest275.json — **Inbound 275 ingestion** workflow (SFTP → Blob → Decode X12 → SB → claims backend) - workflow.rfai277.json — **Outbound 277 RFAI** workflow (SB → Encode X12 → SFTP) - main.bicep — Starter infrastructure template (Storage, Service Bus, App Insights, Logic App Standard plan/app) ## Deploy (starter)
 bash
 az group create -n pchp-attachments-rg -l eastus
 az deployment group create -g pchp-attachments-rg -f main.bicep -p baseName=pchp-attachments

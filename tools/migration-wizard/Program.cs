@@ -39,15 +39,15 @@ app.Run();
 
 static void ConfigureMigrationServices(IServiceCollection services, IConfiguration configuration)
 {
-    // TriZetto Open Access configuration
+    // backend system Open Access APIs configuration
     var trizettoConfig = new TriZettoOpenAccessConfig
     {
-        EndpointUrl = configuration["TriZetto:EndpointUrl"] ?? "https://qnxt-server.example.com/OpenAccess/Services",
-        Username = configuration["TriZetto:Username"] ?? "your-username",
-        Password = configuration["TriZetto:Password"] ?? "your-password",
-        TenantId = configuration["TriZetto:TenantId"] ?? "default-tenant",
-        TimeoutSeconds = int.TryParse(configuration["TriZetto:TimeoutSeconds"], out var timeout) ? timeout : 120,
-        BypassCertificateValidation = bool.TryParse(configuration["TriZetto:BypassCertificateValidation"], out var bypass) && bypass
+        EndpointUrl = configuration["BackendSystem:EndpointUrl"] ?? "https://backend-server.example.com/OpenAccess/Services",
+        Username = configuration["BackendSystem:Username"] ?? "your-username",
+        Password = configuration["BackendSystem:Password"] ?? "your-password",
+        TenantId = configuration["BackendSystem:TenantId"] ?? "default-tenant",
+        TimeoutSeconds = int.TryParse(configuration["BackendSystem:TimeoutSeconds"], out var timeout) ? timeout : 120,
+        BypassCertificateValidation = bool.TryParse(configuration["BackendSystem:BypassCertificateValidation"], out var bypass) && bypass
     };
     services.AddSingleton(trizettoConfig);
     services.AddSingleton<TriZettoOpenAccessClient>();
@@ -73,7 +73,7 @@ static void ConfigureMigrationServices(IServiceCollection services, IConfigurati
         ResourceGroup = configuration["ApiManagement:ResourceGroup"] ?? string.Empty,
         SubscriptionId = configuration["ApiManagement:SubscriptionId"] ?? string.Empty,
         RoutingKeyName = configuration["ApiManagement:RoutingKeyName"] ?? "backend-routing",
-        QnxtBackendId = configuration["ApiManagement:QnxtBackendId"] ?? "qnxt-backend",
+        LegacyBackendId = configuration["ApiManagement:LegacyBackendId"] ?? "legacy-backend",
         CloudHealthOfficeBackendId = configuration["ApiManagement:CloudHealthOfficeBackendId"] ?? "cloudhealthoffice-backend"
     };
     services.AddSingleton(apimConfig);

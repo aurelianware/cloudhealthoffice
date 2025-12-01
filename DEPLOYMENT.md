@@ -390,7 +390,7 @@ az deployment group create \
 | `connectorLocation` | Yes | Region for API connections | `eastus` |
 | `serviceBusName` | Yes | Service Bus namespace name | `hipaa-attachments-prod-svc` |
 | `iaName` | Yes | Integration Account name | `prod-integration-account` |
-| `sftpHost` | Yes | SFTP server hostname | `sftp.availity.com` |
+| `sftpHost` | Yes | SFTP server hostname | `sftp.clearinghouse.example.com` |
 | `sftpUsername` | Yes | SFTP username | `service-account` |
 | `sftpPassword` | Yes (secure) | SFTP password | `<secret-value>` |
 | `storageSku` | No | Storage account SKU | `Standard_LRS` (default) |
@@ -1191,7 +1191,7 @@ Compliance Officer: [Name] - [Phone] - [Email]
 ```
 CHG12345: Deploy HIPAA 275 processing enhancements
 
-- Added retry logic for QNXT API calls
+- Added retry logic for claims backend API calls
 - Updated X12 schema validation
 - Fixed Service Bus connection handling
 
@@ -2137,7 +2137,7 @@ Logic Apps require API connections to be authenticated:
 1. Go to Logic App → Development Tools → API connections
 2. Click "sftp-ssh" connection
 3. Configure:
-   - **Host**: Availity SFTP hostname
+   - **Host**: Clearinghouse SFTP hostname
    - **Port**: 22
    - **Username**: Service account username
    - **SSH Private Key**: Upload private key file
@@ -2205,12 +2205,12 @@ az logic integration-account schema create \
 
 **Via Azure Portal:**
 1. Navigate to Integration Account → Partners
-2. Add Availity partner:
-   - Name: `Availity`
+2. Add clearinghouse partner:
+   - Name: `Clearinghouse`
    - Qualifier: `ZZ`
    - Value: `030240928`
 3. Add Health Plan partner:
-   - Name: `Health Plan-QNXT`
+   - Name: `Health Plan Backend`
    - Qualifier: `ZZ`
    - Value: `{config.payerId}`
 
@@ -2222,15 +2222,15 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachment
 
 #### Create X12 Agreements
 
-**1. Availity-to-Health Plan-275-Receive Agreement:**
+**1. Clearinghouse-to-Health Plan-275-Receive Agreement:**
 1. Navigate to Integration Account → Agreements
 2. Click "+ Add"
 3. Configure:
-   - **Name**: `Availity-to-Health Plan-275-Receive`
+   - **Name**: `Clearinghouse-to-Health Plan-275-Receive`
    - **Agreement Type**: X12
-   - **Host Partner**: Health Plan-QNXT
+   - **Host Partner**: Health Plan Backend
    - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
-   - **Guest Partner**: Availity
+   - **Guest Partner**: Clearinghouse
    - **Guest Identity**: Qualifier=ZZ, Value=030240928
 4. Receive Settings:
    - Schema: X12_005010X210_275
@@ -2238,14 +2238,14 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachment
    - Version: 005010X210
 5. Save
 
-**2. Health Plan-to-Availity-277-Send Agreement:**
+**2. Health Plan-to-Clearinghouse-277-Send Agreement:**
 1. Click "+ Add"
 2. Configure:
-   - **Name**: `Health Plan-to-Availity-277-Send`
+   - **Name**: `Health Plan-to-Clearinghouse-277-Send`
    - **Agreement Type**: X12
-   - **Host Partner**: Health Plan-QNXT
+   - **Host Partner**: Health Plan Backend
    - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
-   - **Guest Partner**: Availity
+   - **Guest Partner**: Clearinghouse
    - **Guest Identity**: Qualifier=ZZ, Value=030240928
 3. Send Settings:
    - Schema: X12_005010X212_277
@@ -2258,9 +2258,9 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachment
 2. Configure:
    - **Name**: `Health Plan-278-Processing`
    - **Agreement Type**: X12
-   - **Host Partner**: Health Plan-QNXT
+   - **Host Partner**: Health Plan Backend
    - **Host Identity**: Qualifier=ZZ, Value={config.payerId}
-   - **Guest Partner**: Health Plan-QNXT (internal)
+   - **Guest Partner**: Health Plan Backend (internal)
    - **Guest Identity**: Qualifier=ZZ, Value={config.payerId}
 3. Receive Settings:
    - Schema: X12_005010X217_278
@@ -2288,8 +2288,8 @@ blob_raw_folder_278=hipaa-attachments/raw/278
 sb_topic=attachments-in
 sb_topic_rfai=rfai-requests
 sb_topic_edi278=edi-278
-qnxt_base_url=https://qnxt-api-uat.example.com
-x12_sender_id_availity=030240928
+backend_base_url=https://claims-backend-api-uat.example.com
+x12_sender_id_clearinghouse=030240928
 x12_receiver_id_pchp={config.payerId}
 x12_messagetype_275=X12_005010X210_275
 x12_messagetype_277=X12_005010X212_277
@@ -2400,7 +2400,7 @@ az servicebus topic show \
 
 **Note**: This step is only required if ECS is enabled in your deployment (`enableEcs: true`).
 
-#### 7.1 Store QNXT API Token in Key Vault
+#### 7.1 Store claims backend API Token in Key Vault
 
 **Security Best Practice**: Always store API tokens in Azure Key Vault.
 
@@ -2410,7 +2410,7 @@ RG_NAME="payer-attachments-uat-rg"
 BASE_NAME="hipaa-attachments-uat"
 LOGIC_APP_NAME="${BASE_NAME}-la"
 KV_NAME="${BASE_NAME}-kv"
-QNXT_API_TOKEN="<your-qnxt-token>"  # Obtain from QNXT administrator
+CLAIMS_BACKEND_API_TOKEN="<your-backend-token>"  # Obtain from claims backend administrator
 
 # Create Key Vault (if not exists)
 az keyvault create \
@@ -2418,11 +2418,11 @@ az keyvault create \
   --resource-group "$RG_NAME" \
   --location eastus
 
-# Store QNXT API token
+# Store claims backend API token
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-token" \
-  --value "$QNXT_API_TOKEN"
+  --name "claims-backend-api-token" \
+  --value "$CLAIMS_BACKEND_API_TOKEN"
 
 # Grant Logic App access to Key Vault
 PRINCIPAL_ID=$(az webapp identity show \
@@ -2444,19 +2444,19 @@ echo "✓ ECS Key Vault configuration complete"
 # Get Key Vault secret URI
 SECRET_URI=$(az keyvault secret show \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-token" \
+  --name "claims-backend-api-token" \
   --query id -o tsv)
 
-# Set environment-specific QNXT base URL
-QNXT_BASE_URL="https://qnxt-api-uat.example.com"  # Adjust for DEV/UAT/PROD
+# Set environment-specific claims backend base URL
+claims backend_BASE_URL="https://claims-backend-api-uat.example.com"  # Adjust for DEV/UAT/PROD
 
 # Update Logic App settings
 az webapp config appsettings set \
   --resource-group "$RG_NAME" \
   --name "$LOGIC_APP_NAME" \
   --settings \
-    "ECS_QNXT_BASE_URL=$QNXT_BASE_URL" \
-    "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})" \
+    "ECS_BACKEND_BASE_URL=$claims backend_BASE_URL" \
+    "ECS_CLAIMS_BACKEND_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})" \
     "ECS_WORKFLOW_ENABLED=true"
 
 echo "✓ ECS application settings configured"
@@ -2586,9 +2586,9 @@ az resource list \
 
 1. Upload test file to SFTP:
    ```bash
-   sftp user@availity-sftp-host
+   sftp user@clearinghouse-sftp-host
    cd /inbound/attachments
-   put test-x12-275-availity-to-pchp.edi
+   put test-x12-275-clearinghouse-inbound.edi
    exit
    ```
 
@@ -2695,7 +2695,7 @@ git log --oneline -10 logicapps/workflows/
 
 # Example output:
 # a1b2c3d (HEAD) Update ingest275 trigger config
-# d4e5f6g Add retry logic to QNXT calls
+# d4e5f6g Add retry logic to claims backend calls
 # g7h8i9j Working version before changes  ← Use this one
 
 PREVIOUS_COMMIT="g7h8i9j"  # Last known good commit

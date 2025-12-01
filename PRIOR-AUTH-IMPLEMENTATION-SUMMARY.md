@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Cloud Health Office now provides **complete CMS-0057-F compliance** for prior authorization workflows with comprehensive support for Da Vinci FHIR Implementation Guides (CRD, DTR, PAS), X12 278 integration, Azure Logic Apps orchestration, and Availity clearinghouse connectivity.
+Cloud Health Office now provides **complete CMS-0057-F compliance** for prior authorization workflows with comprehensive support for Da Vinci FHIR Implementation Guides (CRD, DTR, PAS), X12 278 integration, Azure Logic Apps orchestration, and Clearinghouse clearinghouse connectivity.
 
 ### Key Achievement
 
@@ -40,7 +40,7 @@ Cloud Health Office now provides **complete CMS-0057-F compliance** for prior au
 | **Endpoint Documentation** | ✅ Complete | Comprehensive API guide (24KB) |
 | **Orchestration Documentation** | ✅ Complete | Azure Logic Apps integration patterns |
 | **Consent Documentation** | ✅ Complete | HIPAA-compliant consent management |
-| **Availity Integration** | ✅ Complete | SFTP and trading partner configuration |
+| **Clearinghouse Integration** | ✅ Complete | SFTP and trading partner configuration |
 
 ---
 
@@ -161,7 +161,7 @@ Coverage:    100% of prior-auth-api functions
 9. **Provider Hooks**: CDS Hooks integration
 10. **Consent Management**: HIPAA compliance
 11. **Azure Logic Apps**: Orchestration patterns
-12. **Availity Integration**: Clearinghouse setup
+12. **Clearinghouse Integration**: Clearinghouse setup
 13. **Usage Examples**: 4 complete code examples
 14. **Testing**: Test suite overview
 15. **Security**: HIPAA compliance guidelines
@@ -286,14 +286,14 @@ HTTP POST → Validate → Map X12 ↔ FHIR → Encode/Decode →
 
 ---
 
-## Availity Clearinghouse Integration
+## Clearinghouse Clearinghouse Integration
 
 ### Configuration
 
 ```typescript
 {
-  tradingPartnerId: 'AVAILITY',
-  sftpEndpoint: 'sftp.availity.com',
+  tradingPartnerId: 'CLEARINGHOUSE',
+  sftpEndpoint: 'sftp.clearinghouse.example.com',
   outboundFolder: '/outbound/278',
   inboundFolder: '/inbound/278'
 }
@@ -302,12 +302,12 @@ HTTP POST → Validate → Map X12 ↔ FHIR → Encode/Decode →
 ### Outbound Flow
 1. Generate X12 278 request
 2. Encode via Integration Account
-3. Upload to Availity SFTP
-4. Availity routes to payer
+3. Upload to Clearinghouse SFTP
+4. Clearinghouse routes to payer
 5. Poll for response
 
 ### Inbound Flow
-1. Poll Availity SFTP for responses
+1. Poll Clearinghouse SFTP for responses
 2. Download 278 response file
 3. Decode via Integration Account
 4. Map to FHIR ClaimResponse
@@ -445,7 +445,7 @@ await submitAttachment(authNumber, binary, docRef);
 ### Recommended Actions
 
 1. **Deploy to DEV**: Test with sample payloads
-2. **Configure Availity**: Set up SFTP connectivity
+2. **Configure Clearinghouse**: Set up SFTP connectivity
 3. **Setup Trading Partners**: Configure X12 agreements
 4. **Enable Monitoring**: Application Insights dashboards
 5. **Load Testing**: Verify performance under load

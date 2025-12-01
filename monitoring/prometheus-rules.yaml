@@ -150,7 +150,7 @@ spec:
             severity: critical
             team: edi-processing
           annotations:
-            summary: "SFTP connection failures to Availity"
+            summary: "SFTP connection failures to the clearinghouse"
             description: "{{ $value }} SFTP connection failures in the last 15 minutes"
         
         # Alert on SFTP latency

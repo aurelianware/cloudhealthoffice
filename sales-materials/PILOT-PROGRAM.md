@@ -95,8 +95,8 @@ Must be actively facing CMS-0057-F compliance requirements with January 1, 2027 
 | Requirement | Description |
 |-------------|-------------|
 | **Azure Subscription** | Active Azure subscription with permissions to deploy resources |
-| **EDI Connectivity** | Existing or planned clearinghouse relationship (Availity, Change Healthcare, etc.) |
-| **Backend System** | Claims system accessible for integration (QNXT, Facets, or similar) |
+| **EDI Connectivity** | Existing or planned clearinghouse relationship (Clearinghouse, Change Healthcare, etc.) |
+| **Backend System** | Claims system accessible for integration (claims adjudication systems such as or similar) |
 | **Technical Resource** | Designated technical contact for integration activities |
 | **Executive Sponsor** | Business stakeholder to champion the pilot internally |
 
