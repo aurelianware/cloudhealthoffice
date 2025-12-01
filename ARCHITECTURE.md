@@ -4,6 +4,7 @@ This document provides a comprehensive overview of the Cloud Health Office multi
 
 ## Table of Contents
 - [Overview](#overview)
+- [Deployment Options](#deployment-options)
 - [Platform Architecture](#platform-architecture)
 - [High-Level Architecture](#high-level-architecture)
 - [Component Details](#component-details)
@@ -15,23 +16,109 @@ This document provides a comprehensive overview of the Cloud Health Office multi
 
 ## Overview
 
-Cloud Health Office is a **cloud-native multi-tenant SaaS platform** built on Azure Logic Apps that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
+Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
+
+**Two deployment architectures are supported:**
+1. **Azure Logic Apps** - Fastest deployment, Azure-native managed services
+2. **Kubernetes** - Multi-cloud (AKS, EKS, GKE), greater infrastructure control
 
 ### Key Objectives
 - **Multi-Tenant SaaS**: Single codebase serves unlimited payers with per-tenant isolation
 - **Zero-Code Onboarding**: Add new payers through configuration (<1 hour to production)
 - **Backend Agnostic**: Works with any claims system (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)
-- **Enterprise Security**: HIPAA-compliant with Key Vault, private endpoints, PHI masking, automated rotation
+- **Cloud Agnostic**: Deploy to Azure, AWS, GCP, or on-premises with Kubernetes
+- **Enterprise Security**: HIPAA-compliant with Key Vault or HashiCorp Vault, private endpoints, PHI masking, automated rotation
 - **Reliability**: Comprehensive error handling, retry logic, dead-letter queues, and health monitoring
 - **Horizontal Scalability**: Auto-scales to handle any transaction volume across all tenants
 - **Complete Auditability**: Full transaction tracking, compliance logging, and per-payer reporting
 - **Standards-Based**: X12 EDI integration with Availity and other clearinghouses
 - **SaaS-Ready**: Marketplace-ready with billing integration and customer portal (roadmap)
 
+## Deployment Options
+
+Cloud Health Office supports two primary deployment architectures:
+
+### Option 1: Azure Logic Apps (Fastest)
+
+Best for: Azure-first organizations, rapid deployment, minimal infrastructure management.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Azure Logic Apps Architecture                   │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
+│  │  Logic App  │     │   Service   │     │    Azure    │   │
+│  │  Standard   │────▶│    Bus      │────▶│   Storage   │   │
+│  │  (Workflows)│     │  (Messaging)│     │  (Data Lake)│   │
+│  └─────────────┘     └─────────────┘     └─────────────┘   │
+│         │                                       │           │
+│         ▼                                       ▼           │
+│  ┌─────────────┐                        ┌─────────────┐   │
+│  │ Integration │                        │    Azure    │   │
+│  │   Account   │                        │  Key Vault  │   │
+│  │   (X12 EDI) │                        │  (Secrets)  │   │
+│  └─────────────┘                        └─────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Components:**
+- Azure Logic Apps Standard (WS1 SKU)
+- Azure Service Bus (Standard tier)
+- Azure Storage Gen2 (Data Lake)
+- Azure Integration Account (X12 EDI)
+- Azure Key Vault (Secrets management)
+- Application Insights (Monitoring)
+
+### Option 2: Kubernetes (Multi-Cloud)
+
+Best for: Multi-cloud strategy, existing Kubernetes infrastructure, greater control.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Kubernetes Architecture                         │
+│         (AKS / EKS / GKE / On-Premises)                     │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
+│  │    Argo     │     │   Apache    │     │  S3/MinIO   │   │
+│  │  Workflows  │────▶│   Kafka     │────▶│  (Storage)  │   │
+│  │(Orchestration)    │ (Messaging) │     │             │   │
+│  └─────────────┘     └─────────────┘     └─────────────┘   │
+│         │                                       │           │
+│         ▼                                       ▼           │
+│  ┌─────────────┐                        ┌─────────────┐   │
+│  │    Argo     │                        │  HashiCorp  │   │
+│  │   Events    │                        │   Vault     │   │
+│  │ (Triggers)  │                        │  (Secrets)  │   │
+│  └─────────────┘                        └─────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Components:**
+- Argo Workflows (replaces Logic Apps)
+- Argo Events (event-driven triggers)
+- Apache Kafka (replaces Service Bus)
+- S3/MinIO (replaces Azure Storage)
+- HashiCorp Vault (replaces Key Vault, optional)
+- Prometheus/Grafana (replaces Application Insights)
+
+### Architecture Comparison
+
+| Component | Azure Logic Apps | Kubernetes |
+|-----------|-----------------|------------|
+| **Workflow Engine** | Logic Apps Standard | Argo Workflows |
+| **Event Triggers** | Built-in connectors | Argo Events |
+| **Messaging** | Azure Service Bus | Apache Kafka |
+| **Storage** | Azure Storage Gen2 | S3 / MinIO |
+| **Secrets** | Azure Key Vault | HashiCorp Vault |
+| **Monitoring** | Application Insights | Prometheus/Grafana |
+| **X12 Processing** | Integration Account | Custom containers |
+
+**See [Multi-Cloud Deployment Guide](./docs/MULTI-CLOUD-DEPLOYMENT.md) for detailed deployment instructions.**
+
 ### Platform Context
 
 **Platform Model:**
-- **Multi-Tenant**: Single Logic Apps instance serves multiple payers with config-based isolation
+- **Multi-Tenant**: Single instance serves multiple payers with config-based isolation
 - **Configuration-Driven**: All payer-specific logic defined in configuration files
 - **Automated Deployment**: Config-to-Workflow Generator creates complete deployments
 - **Self-Service**: Interactive onboarding wizard for guided configuration
