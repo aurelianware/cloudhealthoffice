@@ -81,7 +81,7 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
 - [ ] **Vendor & Partner Agreements**
   - Azure partnership documentation
   - Third-party service agreements
-  - Clearinghouse partnership agreements (Availity, etc.)
+  - Clearinghouse partnership agreements (Clearinghouse, etc.)
   - **Status**: ⬜ Not Started / 🔄 In Progress / ✅ Complete
 
 ---

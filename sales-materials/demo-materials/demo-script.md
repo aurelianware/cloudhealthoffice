@@ -6,7 +6,7 @@
 - [ ] Test screen sharing capability
 - [ ] Open Azure Portal (Logic Apps workflow runs)
 - [ ] Open Application Insights (monitoring dashboard)
-- [ ] Have test 275 file ready (`test-x12-275-availity-to-pchp.edi`)
+- [ ] Have test 275 file ready (`test-x12-275-clearinghouse-inbound.edi`)
 - [ ] Prepare ROI calculator with prospect's numbers
 - [ ] Review prospect's notes (claims system, pain points, volume)
 
@@ -55,9 +55,9 @@
 
 **[Show slide or whiteboard: Current Manual Process]**
 
-**YOU:** "Right now, when a provider sends a 275 attachment through Availity, most payers go through this process:"
+**YOU:** "Right now, when a provider sends a 275 attachment through Clearinghouse, most payers go through this process:"
 
-1. **Manual SFTP Login** - Staff logs into Availity SFTP daily
+1. **Manual SFTP Login** - Staff logs into Clearinghouse SFTP daily
 2. **File Download** - Downloads .edi files to local machine
 3. **Manual Decode** - Opens file, reads X12 format manually or with basic tool
 4. **Claim Lookup** - Searches claims system for matching claim number
@@ -84,7 +84,7 @@
 **YOU:** "The platform has four main components:"
 
 **1. SFTP Polling & Data Lake**
-- "Logic App polls Availity SFTP every 15 minutes"
+- "Logic App polls Clearinghouse SFTP every 15 minutes"
 - "Automatically downloads new 275 files"
 - "Archives raw files to Azure Data Lake with date-based partitioning"
 - "Maintains 7-year retention for HIPAA compliance"
@@ -116,18 +116,18 @@
 **[Navigate to Azure Portal → Logic Apps]**
 
 #### Step 1: Show SFTP Trigger
-**YOU:** "Here's the Logic App workflow called `ingest275`. It's configured to check Availity SFTP every 15 minutes for new files in the `/inbound/attachments` folder."
+**YOU:** "Here's the Logic App workflow called `ingest275`. It's configured to check Clearinghouse SFTP every 15 minutes for new files in the `/inbound/attachments` folder."
 
 **[Show workflow definition, trigger configuration]**
 
 **YOU:** "When it finds a new file, it automatically downloads it and kicks off the processing."
 
 #### Step 2: Upload Test File
-**YOU:** "I'm going to upload a test 275 file to our demo SFTP server to simulate Availity sending an attachment."
+**YOU:** "I'm going to upload a test 275 file to our demo SFTP server to simulate Clearinghouse sending an attachment."
 
-**[Upload test-x12-275-availity-to-pchp.edi]**
+**[Upload test-x12-275-clearinghouse-inbound.edi]**
 
-**YOU:** "In a production environment, this would be coming from Availity automatically."
+**YOU:** "In a production environment, this would be coming from the clearinghouse automatically."
 
 #### Step 3: Show Workflow Execution
 **[Navigate to Logic App → Runs History]**
@@ -142,7 +142,7 @@
 2. **Archive to Data Lake** - "Stored raw file in `hipaa-attachments/raw/275/2025/01/15/`"
 3. **Decode X12 275** - "Integration Account decoded the X12 message"
 4. **Extract Metadata** - "Pulled out claim number: 2025010112345, member ID: ABC123456, provider NPI: 1234567890"
-5. **QNXT API Call** - "Called [Their Claims System] API to validate claim and link attachment"
+5. **claims backend API Call** - "Called [Their Claims System] API to validate claim and link attachment"
 6. **Publish to Service Bus** - "Published event to `attachments-in` topic for downstream processing"
 7. **Delete from SFTP** - "Cleaned up SFTP folder (file is safely archived in Data Lake)"
 
@@ -178,8 +178,8 @@
 4. "Create audit trail entry"
 
 **YOU:** "We've built pre-configured integrations for:"
-- "QNXT (McKesson)"
-- "FacetsRx (TriZetto)"
+- "claims backend (McKesson)"
+- "claims adjudication system (TriZetto)"
 - "TriZetto QCARE"
 - "Custom REST APIs"
 
@@ -326,13 +326,13 @@
 **A:** "90 days from contract signature to go-live. Broken down into: 2 weeks discovery, 6 weeks development, 3 weeks testing, 1 week training and deployment."
 
 **Q: "What claims systems do you support?"**
-**A:** "We support any system with a REST API. We have pre-built connectors for QNXT, FacetsRx, and TriZetto. Custom integrations take 3-5 days."
+**A:** "We support any system with a REST API. We have pre-built connectors for claims adjudication systems such as and TriZetto. Custom integrations take 3-5 days."
 
 **Q: "Can we start with a pilot?"**
 **A:** "Absolutely. We typically pilot with 100-200 attachments over 30-60 days before full rollout."
 
-**Q: "What happens if Availity changes their SFTP structure?"**
-**A:** "We monitor Availity announcements and update the platform proactively. Updates are included in your annual license."
+**Q: "What happens if Clearinghouse changes their SFTP structure?"**
+**A:** "We monitor Clearinghouse announcements and update the platform proactively. Updates are included in your annual license."
 
 **Q: "How do we handle multiple payers?"**
 **A:** "The platform supports multiple payers through configuration. Additional payers are $7,000-10,000/year depending on volume."

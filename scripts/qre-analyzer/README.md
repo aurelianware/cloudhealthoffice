@@ -1,12 +1,12 @@
 # X12 278 X215 QRE Analyzer
 
-Validates X12 278 Healthcare Services Review - Inquiry and Response (X215) transactions against Availity QRE (Query and Response for Eligibility) requirements and best practices.
+Validates X12 278 Healthcare Services Review - Inquiry and Response (X215) transactions against Clearinghouse QRE (Query and Response for Eligibility) requirements and best practices.
 
 ## Overview
 
 This analyzer ensures X12 278 inquiry transactions comply with:
 - **X12 TR3 005010X215** specifications
-- **Availity QRE** minimal data requirements
+- **Clearinghouse QRE** minimal data requirements
 - **Best practices** for authorization inquiry transactions
 
 ## Features
@@ -125,7 +125,7 @@ The analyzer uses `qre-analyzer.config.json` for validation rules.
 ### Key Configuration Settings
 
 - **strictMode**: Fail on any validation warning
-- **minimalDataPrinciple**: Enforce Availity QRE minimal data best practice
+- **minimalDataPrinciple**: Enforce Clearinghouse QRE minimal data best practice
 - **queryMethods**: Enable validation for specific query methods
 - **outputPath**: Write JSON report to file (empty = stdout only)
 - **failOnWarnings**: Treat warnings as errors
@@ -295,7 +295,7 @@ print('✓ Configuration is valid')
 ## References
 
 - [X12 278 Healthcare Services Review TR3](https://store.x12.org/store/healthcare/healthcare-claim-005010)
-- [Availity X12 278 X215 QRE Guide](https://www.availity.com/)
+- [Clearinghouse X12 278 X215 QRE Guide](https://www.clearinghouse.com/)
 - [HIPAA X12 Implementation Guides](https://www.cms.gov/regulations-and-guidance/administrative-simplification/hipaa-aca/hipaa-transaction-and-code-set-standards)
 
 ## Support

@@ -202,7 +202,7 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 
 ---
 
-#### 2.3 Cognizant Healthcare
+#### 2.3 Core System Vendor Healthcare
 
 **Partnership Type**: Implementation / Reseller  
 **Revenue Opportunity**: Medium-High ($300K-$1M/year)  
@@ -348,7 +348,7 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 
 ---
 
-### 3.4 Availity
+### 3.4 Clearinghouse
 
 **Partnership Type**: Technical / Clearinghouse  
 **Strategic Value**: High  
@@ -360,13 +360,13 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 - Reference: [ARCHITECTURE.md](../ARCHITECTURE.md)
 
 **Expansion Opportunities:**
-- Availity Essentials marketplace listing
+- Clearinghouse Essentials marketplace listing
 - API integration (beyond SFTP)
 - Joint customer development
 
 **Action Items:**
-- [ ] Research Availity partnership program
-- [ ] Explore Availity Essentials listing
+- [ ] Research clearinghouse partnership program
+- [ ] Explore Clearinghouse Essentials listing
 - [ ] Identify joint marketing opportunities
 
 ---
@@ -390,8 +390,8 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 
 | Vendor | System | Priority | Value Proposition |
 |--------|--------|----------|-------------------|
-| **Conduent** | QNXT | Very High | Native integration, reference architecture |
-| **TriZetto (Cognizant)** | Facets | High | Backend agnostic, complement existing |
+| **Conduent** | claims backend | Very High | Native integration, reference architecture |
+| **Core System Vendor** | claims adjudication system | High | Backend agnostic, complement existing |
 | **Gainwell** | Medicaid Systems | High | Medicaid modernization |
 | **Inovalon** | Claims Analytics | Medium | Analytics integration |
 | **Cotiviti** | Payment Accuracy | Medium | Claims processing enhancement |
@@ -418,7 +418,7 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 |--------------|--------|--------|-------|--------|
 | Microsoft for Startups | Program acceptance | Apply to program | — | ⬜ |
 | Azure Healthcare | Initial introduction | Request meeting | — | ⬜ |
-| Availity | Partnership expansion | Proposal | — | ⬜ |
+| Clearinghouse | Partnership expansion | Proposal | — | ⬜ |
 | Regional consultants | 5 partners | Outreach campaign | — | ⬜ |
 
 ### Phase 2: Scale (Months 4-6)

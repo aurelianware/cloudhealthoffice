@@ -7,12 +7,12 @@
 #   1. sftp-fetch - Download 278 file from SFTP
 #   2. parse-x12-278 - Parse authorization request EDI to JSON
 #   3. extract-auth-data - Extract authorization details
-#   4. call-qnxt-api - POST to QNXT backend API
+#   4. call-claims-backend-api - POST to claims backend backend API
 #   5. store-data-lake - Archive transaction to S3/MinIO
 #   6. publish-kafka - Publish to 'edi-278' topic
 #
 # Trading Partners:
-#   - Sender: Availity (030240928)
+#   - Sender: Clearinghouse (030240928)
 #   - Receiver: Health Plan ({config.payerId})
 
 apiVersion: argoproj.io/v1alpha1
@@ -53,7 +53,7 @@ spec:
   arguments:
     parameters:
       - name: sftp-host
-        value: "sftp.availity.com"
+        value: "sftp.clearinghouse.example.com"
       - name: sftp-folder
         value: "/inbound/278"
       - name: file-pattern
@@ -62,8 +62,8 @@ spec:
         value: "hipaa-attachments"
       - name: kafka-topic
         value: "edi-278"
-      - name: qnxt-api-endpoint
-        value: "https://qnxt.api.local/claims/process-278"
+      - name: claims-backend-api-endpoint
+        value: "https://backend.api.local/claims/process-278"
   
   volumes:
     - name: work-volume
@@ -71,13 +71,13 @@ spec:
         sizeLimit: "1Gi"
     - name: sftp-credentials
       secret:
-        secretName: availity-sftp-secret
+        secretName: clearinghouse-sftp-secret
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: qnxt-credentials
+    - name: backend-credentials
       secret:
-        secretName: qnxt-api-secret
+        secretName: claims-backend-api-secret
   
   templates:
     # Main orchestration template
@@ -117,17 +117,17 @@ spec:
                 - name: parsed-json
                   from: "{{tasks.parse-x12-278.outputs.artifacts.parsed-output}}"
           
-          # Step 4: Call QNXT API
-          - name: call-qnxt-api
+          # Step 4: Call claims backend API
+          - name: call-claims-backend-api
             dependencies: [extract-auth-data]
-            template: qnxt-api-template
+            template: claims-backend-api-template
             arguments:
               artifacts:
                 - name: auth-data
                   from: "{{tasks.extract-auth-data.outputs.artifacts.auth-output}}"
               parameters:
                 - name: api-endpoint
-                  value: "{{workflow.parameters.qnxt-api-endpoint}}"
+                  value: "{{workflow.parameters.claims-backend-api-endpoint}}"
           
           # Step 5: Store to Data Lake
           - name: store-data-lake
@@ -145,7 +145,7 @@ spec:
           
           # Step 6: Publish to Kafka
           - name: publish-kafka
-            dependencies: [call-qnxt-api, store-data-lake]
+            dependencies: [call-claims-backend-api, store-data-lake]
             template: kafka-publish-template
             arguments:
               artifacts:
@@ -198,12 +198,12 @@ spec:
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: username
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: password
                 optional: true
           - name: SSH_KEY_PATH
@@ -281,8 +281,8 @@ spec:
             memory: "256Mi"
             cpu: "200m"
 
-    # QNXT API Call Template
-    - name: qnxt-api-template
+    # claims backend API Call Template
+    - name: claims-backend-api-template
       inputs:
         parameters:
           - name: api-endpoint
@@ -309,7 +309,7 @@ spec:
             # Read auth data and prepare request
             AUTH_DATA=$(cat /data/input/auth-data.json)
             
-            # Extract fields for QNXT API
+            # Extract fields for claims backend API
             CLAIM_NUMBER=$(echo "$AUTH_DATA" | jq -r '.service.claim_number // ""')
             MEMBER_ID=$(echo "$AUTH_DATA" | jq -r '.member.member_id // ""')
             PROVIDER_NPI=$(echo "$AUTH_DATA" | jq -r '.provider.npi // ""')
@@ -327,11 +327,11 @@ spec:
             EOF
             )
             
-            # Call QNXT API
+            # Call claims backend API
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST "{{inputs.parameters.api-endpoint}}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $QNXT_API_TOKEN" \
+              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
               -d "$REQUEST_BODY")
             
             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
@@ -342,16 +342,16 @@ spec:
             
             # Check for success
             if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-              echo "QNXT API call failed with HTTP $HTTP_CODE"
+              echo "claims backend API call failed with HTTP $HTTP_CODE"
               exit 1
             fi
             
-            echo "QNXT API call successful"
+            echo "claims backend API call successful"
         env:
-          - name: QNXT_API_TOKEN
+          - name: CLAIMS_BACKEND_API_TOKEN
             valueFrom:
               secretKeyRef:
-                name: qnxt-api-secret
+                name: claims-backend-api-secret
                 key: token
         volumeMounts:
           - name: work-volume
@@ -525,12 +525,12 @@ spec:
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: username
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: password
                 optional: true
         volumeMounts:

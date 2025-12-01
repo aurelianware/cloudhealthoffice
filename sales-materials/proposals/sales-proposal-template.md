@@ -56,7 +56,7 @@ Cloud Health Office Platform
 Based on our discovery conversations, [Customer Organization Name] faces the following challenges in attachment processing:
 
 1. **Manual Processing Bottlenecks**
-   - Staff manually logs into Availity SFTP multiple times daily
+   - Staff manually logs into Clearinghouse SFTP multiple times daily
    - Each attachment requires 2-3 hours of manual work
    - Monthly volume of [X] attachments = [X × 2] staff hours
 
@@ -89,7 +89,7 @@ Based on our discovery conversations, [Customer Organization Name] faces the fol
 The Cloud Health Office Platform is an Azure-native, configuration-driven solution that automates end-to-end medical attachment processing for healthcare payers.
 
 **Core Capabilities:**
-- Automated SFTP polling and file retrieval from Availity
+- Automated SFTP polling and file retrieval from the clearinghouse
 - X12 EDI decoding (275 Attachments, 277 RFAI, 278 Authorizations)
 - Integration with [Customer's Claims System]
 - Event-driven architecture for downstream workflows
@@ -98,7 +98,7 @@ The Cloud Health Office Platform is an Azure-native, configuration-driven soluti
 ### Architecture Components
 
 #### 1. SFTP Integration & Data Lake
-- **Automated Polling:** Checks Availity SFTP every 15 minutes for new files
+- **Automated Polling:** Checks Clearinghouse SFTP every 15 minutes for new files
 - **Azure Data Lake Gen2:** Archives raw EDI files with date-based partitioning
 - **Retention Management:** 7-year HIPAA-compliant retention with automated lifecycle policies
 - **Secure Storage:** Encryption at rest (AES-256), encryption in transit (TLS 1.2+)
@@ -183,7 +183,7 @@ We will integrate the platform with your [Claims System Name] using the followin
 
 **Customer Responsibilities:**
 - Provide claims system API documentation and credentials
-- Provide Availity SFTP credentials
+- Provide Clearinghouse SFTP credentials
 - Assign technical point of contact
 - Complete compliance questionnaire
 
@@ -404,7 +404,7 @@ We guarantee the ROI outlined in this proposal. If [Customer Organization Name] 
 ## Customer References
 
 ### Reference 1: [Similar Payer Organization]
-**Profile:** Regional health plan, 500K members, QNXT claims system
+**Profile:** Regional health plan, 500K members, claims backend claims system
 **Volume:** 450 attachments/month
 **Results:**
 - 92% reduction in processing time
@@ -417,7 +417,7 @@ We guarantee the ROI outlined in this proposal. If [Customer Organization Name] 
 > — Director of Claims Operations
 
 ### Reference 2: [Similar Payer Organization]
-**Profile:** Multi-state managed care organization, 1.2M members, FacetsRx
+**Profile:** Multi-state managed care organization, 1.2M members, claims adjudication system
 **Volume:** 780 attachments/month
 **Results:**
 - 87% reduction in processing time

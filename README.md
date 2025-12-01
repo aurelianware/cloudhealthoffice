@@ -295,7 +295,7 @@ Production-ready security for PHI workloads with high security maturity (self-as
 
 ## 🤝 Integration Focus
 
-Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like QNXT and Facets, providing enhancements to EDI workflows without requiring full replacements.
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like claims adjudication systems, providing enhancements to EDI workflows without requiring full replacements.
 
 ## 📖 Documentation
 
@@ -465,7 +465,7 @@ Apache 2.0 - See [LICENSE](./LICENSE) for details.
 
 ## 🤝 Collaboration and Integration
 
-Cloud Health Office is designed to complement leading core administrative platforms like QNXT and Facets, enabling rapid enhancements to existing workflows without disruption.
+Cloud Health Office is designed to complement leading core administrative platforms like claims adjudication systems, enabling rapid enhancements to existing workflows without disruption.
 
 ---
 

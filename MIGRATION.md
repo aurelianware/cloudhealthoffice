@@ -8,7 +8,7 @@ This guide provides comprehensive instructions for organizations transitioning f
 - Repository branding from "HIPAA Attachments" to "Cloud Health Office"
 - Enhanced positioning as a multi-tenant SaaS platform
 - Updated documentation reflecting expanded capabilities
-- Clearer separation from Availity (independent integration platform)
+- Clearer separation from the clearinghouse (independent integration platform)
 - Addition of Azure Marketplace roadmap and commercial SaaS features
 
 **What's NOT Changing:**
@@ -123,8 +123,8 @@ New implementations should use the updated branding and documentation:
 | Old Description | New Description | Reason |
 |----------------|-----------------|--------|
 | "275 attachment processing" | "Multi-payer EDI processing (Claims, Eligibility, Attachments, Authorizations, Appeals)" | Reflects full platform capabilities |
-| "Availity integration" | "Clearinghouse integration (Availity, Change Healthcare, etc.)" | Platform-agnostic positioning |
-| "QNXT backend" | "Backend-agnostic (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)" | Works with any claims system |
+| "Clearinghouse integration" | "Clearinghouse integration (Clearinghouse, Change Healthcare, etc.)" | Platform-agnostic positioning |
+| "claims backend backend" | "Backend-agnostic (claims adjudication systems such as TriZetto, Epic, Cerner, custom)" | Works with any claims system |
 | "Payer onboarding" | "Zero-code tenant onboarding" | SaaS multi-tenant terminology |
 
 ### Security Features
@@ -213,8 +213,8 @@ A: Check your deployment's Application Insights or Logic App tags. Versions afte
 **Q: Is this a new product?**
 A: No, it's the same platform with updated branding to reflect its expanded SaaS capabilities.
 
-**Q: What's the connection to Availity?**
-A: Cloud Health Office integrates with Availity (and other clearinghouses), but is an independent platform. This is now clearly stated in documentation with appropriate disclaimers.
+**Q: What's the connection to the clearinghouse?**
+A: Cloud Health Office integrates with the clearinghouse (and other clearinghouses), but is an independent platform. This is now clearly stated in documentation with appropriate disclaimers.
 
 ## Timeline
 
@@ -244,7 +244,7 @@ A: Cloud Health Office integrates with Availity (and other clearinghouses), but 
 
 ## Disclaimer
 
-**Platform Independence**: Cloud Health Office is an independent EDI integration platform. It supports connectivity with Availity, Change Healthcare, and other clearinghouses. This platform is not affiliated with, endorsed by, or sponsored by Availity, LLC or any other clearinghouse mentioned in this documentation.
+**Platform Independence**: Cloud Health Office is an independent EDI integration platform. It supports connectivity with the clearinghouse, Change Healthcare, and other clearinghouses. This platform is not affiliated with, endorsed by, or sponsored by Clearinghouse, LLC or any other clearinghouse mentioned in this documentation.
 
 ---
 

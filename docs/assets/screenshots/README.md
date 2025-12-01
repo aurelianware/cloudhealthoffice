@@ -1,1 +1,1 @@
-![Hero Banner](assets/screenshots/hero-banner-sentinel.png)\n\n![Deployment Wizard](assets/screenshots/deployment-wizard-sentinel.png)\n\n![QNXT Correlation Screen](assets/screenshots/qnxt-correlation-sentinel.png)
+![Hero Banner](assets/screenshots/hero-banner-sentinel.png)\n\n![Deployment Wizard](assets/screenshots/deployment-wizard-sentinel.png)\n\n![claims backend Correlation Screen](assets/screenshots/backend-correlation-sentinel.png)

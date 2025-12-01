@@ -6,8 +6,8 @@ param(
 )
 
 # --- Create Trading Partners ---
-# Availity
-$availityContent = @{
+# Clearinghouse
+$clearinghouseContent = @{
     b2b = @{
         businessIdentities = @(
             @{ qualifier = "ZZ"; value = "030240928" }
@@ -18,11 +18,11 @@ $availityContent = @{
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
-    --name "Availity" `
+    --name "Clearinghouse" `
     --partner-type "B2B" `
-    --content $availityContent
+    --content $clearinghouseContent
 
-# QNXT (Health Plan)
+# claims backend (Health Plan)
 $pchpContent = @{
     b2b = @{
         businessIdentities = @(
@@ -34,7 +34,7 @@ $pchpContent = @{
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
-    --name "Health Plan-QNXT" `
+    --name "Health Plan Backend" `
     --partner-type "B2B" `
     --content $pchpContent
 
@@ -64,10 +64,10 @@ foreach ($schema in $schemas) {
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Availity-to-Health Plan-275-Receive" `
+    --name "Clearinghouse-to-Health Plan-275-Receive" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Availity" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Clearinghouse" `
     --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --guest-identity '{ "qualifier": "ZZ", "value": "030240928" }' `
     --content '{
@@ -93,10 +93,10 @@ az logic integration-account agreement create `
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Health Plan-to-Availity-277-Send" `
+    --name "Health Plan-to-Clearinghouse-277-Send" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Availity" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Clearinghouse" `
     --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --guest-identity '{ "qualifier": "ZZ", "value": "030240928" }' `
     --content '{
@@ -124,8 +124,8 @@ az logic integration-account agreement create `
     --integration-account-name $IntegrationAccountName `
     --name "Health Plan-278-Processing" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Health Plan-QNXT" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Health Plan Backend" `
     --host-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --guest-identity '{ "qualifier": "ZZ", "value": "{config.payerId}" }' `
     --content '{

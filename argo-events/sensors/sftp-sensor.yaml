@@ -53,7 +53,7 @@ spec:
                 arguments:
                   parameters:
                     - name: sftp-host
-                      value: "sftp.availity.com"
+                      value: "sftp.clearinghouse.example.com"
                     - name: sftp-folder
                       value: "/inbound/attachments"
                     - name: file-pattern
@@ -86,7 +86,7 @@ spec:
                 arguments:
                   parameters:
                     - name: sftp-host
-                      value: "sftp.availity.com"
+                      value: "sftp.clearinghouse.example.com"
                     - name: sftp-folder
                       value: "/inbound/278"
                     - name: file-pattern

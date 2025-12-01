@@ -1,7 +1,7 @@
 /**
- * Availity Integration Configuration Interfaces
+ * Clearinghouse Integration Configuration Interfaces
  * 
- * TypeScript interfaces for the unified Availity integration configuration schema.
+ * TypeScript interfaces for the unified Clearinghouse integration configuration schema.
  * Supports all transaction types: 837 Claims, 270/271 Eligibility, 276/277 Claim Status,
  * Appeals, Attachments 275, and Enhanced Claim Status (ECS).
  */
@@ -651,14 +651,14 @@ export interface Modules {
 }
 
 /**
- * Root Availity Integration Configuration
+ * Root Clearinghouse Integration Configuration
  * 
- * Complete configuration for onboarding a health plan to the Availity integration platform.
+ * Complete configuration for onboarding a health plan to the Clearinghouse integration platform.
  */
-export interface AvailityIntegrationConfig {
+export interface ClearinghouseIntegrationConfig {
   /** Health plan organization name */
   organizationName: string;
-  /** Primary payer ID for Availity routing */
+  /** Primary payer ID for Clearinghouse routing */
   payerId: string;
   /** Display name for provider portals */
   payerName: string;
@@ -682,6 +682,6 @@ export interface AvailityIntegrationConfig {
   characterSet?: CharacterSet;
   /** Error handling and acknowledgment configuration */
   errorHandling?: ErrorHandling;
-  /** Configuration for each Availity transaction module */
+  /** Configuration for each Clearinghouse transaction module */
   modules?: Modules;
 }

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the backend-agnostic `ClaimsBackend` interface for the Cloud Health Office system. The interface abstracts claims adjudication system-specific implementations to enable **configuration-driven multi-payer platformization** and support for any backend system (QNXT, FacetsRx, TriZetto, etc.).
+This document defines the backend-agnostic `ClaimsBackend` interface for the Cloud Health Office system. The interface abstracts claims adjudication system-specific implementations to enable **configuration-driven multi-payer platformization** and support for any backend system (claims adjudication systems such as TriZetto, etc.).
 
 ## Purpose
 
@@ -17,7 +17,7 @@ The `ClaimsBackend` interface serves as a contract between the Logic Apps workfl
 
 ### Configuration-Driven Architecture
 
-All backend implementations are configured through the **Unified Availity Integration Configuration Schema**. Each payer defines their backend connection parameters including:
+All backend implementations are configured through the **Unified Clearinghouse Integration Configuration Schema**. Each payer defines their backend connection parameters including:
 - API endpoints and authentication
 - Field mappings between standard interface and backend schema
 - Retry policies and timeouts
@@ -294,21 +294,21 @@ Backend implementations MAY support:
 4. **Advanced Filtering**: Additional search criteria
 5. **Real-time Updates**: WebSocket or SSE for live status updates
 
-## QNXT Backend Implementation
+## claims backend Backend Implementation
 
 ### Overview
 
-The QNXT Claims API is the initial backend implementation for this system.
+The claims backend Claims API is the initial backend implementation for this system.
 
 ### API Base URL
 
-- **DEV**: `https://qnxt-api-dev.example.com`
-- **UAT**: `https://qnxt-api-uat.example.com`
-- **PROD**: `https://qnxt-api.example.com`
+- **DEV**: `https://claims-backend-api-dev.example.com`
+- **UAT**: `https://claims-backend-api-uat.example.com`
+- **PROD**: `https://claims-backend-api.example.com`
 
 ### Authentication
 
-QNXT uses Bearer token authentication:
+claims backend uses Bearer token authentication:
 
 ```http
 Authorization: Bearer <jwt-token>
@@ -318,37 +318,37 @@ Tokens are obtained via Azure AD OAuth 2.0 and expire after 1 hour.
 
 ### Endpoint Mappings
 
-| Interface Method | QNXT Endpoint |
+| Interface Method | claims backend Endpoint |
 |-----------------|---------------|
 | Service Date Search | `POST /api/v1/claims/search/service-date` |
 | Member Search | `POST /api/v1/claims/search/member` |
 | Check Number Search | `POST /api/v1/claims/search/check-number` |
 | Claim History | `POST /api/v1/claims/search/claim-history` |
 
-### QNXT-Specific Considerations
+### claims backend-Specific Considerations
 
-1. **Date Format**: QNXT expects `CCYYMMDD` format (e.g., `20240115`)
-2. **Claim Status Mapping**: QNXT internal codes are mapped to standard status enum
-3. **Pagination**: QNXT supports pagination via `page` and `pageSize` query parameters
+1. **Date Format**: claims backend expects `CCYYMMDD` format (e.g., `20240115`)
+2. **Claim Status Mapping**: claims backend internal codes are mapped to standard status enum
+3. **Pagination**: claims backend supports pagination via `page` and `pageSize` query parameters
 4. **Rate Limits**: 100 requests per minute per API key
 5. **Retry Policy**: 4 retries with 15-second intervals for transient failures
 
-### QNXT Response Transformation
+### claims backend response Transformation
 
-QNXT responses must be transformed to the standard `Claim` format:
+claims backend responses must be transformed to the standard `Claim` format:
 
 ```typescript
-// QNXT Internal Format (example)
-interface QnxtClaim {
+// claims backend Internal Format (example)
+interface BackendClaim {
   claimId: string;              // Maps to claimNumber
   clmStatus: string;            // Maps to claimStatus (via lookup)
   svcFromDt: string;            // Maps to serviceFromDate
-  // ... other QNXT-specific fields
+  // ... other claims backend-specific fields
 }
 
 // Transformation logic in Logic App:
-// - Map QNXT field names to standard interface
-// - Convert date formats (QNXT uses YYYYMMDD)
+// - Map claims backend field names to standard interface
+// - Convert date formats (claims backend uses YYYYMMDD)
 // - Translate status codes to standard enum values
 // - Calculate derived fields (e.g., adjustmentAmount)
 ```
@@ -382,10 +382,10 @@ Future enhancement: Route searches to different backends based on configuration:
 ```json
 {
   "backendConfig": {
-    "default": "qnxt",
+    "default": "backend",
     "backends": {
-      "qnxt": {
-        "baseUrl": "https://qnxt-api.example.com",
+      "backend": {
+        "baseUrl": "https://claims-backend-api.example.com",
         "authType": "bearer",
         "timeout": 30
       },
@@ -453,7 +453,7 @@ Use contract testing to ensure:
 1. **Use Interface Types**: Reference this document for data structures
 2. **Handle All Errors**: Implement robust error handling for all methods
 3. **Log Appropriately**: Log search operations for audit and troubleshooting
-4. **Transform Data**: Ensure all responses match Availity ECS format
+4. **Transform Data**: Ensure all responses match Clearinghouse ECS format
 5. **Test Thoroughly**: Test with multiple backend implementations
 
 ## Versioning
@@ -468,4 +468,4 @@ Use contract testing to ensure:
 - [ECS-INTEGRATION.md](./ECS-INTEGRATION.md) - Detailed ECS integration guide
 - [ECS-OPENAPI.yaml](./api/ECS-OPENAPI.yaml) - OpenAPI specification for ECS endpoints
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture overview
-- [QNXT API Documentation](https://qnxt-api-docs.example.com) - QNXT-specific documentation
+- [claims backend API Documentation](https://claims-backend-api-docs.example.com) - claims backend-specific documentation

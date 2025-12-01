@@ -3,7 +3,7 @@
  * 
  * Comprehensive test suite covering:
  * - Successful search/read calls
- * - Backend data mapping (QNXT → FHIR)
+ * - Backend data mapping (claims backend → FHIR)
  * - SMART on FHIR authentication and consent edge cases
  * - HIPAA safeguards (encryption, PHI audit, redaction)
  * - Consent denial/authorization errors
@@ -15,9 +15,9 @@ import {
   AuthenticationError,
   ConsentDeniedError,
   ResourceNotFoundError,
-  QnxtPatient,
-  QnxtClaim,
-  QnxtEncounter
+  BackendPatient,
+  BackendClaim,
+  BackendEncounter
 } from '../provider-access-api';
 import { Condition, Observation, Patient } from 'fhir/r4';
 
@@ -306,12 +306,12 @@ describe('ProviderAccessApi', () => {
   });
 
   // ==========================================================================
-  // 5. QNXT to FHIR Mapping Tests
+  // 5. Backend to FHIR Mapping Tests
   // ==========================================================================
 
-  describe('QNXT to FHIR Mapping', () => {
-    it('should map QNXT Patient to FHIR Patient (US Core v3.1.1)', () => {
-      const qnxtPatient: QnxtPatient = {
+  describe('Backend to FHIR Mapping', () => {
+    it('should map Backend Patient to FHIR Patient (US Core v3.1.1)', () => {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'Jane',
         lastName: 'Smith',
@@ -329,7 +329,7 @@ describe('ProviderAccessApi', () => {
         email: 'jane.smith@example.com'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 
       expect(fhirPatient.resourceType).toBe('Patient');
       expect(fhirPatient.id).toBe('MEM123');
@@ -344,8 +344,8 @@ describe('ProviderAccessApi', () => {
       expect(fhirPatient.telecom).toHaveLength(2);
     });
 
-    it('should map QNXT Claim to FHIR Claim', () => {
-      const qnxtClaim: QnxtClaim = {
+    it('should map Backend Claim to FHIR Claim', () => {
+      const backendClaim: BackendClaim = {
         claimId: 'CLM123',
         memberId: 'MEM123',
         providerId: 'NPI98765',
@@ -358,7 +358,7 @@ describe('ProviderAccessApi', () => {
         status: 'active'
       };
 
-      const fhirClaim = api.mapQnxtClaimToFhir(qnxtClaim);
+      const fhirClaim = api.mapBackendClaimToFhir(backendClaim);
 
       expect(fhirClaim.resourceType).toBe('Claim');
       expect(fhirClaim.id).toBe('CLM123');
@@ -371,8 +371,8 @@ describe('ProviderAccessApi', () => {
       expect(fhirClaim.total?.currency).toBe('USD');
     });
 
-    it('should map QNXT Encounter to FHIR Encounter', () => {
-      const qnxtEncounter: QnxtEncounter = {
+    it('should map Backend Encounter to FHIR Encounter', () => {
+      const backendEncounter: BackendEncounter = {
         encounterId: 'ENC123',
         memberId: 'MEM123',
         providerId: 'NPI98765',
@@ -382,7 +382,7 @@ describe('ProviderAccessApi', () => {
         status: 'finished'
       };
 
-      const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
+      const fhirEncounter = api.mapBackendEncounterToFhir(backendEncounter);
 
       expect(fhirEncounter.resourceType).toBe('Encounter');
       expect(fhirEncounter.id).toBe('ENC123');
@@ -404,7 +404,7 @@ describe('ProviderAccessApi', () => {
       ];
 
       testCases.forEach(({ input, expected }) => {
-        const qnxtPatient: QnxtPatient = {
+        const backendPatient: BackendPatient = {
           memberId: 'TEST',
           firstName: 'Test',
           lastName: 'User',
@@ -412,13 +412,13 @@ describe('ProviderAccessApi', () => {
           gender: input
         };
 
-        const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+        const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
         expect(fhirPatient.gender).toBe(expected);
       });
     });
 
     it('should normalize date formats (CCYYMMDD to YYYY-MM-DD)', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'TEST',
         firstName: 'Test',
         lastName: 'User',
@@ -426,7 +426,7 @@ describe('ProviderAccessApi', () => {
         gender: 'M'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
       expect(fhirPatient.birthDate).toBe('1985-06-15');
     });
 
@@ -447,7 +447,7 @@ describe('ProviderAccessApi', () => {
       ];
 
       testCases.forEach(({ input, expected }) => {
-        const qnxtEncounter: QnxtEncounter = {
+        const backendEncounter: BackendEncounter = {
           encounterId: 'TEST',
           memberId: 'MEM123',
           providerId: 'NPI123',
@@ -457,7 +457,7 @@ describe('ProviderAccessApi', () => {
           status: 'finished'
         };
 
-        const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
+        const fhirEncounter = api.mapBackendEncounterToFhir(backendEncounter);
         expect(fhirEncounter.class.code).toBe(expected);
       });
     });
@@ -527,7 +527,7 @@ describe('ProviderAccessApi', () => {
 
   describe('HIPAA Safeguards - PHI Redaction', () => {
     it('should redact PHI from Patient resource', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'John',
         lastName: 'Doe',
@@ -543,7 +543,7 @@ describe('ProviderAccessApi', () => {
         email: 'john@example.com'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
       const redacted = api.redactPhi(fhirPatient) as Patient;
 
       expect(redacted.name?.[0]?.family).toBe('***');
@@ -554,7 +554,7 @@ describe('ProviderAccessApi', () => {
     });
 
     it('should preserve resource structure when redacting', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'John',
         lastName: 'Doe',
@@ -562,7 +562,7 @@ describe('ProviderAccessApi', () => {
         gender: 'M'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
       const redacted = api.redactPhi(fhirPatient) as Patient;
 
       expect(redacted.resourceType).toBe('Patient');
@@ -686,7 +686,7 @@ describe('ProviderAccessApi', () => {
 
   describe('US Core v3.1.1 Compliance', () => {
     it('should include US Core Patient profile in Patient resources', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'John',
         lastName: 'Doe',
@@ -694,7 +694,7 @@ describe('ProviderAccessApi', () => {
         gender: 'M'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 
       expect(fhirPatient.meta?.profile).toContain(
         'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'
@@ -702,7 +702,7 @@ describe('ProviderAccessApi', () => {
     });
 
     it('should include required Patient identifiers', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'John',
         lastName: 'Doe',
@@ -710,7 +710,7 @@ describe('ProviderAccessApi', () => {
         gender: 'M'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 
       expect(fhirPatient.identifier).toBeDefined();
       expect(fhirPatient.identifier!.length).toBeGreaterThan(0);
@@ -719,7 +719,7 @@ describe('ProviderAccessApi', () => {
     });
 
     it('should include required Patient demographics', () => {
-      const qnxtPatient: QnxtPatient = {
+      const backendPatient: BackendPatient = {
         memberId: 'MEM123',
         firstName: 'John',
         lastName: 'Doe',
@@ -727,7 +727,7 @@ describe('ProviderAccessApi', () => {
         gender: 'M'
       };
 
-      const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+      const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 
       expect(fhirPatient.name).toBeDefined();
       expect(fhirPatient.gender).toBeDefined();

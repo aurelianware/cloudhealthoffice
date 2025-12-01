@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://aurelianware.com/schemas/availity-integration-config.json",
-  "title": "Availity Integration Configuration Schema",
-  "description": "Comprehensive multi-payer configuration schema for all Availity transaction types (837 Claims, 270/271 Eligibility, 276/277 Claim Status, Appeals, Attachments, ECS)",
+  "$id": "https://aurelianware.com/schemas/clearinghouse-integration-config.json",
+  "title": "Clearinghouse Integration Configuration Schema",
+  "description": "Comprehensive multi-payer configuration schema for all Clearinghouse transaction types (837 Claims, 270/271 Eligibility, 276/277 Claim Status, Appeals, Attachments, ECS)",
   "type": "object",
   "required": [
     "organizationName",
@@ -24,7 +24,7 @@
     },
     "payerId": {
       "type": "string",
-      "description": "Primary payer ID for Availity routing",
+      "description": "Primary payer ID for Clearinghouse routing",
       "pattern": "^[A-Z0-9]+$",
       "minLength": 5,
       "maxLength": 20,
@@ -40,7 +40,7 @@
       "maxLength": 100,
       "examples": [
         "{config.payerName}",
-        "Health Plan QNXT"
+        "Health Plan claims backend"
       ]
     },
     "logo": {
@@ -366,7 +366,7 @@
     },
     "modules": {
       "type": "object",
-      "description": "Configuration for each Availity transaction module",
+      "description": "Configuration for each Clearinghouse transaction module",
       "additionalProperties": false,
       "properties": {
         "claims837": {
@@ -1369,7 +1369,7 @@
                 },
                 "timeout": {
                   "type": "integer",
-                  "description": "Request timeout in seconds (standard: 30 seconds per Availity)",
+                  "description": "Request timeout in seconds (standard: 30 seconds per Clearinghouse)",
                   "minimum": 10,
                   "maximum": 120,
                   "default": 30
@@ -1421,10 +1421,10 @@
               "properties": {
                 "isa06_senderId": {
                   "type": "string",
-                  "description": "ISA06 Interchange Sender ID (typically Availity)",
+                  "description": "ISA06 Interchange Sender ID (typically Clearinghouse)",
                   "minLength": 1,
                   "maxLength": 15,
-                  "default": "AVAILITY001"
+                  "default": "CLEARINGHOUSE001"
                 },
                 "isa08_receiverId": {
                   "type": "string",
@@ -1440,7 +1440,7 @@
                   "description": "GS02 Application Sender's Code",
                   "minLength": 1,
                   "maxLength": 15,
-                  "default": "AVAILITY"
+                  "default": "CLEARINGHOUSE"
                 },
                 "gs03_applicationReceiverCode": {
                   "type": "string",

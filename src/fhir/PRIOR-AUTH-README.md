@@ -548,7 +548,7 @@ HTTP POST → Validate → Map to FHIR → Encode X12 →
 3. **Transform**: FHIR → X12 278
 4. **Encode**: Use Integration Account
 5. **Archive**: Store in Data Lake
-6. **Submit**: POST to Availity or payer
+6. **Submit**: POST to the clearinghouse or payer
 7. **Track SLA**: Store in database
 8. **Return**: Send response to caller
 

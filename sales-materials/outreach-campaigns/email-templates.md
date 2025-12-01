@@ -8,7 +8,7 @@
 
 Hi [First Name],
 
-I noticed [Company Name] processes medical attachments through Availity, and I wanted to share how we've helped similar payers reduce attachment processing time from hours to minutes.
+I noticed [Company Name] processes medical attachments through Clearinghouse, and I wanted to share how we've helped similar payers reduce attachment processing time from hours to minutes.
 
 **The Challenge:**
 Most payers manually process 275 attachment requests, resulting in:
@@ -20,7 +20,7 @@ Most payers manually process 275 attachment requests, resulting in:
 **Our Solution:**
 Cloud Health Office Platform automates the entire workflow:
 ✅ Automated SFTP polling and X12 decoding
-✅ Direct integration with your claims system (QNXT, FacetsRx, etc.)
+✅ Direct integration with your claims system (claims adjudication systems such as etc.)
 ✅ Real-time processing with complete audit trails
 ✅ 100% HIPAA compliant (Premium Key Vault, private endpoints, PHI masking)
 
@@ -85,7 +85,7 @@ I'm looking forward to our demo on [Date] at [Time]. I've prepared a customized 
 
 **What to Prepare:**
 - Current attachment processing volume (monthly)
-- Your claims system (QNXT, FacetsRx, TriZetto, etc.)
+- Your claims system (claims adjudication systems such as TriZetto, etc.)
 - Any specific compliance requirements
 
 **Meeting Details:**
@@ -238,7 +238,7 @@ Welcome to Cloud Health Office Platform! We're thrilled to partner with [Company
 
 **What to Prepare:**
 - Claims system API documentation
-- SFTP credentials for Availity
+- SFTP credentials for Clearinghouse
 - List of stakeholders for training
 - Compliance and security requirements
 

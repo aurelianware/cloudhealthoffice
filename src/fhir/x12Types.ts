@@ -99,7 +99,7 @@ export interface X12_270 {
   /** Payer/Health Plan identifier */
   insurerId: string;
   
-  /** Trading partner ID (e.g., Availity sender ID) */
+  /** Trading partner ID (e.g., Clearinghouse sender ID) */
   tradingPartnerId?: string;
 }
 

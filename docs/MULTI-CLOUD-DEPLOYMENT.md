@@ -123,17 +123,17 @@ helm install cloudhealthoffice . \
 
 ```bash
 # Create SFTP credentials secret
-kubectl create secret generic availity-sftp-secret \
+kubectl create secret generic clearinghouse-sftp-secret \
   --namespace cloudhealthoffice \
   --from-literal=username=your-sftp-user \
   --from-literal=password=your-sftp-password \
   --from-literal=privateKey="$(cat ~/.ssh/sftp_key)"
 
 # Create backend API secret
-kubectl create secret generic qnxt-api-secret \
+kubectl create secret generic claims-backend-api-secret \
   --namespace cloudhealthoffice \
   --from-literal=token=your-api-token \
-  --from-literal=baseUrl=https://qnxt.api.example.com
+  --from-literal=baseUrl=https://backend.api.example.com
 ```
 
 #### 5. Verify Deployment
@@ -334,9 +334,9 @@ kubectl exec -it vault-0 -n cloudhealthoffice -- vault kv put cloudhealthoffice/
   username=sftp-user \
   password=sftp-password
 
-kubectl exec -it vault-0 -n cloudhealthoffice -- vault kv put cloudhealthoffice/qnxt \
+kubectl exec -it vault-0 -n cloudhealthoffice -- vault kv put cloudhealthoffice/backend \
   apiToken=your-api-token \
-  baseUrl=https://qnxt.api.example.com
+  baseUrl=https://backend.api.example.com
 
 kubectl exec -it vault-0 -n cloudhealthoffice -- vault kv put cloudhealthoffice/kafka \
   saslUsername=kafka-user \
@@ -372,7 +372,7 @@ vault:
     vault.hashicorp.com/agent-inject: "true"
     vault.hashicorp.com/role: "cloudhealthoffice"
     vault.hashicorp.com/agent-inject-secret-sftp: "cloudhealthoffice/data/sftp"
-    vault.hashicorp.com/agent-inject-secret-qnxt: "cloudhealthoffice/data/qnxt"
+    vault.hashicorp.com/agent-inject-secret-backend: "cloudhealthoffice/data/backend"
 ```
 
 #### Using Vault Secrets in Workflows

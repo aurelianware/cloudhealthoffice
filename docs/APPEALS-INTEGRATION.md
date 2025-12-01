@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the integration architecture for processing claim appeals between providers and health plans via the Availity platform. The integration is fully compliant with Availity QRE (Qualified RESTful Endpoint) requirements and supports **configuration-driven multi-payer platformization**.
+This document describes the integration architecture for processing claim appeals between providers and health plans via the Clearinghouse platform. The integration is fully compliant with the clearinghouse QRE (Qualified RESTful Endpoint) requirements and supports **configuration-driven multi-payer platformization**.
 
 ### Platform Architecture
 
@@ -21,17 +21,17 @@ For details on adding a new payer to the platform, see the [Developer Onboarding
 ### High-Level Flow
 
 ```
-Provider → Availity Platform → Health Plan Appeals System → Health Plan Backend
+Provider → Clearinghouse Platform → Health Plan Appeals System → Health Plan Backend
                                         ↓
                                 Decision Processing
                                         ↓
-Health Plan → Availity Bedlam API → Availity Platform → Provider
+Health Plan → Clearinghouse API API → Clearinghouse Platform → Provider
 ```
 
 ### Key Components
 
 1. **Appeal Submission Endpoint** (`/appeal/submit`)
-   - Receives appeal requests from providers via Availity
+   - Receives appeal requests from providers via the clearinghouse
    - Validates request data and attachments
    - Stores appeals in health plan system
    - Returns acknowledgment with appeal ID and case number
@@ -48,10 +48,10 @@ Health Plan → Availity Bedlam API → Availity Platform → Provider
      - `DECISION_LETTER`: Health plan decision letters and correspondence
    - Implements authorization checks and access logging
 
-4. **Status Update Push Workflow** (`appeal_update_from_payer_to_availity`)
-   - **Direction**: Health Plan → Availity Bedlam API
+4. **Status Update Push Workflow** (`appeal_update_from_payer_outbound`)
+   - **Direction**: Health Plan → Clearinghouse API API
    - **Trigger**: Service Bus topic `payer-appeal-status-updates`
-   - **Purpose**: Push appeal status updates back to Availity platform
+   - **Purpose**: Push appeal status updates back to the clearinghouse platform
    - **Implementation**: Azure Logic App with Service Bus trigger
    - **Retry Logic**: 3 retries with 30-second intervals
    - **Validation**: Requires `decision` and `decisionReason` for FINALIZED status
@@ -61,23 +61,23 @@ Health Plan → Availity Bedlam API → Availity Platform → Provider
 ### Inbound: Provider Appeals Submission
 
 ```
-1. Provider submits appeal via Availity portal
-2. Availity forwards appeal to health plan /appeal/submit endpoint
+1. Provider submits appeal via the clearinghouse portal
+2. Clearinghouse forwards appeal to health plan /appeal/submit endpoint
 3. Health plan validates and stores appeal
 4. Health plan assigns appealId and caseNumber
 5. Health plan returns AppealToPayerResponse with status RECEIVED
 6. Appeal enters processing workflow (sub-status: REQUEST_RECEIVED)
 ```
 
-### Outbound: Status Updates to Availity
+### Outbound: Status Updates to the clearinghouse
 
 ```
 1. Health plan adjudicates appeal (status changes)
 2. Health plan publishes status update to Service Bus topic payer-appeal-status-updates
-3. Logic App workflow appeal_update_from_payer_to_availity triggers
+3. Logic App workflow appeal_update_from_payer_outbound triggers
 4. Workflow validates status transition (currently SUBMITTED→FINALIZED only)
-5. Workflow POSTs update to Availity Bedlam API endpoint
-6. Availity propagates update to provider portal
+5. Workflow POSTs update to Clearinghouse API API endpoint
+6. Clearinghouse propagates update to provider portal
 7. Workflow logs success/failure to Application Insights
 ```
 
@@ -127,15 +127,15 @@ Future implementations may support:
 
 ## Webhook Direction (Important)
 
-**Critical**: The webhook direction is **Health Plan → Availity**, not Availity → Health Plan.
+**Critical**: The webhook direction is **Health Plan → Clearinghouse**, not Clearinghouse → Health Plan.
 
-- **Inbound**: Providers submit appeals via Availity to health plan REST endpoints (pull model)
-- **Outbound**: Health plan pushes status updates to Availity Bedlam API (push model)
+- **Inbound**: Providers submit appeals via the clearinghouse to health plan REST endpoints (pull model)
+- **Outbound**: Health plan pushes status updates to Clearinghouse API API (push model)
 
 This bidirectional pattern ensures:
 1. Providers have real-time submission feedback
 2. Health plans control the update cadence
-3. Availity platform stays synchronized with health plan system of record
+3. Clearinghouse platform stays synchronized with health plan system of record
 
 ## Authentication
 
@@ -201,7 +201,7 @@ Authorization: Bearer {token}
     "appealType": "FIRST_LEVEL",
     "providerParticipationStatus": "IN_NETWORK",
     "programId": "{config.payerId}",
-    "dataSource": "AVAILITY"
+    "dataSource": "CLEARINGHOUSE"
   }
 }
 ```
@@ -221,7 +221,7 @@ Authorization: Bearer {token}
     "phone": "{config.supportPhone}",
     "email": "{config.supportEmail}"
   },
-  "availityTraceId": "{availity.traceId}",
+  "clearinghouseTraceId": "{clearinghouse.traceId}",
   "payerTraceId": "{payer.traceId}",
   "claimNumber": "{claim.claimNumber}",
   "lastUpdatedDate": "{timestamp}"
@@ -279,12 +279,12 @@ Content-Length: 245760
 [Binary PDF content]
 ```
 
-### Push Status Update to Availity
+### Push Status Update to the clearinghouse
 
 **Service Bus Message** (published to `payer-appeal-status-updates` topic):
 ```json
 {
-  "availityTraceId": "{availity.traceId}",
+  "clearinghouseTraceId": "{clearinghouse.traceId}",
   "payerTraceId": "{payer.traceId}",
   "appealId": "{appeal.appealId}",
   "caseNumber": "{appeal.caseNumber}",
@@ -301,15 +301,15 @@ Content-Length: 245760
 }
 ```
 
-**Logic App POSTs to Availity Bedlam API**:
+**Logic App POSTs to Clearinghouse API API**:
 ```json
-POST https://api.availity.com/bedlam/v1/appeals/status
-Authorization: Bearer {availity_api_key}
+POST https://api.clearinghouse.com/bedlam/v1/appeals/status
+Authorization: Bearer {clearinghouse_api_key}
 Content-Type: application/json
 X-Payer-Id: {config.payerId}
 
 {
-  "traceId": "{availity.traceId}",
+  "traceId": "{clearinghouse.traceId}",
   "payerReferenceId": "{payer.traceId}",
   "appealId": "{appeal.appealId}",
   "status": "FINALIZED",
@@ -378,10 +378,10 @@ All workflows and APIs require the following configuration parameters:
 ```json
 {
   "payerId": "{config.payerId}",
-  "availityBedlamEndpoint": "https://api.availity.com/bedlam/v1/appeals/status",
-  "availityBedlamApiKey": "{secure-from-keyvault}",
+  "clearinghouseApiEndpoint": "https://api.clearinghouse.com/bedlam/v1/appeals/status",
+  "clearinghouseApiApiKey": "{secure-from-keyvault}",
   "serviceBusTopic": "payer-appeal-status-updates",
-  "serviceBusSubscription": "availity-push",
+  "serviceBusSubscription": "clearinghouse-push",
   "blobStorageAccount": "cloud-health-office-storage",
   "authorizationApiEndpoint": "https://api.healthplan.local/authorization",
   "attachmentPattern": "POST_APPEAL"
@@ -423,7 +423,7 @@ All workflows log the following custom events:
 **Status Updates**:
 - `AppealUpdateValidationSuccess`: Update validation passed
 - `AppealUpdateValidationError`: Update validation failed
-- `AppealUpdateSentToAvality`: Update successfully pushed to Availity
+- `AppealUpdateSentToAvality`: Update successfully pushed to the clearinghouse
 - `AppealUpdateError`: Update push failed
 
 **Document Access**:
@@ -436,7 +436,7 @@ All workflows log the following custom events:
 - Appeal submission rate (per hour)
 - Appeal processing time (received → finalized)
 - Document download success rate
-- Availity update push success rate
+- Clearinghouse update push success rate
 - Authorization check latency
 - Dead letter queue depth
 
@@ -448,7 +448,7 @@ Failed messages are sent to dead letter queue with the following reasons:
 
 - `ValidationError`: Message failed validation
 - `AppealProcessingError`: Error during appeal processing
-- `AppealUpdateError`: Error pushing update to Availity
+- `AppealUpdateError`: Error pushing update to the clearinghouse
 - `AuthorizationError`: Authorization check failed
 
 ### Retry Strategy
@@ -494,7 +494,7 @@ All operations are logged with:
 3. **Get appeal status** - Should return current status and sub-status
 4. **Download document (authorized)** - Should return document binary
 5. **Download document (unauthorized)** - Should return 403 Forbidden
-6. **Push status update** - Should successfully POST to Availity Bedlam API
+6. **Push status update** - Should successfully POST to Clearinghouse API API
 7. **Push update with invalid status** - Should send to dead letter queue
 
 ### Example cURL Commands
@@ -524,7 +524,7 @@ curl -X GET "{config.apiBaseUrl}/v1/appeal/document/download?documentId={documen
 2. **403 Forbidden**: Verify user has access to requested appeal/document
 3. **404 Not Found**: Confirm appealId/documentId exists in system
 4. **400 Bad Request**: Review request body for missing/invalid fields
-5. **Dead letter queue growth**: Check Availity Bedlam API connectivity
+5. **Dead letter queue growth**: Check Clearinghouse API API connectivity
 
 ### Debugging Steps
 
@@ -552,7 +552,7 @@ The appeals system supports **zero-code payer onboarding** through configuration
 
 #### Step 1: Create Payer Configuration
 
-Create a new configuration file based on the Unified Availity Integration Configuration Schema:
+Create a new configuration file based on the Unified Clearinghouse Integration Configuration Schema:
 
 ```json
 {
@@ -658,7 +658,7 @@ To support additional status transitions beyond the standard workflow:
 
 ## References
 
-- [Availity QRE Documentation](https://www.availity.com)
+- [Clearinghouse QRE Documentation](https://www.clearinghouse.com)
 - [Appeal-ToPayer-Request Schema](../schemas/Appeal-ToPayer-Request.json)
 - [Appeal-ToPayer-Response Schema](../schemas/Appeal-ToPayer-Response.json)
 - [Appeal-SubStatus Schema](../schemas/Appeal-SubStatus.json)
@@ -676,7 +676,7 @@ The Appeals module (PR #49) integrates seamlessly with Enhanced Claim Status (EC
 
 ```
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Provider   │ ───> │ ECS Query    │ ───> │  QNXT API    │
+│   Provider   │ ───> │ ECS Query    │ ───> │  claims backend API    │
 │   Portal     │ <─── │  (Logic App) │ <─── │              │
 └──────────────┘      └──────────────┘      └──────────────┘
        │                      │
@@ -1023,7 +1023,7 @@ export class ClaimDetailComponent {
 
 ## Configuration
 
-Appeals integration is configured via the Availity integration configuration:
+Appeals integration is configured via the Clearinghouse integration configuration:
 
 ```json
 {
@@ -1048,7 +1048,7 @@ Appeals integration is configured via the Availity integration configuration:
 }
 ```
 
-**Configuration Location:** `config/schemas/availity-integration-config.schema.json`
+**Configuration Location:** `config/schemas/clearinghouse-integration-config.schema.json`
 
 ### Payer-Specific Overrides
 
@@ -1228,4 +1228,4 @@ customEvents
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture
 - Appeals Logic App workflow: `logicapps/workflows/process_appeals/workflow.json`
 - ECS Logic App workflow: `logicapps/workflows/ecs_summary_search/workflow.json`
-- Configuration schema: `config/schemas/availity-integration-config.schema.json`
+- Configuration schema: `config/schemas/clearinghouse-integration-config.schema.json`

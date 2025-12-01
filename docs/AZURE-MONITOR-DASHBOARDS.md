@@ -126,7 +126,7 @@ az deployment group show \
 4. **Error Rate Chart**: Failure distribution by transaction type
 5. **Transactions by Payer Table**: Per-payer breakdown with success rates
 6. **Recent Errors Table**: Last 50 errors with truncated messages (PHI redacted)
-7. **Dependency Health Table**: Backend system health (SFTP, Service Bus, Storage, QNXT)
+7. **Dependency Health Table**: Backend system health (SFTP, Service Bus, Storage, claims backend)
 
 #### Parameters
 

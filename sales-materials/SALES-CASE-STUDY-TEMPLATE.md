@@ -116,8 +116,8 @@ This template is designed to capture pilot customer success stories in a consist
 
 | Integration Point | Technology | Status |
 |-------------------|------------|--------|
-| **Claims System** | [PLACEHOLDER: QNXT, Facets, custom] | [PLACEHOLDER: Completed/In Progress] |
-| **Clearinghouse** | [PLACEHOLDER: Availity, Change Healthcare] | [PLACEHOLDER: Status] |
+| **Claims System** | [PLACEHOLDER: claims adjudication systems such as custom] | [PLACEHOLDER: Completed/In Progress] |
+| **Clearinghouse** | [PLACEHOLDER: Clearinghouse, Change Healthcare] | [PLACEHOLDER: Status] |
 | **Member Portal** | [PLACEHOLDER: Integration approach] | [PLACEHOLDER: Status] |
 | **Provider Portal** | [PLACEHOLDER: Integration approach] | [PLACEHOLDER: Status] |
 | **Data Lake** | [PLACEHOLDER: Azure Storage configuration] | [PLACEHOLDER: Status] |
@@ -215,7 +215,7 @@ Example structure:
 │                                                                   │
 │  ┌──────────────┐         ┌──────────────────┐                  │
 │  │ Clearinghouse │◄───────│   Cloud Health    │                  │
-│  │  (Availity)   │        │     Office        │                  │
+│  │  (Clearinghouse)   │        │     Office        │                  │
 │  └──────────────┘         │  (Logic Apps)     │                  │
 │                           └────────┬─────────┘                   │
 │                                    │                              │
@@ -224,7 +224,7 @@ Example structure:
 │         ▼                          ▼                          ▼  │
 │  ┌─────────────┐          ┌─────────────┐          ┌──────────┐ │
 │  │  Service    │          │   Data      │          │  Backend │ │
-│  │    Bus      │          │   Lake      │          │  (QNXT)  │ │
+│  │    Bus      │          │   Lake      │          │  (claims backend)  │ │
 │  └─────────────┘          └─────────────┘          └──────────┘ │
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐ │
