@@ -5,7 +5,151 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Post v1.0.0 Enhancements
+## [3.0.0] - 2025-12-01
+
+### The Open Frontier Release
+
+Cloud Health Office v3.0.0 delivers multi-cloud independence, commercial launch readiness, and Kubernetes-native workflow orchestration—making enterprise-grade healthcare EDI accessible across any cloud platform.
+
+### Added
+
+#### Multi-Cloud & Cloud Independence (December 2024)
+- **Kubernetes/Helm Deployment**: Deploy Cloud Health Office to AKS, EKS, GKE, or any Kubernetes cluster
+- **Argo Workflows Migration**: Cloud-native workflow orchestration replacing Azure Logic Apps
+- **Apache Kafka Integration**: Cloud-agnostic messaging replacing Azure Service Bus
+- **HashiCorp Vault Support**: Open-source secrets management as alternative to Azure Key Vault
+- **Multi-Cloud Deployment Guide**: Comprehensive documentation for deploying across cloud providers
+
+**Documentation**: [MULTI-CLOUD-DEPLOYMENT.md](./docs/MULTI-CLOUD-DEPLOYMENT.md), [ARGO-MIGRATION-GUIDE.md](./docs/ARGO-MIGRATION-GUIDE.md)
+
+#### Argo Workflows for X12 EDI Processing (December 2024)
+- **X12 275 Attachment Ingest Workflow**: Kubernetes-native SFTP polling and processing
+- **X12 278 Authorization Request Workflow**: Cloud-agnostic prior auth handling
+- **X12 277 RFAI Response Workflow**: Event-driven response generation via Kafka
+- **X12 278 Replay Workflow**: Deterministic replay from Kafka offsets
+- **Container Images**: X12 parser, encoder, SFTP fetcher, metadata extractor, Kafka publisher
+- **Argo Events Configuration**: SFTP polling and Kafka event sources with sensors
+
+**Documentation**: [ARGO-OPERATIONS.md](./docs/ARGO-OPERATIONS.md)
+
+#### Azure Marketplace Readiness (December 2024)
+- **Managed Application Plan**: ARM template deploying full Cloud Health Office stack
+- **SaaS Plan with Meter-Based Billing**: Per-transaction pricing (837, 278, 275, FHIR API calls)
+- **3-Tier Pricing**: Starter ($499/mo), Professional ($1,999/mo), Enterprise ($4,999/mo)
+- **Partner Center Metadata**: Complete offer listing and marketing assets
+- **Legal Documents**: Privacy policy, SLA (99.5%-99.95% uptime), support terms
+- **Marketplace Icons**: Sentinel-branded SVG assets for all required sizes
+
+**Documentation**: [marketplace/README.md](./marketplace/README.md)
+
+#### Commercial Launch Materials (December 2024)
+- **Sales Product Overview**: 2-page executive summary with competitive positioning
+- **ROI Calculator**: TCO analysis and 5-year savings projections
+- **Case Study Template**: Reusable template for pilot customer success stories
+- **Financial Model**: 3-year projections with unit economics
+- **Pitch Deck Content**: 15-slide framework for investor/customer presentations
+- **Pilot Program**: 60-day structured pilot with success criteria
+- **Sales Email Templates**: 5 targeted outreach templates
+- **Marketing Landing Page Copy**: Conversion-optimized content
+
+**Documentation**: [sales-materials/README.md](./sales-materials/)
+
+#### VC Fundraising Strategy (December 2024)
+- **VC Target List**: 12+ prioritized healthcare and SaaS VCs with investment thesis fit
+- **Investor One-Pager**: Single-page investment summary
+- **Due Diligence Checklist**: Legal, financial, technical, commercial preparation
+- **Strategic Partner Targets**: 50+ partners including Microsoft, SIs, technology vendors
+- **Investor Meeting Script**: 30-minute pitch framework
+- **Warm Intro Templates**: 4 introduction request templates
+- **Alternative Funding**: Grants (SBIR), RBF, venture debt, strategic investors
+- **PR Strategy**: Thought leadership, podcasts, conferences, LinkedIn
+
+**Documentation**: [fundraising/README.md](./fundraising/)
+
+#### Microservices Architecture (December 2024)
+- **Eligibility Service**: Azure Container Apps + Dapr with dual X12 270/271 and FHIR interface
+- **ClaimRiskScorer Azure Function**: ML-powered fraud/abuse scoring (0-100) with PyTorch
+- **Provider Directory API Logic App**: FHIR endpoints with NPPES NPI integration
+- **Prior Auth API Logic App**: Da Vinci PAS CDex flow with 72-hour SLA tracking
+- **Cosmos DB Integration**: PriorAuthorizations and ProviderDirectory containers
+
+**Documentation**: [services/eligibility-service/README.md](./services/eligibility-service/)
+
+#### CMS-0057-F Compliance Dashboard (December 2024)
+- **Azure Monitor Workbook**: Real-time compliance metrics visualization
+- **Patient Access API Tracking**: Enablement percentage with daily trends
+- **Prior Auth SLA Monitoring**: 72-hour urgent and 7-day standard response tracking
+- **Error Rate Analysis**: Transaction-level error tracking for 270/271, 278, 837
+- **PHI Audit Trail**: Security operations monitoring via Application Insights
+
+**Documentation**: [docs/AZURE-MONITOR-DASHBOARDS.md](./docs/AZURE-MONITOR-DASHBOARDS.md)
+
+#### Migration Wizard (December 2024)
+- **Blazor Web App**: `/tools/migration-wizard` for legacy system migration
+- **Claims Backend SOAP Integration**: Paginated export via Open Access APIs
+- **Cosmos DB Export**: Batch upsert for Members, ProviderDirectory, BenefitPlans
+- **Mapping Report Generator**: 95%+ auto-match with field-level validation
+- **One-Click API Cutover**: Routing key flip via Azure API Management
+- **Azure Key Vault Integration**: Secure credential management
+
+**Documentation**: [tools/migration-wizard/README.md](./tools/migration-wizard/)
+
+#### 2026 Product Roadmap (December 2024)
+- **Quarterly Milestones**: Q1-Q4 2026 with CMS compliance timeline
+- **Microservice Releases**: eligibility-service v2.0, prior-auth-service v2.0, claims-service v1.0, remittance-service v1.0
+- **Community Targets**: 500→7,500 GitHub stars, 15→150 contributors
+- **OKRs**: Measurable success criteria for compliance, adoption, community, and AI
+
+**Documentation**: [ROADMAP-2026.md](./ROADMAP-2026.md)
+
+#### CMS-0057-F Whitepaper (December 2024)
+- **Executive Whitepaper**: 7-page document for payer CIOs/CTOs
+- **ROI Analysis**: 522% Year 1 ROI, 4.2-month payback period
+- **TCO Comparison**: $16.7M legacy vs $2.6M Cloud Health Office (5-year)
+- **Implementation Roadmap**: 12-16 week phased timeline
+- **Mermaid Visualizations**: Gantt charts, TCO comparison, cost breakdown
+
+**Documentation**: [docs/WHITEPAPER-CMS-0057-F-COMPLIANCE.md](./docs/WHITEPAPER-CMS-0057-F-COMPLIANCE.md)
+
+#### Community Governance (December 2024)
+- **CONTRIBUTING.md**: Enhanced with DCO and CLA instructions
+- **CODE_OF_CONDUCT.md**: Contributor Covenant 2.1
+- **GOVERNANCE.md**: Steering committee election process
+- **Issue Templates**: Feature request and bug report YAML forms
+- **PR Automation**: Auto-labeling and reviewer assignment workflows
+
+#### Platform Improvements (December 2024)
+- **Vendor-Agnostic Refactoring**: Removed 1,295 vendor-specific references across 185 files
+- **Container Build Workflow Fix**: Corrected image tags for vulnerability scanning
+- **patient_access_api Workflow Fix**: Added missing `kind` and `parameters` keys
+
+### Changed
+
+- Updated README.md with Kubernetes deployment badge and dual architecture options
+- Updated ARCHITECTURE.md with deployment options section
+- Updated ROADMAP.md to reflect multi-cloud strategy progress (40% complete)
+- Helm charts updated with HashiCorp Vault integration settings
+
+### Fixed
+
+- Container build workflow image tag mismatch for Trivy scanner
+- patient_access_api workflow.json missing required keys
+- PHI compliance issues with HTTPS enforcement for Vault URLs
+
+### Security
+
+- Storage Account networkAcls defaultAction set to "Deny" for HIPAA compliance
+- Key Vault networkAcls defaultAction set to "Deny" for HIPAA compliance
+- Managed Identity exclusively used for Cosmos DB/Event Grid access (no keys)
+- All 424 tests pass with zero security vulnerabilities
+
+---
+
+## [2.0.0] - 2025-11-28
+
+### FHIR Frontier Forge
+
+Complete CMS-0057-F compliance with production-ready FHIR R4 APIs, delivered 18 months ahead of the January 1, 2027 deadline.
 
 ### Added
 
@@ -299,4 +443,6 @@ Star ★ the repo if you believe payers deserve better than 1990s technology in 
 
 ---
 
+[3.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v3.0.0
+[2.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v2.0.0
 [1.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v1.0.0
