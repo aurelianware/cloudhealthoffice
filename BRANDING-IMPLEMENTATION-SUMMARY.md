@@ -202,7 +202,7 @@ This is the first production release of Cloud Health Office — the open-source,
 #### Key Metrics
 - **Onboarding time**: 6–18 months → <1 hour
 - **Professional services cost**: $500k–$2M → $0
-- **First platform ever** to ship production-grade QNXT REST correlation in open source
+- **First platform ever** to ship production-grade claims backend REST correlation in open source
 
 #### The Sentinel Has Awakened
 The monolith has landed.  

@@ -12,7 +12,7 @@ import {
   PaymentDocument
 } from '../../fhir/patient-access-mapper';
 import { evaluateRateLimit } from '../patient-access-rate-limit';
-import { QnxtPatient, QnxtClaim } from '../../fhir/provider-access-api';
+import { BackendPatient, BackendClaim } from '../../fhir/provider-access-api';
 
 describe('Patient Access API specifications', () => {
   const outputDir = path.join(process.cwd(), 'generated', 'infra', 'patient-access-api');
@@ -41,7 +41,7 @@ describe('Patient Access API specifications', () => {
 
 describe('Patient Access API helper logic', () => {
   const selfLink = 'https://example.azurelogicapps.net/Patient?patient=MEM123';
-  const member: QnxtPatient = {
+  const member: BackendPatient = {
     memberId: 'MEM123',
     firstName: 'Test',
     lastName: 'Member',
@@ -67,7 +67,7 @@ describe('Patient Access API helper logic', () => {
   });
 
   it('converts claim and payment documents', () => {
-    const claim: QnxtClaim = {
+    const claim: BackendClaim = {
       claimId: 'CLM001',
       memberId: 'MEM123',
       providerId: 'NPI123',

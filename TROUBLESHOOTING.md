@@ -499,20 +499,20 @@ exceptions
 | project timestamp, outerMessage, problemId
 ```
 
-#### Issue: QNXT API Timeouts
+#### Issue: claims backend API Timeouts
 
 **Error Message in Workflow:**
 ```
-Action 'Call_QNXT_Claim_Linkage_API' failed: The operation has timed out
+Action 'Call_Claims_Backend_Claim_Linkage_API' failed: The operation has timed out
 ```
 
 **Solution:**
 ```bash
-# Check QNXT API availability
-curl -I https://qnxt-api-uat.example.com/health
+# Check claims backend API availability
+curl -I https://claims-backend-api-uat.example.com/health
 
 # Review retry configuration in workflow
-jq '.definition.actions.Call_QNXT_Claim_Linkage_API.inputs.retryPolicy' \
+jq '.definition.actions.Call_Claims_Backend_Claim_Linkage_API.inputs.retryPolicy' \
   logicapps/workflows/ingest275/workflow.json
 
 # Increase timeout or retry attempts:
@@ -525,13 +525,13 @@ jq '.definition.actions.Call_QNXT_Claim_Linkage_API.inputs.retryPolicy' \
   }
 }
 
-# Monitor QNXT API performance in Application Insights
+# Monitor claims backend API performance in Application Insights
 ```
 
 **Application Insights Query:**
 ```kusto
 dependencies
-| where name contains "QNXT"
+| where name contains "claims backend"
 | summarize 
     avg(duration), 
     percentile(duration, 95),
@@ -572,7 +572,7 @@ cat test-file.edi | grep "^GS"
 #                                 Sender qualifier    Receiver qualifier
 
 # Ensure IDs match Integration Account configuration:
-# - Availity: 030240928
+# - Clearinghouse: {config.clearinghouseId}
 # - Health Plan: {config.payerId}
 ```
 
@@ -781,7 +781,7 @@ az storage account show \
 
 ## Integration Issues
 
-### QNXT API Integration
+### claims backend API Integration
 
 #### Issue: Authentication Failures
 
@@ -796,7 +796,7 @@ az storage account show \
 # Check workflow parameters for token endpoint and credentials
 
 # Test token acquisition manually
-curl -X POST https://qnxt-auth.example.com/oauth/token \
+curl -X POST https://backend-auth.example.com/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials&client_id=xxx&client_secret=xxx"
 
@@ -813,10 +813,10 @@ curl -X POST https://qnxt-auth.example.com/oauth/token \
 
 **Solution:**
 ```bash
-# Review QNXT API documentation for required fields
+# Review claims backend API documentation for required fields
 
 # Check workflow action inputs
-jq '.definition.actions.Call_QNXT_Claim_Linkage_API.inputs' \
+jq '.definition.actions.Call_Claims_Backend_Claim_Linkage_API.inputs' \
   logicapps/workflows/ingest275/workflow.json
 
 # Verify metadata extraction is working
@@ -962,7 +962,7 @@ watch -n 10 'az servicebus topic show --resource-group "rg" --namespace-name "ns
    - Implement batch processing
 
 3. **Check for Bottlenecks:**
-   - QNXT API slow response
+   - claims backend API slow response
    - X12 decode taking too long
    - Network latency
 

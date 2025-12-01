@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ECS Summary Search Response",
-  "description": "Schema for Enhanced Claim Status (ECS) Summary Search responses in Availity format",
+  "description": "Schema for Enhanced Claim Status (ECS) Summary Search responses in Clearinghouse format",
   "type": "object",
   "required": ["requestId", "status", "timestamp"],
   "properties": {
@@ -107,7 +107,7 @@
           "exchangeDate": {
             "type": "string",
             "format": "date-time",
-            "description": "Availity received data timestamp (ValueAdds277)"
+            "description": "Clearinghouse received data timestamp (ValueAdds277)"
           },
           "paidDate": {
             "type": "string",

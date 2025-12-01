@@ -24,7 +24,7 @@ export function example_basicSubscriberEligibility(): void {
     transactionDate: '20240115-0930',
     informationSource: {
       id: '030240928',
-      name: 'Availity Health Network'
+      name: 'Clearinghouse Health Network'
     },
     informationReceiver: {
       npi: '1234567890',
@@ -415,7 +415,7 @@ export function example_azureLogicAppsIntegration(): void {
     transactionDate: '20240115-1000',
     informationSource: {
       id: '030240928',
-      name: 'Availity'
+      name: 'Clearinghouse'
     },
     informationReceiver: {
       npi: '1234567890',

@@ -79,7 +79,7 @@ export class PayerDeploymentGenerator {
     if (config.enabledModules.appeals && config.appeals?.enabled) {
       workflowsToGenerate.push(
         'appeal_to_payer',
-        'appeal_update_from_payer_to_availity',
+        'appeal_update_outbound',
         'appeal_get_details',
         'appeal_document_download',
         'appeal_update_to_payer'

@@ -1,5 +1,5 @@
 {
-  "$schema": "../../core/schemas/availity-integration-config.schema.json",
+  "$schema": "../../core/schemas/clearinghouse-integration-config.schema.json",
   "organizationName": "Example Health Plan",
   "payerId": "EXAMPLE",
   "payerName": "Example Health Plan",

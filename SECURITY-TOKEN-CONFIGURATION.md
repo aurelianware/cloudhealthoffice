@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explains how to securely configure the `QNXT_API_TOKEN` parameter in Logic App workflows using Azure Key Vault references or Managed Identity, eliminating the need to store secrets in workflow JSON files or deployment configurations.
+This guide explains how to securely configure the `CLAIMS_BACKEND_API_TOKEN` parameter in Logic App workflows using Azure Key Vault references or Managed Identity, eliminating the need to store secrets in workflow JSON files or deployment configurations.
 
 ## ⚠️ Security Requirements
 
@@ -13,7 +13,7 @@ This guide explains how to securely configure the `QNXT_API_TOKEN` parameter in 
 ### Before (Insecure ❌)
 ```json
 "parameters": {
-  "qnxt_api_token": {
+  "claims_backend_api_token": {
     "type": "String",
     "defaultValue": "<token>"
   }
@@ -25,9 +25,9 @@ This guide explains how to securely configure the `QNXT_API_TOKEN` parameter in 
 "parameters": {
   "_SECURITY_NOTE": {
     "type": "String",
-    "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference..."
+    "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure CLAIMS_BACKEND_API_TOKEN as an app setting using Azure Key Vault reference..."
   },
-  "QNXT_API_TOKEN": {
+  "CLAIMS_BACKEND_API_TOKEN": {
     "type": "SecureString"
   }
 }
@@ -42,18 +42,18 @@ This method stores the token in Azure Key Vault and references it from Logic App
 #### Step 1: Store Secret in Key Vault
 
 ```bash
-# Store the QNXT API token in Azure Key Vault
+# Store the claims backend API token in Azure Key Vault
 az keyvault secret set \
   --vault-name "your-keyvault-name" \
-  --name "qnxt-api-token" \
-  --value "your-actual-qnxt-token-value"
+  --name "claims-backend-api-token" \
+  --value "your-actual-backend-token-value"
 
 # Get the secret URI
 az keyvault secret show \
   --vault-name "your-keyvault-name" \
-  --name "qnxt-api-token" \
+  --name "claims-backend-api-token" \
   --query "id" -o tsv
-# Output: https://your-keyvault-name.vault.azure.net/secrets/qnxt-api-token/abc123...
+# Output: https://your-keyvault-name.vault.azure.net/secrets/claims-backend-api-token/abc123...
 ```
 
 #### Step 2: Grant Logic App Access to Key Vault
@@ -79,7 +79,7 @@ az role assignment create \
 az webapp config appsettings set \
   --name "your-logic-app-name" \
   --resource-group "your-resource-group" \
-  --settings QNXT_API_TOKEN="@Microsoft.KeyVault(SecretUri=https://your-keyvault-name.vault.azure.net/secrets/qnxt-api-token)"
+  --settings CLAIMS_BACKEND_API_TOKEN="@Microsoft.KeyVault(SecretUri=https://your-keyvault-name.vault.azure.net/secrets/claims-backend-api-token)"
 ```
 
 #### Step 4: Update Workflow Parameters
@@ -91,14 +91,14 @@ When deploying workflows, ensure the parameter references the app setting:
   "definition": {
     "$schema": "...",
     "parameters": {
-      "QNXT_API_TOKEN": {
+      "CLAIMS_BACKEND_API_TOKEN": {
         "type": "SecureString"
       }
     }
   },
   "parameters": {
-    "QNXT_API_TOKEN": {
-      "value": "@appsetting('QNXT_API_TOKEN')"
+    "CLAIMS_BACKEND_API_TOKEN": {
+      "value": "@appsetting('CLAIMS_BACKEND_API_TOKEN')"
     }
   }
 }
@@ -108,9 +108,9 @@ When deploying workflows, ensure the parameter references the app setting:
 
 For even greater security, use Azure Managed Identity to obtain tokens dynamically at runtime without storing them.
 
-#### Step 1: Configure QNXT API to Accept Azure AD Tokens
+#### Step 1: Configure claims backend API to Accept Azure AD Tokens
 
-Work with your QNXT API provider to configure Azure AD authentication.
+Work with your claims backend API provider to configure Azure AD authentication.
 
 #### Step 2: Modify Workflow to Use Managed Identity
 
@@ -118,14 +118,14 @@ Update the HTTP action in your workflow to use Managed Identity authentication:
 
 ```json
 {
-  "Call_QNXT_API": {
+  "Call_CLAIMS_BACKEND_API": {
     "type": "Http",
     "inputs": {
       "method": "POST",
-      "uri": "@{parameters('qnxt_base_url')}/api/endpoint",
+      "uri": "@{parameters('backend_base_url')}/api/endpoint",
       "authentication": {
         "type": "ManagedServiceIdentity",
-        "audience": "https://your-qnxt-api.com"
+        "audience": "https://your-claims-backend-api.com"
       },
       "headers": {
         "Content-Type": "application/json"
@@ -138,24 +138,24 @@ Update the HTTP action in your workflow to use Managed Identity authentication:
 
 ## Affected Workflows
 
-The following workflows have been updated to use `QNXT_API_TOKEN` (SecureString):
+The following workflows have been updated to use `CLAIMS_BACKEND_API_TOKEN` (SecureString):
 
 1. **ingest275** - 275 attachment ingestion (1 API call)
-   - Action: `Call_QNXT_Claim_Linkage_API`
+   - Action: `Call_Claims_Backend_Claim_Linkage_API`
    
 2. **ingest278** - 278 processing (1 API call)
-   - Action: `Call_QNXT_278_API`
+   - Action: `Call_Claims_Backend_278_API`
    
 3. **process_authorizations** - Authorization processing (3 API calls)
    - Actions:
-     - `Call_QNXT_Eligibility_API`
-     - `Call_QNXT_Claims_Verification_API`
-     - `Call_QNXT_Authorization_API`
+     - `Call_Claims_Backend_Eligibility_API`
+     - `Call_Claims_Backend_Claims_Verification_API`
+     - `Call_Claims_Backend_Authorization_API`
    
 4. **process_appeals** - Appeals processing (2 API calls)
    - Actions:
      - `Correlate_Appeal_With_Claim`
-     - `Call_QNXT_Appeals_API`
+     - `Call_Claims_Backend_Appeals_API`
 
 ## Deployment via GitHub Actions
 
@@ -170,15 +170,15 @@ Ensure your GitHub Actions deployment workflow includes the app setting configur
       --name "${{ vars.LOGIC_APP_NAME }}" \
       --resource-group "${{ vars.RESOURCE_GROUP }}" \
       --settings \
-        QNXT_API_TOKEN="@Microsoft.KeyVault(SecretUri=${{ secrets.KEYVAULT_QNXT_TOKEN_URI }})"
+        CLAIMS_BACKEND_API_TOKEN="@Microsoft.KeyVault(SecretUri=${{ secrets.KEYVAULT_claims backend_TOKEN_URI }})"
 ```
 
 ### Required GitHub Secrets
 
 Add these secrets to your GitHub repository:
 
-- `KEYVAULT_QNXT_TOKEN_URI`: The full Key Vault secret URI
-  - Example: `https://your-keyvault.vault.azure.net/secrets/qnxt-api-token`
+- `KEYVAULT_claims backend_TOKEN_URI`: The full Key Vault secret URI
+  - Example: `https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token`
 
 ## Verification
 
@@ -189,14 +189,14 @@ Add these secrets to your GitHub repository:
 az webapp config appsettings list \
   --name "your-logic-app-name" \
   --resource-group "your-resource-group" \
-  --query "[?name=='QNXT_API_TOKEN'].{Name:name, Value:value}" -o table
+  --query "[?name=='CLAIMS_BACKEND_API_TOKEN'].{Name:name, Value:value}" -o table
 ```
 
 Expected output:
 ```
 Name              Value
 ----------------  ------------------------------------------------------------------
-QNXT_API_TOKEN    @Microsoft.KeyVault(SecretUri=https://your-keyvault...
+CLAIMS_BACKEND_API_TOKEN    @Microsoft.KeyVault(SecretUri=https://your-keyvault...
 ```
 
 ### Test Workflow Execution
@@ -219,20 +219,20 @@ az role assignment create \
   --scope "/subscriptions/.../Microsoft.KeyVault/vaults/YOUR_KEYVAULT"
 ```
 
-### Error: "Parameter 'QNXT_API_TOKEN' not found"
+### Error: "Parameter 'CLAIMS_BACKEND_API_TOKEN' not found"
 
 **Cause**: The workflow parameter is not properly configured.
 
 **Solution**: Ensure the workflow parameters.json includes:
 ```json
 {
-  "QNXT_API_TOKEN": {
-    "value": "@appsetting('QNXT_API_TOKEN')"
+  "CLAIMS_BACKEND_API_TOKEN": {
+    "value": "@appsetting('CLAIMS_BACKEND_API_TOKEN')"
   }
 }
 ```
 
-### Error: "401 Unauthorized" from QNXT API
+### Error: "401 Unauthorized" from claims backend API
 
 **Cause**: The token value in Key Vault is incorrect or expired.
 
@@ -240,14 +240,14 @@ az role assignment create \
 ```bash
 az keyvault secret set \
   --vault-name "your-keyvault-name" \
-  --name "qnxt-api-token" \
+  --name "claims-backend-api-token" \
   --value "new-token-value"
 ```
 
 ## Security Best Practices
 
 ### 1. Token Rotation
-- Rotate QNXT API tokens regularly (recommended: every 90 days)
+- Rotate claims backend API tokens regularly (recommended: every 90 days)
 - Update the Key Vault secret value
 - Logic App automatically picks up the new value on next workflow run
 

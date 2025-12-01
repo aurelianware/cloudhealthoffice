@@ -19,7 +19,7 @@ This document provides comprehensive guidance for implementing CMS-0057-F Prior 
 9. [Provider-Facing Hooks](#provider-facing-hooks)
 10. [Consent Management](#consent-management)
 11. [Azure Logic Apps Orchestration](#azure-logic-apps-orchestration)
-12. [Availity Integration](#availity-integration)
+12. [Clearinghouse Integration](#clearinghouse-integration)
 13. [Usage Examples](#usage-examples)
 14. [Testing](#testing)
 15. [Security and HIPAA](#security-and-hipaa)
@@ -44,7 +44,7 @@ The Prior Authorization API implements the **CMS-0057-F Prior Authorization Rule
 ✅ **X12 278 Mapping**: Seamless EDI to FHIR conversion  
 ✅ **SLA Tracking**: Automated decision timeline monitoring  
 ✅ **Azure Logic Apps**: Cloud-native orchestration  
-✅ **Availity Ready**: Clearinghouse integration support  
+✅ **Clearinghouse Ready**: Clearinghouse integration support  
 ✅ **Comprehensive Testing**: 42+ test cases with full coverage
 
 ---
@@ -159,8 +159,8 @@ const card = createCRDCard(
          │ 8. Submit to Payer
          ▼
 ┌────────────────┐        ┌──────────────────┐
-│  Payer System  │◄──────►│     Availity     │
-│   (QNXT, etc)  │        │  (Clearinghouse) │
+│  Payer System  │◄──────►│     Clearinghouse     │
+│   (claims backend, etc)  │        │  (Clearinghouse) │
 └────────────────┘        └──────────────────┘
 ```
 
@@ -581,18 +581,18 @@ HTTP Trigger → Validate → Transform → Encode X12 → Archive →
 
 ---
 
-## Availity Integration
+## Clearinghouse Integration
 
 ### Configuration
 
 ```typescript
 const config = createOrchestrationConfig(baseUrl, 'prod');
 
-// Availity SFTP configuration
-const availityConfig = config.availity;
+// Clearinghouse SFTP configuration
+const clearinghouseConfig = config.clearinghouse;
 // {
-//   tradingPartnerId: 'AVAILITY',
-//   sftpEndpoint: 'sftp.availity.com',
+//   tradingPartnerId: 'CLEARINGHOUSE',
+//   sftpEndpoint: 'sftp.clearinghouse.example.com',
 //   outboundFolder: '/outbound/278',
 //   inboundFolder: '/inbound/278'
 // }
@@ -602,13 +602,13 @@ const availityConfig = config.availity;
 
 1. Generate X12 278 request
 2. Encode via Integration Account
-3. Upload to Availity SFTP `/outbound/278/`
-4. Availity routes to payer
+3. Upload to Clearinghouse SFTP `/outbound/278/`
+4. Clearinghouse routes to payer
 5. Poll for response in `/inbound/278/`
 
 ### Inbound Flow (Response)
 
-1. Poll Availity SFTP `/inbound/278/`
+1. Poll Clearinghouse SFTP `/inbound/278/`
 2. Download 278 response file
 3. Decode via Integration Account
 4. Map to FHIR ClaimResponse
@@ -621,9 +621,9 @@ const availityConfig = config.availity;
 ```powershell
 # Configure trading partner in Integration Account
 ./configure-x12-agreements.ps1 `
-  -TradingPartnerName "Availity" `
+  -TradingPartnerName "Clearinghouse" `
   -SenderId "YOURID" `
-  -ReceiverId "AVAILITY"
+  -ReceiverId "CLEARINGHOUSE"
 ```
 
 ---
@@ -855,7 +855,7 @@ describe('End-to-End Prior Auth Flow', () => {
 
 **BAA Requirements**:
 - Azure BAA in place
-- Subprocessor BAAs (Availity)
+- Subprocessor BAAs (Clearinghouse)
 - Breach notification procedures
 - Regular security assessments
 

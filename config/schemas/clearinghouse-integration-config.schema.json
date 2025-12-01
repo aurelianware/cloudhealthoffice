@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Availity Integration Configuration",
-  "description": "Configuration schema for Availity integration including ECS, Appeals, Attachments, and other modules",
+  "title": "Clearinghouse Integration Configuration",
+  "description": "Configuration schema for Clearinghouse integration including ECS, Appeals, Attachments, and other modules",
   "type": "object",
   "properties": {
     "ecs": {

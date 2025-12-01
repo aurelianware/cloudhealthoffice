@@ -1,9 +1,9 @@
 namespace MigrationWizard.Models;
 
 /// <summary>
-/// Member record from QNXT via TriZetto Open Access
+/// Member record from claims backend via Open Access
 /// </summary>
-public record QnxtMember
+public record BackendMember
 {
     public string MemberId { get; init; } = string.Empty;
     public string SubscriberId { get; init; } = string.Empty;
@@ -22,9 +22,9 @@ public record QnxtMember
 }
 
 /// <summary>
-/// Provider record from QNXT via TriZetto Open Access
+/// Provider record from claims backend via Open Access
 /// </summary>
-public record QnxtProvider
+public record BackendProvider
 {
     public string ProviderId { get; init; } = string.Empty;
     public string Npi { get; init; } = string.Empty;
@@ -43,9 +43,9 @@ public record QnxtProvider
 }
 
 /// <summary>
-/// Benefit plan record from QNXT via TriZetto Open Access
+/// Benefit plan record from claims backend via Open Access
 /// </summary>
-public record QnxtBenefitPlan
+public record BackendBenefitPlan
 {
     public string PlanId { get; init; } = string.Empty;
     public string PlanCode { get; init; } = string.Empty;
@@ -107,7 +107,7 @@ public class CosmosDbMember
     public CosmosDbAddress? Address { get; set; }
     public string PhoneNumber { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public string Source { get; set; } = "QNXT-Migration";
+    public string Source { get; set; } = "Backend-Migration";
     public string MigratedAt { get; set; } = string.Empty;
 }
 
@@ -140,7 +140,7 @@ public class CosmosDbProvider
     public string Phone { get; set; } = string.Empty;
     public string? ContractEffectiveDate { get; set; }
     public string? ContractTerminationDate { get; set; }
-    public string Source { get; set; } = "QNXT-Migration";
+    public string Source { get; set; } = "Backend-Migration";
     public string MigratedAt { get; set; } = string.Empty;
 }
 
@@ -160,7 +160,7 @@ public class CosmosDbBenefitPlan
     public string? TerminationDate { get; set; }
     public List<CosmosDbBenefit> Benefits { get; set; } = new();
     public CosmosDbCostShare? CostShare { get; set; }
-    public string Source { get; set; } = "QNXT-Migration";
+    public string Source { get; set; } = "Backend-Migration";
     public string MigratedAt { get; set; } = string.Empty;
 }
 
@@ -281,15 +281,15 @@ public class FieldMapping
 }
 
 /// <summary>
-/// TriZetto Open Access SOAP API configuration
+/// backend system Open Access APIs SOAP API configuration
 /// </summary>
 public class TriZettoOpenAccessConfig
 {
     /// <summary>
-    /// SOAP endpoint URL for TriZetto Open Access
-    /// Example: https://your-qnxt-server.com/OpenAccess/Services/MemberService.svc
+    /// SOAP endpoint URL for backend system Open Access APIs
+    /// Example: https://your-backend-server.com/OpenAccess/Services/MemberService.svc
     /// </summary>
-    public string EndpointUrl { get; set; } = "https://qnxt-server.example.com/OpenAccess/Services";
+    public string EndpointUrl { get; set; } = "https://backend-server.example.com/OpenAccess/Services";
     
     /// <summary>
     /// Username for SOAP authentication
@@ -355,6 +355,6 @@ public class ApiManagementConfig
     public string ResourceGroup { get; set; } = string.Empty;
     public string SubscriptionId { get; set; } = string.Empty;
     public string RoutingKeyName { get; set; } = "backend-routing";
-    public string QnxtBackendId { get; set; } = "qnxt-backend";
+    public string LegacyBackendId { get; set; } = "legacy-backend";
     public string CloudHealthOfficeBackendId { get; set; } = "cloudhealthoffice-backend";
 }

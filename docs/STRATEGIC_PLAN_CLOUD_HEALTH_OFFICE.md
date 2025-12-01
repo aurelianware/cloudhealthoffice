@@ -9,7 +9,7 @@ Make healthcare EDI open, seamless, and intelligent—crushing legacy costs, int
 
 ### Short-Term (Months 1–3): Validate & Build Momentum
 - **Enhance Onboarding/UX**
-  - Add automated end-to-end test scripts (simulate sample 837 claims across mock backends like QNXT).
+  - Add automated end-to-end test scripts (simulate sample 837 claims across mock backends like claims backend).
   - Create a public "Azure Sandbox" demo repo template (fork → deploy in <30 min).
   - Reduce config error drop-offs with guided wizards and improved error messaging.
 - **Accelerate FHIR Integration: Prioritize for Q1 2026**

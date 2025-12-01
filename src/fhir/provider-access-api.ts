@@ -17,7 +17,7 @@
  * - SMART on FHIR authentication (OpenID Connect/OAuth2)
  * - Patient consent validation
  * - HIPAA safeguards (encryption, audit logging, PHI redaction)
- * - Backend data mapping (QNXT to FHIR)
+ * - Backend data mapping (Backend to FHIR)
  * - US Core and Da Vinci PDex compliance
  */
 
@@ -108,9 +108,9 @@ export interface SearchParameters {
 }
 
 /**
- * QNXT backend data structure (sample - customize per actual QNXT API)
+ * claims backend data structure (sample - customize per actual claims backend API)
  */
-export interface QnxtPatient {
+export interface BackendPatient {
   memberId: string;
   firstName: string;
   lastName: string;
@@ -129,7 +129,7 @@ export interface QnxtPatient {
   email?: string;
 }
 
-export interface QnxtClaim {
+export interface BackendClaim {
   claimId: string;
   memberId: string;
   providerId: string;
@@ -142,7 +142,7 @@ export interface QnxtClaim {
   status: string;
 }
 
-export interface QnxtEncounter {
+export interface BackendEncounter {
   encounterId: string;
   memberId: string;
   providerId: string;
@@ -502,16 +502,16 @@ export class ProviderAccessApi {
   }
 
   // ==========================================================================
-  // QNXT to FHIR Mapping
+  // Backend to FHIR Mapping
   // ==========================================================================
 
   /**
-   * Map QNXT patient data to FHIR Patient resource
+   * Map backend patient data to FHIR Patient resource
    */
-  mapQnxtPatientToFhir(qnxtPatient: QnxtPatient): Patient {
+  mapBackendPatientToFhir(backendPatient: BackendPatient): Patient {
     const patient: Patient = {
       resourceType: 'Patient',
-      id: qnxtPatient.memberId,
+      id: backendPatient.memberId,
       meta: {
         profile: ['http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient']
       },
@@ -525,45 +525,45 @@ export class ProviderAccessApi {
               display: 'Member Number'
             }]
           },
-          value: qnxtPatient.memberId
+          value: backendPatient.memberId
         }
       ],
       active: true,
       name: [
         {
           use: 'official',
-          family: qnxtPatient.lastName,
-          given: [qnxtPatient.firstName, qnxtPatient.middleName].filter(Boolean) as string[]
+          family: backendPatient.lastName,
+          given: [backendPatient.firstName, backendPatient.middleName].filter(Boolean) as string[]
         }
       ],
-      gender: this.mapGenderToFhir(qnxtPatient.gender),
-      birthDate: this.normalizeDateFormat(qnxtPatient.dob)
+      gender: this.mapGenderToFhir(backendPatient.gender),
+      birthDate: this.normalizeDateFormat(backendPatient.dob)
     };
 
     // Add address if available
-    if (qnxtPatient.address) {
+    if (backendPatient.address) {
       patient.address = [{
         use: 'home',
-        line: [qnxtPatient.address.street1, qnxtPatient.address.street2].filter(Boolean) as string[],
-        city: qnxtPatient.address.city,
-        state: qnxtPatient.address.state,
-        postalCode: qnxtPatient.address.zip
+        line: [backendPatient.address.street1, backendPatient.address.street2].filter(Boolean) as string[],
+        city: backendPatient.address.city,
+        state: backendPatient.address.state,
+        postalCode: backendPatient.address.zip
       }];
     }
 
     // Add telecom if available
     const telecom = [];
-    if (qnxtPatient.phone) {
+    if (backendPatient.phone) {
       telecom.push({
         system: 'phone' as const,
-        value: qnxtPatient.phone,
+        value: backendPatient.phone,
         use: 'home' as const
       });
     }
-    if (qnxtPatient.email) {
+    if (backendPatient.email) {
       telecom.push({
         system: 'email' as const,
-        value: qnxtPatient.email,
+        value: backendPatient.email,
         use: 'home' as const
       });
     }
@@ -575,27 +575,27 @@ export class ProviderAccessApi {
   }
 
   /**
-   * Map QNXT claim data to FHIR Claim resource
+   * Map backend claim data to FHIR Claim resource
    */
-  mapQnxtClaimToFhir(qnxtClaim: QnxtClaim): Claim {
+  mapBackendClaimToFhir(backendClaim: BackendClaim): Claim {
     const claim: Claim = {
       resourceType: 'Claim',
-      id: qnxtClaim.claimId,
-      status: this.mapClaimStatus(qnxtClaim.status),
+      id: backendClaim.claimId,
+      status: this.mapClaimStatus(backendClaim.status),
       type: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/claim-type',
-          code: qnxtClaim.claimType.toLowerCase(),
-          display: qnxtClaim.claimType
+          code: backendClaim.claimType.toLowerCase(),
+          display: backendClaim.claimType
         }]
       },
       use: 'claim',
       patient: {
-        reference: `Patient/${qnxtClaim.memberId}`
+        reference: `Patient/${backendClaim.memberId}`
       },
       created: new Date().toISOString(),
       provider: {
-        reference: `Practitioner/${qnxtClaim.providerId}`
+        reference: `Practitioner/${backendClaim.providerId}`
       },
       priority: {
         coding: [{
@@ -607,10 +607,10 @@ export class ProviderAccessApi {
         sequence: 1,
         focal: true,
         coverage: {
-          reference: `Coverage/${qnxtClaim.memberId}`
+          reference: `Coverage/${backendClaim.memberId}`
         }
       }],
-      diagnosis: qnxtClaim.diagnosisCodes.map((code, index) => ({
+      diagnosis: backendClaim.diagnosisCodes.map((code, index) => ({
         sequence: index + 1,
         diagnosisCodeableConcept: {
           coding: [{
@@ -619,7 +619,7 @@ export class ProviderAccessApi {
           }]
         }
       })),
-      item: qnxtClaim.procedureCodes.map((code, index) => ({
+      item: backendClaim.procedureCodes.map((code, index) => ({
         sequence: index + 1,
         productOrService: {
           coding: [{
@@ -627,10 +627,10 @@ export class ProviderAccessApi {
             code: code
           }]
         },
-        servicedDate: qnxtClaim.serviceDate
+        servicedDate: backendClaim.serviceDate
       })),
       total: {
-        value: qnxtClaim.totalCharged,
+        value: backendClaim.totalCharged,
         currency: 'USD'
       }
     };
@@ -639,31 +639,31 @@ export class ProviderAccessApi {
   }
 
   /**
-   * Map QNXT encounter to FHIR Encounter resource
+   * Map backend encounter to FHIR Encounter resource
    */
-  mapQnxtEncounterToFhir(qnxtEncounter: QnxtEncounter): Encounter {
+  mapBackendEncounterToFhir(backendEncounter: BackendEncounter): Encounter {
     const encounter: Encounter = {
       resourceType: 'Encounter',
-      id: qnxtEncounter.encounterId,
-      status: this.mapEncounterStatus(qnxtEncounter.status),
+      id: backendEncounter.encounterId,
+      status: this.mapEncounterStatus(backendEncounter.status),
       class: {
         system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-        code: this.mapEncounterClass(qnxtEncounter.encounterType)
+        code: this.mapEncounterClass(backendEncounter.encounterType)
       },
       subject: {
-        reference: `Patient/${qnxtEncounter.memberId}`
+        reference: `Patient/${backendEncounter.memberId}`
       },
       participant: [{
         individual: {
-          reference: `Practitioner/${qnxtEncounter.providerId}`
+          reference: `Practitioner/${backendEncounter.providerId}`
         }
       }],
       period: {
-        start: qnxtEncounter.encounterDate
+        start: backendEncounter.encounterDate
       },
-      diagnosis: qnxtEncounter.diagnosisCodes.map((code, index) => ({
+      diagnosis: backendEncounter.diagnosisCodes.map((code, index) => ({
         condition: {
-          reference: `Condition/${qnxtEncounter.encounterId}-COND${index + 1}`,
+          reference: `Condition/${backendEncounter.encounterId}-COND${index + 1}`,
           display: code
         },
         rank: index + 1
@@ -852,27 +852,27 @@ export class ProviderAccessApi {
     // For testing: return mock data
     
     if (resourceType === 'Patient') {
-      const mockQnxtPatient: QnxtPatient = {
+      const mockBackendPatient: BackendPatient = {
         memberId: resourceId,
         firstName: 'John',
         lastName: 'Doe',
         dob: '1980-01-01',
         gender: 'M'
       };
-      return this.mapQnxtPatientToFhir(mockQnxtPatient);
+      return this.mapBackendPatientToFhir(mockBackendPatient);
     }
 
     return null;
   }
 
   private async searchPatients(params: SearchParameters): Promise<Patient[]> {
-    // In production: query QNXT or FHIR server
+    // In production: query Backend or FHIR server
     // Mock implementation
     if (!params.patient) {
       return [];
     }
 
-    const mockQnxtPatient: QnxtPatient = {
+    const mockBackendPatient: BackendPatient = {
       memberId: params.patient,
       firstName: 'John',
       lastName: 'Doe',
@@ -888,7 +888,7 @@ export class ProviderAccessApi {
       email: 'john.doe@example.com'
     };
 
-    return [this.mapQnxtPatientToFhir(mockQnxtPatient)];
+    return [this.mapBackendPatientToFhir(mockBackendPatient)];
   }
 
   private async searchClaims(params: SearchParameters): Promise<Claim[]> {
@@ -897,7 +897,7 @@ export class ProviderAccessApi {
       return [];
     }
 
-    const mockQnxtClaim: QnxtClaim = {
+    const mockBackendClaim: BackendClaim = {
       claimId: 'CLM001',
       memberId: params.patient,
       providerId: 'NPI123',
@@ -910,7 +910,7 @@ export class ProviderAccessApi {
       status: 'active'
     };
 
-    return [this.mapQnxtClaimToFhir(mockQnxtClaim)];
+    return [this.mapBackendClaimToFhir(mockBackendClaim)];
   }
 
   private async searchEncounters(params: SearchParameters): Promise<Encounter[]> {
@@ -919,7 +919,7 @@ export class ProviderAccessApi {
       return [];
     }
 
-    const mockQnxtEncounter: QnxtEncounter = {
+    const mockBackendEncounter: BackendEncounter = {
       encounterId: 'ENC001',
       memberId: params.patient,
       providerId: 'NPI123',
@@ -929,7 +929,7 @@ export class ProviderAccessApi {
       status: 'finished'
     };
 
-    return [this.mapQnxtEncounterToFhir(mockQnxtEncounter)];
+    return [this.mapBackendEncounterToFhir(mockBackendEncounter)];
   }
 
   private async searchExplanationOfBenefits(params: SearchParameters): Promise<ExplanationOfBenefit[]> {
@@ -1113,7 +1113,7 @@ export class ProviderAccessApi {
   }
 
   private mapEncounterClass(encounterType: string): string {
-    // Map QNXT encounter types to valid v3-ActCode values
+    // Map backend encounter types to valid v3-ActCode values
     const normalized = encounterType.toUpperCase();
     switch (normalized) {
       case 'AMB':

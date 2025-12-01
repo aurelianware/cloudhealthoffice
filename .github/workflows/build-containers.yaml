@@ -47,7 +47,7 @@ jobs:
             description: "X12 277 RFAI response generator"
           - name: sftp-fetcher
             context: containers/sftp-fetcher
-            description: "SFTP client for Availity file transfer"
+            description: "SFTP client for Clearinghouse file transfer"
           - name: metadata-extractor
             context: containers/metadata-extractor
             description: "X12 metadata extraction"

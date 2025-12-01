@@ -1,5 +1,5 @@
 # Test HIPAA X12 275/277 Workflows with Trading Partners
-# Availity (030240928) ↔ Health Plan-QNXT ({config.payerId})
+# Clearinghouse (030240928) ↔ Health Plan Backend ({config.payerId})
 
 param(
     [Parameter(Mandatory=$false)]
@@ -27,8 +27,8 @@ param(
 Write-Host "🧪 HIPAA X12 275/277 Trading Partners Testing" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📋 Test Configuration:" -ForegroundColor White
-Write-Host "  • Sender: Availity (030240928)" -ForegroundColor Green
-Write-Host "  • Receiver: Health Plan-QNXT ({config.payerId})" -ForegroundColor Green
+Write-Host "  • Sender: Clearinghouse (030240928)" -ForegroundColor Green
+Write-Host "  • Receiver: Health Plan Backend ({config.payerId})" -ForegroundColor Green
 Write-Host "  • Logic App: $LogicAppName" -ForegroundColor Blue
 Write-Host "  • Service Bus: $ServiceBusNamespace" -ForegroundColor Blue
 Write-Host ""
@@ -111,13 +111,13 @@ if ($TestInbound275 -or $TestFullWorkflow) {
     Write-Host "=============================================" -ForegroundColor Yellow
     
     # Check if test file exists
-    if (Test-Path "test-x12-275-availity-to-pchp.edi") {
-        $testContent = Get-Content "test-x12-275-availity-to-pchp.edi" -Raw
+    if (Test-Path "test-x12-275-clearinghouse-inbound.edi") {
+        $testContent = Get-Content "test-x12-275-clearinghouse-inbound.edi" -Raw
         Write-Host "✅ Test X12 275 file found" -ForegroundColor Green
         Write-Host "Sample content:" -ForegroundColor White
         Write-Host ($testContent.Substring(0, [Math]::Min(200, $testContent.Length)) + "...") -ForegroundColor Gray
     } else {
-        Write-Host "❌ Test X12 275 file not found: test-x12-275-availity-to-pchp.edi" -ForegroundColor Red
+        Write-Host "❌ Test X12 275 file not found: test-x12-275-clearinghouse-inbound.edi" -ForegroundColor Red
     }
     
     # Test ingest275 workflow
@@ -127,8 +127,8 @@ if ($TestInbound275 -or $TestFullWorkflow) {
     Write-Host "📋 Verification Steps for 275 Processing:" -ForegroundColor Cyan
     Write-Host "1. Check Data Lake storage for raw file in /raw/275/" -ForegroundColor White
     Write-Host "2. Verify X12 decode operation with trading partners:" -ForegroundColor White
-    Write-Host "   • Sender ID: 030240928 (Availity)" -ForegroundColor Green
-    Write-Host "   • Receiver ID: {config.payerId} (Health Plan-QNXT)" -ForegroundColor Green
+    Write-Host "   • Sender ID: {config.clearinghouseId} (Clearinghouse)" -ForegroundColor Green
+    Write-Host "   • Receiver ID: {config.payerId} (Health Plan Backend)" -ForegroundColor Green
     Write-Host "3. Confirm Service Bus message in attachments-in topic" -ForegroundColor White
     Write-Host "4. Validate metadata extraction:" -ForegroundColor White
     Write-Host "   • Claim Number: CLM20250924001" -ForegroundColor Blue
@@ -143,9 +143,9 @@ if ($TestOutbound277 -or $TestFullWorkflow) {
     Write-Host "=============================================" -ForegroundColor Yellow
     
     # Check if test payload exists
-    if (Test-Path "test-qnxt-response-payload.json") {
-        $testPayload = Get-Content "test-qnxt-response-payload.json" -Raw
-        Write-Host "✅ Test QNXT response payload found" -ForegroundColor Green
+    if (Test-Path "test-backend-response-payload.json") {
+        $testPayload = Get-Content "test-backend-response-payload.json" -Raw
+        Write-Host "✅ Test claims backend response payload found" -ForegroundColor Green
         
         # Parse and display key fields
         $payload = $testPayload | ConvertFrom-Json
@@ -155,7 +155,7 @@ if ($TestOutbound277 -or $TestFullWorkflow) {
         Write-Host "  • RFAI: $($payload.rfaiReference)" -ForegroundColor Blue
         Write-Host "  • Status: $($payload.status)" -ForegroundColor Blue
     } else {
-        Write-Host "❌ Test QNXT payload file not found: test-qnxt-response-payload.json" -ForegroundColor Red
+        Write-Host "❌ Test claims backend payload file not found: test-backend-response-payload.json" -ForegroundColor Red
     }
     
     # Test rfai277 workflow
@@ -163,7 +163,7 @@ if ($TestOutbound277 -or $TestFullWorkflow) {
     
     # Simulate sending message to Service Bus
     Send-TestMessage -TopicName "rfai-requests" -MessageBody $testPayload -Properties @{
-        "messageType" = "qnxt-response"
+        "messageType" = "backend-response"
         "claimNumber" = "CLM20250924001" 
         "rfaiReference" = "RFAI20250924001"
     }
@@ -172,10 +172,10 @@ if ($TestOutbound277 -or $TestFullWorkflow) {
     Write-Host "📋 Verification Steps for 277 Processing:" -ForegroundColor Cyan
     Write-Host "1. Verify rfai277 workflow triggered from Service Bus" -ForegroundColor White
     Write-Host "2. Confirm X12 277 encoding with trading partners:" -ForegroundColor White
-    Write-Host "   • Sender ID: {config.payerId} (Health Plan-QNXT)" -ForegroundColor Green
-    Write-Host "   • Receiver ID: 030240928 (Availity)" -ForegroundColor Green
+    Write-Host "   • Sender ID: {config.payerId} (Health Plan Backend)" -ForegroundColor Green
+    Write-Host "   • Receiver ID: {config.clearinghouseId} (Clearinghouse)" -ForegroundColor Green
     Write-Host "3. Validate 277 message structure and content" -ForegroundColor White
-    Write-Host "4. Check outbound transmission to Availity endpoint" -ForegroundColor White
+    Write-Host "4. Check outbound transmission to the clearinghouse endpoint" -ForegroundColor White
 }
 
 # Infrastructure verification
@@ -232,5 +232,5 @@ Write-Host ""
 Write-Host "🔧 Next Steps:" -ForegroundColor Yellow
 Write-Host "1. Create X12 agreements in Integration Account (if not done)" -ForegroundColor White
 Write-Host "2. Configure SFTP connection for inbound 275 files" -ForegroundColor White  
-Write-Host "3. Set up QNXT API endpoint configuration" -ForegroundColor White
-Write-Host "4. Configure outbound 277 transmission to Availity" -ForegroundColor White
+Write-Host "3. Set up claims backend API endpoint configuration" -ForegroundColor White
+Write-Host "4. Configure outbound 277 transmission to the clearinghouse" -ForegroundColor White

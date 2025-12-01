@@ -71,7 +71,7 @@ Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure
 
 **After Cloud Health Office:**
 - Sub-2-minute processing
-- Automated QNXT/Facets/HealthEdge correlation
+- Automated claims adjudication systems/HealthEdge correlation
 - Complete audit trail
 - Zero manual intervention
 
@@ -93,9 +93,9 @@ Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure
 #### 3. Eligibility Verification (270/271)
 
 **Integration Points:**
-- Availity, Change Healthcare, Optum 360, Inovalon
+- Clearinghouse, Change Healthcare, Optum 360, Inovalon
 - Direct payer connectivity
-- Backend system correlation (QNXT, Facets, HealthEdge)
+- Backend system correlation (claims adjudication systems such as HealthEdge)
 
 **Performance:**
 - Sub-second response times
@@ -187,8 +187,8 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 **Configuration Required:**
 - Payer details (name, ID, backend system)
-- Clearinghouse credentials (Availity, etc.)
-- Backend API endpoints (QNXT, Facets, HealthEdge)
+- Clearinghouse credentials (Clearinghouse, etc.)
+- Backend API endpoints (claims adjudication systems such as HealthEdge)
 - Trading partner agreements
 
 **No Custom Code Required:** Entire deployment is configuration-driven.
@@ -302,7 +302,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
    - Shared infrastructure efficiency
 
 3. **Backend Agnostic**
-   - QNXT, Facets, HealthEdge support
+   - claims adjudication systems such as HealthEdge support
    - REST API integration
    - Extensible for additional backends
 
@@ -354,8 +354,8 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 - [ ] Production infrastructure deployment
 - [ ] Integration Account configuration
-- [ ] Backend API integration (QNXT/Facets/HealthEdge)
-- [ ] Clearinghouse credentials setup (Availity, etc.)
+- [ ] Backend API integration (claims adjudication systems/HealthEdge)
+- [ ] Clearinghouse credentials setup (Clearinghouse, etc.)
 - [ ] End-to-end testing
 
 ### Phase 3: Production Launch (Week 5)

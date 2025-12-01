@@ -6,7 +6,7 @@
 # Workflow Steps:
 #   1. fetch-from-storage - Retrieve original 278 from Kafka offset or S3
 #   2. parse-x12-278 - Re-parse transaction
-#   3. call-qnxt-api - Replay to backend
+#   3. call-claims-backend-api - Replay to backend
 #   4. publish-result - Publish replay result
 #
 # Features:
@@ -63,9 +63,9 @@ spec:
       # Optional custom file name
       - name: file-name
         value: ""
-      # QNXT API endpoint
-      - name: qnxt-api-endpoint
-        value: "https://qnxt.api.local/claims/process-278"
+      # claims backend API endpoint
+      - name: claims-backend-api-endpoint
+        value: "https://backend.api.local/claims/process-278"
       # Replay tracking
       - name: replay-id
         value: ""
@@ -79,9 +79,9 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: qnxt-credentials
+    - name: backend-credentials
       secret:
-        secretName: qnxt-api-secret
+        secretName: claims-backend-api-secret
   
   templates:
     # Main orchestration template
@@ -136,24 +136,24 @@ spec:
                 - name: parsed-json
                   from: "{{tasks.parse-x12-278.outputs.artifacts.parsed-output}}"
           
-          # Step 5: Call QNXT API (replay)
-          - name: call-qnxt-api
+          # Step 5: Call claims backend API (replay)
+          - name: call-claims-backend-api
             dependencies: [extract-metadata]
             when: "{{tasks.check-idempotency.outputs.parameters.should-replay}} == true"
-            template: qnxt-api-template
+            template: claims-backend-api-template
             arguments:
               artifacts:
                 - name: metadata
                   from: "{{tasks.extract-metadata.outputs.artifacts.metadata-output}}"
               parameters:
                 - name: api-endpoint
-                  value: "{{workflow.parameters.qnxt-api-endpoint}}"
+                  value: "{{workflow.parameters.claims-backend-api-endpoint}}"
                 - name: is-replay
                   value: "true"
           
           # Step 6: Record replay result
           - name: record-replay
-            dependencies: [call-qnxt-api]
+            dependencies: [call-claims-backend-api]
             when: "{{tasks.check-idempotency.outputs.parameters.should-replay}} == true"
             template: record-replay-template
             arguments:
@@ -167,7 +167,7 @@ spec:
                 - name: replay-reason
                   value: "{{workflow.parameters.replay-reason}}"
                 - name: api-result
-                  value: "{{tasks.call-qnxt-api.outputs.parameters.api-response}}"
+                  value: "{{tasks.call-claims-backend-api.outputs.parameters.api-response}}"
 
     # Idempotency Check Template
     - name: idempotency-check-template
@@ -394,8 +394,8 @@ spec:
             memory: "256Mi"
             cpu: "200m"
 
-    # QNXT API Template
-    - name: qnxt-api-template
+    # claims backend API Template
+    - name: claims-backend-api-template
       inputs:
         parameters:
           - name: api-endpoint
@@ -443,11 +443,11 @@ spec:
             
             mkdir -p /data/output
             
-            # Call QNXT API
+            # Call claims backend API
             RESPONSE=$(curl -s -w "\n%{http_code}" \
               -X POST "{{inputs.parameters.api-endpoint}}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $QNXT_API_TOKEN" \
+              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
               -H "X-Replay: true" \
               -H "X-Workflow-Id: {{workflow.name}}" \
               -d "$REQUEST_BODY")
@@ -459,16 +459,16 @@ spec:
             echo "{\"httpCode\": $HTTP_CODE, \"body\": $BODY, \"isReplay\": true}" > /data/output/api-response.json
             
             if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-              echo "QNXT API replay call failed with HTTP $HTTP_CODE"
+              echo "claims backend API replay call failed with HTTP $HTTP_CODE"
               exit 1
             fi
             
-            echo "QNXT API replay successful"
+            echo "claims backend API replay successful"
         env:
-          - name: QNXT_API_TOKEN
+          - name: CLAIMS_BACKEND_API_TOKEN
             valueFrom:
               secretKeyRef:
-                name: qnxt-api-secret
+                name: claims-backend-api-secret
                 key: token
         volumeMounts:
           - name: work-volume
