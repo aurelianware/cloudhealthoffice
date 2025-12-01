@@ -9,7 +9,7 @@ This guide provides comprehensive testing procedures for validating the ValueAdd
 - Access to DEV/UAT environment
 - Valid Azure AD authentication token
 - Test payer configured with ValueAdds277 support
-- Test claims in QNXT system covering all scenarios
+- Test claims in claims backend system covering all scenarios
 
 ## Test Scenarios
 
@@ -251,7 +251,7 @@ ab -n 100 -c 10 -p request.json -T application/json \
 - Expected: Use default (true) or return validation error
 
 **Test 8b: Missing Required Field (BILLED)**
-- QNXT response missing `billedAmount` or `BILLED`
+- claims backend response missing `billedAmount` or `BILLED`
 - Expected: Fallback to other field or null, no workflow failure
 
 **Test 8c: Invalid Appeal Date Calculation**
@@ -325,7 +325,7 @@ While this repository has no test framework, consider:
    - Automated schema validation
 
 2. **Integration Tests**
-   - Mock QNXT backend for consistent test data
+   - Mock claims backend backend for consistent test data
    - Test all search methods with ValueAdds277
    - Verify configuration parameters
 
@@ -377,12 +377,12 @@ traces
 
 **Possible Causes:**
 - Configuration parameters disabled
-- QNXT backend not returning enhanced data
+- claims backend backend not returning enhanced data
 - Field mapping incorrect
 
 **Resolution:**
 1. Check workflow parameters: `includeFinancialFields`, etc.
-2. Verify QNXT API returns expected fields
+2. Verify claims backend API returns expected fields
 3. Review Application Insights for mapping errors
 
 ### Issue 2: Integration Flags Always False
@@ -418,5 +418,5 @@ traces
 - [ECS-INTEGRATION.md](./ECS-INTEGRATION.md) - Complete ValueAdds277 documentation
 - [APPEALS-INTEGRATION.md](./APPEALS-INTEGRATION.md) - Appeals integration details
 - Example responses: `docs/examples/ecs-valueadds277-*.json`
-- Configuration schema: `config/schemas/availity-integration-config.schema.json`
+- Configuration schema: `config/schemas/clearinghouse-integration-config.schema.json`
 - OpenAPI specification: `docs/api/ECS-OPENAPI.yaml`

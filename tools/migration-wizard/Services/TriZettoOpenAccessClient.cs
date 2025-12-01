@@ -5,7 +5,7 @@ using MigrationWizard.Models;
 namespace MigrationWizard.Services;
 
 /// <summary>
-/// Client for connecting to QNXT via TriZetto Open Access SOAP APIs.
+/// Client for connecting to claims backend via Open Access SOAP APIs.
 /// 
 /// Note: This is a sample implementation. In production, you would:
 /// 1. Generate service references from actual WSDL files
@@ -43,13 +43,13 @@ public class TriZettoOpenAccessClient : IDisposable
     }
 
     /// <summary>
-    /// Test connection to TriZetto Open Access
+    /// Test connection to backend system Open Access APIs
     /// </summary>
     public async Task<bool> TestConnectionAsync()
     {
         try
         {
-            _logger.LogInformation("Testing connection to TriZetto Open Access at {Endpoint}", _config.EndpointUrl);
+            _logger.LogInformation("Testing connection to backend system Open Access APIs at {Endpoint}", _config.EndpointUrl);
             
             // Build SOAP envelope for ping/status check
             var soapEnvelope = BuildSoapEnvelope("GetSystemStatus", "");
@@ -67,13 +67,13 @@ public class TriZettoOpenAccessClient : IDisposable
     }
 
     /// <summary>
-    /// Export all members from QNXT
+    /// Export all members from backend system
     /// </summary>
-    public async IAsyncEnumerable<QnxtMember> ExportMembersAsync(
+    public async IAsyncEnumerable<BackendMember> ExportMembersAsync(
         DateTime? effectiveAsOf = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting member export from QNXT");
+        _logger.LogInformation("Starting member export from backend");
         
         var pageNumber = 1;
         const int pageSize = 1000;
@@ -122,12 +122,12 @@ public class TriZettoOpenAccessClient : IDisposable
     }
 
     /// <summary>
-    /// Export all providers from QNXT
+    /// Export all providers from backend system
     /// </summary>
-    public async IAsyncEnumerable<QnxtProvider> ExportProvidersAsync(
+    public async IAsyncEnumerable<BackendProvider> ExportProvidersAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting provider export from QNXT");
+        _logger.LogInformation("Starting provider export from backend");
         
         var pageNumber = 1;
         const int pageSize = 1000;
@@ -176,12 +176,12 @@ public class TriZettoOpenAccessClient : IDisposable
     }
 
     /// <summary>
-    /// Export all benefit plans from QNXT
+    /// Export all benefit plans from backend system
     /// </summary>
-    public async IAsyncEnumerable<QnxtBenefitPlan> ExportBenefitPlansAsync(
+    public async IAsyncEnumerable<BackendBenefitPlan> ExportBenefitPlansAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting benefit plan export from QNXT");
+        _logger.LogInformation("Starting benefit plan export from backend");
         
         var pageNumber = 1;
         const int pageSize = 100;
@@ -260,11 +260,11 @@ public class TriZettoOpenAccessClient : IDisposable
         return await response.Content.ReadAsStringAsync();
     }
 
-    private List<QnxtMember> ParseMembersResponse(string soapResponse)
+    private List<BackendMember> ParseMembersResponse(string soapResponse)
     {
         // In production, use proper XML parsing with generated service types
         // This is a simplified implementation for demonstration
-        var members = new List<QnxtMember>();
+        var members = new List<BackendMember>();
         
         // Simulated response parsing - in production, use XmlSerializer or generated types
         // For now, return sample data to demonstrate the flow
@@ -277,7 +277,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         for (int i = 0; i < count; i++)
         {
-            members.Add(new QnxtMember
+            members.Add(new BackendMember
             {
                 MemberId = $"MBR{random.Next(100000, 999999)}",
                 SubscriberId = $"SUB{random.Next(100000, 999999)}",
@@ -302,9 +302,9 @@ public class TriZettoOpenAccessClient : IDisposable
         return members;
     }
 
-    private List<QnxtProvider> ParseProvidersResponse(string soapResponse)
+    private List<BackendProvider> ParseProvidersResponse(string soapResponse)
     {
-        var providers = new List<QnxtProvider>();
+        var providers = new List<BackendProvider>();
         
         if (string.IsNullOrEmpty(soapResponse)) return providers;
         
@@ -313,7 +313,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         for (int i = 0; i < count; i++)
         {
-            providers.Add(new QnxtProvider
+            providers.Add(new BackendProvider
             {
                 ProviderId = $"PRV{random.Next(100000, 999999)}",
                 Npi = $"{random.Next(1000000000, int.MaxValue)}",
@@ -338,9 +338,9 @@ public class TriZettoOpenAccessClient : IDisposable
         return providers;
     }
 
-    private List<QnxtBenefitPlan> ParseBenefitPlansResponse(string soapResponse)
+    private List<BackendBenefitPlan> ParseBenefitPlansResponse(string soapResponse)
     {
-        var plans = new List<QnxtBenefitPlan>();
+        var plans = new List<BackendBenefitPlan>();
         
         if (string.IsNullOrEmpty(soapResponse)) return plans;
         
@@ -352,7 +352,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         for (int i = 0; i < count; i++)
         {
-            plans.Add(new QnxtBenefitPlan
+            plans.Add(new BackendBenefitPlan
             {
                 PlanId = $"PLN{random.Next(10000, 99999)}",
                 PlanCode = $"PLAN{random.Next(100, 999)}",

@@ -96,18 +96,18 @@ data:
   outbound-277-folder: "outbound/277"
 
 ---
-# QNXT API Configuration
+# claims backend API Configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: qnxt-config
+  name: backend-config
   namespace: cloudhealthoffice
   labels:
-    app.kubernetes.io/name: qnxt-config
+    app.kubernetes.io/name: backend-config
     app.kubernetes.io/component: config
     app.kubernetes.io/part-of: cloudhealthoffice
 data:
-  api-url: "https://qnxt.api.local"
+  api-url: "https://backend.api.local"
   link-attachment-endpoint: "/claims/link-attachment"
   process-278-endpoint: "/claims/process-278"
   timeout-seconds: "30"

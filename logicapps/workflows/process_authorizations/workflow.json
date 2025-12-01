@@ -238,13 +238,13 @@
               ]
             }
           },
-          "Call_QNXT_Eligibility_API": {
+          "Call_Claims_Backend_Eligibility_API": {
             "type": "Http",
             "inputs": {
               "method": "POST",
-              "uri": "@{parameters('qnxt_base_url')}/members/check-eligibility",
+              "uri": "@{parameters('backend_base_url')}/members/check-eligibility",
               "headers": {
-                "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                 "Content-Type": "application/json"
               },
               "body": {
@@ -281,25 +281,25 @@
                 "eventName": "Member_Eligibility_Checked",
                 "properties": {
                   "memberId": "@outputs('Extract_Authorization_Metadata')?['memberId']",
-                  "eligible": "@{body('Call_QNXT_Eligibility_API')?['eligible']}",
+                  "eligible": "@{body('Call_Claims_Backend_Eligibility_API')?['eligible']}",
                   "claimNumber": "@outputs('Extract_Authorization_Metadata')?['claimNumber']"
                 }
               }
             },
             "runAfter": {
-              "Call_QNXT_Eligibility_API": [
+              "Call_Claims_Backend_Eligibility_API": [
                 "Succeeded",
                 "Failed"
               ]
             }
           },
-          "Call_QNXT_Claims_Verification_API": {
+          "Call_Claims_Backend_Claims_Verification_API": {
             "type": "Http",
             "inputs": {
               "method": "POST",
-              "uri": "@{parameters('qnxt_base_url')}/claims/verify",
+              "uri": "@{parameters('backend_base_url')}/claims/verify",
               "headers": {
-                "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                 "Content-Type": "application/json"
               },
               "body": {
@@ -323,13 +323,13 @@
               ]
             }
           },
-          "Call_QNXT_Authorization_API": {
+          "Call_Claims_Backend_Authorization_API": {
             "type": "Http",
             "inputs": {
               "method": "POST",
-              "uri": "@{parameters('qnxt_base_url')}/authorizations/process",
+              "uri": "@{parameters('backend_base_url')}/authorizations/process",
               "headers": {
-                "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                 "Content-Type": "application/json"
               },
               "body": {
@@ -342,8 +342,8 @@
                 "reviewDecision": "@outputs('Extract_Authorization_Metadata')?['reviewDecision']",
                 "authorizationReference": "@outputs('Extract_Authorization_Metadata')?['authorizationReference']",
                 "appealReference": "@outputs('Extract_Authorization_Metadata')?['appealReference']",
-                "eligibilityStatus": "@{body('Call_QNXT_Eligibility_API')?['eligible']}",
-                "claimVerified": "@{body('Call_QNXT_Claims_Verification_API')?['verified']}",
+                "eligibilityStatus": "@{body('Call_Claims_Backend_Eligibility_API')?['eligible']}",
+                "claimVerified": "@{body('Call_Claims_Backend_Claims_Verification_API')?['verified']}",
                 "dataLakePath": "@concat(parameters('blob_authorizations_folder'), '/', formatDateTime(utcNow(), 'yyyy/MM/dd'))",
                 "fileName": "@{body('Parse_278_Message')?['fileName']}-auth-@{utcNow()}.edi",
                 "processedAt": "@utcNow()"
@@ -357,7 +357,7 @@
               }
             },
             "runAfter": {
-              "Call_QNXT_Claims_Verification_API": [
+              "Call_Claims_Backend_Claims_Verification_API": [
                 "Succeeded"
               ]
             }
@@ -365,17 +365,17 @@
           "Determine_Authorization_Decision": {
             "type": "Compose",
             "inputs": {
-              "authorizationNumber": "@{coalesce(body('Call_QNXT_Authorization_API')?['authorizationNumber'], '')}",
-              "authorizationStatus": "@{coalesce(body('Call_QNXT_Authorization_API')?['status'], 'pending')}",
-              "effectiveStartDate": "@{coalesce(body('Call_QNXT_Authorization_API')?['effectiveStartDate'], '')}",
-              "effectiveEndDate": "@{coalesce(body('Call_QNXT_Authorization_API')?['effectiveEndDate'], '')}",
-              "authorizationLimits": "@{coalesce(body('Call_QNXT_Authorization_API')?['limits'], '')}",
-              "authorizationConditions": "@{coalesce(body('Call_QNXT_Authorization_API')?['conditions'], '')}",
-              "denialReason": "@{coalesce(body('Call_QNXT_Authorization_API')?['denialReason'], '')}",
-              "isApproved": "@{equals(coalesce(body('Call_QNXT_Authorization_API')?['status'], 'pending'), 'approved')}"
+              "authorizationNumber": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['authorizationNumber'], '')}",
+              "authorizationStatus": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['status'], 'pending')}",
+              "effectiveStartDate": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['effectiveStartDate'], '')}",
+              "effectiveEndDate": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['effectiveEndDate'], '')}",
+              "authorizationLimits": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['limits'], '')}",
+              "authorizationConditions": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['conditions'], '')}",
+              "denialReason": "@{coalesce(body('Call_Claims_Backend_Authorization_API')?['denialReason'], '')}",
+              "isApproved": "@{equals(coalesce(body('Call_Claims_Backend_Authorization_API')?['status'], 'pending'), 'approved')}"
             },
             "runAfter": {
-              "Call_QNXT_Authorization_API": [
+              "Call_Claims_Backend_Authorization_API": [
                 "Succeeded"
               ]
             }
@@ -685,7 +685,7 @@
                   "errorMessage": "@{result('Try_Process_Authorization')?[0]?['error']?['message']}",
                   "errorCode": "@{result('Try_Process_Authorization')?[0]?['error']?['code']}",
                   "failedAction": "@{result('Try_Process_Authorization')?[0]?['name']}",
-                  "failureStage": "@{if(equals(actions('Parse_278_Message')?['status'], 'Failed'), 'Message Parsing', if(equals(actions('Get_278_Blob_Content')?['status'], 'Failed'), 'Blob Retrieval', if(equals(actions('Decode_X12_278_Authorization')?['status'], 'Failed'), 'X12 Decode', if(equals(actions('Call_QNXT_Eligibility_API')?['status'], 'Failed'), 'QNXT Eligibility API', if(equals(actions('Call_QNXT_Claims_Verification_API')?['status'], 'Failed'), 'QNXT Claims Verification', if(equals(actions('Call_QNXT_Authorization_API')?['status'], 'Failed'), 'QNXT Authorization API', if(equals(actions('Encode_X12_277_Response')?['status'], 'Failed'), 'X12 277 Encode', if(equals(actions('Publish_to_Auth_Statuses_Topic')?['status'], 'Failed'), 'Service Bus Publish', 'Unknown')))))))))}",
+                  "failureStage": "@{if(equals(actions('Parse_278_Message')?['status'], 'Failed'), 'Message Parsing', if(equals(actions('Get_278_Blob_Content')?['status'], 'Failed'), 'Blob Retrieval', if(equals(actions('Decode_X12_278_Authorization')?['status'], 'Failed'), 'X12 Decode', if(equals(actions('Call_Claims_Backend_Eligibility_API')?['status'], 'Failed'), 'claims backend Eligibility API', if(equals(actions('Call_Claims_Backend_Claims_Verification_API')?['status'], 'Failed'), 'claims backend Claims Verification', if(equals(actions('Call_Claims_Backend_Authorization_API')?['status'], 'Failed'), 'claims backend Authorization API', if(equals(actions('Encode_X12_277_Response')?['status'], 'Failed'), 'X12 277 Encode', if(equals(actions('Publish_to_Auth_Statuses_Topic')?['status'], 'Failed'), 'Service Bus Publish', 'Unknown')))))))))}",
                   "fileName": "@{body('Parse_278_Message')?['fileName']}"
                 }
               }
@@ -737,7 +737,7 @@
   "parameters": {
     "_SECURITY_NOTE": {
       "type": "String",
-      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token) or use Managed Identity to obtain tokens at runtime."
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure CLAIMS_BACKEND_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token) or use Managed Identity to obtain tokens at runtime."
     },
     "$connections": {
       "type": "Object",
@@ -771,11 +771,11 @@
       "type": "String",
       "defaultValue": "dead-letter"
     },
-    "qnxt_base_url": {
+    "backend_base_url": {
       "type": "String",
-      "defaultValue": "https://qnxt.api.local"
+      "defaultValue": "https://backend.api.local"
     },
-    "QNXT_API_TOKEN": {
+    "CLAIMS_BACKEND_API_TOKEN": {
       "type": "SecureString"
     },
     "x12_sender_id": {

@@ -10,19 +10,19 @@ Azure Logic Apps Standard workflows for processing HIPAA X12 EDI transactions (2
 
 ### ingest275/workflow.json
 **Purpose**: HIPAA 275 Attachment Ingestion  
-**Trigger**: SFTP polling for new 275 files from Availity  
+**Trigger**: SFTP polling for new 275 files from the clearinghouse  
 **Flow**:
-1. Poll Availity SFTP for new .edi files
+1. Poll Clearinghouse SFTP for new .edi files
 2. Archive raw file to Data Lake (`hipaa-attachments/raw/275/yyyy/MM/dd/`)
 3. Decode X12 275 message via Integration Account
 4. Extract claim/member/provider metadata
-5. Call QNXT API to link attachment to claim
+5. Call claims backend API to link attachment to claim
 6. Publish event to Service Bus topic `attachments-in`
 7. Delete file from SFTP after processing
 
 **Key Properties**:
 - Kind: `Stateful`
-- Retry logic: 4 retries with 15-second intervals for QNXT calls
+- Retry logic: 4 retries with 15-second intervals for claims backend calls
 - Required connections: sftp-ssh, azureblob, servicebus, integrationaccount
 
 ### ingest278/workflow.json
@@ -69,9 +69,9 @@ POST /api/replay278/triggers/HTTP_Replay_278_Request/invoke
 **Flow**:
 1. Consume RFAI request from Service Bus
 2. Generate X12 277 message via Integration Account
-3. Send 277 file to Availity via SFTP
+3. Send 277 file to the clearinghouse via SFTP
 4. Archive sent file to Data Lake
-5. Update status in QNXT system
+5. Update status in claims backend system
 
 **Key Properties**:
 - Kind: `Stateful`
@@ -144,7 +144,7 @@ The `pr-lint.yml` workflow validates:
 
 ### Connection References
 All workflows require configured API connections:
-- `sftp-ssh`: Availity SFTP (ingest workflows)
+- `sftp-ssh`: Clearinghouse SFTP (ingest workflows)
 - `azureblob`: Data Lake Storage (all workflows)
 - `servicebus`: Service Bus topics (all workflows)
 - `integrationaccount`: X12 processing (all workflows)
@@ -169,8 +169,8 @@ Common workflow parameters:
 - **278 Review**: X12_005010X217_278
 
 ### Trading Partners
-- **Sender**: Availity (ID: 030240928)
-- **Receiver**: Health Plan-QNXT (ID: {config.payerId})
+- **Sender**: Clearinghouse (ID: {config.clearinghouseId})
+- **Receiver**: Health Plan Backend (ID: {config.payerId})
 
 ## Deployment
 

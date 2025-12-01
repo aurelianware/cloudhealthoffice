@@ -1,4 +1,4 @@
-# Unified Availity Integration Configuration Schema
+# Unified Clearinghouse Integration Configuration Schema
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@
 
 ## Overview
 
-The **Unified Availity Integration Configuration Schema** provides a comprehensive, configuration-driven approach to onboarding health plans to the Availity integration platform. This schema supports all major Availity transaction types without requiring custom coding per payer.
+The **Unified Clearinghouse Integration Configuration Schema** provides a comprehensive, configuration-driven approach to onboarding health plans to the Clearinghouse integration platform. This schema supports all major Clearinghouse transaction types without requiring custom coding per payer.
 
 ### Supported Transaction Types
 
@@ -91,7 +91,7 @@ Root Configuration
 **Example**: `"Blue Cross Blue Shield of Texas"`
 
 #### `payerId` (string, required)
-**Description**: Primary payer ID for Availity routing  
+**Description**: Primary payer ID for Clearinghouse routing  
 **Pattern**: `^[A-Z0-9]+$`  
 **Constraints**: 5-20 characters  
 **Example**: `"66917"`, `"030240928"`
@@ -99,7 +99,7 @@ Root Configuration
 #### `payerName` (string, required)
 **Description**: Display name for provider portals  
 **Constraints**: 1-100 characters  
-**Example**: `"{config.payerName}"`, `"Health Plan QNXT"`
+**Example**: `"{config.payerName}"`, `"Health Plan claims backend"`
 
 #### `logo` (string, uri format, optional)
 **Description**: URL to payer logo  
@@ -915,13 +915,13 @@ This example demonstrates a regional BCBS plan with:
 
 ```typescript
 import * as fs from 'fs';
-import { AvailityIntegrationConfig } from './core/interfaces/availity-integration-config.interface';
+import { ClearinghouseIntegrationConfig } from './core/interfaces/clearinghouse-integration-config.interface';
 import { validateConfig } from './core/validation/config-validator';
-import schema from './core/schemas/availity-integration-config.schema.json';
+import schema from './core/schemas/clearinghouse-integration-config.schema.json';
 
 // Load configuration
 const configJson = fs.readFileSync('path/to/payer-config.json', 'utf-8');
-const config: AvailityIntegrationConfig = JSON.parse(configJson);
+const config: ClearinghouseIntegrationConfig = JSON.parse(configJson);
 
 // Validate configuration
 const result = validateConfig(config, schema);
@@ -943,7 +943,7 @@ if (result.valid) {
 
 ### Adding a New Module
 
-1. **Define the Module Interface** in `core/interfaces/availity-integration-config.interface.ts`:
+1. **Define the Module Interface** in `core/interfaces/clearinghouse-integration-config.interface.ts`:
 
 ```typescript
 export interface NewModule {
@@ -963,7 +963,7 @@ export interface Modules {
 }
 ```
 
-3. **Define Schema in JSON Schema** in `core/schemas/availity-integration-config.schema.json`:
+3. **Define Schema in JSON Schema** in `core/schemas/clearinghouse-integration-config.schema.json`:
 
 ```json
 {
@@ -1039,7 +1039,7 @@ Use the `$id` field in the JSON Schema to version:
 
 ```json
 {
-  "$id": "https://aurelianware.com/schemas/availity-integration-config/v2.0.json"
+  "$id": "https://aurelianware.com/schemas/clearinghouse-integration-config/v2.0.json"
 }
 ```
 
@@ -1069,7 +1069,7 @@ Create a new JSON configuration file using the schema:
 
 ```json
 {
-  "$schema": "core/schemas/availity-integration-config.schema.json",
+  "$schema": "core/schemas/clearinghouse-integration-config.schema.json",
   "organizationName": "Your Health Plan",
   "payerId": "YOUR_PAYER_ID",
   "payerName": "Display Name",
@@ -1210,7 +1210,7 @@ Create a new JSON schema file for your module in `core/schemas/modules/`:
 
 #### Step 2: Add Module to Root Schema
 
-Update `availity-integration-config.schema.json`:
+Update `clearinghouse-integration-config.schema.json`:
 
 ```json
 {
@@ -1359,8 +1359,8 @@ describe("CustomModule Generator", () => {
 
 ## Support and Resources
 
-- **Schema File**: `core/schemas/availity-integration-config.schema.json`
-- **TypeScript Interfaces**: `core/interfaces/availity-integration-config.interface.ts`
+- **Schema File**: `core/schemas/clearinghouse-integration-config.schema.json`
+- **TypeScript Interfaces**: `core/interfaces/clearinghouse-integration-config.interface.ts`
 - **Validator**: `core/validation/config-validator.ts`
 - **Examples**: `core/examples/`
 - **Generator**: `scripts/cli/payer-generator-cli.js`

@@ -918,7 +918,7 @@ describe('Prior Authorization API - Orchestration Configuration', () => {
       expect(config.endpoints.checkStatus).toBe('https://dev.cloudhealthoffice.com/api/prior-auth/status');
       expect(config.serviceBus.requestTopic).toBe('prior-auth-requests-dev');
       expect(config.serviceBus.responseTopic).toBe('prior-auth-responses-dev');
-      expect(config.availity.tradingPartnerId).toBe('AVAILITY');
+      expect(config.clearinghouse.tradingPartnerId).toBe('CLEARINGHOUSE');
       expect(config.slaMonitoring.enabled).toBe(true);
       expect(config.slaMonitoring.alertThresholdHours).toBe(24);
     });
@@ -929,9 +929,9 @@ describe('Prior Authorization API - Orchestration Configuration', () => {
       expect(config.serviceBus.requestTopic).toBe('prior-auth-requests-prod');
       expect(config.serviceBus.responseTopic).toBe('prior-auth-responses-prod');
       expect(config.serviceBus.attachmentTopic).toBe('prior-auth-attachments-prod');
-      expect(config.availity.sftpEndpoint).toBe('sftp.availity.com');
-      expect(config.availity.outboundFolder).toBe('/outbound/278');
-      expect(config.availity.inboundFolder).toBe('/inbound/278');
+      expect(config.clearinghouse.sftpEndpoint).toBe('sftp.clearinghouse.example.com');
+      expect(config.clearinghouse.outboundFolder).toBe('/outbound/278');
+      expect(config.clearinghouse.inboundFolder).toBe('/inbound/278');
     });
     
     it('should create orchestration config for uat environment', () => {

@@ -7,9 +7,9 @@ import { FHIREligibilityMapper } from '../src/fhir-mapper';
 import { 
   X12_270_Request, 
   X12_271_Response,
-  QNXTEligibilityRule 
+  BackendEligibilityRule 
 } from '../src/types';
-import { loadQNXTRulesFromCSV, validateRules, generateSampleCSV } from '../src/migration';
+import { loadBackendRulesFromCSV, validateRules, generateSampleCSV } from '../src/migration';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -224,7 +224,7 @@ describe('FHIREligibilityMapper', () => {
   });
 });
 
-describe('QNXT Migration', () => {
+describe('Backend Migration', () => {
   const tempDir = '/tmp/eligibility-test';
   const sampleCsvPath = path.join(tempDir, 'test-rules.csv');
 
@@ -256,11 +256,11 @@ describe('QNXT Migration', () => {
     });
   });
 
-  describe('loadQNXTRulesFromCSV', () => {
+  describe('loadBackendRulesFromCSV', () => {
     it('loads rules from CSV file', async () => {
       generateSampleCSV(sampleCsvPath);
       
-      const rules = await loadQNXTRulesFromCSV(sampleCsvPath);
+      const rules = await loadBackendRulesFromCSV(sampleCsvPath);
       
       expect(rules.length).toBeGreaterThan(0);
       expect(rules[0].ruleId).toBeDefined();
@@ -269,14 +269,14 @@ describe('QNXT Migration', () => {
     });
 
     it('throws error for non-existent file', async () => {
-      await expect(loadQNXTRulesFromCSV('/nonexistent/file.csv'))
+      await expect(loadBackendRulesFromCSV('/nonexistent/file.csv'))
         .rejects.toThrow('CSV file not found');
     });
   });
 
   describe('validateRules', () => {
     it('validates valid rules successfully', () => {
-      const rules: QNXTEligibilityRule[] = [
+      const rules: BackendEligibilityRule[] = [
         {
           ruleId: 'RULE001',
           ruleName: 'Test Rule',
@@ -301,7 +301,7 @@ describe('QNXT Migration', () => {
     });
 
     it('reports errors for invalid rules', () => {
-      const rules: QNXTEligibilityRule[] = [
+      const rules: BackendEligibilityRule[] = [
         {
           ruleId: '',
           ruleName: 'Invalid Rule',
@@ -326,7 +326,7 @@ describe('QNXT Migration', () => {
     });
 
     it('validates coinsurance percentages', () => {
-      const rules: QNXTEligibilityRule[] = [
+      const rules: BackendEligibilityRule[] = [
         {
           ruleId: 'RULE002',
           ruleName: 'Invalid Coinsurance',
@@ -384,8 +384,8 @@ describe('Types', () => {
     expect(request.subscriber.memberId).toBe('MEM001');
   });
 
-  it('QNXTEligibilityRule has correct structure', () => {
-    const rule: QNXTEligibilityRule = {
+  it('BackendEligibilityRule has correct structure', () => {
+    const rule: BackendEligibilityRule = {
       ruleId: 'RULE001',
       ruleName: 'Test Rule',
       planCode: 'PPO_GOLD',
@@ -1096,8 +1096,8 @@ describe('EligibilityService Business Logic', () => {
   });
 
   describe('Eligibility Rules Loading', () => {
-    const loadEligibilityRules = (rules: QNXTEligibilityRule[]): Map<string, QNXTEligibilityRule[]> => {
-      const eligibilityRules = new Map<string, QNXTEligibilityRule[]>();
+    const loadEligibilityRules = (rules: BackendEligibilityRule[]): Map<string, BackendEligibilityRule[]> => {
+      const eligibilityRules = new Map<string, BackendEligibilityRule[]>();
       for (const rule of rules) {
         const key = `${rule.planCode}:${rule.serviceTypeCode}`;
         if (!eligibilityRules.has(key)) {
@@ -1113,7 +1113,7 @@ describe('EligibilityService Business Logic', () => {
     };
 
     it('loads and organizes rules by plan and service type', () => {
-      const rules: QNXTEligibilityRule[] = [
+      const rules: BackendEligibilityRule[] = [
         {
           ruleId: 'RULE001',
           ruleName: 'Rule 1',
@@ -1150,7 +1150,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('sorts rules by priority', () => {
-      const rules: QNXTEligibilityRule[] = [
+      const rules: BackendEligibilityRule[] = [
         {
           ruleId: 'RULE_LOW',
           ruleName: 'Low Priority',
@@ -1193,12 +1193,12 @@ describe('EligibilityService Business Logic', () => {
     };
 
     const getApplicableRules = (
-      eligibilityRules: Map<string, QNXTEligibilityRule[]>,
+      eligibilityRules: Map<string, BackendEligibilityRule[]>,
       planCode: string, 
       serviceTypeCode: string, 
       memberAge?: number, 
       gender?: 'M' | 'F'
-    ): QNXTEligibilityRule[] => {
+    ): BackendEligibilityRule[] => {
       const key = `${planCode}:${serviceTypeCode}`;
       const rules = eligibilityRules.get(key) || [];
       const today = getCurrentDate();
@@ -1227,7 +1227,7 @@ describe('EligibilityService Business Logic', () => {
     };
 
     it('returns active rules for plan and service type', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       rules.set('PPO_GOLD:30', [
         {
           ruleId: 'RULE001',
@@ -1250,7 +1250,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('filters out inactive rules', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       rules.set('PPO_GOLD:30', [
         {
           ruleId: 'RULE001',
@@ -1272,7 +1272,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('filters rules by effective date range', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       rules.set('PPO_GOLD:30', [
         {
           ruleId: 'RULE_FUTURE',
@@ -1321,7 +1321,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('filters rules by member age', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       rules.set('PPO_GOLD:30', [
         {
           ruleId: 'RULE_PEDIATRIC',
@@ -1378,7 +1378,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('filters rules by gender restrictions', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       rules.set('PPO_GOLD:88', [
         {
           ruleId: 'RULE_MAMMOGRAM',
@@ -1401,7 +1401,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('returns empty array for unknown plan/service combination', () => {
-      const rules = new Map<string, QNXTEligibilityRule[]>();
+      const rules = new Map<string, BackendEligibilityRule[]>();
       
       const applicable = getApplicableRules(rules, 'UNKNOWN_PLAN', 'XX');
       expect(applicable).toHaveLength(0);
@@ -1649,7 +1649,7 @@ describe('EligibilityService Business Logic', () => {
       };
     }
 
-    const generateBenefitFromRule = (rule: QNXTEligibilityRule, serviceTypeCode: string): EligibilityBenefit => {
+    const generateBenefitFromRule = (rule: BackendEligibilityRule, serviceTypeCode: string): EligibilityBenefit => {
       return {
         serviceTypeCode,
         serviceTypeDescription: rule.benefitCategory,
@@ -1665,7 +1665,7 @@ describe('EligibilityService Business Logic', () => {
     };
 
     it('generates benefit for covered service', () => {
-      const rule: QNXTEligibilityRule = {
+      const rule: BackendEligibilityRule = {
         ruleId: 'RULE001',
         ruleName: 'Test Rule',
         planCode: 'PPO_GOLD',
@@ -1693,7 +1693,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('generates benefit for non-covered service', () => {
-      const rule: QNXTEligibilityRule = {
+      const rule: BackendEligibilityRule = {
         ruleId: 'RULE002',
         ruleName: 'Not Covered',
         planCode: 'PPO_GOLD',
@@ -1713,7 +1713,7 @@ describe('EligibilityService Business Logic', () => {
     });
 
     it('generates benefit requiring prior authorization', () => {
-      const rule: QNXTEligibilityRule = {
+      const rule: BackendEligibilityRule = {
         ruleId: 'RULE003',
         ruleName: 'MRI Imaging',
         planCode: 'PPO_GOLD',

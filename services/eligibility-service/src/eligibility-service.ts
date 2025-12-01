@@ -8,7 +8,7 @@
  * - Cosmos DB caching with configurable TTL
  * - Event Grid publishing for EligibilityChecked events
  * - Dapr integration for state management and pub/sub
- * - QNXT backend integration
+ * - claims backend integration
  * - FHIR server integration
  */
 
@@ -27,7 +27,7 @@ import {
   EligibilityBenefit,
   HealthStatus,
   ComponentHealth,
-  QNXTEligibilityRule
+  BackendEligibilityRule
 } from './types';
 import { X12EligibilityMapper } from './x12-mapper';
 import { FHIREligibilityMapper } from './fhir-mapper';
@@ -44,7 +44,7 @@ export class EligibilityService {
   private fhirMapper: FHIREligibilityMapper;
   private config: EligibilityServiceConfig;
   private startTime: number;
-  private eligibilityRules: Map<string, QNXTEligibilityRule[]> = new Map();
+  private eligibilityRules: Map<string, BackendEligibilityRule[]> = new Map();
 
   constructor(config: EligibilityServiceConfig) {
     this.config = config;
@@ -249,9 +249,9 @@ export class EligibilityService {
   }
 
   /**
-   * Load eligibility rules from QNXT (typically imported from CSV)
+   * Load eligibility rules from claims backend (typically imported from CSV)
    */
-  loadEligibilityRules(rules: QNXTEligibilityRule[]): void {
+  loadEligibilityRules(rules: BackendEligibilityRule[]): void {
     this.eligibilityRules.clear();
     for (const rule of rules) {
       const key = `${rule.planCode}:${rule.serviceTypeCode}`;
@@ -269,7 +269,7 @@ export class EligibilityService {
   /**
    * Get applicable eligibility rules for a service
    */
-  getApplicableRules(planCode: string, serviceTypeCode: string, memberAge?: number, gender?: 'M' | 'F'): QNXTEligibilityRule[] {
+  getApplicableRules(planCode: string, serviceTypeCode: string, memberAge?: number, gender?: 'M' | 'F'): BackendEligibilityRule[] {
     const key = `${planCode}:${serviceTypeCode}`;
     const rules = this.eligibilityRules.get(key) || [];
     const today = this.getCurrentDate();
@@ -306,8 +306,8 @@ export class EligibilityService {
       eventGrid: await this.checkEventGridHealth()
     };
 
-    if (this.config.qnxt) {
-      checks.qnxt = await this.checkQNXTHealth();
+    if (this.config.backend) {
+      checks.backendSystem = await this.checkBackendHealth();
     }
 
     if (this.config.fhirServer) {
@@ -419,7 +419,7 @@ export class EligibilityService {
       lastAccessedAt: new Date().toISOString(),
       accessCount: 0,
       ttl,
-      source: 'QNXT'
+      source: 'BACKEND_SYSTEM'
     };
 
     try {
@@ -465,7 +465,7 @@ export class EligibilityService {
   }
 
   private async fetchX12Eligibility(request: X12_270_Request): Promise<X12_271_Response> {
-    // In production, this would call QNXT or a clearinghouse
+    // In production, this would call claims backend or a clearinghouse
     // For now, generate a response based on loaded rules
     const planCode = request.subscriber.groupNumber || 'DEFAULT';
     const serviceTypes = request.serviceTypeCodes || ['30'];
@@ -702,14 +702,14 @@ export class EligibilityService {
     };
   }
 
-  private async checkQNXTHealth(): Promise<ComponentHealth> {
-    if (!this.config.qnxt) {
+  private async checkBackendHealth(): Promise<ComponentHealth> {
+    if (!this.config.backend) {
       return {
         status: 'healthy',
         lastCheck: new Date().toISOString()
       };
     }
-    // In production, would make a health check call to QNXT
+    // In production, would make a health check call to claims backend
     return {
       status: 'healthy',
       lastCheck: new Date().toISOString()

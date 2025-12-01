@@ -14,7 +14,7 @@ import { CoverageEligibilityRequest } from 'fhir/r4';
 import { EligibilityService } from './eligibility-service';
 import { X12_270_Request, EligibilityServiceConfig, EligibilityCheckRequest } from './types';
 import { X12EligibilityMapper } from './x12-mapper';
-import { loadQNXTRulesFromCSV } from './migration';
+import { loadBackendRulesFromCSV } from './migration';
 
 // Default configuration
 const DEFAULT_CONFIG: EligibilityServiceConfig = {
@@ -27,8 +27,8 @@ const DEFAULT_CONFIG: EligibilityServiceConfig = {
   eventGrid: {
     topicEndpoint: process.env.EVENT_GRID_ENDPOINT || ''
   },
-  qnxt: process.env.QNXT_BASE_URL ? {
-    baseUrl: process.env.QNXT_BASE_URL,
+  backend?: process.env.BACKEND_BASE_URL ? {
+    baseUrl: process.env.BACKEND_BASE_URL,
     timeout: 30000
   } : undefined,
   fhirServer: process.env.FHIR_SERVER_URL ? {
@@ -343,15 +343,15 @@ async function startServer(): Promise<void> {
   // Initialize the eligibility service
   eligibilityService = new EligibilityService(DEFAULT_CONFIG);
   
-  // Load QNXT rules if CSV file is provided
-  const rulesFile = process.env.QNXT_RULES_FILE;
+  // Load backend rules if CSV file is provided
+  const rulesFile = process.env.BACKEND_RULES_FILE;
   if (rulesFile) {
     try {
-      const rules = await loadQNXTRulesFromCSV(rulesFile);
+      const rules = await loadBackendRulesFromCSV(rulesFile);
       eligibilityService.loadEligibilityRules(rules);
       console.log(`Loaded ${rules.length} eligibility rules from ${rulesFile}`);
     } catch (error) {
-      console.warn(`Failed to load QNXT rules: ${error}`);
+      console.warn(`Failed to load backend rules: ${error}`);
     }
   }
   

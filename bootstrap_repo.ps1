@@ -179,7 +179,7 @@ jobs:
 
 This repo contains:
 - infra/main.bicep — Storage, Service Bus topics, App Insights, Logic App Standard plan/app (starter)
-- logicapps/workflows/ingest275/workflow.json — 275 Ingestion workflow (SFTP → Blob → X12 decode → SB → QNXT)
+- logicapps/workflows/ingest275/workflow.json — 275 Ingestion workflow (SFTP → Blob → X12 decode → SB → claims backend)
 - logicapps/workflows/rfai277/workflow.json — 277 RFAI outbound workflow (SB → X12 encode → SFTP)
 - .github/workflows/deploy_logicapps_workflows.yml — GitHub Actions (Bicep + workflows ZIP deploy)
 

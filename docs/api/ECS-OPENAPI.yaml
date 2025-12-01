@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Enhanced Claim Status (ECS) API
   description: |
-    API for querying claim status information from QNXT claims adjudication system.
+    API for querying claim status information from claims backend claims adjudication system.
     Supports four search methods: Service Date, Member, Check Number, and Claim History.
     
     ## Authentication
@@ -451,8 +451,8 @@ paths:
                 totalResults: 0
                 claims: []
                 errors:
-                  - errorCode: QNXT_UNAVAILABLE
-                    errorMessage: QNXT backend system is temporarily unavailable
+                  - errorCode: claims backend_UNAVAILABLE
+                    errorMessage: claims backend backend system is temporarily unavailable
 
 components:
   securitySchemes:
@@ -820,7 +820,7 @@ components:
         exchangeDate:
           type: string
           format: date-time
-          description: Availity received data timestamp (ValueAdds277)
+          description: Clearinghouse received data timestamp (ValueAdds277)
           example: "2024-01-15T10:30:45.123Z"
         comment:
           type: string

@@ -193,8 +193,8 @@
                 "name": "sftpHost",
                 "type": "Microsoft.Common.TextBox",
                 "label": "SFTP Host",
-                "toolTip": "SFTP server hostname (e.g., sftp.availity.com)",
-                "placeholder": "sftp.availity.com",
+                "toolTip": "SFTP server hostname (e.g., sftp.clearinghouse.example.com)",
+                "placeholder": "sftp.clearinghouse.example.com",
                 "constraints": {
                   "required": false,
                   "validations": [

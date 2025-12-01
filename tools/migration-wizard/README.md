@@ -1,10 +1,10 @@
-# Cloud Health Office - QNXT Migration Wizard
+# Cloud Health Office - claims backend Migration Wizard
 
-A Blazor web application for migrating members, providers, and benefit plans from TriZetto QNXT to Cloud Health Office's Cosmos DB.
+A Blazor web application for migrating members, providers, and benefit plans from core administrative system to Cloud Health Office's Cosmos DB.
 
 ## Features
 
-- **TriZetto Open Access SOAP API Integration**: Connect to QNXT via TriZetto Open Access SOAP APIs
+- **TriZetto Open Access SOAP API Integration**: Connect to claims backend via TriZetto Open Access SOAP APIs
 - **Data Export**: Export members, providers, and benefit plans to Cloud Health Office Cosmos DB
 - **Mapping Report**: Generate comprehensive mapping reports with 95%+ auto-match capability
 - **One-Click Cutover**: Flip API Management routing keys to switch traffic to Cloud Health Office
@@ -17,7 +17,7 @@ A Blazor web application for migrating members, providers, and benefit plans fro
   - Cosmos DB account (using the Cloud Health Office database schema)
   - API Management instance (for traffic routing)
   - Azure Key Vault (for secure credential storage)
-- Access to TriZetto Open Access SOAP APIs (QNXT)
+- Access to TriZetto Open Access SOAP APIs (claims backend)
 
 ## Configuration
 
@@ -69,7 +69,7 @@ For local development without Key Vault, you can use `appsettings.Development.js
     "VaultUri": "https://your-keyvault.vault.azure.net/"
   },
   "TriZetto": {
-    "EndpointUrl": "https://qnxt-server.example.com/OpenAccess/Services",
+    "EndpointUrl": "https://backend-server.example.com/OpenAccess/Services",
     "TenantId": "default-tenant",
     "TimeoutSeconds": 120,
     "BypassCertificateValidation": false
@@ -87,7 +87,7 @@ For local development without Key Vault, you can use `appsettings.Development.js
     "ResourceGroup": "your-resource-group",
     "SubscriptionId": "your-azure-subscription-id",
     "RoutingKeyName": "backend-routing",
-    "QnxtBackendId": "qnxt-backend",
+    "BackendSystemId": "backend-backend",
     "CloudHealthOfficeBackendId": "cloudhealthoffice-backend"
   }
 }
@@ -117,7 +117,7 @@ Update `appsettings.json` with your TriZetto Open Access, Cosmos DB, and API Man
 
 ### 2. Start Migration
 Click **"Start Migration"** to begin the export process:
-- Members are exported from QNXT and written to the `Members` container
+- Members are exported from claims backend and written to the `Members` container
 - Providers are exported and written to the `ProviderDirectory` container
 - Benefit plans are exported and written to the `BenefitPlans` container
 
@@ -136,7 +136,7 @@ When ready, click **"Start Cutover"** to flip the API Management routing:
 
 ### 5. Monitor and Rollback
 If issues occur after cutover:
-- Click **"Rollback Cutover"** to revert traffic to QNXT
+- Click **"Rollback Cutover"** to revert traffic to claims backend
 - Review errors and address issues before re-attempting cutover
 
 ## TriZetto Open Access SOAP APIs
@@ -177,7 +177,7 @@ The migration wizard connects to the following SOAP endpoints:
 
 ### Member Mapping
 
-| QNXT Field | Cloud Health Office Field | Transformation |
+| claims backend Field | Cloud Health Office Field | Transformation |
 |------------|---------------------------|----------------|
 | MemberId | memberId | Direct |
 | SubscriberId | subscriberId | Direct |
@@ -190,7 +190,7 @@ The migration wizard connects to the following SOAP endpoints:
 
 ### Provider Mapping
 
-| QNXT Field | Cloud Health Office Field | Transformation |
+| claims backend Field | Cloud Health Office Field | Transformation |
 |------------|---------------------------|----------------|
 | ProviderId | providerId | Direct |
 | Npi | npi | Luhn validated |
@@ -209,7 +209,7 @@ The migration wizard connects to the following SOAP endpoints:
                ▼                      ▼
 ┌──────────────────────┐    ┌────────────────────────┐
 │  TriZetto Open Access │    │    Cosmos DB           │
-│    (QNXT SOAP API)    │    │  (Cloud Health Office) │
+│    (claims backend SOAP API)    │    │  (Cloud Health Office) │
 │                       │    │                        │
 │  • Members            │───▶│  • Members             │
 │  • Providers          │    │  • ProviderDirectory   │
@@ -224,7 +224,7 @@ The migration wizard connects to the following SOAP endpoints:
                             │  Named Value:          │
                             │  backend-routing       │
                             │  ↓                     │
-                            │  qnxt-backend →        │
+                            │  backend-backend →        │
                             │  cloudhealthoffice-    │
                             │  backend               │
                             └────────────────────────┘
@@ -234,10 +234,10 @@ The migration wizard connects to the following SOAP endpoints:
 
 ### Connection Failures
 
-1. Verify network connectivity to QNXT server
+1. Verify network connectivity to claims backend server
 2. Check firewall rules allow HTTPS traffic
 3. Validate credentials in appsettings.json
-4. Ensure tenant ID matches your QNXT configuration
+4. Ensure tenant ID matches your claims backend configuration
 
 ### Low Auto-Match Rate
 

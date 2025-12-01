@@ -11,10 +11,10 @@ metadata:
     app.kubernetes.io/component: config
     app.kubernetes.io/part-of: cloudhealthoffice
 data:
-  # Availity trading partner (clearinghouse)
-  availity-id: "030240928"
-  availity-qualifier: "ZZ"
-  availity-name: "Availity"
+  # Clearinghouse trading partner (clearinghouse)
+  clearinghouse-id: "030240928"
+  clearinghouse-qualifier: "ZZ"
+  clearinghouse-name: "Clearinghouse"
   
   # Health Plan trading partner (configure per deployment)
   healthplan-id: ""  # Set during deployment
@@ -25,10 +25,10 @@ data:
   trading-partners.json: |
     {
       "partners": {
-        "availity": {
+        "clearinghouse": {
           "id": "030240928",
           "qualifier": "ZZ",
-          "name": "Availity",
+          "name": "Clearinghouse",
           "role": "clearinghouse",
           "transactionTypes": ["275", "277", "278"]
         },
@@ -43,18 +43,18 @@ data:
       "routing": {
         "inbound": {
           "275": {
-            "sender": "availity",
+            "sender": "clearinghouse",
             "receiver": "healthplan"
           },
           "278": {
-            "sender": "availity",
+            "sender": "clearinghouse",
             "receiver": "healthplan"
           }
         },
         "outbound": {
           "277": {
             "sender": "healthplan",
-            "receiver": "availity"
+            "receiver": "clearinghouse"
           }
         }
       }

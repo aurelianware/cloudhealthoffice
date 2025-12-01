@@ -344,7 +344,7 @@ If your deployment includes SFTP configuration:
 
 ```bash
 # SFTP connection details (environment-specific)
-gh secret set SFTP_HOST --repo "$REPO_OWNER/$REPO_NAME" --body "sftp.availity.com"
+gh secret set SFTP_HOST --repo "$REPO_OWNER/$REPO_NAME" --body "sftp.clearinghouse.example.com"
 gh secret set SFTP_USERNAME --repo "$REPO_OWNER/$REPO_NAME" --body "service-account"
 gh secret set SFTP_PASSWORD --repo "$REPO_OWNER/$REPO_NAME" --body "<sftp-password>"
 ```

@@ -12,7 +12,7 @@
             }
           },
           "method": "get",
-          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/head"
+          "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_clearinghouse'))}/messages/head"
         },
         "recurrence": {
           "frequency": "Minute",
@@ -32,7 +32,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "availityTraceId": {
+                  "clearinghouseTraceId": {
                     "type": "string"
                   },
                   "payerTraceId": {
@@ -96,7 +96,7 @@
                   }
                 },
                 "required": [
-                  "availityTraceId",
+                  "clearinghouseTraceId",
                   "payerTraceId",
                   "status"
                 ]
@@ -153,7 +153,7 @@
                       "body": {
                         "eventName": "AppealUpdateValidationSuccess",
                         "properties": {
-                          "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                          "clearinghouseTraceId": "@{body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']}",
                           "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
                           "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
                           "decision": "@{body('Parse_Appeal_Update_Message')?['decision']}",
@@ -171,7 +171,7 @@
                       "inputs": {
                         "errorType": "ValidationError",
                         "errorMessage": "FINALIZED status requires both decision and decisionReason fields",
-                        "availityTraceId": "@body('Parse_Appeal_Update_Message')?['availityTraceId']",
+                        "clearinghouseTraceId": "@body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']",
                         "payerTraceId": "@body('Parse_Appeal_Update_Message')?['payerTraceId']",
                         "status": "@body('Parse_Appeal_Update_Message')?['status']",
                         "decision": "@coalesce(body('Parse_Appeal_Update_Message')?['decision'], 'MISSING')",
@@ -194,7 +194,7 @@
                           "properties": {
                             "errorType": "@{outputs('Compose_Validation_Error')?['errorType']}",
                             "errorMessage": "@{outputs('Compose_Validation_Error')?['errorMessage']}",
-                            "availityTraceId": "@{outputs('Compose_Validation_Error')?['availityTraceId']}",
+                            "clearinghouseTraceId": "@{outputs('Compose_Validation_Error')?['clearinghouseTraceId']}",
                             "payerTraceId": "@{outputs('Compose_Validation_Error')?['payerTraceId']}",
                             "timestamp": "@{utcNow()}"
                           }
@@ -215,7 +215,7 @@
                           }
                         },
                         "method": "post",
-                        "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
+                        "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_clearinghouse'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
                         "queries": {
                           "deadLetterReason": "ValidationError",
                           "deadLetterErrorDescription": "@{outputs('Compose_Validation_Error')?['errorMessage']}"
@@ -264,7 +264,7 @@
                     "body": {
                       "eventName": "AppealUpdateNonFinalizedStatus",
                       "properties": {
-                        "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                        "clearinghouseTraceId": "@{body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']}",
                         "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
                         "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
                         "subStatus": "@{body('Parse_Appeal_Update_Message')?['subStatus']}",
@@ -282,10 +282,10 @@
               ]
             }
           },
-          "Compose_Availity_Bedlam_Payload": {
+          "Compose_Clearinghouse_Bedlam_Payload": {
             "type": "Compose",
             "inputs": {
-              "traceId": "@body('Parse_Appeal_Update_Message')?['availityTraceId']",
+              "traceId": "@body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']",
               "payerReferenceId": "@body('Parse_Appeal_Update_Message')?['payerTraceId']",
               "appealId": "@coalesce(body('Parse_Appeal_Update_Message')?['appealId'], '')",
               "caseNumber": "@coalesce(body('Parse_Appeal_Update_Message')?['caseNumber'], '')",
@@ -308,18 +308,18 @@
               ]
             }
           },
-          "POST_To_Availity_Bedlam_API": {
+          "POST_To_Clearinghouse_Bedlam_API": {
             "type": "Http",
             "inputs": {
               "method": "POST",
-              "uri": "@parameters('availity_bedlam_endpoint')",
+              "uri": "@parameters('clearinghouse_bedlam_endpoint')",
               "headers": {
-                "Authorization": "Bearer @{parameters('availity_bedlam_api_key')}",
+                "Authorization": "Bearer @{parameters('clearinghouse_bedlam_api_key')}",
                 "Content-Type": "application/json",
                 "X-Payer-Id": "{config.payerId}",
-                "X-Correlation-Id": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}"
+                "X-Correlation-Id": "@{body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']}"
               },
-              "body": "@outputs('Compose_Availity_Bedlam_Payload')"
+              "body": "@outputs('Compose_Clearinghouse_Bedlam_Payload')"
             },
             "runtimeConfiguration": {
               "retry": {
@@ -329,15 +329,15 @@
               }
             },
             "runAfter": {
-              "Compose_Availity_Bedlam_Payload": [
+              "Compose_Clearinghouse_Bedlam_Payload": [
                 "Succeeded"
               ]
             }
           },
-          "Parse_Availity_Response": {
+          "Parse_Clearinghouse_Response": {
             "type": "ParseJson",
             "inputs": {
-              "content": "@body('POST_To_Availity_Bedlam_API')",
+              "content": "@body('POST_To_Clearinghouse_Bedlam_API')",
               "schema": {
                 "type": "object",
                 "properties": {
@@ -360,12 +360,12 @@
               }
             },
             "runAfter": {
-              "POST_To_Availity_Bedlam_API": [
+              "POST_To_Clearinghouse_Bedlam_API": [
                 "Succeeded"
               ]
             }
           },
-          "Log_Update_Sent_To_Availity": {
+          "Log_Update_Sent_To_Clearinghouse": {
             "type": "ApiConnection",
             "inputs": {
               "host": {
@@ -378,20 +378,20 @@
               "body": {
                 "eventName": "AppealUpdateSentToAvality",
                 "properties": {
-                  "availityTraceId": "@{body('Parse_Appeal_Update_Message')?['availityTraceId']}",
+                  "clearinghouseTraceId": "@{body('Parse_Appeal_Update_Message')?['clearinghouseTraceId']}",
                   "payerTraceId": "@{body('Parse_Appeal_Update_Message')?['payerTraceId']}",
                   "status": "@{body('Parse_Appeal_Update_Message')?['status']}",
                   "subStatus": "@{body('Parse_Appeal_Update_Message')?['subStatus']}",
                   "decision": "@{body('Parse_Appeal_Update_Message')?['decision']}",
-                  "availityResponseCode": "@{body('Parse_Availity_Response')?['responseCode']}",
-                  "availitySuccess": "@{body('Parse_Availity_Response')?['success']}",
-                  "httpStatusCode": "@{outputs('POST_To_Availity_Bedlam_API')?['statusCode']}",
+                  "clearinghouseResponseCode": "@{body('Parse_Clearinghouse_Response')?['responseCode']}",
+                  "clearinghouseSuccess": "@{body('Parse_Clearinghouse_Response')?['success']}",
+                  "httpStatusCode": "@{outputs('POST_To_Clearinghouse_Bedlam_API')?['statusCode']}",
                   "timestamp": "@{utcNow()}"
                 }
               }
             },
             "runAfter": {
-              "Parse_Availity_Response": [
+              "Parse_Clearinghouse_Response": [
                 "Succeeded"
               ]
             }
@@ -405,10 +405,10 @@
                 }
               },
               "method": "delete",
-              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}"
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_clearinghouse'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}"
             },
             "runAfter": {
-              "Log_Update_Sent_To_Availity": [
+              "Log_Update_Sent_To_Clearinghouse": [
                 "Succeeded"
               ]
             }
@@ -425,7 +425,7 @@
               "errorType": "AppealUpdateError",
               "errorMessage": "@{coalesce(result('Try_Process_Appeal_Update')?[0]?['error']?['message'], 'Unknown error occurred')}",
               "errorCode": "@{coalesce(result('Try_Process_Appeal_Update')?[0]?['error']?['code'], 'UNKNOWN')}",
-              "availityTraceId": "@{coalesce(body('Parse_Appeal_Update_Message')?['availityTraceId'], 'Unknown')}",
+              "clearinghouseTraceId": "@{coalesce(body('Parse_Appeal_Update_Message')?['clearinghouseTraceId'], 'Unknown')}",
               "payerTraceId": "@{coalesce(body('Parse_Appeal_Update_Message')?['payerTraceId'], 'Unknown')}",
               "status": "@{coalesce(body('Parse_Appeal_Update_Message')?['status'], 'Unknown')}",
               "triggerBody": "@triggerBody()",
@@ -449,10 +449,10 @@
                   "errorType": "@{outputs('Compose_Error_Details')?['errorType']}",
                   "errorMessage": "@{outputs('Compose_Error_Details')?['errorMessage']}",
                   "errorCode": "@{outputs('Compose_Error_Details')?['errorCode']}",
-                  "availityTraceId": "@{outputs('Compose_Error_Details')?['availityTraceId']}",
+                  "clearinghouseTraceId": "@{outputs('Compose_Error_Details')?['clearinghouseTraceId']}",
                   "payerTraceId": "@{outputs('Compose_Error_Details')?['payerTraceId']}",
                   "status": "@{outputs('Compose_Error_Details')?['status']}",
-                  "workflowName": "appeal_update_from_payer_to_availity",
+                  "workflowName": "appeal_update_from_payer_outbound",
                   "timestamp": "@{outputs('Compose_Error_Details')?['timestamp']}"
                 }
               }
@@ -472,7 +472,7 @@
                 }
               },
               "method": "post",
-              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_availity'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
+              "path": "/@{encodeURIComponent(parameters('sb_namespace'))}/topics/@{encodeURIComponent(parameters('sb_topic_payer_appeal_updates'))}/subscriptions/@{encodeURIComponent(parameters('sb_subscription_clearinghouse'))}/messages/@{encodeURIComponent(triggerBody()?['MessageId'])}/deadletter",
               "queries": {
                 "deadLetterReason": "AppealUpdateError",
                 "deadLetterErrorDescription": "@{outputs('Compose_Error_Details')?['errorMessage']}"
@@ -501,7 +501,7 @@
   "parameters": {
     "_SECURITY_NOTE": {
       "type": "String",
-      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure availity_bedlam_api_key as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/availity-bedlam-api-key) or use Managed Identity to obtain tokens at runtime."
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure clearinghouse_bedlam_api_key as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/clearinghouse-api-api-key) or use Managed Identity to obtain tokens at runtime."
     },
     "$connections": {
       "type": "Object",
@@ -515,15 +515,15 @@
       "type": "String",
       "defaultValue": "payer-appeal-status-updates"
     },
-    "sb_subscription_availity": {
+    "sb_subscription_clearinghouse": {
       "type": "String",
-      "defaultValue": "availity-push"
+      "defaultValue": "clearinghouse-push"
     },
-    "availity_bedlam_endpoint": {
+    "clearinghouse_bedlam_endpoint": {
       "type": "String",
-      "defaultValue": "https://api.availity.com/bedlam/v1/appeals/status"
+      "defaultValue": "https://api.clearinghouse.com/bedlam/v1/appeals/status"
     },
-    "availity_bedlam_api_key": {
+    "clearinghouse_bedlam_api_key": {
       "type": "SecureString"
     }
   }

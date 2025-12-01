@@ -94,19 +94,19 @@ spec:
                   name: {{ .Values.existingSecrets.eventGrid }}
                   key: key
             {{- end }}
-            {{- if .Values.config.qnxt.baseUrl }}
-            - name: QNXT_BASE_URL
-              value: {{ .Values.config.qnxt.baseUrl | quote }}
-            {{- else if .Values.existingSecrets.qnxt }}
-            - name: QNXT_BASE_URL
+            {{- if .Values.config.backend.baseUrl }}
+            - name: claims backend_BASE_URL
+              value: {{ .Values.config.backend.baseUrl | quote }}
+            {{- else if .Values.existingSecrets.backend }}
+            - name: claims backend_BASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.existingSecrets.qnxt }}
+                  name: {{ .Values.existingSecrets.backend }}
                   key: baseUrl
-            - name: QNXT_API_KEY
+            - name: CLAIMS_BACKEND_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.existingSecrets.qnxt }}
+                  name: {{ .Values.existingSecrets.backend }}
                   key: apiKey
             {{- end }}
             {{- if .Values.config.fhirServer.baseUrl }}

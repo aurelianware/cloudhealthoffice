@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://aurelianware.com/schemas/Appeal-ToPayer-Request.json",
   "title": "Appeal To Payer Request",
-  "description": "Request schema for submitting claim appeals from provider to health plan via Availity platform. Compliant with Availity QRE requirements for pre-appeal and post-appeal attachment patterns.",
+  "description": "Request schema for submitting claim appeals from provider to health plan via the clearinghouse platform. Compliant with the clearinghouse QRE requirements for pre-appeal and post-appeal attachment patterns.",
   "type": "object",
   "required": [
     "claimNumber",
@@ -247,8 +247,8 @@
         "dataSource": {
           "type": "string",
           "description": "Source system that originated the appeal",
-          "enum": ["AVAILITY", "PROVIDER_PORTAL", "EDI", "MANUAL_ENTRY", "OTHER"],
-          "examples": ["AVAILITY", "PROVIDER_PORTAL"]
+          "enum": ["CLEARINGHOUSE", "PROVIDER_PORTAL", "EDI", "MANUAL_ENTRY", "OTHER"],
+          "examples": ["CLEARINGHOUSE", "PROVIDER_PORTAL"]
         },
         "planId": {
           "type": "string",
@@ -281,9 +281,9 @@
         }
       }
     },
-    "availityTraceId": {
+    "clearinghouseTraceId": {
       "type": "string",
-      "description": "Availity transaction trace identifier for correlation (assigned by Availity)",
+      "description": "Clearinghouse transaction trace identifier for correlation (assigned by Clearinghouse)",
       "maxLength": 100,
       "examples": ["AVL-2024-abc123-xyz789"]
     },
@@ -343,14 +343,14 @@
         "appealType": "FIRST_LEVEL",
         "providerParticipationStatus": "IN_NETWORK",
         "programId": "{config.payerId}",
-        "dataSource": "AVAILITY",
+        "dataSource": "CLEARINGHOUSE",
         "planId": "{config.payerId}",
         "appealAttachmentName": "Appeal for Claim CLM-2024-001234",
         "appealEligibleForMember": true,
         "appealTimelyFilingDate": "2024-12-31",
         "appealMessage": "This appeal is being submitted within the 180-day timely filing requirement."
       },
-      "availityTraceId": "AVL-2024-abc123-xyz789",
+      "clearinghouseTraceId": "AVL-2024-abc123-xyz789",
       "submissionDate": "2024-01-15T14:30:00Z"
     }
   ]

@@ -164,7 +164,7 @@ The Provider Access API enables healthcare providers to securely access patient 
 ✅ **HIPAA Safeguards** - Encryption, audit logging, and PHI redaction  
 ✅ **US Core v3.1.1 Compliance** - US Core Patient profile and USCDI data elements  
 ✅ **Da Vinci PDex Alignment** - Compatible with Payer Data Exchange Implementation Guides  
-✅ **Backend Integration** - QNXT to FHIR data mapping
+✅ **Backend Integration** - claims backend to FHIR data mapping
 
 ### Supported Resources
 
@@ -369,15 +369,15 @@ The Provider Access API returns FHIR OperationOutcome resources for errors:
 }
 ```
 
-### Backend Data Mapping (QNXT → FHIR)
+### Backend Data Mapping (claims backend → FHIR)
 
-The Provider Access API includes mappers to transform backend payer system data (e.g., QNXT) to FHIR resources:
+The Provider Access API includes mappers to transform backend payer system data (e.g., claims backend) to FHIR resources:
 
 **Patient Mapping:**
 
 ```typescript
-// QNXT Patient data
-const qnxtPatient = {
+// claims backend Patient data
+const backendPatient = {
   memberId: 'MEM123',
   firstName: 'John',
   lastName: 'Doe',
@@ -389,14 +389,14 @@ const qnxtPatient = {
 };
 
 // Transform to FHIR Patient (US Core)
-const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 ```
 
 **Claim Mapping:**
 
 ```typescript
-// QNXT Claim data
-const qnxtClaim = {
+// claims backend Claim data
+const backendClaim = {
   claimId: 'CLM123',
   memberId: 'MEM123',
   providerId: 'NPI98765',
@@ -410,14 +410,14 @@ const qnxtClaim = {
 };
 
 // Transform to FHIR Claim
-const fhirClaim = api.mapQnxtClaimToFhir(qnxtClaim);
+const fhirClaim = api.mapBackendClaimToFhir(backendClaim);
 ```
 
 **Encounter Mapping:**
 
 ```typescript
-// QNXT Encounter data
-const qnxtEncounter = {
+// claims backend Encounter data
+const backendEncounter = {
   encounterId: 'ENC123',
   memberId: 'MEM123',
   providerId: 'NPI98765',
@@ -428,7 +428,7 @@ const qnxtEncounter = {
 };
 
 // Transform to FHIR Encounter
-const fhirEncounter = api.mapQnxtEncounterToFhir(qnxtEncounter);
+const fhirEncounter = api.mapBackendEncounterToFhir(backendEncounter);
 ```
 
 ### HIPAA Safeguards
@@ -547,7 +547,7 @@ The Provider Access API includes 44 comprehensive unit tests covering:
 - ✅ Patient consent validation (active, expired, revoked)
 - ✅ Search operations (all 6 resource types)
 - ✅ Read operations with consent checks
-- ✅ QNXT to FHIR mapping (Patient, Claim, Encounter)
+- ✅ claims backend to FHIR mapping (Patient, Claim, Encounter)
 - ✅ Gender and date format handling
 - ✅ Encryption/decryption (AES-256-GCM)
 - ✅ PHI redaction
@@ -570,7 +570,7 @@ PASS src/fhir/__tests__/provider-access-api.test.ts
     ✓ should validate SMART on FHIR tokens
     ✓ should check patient consent
     ✓ should search FHIR resources
-    ✓ should map QNXT data to FHIR
+    ✓ should map claims backend data to FHIR
     ✓ should encrypt/decrypt PHI
     ✓ should log audit trails
     ... (44 tests total)
@@ -610,7 +610,7 @@ Tests: 44 passed, 44 total
                                             ▼
                     ┌──────────────────────────────────────┐
                     │  Payer Backend System                │
-                    │  (QNXT, Claims System, etc.)         │
+                    │  (claims backend, Claims System, etc.)         │
                     └──────────────────────────────────────┘
 ```
 
@@ -1121,7 +1121,7 @@ const x12Input: X12_270 = {
   inquiryId: 'INQ20240115001',
   transactionDate: '20240115-0930',
   informationSource: {
-    id: '030240928',  // Availity
+    id: '030240928',  // Clearinghouse
     name: 'Texas Health Plan',
     taxId: '75-1234567'
   },
@@ -2225,7 +2225,7 @@ The CMS-0057-F Prior Authorization Final Rule (effective January 2027) requires 
 - **X12 278 Integration** - Bidirectional mapping between X12 and FHIR
 - **72-Hour SLA Tracking** - Automated decision timeline compliance
 - **Attachment Support** - Binary resources for clinical documents/images
-- **Clearinghouse Integration** - Availity, Change Healthcare support
+- **Clearinghouse Integration** - Clearinghouse, Change Healthcare support
 
 ### Key Benefits
 
@@ -2245,7 +2245,7 @@ The CMS-0057-F Prior Authorization Final Rule (effective January 2027) requires 
 ```text
 ┌─────────────┐      X12 278        ┌──────────────────┐
 │   Provider  │ ──────────────────> │  Clearinghouse   │
-│   System    │      Request        │   (Availity)     │
+│   System    │      Request        │   (Clearinghouse)     │
 └─────────────┘                     └──────────────────┘
                                              │
                                              │ SFTP/API
@@ -2270,7 +2270,7 @@ The CMS-0057-F Prior Authorization Final Rule (effective January 2027) requires 
                                              ▼
                                      ┌──────────────────┐
                                      │  Clinical Review │
-                                     │  System (QNXT)   │
+                                     │  System (claims backend)   │
                                      └──────────────────┘
                                              │
                                              │ Decision
@@ -2651,7 +2651,7 @@ if (validation.valid) {
 
 ### Supported Clearinghouses
 
-- **Availity** (Primary)
+- **Clearinghouse** (Primary)
 - **Change Healthcare**
 - **Waystar**
 - **Custom** (configurable)
@@ -2662,10 +2662,10 @@ if (validation.valid) {
 import { packageForClearinghouse, processFromClearinghouse } from './prior-auth-api';
 
 const clearinghouseConfig = {
-  name: 'Availity',
+  name: 'Clearinghouse',
   tradingPartnerId: '030240928',
   sftp: {
-    host: 'sftp.availity.com',
+    host: 'sftp.clearinghouse.example.com',
     port: 22,
     username: 'healthplan001',
     inboundPath: '/inbound/278',
@@ -2687,7 +2687,7 @@ const { x12Response, fhirResponse } = processFromClearinghouse(
 ### Azure Logic Apps Orchestration
 
 The `ingest278` workflow handles:
-1. Poll Availity SFTP for incoming 278 requests
+1. Poll Clearinghouse SFTP for incoming 278 requests
 2. Archive to Data Lake: `hipaa-attachments/raw/278/yyyy/MM/dd/`
 3. Decode X12 via Integration Account
 4. Map to FHIR using `mapX12278ToFhirPriorAuth()`
@@ -2883,8 +2883,8 @@ A: Yes, our implementation follows:
 **Q: How do I integrate with existing systems?**
 
 A:
-1. **QNXT Integration**: Azure Logic Apps call QNXT APIs for review decisions
-2. **Clearinghouse**: SFTP/API integration with Availity or Change Healthcare
+1. **claims backend Integration**: Azure Logic Apps call claims backend APIs for review decisions
+2. **Clearinghouse**: SFTP/API integration with the clearinghouse or Change Healthcare
 3. **EHR Integration**: CDS Hooks endpoints for real-time CRD
 4. **FHIR Server**: Store resources in Azure API for FHIR or Cosmos DB
 

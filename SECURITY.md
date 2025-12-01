@@ -51,7 +51,7 @@ The Cloud Health Office system processes Protected Health Information (PHI) and 
 
 **Required BAAs:**
 - ✅ Microsoft Azure (BAA in place for all Azure services)
-- ✅ Availity (trading partner - verify BAA exists)
+- ✅ Clearinghouse (trading partner - verify BAA exists)
 - ❓ Any third-party monitoring or logging services
 
 **BAA Checklist:**
@@ -110,7 +110,7 @@ The Cloud Health Office system processes Protected Health Information (PHI) and 
 
 **All network communications must use encryption:**
 
-#### SFTP (Availity Integration)
+#### SFTP (Clearinghouse Integration)
 ```
 Protocol: SSH File Transfer Protocol
 Minimum Version: SSH-2
@@ -130,7 +130,7 @@ sftp -v user@sftp-host 2>&1 | grep -E 'kex|cipher|mac'
 # mac: hmac-sha2-256
 ```
 
-#### HTTPS (QNXT API, Azure Services)
+#### HTTPS (claims backend API, Azure Services)
 ```
 Protocol: HTTPS
 Minimum TLS Version: 1.2
@@ -433,10 +433,10 @@ az keyvault secret set \
   --name "sftp-password" \
   --value "actual-password"
 
-# Store QNXT API client secret
+# Store claims backend API client secret
 az keyvault secret set \
   --vault-name "hipaa-keyvault" \
-  --name "qnxt-client-secret" \
+  --name "backend-client-secret" \
   --value "actual-secret"
 
 # Grant Logic App access to secrets
@@ -454,9 +454,9 @@ az keyvault set-policy \
       "type": "securestring",
       "value": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/sftp-password')"
     },
-    "qnxtClientSecret": {
+    "backendClientSecret": {
       "type": "securestring",
-      "value": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/qnxt-client-secret')"
+      "value": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/backend-client-secret')"
     }
   }
 }
@@ -469,12 +469,12 @@ az keyvault set-policy \
 ```bash
 # ❌ WRONG - Secret in code
 {
-  "qnxt_api_key": "abc123-secret-key-456def"
+  "claims_backend_api_key": "abc123-secret-key-456def"
 }
 
 # ✅ CORRECT - Reference to Key Vault
 {
-  "qnxt_api_key": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/qnxt-api-key')"
+  "claims_backend_api_key": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/claims-backend-api-key')"
 }
 ```
 
@@ -553,7 +553,7 @@ az monitor activity-log list \
 
 **Logged automatically:**
 - All workflow runs (start, complete, failure)
-- API calls (QNXT, SFTP, Service Bus)
+- API calls (claims backend, SFTP, Service Bus)
 - Exceptions and errors
 - Performance metrics
 - Custom events
@@ -611,7 +611,7 @@ customEvents
     "timestamp": "@{utcNow()}"
   },
   "runAfter": {
-    "Call_QNXT_API": ["Succeeded"]
+    "Call_CLAIMS_BACKEND_API": ["Succeeded"]
   }
 }
 ```
@@ -953,9 +953,9 @@ curl -I http://logic-app.azurewebsites.net
 
 ## ECS Integration Security Notes
 
-### QNXT API Token Management
+### claims backend API Token Management
 
-**CRITICAL**: The ECS Summary Search workflow requires a QNXT API token for backend integration.
+**CRITICAL**: The ECS Summary Search workflow requires a claims backend API token for backend integration.
 
 **DO NOT:**
 - ❌ Commit API tokens, secrets, or passwords to version control
@@ -964,7 +964,7 @@ curl -I http://logic-app.azurewebsites.net
 - ❌ Store tokens in plain text in app settings
 
 **DO:**
-- ✅ Store QNXT API tokens in Azure Key Vault
+- ✅ Store claims backend API tokens in Azure Key Vault
 - ✅ Reference Key Vault secrets via app settings: `@Microsoft.KeyVault(SecretUri=...)`
 - ✅ Use Managed Identity for authentication where possible
 - ✅ Rotate tokens regularly (every 90 days minimum)
@@ -975,19 +975,19 @@ curl -I http://logic-app.azurewebsites.net
 # Store token in Key Vault
 az keyvault secret set \
   --vault-name "${KV_NAME}" \
-  --name "qnxt-api-token" \
-  --value "${QNXT_TOKEN}"
+  --name "claims-backend-api-token" \
+  --value "${claims backend_TOKEN}"
 
 # Configure Logic App to reference Key Vault
 SECRET_URI=$(az keyvault secret show \
   --vault-name "${KV_NAME}" \
-  --name "qnxt-api-token" \
+  --name "claims-backend-api-token" \
   --query id -o tsv)
 
 az webapp config appsettings set \
   --resource-group "${RG_NAME}" \
   --name "${LOGIC_APP_NAME}" \
-  --settings "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})"
+  --settings "ECS_CLAIMS_BACKEND_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})"
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md#7-configure-ecs-enhanced-claim-status-integration) for complete setup instructions.

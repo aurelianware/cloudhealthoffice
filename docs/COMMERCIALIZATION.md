@@ -2,7 +2,7 @@
 
 ## Product Overview
 
-**Enhanced Claim Status Plus** is a premium offering that extends the standard ECS Summary Search with 60+ value-added fields from Availity's ValueAdds277 specification. This enhancement transforms basic claim status lookups into a comprehensive claim intelligence platform with seamless integration across Appeals, Attachments, Corrections, and Messaging modules.
+**Enhanced Claim Status Plus** is a premium offering that extends the standard ECS Summary Search with 60+ value-added fields from the clearinghouse's ValueAdds277 specification. This enhancement transforms basic claim status lookups into a comprehensive claim intelligence platform with seamless integration across Appeals, Attachments, Corrections, and Messaging modules.
 
 ## Product Positioning
 
@@ -200,7 +200,7 @@
 | **Our Platform** | Enhanced Claim Status Plus | ✅ Full (60+ fields) | ✅ 6 flags | ✅ Complete | $10K/payer/year |
 | Change Healthcare | Revenue Cycle Management | ⚠️ Partial (~20 fields) | ❌ | ❌ | $15K/payer/year |
 | Optum | ClaimConnect | ⚠️ Partial (~25 fields) | ⚠️ Limited | ❌ | $12K/payer/year |
-| Availity Essentials | Standard ECS | ❌ Basic only | ❌ | ❌ | Included |
+| Clearinghouse Essentials | Standard ECS | ❌ Basic only | ❌ | ❌ | Included |
 | Waystar | Claim Status | ⚠️ Partial (~15 fields) | ❌ | ❌ | $8K/payer/year |
 
 ### Competitive Advantages
@@ -259,7 +259,7 @@
 - Project kickoff
 
 **Phase 2: Development & Integration (6 weeks)**
-- QNXT backend integration
+- claims backend backend integration
 - ValueAdds277 field mapping
 - Integration flag logic implementation
 - Configuration setup
@@ -284,7 +284,7 @@
 
 ### Fast-Track Implementation (45 days)
 
-Available for payers with existing Availity integration and standard QNXT backend.
+Available for payers with existing Clearinghouse integration and standard claims backend backend.
 
 ## Success Metrics
 
@@ -558,5 +558,5 @@ The platform supports multiple deployment models to meet partner and customer ne
 - [ECS-OPENAPI.yaml](./api/ECS-OPENAPI.yaml) - API specification
 - [UNIFIED-CONFIG-SCHEMA.md](./UNIFIED-CONFIG-SCHEMA.md) - Configuration schema reference
 - [CONFIG-TO-WORKFLOW-GENERATOR.md](./CONFIG-TO-WORKFLOW-GENERATOR.md) - Developer tools and generator
-- Configuration schema: `config/schemas/availity-integration-config.schema.json`
+- Configuration schema: `config/schemas/clearinghouse-integration-config.schema.json`
 - Example responses: `docs/examples/ecs-valueadds277-*.json`

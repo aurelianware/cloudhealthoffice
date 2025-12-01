@@ -7,9 +7,9 @@
 
 import {
   createProviderAccessApi,
-  QnxtPatient,
-  QnxtClaim,
-  QnxtEncounter
+  BackendPatient,
+  BackendClaim,
+  BackendEncounter
 } from './provider-access-api';
 import { Claim, Condition, Observation } from 'fhir/r4';
 
@@ -201,15 +201,15 @@ async function exampleAuthError() {
 
 /**
  * Example 7: Backend Data Mapping
- * Transform QNXT patient data to FHIR Patient
+ * Transform backend patient data to FHIR Patient
  */
-function exampleQnxtMapping() {
-  console.log('\n=== Example 7: QNXT to FHIR Mapping ===\n');
+function exampleBackendMapping() {
+  console.log('\n=== Example 7: Backend to FHIR Mapping ===\n');
   
   const api = createProviderAccessApi();
 
-  // Sample QNXT patient data from backend
-  const qnxtPatient: QnxtPatient = {
+  // Sample backend patient data from backend
+  const backendPatient: BackendPatient = {
     memberId: 'MEM789',
     firstName: 'Sarah',
     lastName: 'Johnson',
@@ -228,9 +228,9 @@ function exampleQnxtMapping() {
   };
 
   // Transform to FHIR Patient
-  const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+  const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
 
-  console.log('QNXT Patient:', qnxtPatient);
+  console.log('Backend Patient:', backendPatient);
   console.log('\nFHIR Patient:', JSON.stringify(fhirPatient, null, 2));
 }
 
@@ -268,7 +268,7 @@ function exampleRedaction() {
   
   const api = createProviderAccessApi();
 
-  const qnxtPatient: QnxtPatient = {
+  const backendPatient: BackendPatient = {
     memberId: 'MEM456',
     firstName: 'Michael',
     lastName: 'Brown',
@@ -284,7 +284,7 @@ function exampleRedaction() {
     email: 'michael.brown@example.com'
   };
 
-  const fhirPatient = api.mapQnxtPatientToFhir(qnxtPatient);
+  const fhirPatient = api.mapBackendPatientToFhir(backendPatient);
   
   console.log('Original Patient:', JSON.stringify(fhirPatient, null, 2));
 
@@ -342,7 +342,7 @@ async function runAllExamples() {
   await exampleObservationSearch();
   await exampleReadResource();
   await exampleAuthError();
-  exampleQnxtMapping();
+  exampleBackendMapping();
   exampleEncryption();
   exampleRedaction();
   await exampleAuditLogs();
@@ -362,7 +362,7 @@ export {
   exampleObservationSearch,
   exampleReadResource,
   exampleAuthError,
-  exampleQnxtMapping,
+  exampleBackendMapping,
   exampleEncryption,
   exampleRedaction,
   exampleAuditLogs,

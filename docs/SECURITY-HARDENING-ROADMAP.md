@@ -314,7 +314,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 - External penetration testing
 - Internal penetration testing (simulated insider)
 - Web application security testing (replay278 endpoint)
-- API security testing (QNXT integration)
+- API security testing (claims backend integration)
 - Social engineering testing (phishing simulation)
 
 **Success Criteria:**

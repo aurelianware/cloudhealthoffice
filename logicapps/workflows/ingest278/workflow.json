@@ -122,13 +122,13 @@
           ]
         }
       },
-      "Call_QNXT_278_API": {
+      "Call_Claims_Backend_278_API": {
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{parameters('qnxt_base_url')}/claims/process-278",
+          "uri": "@{parameters('backend_base_url')}/claims/process-278",
           "headers": {
-            "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+            "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
             "Content-Type": "application/json"
           },
           "body": {
@@ -175,7 +175,7 @@
           }
         },
         "runAfter": {
-          "Call_QNXT_278_API": [
+          "Call_Claims_Backend_278_API": [
             "Succeeded",
             "Failed"
           ]
@@ -188,7 +188,7 @@
   "parameters": {
     "_SECURITY_NOTE": {
       "type": "String",
-      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token) or use Managed Identity to obtain tokens at runtime."
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure CLAIMS_BACKEND_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token) or use Managed Identity to obtain tokens at runtime."
     },
     "$connections": {
       "type": "Object",
@@ -210,11 +210,11 @@
       "type": "String",
       "defaultValue": "edi-278"
     },
-    "qnxt_base_url": {
+    "backend_base_url": {
       "type": "String",
-      "defaultValue": "https://qnxt.api.local"
+      "defaultValue": "https://backend.api.local"
     },
-    "QNXT_API_TOKEN": {
+    "CLAIMS_BACKEND_API_TOKEN": {
       "type": "SecureString"
     },
     "x12_sender_id": {

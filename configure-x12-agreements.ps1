@@ -4,14 +4,14 @@ param(
     [string]$Location = "westus"
 )
 
-# Agreement 1: Availity-to-Health Plan-275-Receive
+# Agreement 1: Clearinghouse-to-Health Plan-275-Receive
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Availity-to-Health Plan-275-Receive" `
+    --name "Clearinghouse-to-Health Plan-275-Receive" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Availity" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Clearinghouse" `
     --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"030240928\" }" `
     --content '{
@@ -33,14 +33,14 @@ az logic integration-account agreement create `
         }
     }'
 
-# Agreement 2: Health Plan-to-Availity-277-Send
+# Agreement 2: Health Plan-to-Clearinghouse-277-Send
 az logic integration-account agreement create `
     --resource-group $ResourceGroup `
     --integration-account-name $IntegrationAccountName `
-    --name "Health Plan-to-Availity-277-Send" `
+    --name "Health Plan-to-Clearinghouse-277-Send" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Availity" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Clearinghouse" `
     --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"030240928\" }" `
     --content '{
@@ -68,8 +68,8 @@ az logic integration-account agreement create `
     --integration-account-name $IntegrationAccountName `
     --name "Health Plan-278-Processing" `
     --agreement-type X12 `
-    --host-partner "Health Plan-QNXT" `
-    --guest-partner "Health Plan-QNXT" `
+    --host-partner "Health Plan Backend" `
+    --guest-partner "Health Plan Backend" `
     --host-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --guest-identity "{ \"qualifier\": \"ZZ\", \"value\": \"{config.payerId}\" }" `
     --content '{

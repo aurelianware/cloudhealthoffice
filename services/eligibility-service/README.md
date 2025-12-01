@@ -9,7 +9,7 @@ A dual-interface healthcare eligibility verification service supporting both X12
 - **Event Grid Publishing**: Publishes "EligibilityChecked" events for downstream processing
 - **Azure Container Apps**: Production-ready deployment with Dapr integration
 - **Helm Chart**: Kubernetes deployment support
-- **Migration Script**: Import existing QNXT eligibility rules from CSV
+- **Migration Script**: Import existing claims backend eligibility rules from CSV
 
 ## Architecture
 
@@ -40,7 +40,7 @@ A dual-interface healthcare eligibility verification service supporting both X12
       │                 │                   │
       ▼                 ▼                   ▼
 ┌──────────┐    ┌─────────────┐    ┌─────────────┐
-│Cosmos DB │    │QNXT/Backend │    │Event Grid   │
+│Cosmos DB │    │claims backend/Backend │    │Event Grid   │
 │eligibility│    │Systems      │    │Topic        │
 │-db       │    └─────────────┘    └─────────────┘
 └──────────┘
@@ -234,7 +234,7 @@ docker run -p 3000:3000 \
   eligibility-service:latest
 ```
 
-## Migration from QNXT
+## Migration from claims backend
 
 ### Generate Sample CSV Template
 
@@ -246,7 +246,7 @@ npm run migrate:sample
 ### Import Rules from CSV
 
 ```bash
-npm run migrate:import -- qnxt-rules.csv --output rules.json --validate
+npm run migrate:import -- backend-rules.csv --output rules.json --validate
 ```
 
 ### CSV Format
@@ -289,8 +289,8 @@ The migration script expects CSV with these columns:
 | `CACHE_MAX_AGE` | Max cache age before refresh (seconds) | 43200 |
 | `DAPR_ENABLED` | Enable Dapr sidecar | false |
 | `DAPR_APP_ID` | Dapr application ID | eligibility-service |
-| `QNXT_BASE_URL` | QNXT API base URL | Optional |
-| `QNXT_RULES_FILE` | Path to eligibility rules CSV | Optional |
+| `claims backend_BASE_URL` | claims backend API base URL | Optional |
+| `claims backend_RULES_FILE` | Path to eligibility rules CSV | Optional |
 
 ## Event Grid Events
 
@@ -326,7 +326,7 @@ Published after each eligibility check:
 | Container | Partition Key | TTL | Purpose |
 |-----------|--------------|-----|---------|
 | eligibility-cache | /memberId | Configurable | Eligibility response cache |
-| eligibility-rules | /planCode | None | QNXT eligibility rules |
+| eligibility-rules | /planCode | None | claims backend eligibility rules |
 | dapr-state | /partitionKey | None | Dapr state store |
 
 ## Development

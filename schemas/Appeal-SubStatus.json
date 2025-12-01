@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://aurelianware.com/schemas/Appeal-SubStatus.json",
   "title": "Appeal Sub-Status",
-  "description": "Sub-status values for appeal processing workflow as defined by Availity QRE requirements. These sub-statuses provide granular tracking of appeal lifecycle stages.",
+  "description": "Sub-status values for appeal processing workflow as defined by Clearinghouse QRE requirements. These sub-statuses provide granular tracking of appeal lifecycle stages.",
   "type": "string",
   "enum": [
     "AWAITING_CLASSIFICATION",

@@ -592,14 +592,14 @@ Authorization responses use the X12 278 transaction with these key segments:
 
 ### Configuration Schema
 
-**File**: `core/schemas/availity-integration-config.schema.json`
+**File**: `core/schemas/clearinghouse-integration-config.schema.json`
 
 **Complete Example**:
 ```json
 {
   "payer": {
     "id": "030240928",
-    "name": "Availity",
+    "name": "Clearinghouse",
     "tradingPartnerId": "AVLTY"
   },
   "authorizations": {
@@ -938,10 +938,10 @@ az servicebus topic show \
 - **X12 270/271 Eligibility (005010X279)**: Eligibility Check TR3
 - **X12 275 Attachment (005010X215)**: Additional Information to Support a Health Care Services Review TR3
 
-### Availity Documentation
+### Clearinghouse Documentation
 
-- **Availity X12 278 X217 QRE (Quality Review and Evaluation)**: Payer-specific requirements for authorization submissions
-- **Availity Developer Portal**: API documentation and testing tools
+- **Clearinghouse X12 278 X217 QRE (Quality Review and Evaluation)**: Payer-specific requirements for authorization submissions
+- **Clearinghouse Developer Portal**: API documentation and testing tools
 
 ### Azure Resources
 

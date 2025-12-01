@@ -52,7 +52,7 @@
 
 | System | In Use? | Version/Vendor | Integration Method |
 |--------|---------|----------------|-------------------|
-| **Core Admin System** | ☐ Yes ☐ No | | QNXT, HealthRules, etc. |
+| **Core Admin System** | ☐ Yes ☐ No | | claims backend, HealthRules, etc. |
 | **Claims Processing** | ☐ Yes ☐ No | | |
 | **EDI Gateway** | ☐ Yes ☐ No | | |
 | **Member Portal** | ☐ Yes ☐ No | | |
@@ -125,13 +125,13 @@ Select the infrastructure tier:
 
 ## 3. Trading Partner Configuration
 
-### Availity Integration
+### Clearinghouse Integration
 
 | Field | Response | Notes |
 |-------|----------|-------|
-| **Availity Customer ID** | | Primary ID |
+| **Clearinghouse Customer ID** | | Primary ID |
 | **Trading Partner ID** | | For EDI routing |
-| **Availity Portal Access** | ☐ Yes ☐ No | Login credentials available? |
+| **Clearinghouse Portal Access** | ☐ Yes ☐ No | Login credentials available? |
 | **Environment** | ☐ Test ☐ Production | Start with test |
 
 ### X12 EDI Configuration
@@ -142,7 +142,7 @@ Select the infrastructure tier:
 |-------|----------|-------|
 | **Sender ID (ISA06)** | | Your organization ID |
 | **Sender Qualifier (ISA05)** | ☐ ZZ (Mutually Defined) ☐ 30 (Tax ID) | Standard: ZZ |
-| **Receiver ID (ISA08)** | | Availity ID: 030240928 |
+| **Receiver ID (ISA08)** | | Clearinghouse ID: 030240928 |
 | **Receiver Qualifier (ISA07)** | ☐ ZZ ☐ 30 | Standard: ZZ |
 | **Interchange Version (ISA12)** | | Standard: 00501 (5010) |
 
@@ -156,11 +156,11 @@ Select the infrastructure tier:
 
 ### SFTP Configuration
 
-#### Inbound (From Availity to Your System)
+#### Inbound (From Clearinghouse to Your System)
 
 | Field | Response | Notes |
 |-------|----------|-------|
-| **SFTP Hostname** | | Provided by Availity |
+| **SFTP Hostname** | | Provided by Clearinghouse |
 | **Port** | | Standard: 22 |
 | **Username** | | |
 | **Authentication Method** | ☐ SSH Key ☐ Password | SSH key recommended |
@@ -168,7 +168,7 @@ Select the infrastructure tier:
 | **File Naming Pattern** | | e.g., 275_*.edi |
 | **Polling Frequency** | | e.g., Every 5 minutes |
 
-#### Outbound (From Your System to Availity)
+#### Outbound (From Your System to the clearinghouse)
 
 | Field | Response | Notes |
 |-------|----------|-------|
@@ -189,14 +189,14 @@ Select all modules to enable:
 
 #### ✅ **HIPAA 275 Attachments** (Included)
 - [ ] Enabled
-- **Description:** Process clinical and administrative attachments from Availity SFTP, archive to Data Lake, update core system
+- **Description:** Process clinical and administrative attachments from Clearinghouse SFTP, archive to Data Lake, update core system
 - **Estimated Volume:** _____ files/month
 - **Peak Volume:** _____ files/day
 - **Average File Size:** _____ KB/MB
 
 #### ☑️ **HIPAA 277 RFAI (Request for Additional Information)**
 - [ ] Enabled
-- **Description:** Generate and send 277 RFAI responses back to Availity via SFTP
+- **Description:** Generate and send 277 RFAI responses back to the clearinghouse via SFTP
 - **Estimated Volume:** _____ requests/month
 - **Turnaround Time Required:** _____ hours/days
 
@@ -313,7 +313,7 @@ Select all modules to enable:
 
 | Field | Response | Notes |
 |-------|----------|-------|
-| **System Name** | ☐ QNXT ☐ HealthRules ☐ Custom ☐ Other: _____ | |
+| **System Name** | ☐ claims backend ☐ HealthRules ☐ Custom ☐ Other: _____ | |
 | **Version** | | |
 | **API Type** | ☐ REST ☐ SOAP ☐ GraphQL ☐ Other: _____ | |
 | **Base URL (Test)** | | |
@@ -395,7 +395,7 @@ Select all modules to enable:
 | API timeouts | ☐ Yes | >10% in 5min | |
 | Storage quota | ☐ Yes | >80% capacity | |
 | Service Bus dead letters | ☐ Yes | >10 messages | |
-| QNXT API errors | ☐ Yes | >5 in 15min | |
+| claims backend API errors | ☐ Yes | >5 in 15min | |
 | High latency | ☐ Yes | >30s p95 | |
 
 ---
@@ -425,7 +425,7 @@ Select all modules to enable:
 | Service principal/OIDC configured | | ☐ Not Started ☐ In Progress ☐ Complete | Azure subscription |
 | Configuration file validated | | ☐ Not Started ☐ In Progress ☐ Complete | Requirements gathered |
 | DEV infrastructure deployed | | ☐ Not Started ☐ In Progress ☐ Complete | OIDC configured |
-| SFTP connectivity confirmed | | ☐ Not Started ☐ In Progress ☐ Complete | Availity credentials |
+| SFTP connectivity confirmed | | ☐ Not Started ☐ In Progress ☐ Complete | Clearinghouse credentials |
 | Test 275 file processed | | ☐ Not Started ☐ In Progress ☐ Complete | DEV deployed |
 | Core admin API integration tested | | ☐ Not Started ☐ In Progress ☐ Complete | DEV deployed |
 | UAT environment deployed | | ☐ Not Started ☐ In Progress ☐ Complete | DEV testing complete |
@@ -438,7 +438,7 @@ Select all modules to enable:
 **Items that could delay the project:**
 
 1. ☐ Azure subscription approval process
-2. ☐ Availity trading partner setup
+2. ☐ Clearinghouse trading partner setup
 3. ☐ Core admin system API availability
 4. ☐ Security/compliance review
 5. ☐ Testing environment access
@@ -605,7 +605,7 @@ Select all modules to enable:
 - [ ] Azure subscription is provisioned and accessible
 - [ ] Service principal/OIDC federated credentials are configured
 - [ ] GitHub Secrets are configured for target environment
-- [ ] Availity trading partner credentials are available
+- [ ] Clearinghouse trading partner credentials are available
 - [ ] Core admin system API endpoints are accessible
 - [ ] X12 EDI configuration is validated
 - [ ] SFTP connectivity is tested
@@ -626,12 +626,12 @@ Select all modules to enable:
 
 **After creating the payer configuration JSON:**
 
-- [ ] Configuration file follows the schema: `config/schemas/availity-integration-config.schema.json`
+- [ ] Configuration file follows the schema: `config/schemas/clearinghouse-integration-config.schema.json`
 - [ ] All required fields are populated
 - [ ] Module configurations match selections in this worksheet
 - [ ] API endpoints are correct for test and production environments
 - [ ] Authentication credentials reference Key Vault secrets
-- [ ] SFTP settings match Availity documentation
+- [ ] SFTP settings match Clearinghouse documentation
 - [ ] X12 identifiers are correctly formatted
 - [ ] Trading partner configuration is complete
 - [ ] Infrastructure settings match selected tier
@@ -693,7 +693,7 @@ Select all modules to enable:
    - [ ] Configure OIDC federated credentials
    - [ ] Create service principals for DEV/UAT/PROD
 
-3. **Availity Setup**
+3. **Clearinghouse Setup**
    - [ ] Confirm trading partner agreement
    - [ ] Obtain SFTP credentials
    - [ ] Request test environment access
@@ -762,7 +762,7 @@ Select all modules to enable:
 | Item | Owner | Due Date | Status | Blocker? |
 |------|-------|----------|--------|----------|
 | Azure subscription approval | | | | ☐ Yes ☐ No |
-| Availity trading partner setup | | | | ☐ Yes ☐ No |
+| Clearinghouse trading partner setup | | | | ☐ Yes ☐ No |
 | Core admin API access | | | | ☐ Yes ☐ No |
 | Security review | | | | ☐ Yes ☐ No |
 | BAA signing | | | | ☐ Yes ☐ No |
@@ -796,7 +796,7 @@ Select all modules to enable:
 
 ### Configuration Schema
 
-- **Schema File:** `config/schemas/availity-integration-config.schema.json`
+- **Schema File:** `config/schemas/clearinghouse-integration-config.schema.json`
 - **Validation Tool:** `node dist/scripts/cli/payer-generator-cli.js validate <config-file>`
 
 ### Sample Configurations
@@ -824,10 +824,10 @@ Select all modules to enable:
 | **275** | HIPAA X12 transaction for Additional Information to Support a Health Care Claim or Encounter |
 | **277** | HIPAA X12 transaction for Health Care Claim Status Notification (including RFAI) |
 | **278** | HIPAA X12 transaction for Health Care Services Review Information (Prior Authorization) |
-| **Availity** | Healthcare EDI clearinghouse and portal provider |
+| **Clearinghouse** | Healthcare EDI clearinghouse and portal provider |
 | **BAA** | Business Associate Agreement (HIPAA requirement) |
 | **CMK** | Customer-Managed Keys (encryption keys controlled by customer) |
-| **ECS** | Enhanced Claim Status (Availity's advanced claim status product) |
+| **ECS** | Enhanced Claim Status (Clearinghouse's advanced claim status product) |
 | **EDI** | Electronic Data Interchange |
 | **GS Segment** | Functional Group Header in X12 EDI |
 | **ISA Segment** | Interchange Control Header in X12 EDI |
@@ -835,13 +835,13 @@ Select all modules to enable:
 | **Logic App Standard** | Azure serverless workflow automation platform (new model) |
 | **OIDC** | OpenID Connect (modern authentication protocol) |
 | **PHI** | Protected Health Information (HIPAA-regulated data) |
-| **QNXT** | Core administration system used by many health plans |
+| **claims backend** | Core administration system used by many health plans |
 | **RFAI** | Request for Additional Information (via 277 transaction) |
 | **Service Bus** | Azure message broker for reliable asynchronous messaging |
 | **SFTP** | Secure File Transfer Protocol |
 | **Trading Partner** | Organization you exchange EDI transactions with |
 | **UAT** | User Acceptance Testing |
-| **ValueAdds277** | Availity's enhanced 277 response with 60+ additional fields |
+| **ValueAdds277** | Clearinghouse's enhanced 277 response with 60+ additional fields |
 | **VNet** | Virtual Network (Azure network isolation) |
 | **X12** | EDI standard used in US healthcare |
 
@@ -900,7 +900,7 @@ Select all modules to enable:
 #### Pattern 1: SFTP Polling + Data Lake Archive + API Push
 **Use Case:** 275 Attachments, 278 Authorizations
 ```
-Availity SFTP → Logic App → Data Lake → X12 Decode → Extract Metadata → 
+Clearinghouse SFTP → Logic App → Data Lake → X12 Decode → Extract Metadata → 
 Core Admin API → Service Bus → Downstream Workflows
 ```
 
@@ -908,7 +908,7 @@ Core Admin API → Service Bus → Downstream Workflows
 **Use Case:** 277 RFAI
 ```
 Core Admin System → Service Bus → Logic App → Generate X12 → 
-Availity SFTP Outbound → Archive to Data Lake
+Clearinghouse SFTP Outbound → Archive to Data Lake
 ```
 
 #### Pattern 3: HTTP API + Real-Time Response
