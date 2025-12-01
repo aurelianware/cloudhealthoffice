@@ -1,0 +1,86 @@
+# Kafka Event Source for Argo Events
+# Listens to Kafka topics for event-driven workflow triggers
+#
+# Topics monitored:
+#   - rfai-requests: Triggers 277 RFAI generation workflow
+#   - edi-278-replay: Triggers 278 replay workflow
+
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: kafka-events
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: kafka-events
+    app.kubernetes.io/component: event-source
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  kafka:
+    # RFAI Requests Topic - triggers 277 generation
+    rfai-requests:
+      url: ""  # Set via ConfigMap
+      topic: "rfai-requests"
+      partition: "0"
+      consumerGroup:
+        groupName: "argo-rfai-processor"
+        oldest: true
+        rebalanceStrategy: "sticky"
+      sasl:
+        mechanism: "SCRAM-SHA-512"
+        userSecret:
+          name: kafka-sasl-secret
+          key: username
+        passwordSecret:
+          name: kafka-sasl-secret
+          key: password
+      tls:
+        caCertSecret:
+          name: kafka-tls-secret
+          key: ca.crt
+          optional: true
+      jsonBody: true
+      metadata:
+        workflow: "x12-277-rfai"
+        source: "kafka"
+    
+    # 278 Replay Requests Topic
+    edi-278-replay-requests:
+      url: ""  # Set via ConfigMap
+      topic: "edi-278-replay-requests"
+      partition: "0"
+      consumerGroup:
+        groupName: "argo-replay-processor"
+        oldest: true
+        rebalanceStrategy: "sticky"
+      sasl:
+        mechanism: "SCRAM-SHA-512"
+        userSecret:
+          name: kafka-sasl-secret
+          key: username
+        passwordSecret:
+          name: kafka-sasl-secret
+          key: password
+      tls:
+        caCertSecret:
+          name: kafka-tls-secret
+          key: ca.crt
+          optional: true
+      jsonBody: true
+      metadata:
+        workflow: "x12-278-replay"
+        source: "kafka"
+
+---
+# ConfigMap for Kafka EventSource URL
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-eventsource-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: kafka-eventsource-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  bootstrap-servers: "kafka-cluster-kafka-bootstrap.kafka:9092"
+  security-protocol: "SASL_SSL"

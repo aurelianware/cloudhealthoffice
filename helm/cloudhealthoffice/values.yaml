@@ -1,0 +1,271 @@
+# Cloud Health Office Helm Chart Values
+#
+# This chart deploys a cloud-agnostic X12 EDI processing platform using:
+# - Argo Workflows for orchestration
+# - Apache Kafka for event streaming
+# - S3-compatible storage (MinIO or AWS S3)
+# - Custom containers for X12 processing
+#
+# HIPAA Compliance: Ensure all secrets are properly secured and audit logging is enabled.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Namespace configuration
+namespace:
+  create: true
+  name: cloudhealthoffice
+
+# Container images
+images:
+  x12Parser:
+    repository: cloudhealthoffice/x12-parser
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  x12Encoder:
+    repository: cloudhealthoffice/x12-encoder
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  sftpFetcher:
+    repository: cloudhealthoffice/sftp-fetcher
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  metadataExtractor:
+    repository: cloudhealthoffice/metadata-extractor
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  kafkaPublisher:
+    repository: cloudhealthoffice/kafka-publisher
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+# Argo Workflows configuration
+argo-workflows:
+  enabled: true
+  controller:
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  server:
+    enabled: true
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+# Argo Events configuration
+argo-events:
+  enabled: true
+  controller:
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+# Kafka configuration
+kafka:
+  enabled: true
+  # Use external Kafka cluster
+  external:
+    enabled: false
+    bootstrapServers: ""
+    securityProtocol: "SASL_SSL"
+  # Topics to create
+  topics:
+    - name: edi-raw-files
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 604800000  # 7 days
+    - name: attachments-in
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 2592000000  # 30 days
+    - name: edi-278
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 2592000000
+    - name: rfai-requests
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 604800000
+    - name: edi-277-outbound
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 2592000000
+    - name: dead-letter-queue
+      partitions: 3
+      replicationFactor: 3
+      retentionMs: 7776000000  # 90 days
+
+# MinIO (S3-compatible storage)
+minio:
+  enabled: false  # Set to true for self-hosted S3
+  mode: standalone
+  rootUser: minio-admin
+  rootPassword: ""  # Set via secret
+  buckets:
+    - name: hipaa-attachments
+      policy: none
+      purge: false
+  persistence:
+    enabled: true
+    size: 100Gi
+
+# S3 configuration (for AWS S3 or MinIO)
+storage:
+  type: "s3"  # s3 or minio
+  bucket: "hipaa-attachments"
+  region: "us-east-1"
+  endpoint: ""  # Leave empty for AWS S3, set for MinIO
+  encryption: true
+  # Folders structure
+  folders:
+    raw275: "raw/275"
+    raw278: "raw/278"
+    outbound277: "outbound/277"
+
+# SFTP configuration (Availity)
+sftp:
+  host: "sftp.availity.com"
+  port: 22
+  inboundFolder: "/inbound/attachments"
+  inbound278Folder: "/inbound/278"
+  outboundFolder: "/outbound/277"
+  # Credentials stored in Kubernetes Secret
+  secretName: "availity-sftp-secret"
+
+# Trading partner configuration
+tradingPartners:
+  availity:
+    id: "030240928"
+    qualifier: "ZZ"
+    name: "Availity"
+  healthPlan:
+    id: ""  # Set via ConfigMap or Secret
+    qualifier: "ZZ"
+    name: "Health Plan"
+
+# QNXT API configuration
+qnxt:
+  baseUrl: "https://qnxt.api.local"
+  endpoints:
+    linkAttachment: "/claims/link-attachment"
+    process278: "/claims/process-278"
+    getClaimInfo: "/claims"
+  timeout: 30
+  retries: 4
+  retryDelay: 15
+  # API token stored in Kubernetes Secret
+  secretName: "qnxt-api-secret"
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+
+# Alerting rules
+alerting:
+  enabled: true
+  rules:
+    workflowFailure:
+      enabled: true
+      threshold: 1
+      for: "5m"
+    kafkaLag:
+      enabled: true
+      threshold: 1000
+      for: "10m"
+    x12ParsingErrors:
+      enabled: true
+      threshold: 5
+      for: "15m"
+
+# RBAC configuration
+rbac:
+  create: true
+  serviceAccount:
+    create: true
+    name: "argo-workflow-sa"
+    annotations: {}
+
+# Pod security settings
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+containerSecurityContext:
+  runAsUser: 1000
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kafka
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+
+# Resource defaults for workflow containers
+resources:
+  default:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  x12Parser:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Workflow-specific settings
+workflows:
+  ttlAfterCompletion: 86400  # 24 hours
+  ttlAfterSuccess: 43200      # 12 hours
+  ttlAfterFailure: 604800     # 7 days
+  retryLimit: 3
+  activeDeadlineSeconds: 1800 # 30 minutes
+
+# HIPAA compliance settings
+hipaa:
+  auditLogging: true
+  phiRedaction: true
+  encryptionAtRest: true
+  encryptionInTransit: true
+  dataRetentionDays: 2555  # 7 years

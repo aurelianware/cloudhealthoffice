@@ -1,0 +1,2 @@
+# X12 Encoder Dependencies
+python-dateutil>=2.8.2

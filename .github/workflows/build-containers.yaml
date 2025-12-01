@@ -1,0 +1,196 @@
+# Build and Push Container Images for Argo Workflows
+#
+# Builds all X12 processing containers and pushes to container registry.
+# Triggered on changes to container directories.
+
+name: Build Containers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'containers/**'
+      - '.github/workflows/build-containers.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'containers/**'
+      - '.github/workflows/build-containers.yaml'
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: 'Push images to registry'
+        required: true
+        default: 'false'
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/cloudhealthoffice
+
+jobs:
+  build-containers:
+    name: Build Container Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        container:
+          - name: x12-parser
+            context: containers/x12-parser
+            description: "X12 EDI parser for 275/277/278 transactions"
+          - name: x12-encoder
+            context: containers/x12-encoder
+            description: "X12 277 RFAI response generator"
+          - name: sftp-fetcher
+            context: containers/sftp-fetcher
+            description: "SFTP client for Availity file transfer"
+          - name: metadata-extractor
+            context: containers/metadata-extractor
+            description: "X12 metadata extraction"
+          - name: kafka-publisher
+            context: containers/kafka-publisher
+            description: "Kafka event publisher"
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push ${{ matrix.container.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.container.context }}
+          push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_to_registry == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.name }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.container.name }}.sarif'
+        if: github.event_name != 'pull_request'
+      
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results-${{ matrix.container.name }}.sarif'
+        if: github.event_name != 'pull_request'
+
+  test-containers:
+    name: Test Container Images
+    needs: build-containers
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-cov
+          pip install -r containers/x12-parser/requirements.txt
+      
+      - name: Run X12 parser tests
+        run: |
+          cd containers/x12-parser
+          python -m pytest ../../tests/integration/test_x12_parser.py -v
+      
+      - name: Test parser with sample files
+        run: |
+          cd containers/x12-parser
+          python parse_x12.py ../../tests/fixtures/test-x12-275.edi --metadata-only
+          python parse_x12.py ../../tests/fixtures/test-x12-278.edi --metadata-only
+
+  scan-containers:
+    name: Security Scan
+    needs: build-containers
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      security-events: write
+    
+    strategy:
+      matrix:
+        container:
+          - x12-parser
+          - x12-encoder
+          - sftp-fetcher
+          - metadata-extractor
+          - kafka-publisher
+    
+    steps:
+      - name: Run Snyk container scan
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container }}:${{ github.sha }}
+          args: --severity-threshold=high
+        continue-on-error: true
+
+  summary:
+    name: Build Summary
+    needs: [build-containers, test-containers]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build-containers.result }}" != "success" ]; then
+            echo "Container build failed"
+            exit 1
+          fi
+          echo "All containers built successfully"
+          
+      - name: Post summary
+        run: |
+          echo "## Container Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Container | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| x12-parser | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| x12-encoder | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| sftp-fetcher | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| metadata-extractor | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| kafka-publisher | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images pushed to: \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}\`" >> $GITHUB_STEP_SUMMARY
