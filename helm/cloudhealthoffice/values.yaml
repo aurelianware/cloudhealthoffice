@@ -282,7 +282,8 @@ vault:
   # HashiCorp Vault settings (used when type: hashicorp)
   hashicorp:
     # Internal address if Vault is deployed in the same cluster
-    address: "http://vault.cloudhealthoffice.svc:8200"
+    # Use HTTPS for production deployments (TLS required for PHI compliance)
+    address: "https://vault.cloudhealthoffice.svc:8200"
     # External address for Vault outside the cluster
     # address: "https://vault.example.com"
     
