@@ -1,0 +1,92 @@
+# X12 Transaction Type Configuration
+# Mappings and schemas for HIPAA X12 transactions
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: x12-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  # X12 version configurations
+  x12-version: "005010"
+  
+  # Transaction type mappings
+  transaction-types.json: |
+    {
+      "275": {
+        "name": "Additional Information to Support a Health Care Claim",
+        "implementationGuide": "005010X210",
+        "functionalGroup": "HI",
+        "schemaFile": "X12_005010X210_275.xsd",
+        "kafkaTopic": "attachments-in",
+        "sftpFolder": "/inbound/attachments"
+      },
+      "277": {
+        "name": "Health Care Claim Status Notification",
+        "implementationGuide": "005010X212",
+        "functionalGroup": "HI",
+        "schemaFile": "X12_005010X212_277.xsd",
+        "kafkaTopic": "edi-277-outbound",
+        "sftpFolder": "/outbound/277"
+      },
+      "278": {
+        "name": "Health Care Services Review Information",
+        "implementationGuide": "005010X217",
+        "functionalGroup": "HI",
+        "schemaFile": "X12_005010X217_278.xsd",
+        "kafkaTopic": "edi-278",
+        "sftpFolder": "/inbound/278"
+      }
+    }
+  
+  # Segment descriptions for logging
+  segment-descriptions.json: |
+    {
+      "ISA": "Interchange Control Header",
+      "GS": "Functional Group Header",
+      "ST": "Transaction Set Header",
+      "BHT": "Beginning of Hierarchical Transaction",
+      "HL": "Hierarchical Level",
+      "NM1": "Individual or Organizational Name",
+      "N3": "Address Information",
+      "N4": "Geographic Location",
+      "REF": "Reference Identification",
+      "DMG": "Demographic Information",
+      "DTP": "Date/Time Period",
+      "TRN": "Trace",
+      "UM": "Health Care Services Review Information",
+      "HCR": "Health Care Services Review",
+      "STC": "Status Information",
+      "CLM": "Health Claim",
+      "PWK": "Paperwork",
+      "SE": "Transaction Set Trailer",
+      "GE": "Functional Group Trailer",
+      "IEA": "Interchange Control Trailer"
+    }
+  
+  # Status codes for 277 transactions
+  status-codes.json: |
+    {
+      "categoryA1": {
+        "code": "A1",
+        "description": "Request for Additional Information",
+        "reasonCodes": {
+          "20": "Additional Information Requested - Medical Records",
+          "21": "Additional Information Requested - Prior Auth",
+          "41": "Prior Authorization Required",
+          "42": "Attachment Required"
+        }
+      },
+      "categoryA2": {
+        "code": "A2",
+        "description": "Accepted"
+      },
+      "categoryA3": {
+        "code": "A3",
+        "description": "Rejected"
+      }
+    }
