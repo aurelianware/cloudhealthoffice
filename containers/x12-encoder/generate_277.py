@@ -25,7 +25,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 
 
 @dataclass
@@ -240,7 +240,7 @@ class X12_277_Generator:
         """Format control number with leading zeros"""
         return str(number).zfill(length)
     
-    def from_json(self, json_data: Dict[str, Any]) -> tuple[ClaimStatusInfo, X277Envelope]:
+    def from_json(self, json_data: Dict[str, Any]) -> Tuple[ClaimStatusInfo, X277Envelope]:
         """Parse JSON input to ClaimStatusInfo and X277Envelope"""
         claim_info = ClaimStatusInfo(
             claim_number=json_data.get("claimNumber", ""),
