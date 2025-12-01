@@ -262,6 +262,129 @@ workflows:
   retryLimit: 3
   activeDeadlineSeconds: 1800 # 30 minutes
 
+# =============================================================================
+# Secrets Management - Choose one of the following options
+# =============================================================================
+# Option 1: HashiCorp Vault (Recommended for multi-cloud)
+# Option 2: Kubernetes Secrets (default, managed by kubectl)
+# Option 3: Cloud-native (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager)
+
+vault:
+  # Enable HashiCorp Vault integration for cloud-agnostic secrets management
+  enabled: false
+  
+  # Vault type: hashicorp, azure-keyvault, aws-secrets-manager, gcp-secret-manager
+  type: hashicorp
+  
+  # HashiCorp Vault settings
+  hashicorp:
+    # Internal address if Vault is deployed in the same cluster
+    address: "http://vault.cloudhealthoffice.svc:8200"
+    # External address for Vault outside the cluster
+    # address: "https://vault.example.com"
+    
+    # Kubernetes auth method role
+    role: "cloudhealthoffice"
+    
+    # Path to secrets in Vault KV v2
+    secretPath: "cloudhealthoffice/data"
+    
+    # Enable Vault Agent Injector for automatic secret injection
+    agentInject:
+      enabled: true
+      # Secrets to inject into pods
+      secrets:
+        - name: sftp
+          path: "cloudhealthoffice/data/sftp"
+          template: |
+            {{- with secret "cloudhealthoffice/data/sftp" -}}
+            SFTP_USERNAME={{ .Data.data.username }}
+            SFTP_PASSWORD={{ .Data.data.password }}
+            {{- end -}}
+        - name: qnxt
+          path: "cloudhealthoffice/data/qnxt"
+          template: |
+            {{- with secret "cloudhealthoffice/data/qnxt" -}}
+            QNXT_API_TOKEN={{ .Data.data.apiToken }}
+            QNXT_BASE_URL={{ .Data.data.baseUrl }}
+            {{- end -}}
+        - name: kafka
+          path: "cloudhealthoffice/data/kafka"
+          template: |
+            {{- with secret "cloudhealthoffice/data/kafka" -}}
+            KAFKA_SASL_USERNAME={{ .Data.data.saslUsername }}
+            KAFKA_SASL_PASSWORD={{ .Data.data.saslPassword }}
+            {{- end -}}
+    
+    # TLS configuration
+    tls:
+      enabled: false
+      secretName: "vault-tls"
+      caPath: "/vault/tls/ca.crt"
+  
+  # Azure Key Vault settings (if type: azure-keyvault)
+  azureKeyVault:
+    vaultName: ""
+    tenantId: ""
+    clientId: ""
+    # Use managed identity or service principal
+    useManagedIdentity: true
+  
+  # AWS Secrets Manager settings (if type: aws-secrets-manager)
+  awsSecretsManager:
+    region: "us-east-1"
+    # Use IAM roles for service accounts (IRSA)
+    useIRSA: true
+  
+  # GCP Secret Manager settings (if type: gcp-secret-manager)
+  gcpSecretManager:
+    projectId: ""
+    # Use Workload Identity
+    useWorkloadIdentity: true
+
+# =============================================================================
+# HashiCorp Vault Deployment (Optional - deploy Vault in-cluster)
+# =============================================================================
+# Set to true to deploy HashiCorp Vault as part of this chart
+# For production, consider using HashiCorp Cloud Platform (HCP) Vault
+vaultServer:
+  # Deploy Vault server in the cluster
+  enabled: false
+  
+  # Vault Helm chart configuration (passed to subchart)
+  server:
+    dev:
+      enabled: false  # Set to true for development/testing only
+    ha:
+      enabled: true
+      replicas: 3
+      raft:
+        enabled: true
+    
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    
+    dataStorage:
+      enabled: true
+      size: 10Gi
+    
+    auditStorage:
+      enabled: true
+      size: 10Gi
+  
+  injector:
+    enabled: true
+    replicas: 2
+  
+  ui:
+    enabled: true
+    serviceType: ClusterIP
+
 # HIPAA compliance settings
 hipaa:
   auditLogging: true
