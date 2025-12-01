@@ -115,17 +115,28 @@ This document outlines the strategic vision and planned enhancements for the Clo
 - [ ] Per-payer and per-transaction-type breakdowns
 - [ ] Exportable reports (PDF, Excel, CSV)
 
-#### 4. Multi-Cloud Support (AWS) ☁️
-**Priority**: Low  
-**Status**: Research (10% complete)
+#### 4. Multi-Cloud & Cloud Independence ☁️
+**Priority**: Medium (increased from Low)  
+**Status**: In Progress (40% complete)
 
-**Description**: Deploy Cloud Health Office on AWS using CloudFormation/CDK for customers with AWS-first strategies.
+**Description**: Enable Cloud Health Office deployment on any cloud (Azure, AWS, GCP) or on-premises using Kubernetes and open-source components.
 
 **Deliverables**:
-- [ ] CloudFormation/CDK templates for AWS deployment
+- [x] Kubernetes/Helm deployment (AKS, EKS, GKE compatible)
+- [x] Argo Workflows for cloud-native workflow orchestration
+- [x] Apache Kafka for cloud-agnostic messaging
+- [x] HashiCorp Vault integration for open-source secrets management
+- [x] Multi-Cloud Deployment Guide documentation
+- [ ] CloudFormation/CDK templates for AWS-native deployment
 - [ ] AWS equivalent services mapping (Lambda, S3, SQS, etc.)
 - [ ] Cross-cloud compatibility testing
 - [ ] AWS Marketplace listing (if pursued)
+- [ ] GCP Cloud Functions alternative deployment
+
+**New in This Release**:
+- HashiCorp Vault support as alternative to Azure Key Vault
+- Updated Helm charts with Vault integration
+- Comprehensive multi-cloud deployment documentation
 
 ---
 
