@@ -1,0 +1,113 @@
+# Kafka Topics Configuration
+# Topic names and configuration for X12 EDI event streaming
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: kafka-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  # Kafka connection settings
+  bootstrap-servers: "cloudhealthoffice-kafka-bootstrap.kafka:9092"
+  security-protocol: "SASL_SSL"
+  
+  # Topic names
+  topic-edi-raw-files: "edi-raw-files"
+  topic-attachments-in: "attachments-in"
+  topic-edi-278: "edi-278"
+  topic-rfai-requests: "rfai-requests"
+  topic-edi-277-outbound: "edi-277-outbound"
+  topic-edi-278-replays: "edi-278-replays"
+  topic-dead-letter-queue: "dead-letter-queue"
+  
+  # Consumer groups
+  consumer-group-275-processor: "argo-275-processor"
+  consumer-group-278-processor: "argo-278-processor"
+  consumer-group-rfai-processor: "argo-rfai-processor"
+  consumer-group-replay-processor: "argo-replay-processor"
+  
+  # Topic configuration JSON
+  topics.json: |
+    {
+      "topics": {
+        "edi-raw-files": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 604800000,
+          "compressionType": "lz4"
+        },
+        "attachments-in": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 2592000000,
+          "compressionType": "lz4"
+        },
+        "edi-278": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 2592000000,
+          "compressionType": "lz4"
+        },
+        "rfai-requests": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 604800000,
+          "compressionType": "lz4"
+        },
+        "edi-277-outbound": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 2592000000,
+          "compressionType": "lz4"
+        },
+        "dead-letter-queue": {
+          "partitions": 3,
+          "replicationFactor": 3,
+          "retentionMs": 7776000000,
+          "compressionType": "lz4"
+        }
+      }
+    }
+
+---
+# S3/MinIO Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: s3-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  bucket: "hipaa-attachments"
+  region: "us-east-1"
+  # Leave empty for AWS S3, set for MinIO
+  endpoint-url: ""
+  
+  # Folder structure
+  raw-275-folder: "raw/275"
+  raw-278-folder: "raw/278"
+  outbound-277-folder: "outbound/277"
+
+---
+# QNXT API Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qnxt-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: qnxt-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  api-url: "https://qnxt.api.local"
+  link-attachment-endpoint: "/claims/link-attachment"
+  process-278-endpoint: "/claims/process-278"
+  timeout-seconds: "30"

@@ -1,0 +1,194 @@
+# Prometheus Alerting Rules for Cloud Health Office
+# EDI processing monitoring and SLA alerts
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudhealthoffice-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: cloudhealthoffice-alerts
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: cloudhealthoffice
+    prometheus: kube-prometheus
+    release: prometheus
+spec:
+  groups:
+    # Workflow failure alerts
+    - name: cloudhealthoffice.workflow.rules
+      interval: 30s
+      rules:
+        # Alert on workflow failures
+        - alert: ArgoWorkflowFailed
+          expr: |
+            sum(increase(argo_workflows_count{status="Failed",namespace="cloudhealthoffice"}[5m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            team: edi-processing
+          annotations:
+            summary: "Argo Workflow failed in cloudhealthoffice namespace"
+            description: "{{ $value }} workflow(s) have failed in the last 5 minutes"
+            runbook_url: "https://docs.cloudhealthoffice.com/runbooks/workflow-failure"
+        
+        # Alert on workflow running too long
+        - alert: ArgoWorkflowRunningTooLong
+          expr: |
+            argo_workflows_count{status="Running",namespace="cloudhealthoffice"} > 0
+            and
+            time() - argo_workflow_start_time{namespace="cloudhealthoffice"} > 1800
+          for: 5m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "Argo Workflow running longer than 30 minutes"
+            description: "Workflow {{ $labels.name }} has been running for over 30 minutes"
+        
+        # Alert on high workflow queue
+        - alert: ArgoWorkflowQueueHigh
+          expr: |
+            sum(argo_workflows_count{status="Pending",namespace="cloudhealthoffice"}) > 10
+          for: 10m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "High number of pending workflows"
+            description: "{{ $value }} workflows are pending execution"
+
+    # Kafka consumer lag alerts
+    - name: cloudhealthoffice.kafka.rules
+      interval: 30s
+      rules:
+        # Alert on high consumer lag
+        - alert: KafkaConsumerLagHigh
+          expr: |
+            sum(kafka_consumergroup_lag{consumergroup=~"argo-.*",topic=~"(attachments-in|edi-278|rfai-requests)"}) by (consumergroup, topic) > 1000
+          for: 10m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "Kafka consumer lag is high"
+            description: "Consumer group {{ $labels.consumergroup }} has lag of {{ $value }} on topic {{ $labels.topic }}"
+        
+        # Alert on consumer lag growing
+        - alert: KafkaConsumerLagGrowing
+          expr: |
+            rate(kafka_consumergroup_lag{consumergroup=~"argo-.*"}[15m]) > 10
+          for: 15m
+          labels:
+            severity: critical
+            team: edi-processing
+          annotations:
+            summary: "Kafka consumer lag is growing"
+            description: "Consumer lag for {{ $labels.consumergroup }} is increasing at {{ $value }} messages/second"
+        
+        # Alert on dead letter queue
+        - alert: DeadLetterQueueNotEmpty
+          expr: |
+            sum(kafka_topic_partition_current_offset{topic="dead-letter-queue"}) > 0
+          for: 15m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "Messages in dead letter queue"
+            description: "Dead letter queue has {{ $value }} messages - investigate failed processing"
+
+    # X12 processing alerts
+    - name: cloudhealthoffice.x12.rules
+      interval: 30s
+      rules:
+        # Alert on X12 parsing errors
+        - alert: X12ParsingErrorsHigh
+          expr: |
+            sum(rate(x12_parse_errors_total{namespace="cloudhealthoffice"}[15m])) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "High rate of X12 parsing errors"
+            description: "X12 parsing error rate is {{ $value | humanizePercentage }} per minute"
+        
+        # Alert on low processing throughput
+        - alert: X12ProcessingThroughputLow
+          expr: |
+            sum(rate(x12_transactions_processed_total{namespace="cloudhealthoffice"}[1h])) < 1
+          for: 2h
+          labels:
+            severity: info
+            team: edi-processing
+          annotations:
+            summary: "X12 processing throughput is low"
+            description: "Less than 1 transaction per hour processed in the last 2 hours"
+        
+        # Alert on 277 generation failures
+        - alert: X12_277GenerationFailed
+          expr: |
+            sum(increase(x12_277_generation_errors_total{namespace="cloudhealthoffice"}[1h])) > 5
+          for: 1h
+          labels:
+            severity: critical
+            team: edi-processing
+          annotations:
+            summary: "X12 277 RFAI generation failures"
+            description: "{{ $value }} 277 generation failures in the last hour"
+
+    # SFTP connectivity alerts
+    - name: cloudhealthoffice.sftp.rules
+      interval: 60s
+      rules:
+        # Alert on SFTP connection failures
+        - alert: SFTPConnectionFailed
+          expr: |
+            sum(increase(sftp_connection_failures_total{namespace="cloudhealthoffice"}[15m])) > 3
+          for: 15m
+          labels:
+            severity: critical
+            team: edi-processing
+          annotations:
+            summary: "SFTP connection failures to Availity"
+            description: "{{ $value }} SFTP connection failures in the last 15 minutes"
+        
+        # Alert on SFTP latency
+        - alert: SFTPLatencyHigh
+          expr: |
+            histogram_quantile(0.95, sum(rate(sftp_operation_duration_seconds_bucket{namespace="cloudhealthoffice"}[5m])) by (le)) > 30
+          for: 10m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "SFTP operations are slow"
+            description: "95th percentile SFTP operation latency is {{ $value | humanizeDuration }}"
+
+    # SLA monitoring
+    - name: cloudhealthoffice.sla.rules
+      interval: 60s
+      rules:
+        # Alert on 275 processing SLA breach
+        - alert: X12_275ProcessingSLABreach
+          expr: |
+            histogram_quantile(0.95, sum(rate(x12_275_processing_duration_seconds_bucket{namespace="cloudhealthoffice"}[1h])) by (le)) > 120
+          for: 30m
+          labels:
+            severity: critical
+            team: edi-processing
+          annotations:
+            summary: "275 processing SLA breach"
+            description: "95th percentile 275 processing time exceeds 2 minute SLA"
+        
+        # Alert on end-to-end latency
+        - alert: EDIEndToEndLatencyHigh
+          expr: |
+            histogram_quantile(0.99, sum(rate(edi_end_to_end_duration_seconds_bucket{namespace="cloudhealthoffice"}[1h])) by (le, transaction_type)) > 300
+          for: 30m
+          labels:
+            severity: warning
+            team: edi-processing
+          annotations:
+            summary: "EDI end-to-end latency is high"
+            description: "99th percentile {{ $labels.transaction_type }} latency is {{ $value | humanizeDuration }}"

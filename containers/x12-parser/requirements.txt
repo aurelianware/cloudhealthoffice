@@ -1,0 +1,6 @@
+# X12 Parser Dependencies
+# pyx12 - X12 EDI parsing library
+pyx12>=2.3.3
+
+# Standard utilities
+python-dateutil>=2.8.2
