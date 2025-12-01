@@ -43,11 +43,11 @@ static void ConfigureMigrationServices(IServiceCollection services, IConfigurati
     var trizettoConfig = new TriZettoOpenAccessConfig
     {
         EndpointUrl = configuration["BackendSystem:EndpointUrl"] ?? "https://backend-server.example.com/OpenAccess/Services",
-        Username = configuration["TriZetto:Username"] ?? "your-username",
-        Password = configuration["TriZetto:Password"] ?? "your-password",
-        TenantId = configuration["TriZetto:TenantId"] ?? "default-tenant",
-        TimeoutSeconds = int.TryParse(configuration["TriZetto:TimeoutSeconds"], out var timeout) ? timeout : 120,
-        BypassCertificateValidation = bool.TryParse(configuration["TriZetto:BypassCertificateValidation"], out var bypass) && bypass
+        Username = configuration["BackendSystem:Username"] ?? "your-username",
+        Password = configuration["BackendSystem:Password"] ?? "your-password",
+        TenantId = configuration["BackendSystem:TenantId"] ?? "default-tenant",
+        TimeoutSeconds = int.TryParse(configuration["BackendSystem:TimeoutSeconds"], out var timeout) ? timeout : 120,
+        BypassCertificateValidation = bool.TryParse(configuration["BackendSystem:BypassCertificateValidation"], out var bypass) && bypass
     };
     services.AddSingleton(trizettoConfig);
     services.AddSingleton<TriZettoOpenAccessClient>();

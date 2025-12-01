@@ -27,7 +27,7 @@ const DEFAULT_CONFIG: EligibilityServiceConfig = {
   eventGrid: {
     topicEndpoint: process.env.EVENT_GRID_ENDPOINT || ''
   },
-  backend?: process.env.BACKEND_BASE_URL ? {
+  backendConfig: process.env.BACKEND_BASE_URL ? {
     baseUrl: process.env.BACKEND_BASE_URL,
     timeout: 30000
   } : undefined,

@@ -306,7 +306,7 @@ export class EligibilityService {
       eventGrid: await this.checkEventGridHealth()
     };
 
-    if (this.config.backend) {
+    if (this.config.backendConfig) {
       checks.backendSystem = await this.checkBackendHealth();
     }
 
@@ -703,7 +703,7 @@ export class EligibilityService {
   }
 
   private async checkBackendHealth(): Promise<ComponentHealth> {
-    if (!this.config.backend) {
+    if (!this.config.backendConfig) {
       return {
         status: 'healthy',
         lastCheck: new Date().toISOString()
