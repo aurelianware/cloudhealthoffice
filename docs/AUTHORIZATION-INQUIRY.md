@@ -26,10 +26,10 @@ The Authorization Inquiry workflow implements the X12 278 X215 Healthcare Servic
 
 ### Key Features
 
-- **Lightweight Queries**: Minimal data requirements following Availity QRE best practices
+- **Lightweight Queries**: Minimal data requirements following Clearinghouse QRE best practices
 - **Dual Query Methods**: Query by authorization number OR member demographics
 - **Real-time Status**: Immediate authorization status from payer systems
-- **Standard Timeout**: 30-second response time per Availity standards
+- **Standard Timeout**: 30-second response time per Clearinghouse standards
 - **Automatic Retry**: 3 retry attempts with 30-second intervals
 - **Comprehensive Logging**: Application Insights integration for monitoring
 
@@ -43,7 +43,7 @@ The Authorization Inquiry workflow implements the X12 278 X215 Healthcare Servic
 
 ### Supported Payers
 
-The Authorization Inquiry workflow is compatible with any payer that supports X12 278 X215 transactions via Availity. Configuration is per-payer and includes:
+The Authorization Inquiry workflow is compatible with any payer that supports X12 278 X215 transactions via the clearinghouse. Configuration is per-payer and includes:
 
 - Endpoint URL (test/production)
 - Authentication credentials
@@ -167,8 +167,8 @@ The Authorization Inquiry workflow supports two distinct query patterns, each op
 
 **X12 278 X215 Request Structure**:
 ```
-ISA*00*...*ZZ*AVAILITY001*ZZ*PAYERID*...~
-GS*HI*AVAILITY*PAYER*...~
+ISA*00*...*ZZ*CLEARINGHOUSE001*ZZ*PAYERID*...~
+GS*HI*CLEARINGHOUSE*PAYER*...~
 ST*278*0001*005010X215~
 BHT*0007*13*AUTH-INQ-001*20251119*1030~
 HL*1**20*1~
@@ -178,7 +178,7 @@ NM1*1P*2*PROVIDER NAME*****XX*1234567890~
 HL*3*2*22*1~
 REF*D9*AUTH12345~               ← Authorization number
 HL*4*3*23*0~
-TRN*1*AUTH-INQ-001*9AVAILITY~
+TRN*1*AUTH-INQ-001*9CLEARINGHOUSE~
 UM*HS*I~                        ← Service type + Inquiry
 HCR*I1~                         ← Inquiry action code
 SE*14*0001~
@@ -222,8 +222,8 @@ IEA*1*000000001~
 
 **X12 278 X215 Request Structure**:
 ```
-ISA*00*...*ZZ*AVAILITY001*ZZ*PAYERID*...~
-GS*HI*AVAILITY*PAYER*...~
+ISA*00*...*ZZ*CLEARINGHOUSE001*ZZ*PAYERID*...~
+GS*HI*CLEARINGHOUSE*PAYER*...~
 ST*278*0001*005010X215~
 BHT*0007*13*MEMBER-INQ-001*20251119*1030~
 HL*1**20*1~
@@ -234,7 +234,7 @@ HL*3*2*22*1~
 NM1*IL*1*SMITH*JOHN****MI*MEM123456~    ← Member demographics
 DMG*D8*19850615~                         ← Date of birth
 HL*4*3*23*0~
-TRN*1*MEMBER-INQ-001*9AVAILITY~
+TRN*1*MEMBER-INQ-001*9CLEARINGHOUSE~
 UM*HS*I~
 HCR*I1~
 SE*13*0001~
@@ -532,7 +532,7 @@ The workflow implements automatic retry for transient errors:
 
 ### Configuration Schema
 
-Authorization Inquiry is configured via `core/schemas/availity-integration-config.schema.json`:
+Authorization Inquiry is configured via `core/schemas/clearinghouse-integration-config.schema.json`:
 
 ```json
 {
@@ -565,9 +565,9 @@ Authorization Inquiry is configured via `core/schemas/availity-integration-confi
           "serviceDatesRequired": false
         },
         "enveloping": {
-          "isa06_senderId": "AVAILITY001",
+          "isa06_senderId": "CLEARINGHOUSE001",
           "isa08_receiverId": "PAYERID",
-          "gs02_applicationSenderCode": "AVAILITY",
+          "gs02_applicationSenderCode": "CLEARINGHOUSE",
           "gs03_applicationReceiverCode": "PAYER"
         },
         "retry": {
@@ -585,7 +585,7 @@ Authorization Inquiry is configured via `core/schemas/availity-integration-confi
 
 Each payer may have different requirements. The authorization inquiry configuration is nested within the `modules.authorizations278.inquiry_x215` section. Override settings as needed:
 
-#### Example: Payer A (Standard Availity)
+#### Example: Payer A (Standard Clearinghouse)
 ```json
 {
   "organizationName": "Payer A Health Plan",
@@ -597,8 +597,8 @@ Each payer may have different requirements. The authorization inquiry configurat
       "enabled": true,
       "inquiry_x215": {
         "connectivity": {
-          "testUrl": "https://payera-test.availity.com/auth-inquiry",
-          "prodUrl": "https://payera.availity.com/auth-inquiry",
+          "testUrl": "https://payera-test.clearinghouse.com/auth-inquiry",
+          "prodUrl": "https://payera.clearinghouse.com/auth-inquiry",
           "timeout": 30
         },
         "enveloping": {
@@ -646,9 +646,9 @@ Configure in Logic App settings (Application Settings or Key Vault references):
 |-----------|-------------|---------|
 | `payer_inquiry_endpoint` | Payer API endpoint URL | https://payer-api.example.com/auth-inquiry |
 | `payer_api_token` | Bearer token for authentication | (SecureString from Key Vault) |
-| `isa06_senderId` | ISA06 Sender ID | AVAILITY001 |
+| `isa06_senderId` | ISA06 Sender ID | CLEARINGHOUSE001 |
 | `isa08_receiverId` | ISA08 Receiver ID (Payer ID) | PAYERID |
-| `gs02_applicationSenderCode` | GS02 Sender Code | AVAILITY |
+| `gs02_applicationSenderCode` | GS02 Sender Code | CLEARINGHOUSE |
 | `gs03_applicationReceiverCode` | GS03 Receiver Code | PAYER |
 
 ---
@@ -1142,7 +1142,7 @@ Authorization: Bearer {token}
 **Authorization Number**: Payer-assigned unique identifier for authorization  
 **HS**: Health Services Review (Outpatient authorization)  
 **NPI**: National Provider Identifier (10-digit provider ID)  
-**QRE**: Quick Reference for Essentials (Availity implementation guide)  
+**QRE**: Quick Reference for Essentials (Clearinghouse implementation guide)  
 **SC**: Specialty Care Review (Referral authorization)  
 **TR3**: Technical Report Type 3 (X12 implementation guide)  
 **X215**: X12 278 Healthcare Services Review - Inquiry and Response  
@@ -1150,7 +1150,7 @@ Authorization: Bearer {token}
 
 ### Related Documentation
 
-- [Availity X12 278 X215 QRE](https://availity.com/documentation)
+- [Clearinghouse X12 278 X215 QRE](https://clearinghouse.com/documentation)
 - [X12 278 TR3 005010X215](https://x12.org)
 - [HIPAA Transaction Standards](https://www.cms.gov/regulations-and-guidance/administrative-simplification/hipaa-aca/hipaa-transaction-code-set-standards)
 - [Authorization Request Workflow (X217)](./AUTHORIZATION-REQUEST.md) *(Future PR #55)*

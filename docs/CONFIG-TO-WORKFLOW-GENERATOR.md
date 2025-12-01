@@ -203,7 +203,7 @@ Each enabled module requires its own configuration block:
   "x12Config": {
     "isa": {
       "senderId": "PAYERID",
-      "receiverId": "AVAILITY",
+      "receiverId": "CLEARINGHOUSE",
       "senderQualifier": "ZZ",
       "receiverQualifier": "ZZ"
     },
@@ -632,7 +632,7 @@ The wizard generates:
 $ node dist/scripts/cli/payer-onboarding-wizard.js
 
 ┌─────────────────────────────────────────────────────┐
-│  Availity Integration Platform - Onboarding Wizard  │
+│  Clearinghouse Integration Platform - Onboarding Wizard  │
 │  Version 2.0                                         │
 └─────────────────────────────────────────────────────┘
 

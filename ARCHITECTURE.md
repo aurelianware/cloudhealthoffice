@@ -25,13 +25,13 @@ Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that proces
 ### Key Objectives
 - **Multi-Tenant SaaS**: Single codebase serves unlimited payers with per-tenant isolation
 - **Zero-Code Onboarding**: Add new payers through configuration (<1 hour to production)
-- **Backend Agnostic**: Works with any claims system (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)
+- **Backend Agnostic**: Works with any claims system (claims adjudication systems such as TriZetto, Epic, Cerner, custom)
 - **Cloud Agnostic**: Deploy to Azure, AWS, GCP, or on-premises with Kubernetes
 - **Enterprise Security**: HIPAA-compliant with Key Vault or HashiCorp Vault, private endpoints, PHI masking, automated rotation
 - **Reliability**: Comprehensive error handling, retry logic, dead-letter queues, and health monitoring
 - **Horizontal Scalability**: Auto-scales to handle any transaction volume across all tenants
 - **Complete Auditability**: Full transaction tracking, compliance logging, and per-payer reporting
-- **Standards-Based**: X12 EDI integration with Availity and other clearinghouses
+- **Standards-Based**: X12 EDI integration with the clearinghouse and other clearinghouses
 - **SaaS-Ready**: Marketplace-ready with billing integration and customer portal (roadmap)
 
 ## Deployment Options
@@ -124,12 +124,12 @@ Best for: Multi-cloud strategy, existing Kubernetes infrastructure, greater cont
 - **Self-Service**: Interactive onboarding wizard for guided configuration
 
 **Trading Partners (Generic):**
-- **Availity** (ID: 030240928) - EDI clearinghouse sending attachment requests
+- **Clearinghouse** (ID: 030240928) - EDI clearinghouse sending attachment requests
 - **Health Plans** (ID: {config.payerId}) - Individual payer claims processing systems
 
 **Supported Use Cases:**
-1. Inbound attachment requests from providers via Availity (275)
-2. Outbound status responses to Availity (277)
+1. Inbound attachment requests from providers via the clearinghouse (275)
+2. Outbound status responses to the clearinghouse (277)
 3. Health care services review processing (278)
 4. Deterministic transaction replay for debugging
 5. Appeals integration with attachment workflows
@@ -200,13 +200,13 @@ The platform uses a **unified configuration schema** to support multiple payers 
 └─────────────────────────────────────────────────────────────────┘
 
 ┌──────────────┐         ┌──────────────────────────────────┐
-│   Availity   │ SFTP    │     Logic Apps Standard          │
+│   Clearinghouse   │ SFTP    │     Logic Apps Standard          │
 │   (275/278)  │────────▶│  ┌────────────────────────────┐  │
 │              │         │  │  ingest275 Workflow        │  │
 └──────────────┘         │  │  (SFTP Trigger)            │  │
                          │  └────────────┬───────────────┘  │
 ┌──────────────┐         │               │                  │
-│    QNXT      │◀────────│  ┌────────────▼───────────────┐  │
+│    claims backend      │◀────────│  ┌────────────▼───────────────┐  │
 │     API      │  HTTP   │  │  Decode X12 275            │  │
 │              │         │  │  Extract Metadata          │  │
 └──────────────┘         │  │  Archive to Data Lake      │  │
@@ -219,7 +219,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 └──────────────┘         │                                  │
                          │  ┌────────────────────────────┐  │
 ┌──────────────┐         │  │  rfai277 Workflow          │  │
-│   Availity   │◀────────│  │  (Service Bus Trigger)     │  │
+│   Clearinghouse   │◀────────│  │  (Service Bus Trigger)     │  │
 │   (277)      │  SFTP   │  │  ▲                         │  │
 │              │         │  └──┼─────────────────────────┘  │
 └──────────────┘         │     │                            │
@@ -277,7 +277,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 #### 1. ingest275 - Attachment Ingestion (275)
 
 **Trigger:** SFTP file polling  
-**Purpose:** Process inbound attachment requests from Availity  
+**Purpose:** Process inbound attachment requests from the clearinghouse  
 **Flow:**
 
 ```
@@ -297,7 +297,7 @@ SFTP New File Event
   │   • Provider NPI
   │   • Attachment Reference
   │
-  ├─▶ Call QNXT API
+  ├─▶ Call claims backend API
   │   POST /api/claims/attachments/link
   │   Retry: 4 attempts, 15s interval
   │
@@ -315,7 +315,7 @@ SFTP New File Event
 - `Store_Raw_in_Blob` - Archive to Data Lake
 - `Decode_X12_275` - X12 decoding via Integration Account
 - `Extract_Metadata` - Parse decoded JSON
-- `Call_QNXT_Claim_Linkage_API` - Link attachment to claim
+- `Call_Claims_Backend_Claim_Linkage_API` - Link attachment to claim
 - `Publish_to_Service_Bus` - Queue for downstream processing
 
 **Parameters:**
@@ -324,7 +324,7 @@ SFTP New File Event
   "sftp_inbound_folder": "/inbound/attachments",
   "blob_raw_folder": "hipaa-attachments/raw/275",
   "sb_topic": "attachments-in",
-  "qnxt_base_url": "https://qnxt-api.example.com",
+  "backend_base_url": "https://claims-backend-api.example.com",
   "x12_messagetype_275": "X12_005010X210_275"
 }
 ```
@@ -332,7 +332,7 @@ SFTP New File Event
 #### 2. rfai277 - RFAI Response (277)
 
 **Trigger:** Service Bus topic subscription (rfai-requests)  
-**Purpose:** Generate and send attachment status responses to Availity  
+**Purpose:** Generate and send attachment status responses to the clearinghouse  
 **Flow:**
 
 ```
@@ -345,24 +345,24 @@ Service Bus Message Received
   ├─▶ Encode X12 277 Message
   │   (Integration Account)
   │   Sender: Health Plan ({config.payerId})
-  │   Receiver: Availity (030240928)
+  │   Receiver: Clearinghouse (030240928)
   │
-  ├─▶ Send to Availity via SFTP
+  ├─▶ Send to the clearinghouse via SFTP
   │   Path: /outbound/277/
   │
   ├─▶ Archive Sent Message
   │   Path: hipaa-attachments/sent/277/{yyyy}/{MM}/{dd}/
   │
-  └─▶ Update QNXT Status
+  └─▶ Update claims backend Status
       POST /api/claims/attachments/status
 ```
 
 **Key Actions:**
 - Service Bus trigger on `rfai-requests` topic
 - `Encode_X12_277` - X12 encoding via Integration Account
-- `Send_to_SFTP` - Upload to Availity
+- `Send_to_SFTP` - Upload to the clearinghouse
 - `Archive_Sent` - Store in Data Lake
-- `Update_QNXT` - Confirm delivery
+- `Update_claims backend` - Confirm delivery
 
 **Parameters:**
 ```json
@@ -576,8 +576,8 @@ hipaa-attachments/
 #### Trading Partners
 | Partner | ID | Qualifier | Role |
 |---------|-----|-----------|------|
-| Availity | 030240928 | ZZ | Sender (275/278), Receiver (277) |
-| Health Plan-QNXT | {config.payerId} | ZZ | Receiver (275/278), Sender (277) |
+| Clearinghouse | 030240928 | ZZ | Sender (275/278), Receiver (277) |
+| Health Plan Backend | {config.payerId} | ZZ | Receiver (275/278), Sender (277) |
 
 #### X12 Schemas
 | Transaction | Version | Schema Name | Purpose |
@@ -587,22 +587,22 @@ hipaa-attachments/
 | 278 | 005010X217 | X12_005010X217_278 | Health Care Services Review Information |
 
 #### X12 Agreements
-1. **Availity-to-Health Plan-275-Receive**
+1. **Clearinghouse-to-Health Plan-275-Receive**
    - Direction: Receive (Inbound)
-   - Host: Health Plan-QNXT
-   - Guest: Availity
+   - Host: Health Plan Backend
+   - Guest: Clearinghouse
    - Transaction: 275
 
-2. **Health Plan-to-Availity-277-Send**
+2. **Health Plan-to-Clearinghouse-277-Send**
    - Direction: Send (Outbound)
-   - Host: Health Plan-QNXT
-   - Guest: Availity
+   - Host: Health Plan Backend
+   - Guest: Clearinghouse
    - Transaction: 277
 
 3. **Health Plan-278-Processing**
    - Direction: Receive (Internal)
-   - Host: Health Plan-QNXT
-   - Guest: Health Plan-QNXT
+   - Host: Health Plan Backend
+   - Guest: Health Plan Backend
    - Transaction: 278
 
 ### Application Insights
@@ -614,7 +614,7 @@ hipaa-attachments/
 **Tracked Metrics:**
 - Workflow execution duration
 - Success/failure rates
-- API call latencies (QNXT)
+- API call latencies (claims backend)
 - Service Bus message processing
 - SFTP connection reliability
 - X12 decode/encode operations
@@ -628,7 +628,7 @@ Three production-ready dashboards are automatically deployed:
    - Real-time transaction volume, latency (P50/P95/P99), success rates
    - Per-transaction-type breakdown (275, 277, 278)
    - Error distribution and recent failures
-   - Dependency health (SFTP, Service Bus, Storage, QNXT)
+   - Dependency health (SFTP, Service Bus, Storage, claims backend)
 
 2. **Payer Integration Health** (`{baseName}-payer-health`)
    - Per-payer health scoring (0-100%)
@@ -660,7 +660,7 @@ See `docs/AZURE-MONITOR-DASHBOARDS.md` for complete documentation.
 - workflow_completed
 - x12_decoded
 - x12_encoded
-- qnxt_api_called
+- claims_backend_api_called
 - service_bus_published
 - blob_stored
 - sftp_file_deleted
@@ -674,9 +674,9 @@ traces
 | where message contains "workflow"
 | project timestamp, message, severityLevel
 
-// QNXT API performance
+// claims backend API performance
 dependencies
-| where name contains "QNXT"
+| where name contains "claims backend"
 | summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
 
 // X12 decode failures
@@ -689,11 +689,11 @@ traces
 
 ### 275 Attachment Ingestion Flow
 
-**Overview:** Process inbound attachment requests from Availity and link to claims in QNXT
+**Overview:** Process inbound attachment requests from the clearinghouse and link to claims in claims backend
 
 ```
 ┌─────────────┐
-│  Availity   │
+│  Clearinghouse   │
 │    SFTP     │
 └──────┬──────┘
        │ 1. New 275 file arrives
@@ -714,7 +714,7 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Decode X12 275         │
-│  Agreement: Availity→Health Plan
+│  Agreement: Clearinghouse→Health Plan
 └──────┬──────────────────┘
        │ 4. Decoded JSON
        ▼
@@ -728,7 +728,7 @@ traces
        │ 5. Metadata extracted
        ▼
 ┌─────────────────────────┐
-│  QNXT API               │
+│  claims backend API               │
 │  Link attachment to claim│
 │  Retry: 4x, 15s interval│
 └──────┬──────────────────┘
@@ -748,16 +748,16 @@ traces
 ```
 
 **Duration:** ~5-15 seconds per file  
-**Error Handling:** Retry logic for QNXT API (4 attempts, 15s intervals)  
+**Error Handling:** Retry logic for claims backend API (4 attempts, 15s intervals)  
 **Dead Letter:** Failed messages sent to Service Bus DLQ
 
 ### 277 RFAI Response Flow
 
-**Overview:** Generate and send status responses back to Availity
+**Overview:** Generate and send status responses back to the clearinghouse
 
 ```
 ┌─────────────────────────┐
-│  QNXT or Internal       │
+│  Backend System       │
 │  System                 │
 └──────┬──────────────────┘
        │ 1. RFAI request created
@@ -777,12 +777,12 @@ traces
 ┌─────────────────────────┐
 │  Integration Account    │
 │  Encode X12 277         │
-│  Agreement: Health Plan→Availity│
+│  Agreement: Health Plan→Clearinghouse│
 └──────┬──────────────────┘
        │ 4. X12 277 created
        ▼
 ┌─────────────────────────┐
-│  Availity SFTP          │
+│  Clearinghouse SFTP          │
 │  Send 277 file          │
 │  Path: /outbound/277/   │
 └──────┬──────────────────┘
@@ -796,7 +796,7 @@ traces
        │ 6. Archive complete
        ▼
 ┌─────────────────────────┐
-│  QNXT API               │
+│  claims backend API               │
 │  Update status          │
 │  Status: transmitted    │
 └─────────────────────────┘
@@ -859,7 +859,7 @@ traces
 
 ## Integration Points
 
-### 1. Availity SFTP Integration
+### 1. Clearinghouse SFTP Integration
 
 **Protocol:** SSH File Transfer Protocol (SFTP)  
 **Authentication:** SSH Key-based  
@@ -886,7 +886,7 @@ traces
 - File read errors: Move to error folder
 - Authentication failures: Alert operations team
 
-### 2. QNXT API Integration
+### 2. claims backend API Integration
 
 **Base URL:** Environment-specific (DEV/UAT/PROD)  
 **Authentication:** Bearer token (OAuth 2.0)  
@@ -952,7 +952,7 @@ Response:
 **ISA/GS Identifiers:**
 ```
 ISA Header:
-- ISA06: Sender ID (Availity: 030240928, Health Plan: {config.payerId})
+- ISA06: Sender ID (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId})
 - ISA08: Receiver ID
 - ISA11: Usage Indicator (T=Test, P=Production)
 
@@ -1041,12 +1041,12 @@ GS Header:
 
 **Rationale:**
 1. **Transient Failures**: Network issues, timeouts
-2. **Service Availability**: QNXT API may be temporarily unavailable
+2. **Service Availability**: claims backend API may be temporarily unavailable
 3. **Success Rate**: Significantly improves overall success rate
 4. **Exponential Backoff**: Reduces load on struggling services
 
 **Configuration:**
-- QNXT API: 4 retries, 15s interval, exponential backoff
+- claims backend API: 4 retries, 15s interval, exponential backoff
 - SFTP: 3 retries, 30s interval
 - Service Bus: Built-in retry (10 attempts)
 
@@ -1115,7 +1115,7 @@ GS Header:
 ### Business Associate Agreement (BAA)
 
 **Required With:**
-- Availity (trading partner)
+- Clearinghouse (trading partner)
 - Any downstream systems receiving PHI
 - Azure (Microsoft BAA in place)
 
@@ -1160,13 +1160,13 @@ GS Header:
 **Key Metrics:**
 - Workflow run success rate (target: >99%)
 - Average execution duration (target: <15s)
-- QNXT API latency (target: <2s)
+- claims backend API latency (target: <2s)
 - Service Bus queue depth (alert if >1000)
 - Storage IOPS utilization
 
 **Alerts:**
 - Workflow failure rate >1%
-- QNXT API timeout rate >5%
+- claims backend API timeout rate >5%
 - Service Bus dead-letter count >10
 - Storage throttling detected
 

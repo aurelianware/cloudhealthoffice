@@ -1,5 +1,5 @@
 # HIPAA X12 275/277 Trading Partners Testing Plan
-# Availity (030240928) ↔ Health Plan-QNXT ({config.payerId})
+# Clearinghouse (030240928) ↔ Health Plan Backend ({config.payerId})
 
 ## 🎯 Testing Overview
 
@@ -9,7 +9,7 @@ This comprehensive test plan will verify the end-to-end HIPAA attachment process
 
 ### Prerequisites Checklist:
 - ✅ Integration Account: `hipaa-attachments-ia`
-- ✅ Trading Partners: Availity (030240928) & Health Plan-QNXT ({config.payerId})  
+- ✅ Trading Partners: Clearinghouse (030240928) & Health Plan Backend ({config.payerId})  
 - ⚠️ X12 Agreements: Need to be created in Azure Portal
 - ✅ Logic Apps: ingest275 & rfai277 workflows
 - ✅ Service Bus: hipaa-attachments-svc with topics
@@ -18,7 +18,7 @@ This comprehensive test plan will verify the end-to-end HIPAA attachment process
 ## 🧪 Test Cases
 
 ### Test Case 1: X12 275 Inbound Processing
-**Objective**: Verify Availity → Health Plan attachment request processing
+**Objective**: Verify Clearinghouse → Health Plan attachment request processing
 
 **Test Data**: Sample X12 275 EDI Message
 ```edi
@@ -43,15 +43,15 @@ IEA*1*000000001~
 
 **Expected Results**:
 1. ✅ File stored in Data Lake: `/raw/275/2025/09/24/`
-2. ✅ X12 decoded successfully using Availity-Health Plan agreement
+2. ✅ X12 decoded successfully using Clearinghouse-Health Plan agreement
 3. ✅ Metadata extracted: Claim CLM20250924001, Member 123456789
 4. ✅ Message sent to Service Bus topic: attachments-in
-5. ✅ QNXT API called with claim linkage data
+5. ✅ claims backend API called with claim linkage data
 
 ### Test Case 2: X12 277 Outbound Generation
-**Objective**: Verify Health Plan → Availity response processing
+**Objective**: Verify Health Plan → Clearinghouse response processing
 
-**Test Data**: QNXT Response Payload
+**Test Data**: claims backend response Payload
 ```json
 {
   "claimNumber": "CLM20250924001",
@@ -67,9 +67,9 @@ IEA*1*000000001~
 
 **Expected Results**:
 1. ✅ Service Bus message received from rfai-requests topic
-2. ✅ X12 277 constructed with Health Plan as sender, Availity as receiver
-3. ✅ Message encoded using Health Plan-Availity agreement
-4. ✅ Response transmitted back to Availity endpoint
+2. ✅ X12 277 constructed with Health Plan as sender, Clearinghouse as receiver
+3. ✅ Message encoded using Health Plan-Clearinghouse agreement
+4. ✅ Response transmitted back to the clearinghouse endpoint
 
 ## 🚀 Execute Tests
 

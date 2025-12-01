@@ -89,7 +89,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// <summary>
     /// Export member to Cosmos DB
     /// </summary>
-    public async Task<bool> ExportMemberAsync(QnxtMember member)
+    public async Task<bool> ExportMemberAsync(BackendMember member)
     {
         await InitializeAsync();
 
@@ -121,7 +121,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// Export multiple members in batch
     /// </summary>
     public async Task<(int succeeded, int failed)> ExportMembersBatchAsync(
-        IEnumerable<QnxtMember> members,
+        IEnumerable<BackendMember> members,
         IProgress<int>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -173,7 +173,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// <summary>
     /// Export provider to Cosmos DB
     /// </summary>
-    public async Task<bool> ExportProviderAsync(QnxtProvider provider)
+    public async Task<bool> ExportProviderAsync(BackendProvider provider)
     {
         await InitializeAsync();
 
@@ -199,7 +199,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// Export multiple providers in batch
     /// </summary>
     public async Task<(int succeeded, int failed)> ExportProvidersBatchAsync(
-        IEnumerable<QnxtProvider> providers,
+        IEnumerable<BackendProvider> providers,
         IProgress<int>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -249,7 +249,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// <summary>
     /// Export benefit plan to Cosmos DB
     /// </summary>
-    public async Task<bool> ExportBenefitPlanAsync(QnxtBenefitPlan plan)
+    public async Task<bool> ExportBenefitPlanAsync(BackendBenefitPlan plan)
     {
         await InitializeAsync();
 
@@ -275,7 +275,7 @@ public class CosmosDbExportService : IAsyncDisposable
     /// Export multiple benefit plans in batch
     /// </summary>
     public async Task<(int succeeded, int failed)> ExportBenefitPlansBatchAsync(
-        IEnumerable<QnxtBenefitPlan> plans,
+        IEnumerable<BackendBenefitPlan> plans,
         IProgress<int>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -322,7 +322,7 @@ public class CosmosDbExportService : IAsyncDisposable
         return (succeeded, failed);
     }
 
-    private CosmosDbMember MapToCosmosDbMember(QnxtMember member)
+    private CosmosDbMember MapToCosmosDbMember(BackendMember member)
     {
         return new CosmosDbMember
         {
@@ -348,12 +348,12 @@ public class CosmosDbExportService : IAsyncDisposable
             } : null,
             PhoneNumber = member.PhoneNumber,
             Email = member.Email,
-            Source = "QNXT-Migration",
+            Source = "Backend-Migration",
             MigratedAt = DateTime.UtcNow.ToString("O")
         };
     }
 
-    private CosmosDbProvider MapToCosmosDbProvider(QnxtProvider provider)
+    private CosmosDbProvider MapToCosmosDbProvider(BackendProvider provider)
     {
         return new CosmosDbProvider
         {
@@ -379,12 +379,12 @@ public class CosmosDbExportService : IAsyncDisposable
             Phone = provider.Phone,
             ContractEffectiveDate = provider.ContractEffectiveDate?.ToString("yyyy-MM-dd"),
             ContractTerminationDate = provider.ContractTerminationDate?.ToString("yyyy-MM-dd"),
-            Source = "QNXT-Migration",
+            Source = "Backend-Migration",
             MigratedAt = DateTime.UtcNow.ToString("O")
         };
     }
 
-    private CosmosDbBenefitPlan MapToCosmosDbBenefitPlan(QnxtBenefitPlan plan)
+    private CosmosDbBenefitPlan MapToCosmosDbBenefitPlan(BackendBenefitPlan plan)
     {
         return new CosmosDbBenefitPlan
         {
@@ -414,7 +414,7 @@ public class CosmosDbExportService : IAsyncDisposable
                 IndividualOutOfPocketMax = plan.CostShare.IndividualOutOfPocketMax,
                 FamilyOutOfPocketMax = plan.CostShare.FamilyOutOfPocketMax
             } : null,
-            Source = "QNXT-Migration",
+            Source = "Backend-Migration",
             MigratedAt = DateTime.UtcNow.ToString("O")
         };
     }

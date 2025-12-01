@@ -15,12 +15,12 @@ param appInsightsKey string
 @description('Application Insights connection string')
 param appInsightsConnectionString string
 
-@description('QNXT API base URL')
-param qnxtBaseUrl string = 'https://qnxt-api.example.com'
+@description('claims backend API base URL')
+param backendBaseUrl string = 'https://claims-backend-api.example.com'
 
 @secure()
-@description('QNXT API authentication token')
-param qnxtApiToken string = ''
+@description('claims backend API authentication token')
+param backendApiToken string = ''
 
 @description('Enable ECS workflow deployment')
 param enableEcs bool = true
@@ -37,19 +37,19 @@ var ecsWorkflowName = 'ecs_summary_search'
 // ECS workflow configuration to be used in Logic App settings
 output ecsWorkflowConfig object = {
   workflowName: ecsWorkflowName
-  qnxtBaseUrl: qnxtBaseUrl
+  backendBaseUrl: backendBaseUrl
   enabled: enableEcs
 }
 
 // App Settings for ECS integration
 output ecsAppSettings array = [
   {
-    name: 'ECS_QNXT_BASE_URL'
-    value: qnxtBaseUrl
+    name: 'ECS_BACKEND_BASE_URL'
+    value: backendBaseUrl
   }
-  // Note: ECS_QNXT_API_TOKEN must be configured separately via Key Vault reference
+  // Note: ECS_CLAIMS_BACKEND_API_TOKEN must be configured separately via Key Vault reference
   // DO NOT include token values in Bicep outputs or app settings
-  // Configure via: az webapp config appsettings set --settings "ECS_QNXT_API_TOKEN=@Microsoft.KeyVault(SecretUri=...)"
+  // Configure via: az webapp config appsettings set --settings "ECS_CLAIMS_BACKEND_API_TOKEN=@Microsoft.KeyVault(SecretUri=...)"
   {
     name: 'ECS_WORKFLOW_ENABLED'
     value: string(enableEcs)
@@ -77,11 +77,11 @@ output ecsEndpointInfo object = {
 // ECS workflow parameters (for Logic App configuration)
 // Note: Secure parameters should reference Key Vault
 output ecsWorkflowParameters object = {
-  qnxt_base_url: {
+  backend_base_url: {
     type: 'String'
-    value: qnxtBaseUrl
+    value: backendBaseUrl
   }
-  // qnxt_api_token should be configured via Key Vault reference
+  // claims_backend_api_token should be configured via Key Vault reference
   // not exposed in outputs due to security concerns
 }
 
@@ -89,7 +89,7 @@ output ecsWorkflowParameters object = {
 output ecsTags object = {
   Component: 'ECS'
   WorkflowType: 'SummarySearch'
-  IntegrationType: 'QNXT'
+  IntegrationType: 'claims backend'
   Environment: contains(baseName, 'prod') ? 'Production' : contains(baseName, 'uat') ? 'UAT' : 'Development'
 }
 
@@ -108,8 +108,8 @@ output ecsTags object = {
 //       logicAppName: la.name
 //       appInsightsKey: insights.properties.InstrumentationKey
 //       appInsightsConnectionString: insights.properties.ConnectionString
-//       qnxtBaseUrl: qnxtBaseUrl
-//       qnxtApiToken: qnxtApiToken
+//       backendBaseUrl: backendBaseUrl
+//       backendApiToken: backendApiToken
 //     }
 //   }
 //

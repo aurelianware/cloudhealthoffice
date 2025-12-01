@@ -244,13 +244,13 @@ Name: AZURE_SUBSCRIPTION_ID
 Value: <prod-subscription-id-from-azure>
 
 Name: SFTP_HOST
-Value: <availity-sftp-hostname>
+Value: <clearinghouse-sftp-hostname>
 
 Name: SFTP_USERNAME
-Value: <availity-sftp-username>
+Value: <clearinghouse-sftp-username>
 
 Name: SFTP_PASSWORD
-Value: <availity-sftp-password>
+Value: <clearinghouse-sftp-password>
 ```
 
 **Important Notes:**
@@ -794,21 +794,21 @@ az keyvault secret set \
   --name "sftp-password" \
   --value "${SFTP_PASSWORD}"
 
-# Add QNXT API credentials
+# Add claims backend API credentials
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-base-url" \
-  --value "https://qnxt-api-prod.example.com"
+  --name "claims-backend-api-base-url" \
+  --value "https://claims-backend-api-prod.example.com"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-id" \
-  --value "${QNXT_CLIENT_ID}"
+  --name "claims-backend-api-client-id" \
+  --value "${claims backend_CLIENT_ID}"
 
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-secret" \
-  --value "${QNXT_CLIENT_SECRET}"
+  --name "claims-backend-api-client-secret" \
+  --value "${claims backend_CLIENT_SECRET}"
 
 # Verify secrets
 az keyvault secret list --vault-name "$KV_NAME" --output table
@@ -846,10 +846,10 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 {
   "type": "Http",
   "inputs": {
-    "uri": "@parameters('qnxt_base_url')/api/claims",
+    "uri": "@parameters('backend_base_url')/api/claims",
     "authentication": {
       "type": "ClientCredentials",
-      "secret": "@parameters('qnxt_client_secret')"
+      "secret": "@parameters('backend_client_secret')"
     }
   }
 }
@@ -860,10 +860,10 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 {
   "type": "Http",
   "inputs": {
-    "uri": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/qnxt-api-base-url')/api/claims",
+    "uri": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/claims-backend-api-base-url')/api/claims",
     "authentication": {
       "type": "ClientCredentials",
-      "secret": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/qnxt-api-client-secret')"
+      "secret": "@keyvault('https://cloud-health-office-prod-kv.vault.azure.net/secrets/claims-backend-api-client-secret')"
     }
   }
 }
@@ -921,14 +921,14 @@ az keyvault secret set \
 
 # Update SFTP server with new password (implementation specific)
 
-# Rotate QNXT API client secret
+# Rotate claims backend API client secret
 NEW_CLIENT_SECRET=$(openssl rand -base64 32)
 az keyvault secret set \
   --vault-name "$KV_NAME" \
-  --name "qnxt-api-client-secret" \
+  --name "claims-backend-api-client-secret" \
   --value "$NEW_CLIENT_SECRET"
 
-# Update QNXT API OAuth client (implementation specific)
+# Update claims backend API OAuth client (implementation specific)
 
 echo "✅ Secrets rotated successfully"
 EOF
@@ -941,7 +941,7 @@ chmod +x rotate-secrets.sh
 | Secret Type | Frequency | Owner | Automation |
 |-------------|-----------|-------|------------|
 | SFTP Password | Quarterly | Security Team | Automated script |
-| QNXT API Client Secret | Quarterly | Integration Team | Automated script |
+| claims backend API Client Secret | Quarterly | Integration Team | Automated script |
 | OAuth Tokens | Daily (automatic) | Azure AD | Built-in Azure AD |
 
 ### Monitoring and Compliance

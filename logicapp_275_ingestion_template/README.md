@@ -1,16 +1,16 @@
 
 # Logic App Standard – 275 Ingestion Template
 
-This template implements the 275 ingestion pattern described in *Electronic Attachment and Correspondence Management Integration Design* (277/275 with QNXT & Availity).
+This template implements the 275 ingestion pattern described in *Electronic Attachment and Correspondence Management Integration Design* (277/275 with claims backend & Clearinghouse).
 
 **Key features**
-- Poll SFTP for new/updated files (providers → Availity → Health Plan)
+- Poll SFTP for new/updated files (providers → Clearinghouse → Health Plan)
 - Store raw 275 file to Azure Data Lake Storage Gen2 (`hipaa-attachments/raw/275/yyyy/MM/dd/`)
 - **Decode X12** 275 via Integration Account connector
 - Extract claim/member metadata (TRN02, NM1 segments, DTM)
 - Branch: **Solicited** (has RFAI reference) vs **Unsolicited**
 - Publish message to **Service Bus** topic (`attachments-in`)
-- Call QNXT **Claim Linkage** API with retry policy
+- Call claims backend **Claim Linkage** API with retry policy
 - Log custom event to **Application Insights**
 
 > Source design: 275 Electronic Attachment and Correspondence Management Integration Design. fileciteturn10file0
@@ -20,7 +20,7 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 - Connections: `sftp-ssh`, `azureblob`, `servicebus`, `integrationaccount`
 - Azure Data Lake Storage Gen2 account (Storage account with hierarchical namespace enabled)
 - Service Bus namespace + topic (`attachments-in`) and dead-letter handling
-- QNXT API endpoint to link document → claim
+- claims backend API endpoint to link document → claim
 - Application Insights (optional; adjust `appinsights_custom_events_url`)
 
 ## Parameters to set
@@ -28,11 +28,11 @@ This template implements the 275 ingestion pattern described in *Electronic Atta
 - `blob_storage_account`: connection reference name
 - `blob_raw_folder`: e.g., `hipaa-attachments/raw/275` (will be date-partitioned automatically)
 - `sb_namespace`, `sb_topic`
-- `qnxt_base_url`, `QNXT_API_TOKEN` (SecureString - configure via Azure Key Vault reference)
+- `backend_base_url`, `CLAIMS_BACKEND_API_TOKEN` (SecureString - configure via Azure Key Vault reference)
 - `x12_sender_id`, `x12_receiver_id`
 - `appinsights_custom_events_url`
 
-**Security Note**: Configure `QNXT_API_TOKEN` using Azure Key Vault reference: `@Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token)`. Never hardcode secrets in workflow parameters.
+**Security Note**: Configure `CLAIMS_BACKEND_API_TOKEN` using Azure Key Vault reference: `@Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token)`. Never hardcode secrets in workflow parameters.
 
 ## Decoding X12
 Update `messageType` to match your TR3 version: `X12_005010X210_275` (or `006020X314` etc.). Ensure your Integration Account has the schema and agreement configured.
@@ -47,7 +47,7 @@ Update `messageType` to match your TR3 version: `X12_005010X210_275` (or `006020
 Adjust expressions under **Extract_Metadata** accordingly.
 
 ## Error handling
-- The HTTP action to QNXT uses retry policy (4 × 15s). Consider wrapping the whole flow in a `Scope` with **Run After** to route failures to a dead-letter Service Bus topic.
+- The HTTP action to claims backend uses retry policy (4 × 15s). Consider wrapping the whole flow in a `Scope` with **Run After** to route failures to a dead-letter Service Bus topic.
 
 ## Deployment
 1. Create a **Logic App (Standard)**; add connections for SFTP, Blob, Service Bus, Integration Account.

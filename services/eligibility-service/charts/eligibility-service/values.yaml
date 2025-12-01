@@ -145,8 +145,8 @@ config:
     inactiveTtl: 3600     # 1 hour for inactive members
     maxAge: 43200         # 12 hours max cache age
   
-  # QNXT configuration (optional)
-  qnxt:
+  # claims backend configuration (optional)
+  backend:
     baseUrl: ""           # Set via secret or environment
     timeout: 30000
   
@@ -191,7 +191,7 @@ externalSecrets:
 existingSecrets:
   cosmos: ""              # Name of existing secret with Cosmos DB credentials
   eventGrid: ""           # Name of existing secret with Event Grid credentials
-  qnxt: ""                # Name of existing secret with QNXT credentials
+  backend: ""                # Name of existing secret with claims backend credentials
 
 # Pod disruption budget
 podDisruptionBudget:

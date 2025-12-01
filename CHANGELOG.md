@@ -169,7 +169,7 @@ This is the first production release of Cloud Health Office — the open-source,
 - **Multi-Tenant SaaS Architecture**: Configuration-driven platform supporting unlimited health plans
 - **CLI Onboarding Wizard**: Complete deployment from worksheet to production in <45 minutes
 - **Zero-Code Payer Onboarding**: Add new payers via JSON configuration without custom development
-- **Backend-Agnostic Design**: Works with any claims system (QNXT, FacetsRx, TriZetto, Epic, Cerner, custom)
+- **Backend-Agnostic Design**: Works with any claims system (claims adjudication systems such as TriZetto, Epic, Cerner, custom)
 
 #### EDI Transaction Processing
 - **275 Attachments**: Clinical and administrative attachment processing with file validation
@@ -184,7 +184,7 @@ This is the first production release of Cloud Health Office — the open-source,
 - **ECS (Enhanced Claim Status)**: Advanced claim status with extended data and 4 query methods
 
 #### Clearinghouse Integration
-- **Availity Integration**: Native SFTP and API connectivity
+- **Clearinghouse Integration**: Native SFTP and API connectivity
 - **Change Healthcare Support**: Ready for integration
 - **Optum 360 Support**: Ready for integration
 - **Inovalon Support**: Ready for integration
@@ -214,9 +214,9 @@ This is the first production release of Cloud Health Office — the open-source,
 - **Example Configurations**: Medicaid MCO and Regional Blues templates
 - **Comprehensive Documentation**: 20+ detailed guides
 
-#### QNXT Integration (First in Open Source)
+#### claims backend Integration (First in Open Source)
 - **Real-Time Correlation APIs**: Link attachments to claims
-- **Appeals Registration**: Direct integration with QNXT Appeals API
+- **Appeals Registration**: Direct integration with claims backend Appeals API
 - **Authorization Processing**: Complete authorization lifecycle management
 - **Eligibility Verification**: Member eligibility checks with retry logic
 - **Retry Logic**: 4 retries @ 15-second intervals for API calls
@@ -232,7 +232,7 @@ This is the first production release of Cloud Health Office — the open-source,
 
 - **Onboarding time reduction**: 6–18 months (legacy) → <1 hour
 - **Professional services cost elimination**: $500k–$2M → $0 (bring-your-own-subscription)
-- **First production-grade QNXT REST correlation** in open source
+- **First production-grade claims backend REST correlation** in open source
 - **Complete source code transparency**: No black boxes, fully auditable
 - **Azure Marketplace ready**: Prepared for Managed Application publishing
 

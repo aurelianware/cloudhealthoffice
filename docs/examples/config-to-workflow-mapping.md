@@ -4,7 +4,7 @@ This document explains how the ValueAdds277 configuration in the unified schema 
 
 ## Configuration Schema Location
 
-**File**: `core/schemas/availity-integration-config.schema.json`  
+**File**: `core/schemas/clearinghouse-integration-config.schema.json`  
 **Path**: `definitions.ECSModule.properties.valueAdds277`
 
 ## Workflow Parameters Location
@@ -66,7 +66,7 @@ The workflow uses these parameters in the `Map_Claims_with_ValueAdds277` action:
 {
   "type": "Select",
   "inputs": {
-    "from": "@variables('qnxtResults')?['claims']",
+    "from": "@variables('backendResults')?['claims']",
     "select": {
       "BILLED": "@if(parameters('includeFinancialFields'), coalesce(item()?['BILLED'], item()?['billedAmount']), null())",
       "drgCode": "@if(parameters('includeClinicalFields'), item()?['drgCode'], null())",
@@ -222,9 +222,9 @@ To test different configurations:
 
 ## Backend Field Mapping
 
-The workflow expects QNXT backend to provide these fields:
+The workflow expects claims backend backend to provide these fields:
 
-| ValueAdds277 Field | QNXT Field(s) | Fallback |
+| ValueAdds277 Field | claims backend Field(s) | Fallback |
 |-------------------|---------------|----------|
 | `BILLED` | `BILLED` or `billedAmount` | `billedAmount` |
 | `ALLOWED` | `ALLOWED` or `allowedAmount` | `allowedAmount` |
@@ -273,8 +273,8 @@ The workflow expects QNXT backend to provide these fields:
 
 ### Issue: Backend doesn't have ValueAdds277 fields
 
-**Cause**: QNXT backend not returning enhanced fields  
-**Solution**: Workflow uses fallbacks. Map standard QNXT fields to ValueAdds277 equivalents in backend transformation layer.
+**Cause**: claims backend backend not returning enhanced fields  
+**Solution**: Workflow uses fallbacks. Map standard claims backend fields to ValueAdds277 equivalents in backend transformation layer.
 
 ## References
 

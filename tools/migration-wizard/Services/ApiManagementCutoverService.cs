@@ -88,7 +88,7 @@ public class ApiManagementCutoverService
     }
 
     /// <summary>
-    /// Rollback cutover by reverting to QNXT backend
+    /// Rollback cutover by reverting to legacy backend
     /// </summary>
     public async Task<CutoverResult> RollbackCutoverAsync(CancellationToken cancellationToken = default)
     {
@@ -99,7 +99,7 @@ public class ApiManagementCutoverService
 
         try
         {
-            _logger.LogWarning("Starting cutover rollback to QNXT backend");
+            _logger.LogWarning("Starting cutover rollback to legacy backend");
 
             var token = await GetAzureAccessTokenAsync(cancellationToken);
             if (string.IsNullOrEmpty(token))
@@ -112,7 +112,7 @@ public class ApiManagementCutoverService
             var currentConfig = await GetCurrentRoutingConfigAsync(token, cancellationToken);
             result.PreviousBackendId = currentConfig.CurrentBackendId;
 
-            var updateSuccess = await UpdateRoutingKeyAsync(token, _config.QnxtBackendId, cancellationToken);
+            var updateSuccess = await UpdateRoutingKeyAsync(token, _config.LegacyBackendId, cancellationToken);
             if (!updateSuccess)
             {
                 result.Success = false;
@@ -121,10 +121,10 @@ public class ApiManagementCutoverService
             }
 
             result.Success = true;
-            result.NewBackendId = _config.QnxtBackendId;
+            result.NewBackendId = _config.LegacyBackendId;
             result.CompletedAt = DateTime.UtcNow;
 
-            _logger.LogInformation("Rollback completed. Traffic now routed to {BackendId}", _config.QnxtBackendId);
+            _logger.LogInformation("Rollback completed. Traffic now routed to {BackendId}", _config.LegacyBackendId);
 
             return result;
         }
@@ -255,15 +255,15 @@ public class ApiManagementCutoverService
 
             return new RoutingConfig
             {
-                CurrentBackendId = currentValue ?? _config.QnxtBackendId,
+                CurrentBackendId = currentValue ?? _config.LegacyBackendId,
                 LastUpdated = DateTime.UtcNow
             };
         }
 
-        // If named value doesn't exist, assume QNXT backend
+        // If named value doesn't exist, assume legacy backend
         return new RoutingConfig
         {
-            CurrentBackendId = _config.QnxtBackendId,
+            CurrentBackendId = _config.LegacyBackendId,
             LastUpdated = DateTime.UtcNow
         };
     }

@@ -430,7 +430,7 @@ describe("PHI Redaction Module", () => {
     it("should preserve business data while removing PHI", () => {
       const payload = {
         transactionId: "TRX002",
-        payer: "Availity",
+        payer: "Clearinghouse",
         payerId: "AVLTY001",
         memberId: "123-45-6789", // PHI - SSN format with dashes
         serviceDate: "2024-01-15",
@@ -444,7 +444,7 @@ describe("PHI Redaction Module", () => {
 
       // Business data preserved
       expect(masked.transactionId).toBe("TRX002");
-      expect(masked.payer).toBe("Availity");
+      expect(masked.payer).toBe("Clearinghouse");
       expect(masked.payerId).toBe("AVLTY001");
       expect(masked.serviceDate).toBe("2024-01-15");
       expect(masked.billAmount).toBe(1500.00);

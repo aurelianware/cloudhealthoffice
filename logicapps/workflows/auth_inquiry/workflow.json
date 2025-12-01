@@ -452,7 +452,7 @@
       },
       "isa06_senderId": {
         "type": "String",
-        "defaultValue": "AVAILITY001"
+        "defaultValue": "CLEARINGHOUSE001"
       },
       "isa08_receiverId": {
         "type": "String",
@@ -460,7 +460,7 @@
       },
       "gs02_applicationSenderCode": {
         "type": "String",
-        "defaultValue": "AVAILITY"
+        "defaultValue": "CLEARINGHOUSE"
       },
       "gs03_applicationReceiverCode": {
         "type": "String",
@@ -493,13 +493,13 @@
       "value": "https://payer-api.example.com/auth-inquiry"
     },
     "isa06_senderId": {
-      "value": "AVAILITY001"
+      "value": "CLEARINGHOUSE001"
     },
     "isa08_receiverId": {
       "value": "PAYERID"
     },
     "gs02_applicationSenderCode": {
-      "value": "AVAILITY"
+      "value": "CLEARINGHOUSE"
     },
     "gs03_applicationReceiverCode": {
       "value": "PAYER"

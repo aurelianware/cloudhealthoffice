@@ -116,7 +116,7 @@ hotfix/v{MAJOR}.{MINOR}.{PATCH+1}-{short-description}
 ```
 
 **Examples:**
-- `hotfix/v1.2.1-qnxt-timeout`
+- `hotfix/v1.2.1-backend-timeout`
 - `hotfix/v2.0.1-sftp-connection-failure`
 
 **Naming Rules:**
@@ -236,12 +236,12 @@ We follow **Conventional Commits** aligned with semantic versioning.
 | Type | Description | Semantic Version Impact | Examples |
 |------|-------------|------------------------|----------|
 | `feat` | New feature | MINOR bump | `feat(workflows): Add 278 replay endpoint` |
-| `fix` | Bug fix | PATCH bump | `fix(auth): Correct QNXT API timeout handling` |
+| `fix` | Bug fix | PATCH bump | `fix(auth): Correct claims backend API timeout handling` |
 | `docs` | Documentation only | None | `docs: Update deployment guide` |
 | `refactor` | Code refactoring (no behavior change) | None | `refactor(bicep): Simplify parameter definitions` |
 | `test` | Add or modify tests | None | `test(workflows): Add 275 ingestion test` |
 | `chore` | Maintenance tasks | None | `chore: Update dependencies` |
-| `perf` | Performance improvement | PATCH bump | `perf(appeals): Optimize QNXT API calls` |
+| `perf` | Performance improvement | PATCH bump | `perf(appeals): Optimize claims backend API calls` |
 | `style` | Code style changes (formatting) | None | `style(powershell): Apply consistent formatting` |
 | `ci` | CI/CD changes | None | `ci: Update GitHub Actions workflows` |
 | `build` | Build system changes | None | `build: Update Bicep CLI version` |
@@ -252,10 +252,10 @@ We follow **Conventional Commits** aligned with semantic versioning.
 For breaking changes, add `BREAKING CHANGE:` in the footer or append `!` after type:
 
 ```
-feat(api)!: Change QNXT API request format
+feat(api)!: Change claims backend API request format
 
-BREAKING CHANGE: QNXT API now requires authentication token in header instead of query parameter.
-Update all QNXT API calls accordingly.
+BREAKING CHANGE: claims backend API now requires authentication token in header instead of query parameter.
+Update all claims backend API calls accordingly.
 ```
 
 **Impact**: MAJOR version bump
@@ -289,9 +289,9 @@ feat(workflows): Add replay endpoint for 278 transactions
 
 **Bug Fix:**
 ```
-fix(auth): Handle QNXT API timeouts with retry logic
+fix(auth): Handle claims backend API timeouts with retry logic
 
-Added 4 retries with 15-second intervals for QNXT authorization
+Added 4 retries with 15-second intervals for claims backend authorization
 API calls to handle transient network failures.
 
 Fixes #127
@@ -470,16 +470,16 @@ Process for critical production fixes:
 
 git checkout main
 git pull origin main
-git checkout -b hotfix/v1.2.1-qnxt-timeout
+git checkout -b hotfix/v1.2.1-backend-timeout
 
 # Make minimal fix
 # - Focus on critical issue only
 # - Avoid additional changes
 # - Add tests if possible
 
-git commit -m "fix(auth): Handle QNXT API timeout with retry logic
+git commit -m "fix(auth): Handle claims backend API timeout with retry logic
 
-Critical fix for production QNXT API timeouts affecting
+Critical fix for production claims backend API timeouts affecting
 authorization processing. Added 4 retries with 15-second
 intervals.
 
@@ -490,7 +490,7 @@ Fixes #234"
 
 ```bash
 # Option A: Deploy to UAT for verification
-git push origin hotfix/v1.2.1-qnxt-timeout
+git push origin hotfix/v1.2.1-backend-timeout
 # Create PR to temporary test branch if needed
 
 # Option B: Test in isolated environment
@@ -510,7 +510,7 @@ git push origin hotfix/v1.2.1-qnxt-timeout
 # After merge
 git checkout main
 git pull origin main
-git tag -a v1.2.1 -m "Hotfix v1.2.1: QNXT timeout fix"
+git tag -a v1.2.1 -m "Hotfix v1.2.1: claims backend timeout fix"
 git push origin v1.2.1
 ```
 
@@ -558,7 +558,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 Increment when making **incompatible API changes** or **breaking changes**:
 - Changed Integration Account schema requirements
 - Modified Service Bus topic structure
-- Changed QNXT API integration contract
+- Changed claims backend API integration contract
 - Removed or renamed workflow parameters
 - Changed Data Lake folder structure
 
@@ -593,7 +593,7 @@ Increment when making **backward-compatible bug fixes**:
 
 **Example Commit:**
 ```
-fix(auth): Correct QNXT API timeout handling
+fix(auth): Correct claims backend API timeout handling
 ```
 
 ### Pre-release Versions

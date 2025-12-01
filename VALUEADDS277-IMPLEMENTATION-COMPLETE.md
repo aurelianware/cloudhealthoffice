@@ -25,7 +25,7 @@ This implementation enables payers to offer "Enhanced Claim Status Plus" as a pr
 
 **Status**: Already Complete (prior PR)
 
-- **Map_Claims_with_ValueAdds277** action: Comprehensive field mapping from QNXT to ValueAdds277
+- **Map_Claims_with_ValueAdds277** action: Comprehensive field mapping from claims backend to ValueAdds277
 - **6 workflow parameters**: All include* fields for toggling field groups
 - **Integration flags logic**: Calculated based on claim status
 - **Appeal metadata**: Automatic calculation of timely filing dates
@@ -46,7 +46,7 @@ This implementation enables payers to offer "Enhanced Claim Status Plus" as a pr
 
 **Validation**: ✓ Valid JSON Schema Draft-07
 
-### ✅ 3. Unified Configuration Schema (`core/schemas/availity-integration-config.schema.json`)
+### ✅ 3. Unified Configuration Schema (`core/schemas/clearinghouse-integration-config.schema.json`)
 
 **Status**: NEW - Added in this PR
 
@@ -88,7 +88,7 @@ This implementation enables payers to offer "Enhanced Claim Status Plus" as a pr
 - **Complete mapping table**: Config paths to workflow parameters
 - **4 configuration scenarios**: With use cases and response sizes
 - **Integration flag behavior**: Detailed logic for each flag
-- **Backend field mapping**: QNXT fields to ValueAdds277 fields
+- **Backend field mapping**: claims backend fields to ValueAdds277 fields
 - **Performance impact**: Response times and sizes
 - **Troubleshooting guide**: Common issues and solutions
 
@@ -263,7 +263,7 @@ All 6 integration flags enable seamless cross-module workflows:
 
 ## Files Changed in This PR
 
-1. `core/schemas/availity-integration-config.schema.json` (+92 lines)
+1. `core/schemas/clearinghouse-integration-config.schema.json` (+92 lines)
 2. `docs/UNIFIED-CONFIG-SCHEMA.md` (+271 lines)
 3. `config/examples/valueadds277-example-config.json` (NEW)
 4. `config/examples/README.md` (NEW)
@@ -289,7 +289,7 @@ All 6 integration flags enable seamless cross-module workflows:
 - PR #51 - Config-to-workflow generator
 
 ### Specifications
-- Availity ECS ValueAdds277 QRE (uploaded)
+- Clearinghouse ECS ValueAdds277 QRE (uploaded)
 - X12 277 Implementation Guide
 - HIPAA 5010 Standards
 

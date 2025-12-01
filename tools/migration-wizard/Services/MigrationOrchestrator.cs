@@ -3,7 +3,7 @@ using MigrationWizard.Models;
 namespace MigrationWizard.Services;
 
 /// <summary>
-/// Main orchestrator service for the QNXT to Cloud Health Office migration
+/// Main orchestrator service for the legacy system to Cloud Health Office migration
 /// </summary>
 public class MigrationOrchestrator : IDisposable
 {
@@ -19,9 +19,9 @@ public class MigrationOrchestrator : IDisposable
     private bool _disposed;
 
     // In-memory storage for current migration batch
-    private readonly List<QnxtMember> _members = new();
-    private readonly List<QnxtProvider> _providers = new();
-    private readonly List<QnxtBenefitPlan> _benefitPlans = new();
+    private readonly List<BackendMember> _members = new();
+    private readonly List<BackendProvider> _providers = new();
+    private readonly List<BackendBenefitPlan> _benefitPlans = new();
 
     public event Action<MigrationStatus>? OnStatusChanged;
 
@@ -78,7 +78,7 @@ public class MigrationOrchestrator : IDisposable
             var trizettoConnected = await _trizettoClient.TestConnectionAsync();
             if (!trizettoConnected)
             {
-                throw new Exception("Failed to connect to TriZetto Open Access");
+                throw new Exception("Failed to connect to backend system Open Access APIs");
             }
 
             var cosmosConnected = await _cosmosExportService.TestConnectionAsync();
@@ -297,7 +297,7 @@ public class MigrationOrchestrator : IDisposable
             {
                 _status.IsCutoverComplete = false;
                 _status.CurrentPhase = MigrationPhase.ReadyForCutover;
-                _logger.LogWarning("Cutover rolled back. Traffic now routed to QNXT");
+                _logger.LogWarning("Cutover rolled back. Traffic now routed to legacy backend");
             }
             
             NotifyStatusChanged();

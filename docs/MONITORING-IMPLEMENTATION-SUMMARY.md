@@ -19,7 +19,7 @@ Successfully implemented production-grade real-time monitoring dashboards for Cl
 - ✅ Latency metrics (Average, P50, P95, P99)
 - ✅ Error distribution and recent failures
 - ✅ Per-payer transaction breakdown
-- ✅ Dependency health (SFTP, Service Bus, Storage, QNXT)
+- ✅ Dependency health (SFTP, Service Bus, Storage, claims backend)
 
 **Key Visualizations**:
 - Transaction overview tiles with KPIs

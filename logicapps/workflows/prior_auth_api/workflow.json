@@ -37,9 +37,9 @@
         "type": "Int",
         "defaultValue": 168
       },
-      "availityTradingPartnerId": {
+      "clearinghouseTradingPartnerId": {
         "type": "String",
-        "defaultValue": "AVAILITY"
+        "defaultValue": "CLEARINGHOUSE"
       }
     },
     "triggers": {
@@ -360,7 +360,7 @@
                           "patientId": "@{outputs('Extract_Claim_Details')?['patientId']}",
                           "providerNpi": "@{outputs('Extract_Claim_Details')?['providerNpi']}",
                           "requestType": "@{outputs('Extract_Claim_Details')?['requestType']}",
-                          "tradingPartnerId": "@{parameters('availityTradingPartnerId')}"
+                          "tradingPartnerId": "@{parameters('clearinghouseTradingPartnerId')}"
                         }
                       }
                     }

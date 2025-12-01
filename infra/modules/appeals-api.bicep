@@ -20,8 +20,8 @@ param payerId string = '{config.payerId}'
 @description('Service Bus namespace name')
 param serviceBusNamespaceName string
 
-@description('Availity Bedlam API endpoint for pushing appeal status updates')
-param availityBedlamEndpoint string = 'https://api.availity.com/bedlam/v1/appeals/status'
+@description('Clearinghouse API API endpoint for pushing appeal status updates')
+param clearinghouseApiEndpoint string = 'https://api.clearinghouse.com/bedlam/v1/appeals/status'
 
 @description('Key Vault resource ID for storing secrets')
 param keyVaultId string
@@ -47,7 +47,7 @@ resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview
 }
 
 // Topic: payer-appeal-status-updates
-// Used by backend to publish appeal status changes that need to be pushed to Availity
+// Used by backend to publish appeal status changes that need to be pushed to the clearinghouse
 resource payerAppealStatusUpdatesTopic 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
   parent: serviceBusNamespace
   name: 'payer-appeal-status-updates'
@@ -60,11 +60,11 @@ resource payerAppealStatusUpdatesTopic 'Microsoft.ServiceBus/namespaces/topics@2
   }
 }
 
-// Subscription: availity-push
-// Consumed by appeal_update_from_payer_to_availity workflow
-resource availityPushSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
+// Subscription: clearinghouse-push
+// Consumed by appeal_update_from_payer_outbound workflow
+resource clearinghousePushSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022-10-01-preview' = {
   parent: payerAppealStatusUpdatesTopic
-  name: 'availity-push'
+  name: 'clearinghouse-push'
   properties: {
     maxDeliveryCount: 10
     lockDuration: 'PT5M'
@@ -97,11 +97,11 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: last(split(keyVaultId, '/'))
 }
 
-// Secret: Availity Bedlam API Key
-// Used by appeal_update_from_payer_to_availity workflow
-resource availityBedlamApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+// Secret: Clearinghouse API API Key
+// Used by appeal_update_from_payer_outbound workflow
+resource clearinghouseApiApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'availity-bedlam-api-key'
+  name: 'clearinghouse-api-api-key'
   properties: {
     value: 'PLACEHOLDER-REPLACE-WITH-ACTUAL-KEY'
     contentType: 'text/plain'
@@ -110,8 +110,8 @@ resource availityBedlamApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-0
     }
   }
   tags: union(tags, {
-    purpose: 'Availity Bedlam API authentication'
-    workflow: 'appeal_update_from_payer_to_availity'
+    purpose: 'Clearinghouse API API authentication'
+    workflow: 'appeal_update_from_payer_outbound'
   })
 }
 
@@ -140,9 +140,9 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
 
 // Outputs for use in Logic App configuration
 output payerAppealStatusUpdatesTopicName string = payerAppealStatusUpdatesTopic.name
-output availityPushSubscriptionName string = availityPushSubscription.name
+output clearinghousePushSubscriptionName string = clearinghousePushSubscription.name
 output appealsContainerName string = 'appeals'
-output availityBedlamApiKeySecretUri string = availityBedlamApiKeySecret.properties.secretUri
+output clearinghouseApiApiKeySecretUri string = clearinghouseApiApiKeySecret.properties.secretUri
 output authorizationApiEndpointSecretUri string = authorizationApiEndpointSecret.properties.secretUri
 output serviceBusConnectionString string = listKeys(serviceBusNamespace.id, serviceBusNamespace.apiVersion).primaryConnectionString
 output storageAccountConnectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${listKeys(storageAccount.id, storageAccount.apiVersion).keys[0].value};EndpointSuffix=${az.environment().suffixes.storage}'
@@ -150,9 +150,9 @@ output storageAccountConnectionString string = 'DefaultEndpointsProtocol=https;A
 // Configuration outputs for Logic Apps
 output appealConfiguration object = {
   payerId: payerId
-  availityBedlamEndpoint: availityBedlamEndpoint
+  clearinghouseApiEndpoint: clearinghouseApiEndpoint
   serviceBusTopic: payerAppealStatusUpdatesTopic.name
-  serviceBusSubscription: availityPushSubscription.name
+  serviceBusSubscription: clearinghousePushSubscription.name
   appealsContainerPath: 'hipaa-attachments/appeals'
   environment: environment
 }
@@ -166,6 +166,6 @@ output monitoringConfiguration object = {
 // Security outputs
 output securityConfiguration object = {
   keyVaultUri: keyVault.properties.vaultUri
-  availityBedlamApiKeySecretName: availityBedlamApiKeySecret.name
+  clearinghouseApiApiKeySecretName: clearinghouseApiApiKeySecret.name
   authorizationApiEndpointSecretName: authorizationApiEndpointSecret.name
 }

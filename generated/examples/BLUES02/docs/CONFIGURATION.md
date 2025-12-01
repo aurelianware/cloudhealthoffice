@@ -88,7 +88,7 @@ This document describes the configuration for Regional Blue Cross Blue Shield (B
 #### X12 Configuration
 
 - **Sender ID**: BLUES02
-- **Receiver ID**: AVAILITY
+- **Receiver ID**: CLEARINGHOUSE
 - **Transaction Sets**: 275, 277, 278
 
 

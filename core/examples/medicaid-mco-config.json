@@ -126,7 +126,7 @@
     "x12Config": {
       "isa": {
         "senderId": "MCO001",
-        "receiverId": "AVAILITY",
+        "receiverId": "CLEARINGHOUSE",
         "senderQualifier": "ZZ",
         "receiverQualifier": "ZZ"
       },

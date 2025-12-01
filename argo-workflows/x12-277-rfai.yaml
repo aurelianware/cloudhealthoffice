@@ -8,12 +8,12 @@
 #   2. fetch-claim-data - Retrieve claim information from backend
 #   3. generate-277 - Build X12 277 RFAI response
 #   4. encode-x12 - Encode to EDI format
-#   5. sftp-upload - Send to Availity SFTP
+#   5. sftp-upload - Send to Clearinghouse SFTP
 #   6. publish-kafka - Confirm to 'edi-277-outbound' topic
 #
 # Trading Partners:
 #   - Sender: Health Plan ({config.payerId})
-#   - Receiver: Availity (030240928)
+#   - Receiver: Clearinghouse (030240928)
 
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
@@ -59,9 +59,9 @@ spec:
       - name: sender-id
         value: ""  # Health Plan ID - set via ConfigMap
       - name: receiver-id
-        value: "030240928"  # Availity
+        value: "030240928"  # Clearinghouse
       - name: sftp-host
-        value: "sftp.availity.com"
+        value: "sftp.clearinghouse.example.com"
       - name: sftp-outbound-folder
         value: "/outbound/277"
       - name: kafka-topic-outbound
@@ -73,13 +73,13 @@ spec:
         sizeLimit: "1Gi"
     - name: sftp-credentials
       secret:
-        secretName: availity-sftp-secret
+        secretName: clearinghouse-sftp-secret
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: qnxt-credentials
+    - name: backend-credentials
       secret:
-        secretName: qnxt-api-secret
+        secretName: claims-backend-api-secret
   
   templates:
     # Main orchestration template
@@ -234,11 +234,11 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            # Fetch claim info from QNXT API
+            # Fetch claim info from claims backend API
             RESPONSE=$(curl -s \
-              -H "Authorization: Bearer $QNXT_API_TOKEN" \
+              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
               -H "Content-Type: application/json" \
-              "$QNXT_API_URL/claims/{{inputs.parameters.claim-number}}")
+              "$CLAIMS_BACKEND_API_URL/claims/{{inputs.parameters.claim-number}}")
             
             # If API call fails or returns empty, create minimal claim info
             if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
@@ -257,15 +257,15 @@ spec:
             echo "$RESPONSE" > /data/output/claim-info.json
             echo "Fetched claim data for: {{inputs.parameters.claim-number}}"
         env:
-          - name: QNXT_API_URL
+          - name: CLAIMS_BACKEND_API_URL
             valueFrom:
               configMapKeyRef:
-                name: qnxt-config
+                name: backend-config
                 key: api-url
-          - name: QNXT_API_TOKEN
+          - name: CLAIMS_BACKEND_API_TOKEN
             valueFrom:
               secretKeyRef:
-                name: qnxt-api-secret
+                name: claims-backend-api-secret
                 key: token
         volumeMounts:
           - name: work-volume
@@ -409,12 +409,12 @@ spec:
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: username
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: availity-sftp-secret
+                name: clearinghouse-sftp-secret
                 key: password
                 optional: true
         volumeMounts:

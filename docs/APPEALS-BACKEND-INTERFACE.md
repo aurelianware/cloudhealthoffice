@@ -6,7 +6,7 @@ This document defines the interface contract between the Appeals Integration Lay
 
 ### Platform Design Principles
 
-1. **Backend Agnostic**: Interface works with any claims processing system (QNXT, FacetsRx, TriZetto, etc.)
+1. **Backend Agnostic**: Interface works with any claims processing system (claims adjudication systems such as TriZetto, etc.)
 2. **Configuration-Driven**: Backend endpoints, authentication, and field mappings defined in payer configuration
 3. **Standardized Contract**: Consistent API interface across all payers
 4. **Extensible**: Support for payer-specific custom fields via configuration
@@ -69,7 +69,7 @@ The Health Plan Backend System must implement the following endpoints:
       "fileSizeBytes": "{document.fileSizeBytes}"
     }
   ],
-  "availityTraceId": "{availity.traceId}",
+  "clearinghouseTraceId": "{clearinghouse.traceId}",
   "ecsAdditionalProperties": {
     "appealType": "{config.defaultAppealType}",
     "providerParticipationStatus": "{provider.participationStatus}",
@@ -338,12 +338,12 @@ The backend system should publish events to Service Bus topics to enable real-ti
 
 ### Topic: `payer-appeal-status-updates`
 
-Published when appeal status changes in backend system. Consumed by `appeal_update_from_payer_to_availity` workflow.
+Published when appeal status changes in backend system. Consumed by `appeal_update_from_payer_outbound` workflow.
 
 **Message Format**:
 ```json
 {
-  "availityTraceId": "AVL-2024-abc123",
+  "clearinghouseTraceId": "AVL-2024-abc123",
   "payerTraceId": "PAY-2024-001234",
   "appealId": "APP-2024-001234",
   "caseNumber": "CASE-2024-5678",
@@ -405,7 +405,7 @@ receivedDate            - Date appeal was received
 submissionDate          - Date submitted to backend
 estimatedCompletionDate - Estimated completion date
 actualCompletionDate    - Actual completion date
-availityTraceId         - Availity trace identifier
+clearinghouseTraceId         - Clearinghouse trace identifier
 payerTraceId            - Backend trace identifier
 lastUpdatedDate         - Last update timestamp
 createdBy               - User who created record
@@ -436,12 +436,12 @@ availableUntil          - Date document is available until
 ### Pattern 1: Synchronous Appeal Registration
 
 ```
-1. Provider submits appeal via Availity
+1. Provider submits appeal via the clearinghouse
 2. Appeals API receives request
 3. Appeals API calls /api/backend/appeals/register (synchronous)
 4. Backend validates and registers appeal
 5. Backend returns success with appealId
-6. Appeals API returns response to Availity/provider
+6. Appeals API returns response to the clearinghouse/provider
 ```
 
 **Pros**: Immediate feedback, simple error handling
@@ -452,13 +452,13 @@ availableUntil          - Date document is available until
 ### Pattern 2: Asynchronous Appeal Processing
 
 ```
-1. Provider submits appeal via Availity
+1. Provider submits appeal via the clearinghouse
 2. Appeals API receives request
 3. Appeals API publishes message to Service Bus topic
 4. Appeals API returns acknowledgment immediately
 5. Backend processor consumes message asynchronously
 6. Backend registers appeal and publishes status update
-7. Status update triggers notification to Availity
+7. Status update triggers notification to the clearinghouse
 ```
 
 **Pros**: Better resilience, no timeout risk
@@ -608,7 +608,7 @@ Response:
 
 ### Platform Configuration
 
-All backend interface implementations are configured through the **Unified Availity Integration Configuration Schema**. Each payer defines their backend connection parameters in their configuration file:
+All backend interface implementations are configured through the **Unified Clearinghouse Integration Configuration Schema**. Each payer defines their backend connection parameters in their configuration file:
 
 ```json
 {

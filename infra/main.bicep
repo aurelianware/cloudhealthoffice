@@ -44,9 +44,9 @@ param serviceBusName string
 
 // ECS (Enhanced Claim Status) parameters
 param enableEcs bool = true
-param qnxtBaseUrl string = 'https://qnxt-api.example.com'
+param backendBaseUrl string = 'https://claims-backend-api.example.com'
 @secure()
-param qnxtApiToken string = ''
+param backendApiToken string = ''
 
 // =========================
  // Variables
@@ -417,8 +417,8 @@ module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
     logicAppName: la.name
     appInsightsKey: insights.properties.InstrumentationKey
     appInsightsConnectionString: insights.properties.ConnectionString
-    qnxtBaseUrl: qnxtBaseUrl
-    qnxtApiToken: qnxtApiToken
+    backendBaseUrl: backendBaseUrl
+    backendApiToken: backendApiToken
     enableEcs: enableEcs
   }
 }

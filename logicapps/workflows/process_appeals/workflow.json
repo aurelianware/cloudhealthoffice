@@ -147,9 +147,9 @@
                 "type": "Http",
                 "inputs": {
                   "method": "POST",
-                  "uri": "@{parameters('qnxt_base_url')}/claims/correlate-appeal",
+                  "uri": "@{parameters('backend_base_url')}/claims/correlate-appeal",
                   "headers": {
-                    "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                    "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                     "Content-Type": "application/json"
                   },
                   "body": {
@@ -174,13 +174,13 @@
                   ]
                 }
               },
-              "Call_QNXT_Appeals_API": {
+              "Call_Claims_Backend_Appeals_API": {
                 "type": "Http",
                 "inputs": {
                   "method": "POST",
-                  "uri": "@{parameters('qnxt_base_url')}/appeals/register",
+                  "uri": "@{parameters('backend_base_url')}/appeals/register",
                   "headers": {
-                    "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                    "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                     "Content-Type": "application/json"
                   },
                   "body": {
@@ -209,10 +209,10 @@
                   ]
                 }
               },
-              "Parse_QNXT_Response": {
+              "Parse_claims backend_Response": {
                 "type": "ParseJson",
                 "inputs": {
-                  "content": "@body('Call_QNXT_Appeals_API')",
+                  "content": "@body('Call_Claims_Backend_Appeals_API')",
                   "schema": {
                     "type": "object",
                     "properties": {
@@ -238,7 +238,7 @@
                   }
                 },
                 "runAfter": {
-                  "Call_QNXT_Appeals_API": [
+                  "Call_Claims_Backend_Appeals_API": [
                     "Succeeded"
                   ]
                 }
@@ -258,15 +258,15 @@
                     "properties": {
                       "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
                       "memberId": "@{outputs('Extract_Appeal_Metadata')?['memberId']}",
-                      "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
-                      "appealTrackingNumber": "@{body('Parse_QNXT_Response')?['appealTrackingNumber']}",
-                      "appealStatus": "@{body('Parse_QNXT_Response')?['appealStatus']}",
+                      "appealId": "@{body('Parse_claims backend_Response')?['appealId']}",
+                      "appealTrackingNumber": "@{body('Parse_claims backend_Response')?['appealTrackingNumber']}",
+                      "appealStatus": "@{body('Parse_claims backend_Response')?['appealStatus']}",
                       "timestamp": "@{utcNow()}"
                     }
                   }
                 },
                 "runAfter": {
-                  "Parse_QNXT_Response": [
+                  "Parse_claims backend_Response": [
                     "Succeeded"
                   ]
                 }
@@ -277,7 +277,7 @@
                   "and": [
                     {
                       "equals": [
-                        "@body('Parse_QNXT_Response')?['requiresRFAI']",
+                        "@body('Parse_claims backend_Response')?['requiresRFAI']",
                         true
                       ]
                     }
@@ -291,10 +291,10 @@
                       "memberId": "@outputs('Extract_Appeal_Metadata')?['memberId']",
                       "providerNpi": "@outputs('Extract_Appeal_Metadata')?['providerNpi']",
                       "serviceFromDate": "@outputs('Extract_Appeal_Metadata')?['serviceFromDate']",
-                      "appealId": "@body('Parse_QNXT_Response')?['appealId']",
-                      "appealTrackingNumber": "@body('Parse_QNXT_Response')?['appealTrackingNumber']",
-                      "rfaiReasonCode": "@body('Parse_QNXT_Response')?['rfaiReasonCode']",
-                      "rfaiReference": "@concat('APPEAL-', body('Parse_QNXT_Response')?['appealTrackingNumber'])",
+                      "appealId": "@body('Parse_claims backend_Response')?['appealId']",
+                      "appealTrackingNumber": "@body('Parse_claims backend_Response')?['appealTrackingNumber']",
+                      "rfaiReasonCode": "@body('Parse_claims backend_Response')?['rfaiReasonCode']",
+                      "rfaiReference": "@concat('APPEAL-', body('Parse_claims backend_Response')?['appealTrackingNumber'])",
                       "eventType": "appeal-rfai",
                       "eventTimestamp": "@utcNow()"
                     },
@@ -316,8 +316,8 @@
                         "userProperties": {
                           "eventType": "appeal-rfai",
                           "claimNumber": "@outputs('Extract_Appeal_Metadata')?['claimNumber']",
-                          "appealId": "@body('Parse_QNXT_Response')?['appealId']",
-                          "appealTrackingNumber": "@body('Parse_QNXT_Response')?['appealTrackingNumber']"
+                          "appealId": "@body('Parse_claims backend_Response')?['appealId']",
+                          "appealTrackingNumber": "@body('Parse_claims backend_Response')?['appealTrackingNumber']"
                         }
                       }
                     },
@@ -341,9 +341,9 @@
                         "eventName": "AppealRFAIPublished",
                         "properties": {
                           "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
-                          "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
-                          "appealTrackingNumber": "@{body('Parse_QNXT_Response')?['appealTrackingNumber']}",
-                          "rfaiReasonCode": "@{body('Parse_QNXT_Response')?['rfaiReasonCode']}",
+                          "appealId": "@{body('Parse_claims backend_Response')?['appealId']}",
+                          "appealTrackingNumber": "@{body('Parse_claims backend_Response')?['appealTrackingNumber']}",
+                          "rfaiReasonCode": "@{body('Parse_claims backend_Response')?['rfaiReasonCode']}",
                           "timestamp": "@{utcNow()}"
                         }
                       }
@@ -371,8 +371,8 @@
                           "eventName": "AppealNoRFAI",
                           "properties": {
                             "claimNumber": "@{outputs('Extract_Appeal_Metadata')?['claimNumber']}",
-                            "appealId": "@{body('Parse_QNXT_Response')?['appealId']}",
-                            "appealStatus": "@{body('Parse_QNXT_Response')?['appealStatus']}",
+                            "appealId": "@{body('Parse_claims backend_Response')?['appealId']}",
+                            "appealStatus": "@{body('Parse_claims backend_Response')?['appealStatus']}",
                             "timestamp": "@{utcNow()}"
                           }
                         }
@@ -504,7 +504,7 @@
   "parameters": {
     "_SECURITY_NOTE": {
       "type": "String",
-      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token) or use Managed Identity to obtain tokens at runtime."
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure CLAIMS_BACKEND_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token) or use Managed Identity to obtain tokens at runtime."
     },
     "$connections": {
       "type": "Object",
@@ -526,11 +526,11 @@
       "type": "String",
       "defaultValue": "appeals-processor"
     },
-    "qnxt_base_url": {
+    "backend_base_url": {
       "type": "String",
-      "defaultValue": "https://qnxt.api.local"
+      "defaultValue": "https://backend.api.local"
     },
-    "QNXT_API_TOKEN": {
+    "CLAIMS_BACKEND_API_TOKEN": {
       "type": "SecureString"
     }
   }

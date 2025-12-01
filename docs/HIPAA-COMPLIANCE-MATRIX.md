@@ -271,7 +271,7 @@ customEvents
 
 **Events Captured:**
 - Workflow executions (start, success, failure)
-- API calls to external systems (QNXT, SFTP)
+- API calls to external systems (claims backend, SFTP)
 - PHI resource access (claims, members, attachments)
 - Authentication attempts and failures
 - Data transformations and validations

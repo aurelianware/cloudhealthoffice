@@ -1,5 +1,5 @@
 # SFTP Polling Event Source for Argo Events
-# Calendar-based trigger to poll Availity SFTP for new EDI files
+# Calendar-based trigger to poll Clearinghouse SFTP for new EDI files
 #
 # Polling interval: Every 15 minutes
 # Emits events for new 275/278 files
@@ -61,4 +61,4 @@ spec:
       url: "http://sftp-watcher-service:8080/events"
       jsonBody: true
       metadata:
-        source: "availity-sftp"
+        source: "clearinghouse-sftp"

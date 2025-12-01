@@ -231,7 +231,7 @@ export interface EligibilityCacheRecord {
   /** TTL in seconds (for Cosmos DB auto-expiry) */
   ttl: number;
   /** Source of eligibility data */
-  source: 'QNXT' | 'FHIR_SERVER' | 'CLEARINGHOUSE' | 'MANUAL';
+  source: 'BACKEND_SYSTEM' | 'FHIR_SERVER' | 'CLEARINGHOUSE' | 'MANUAL';
 }
 
 /**
@@ -258,13 +258,13 @@ export interface EligibilityCacheResponse {
 }
 
 // ============================================================================
-// QNXT Eligibility Rules Types
+// Backend Eligibility Rules Types
 // ============================================================================
 
 /**
- * QNXT eligibility rule imported from CSV
+ * backend eligibility rule imported from CSV
  */
-export interface QNXTEligibilityRule {
+export interface BackendEligibilityRule {
   /** Unique rule ID */
   ruleId: string;
   /** Rule name */
@@ -388,8 +388,8 @@ export interface EligibilityServiceConfig {
     topicEndpoint: string;
     topicKey?: string; // Use managed identity if not provided
   };
-  /** QNXT API configuration */
-  qnxt?: {
+  /** claims backend API configuration */
+  backendConfig?: {
     baseUrl: string;
     apiKey?: string;
     timeout: number;
@@ -478,7 +478,7 @@ export interface HealthStatus {
   checks: {
     cosmosDb: ComponentHealth;
     eventGrid: ComponentHealth;
-    qnxt?: ComponentHealth;
+    backendConfig?: ComponentHealth;
     fhirServer?: ComponentHealth;
     dapr?: ComponentHealth;
   };

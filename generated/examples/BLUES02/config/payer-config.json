@@ -158,7 +158,7 @@
     "x12Config": {
       "isa": {
         "senderId": "BLUES02",
-        "receiverId": "AVAILITY",
+        "receiverId": "CLEARINGHOUSE",
         "senderQualifier": "ZZ",
         "receiverQualifier": "ZZ"
       },

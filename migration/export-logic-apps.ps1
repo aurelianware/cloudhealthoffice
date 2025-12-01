@@ -154,9 +154,9 @@ Logic App: $LogicAppName
 | sftp_inbound_folder | trading-partners-config | sftp-folder |
 | blob_raw_folder | kafka-topics-config | raw-275-folder |
 | sb_topic | kafka-topics-config | topic-attachments-in |
-| qnxt_base_url | qnxt-config | api-url |
-| QNXT_API_TOKEN | qnxt-api-secret | token |
-| x12_sender_id | trading-partners-config | availity-id |
+| backend_base_url | backend-config | api-url |
+| CLAIMS_BACKEND_API_TOKEN | claims-backend-api-secret | token |
+| x12_sender_id | trading-partners-config | clearinghouse-id |
 | x12_receiver_id | trading-partners-config | healthplan-id |
 
 ## Action Items

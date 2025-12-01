@@ -51,8 +51,8 @@ Write-Host "✅ Integration Account created successfully" -ForegroundColor Green
 # Create Trading Partners
 Write-Host "🤝 Creating Trading Partners..." -ForegroundColor Cyan
 
-# Availity Partner
-$availityContent = @{
+# Clearinghouse Partner
+$clearinghouseContent = @{
     b2b = @{
         businessIdentities = @(
             @{
@@ -66,9 +66,9 @@ $availityContent = @{
 az logic integration-account partner create `
     --resource-group $ResourceGroup `
     --integration-account $IntegrationAccountName `
-    --name "Availity" `
+    --name "Clearinghouse" `
     --partner-type "B2B" `
-    --content $availityContent
+    --content $clearinghouseContent
 
 # Your Organization Partner
 $orgContent = @{
@@ -97,10 +97,10 @@ Write-Host "✅ Trading Partners created" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Next Steps:" -ForegroundColor Yellow
 Write-Host "1. ✅ Integration Account created: $IntegrationAccountName" -ForegroundColor White
-Write-Host "2. ✅ Trading Partners configured: Availity (030240928), YourOrganization ({config.payerId})" -ForegroundColor White
+Write-Host "2. ✅ Trading Partners configured: Clearinghouse (030240928), YourOrganization ({config.payerId})" -ForegroundColor White
 Write-Host "3. 🔧 Create X12 Agreements in Azure Portal:" -ForegroundColor White
-Write-Host "   - X12 275 Receive Agreement (Availity -> You)" -ForegroundColor White
-Write-Host "   - X12 277 Send Agreement (You -> Availity)" -ForegroundColor White
+Write-Host "   - X12 275 Receive Agreement (Clearinghouse -> You)" -ForegroundColor White
+Write-Host "   - X12 277 Send Agreement (You -> Clearinghouse)" -ForegroundColor White
 Write-Host "4. 🔗 Update Logic Apps to reference new Integration Account" -ForegroundColor White
 
 Write-Host ""

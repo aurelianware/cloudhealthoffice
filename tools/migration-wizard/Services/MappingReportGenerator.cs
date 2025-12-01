@@ -42,9 +42,9 @@ public class MappingReportGenerator
     /// Generate comprehensive mapping report
     /// </summary>
     public MappingReport GenerateReport(
-        IEnumerable<QnxtMember> members,
-        IEnumerable<QnxtProvider> providers,
-        IEnumerable<QnxtBenefitPlan> benefitPlans)
+        IEnumerable<BackendMember> members,
+        IEnumerable<BackendProvider> providers,
+        IEnumerable<BackendBenefitPlan> benefitPlans)
     {
         _logger.LogInformation("Generating mapping report...");
 
@@ -91,7 +91,7 @@ public class MappingReportGenerator
     /// <summary>
     /// Generate member mapping result
     /// </summary>
-    private MappingResult GenerateMemberMapping(QnxtMember member)
+    private MappingResult GenerateMemberMapping(BackendMember member)
     {
         var fieldMappings = new List<FieldMapping>();
         var matchedFields = 0;
@@ -152,7 +152,7 @@ public class MappingReportGenerator
     /// <summary>
     /// Generate provider mapping result
     /// </summary>
-    private MappingResult GenerateProviderMapping(QnxtProvider provider)
+    private MappingResult GenerateProviderMapping(BackendProvider provider)
     {
         var fieldMappings = new List<FieldMapping>();
 
@@ -192,7 +192,7 @@ public class MappingReportGenerator
     /// <summary>
     /// Generate benefit plan mapping result
     /// </summary>
-    private MappingResult GenerateBenefitPlanMapping(QnxtBenefitPlan plan)
+    private MappingResult GenerateBenefitPlanMapping(BackendBenefitPlan plan)
     {
         var fieldMappings = new List<FieldMapping>();
 
@@ -346,7 +346,7 @@ public class MappingReportGenerator
         int providerCount,
         int benefitPlanCount)
     {
-        // Based on industry experience, estimate ~97% auto-match for well-structured QNXT data
+        // Based on industry experience, estimate ~97% auto-match for well-structured backend data
         // Members typically have 98% match rate (standardized formats)
         // Providers have 96% match rate (taxonomy/specialty variations)
         // Benefit plans have 95% match rate (more complex mappings)

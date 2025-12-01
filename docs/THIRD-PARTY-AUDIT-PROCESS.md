@@ -81,7 +81,7 @@ Third-party security audits provide independent validation of Cloud Health Offic
 - External network penetration testing
 - Internal network penetration testing (simulated insider threat)
 - Web application security testing (replay278 HTTP endpoint)
-- API security testing (QNXT integration, SFTP)
+- API security testing (claims backend integration, SFTP)
 - Social engineering testing (optional)
 - Physical security testing (not applicable for cloud-native)
 
@@ -427,7 +427,7 @@ Proposals will be evaluated based on:
 │   └── Acknowledgment-Forms/
 ├── 8-Business-Associate-Agreements/
 │   ├── BAA-Microsoft-Azure.pdf
-│   ├── BAA-Availity.pdf
+│   ├── BAA-Clearinghouse.pdf
 │   └── BAA-Index.xlsx
 └── 9-Incident-Response/
     ├── Incident-Log-2025.xlsx

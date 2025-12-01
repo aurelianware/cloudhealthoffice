@@ -361,7 +361,7 @@ This document outlines the strategic vision and planned enhancements for the Clo
 - Automated denial appeals with success probability scoring
 
 #### 3. Interoperability Hub
-- Connect with all major US clearinghouses (Availity, Change Healthcare, Waystar, etc.)
+- Connect with all major US clearinghouses (Clearinghouse, Change Healthcare, Waystar, etc.)
 - Direct payer connections (bypass clearinghouses)
 - Provider directory and credentialing integration
 

@@ -39,7 +39,7 @@ Click the **Deploy to Azure** button above and configure:
 |-----------|-------------|---------|
 | **baseName** | Unique name for resources | `myhealthplan` |
 | **location** | Azure region | `eastus` |
-| **sftpHost** | Clearinghouse SFTP host | `sftp.availity.com` |
+| **sftpHost** | Clearinghouse SFTP host | `sftp.clearinghouse.example.com` |
 | **sftpUsername** | SFTP username | `demo` |
 | **deploymentEnvironment** | Environment type | `sandbox` |
 

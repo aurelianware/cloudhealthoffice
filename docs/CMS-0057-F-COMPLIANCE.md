@@ -664,7 +664,7 @@ az monitor metrics alert create \
 
 - [ ] **Deploy Cloud Health Office** via CLI wizard or Azure Deploy button
 - [ ] **Configure OAuth 2.0** with Azure AD for patient and provider access
-- [ ] **Set up X12 integration** with trading partners (Availity, Navinet, etc.)
+- [ ] **Set up X12 integration** with trading partners (Clearinghouse, Navinet, etc.)
 - [ ] **Deploy FHIR endpoints** for Patient Access, Provider Access, and Prior Auth APIs
 - [ ] **Implement payer-to-payer exchange** with bulk FHIR export
 - [ ] **Configure response timelines** (72hr urgent, 7-day standard)

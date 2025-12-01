@@ -122,13 +122,13 @@
             },
             "runAfter": { "Extract_Metadata": [ "Succeeded" ] }
           },
-          "Call_QNXT_Claim_Linkage_API": {
+          "Call_Claims_Backend_Claim_Linkage_API": {
             "type": "Http",
             "inputs": {
               "method": "POST",
-              "uri": "@{parameters('qnxt_base_url')}/claims/link-attachment",
+              "uri": "@{parameters('backend_base_url')}/claims/link-attachment",
               "headers": {
-                "Authorization": "Bearer @{parameters('QNXT_API_TOKEN')}",
+                "Authorization": "Bearer @{parameters('CLAIMS_BACKEND_API_TOKEN')}",
                 "Content-Type": "application/json"
               },
               "body": {
@@ -155,7 +155,7 @@
               "method": "delete",
               "path": "/datasets/default/files/@{encodeURIComponent(triggerBody()?['path'])}"
             },
-            "runAfter": { "Call_QNXT_Claim_Linkage_API": [ "Succeeded" ] }
+            "runAfter": { "Call_Claims_Backend_Claim_Linkage_API": [ "Succeeded" ] }
           }
         },
         "runAfter": {}
@@ -237,7 +237,7 @@
   "parameters": {
     "_SECURITY_NOTE": {
       "type": "String",
-      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure QNXT_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/qnxt-api-token) or use Managed Identity to obtain tokens at runtime."
+      "defaultValue": "SECURITY: Do NOT store secrets in workflow JSON. Configure CLAIMS_BACKEND_API_TOKEN as an app setting using Azure Key Vault reference: @Microsoft.KeyVault(SecretUri=https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token) or use Managed Identity to obtain tokens at runtime."
     },
     "$connections": { "type": "Object", "defaultValue": {} },
     "sftp_inbound_folder": { "type": "String", "defaultValue": "/inbound/attachments" },
@@ -246,8 +246,8 @@
     "sb_namespace": { "type": "String", "defaultValue": "hipaa-logic-svc" },
     "sb_topic": { "type": "String", "defaultValue": "attachments-in" },
     "sb_topic_deadletter": { "type": "String", "defaultValue": "attachments-deadletter" },
-    "qnxt_base_url": { "type": "String", "defaultValue": "https://qnxt.api.local" },
-    "QNXT_API_TOKEN": { "type": "SecureString" },
+    "backend_base_url": { "type": "String", "defaultValue": "https://backend.api.local" },
+    "CLAIMS_BACKEND_API_TOKEN": { "type": "SecureString" },
     "x12_sender_id": { "type": "String", "defaultValue": "030240928" },
     "x12_receiver_id": { "type": "String", "defaultValue": "{config.payerId}" },
     "x12_275_messagetype": { "type": "String", "defaultValue": "X12_005010X210_275" }

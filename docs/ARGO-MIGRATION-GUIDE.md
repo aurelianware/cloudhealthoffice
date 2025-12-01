@@ -32,8 +32,8 @@ The migration moves X12 EDI processing from Azure-native services to a cloud-agn
 
 ### Access Requirements
 
-- Availity SFTP credentials
-- QNXT API token
+- Clearinghouse SFTP credentials
+- claims backend API token
 - S3/MinIO credentials
 - Kafka SASL credentials (if using external Kafka)
 
@@ -95,7 +95,7 @@ docker push cloudhealthoffice/kafka-publisher:latest
 
 ```bash
 # Create secrets (replace placeholder values)
-kubectl create secret generic availity-sftp-secret \
+kubectl create secret generic clearinghouse-sftp-secret \
   --from-literal=username=$SFTP_USERNAME \
   --from-literal=password=$SFTP_PASSWORD \
   -n cloudhealthoffice
@@ -106,8 +106,8 @@ kubectl create secret generic kafka-sasl-secret \
   --from-literal=password=$KAFKA_PASSWORD \
   -n cloudhealthoffice
 
-kubectl create secret generic qnxt-api-secret \
-  --from-literal=token=$QNXT_API_TOKEN \
+kubectl create secret generic claims-backend-api-secret \
+  --from-literal=token=$CLAIMS_BACKEND_API_TOKEN \
   -n cloudhealthoffice
 
 kubectl create secret generic s3-credentials-secret \
@@ -179,7 +179,7 @@ After successful migration:
 | Decode_X12_275 | parse-x12-275 step |
 | Extract_Metadata | extract-metadata step |
 | Send_to_ServiceBus | publish-kafka step |
-| Call_QNXT_API | (configurable in metadata-extractor) |
+| Call_CLAIMS_BACKEND_API | (configurable in metadata-extractor) |
 | Delete_SFTP_File | cleanup-sftp step |
 
 ### ingest278 → x12-278-ingest
@@ -191,7 +191,7 @@ After successful migration:
 | Store_Raw_in_Blob_278 | store-data-lake step |
 | Decode_X12_278 | parse-x12-278 step |
 | Extract_278_Metadata | extract-auth-data step |
-| Call_QNXT_278_API | call-qnxt-api step |
+| Call_Claims_Backend_278_API | call-claims-backend-api step |
 | Log_Custom_Event | publish-kafka step |
 
 ### rfai277 → x12-277-rfai
@@ -228,7 +228,7 @@ kind: ConfigMap
 metadata:
   name: trading-partners-config
 data:
-  availity-id: "030240928"
+  clearinghouse-id: "030240928"
 ```
 
 ### Secret Migration
@@ -237,10 +237,10 @@ Azure Key Vault → Kubernetes Secrets:
 
 ```bash
 # Export from Key Vault
-az keyvault secret show --name qnxt-api-token --vault-name myvault --query value -o tsv
+az keyvault secret show --name claims-backend-api-token --vault-name myvault --query value -o tsv
 
 # Create Kubernetes Secret
-kubectl create secret generic qnxt-api-secret \
+kubectl create secret generic claims-backend-api-secret \
   --from-literal=token=<exported-value> \
   -n cloudhealthoffice
 ```
@@ -305,7 +305,7 @@ kubectl get pods -n cloudhealthoffice -l workflows.argoproj.io/workflow=<workflo
 ```bash
 # Test SFTP connectivity
 kubectl run sftp-test --rm -it --image=cloudhealthoffice/sftp-fetcher \
-  --env="SFTP_HOST=sftp.availity.com" \
+  --env="SFTP_HOST=sftp.clearinghouse.example.com" \
   --env="SFTP_USERNAME=$USER" \
   -- --list-only
 ```

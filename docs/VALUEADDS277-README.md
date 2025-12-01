@@ -88,7 +88,7 @@ Payee name, check details, cashed date, payment tracking
 |------|---------|
 | `schemas/ECS-SummarySearch-Response.json` | Response schema with 60+ fields |
 | `logicapps/workflows/ecs_summary_search/workflow.json` | Workflow with transformation logic |
-| `config/schemas/availity-integration-config.schema.json` | Configuration schema |
+| `config/schemas/clearinghouse-integration-config.schema.json` | Configuration schema |
 | `docs/api/ECS-OPENAPI.yaml` | OpenAPI specification |
 
 ### 📖 Examples
@@ -116,7 +116,7 @@ Review the three example responses to see ValueAdds277 in action:
 Follow [VALUEADDS277-TESTING.md](./VALUEADDS277-TESTING.md) for test scenarios and validation checklists.
 
 ### 4. Configure Deployment
-Review [availity-integration-config.schema.json](../config/schemas/availity-integration-config.schema.json) for configuration options.
+Review [clearinghouse-integration-config.schema.json](../config/schemas/clearinghouse-integration-config.schema.json) for configuration options.
 
 ---
 

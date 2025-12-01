@@ -200,18 +200,18 @@ export class InteractiveWizard {
         name: 'clearinghouse',
         message: 'Select your clearinghouse:',
         choices: [
-          { name: 'Availity (Recommended)', value: 'availity' },
+          { name: 'Clearinghouse (Recommended)', value: 'clearinghouse' },
           { name: 'Change Healthcare', value: 'change' },
           { name: 'Waystar', value: 'waystar' },
           { name: 'Other/Custom', value: 'custom' },
         ],
-        default: 'availity',
+        default: 'clearinghouse',
       },
       {
         type: 'input',
         name: 'senderId',
         message: 'Your X12 Sender ID (ISA qualifier):',
-        default: (answers: any) => answers.clearinghouse === 'availity' ? '030240928' : '',
+        default: (answers: any) => answers.clearinghouse === 'clearinghouse' ? '030240928' : '',
         validate: (input: string) => {
           if (!input || input.length < 6) {
             return 'Sender ID must be at least 6 characters';
@@ -233,8 +233,8 @@ export class InteractiveWizard {
       {
         type: 'input',
         name: 'sftpHost',
-        message: 'SFTP Host (e.g., sftp.availity.com):',
-        default: (answers: any) => answers.clearinghouse === 'availity' ? 'sftp.availity.com' : '',
+        message: 'SFTP Host (e.g., sftp.clearinghouse.example.com):',
+        default: (answers: any) => answers.clearinghouse === 'clearinghouse' ? 'sftp.clearinghouse.example.com' : '',
         validate: (input: string) => {
           if (!input) {
             return 'SFTP host is required';
