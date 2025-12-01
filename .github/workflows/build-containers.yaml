@@ -97,7 +97,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.name }}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
           output: 'trivy-results-${{ matrix.container.name }}.sarif'
         if: github.event_name != 'pull_request'
@@ -164,7 +164,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container }}:${{ github.sha }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container }}:latest
           args: --severity-threshold=high
         continue-on-error: true
 
