@@ -199,12 +199,12 @@ class X12Parser:
             result = ParsedX12(parsed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
         
         # Detect delimiters from ISA segment
+        # ISA segment is exactly 106 characters, segment terminator follows at position 105
         if len(content) < 106:
             result.parse_errors.append("Content too short to contain valid ISA segment")
             return result
         
         element_separator = content[3]
-        # ISA segment is exactly 106 characters, segment terminator follows
         segment_terminator = content[105]
         
         # Handle newlines in segment terminator detection
