@@ -1,0 +1,562 @@
+# X12 275 Attachment Ingest Workflow
+# Replaces Azure Logic Apps ingest275 workflow with Kubernetes-native orchestration
+#
+# HIPAA Transaction: 005010X210 (275) - Additional Information to Support a Health Care Claim
+#
+# Workflow Steps:
+#   1. sftp-fetch - Download 275 file from Availity SFTP
+#   2. parse-x12-275 - Parse EDI to JSON
+#   3. validate-schema - Validate X12 structure
+#   4. extract-metadata - Extract claim/attachment metadata
+#   5. store-data-lake - Archive raw EDI file to S3/MinIO
+#   6. publish-kafka - Publish to 'attachments-in' topic
+#
+# Trading Partners:
+#   - Sender: Availity (030240928)
+#   - Receiver: Health Plan ({config.payerId})
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-275-ingest
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-275-ingest
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 275 attachment ingestion workflow - HIPAA compliant"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: ingest-275
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL for completed workflows
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24 hours
+    secondsAfterSuccess: 43200     # 12 hours
+    secondsAfterFailure: 604800    # 7 days (longer for debugging)
+  
+  # Archive completed workflows
+  archiveLogs: true
+  
+  # Workflow timeout
+  activeDeadlineSeconds: 1800  # 30 minutes
+  
+  # Retry strategy for the entire workflow
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  # Arguments/parameters
+  arguments:
+    parameters:
+      - name: sftp-host
+        value: "sftp.availity.com"
+      - name: sftp-folder
+        value: "/inbound/attachments"
+      - name: file-pattern
+        value: "*.edi"
+      - name: s3-bucket
+        value: "hipaa-attachments"
+      - name: kafka-topic
+        value: "attachments-in"
+      - name: sender-id
+        value: "030240928"
+      - name: receiver-id
+        value: ""  # Set via ConfigMap
+  
+  # Volume definitions
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: availity-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+  
+  templates:
+    # Main orchestration template
+    - name: ingest-275
+      dag:
+        tasks:
+          # Step 1: Fetch files from SFTP
+          - name: sftp-fetch
+            template: sftp-fetch-template
+            arguments:
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-folder}}"
+                - name: file-pattern
+                  value: "{{workflow.parameters.file-pattern}}"
+          
+          # Step 2: Parse X12 275 files (fan-out for each file)
+          - name: parse-x12-275
+            dependencies: [sftp-fetch]
+            template: parse-x12-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+              parameters:
+                - name: transaction-type
+                  value: "275"
+          
+          # Step 3: Validate X12 structure
+          - name: validate-schema
+            dependencies: [parse-x12-275]
+            template: validate-schema-template
+            arguments:
+              artifacts:
+                - name: parsed-json
+                  from: "{{tasks.parse-x12-275.outputs.artifacts.parsed-output}}"
+          
+          # Step 4: Extract metadata
+          - name: extract-metadata
+            dependencies: [validate-schema]
+            template: extract-metadata-template
+            arguments:
+              artifacts:
+                - name: parsed-json
+                  from: "{{tasks.parse-x12-275.outputs.artifacts.parsed-output}}"
+          
+          # Step 5: Store to Data Lake (parallel with Kafka publish)
+          - name: store-data-lake
+            dependencies: [validate-schema]
+            template: store-s3-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+              parameters:
+                - name: s3-bucket
+                  value: "{{workflow.parameters.s3-bucket}}"
+                - name: s3-prefix
+                  value: "raw/275/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}"
+          
+          # Step 6: Publish to Kafka
+          - name: publish-kafka
+            dependencies: [extract-metadata, store-data-lake]
+            template: kafka-publish-template
+            arguments:
+              artifacts:
+                - name: metadata-json
+                  from: "{{tasks.extract-metadata.outputs.artifacts.metadata-output}}"
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic}}"
+          
+          # Step 7: Cleanup SFTP (only after successful processing)
+          - name: cleanup-sftp
+            dependencies: [publish-kafka]
+            template: sftp-cleanup-template
+            arguments:
+              artifacts:
+                - name: file-list
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.file-manifest}}"
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+
+    # SFTP Fetch Template
+    - name: sftp-fetch-template
+      inputs:
+        parameters:
+          - name: sftp-host
+          - name: sftp-folder
+          - name: file-pattern
+      outputs:
+        artifacts:
+          - name: downloaded-files
+            path: /data/output
+            archive:
+              none: {}
+          - name: file-manifest
+            path: /data/manifest.json
+      container:
+        image: cloudhealthoffice/sftp-fetcher:latest
+        args:
+          - "--host"
+          - "{{inputs.parameters.sftp-host}}"
+          - "--folder"
+          - "{{inputs.parameters.sftp-folder}}"
+          - "--pattern"
+          - "{{inputs.parameters.file-pattern}}"
+          - "--output"
+          - "/data/output"
+          - "--json"
+        env:
+          - name: SFTP_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: password
+                optional: true
+          - name: SSH_KEY_PATH
+            value: "/secrets/ssh-key"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+          - name: sftp-credentials
+            mountPath: /secrets
+            readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+    # Parse X12 Template
+    - name: parse-x12-template
+      inputs:
+        parameters:
+          - name: transaction-type
+        artifacts:
+          - name: edi-file
+            path: /data/input
+      outputs:
+        artifacts:
+          - name: parsed-output
+            path: /data/output/parsed.json
+      container:
+        image: cloudhealthoffice/x12-parser:latest
+        args:
+          - "/data/input/*.edi"
+          - "--output"
+          - "/data/output/parsed.json"
+          - "--transaction-type"
+          - "{{inputs.parameters.transaction-type}}"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+    # Validate Schema Template
+    - name: validate-schema-template
+      inputs:
+        artifacts:
+          - name: parsed-json
+            path: /data/input/parsed.json
+      outputs:
+        parameters:
+          - name: validation-result
+            valueFrom:
+              path: /data/output/validation.json
+      container:
+        image: cloudhealthoffice/x12-parser:latest
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import sys
+            
+            with open('/data/input/parsed.json') as f:
+                parsed = json.load(f)
+            
+            errors = parsed.get('parse_errors', [])
+            result = {
+                'valid': len(errors) == 0,
+                'errors': errors,
+                'transaction_type': parsed.get('transaction_type', ''),
+                'file_name': parsed.get('file_name', '')
+            }
+            
+            with open('/data/output/validation.json', 'w') as f:
+                json.dump(result, f)
+            
+            if not result['valid']:
+                print(f"Validation failed: {errors}", file=sys.stderr)
+                sys.exit(1)
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Extract Metadata Template
+    - name: extract-metadata-template
+      inputs:
+        artifacts:
+          - name: parsed-json
+            path: /data/input/parsed.json
+      outputs:
+        artifacts:
+          - name: metadata-output
+            path: /data/output/metadata.json
+      container:
+        image: cloudhealthoffice/metadata-extractor:latest
+        args:
+          - "--input"
+          - "/data/input/parsed.json"
+          - "--output"
+          - "/data/output/metadata.json"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Store to S3/MinIO Template
+    - name: store-s3-template
+      inputs:
+        parameters:
+          - name: s3-bucket
+          - name: s3-prefix
+        artifacts:
+          - name: edi-file
+            path: /data/input
+      container:
+        image: amazon/aws-cli:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            for file in /data/input/*.edi; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                timestamp=$(date +%Y%m%d%H%M%S)
+                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                aws s3 cp "$file" "$s3_path" --sse AES256
+                echo "Uploaded: $s3_path"
+              fi
+            done
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: access-key-id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: secret-access-key
+          - name: AWS_DEFAULT_REGION
+            valueFrom:
+              configMapKeyRef:
+                name: s3-config
+                key: region
+                optional: true
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              configMapKeyRef:
+                name: s3-config
+                key: endpoint-url
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Kafka Publish Template
+    - name: kafka-publish-template
+      inputs:
+        parameters:
+          - name: topic
+        artifacts:
+          - name: metadata-json
+            path: /data/input/metadata.json
+      outputs:
+        parameters:
+          - name: publish-result
+            valueFrom:
+              path: /data/output/publish-result.json
+      container:
+        image: cloudhealthoffice/kafka-publisher:latest
+        args:
+          - "--input"
+          - "/data/input/metadata.json"
+          - "--topic"
+          - "{{inputs.parameters.topic}}"
+          - "--json"
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+          - name: KAFKA_SECURITY_PROTOCOL
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: security-protocol
+                optional: true
+          - name: KAFKA_SASL_MECHANISM
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: mechanism
+                optional: true
+          - name: KAFKA_SASL_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: username
+                optional: true
+          - name: KAFKA_SASL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: password
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # SFTP Cleanup Template
+    - name: sftp-cleanup-template
+      inputs:
+        parameters:
+          - name: sftp-host
+        artifacts:
+          - name: file-list
+            path: /data/manifest.json
+      container:
+        image: cloudhealthoffice/sftp-fetcher:latest
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            import paramiko
+            
+            with open('/data/manifest.json') as f:
+                manifest = json.load(f)
+            
+            host = "{{inputs.parameters.sftp-host}}"
+            username = os.environ.get('SFTP_USERNAME')
+            password = os.environ.get('SFTP_PASSWORD')
+            
+            if manifest.get('files'):
+                transport = paramiko.Transport((host, 22))
+                transport.connect(username=username, password=password)
+                sftp = paramiko.SFTPClient.from_transport(transport)
+                
+                for file_info in manifest['files']:
+                    try:
+                        sftp.remove(file_info['path'])
+                        print(f"Deleted: {file_info['path']}")
+                    except Exception as e:
+                        print(f"Failed to delete {file_info['path']}: {e}")
+                
+                sftp.close()
+                transport.close()
+        env:
+          - name: SFTP_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: password
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Error Handler Template
+    - name: error-handler
+      inputs:
+        parameters:
+          - name: error-message
+          - name: failed-step
+      container:
+        image: cloudhealthoffice/kafka-publisher:latest
+        args:
+          - "--topic"
+          - "dead-letter-queue"
+          - "--message"
+          - '{"workflow": "x12-275-ingest", "failedStep": "{{inputs.parameters.failed-step}}", "error": "{{inputs.parameters.error-message}}", "timestamp": "{{workflow.creationTimestamp}}"}'
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+  # Exit handler for cleanup and error notification
+  onExit: exit-handler
+  
+  # Exit handler template
+  - name: exit-handler
+    steps:
+      - - name: notify-completion
+          template: notify-template
+          when: "{{workflow.status}} == Succeeded"
+      - - name: notify-failure
+          template: error-handler
+          when: "{{workflow.status}} != Succeeded"
+          arguments:
+            parameters:
+              - name: error-message
+                value: "Workflow failed"
+              - name: failed-step
+                value: "{{workflow.failures}}"
+
+  - name: notify-template
+    container:
+      image: curlimages/curl:latest
+      command: ["echo"]
+      args: ["Workflow completed successfully"]

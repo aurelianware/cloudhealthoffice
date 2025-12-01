@@ -1,0 +1,117 @@
+# RFAI Sensor - Triggers 277 RFAI workflow on Kafka events
+#
+# Listens to: kafka-events EventSource (rfai-requests topic)
+# Triggers: x12-277-rfai WorkflowTemplate
+
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: rfai-sensor
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: rfai-sensor
+    app.kubernetes.io/component: sensor
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  template:
+    serviceAccountName: argo-events-sa
+    container:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "50m"
+        limits:
+          memory: "128Mi"
+          cpu: "100m"
+  
+  dependencies:
+    - name: rfai-request
+      eventSourceName: kafka-events
+      eventName: rfai-requests
+      filters:
+        data:
+          # Filter for valid RFAI requests
+          - path: body.claimNumber
+            type: string
+            comparator: "!="
+            value: ""
+    
+    - name: replay-request
+      eventSourceName: kafka-events
+      eventName: edi-278-replay-requests
+  
+  triggers:
+    # Trigger X12 277 RFAI Workflow
+    - template:
+        name: trigger-277-rfai
+        conditions: "rfai-request"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: x12-277-rfai-
+                namespace: cloudhealthoffice
+                labels:
+                  trigger: "kafka-rfai"
+              spec:
+                workflowTemplateRef:
+                  name: x12-277-rfai
+                arguments:
+                  parameters:
+                    - name: rfai-request
+                      value: ""  # Populated from event data
+          parameters:
+            # Pass the entire Kafka message body as the rfai-request parameter
+            - src:
+                dependencyName: rfai-request
+                dataKey: body
+              dest: spec.arguments.parameters.0.value
+      retryStrategy:
+        steps: 3
+        duration: "30s"
+    
+    # Trigger X12 278 Replay Workflow
+    - template:
+        name: trigger-278-replay
+        conditions: "replay-request"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: x12-278-replay-
+                namespace: cloudhealthoffice
+                labels:
+                  trigger: "kafka-replay"
+              spec:
+                workflowTemplateRef:
+                  name: x12-278-replay
+                arguments:
+                  parameters:
+                    - name: blob-url
+                      value: ""
+                    - name: kafka-offset
+                      value: ""
+                    - name: replay-reason
+                      value: ""
+          parameters:
+            - src:
+                dependencyName: replay-request
+                dataKey: body.blobUrl
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: replay-request
+                dataKey: body.kafkaOffset
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: replay-request
+                dataKey: body.reason
+              dest: spec.arguments.parameters.2.value
+      retryStrategy:
+        steps: 3
+        duration: "30s"
