@@ -271,12 +271,15 @@ workflows:
 
 vault:
   # Enable HashiCorp Vault integration for cloud-agnostic secrets management
+  # When false, secrets are managed via Kubernetes Secrets (kubectl create secret)
+  # Set to true and configure the options below to use external secrets management
   enabled: false
   
-  # Vault type: hashicorp, azure-keyvault, aws-secrets-manager, gcp-secret-manager
+  # Vault type (only used when enabled: true)
+  # Options: hashicorp, azure-keyvault, aws-secrets-manager, gcp-secret-manager
   type: hashicorp
   
-  # HashiCorp Vault settings
+  # HashiCorp Vault settings (used when type: hashicorp)
   hashicorp:
     # Internal address if Vault is deployed in the same cluster
     address: "http://vault.cloudhealthoffice.svc:8200"
