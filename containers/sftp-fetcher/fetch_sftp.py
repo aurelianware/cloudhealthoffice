@@ -23,6 +23,7 @@ import argparse
 import json
 import logging
 import os
+import stat
 import sys
 import time
 from dataclasses import dataclass, field
@@ -188,7 +189,7 @@ class SFTPFetcher:
                         path=f"{remote_folder}/{entry.filename}",
                         size=entry.st_size or 0,
                         modified_time=datetime.fromtimestamp(entry.st_mtime or 0),
-                        is_directory=entry.st_mode is not None and (entry.st_mode & 0o40000) != 0
+                        is_directory=entry.st_mode is not None and stat.S_ISDIR(entry.st_mode)
                     ))
             
             self.logger.info(f"Found {len(files)} files matching pattern")

@@ -11,8 +11,13 @@ import sys
 import unittest
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'containers' / 'x12-parser'))
+# Get the path to containers/x12-parser relative to this test file
+CONTAINERS_PATH = Path(__file__).resolve().parent.parent.parent / 'containers' / 'x12-parser'
+if CONTAINERS_PATH.exists():
+    sys.path.insert(0, str(CONTAINERS_PATH))
+else:
+    # Fallback for running from different locations
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / 'containers' / 'x12-parser'))
 
 from parse_x12 import X12Parser, TransactionType
 

@@ -113,6 +113,8 @@ jobs:
     needs: build-containers
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
@@ -171,6 +173,7 @@ jobs:
     needs: [build-containers, test-containers]
     runs-on: ubuntu-latest
     if: always()
+    permissions: {}
     
     steps:
       - name: Check build status

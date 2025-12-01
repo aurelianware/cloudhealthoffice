@@ -254,8 +254,13 @@ spec:
             kafka_offset = "{{inputs.parameters.kafka-offset}}"
             
             if blob_url:
-                # Fetch from S3/MinIO
-                import subprocess
+                # Validate blob URL to prevent command injection
+                import re
+                
+                # Only allow alphanumeric, hyphens, underscores, forward slashes, and periods
+                if not re.match(r'^[a-zA-Z0-9\-_./]+$', blob_url):
+                    print(f"Invalid blob URL format: {blob_url}")
+                    exit(1)
                 
                 # Parse S3 URL
                 if blob_url.startswith('s3://'):
@@ -264,17 +269,31 @@ spec:
                     s3_bucket = os.environ.get('S3_BUCKET', 'hipaa-attachments')
                     s3_path = f"s3://{s3_bucket}/{blob_url}"
                 
-                # Download file (requires aws cli)
-                result = subprocess.run(
-                    ['aws', 's3', 'cp', s3_path, '/data/output/replay.edi'],
-                    capture_output=True, text=True
-                )
-                
-                if result.returncode != 0:
-                    print(f"S3 download failed: {result.stderr}")
-                    exit(1)
-                
-                print(f"Downloaded from S3: {s3_path}")
+                # Download file using boto3 for safety (aws cli as fallback)
+                try:
+                    import boto3
+                    s3 = boto3.client('s3')
+                    
+                    # Parse bucket and key from s3_path
+                    path_parts = s3_path.replace('s3://', '').split('/', 1)
+                    bucket = path_parts[0]
+                    key = path_parts[1] if len(path_parts) > 1 else ''
+                    
+                    s3.download_file(bucket, key, '/data/output/replay.edi')
+                    print(f"Downloaded from S3 using boto3: {s3_path}")
+                except ImportError:
+                    # Fallback to aws cli
+                    import subprocess
+                    result = subprocess.run(
+                        ['aws', 's3', 'cp', s3_path, '/data/output/replay.edi'],
+                        capture_output=True, text=True
+                    )
+                    
+                    if result.returncode != 0:
+                        print(f"S3 download failed: {result.stderr}")
+                        exit(1)
+                    
+                    print(f"Downloaded from S3: {s3_path}")
             
             elif kafka_offset:
                 # Fetch from Kafka by offset
