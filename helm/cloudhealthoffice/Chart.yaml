@@ -12,6 +12,8 @@ keywords:
   - hipaa
   - argo-workflows
   - kafka
+  - hashicorp-vault
+  - multi-cloud
 
 maintainers:
   - name: Aurelianware
@@ -47,6 +49,13 @@ dependencies:
     repository: "https://charts.bitnami.com/bitnami"
     condition: minio.enabled
   
+  # HashiCorp Vault (optional - for cloud-agnostic secrets management)
+  - name: vault
+    version: "0.27.0"
+    repository: "https://helm.releases.hashicorp.com"
+    condition: vaultServer.enabled
+    alias: vaultServer
+  
   # Prometheus monitoring (optional)
   - name: kube-prometheus-stack
     version: "55.0.0"
@@ -57,3 +66,8 @@ dependencies:
 annotations:
   category: Healthcare
   licenses: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/aurelianware/cloudhealthoffice/docs
+    - name: Multi-Cloud Deployment Guide
+      url: https://github.com/aurelianware/cloudhealthoffice/docs/MULTI-CLOUD-DEPLOYMENT.md
