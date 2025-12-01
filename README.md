@@ -1,11 +1,12 @@
 # Cloud Health Office
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
+[![Kubernetes](https://img.shields.io/badge/Deploy%20to-Kubernetes-326CE5?logo=kubernetes&logoColor=white)](./docs/MULTI-CLOUD-DEPLOYMENT.md#option-2-kubernetes-deployment-akseksgke)
 [![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-An open-source, Azure-native platform for multi-payer EDI integration in healthcare.
+An open-source, **multi-cloud** platform for multi-payer EDI integration in healthcare. Deploy to **Azure Logic Apps** (fastest) or **Kubernetes** (AKS, EKS, GKE) for cloud independence.
 
 > **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security with high security maturity, and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
 
@@ -79,12 +80,33 @@ npm run test:fhir
 
 ## 🚀 Quick Start
 
-Deploy a complete HIPAA-compliant EDI platform in **&lt;5 minutes**:
+Deploy a complete HIPAA-compliant EDI platform in **<5 minutes**:
+
+### Option A: Azure Logic Apps (Recommended for Azure-first)
 
 1. **Click Deploy to Azure** ☝️ (button above)
 2. **Configure** basic settings (baseName, region)
 3. **Deploy workflows** via CLI
 4. **Start processing** 270/275/277/278/837 transactions
+
+### Option B: Kubernetes (Multi-Cloud)
+
+Deploy to **AKS**, **EKS**, or **GKE** for cloud independence:
+
+```bash
+# Add Helm repos and deploy
+helm repo add argo https://argoproj.github.io/argo-helm
+helm install cloudhealthoffice ./helm/cloudhealthoffice --namespace cloudhealthoffice
+```
+
+See [Multi-Cloud Deployment Guide](./docs/MULTI-CLOUD-DEPLOYMENT.md) for complete instructions.
+
+### Choose Your Architecture
+
+| Architecture | Deploy Time | Best For |
+|-------------|-------------|----------|
+| **Azure Logic Apps** | <5 min | Rapid deployment, Azure-only |
+| **Kubernetes** | 15-30 min | Multi-cloud, existing K8s |
 
 See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
@@ -94,6 +116,8 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed guide.
 
 - 🎯 **Interactive Wizard** - Guided configuration typically in under 5 minutes, based on testing
 - ⚡ **One-Click Azure Deploy** - Instant sandbox environment  
+- ☸️ **Kubernetes Support** - Deploy to AKS, EKS, or GKE with Helm
+- 🔓 **HashiCorp Vault Integration** - Open-source secrets management for cloud independence
 - 🧪 **Test Data Generator** - Synthetic 837 claims for testing
 - 📊 **E2E Test Suite** - Automated health checks and reporting
 - 🔒 **PHI Validation** - Automated HIPAA compliance checks
@@ -108,6 +132,7 @@ cd cloudhealthoffice && npm install && npm run build
 npm run generate -- interactive --output my-config.json --generate
 
 # Or use Azure Deploy button above for instant sandbox
+# Or deploy to Kubernetes (see docs/MULTI-CLOUD-DEPLOYMENT.md)
 ```
 
 ## 📋 Core Features
@@ -297,9 +322,16 @@ Cloud Health Office is backend-agnostic and designed to integrate seamlessly wit
 
 ### Deployment & Operations
 
-- [Deployment Guide](./DEPLOYMENT.md) - Step-by-step deployment
+- [Deployment Guide](./DEPLOYMENT.md) - Step-by-step Azure deployment
+- **[Multi-Cloud Deployment](./docs/MULTI-CLOUD-DEPLOYMENT.md)** - Kubernetes (AKS/EKS/GKE) deployment
 - [Gated Release Guide](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
+
+### Cloud Independence
+
+- **[HashiCorp Vault Integration](./docs/MULTI-CLOUD-DEPLOYMENT.md#option-b-hashicorp-vault-recommended-for-multi-cloud)** - Open-source secrets management
+- [Helm Charts](./helm/cloudhealthoffice/) - Kubernetes deployment via Helm
+- [Argo Workflows](./argo-workflows/) - Cloud-native workflow orchestration
 
 ## 🏥 CMS Interoperability & Prior Authorization Compliance
 
