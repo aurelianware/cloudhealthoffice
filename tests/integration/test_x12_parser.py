@@ -169,7 +169,7 @@ class TestX12ParserMetadataExtraction(unittest.TestCase):
         
         result = self.parser.parse_file(str(edi_file))
         
-        # Member ID should be extracted
+        # subscriber identifier should be extracted from NM1 segment
         self.assertIn("member_id", result.metadata)
         self.assertTrue(len(result.metadata.get("member_id", "")) > 0)
     
