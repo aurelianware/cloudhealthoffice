@@ -80,7 +80,7 @@ The Kubernetes deployment provides cloud-agnostic infrastructure using:
 - Kubernetes cluster (AKS, EKS, GKE, or self-managed)
 - Helm 3.x installed
 - kubectl configured for your cluster
-- Sufficient cluster resources (8+ vCPUs, 16+ GB RAM recommended)
+- Sufficient total cluster resources: 8+ vCPUs and 16+ GB RAM minimum across all nodes (recommended: 3 nodes with 4 vCPUs, 8 GB RAM each)
 
 ### Deployment Steps
 
