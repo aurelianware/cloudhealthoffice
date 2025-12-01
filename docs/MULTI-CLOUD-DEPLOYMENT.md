@@ -364,7 +364,7 @@ kubectl exec -it vault-0 -n cloudhealthoffice -- vault write auth/kubernetes/rol
 vault:
   enabled: true
   type: hashicorp  # Options: hashicorp, azure-keyvault, aws-secrets-manager
-  address: "http://vault.cloudhealthoffice.svc:8200"
+  address: "https://vault.cloudhealthoffice.svc:8200"  # Use HTTPS for PHI compliance
   role: "cloudhealthoffice"
   secretPath: "cloudhealthoffice/data"
   # For Vault Agent Injector annotations
