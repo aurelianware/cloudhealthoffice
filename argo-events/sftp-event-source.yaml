@@ -1,0 +1,64 @@
+# SFTP Polling Event Source for Argo Events
+# Calendar-based trigger to poll Availity SFTP for new EDI files
+#
+# Polling interval: Every 15 minutes
+# Emits events for new 275/278 files
+
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: sftp-polling
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: sftp-polling
+    app.kubernetes.io/component: event-source
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  # Calendar-based trigger
+  calendar:
+    sftp-poll-275:
+      # Every 15 minutes
+      schedule: "*/15 * * * *"
+      timezone: "UTC"
+      metadata:
+        transaction-type: "275"
+        sftp-folder: "/inbound/attachments"
+        file-pattern: "*.edi"
+        workflow: "x12-275-ingest"
+    
+    sftp-poll-278:
+      # Every 15 minutes, offset by 5 minutes from 275
+      schedule: "5,20,35,50 * * * *"
+      timezone: "UTC"
+      metadata:
+        transaction-type: "278"
+        sftp-folder: "/inbound/278"
+        file-pattern: "*.edi"
+        workflow: "x12-278-ingest"
+  
+  # Optional: Generic webhook for manual triggers
+  webhook:
+    manual-trigger:
+      port: "12000"
+      endpoint: "/trigger"
+      method: "POST"
+
+---
+# SFTP File Watcher Event Source (alternative to polling)
+# Uses a custom container to watch SFTP for new files
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: sftp-file-watcher
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: sftp-file-watcher
+    app.kubernetes.io/component: event-source
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  generic:
+    sftp-new-file:
+      url: "http://sftp-watcher-service:8080/events"
+      jsonBody: true
+      metadata:
+        source: "availity-sftp"

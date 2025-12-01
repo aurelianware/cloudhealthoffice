@@ -1,0 +1,61 @@
+# Trading Partners Configuration
+# X12 EDI trading partner identifiers and routing information
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trading-partners-config
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: trading-partners-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  # Availity trading partner (clearinghouse)
+  availity-id: "030240928"
+  availity-qualifier: "ZZ"
+  availity-name: "Availity"
+  
+  # Health Plan trading partner (configure per deployment)
+  healthplan-id: ""  # Set during deployment
+  healthplan-qualifier: "ZZ"
+  healthplan-name: "Health Plan"
+  
+  # Trading partner agreement JSON
+  trading-partners.json: |
+    {
+      "partners": {
+        "availity": {
+          "id": "030240928",
+          "qualifier": "ZZ",
+          "name": "Availity",
+          "role": "clearinghouse",
+          "transactionTypes": ["275", "277", "278"]
+        },
+        "healthplan": {
+          "id": "${HEALTHPLAN_ID}",
+          "qualifier": "ZZ",
+          "name": "${HEALTHPLAN_NAME}",
+          "role": "payer",
+          "transactionTypes": ["275", "277", "278"]
+        }
+      },
+      "routing": {
+        "inbound": {
+          "275": {
+            "sender": "availity",
+            "receiver": "healthplan"
+          },
+          "278": {
+            "sender": "availity",
+            "receiver": "healthplan"
+          }
+        },
+        "outbound": {
+          "277": {
+            "sender": "healthplan",
+            "receiver": "availity"
+          }
+        }
+      }
+    }

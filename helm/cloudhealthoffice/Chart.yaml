@@ -1,0 +1,59 @@
+apiVersion: v2
+name: cloudhealthoffice
+description: Cloud Health Office - Kubernetes-native X12 EDI processing platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - healthcare
+  - edi
+  - x12
+  - hipaa
+  - argo-workflows
+  - kafka
+
+maintainers:
+  - name: Aurelianware
+    email: support@aurelianware.com
+    url: https://github.com/aurelianware
+
+home: https://github.com/aurelianware/cloudhealthoffice
+sources:
+  - https://github.com/aurelianware/cloudhealthoffice
+
+dependencies:
+  # Argo Workflows for orchestration
+  - name: argo-workflows
+    version: "0.38.0"
+    repository: "https://argoproj.github.io/argo-helm"
+    condition: argo-workflows.enabled
+  
+  # Argo Events for event-driven triggers
+  - name: argo-events
+    version: "2.4.1"
+    repository: "https://argoproj.github.io/argo-helm"
+    condition: argo-events.enabled
+  
+  # Kafka (optional - can use external Kafka)
+  - name: kafka
+    version: "26.6.2"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: kafka.enabled
+  
+  # MinIO (optional - for S3-compatible storage)
+  - name: minio
+    version: "12.10.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: minio.enabled
+  
+  # Prometheus monitoring (optional)
+  - name: kube-prometheus-stack
+    version: "55.0.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.enabled
+    alias: monitoring
+
+annotations:
+  category: Healthcare
+  licenses: Apache-2.0

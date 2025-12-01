@@ -1,0 +1,591 @@
+# X12 277 RFAI Response Workflow
+# Replaces Azure Logic Apps rfai277 workflow with Kubernetes-native orchestration
+#
+# HIPAA Transaction: 005010X212 (277) - Health Care Claim Status Notification
+#
+# Workflow Steps:
+#   1. consume-kafka - Listen to 'rfai-requests' topic (triggered by Argo Events)
+#   2. fetch-claim-data - Retrieve claim information from backend
+#   3. generate-277 - Build X12 277 RFAI response
+#   4. encode-x12 - Encode to EDI format
+#   5. sftp-upload - Send to Availity SFTP
+#   6. publish-kafka - Confirm to 'edi-277-outbound' topic
+#
+# Trading Partners:
+#   - Sender: Health Plan ({config.payerId})
+#   - Receiver: Availity (030240928)
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-277-rfai
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-277-rfai
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 277 RFAI response generation workflow - HIPAA compliant"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: generate-277-rfai
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+    secondsAfterSuccess: 43200
+    secondsAfterFailure: 604800
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 1200  # 20 minutes
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  arguments:
+    parameters:
+      # RFAI request payload (passed from Argo Events)
+      - name: rfai-request
+        value: "{}"
+      # Trading partner configuration
+      - name: sender-id
+        value: ""  # Health Plan ID - set via ConfigMap
+      - name: receiver-id
+        value: "030240928"  # Availity
+      - name: sftp-host
+        value: "sftp.availity.com"
+      - name: sftp-outbound-folder
+        value: "/outbound/277"
+      - name: kafka-topic-outbound
+        value: "edi-277-outbound"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: availity-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: qnxt-credentials
+      secret:
+        secretName: qnxt-api-secret
+  
+  templates:
+    # Main orchestration template
+    - name: generate-277-rfai
+      dag:
+        tasks:
+          # Step 1: Parse RFAI request from Kafka message
+          - name: parse-rfai-request
+            template: parse-request-template
+            arguments:
+              parameters:
+                - name: rfai-payload
+                  value: "{{workflow.parameters.rfai-request}}"
+          
+          # Step 2: Fetch claim data from backend (if needed)
+          - name: fetch-claim-data
+            dependencies: [parse-rfai-request]
+            template: fetch-claim-template
+            arguments:
+              parameters:
+                - name: claim-number
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.claim-number}}"
+                - name: member-id
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.member-id}}"
+          
+          # Step 3: Generate X12 277 EDI
+          - name: generate-277
+            dependencies: [fetch-claim-data]
+            template: generate-277-template
+            arguments:
+              artifacts:
+                - name: claim-data
+                  from: "{{tasks.fetch-claim-data.outputs.artifacts.claim-info}}"
+              parameters:
+                - name: sender-id
+                  value: "{{workflow.parameters.sender-id}}"
+                - name: receiver-id
+                  value: "{{workflow.parameters.receiver-id}}"
+                - name: rfai-reason-code
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.rfai-reason-code}}"
+                - name: rfai-reference
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.rfai-reference}}"
+          
+          # Step 4: Upload to SFTP
+          - name: sftp-upload
+            dependencies: [generate-277]
+            template: sftp-upload-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-outbound-folder}}"
+          
+          # Step 5: Archive to Data Lake
+          - name: archive-277
+            dependencies: [generate-277]
+            template: store-s3-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: s3-bucket
+                  value: "hipaa-attachments"
+                - name: s3-prefix
+                  value: "outbound/277/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}"
+          
+          # Step 6: Publish confirmation to Kafka
+          - name: publish-confirmation
+            dependencies: [sftp-upload, archive-277]
+            template: kafka-confirm-template
+            arguments:
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic-outbound}}"
+                - name: claim-number
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.claim-number}}"
+                - name: rfai-reference
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.rfai-reference}}"
+
+    # Parse RFAI Request Template
+    - name: parse-request-template
+      inputs:
+        parameters:
+          - name: rfai-payload
+      outputs:
+        parameters:
+          - name: claim-number
+            valueFrom:
+              path: /data/output/claim-number
+          - name: member-id
+            valueFrom:
+              path: /data/output/member-id
+          - name: rfai-reason-code
+            valueFrom:
+              path: /data/output/rfai-reason-code
+          - name: rfai-reference
+            valueFrom:
+              path: /data/output/rfai-reference
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            
+            payload = json.loads('''{{inputs.parameters.rfai-payload}}''')
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            with open('/data/output/claim-number', 'w') as f:
+                f.write(payload.get('claimNumber', ''))
+            
+            with open('/data/output/member-id', 'w') as f:
+                f.write(payload.get('memberId', ''))
+            
+            with open('/data/output/rfai-reason-code', 'w') as f:
+                f.write(payload.get('rfaiReasonCode', 'A1'))
+            
+            with open('/data/output/rfai-reference', 'w') as f:
+                f.write(payload.get('rfaiReference', ''))
+            
+            print(f"Parsed RFAI request for claim: {payload.get('claimNumber')}")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+    # Fetch Claim Data Template
+    - name: fetch-claim-template
+      inputs:
+        parameters:
+          - name: claim-number
+          - name: member-id
+      outputs:
+        artifacts:
+          - name: claim-info
+            path: /data/output/claim-info.json
+      container:
+        image: curlimages/curl:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Fetch claim info from QNXT API
+            RESPONSE=$(curl -s \
+              -H "Authorization: Bearer $QNXT_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$QNXT_API_URL/claims/{{inputs.parameters.claim-number}}")
+            
+            # If API call fails or returns empty, create minimal claim info
+            if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
+              RESPONSE='{
+                "claimNumber": "{{inputs.parameters.claim-number}}",
+                "memberId": "{{inputs.parameters.member-id}}",
+                "memberFirstName": "",
+                "memberLastName": "",
+                "providerNpi": "",
+                "payerId": "",
+                "payerName": "HEALTH PLAN"
+              }'
+            fi
+            
+            mkdir -p /data/output
+            echo "$RESPONSE" > /data/output/claim-info.json
+            echo "Fetched claim data for: {{inputs.parameters.claim-number}}"
+        env:
+          - name: QNXT_API_URL
+            valueFrom:
+              configMapKeyRef:
+                name: qnxt-config
+                key: api-url
+          - name: QNXT_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: qnxt-api-secret
+                key: token
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+    # Generate X12 277 Template
+    - name: generate-277-template
+      inputs:
+        parameters:
+          - name: sender-id
+          - name: receiver-id
+          - name: rfai-reason-code
+          - name: rfai-reference
+        artifacts:
+          - name: claim-data
+            path: /data/input/claim-info.json
+      outputs:
+        artifacts:
+          - name: edi-output
+            path: /data/output/277_rfai.edi
+      container:
+        image: cloudhealthoffice/x12-encoder:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Read claim data
+            CLAIM_DATA=$(cat /data/input/claim-info.json)
+            
+            # Create input JSON for 277 generator
+            cat > /data/input/277-request.json << EOF
+            {
+              "claimNumber": $(echo "$CLAIM_DATA" | jq -r '.claimNumber // ""' | jq -Rs .),
+              "memberId": $(echo "$CLAIM_DATA" | jq -r '.memberId // ""' | jq -Rs .),
+              "memberFirstName": $(echo "$CLAIM_DATA" | jq -r '.memberFirstName // ""' | jq -Rs .),
+              "memberLastName": $(echo "$CLAIM_DATA" | jq -r '.memberLastName // ""' | jq -Rs .),
+              "providerNpi": $(echo "$CLAIM_DATA" | jq -r '.providerNpi // ""' | jq -Rs .),
+              "payerId": "{{inputs.parameters.sender-id}}",
+              "payerName": $(echo "$CLAIM_DATA" | jq -r '.payerName // "HEALTH PLAN"' | jq -Rs .),
+              "rfaiReference": "{{inputs.parameters.rfai-reference}}",
+              "rfaiReasonCode": "{{inputs.parameters.rfai-reason-code}}",
+              "statusCategoryCode": "A1",
+              "statusCode": "20",
+              "envelope": {
+                "sender": {
+                  "qualifier": "ZZ",
+                  "identifier": "{{inputs.parameters.sender-id}}"
+                },
+                "receiver": {
+                  "qualifier": "ZZ",
+                  "identifier": "{{inputs.parameters.receiver-id}}"
+                },
+                "usageIndicator": "P"
+              }
+            }
+            EOF
+            
+            mkdir -p /data/output
+            
+            # Generate 277 EDI
+            python /app/generate_277.py \
+              --input /data/input/277-request.json \
+              --output /data/output/277_rfai.edi
+            
+            echo "Generated 277 RFAI EDI file"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # SFTP Upload Template
+    - name: sftp-upload-template
+      inputs:
+        parameters:
+          - name: sftp-host
+          - name: sftp-folder
+        artifacts:
+          - name: edi-file
+            path: /data/input
+      outputs:
+        parameters:
+          - name: upload-status
+            valueFrom:
+              path: /data/output/upload-status.json
+      container:
+        image: cloudhealthoffice/sftp-fetcher:latest
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            import paramiko
+            from datetime import datetime
+            
+            host = "{{inputs.parameters.sftp-host}}"
+            folder = "{{inputs.parameters.sftp-folder}}"
+            username = os.environ.get('SFTP_USERNAME')
+            password = os.environ.get('SFTP_PASSWORD')
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            try:
+                transport = paramiko.Transport((host, 22))
+                transport.connect(username=username, password=password)
+                sftp = paramiko.SFTPClient.from_transport(transport)
+                
+                uploaded = []
+                for filename in os.listdir('/data/input'):
+                    if filename.endswith('.edi'):
+                        local_path = f'/data/input/{filename}'
+                        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+                        remote_filename = f'277_RFAI_{timestamp}.edi'
+                        remote_path = f'{folder}/{remote_filename}'
+                        
+                        sftp.put(local_path, remote_path)
+                        uploaded.append(remote_path)
+                        print(f'Uploaded: {remote_path}')
+                
+                sftp.close()
+                transport.close()
+                
+                result = {'success': True, 'uploaded': uploaded}
+            except Exception as e:
+                result = {'success': False, 'error': str(e)}
+            
+            with open('/data/output/upload-status.json', 'w') as f:
+                json.dump(result, f)
+        env:
+          - name: SFTP_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: availity-sftp-secret
+                key: password
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+          - name: sftp-credentials
+            mountPath: /secrets
+            readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Store to S3/MinIO Template
+    - name: store-s3-template
+      inputs:
+        parameters:
+          - name: s3-bucket
+          - name: s3-prefix
+        artifacts:
+          - name: edi-file
+            path: /data/input
+      container:
+        image: amazon/aws-cli:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            for file in /data/input/*.edi; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                timestamp=$(date +%Y%m%d%H%M%S)
+                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                aws s3 cp "$file" "$s3_path" --sse AES256
+                echo "Archived: $s3_path"
+              fi
+            done
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: access-key-id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: secret-access-key
+          - name: AWS_DEFAULT_REGION
+            valueFrom:
+              configMapKeyRef:
+                name: s3-config
+                key: region
+                optional: true
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              configMapKeyRef:
+                name: s3-config
+                key: endpoint-url
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Kafka Confirmation Template
+    - name: kafka-confirm-template
+      inputs:
+        parameters:
+          - name: topic
+          - name: claim-number
+          - name: rfai-reference
+      container:
+        image: cloudhealthoffice/kafka-publisher:latest
+        args:
+          - "--topic"
+          - "{{inputs.parameters.topic}}"
+          - "--message"
+          - '{"event": "277_RFAI_SENT", "claimNumber": "{{inputs.parameters.claim-number}}", "rfaiReference": "{{inputs.parameters.rfai-reference}}", "sentAt": "{{workflow.creationTimestamp}}", "workflow": "{{workflow.name}}"}'
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+          - name: KAFKA_SECURITY_PROTOCOL
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: security-protocol
+                optional: true
+          - name: KAFKA_SASL_MECHANISM
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: mechanism
+                optional: true
+          - name: KAFKA_SASL_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: username
+                optional: true
+          - name: KAFKA_SASL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: password
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+    # Error Handler
+    - name: error-handler
+      inputs:
+        parameters:
+          - name: error-message
+      container:
+        image: cloudhealthoffice/kafka-publisher:latest
+        args:
+          - "--topic"
+          - "dead-letter-queue"
+          - "--message"
+          - '{"workflow": "x12-277-rfai", "error": "{{inputs.parameters.error-message}}", "timestamp": "{{workflow.creationTimestamp}}"}'
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+  onExit: exit-handler
+
+  - name: exit-handler
+    steps:
+      - - name: log-success
+          template: log-template
+          when: "{{workflow.status}} == Succeeded"
+      - - name: handle-failure
+          template: error-handler
+          when: "{{workflow.status}} != Succeeded"
+          arguments:
+            parameters:
+              - name: error-message
+                value: "277 RFAI workflow failed"
+
+  - name: log-template
+    container:
+      image: busybox
+      command: ["echo"]
+      args: ["X12 277 RFAI workflow completed successfully"]
