@@ -1,6 +1,168 @@
-# What's New in Cloud Health Office (Post v1.0.0)
+# What's New in Cloud Health Office
 
-This document highlights major features and enhancements added to Cloud Health Office since the v1.0.0 release (November 21, 2025).
+This document highlights major features and enhancements added to Cloud Health Office across releases.
+
+---
+
+## 🚀 v3.0.0 — The Open Frontier Release (December 2025)
+
+Cloud Health Office v3.0.0 delivers multi-cloud independence, commercial launch readiness, and Kubernetes-native workflow orchestration.
+
+### 🌐 Multi-Cloud & Cloud Independence
+
+**What it does**: Deploy Cloud Health Office on any cloud—Azure, AWS, GCP, or private Kubernetes clusters.
+
+**Key Benefits**:
+- 🌍 Run on AKS, EKS, GKE, or any Kubernetes cluster
+- ⚡ Argo Workflows for cloud-native orchestration
+- 📨 Apache Kafka for cloud-agnostic messaging
+- 🔐 HashiCorp Vault as open-source alternative to Azure Key Vault
+
+**Get Started**:
+```bash
+# Deploy with Helm
+helm install cloudhealthoffice ./helm/cloudhealthoffice \
+  --set vault.enabled=true \
+  --set vault.type=hashicorp
+
+# Apply Argo Workflows
+kubectl apply -f argo-workflows/
+```
+
+**Documentation**: [MULTI-CLOUD-DEPLOYMENT.md](./docs/MULTI-CLOUD-DEPLOYMENT.md), [ARGO-MIGRATION-GUIDE.md](./docs/ARGO-MIGRATION-GUIDE.md)
+
+---
+
+### 🛒 Azure Marketplace Readiness
+
+**What it does**: Complete Azure Marketplace offer structure with managed application and SaaS billing.
+
+**Key Benefits**:
+- 🚀 One-click deployment via Azure Marketplace
+- 💰 Meter-based billing per transaction (837, 278, 275, FHIR)
+- 📊 3-tier pricing: Starter/Professional/Enterprise
+- 📄 Legal docs: Privacy policy, SLA, support terms
+
+**Pricing Tiers**:
+| Tier | Price | Transactions Included |
+|------|-------|----------------------|
+| Starter | $499/mo | 1,000 837 claims |
+| Professional | $1,999/mo | 10,000 837 claims |
+| Enterprise | $4,999/mo | 50,000 837 claims |
+
+**Documentation**: [marketplace/README.md](./marketplace/)
+
+---
+
+### 🏗️ Argo Workflows for EDI Processing
+
+**What it does**: Kubernetes-native workflow orchestration for X12 EDI transactions.
+
+**Workflows Added**:
+- **X12 275 Attachment Ingest**: SFTP polling → Parse → Archive → Kafka
+- **X12 278 Authorization Request**: Parse → Backend API → Archive → Kafka
+- **X12 277 RFAI Response**: Kafka trigger → Generate → SFTP upload
+- **X12 278 Replay**: Deterministic replay from Kafka offsets
+
+**Container Images**:
+- `x12-parser`: Parse X12 275/278 to JSON
+- `x12-encoder`: Generate X12 277 responses
+- `sftp-fetcher`: Download files from clearinghouse SFTP
+- `metadata-extractor`: Extract claim/member/provider data
+- `kafka-publisher`: Publish events to Kafka topics
+
+**Documentation**: [ARGO-OPERATIONS.md](./docs/ARGO-OPERATIONS.md)
+
+---
+
+### 🤖 ClaimRiskScorer AI Function
+
+**What it does**: ML-powered fraud/abuse risk scoring for 837 claims.
+
+**Key Features**:
+- 📊 Risk score 0-100 using PyTorch model
+- 🏷️ Custom ZZZ segment in 277 responses with score + reasons
+- 📈 Application Insights "HighRiskClaim" custom events
+- ⚡ Service Bus trigger for real-time scoring
+
+**Documentation**: [functions/ClaimRiskScorer/README.md](./functions/ClaimRiskScorer/)
+
+---
+
+### 🔌 Eligibility Service Microservice
+
+**What it does**: Dual-interface eligibility service with X12 270/271 and FHIR support.
+
+**Key Features**:
+- 🔄 X12 270/271 AND FHIR CoverageEligibilityRequest
+- 📦 Dedicated Cosmos DB with TTL cache
+- 📣 Event Grid publisher for "EligibilityChecked" events
+- 🚀 Azure Container Apps + Dapr deployment
+
+**Documentation**: [services/eligibility-service/README.md](./services/eligibility-service/)
+
+---
+
+### 💼 Commercial Launch Materials
+
+**What it does**: Complete sales and marketing materials for commercial launch.
+
+**Materials Included**:
+- 📋 **Product Overview**: 2-page executive summary
+- 💰 **ROI Calculator**: TCO analysis and break-even projections
+- 📊 **Financial Model**: 3-year revenue and profitability projections
+- 🎯 **Pitch Deck**: 15-slide framework for investors/customers
+- 📧 **Email Templates**: 5 outreach templates for different personas
+- 🎪 **Pilot Program**: 60-day structured engagement
+
+**Documentation**: [sales-materials/](./sales-materials/)
+
+---
+
+### 🎯 VC Fundraising Strategy
+
+**What it does**: Comprehensive investor relations and fundraising materials.
+
+**Materials Included**:
+- 📋 **VC Target List**: 12+ healthcare and SaaS VCs with fit analysis
+- 📄 **Investor One-Pager**: Email-forward ready summary
+- ✅ **Due Diligence Checklist**: Legal, financial, technical prep
+- 🤝 **Partner Targets**: 50+ strategic partners
+- 🎤 **Meeting Script**: 30-minute pitch framework
+- 💡 **Alternative Funding**: SBIR, RBF, venture debt options
+
+**Documentation**: [fundraising/](./fundraising/)
+
+---
+
+### 📊 CMS-0057-F Compliance Dashboard
+
+**What it does**: Azure Monitor workbook for real-time compliance tracking.
+
+**Metrics Tracked**:
+- Patient Access API enablement %
+- Prior Auth response times (72h urgent, 7d standard SLAs)
+- Error rates by transaction type (270/271, 278, 837)
+- PHI/security operations audit trail
+
+**Documentation**: [docs/AZURE-MONITOR-DASHBOARDS.md](./docs/AZURE-MONITOR-DASHBOARDS.md)
+
+---
+
+### 🔧 Migration Wizard
+
+**What it does**: Blazor web app for migrating from legacy claims systems.
+
+**Capabilities**:
+- 📤 Export members, providers, benefit plans via SOAP APIs
+- 📥 Import to Cosmos DB with batch upsert
+- 📊 Mapping report with 95%+ auto-match
+- 🔄 One-click API Management cutover
+- 🔐 Azure Key Vault credential integration
+
+**Documentation**: [tools/migration-wizard/README.md](./tools/migration-wizard/)
+
+---
 
 ## 🎯 Quick Links
 
@@ -8,10 +170,11 @@ This document highlights major features and enhancements added to Cloud Health O
 - **[Updated README](./README.md)** - Enhanced with new features section
 - **[Quick Start Guide](./QUICKSTART.md)** - Includes new onboarding options
 - **[Changelog](./CHANGELOG.md)** - Detailed version history
+- **[2026 Roadmap](./ROADMAP-2026.md)** - Quarterly milestones and microservice releases
 
 ---
 
-## 🚀 Major New Features
+## 📈 v2.0.0 Features (November 2025)
 
 ### 1. Config-to-Workflow Generator (Zero-Code Payer Onboarding)
 
