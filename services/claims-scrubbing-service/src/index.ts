@@ -268,9 +268,7 @@ async function start(): Promise<void> {
 
     server.listen(PORT, () => {
       console.log(`Claims Scrubbing Service listening on port ${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
-      console.log(`Validate claim: POST http://localhost:${PORT}/api/claims/validate`);
-      console.log(`Get rules: GET http://localhost:${PORT}/api/rules`);
+      console.log(`Endpoints: /livez, /readyz, /api/claims/validate, /api/rules`);
     });
   } catch (error) {
     console.error('Failed to start service:', error);
