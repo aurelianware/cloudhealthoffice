@@ -228,10 +228,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     sendJson(res, 404, { error: 'Not found', path: pathname });
   } catch (error) {
     console.error('Request error:', error);
-    sendJson(res, 500, {
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    const isProd = process.env.NODE_ENV === 'production';
+    sendJson(res, 500, isProd
+      ? { error: 'Internal server error' }
+      : {
+          error: 'Internal server error',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        }
+    );
   }
 }
 
