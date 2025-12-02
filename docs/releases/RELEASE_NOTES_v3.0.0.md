@@ -153,20 +153,17 @@ az deployment group create \
 ### Kubernetes Migration (Optional)
 
 ```bash
-# 1. Add Helm repo
-helm repo add cloudhealthoffice https://charts.cloudhealthoffice.example
-
-# 2. Install with HashiCorp Vault
+# 1. Install using local Helm chart (from repository clone)
 helm install cloudhealthoffice ./helm/cloudhealthoffice \
   --namespace cloudhealthoffice \
   --create-namespace \
   --set vault.enabled=true \
   --set vault.type=hashicorp
 
-# 3. Apply Argo Workflows
+# 2. Apply Argo Workflows
 kubectl apply -f argo-workflows/ -n cloudhealthoffice
 
-# 4. Verify deployment
+# 3. Verify deployment
 kubectl get pods -n cloudhealthoffice
 kubectl get workflows -n cloudhealthoffice
 ```
