@@ -12,7 +12,6 @@ import { URL } from 'url';
 import {
   ClaimsScrubberConfig,
   ValidateClaimRequest,
-  ValidateClaimResponse,
   BatchValidateRequest,
   X12_837_Claim,
 } from './types';
