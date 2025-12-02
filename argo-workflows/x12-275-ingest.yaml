@@ -536,27 +536,27 @@ spec:
             memory: "128Mi"
             cpu: "100m"
 
+    # Exit handler template
+    - name: exit-handler
+      steps:
+        - - name: notify-completion
+            template: notify-template
+            when: "{{workflow.status}} == Succeeded"
+        - - name: notify-failure
+            template: error-handler
+            when: "{{workflow.status}} != Succeeded"
+            arguments:
+              parameters:
+                - name: error-message
+                  value: "Workflow failed"
+                - name: failed-step
+                  value: "{{workflow.failures}}"
+
+    - name: notify-template
+      container:
+        image: curlimages/curl:latest
+        command: ["echo"]
+        args: ["Workflow completed successfully"]
+
   # Exit handler for cleanup and error notification
   onExit: exit-handler
-  
-  # Exit handler template
-  - name: exit-handler
-    steps:
-      - - name: notify-completion
-          template: notify-template
-          when: "{{workflow.status}} == Succeeded"
-      - - name: notify-failure
-          template: error-handler
-          when: "{{workflow.status}} != Succeeded"
-          arguments:
-            parameters:
-              - name: error-message
-                value: "Workflow failed"
-              - name: failed-step
-                value: "{{workflow.failures}}"
-
-  - name: notify-template
-    container:
-      image: curlimages/curl:latest
-      command: ["echo"]
-      args: ["Workflow completed successfully"]
