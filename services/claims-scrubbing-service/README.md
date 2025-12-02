@@ -15,7 +15,8 @@ Pre-adjudication claims validation service for 837P (Professional), 837I (Instit
   - Amount verification
   - NPI validation (Luhn algorithm)
   - Modifier validation
-- **Azure Integration**: Service Bus, Cosmos DB, Blob Storage
+- **Kafka Integration**: Consistent with repository messaging patterns
+- **Azure Integration**: Cosmos DB, Blob Storage
 - **Dapr Support**: Optional sidecar integration
 
 ## Quick Start
@@ -116,10 +117,17 @@ GET /readyz
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | HTTP server port | 3000 |
-| `SERVICE_BUS_NAMESPACE` | Azure Service Bus namespace | - |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap servers | localhost:9092 |
+| `KAFKA_CLIENT_ID` | Kafka client ID | claims-scrubber |
+| `KAFKA_CONSUMER_GROUP` | Kafka consumer group | claims-scrubber-group |
+| `KAFKA_SASL_USERNAME` | SASL username (optional) | - |
+| `KAFKA_SASL_PASSWORD` | SASL password (optional) | - |
+| `KAFKA_SASL_MECHANISM` | SASL mechanism | scram-sha-512 |
+| `KAFKA_SSL` | Enable SSL/TLS | false |
 | `INBOUND_CLAIMS_TOPIC` | Topic for incoming claims | claims-inbound |
-| `CLEAN_CLAIMS_TOPIC` | Topic for validated claims | claims-clean |
-| `FLAGGED_CLAIMS_TOPIC` | Topic for flagged claims | claims-flagged |
+| `CLEAN_CLAIMS_TOPIC` | Topic for validated claims | claims-adjudication |
+| `FLAGGED_CLAIMS_TOPIC` | Topic for flagged claims | claims-work-queue |
+| `REJECTED_CLAIMS_TOPIC` | Topic for rejected claims | claims-rejected |
 | `COSMOS_ENDPOINT` | Cosmos DB endpoint | - |
 | `COSMOS_DATABASE` | Database name | claims-scrubbing |
 | `STORAGE_ACCOUNT_NAME` | Storage account for archival | - |

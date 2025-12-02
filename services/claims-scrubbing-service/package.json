@@ -26,7 +26,7 @@
     "hipaa",
     "edi",
     "x12",
-    "azure",
+    "kafka",
     "dapr",
     "first-pass-rate"
   ],
@@ -35,8 +35,8 @@
   "dependencies": {
     "@azure/cosmos": "^4.2.0",
     "@azure/identity": "^4.13.0",
-    "@azure/service-bus": "^7.9.5",
     "@azure/storage-blob": "^12.29.1",
+    "kafkajs": "^2.2.4",
     "uuid": "^11.0.0"
   },
   "devDependencies": {

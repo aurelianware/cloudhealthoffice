@@ -20,14 +20,20 @@ import { ClaimsScrubberService } from './claims-scrubber';
 
 // Default configuration (can be overridden by environment variables)
 const config: ClaimsScrubberConfig = {
-  serviceBus: {
-    namespace: process.env.SERVICE_BUS_NAMESPACE,
-    connectionString: process.env.SERVICE_BUS_CONNECTION_STRING,
+  kafka: {
+    bootstrapServers: process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092',
+    clientId: process.env.KAFKA_CLIENT_ID || 'claims-scrubber',
     inboundTopic: process.env.INBOUND_CLAIMS_TOPIC || 'claims-inbound',
-    cleanClaimsTopic: process.env.CLEAN_CLAIMS_TOPIC || 'claims-clean',
-    flaggedClaimsTopic: process.env.FLAGGED_CLAIMS_TOPIC || 'claims-flagged',
+    cleanClaimsTopic: process.env.CLEAN_CLAIMS_TOPIC || 'claims-adjudication',
+    flaggedClaimsTopic: process.env.FLAGGED_CLAIMS_TOPIC || 'claims-work-queue',
     rejectedClaimsTopic: process.env.REJECTED_CLAIMS_TOPIC || 'claims-rejected',
-    subscriptionName: process.env.CLAIMS_SUBSCRIPTION || 'claims-scrubber-sub',
+    consumerGroupId: process.env.KAFKA_CONSUMER_GROUP || 'claims-scrubber-group',
+    sasl: process.env.KAFKA_SASL_USERNAME ? {
+      mechanism: (process.env.KAFKA_SASL_MECHANISM || 'scram-sha-512') as 'plain' | 'scram-sha-256' | 'scram-sha-512',
+      username: process.env.KAFKA_SASL_USERNAME,
+      password: process.env.KAFKA_SASL_PASSWORD || '',
+    } : undefined,
+    ssl: process.env.KAFKA_SSL === 'true',
   },
   storage: {
     accountName: process.env.STORAGE_ACCOUNT_NAME,
@@ -197,7 +203,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       sendJson(res, 200, [
         {
           pubsubname: config.dapr?.pubSubName || 'pubsub',
-          topic: config.serviceBus.inboundTopic,
+          topic: config.kafka.inboundTopic,
           route: '/api/dapr/claims',
         },
       ]);
