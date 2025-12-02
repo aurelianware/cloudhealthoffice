@@ -44,11 +44,12 @@ kubectl apply -f argo-workflows/
 - 📄 Legal docs: Privacy policy, SLA, support terms
 
 **Pricing Tiers**:
-| Tier | Price | Transactions Included |
-|------|-------|----------------------|
-| Starter | $499/mo | 1,000 837 claims |
-| Professional | $1,999/mo | 10,000 837 claims |
-| Enterprise | $4,999/mo | 50,000 837 claims |
+
+| Tier         | Price      | 837 Claims Included |
+|--------------|------------|---------------------|
+| Starter      | $499/mo    | 1,000               |
+| Professional | $1,999/mo  | 10,000              |
+| Enterprise   | $4,999/mo  | 50,000              |
 
 **Documentation**: [marketplace/README.md](./marketplace/)
 

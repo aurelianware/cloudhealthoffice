@@ -5,7 +5,7 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - 2025-12-01
+## [3.0.0] - December 1, 2025
 
 ### The Open Frontier Release
 
@@ -142,6 +142,28 @@ Cloud Health Office v3.0.0 delivers multi-cloud independence, commercial launch 
 - Key Vault networkAcls defaultAction set to "Deny" for HIPAA compliance
 - Managed Identity exclusively used for Cosmos DB/Event Grid access (no keys)
 - All 424 tests pass with zero security vulnerabilities
+
+### PRs Merged (17 since v2.0.0)
+
+| PR | Title | Category |
+|----|-------|----------|
+| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references (Cognizant, QNXT, Facets, Availity) | Platform |
+| [#115](https://github.com/aurelianware/cloudhealthoffice/pull/115) | Add multi-cloud deployment documentation and HashiCorp Vault integration | Multi-Cloud |
+| [#114](https://github.com/aurelianware/cloudhealthoffice/pull/114) | Fix image tag mismatch in container build workflow | CI/CD |
+| [#113](https://github.com/aurelianware/cloudhealthoffice/pull/113) | Migrate X12 EDI processing to Argo Workflows and Kafka | Multi-Cloud |
+| [#112](https://github.com/aurelianware/cloudhealthoffice/pull/112) | Add VC fundraising strategy and materials | Commercial |
+| [#111](https://github.com/aurelianware/cloudhealthoffice/pull/111) | Add comprehensive commercial launch materials | Commercial |
+| [#110](https://github.com/aurelianware/cloudhealthoffice/pull/110) | Enhance CMS-0057-F whitepaper with ROI analysis and visualizations | Documentation |
+| [#109](https://github.com/aurelianware/cloudhealthoffice/pull/109) | Add CMS-0057-F compliance whitepaper for payer executives | Documentation |
+| [#108](https://github.com/aurelianware/cloudhealthoffice/pull/108) | Add 2026 product roadmap with CMS compliance milestones | Roadmap |
+| [#107](https://github.com/aurelianware/cloudhealthoffice/pull/107) | Add community governance files, issue templates, and PR automation | Governance |
+| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Add Blazor migration wizard for QNXT to Cloud Health Office | Tools |
+| [#105](https://github.com/aurelianware/cloudhealthoffice/pull/105) | Add Azure Marketplace offer structure with managed app and SaaS plans | Marketplace |
+| [#104](https://github.com/aurelianware/cloudhealthoffice/pull/104) | Add ClaimRiskScorer Azure Function for 837 fraud/abuse risk scoring | Microservices |
+| [#103](https://github.com/aurelianware/cloudhealthoffice/pull/103) | Add eligibility-service with dual X12 270/271 and FHIR interface | Microservices |
+| [#102](https://github.com/aurelianware/cloudhealthoffice/pull/102) | Add CMS-0057-F Compliance Dashboard workbook for Azure Monitor | Compliance |
+| [#101](https://github.com/aurelianware/cloudhealthoffice/pull/101) | Fix patient_access_api workflow missing required keys | Bug Fix |
+| [#100](https://github.com/aurelianware/cloudhealthoffice/pull/100) | Add ProviderDirectoryApi and PriorAuthApi Logic Apps with NPPES integration | Microservices |
 
 ---
 
