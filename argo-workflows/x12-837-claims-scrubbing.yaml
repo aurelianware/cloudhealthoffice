@@ -1,0 +1,593 @@
+# X12 837 Claims Scrubbing Workflow
+# Pre-adjudication validation for 837P/837I/837D claims
+#
+# HIPAA Transactions:
+#   - 837P (005010X222A1) - Professional Claims
+#   - 837I (005010X223A2) - Institutional Claims
+#   - 837D (005010X224A2) - Dental Claims
+#
+# Workflow Steps:
+#   1. ingest-claims - Receive claims from SFTP or Service Bus
+#   2. parse-x12-837 - Parse EDI to JSON
+#   3. validate-claims - Run validation rules
+#   4. route-claims - Route based on validation results
+#   5. archive-results - Store validation results
+#
+# Routing:
+#   - Clean claims → adjudication-queue
+#   - Flagged claims → work-queue (for staff review)
+#   - Rejected claims → rejected-queue
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-837-claims-scrubbing
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-837-claims-scrubbing
+    app.kubernetes.io/component: claims-validation
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 837 claims validation workflow - improves first-pass rates"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: scrub-claims
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL for completed workflows
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24 hours
+    secondsAfterSuccess: 43200     # 12 hours
+    secondsAfterFailure: 604800    # 7 days (longer for debugging)
+  
+  # Archive completed workflows
+  archiveLogs: true
+  
+  # Workflow timeout
+  activeDeadlineSeconds: 3600  # 1 hour
+  
+  # Retry strategy for the entire workflow
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  # Arguments/parameters
+  arguments:
+    parameters:
+      - name: source-type
+        value: "sftp"  # sftp or service-bus
+      - name: sftp-host
+        value: ""
+      - name: sftp-folder
+        value: "/inbound/claims"
+      - name: file-pattern
+        value: "*.edi"
+      - name: claim-types
+        value: "837P,837I,837D"
+      - name: s3-bucket
+        value: "claims-archive"
+      - name: kafka-clean-topic
+        value: "claims-adjudication"
+      - name: kafka-flagged-topic
+        value: "claims-work-queue"
+      - name: kafka-rejected-topic
+        value: "claims-rejected"
+      - name: first-pass-rate-target
+        value: "95"
+      - name: payer-id
+        value: ""
+  
+  # Volume definitions
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "2Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: claims-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: rules-config
+      configMap:
+        name: claims-validation-rules
+  
+  templates:
+    # Main orchestration template
+    - name: scrub-claims
+      dag:
+        tasks:
+          # Step 1: Ingest claims from source
+          - name: ingest-claims
+            template: ingest-claims-template
+            arguments:
+              parameters:
+                - name: source-type
+                  value: "{{workflow.parameters.source-type}}"
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-folder}}"
+                - name: file-pattern
+                  value: "{{workflow.parameters.file-pattern}}"
+          
+          # Step 2: Parse X12 837 claims
+          - name: parse-claims
+            dependencies: [ingest-claims]
+            template: parse-x12-837-template
+            arguments:
+              artifacts:
+                - name: edi-files
+                  from: "{{tasks.ingest-claims.outputs.artifacts.claim-files}}"
+              parameters:
+                - name: claim-types
+                  value: "{{workflow.parameters.claim-types}}"
+          
+          # Step 3: Validate claims using rule engine
+          - name: validate-claims
+            dependencies: [parse-claims]
+            template: validate-claims-template
+            arguments:
+              artifacts:
+                - name: parsed-claims
+                  from: "{{tasks.parse-claims.outputs.artifacts.parsed-claims}}"
+              parameters:
+                - name: payer-id
+                  value: "{{workflow.parameters.payer-id}}"
+          
+          # Step 4a: Route clean claims to adjudication
+          - name: route-clean-claims
+            dependencies: [validate-claims]
+            template: route-claims-template
+            arguments:
+              artifacts:
+                - name: validation-results
+                  from: "{{tasks.validate-claims.outputs.artifacts.validation-results}}"
+              parameters:
+                - name: status-filter
+                  value: "clean"
+                - name: kafka-topic
+                  value: "{{workflow.parameters.kafka-clean-topic}}"
+          
+          # Step 4b: Route flagged claims to work queue
+          - name: route-flagged-claims
+            dependencies: [validate-claims]
+            template: route-claims-template
+            arguments:
+              artifacts:
+                - name: validation-results
+                  from: "{{tasks.validate-claims.outputs.artifacts.validation-results}}"
+              parameters:
+                - name: status-filter
+                  value: "flagged"
+                - name: kafka-topic
+                  value: "{{workflow.parameters.kafka-flagged-topic}}"
+          
+          # Step 4c: Route rejected claims
+          - name: route-rejected-claims
+            dependencies: [validate-claims]
+            template: route-claims-template
+            arguments:
+              artifacts:
+                - name: validation-results
+                  from: "{{tasks.validate-claims.outputs.artifacts.validation-results}}"
+              parameters:
+                - name: status-filter
+                  value: "rejected"
+                - name: kafka-topic
+                  value: "{{workflow.parameters.kafka-rejected-topic}}"
+          
+          # Step 5: Archive all results
+          - name: archive-results
+            dependencies: [route-clean-claims, route-flagged-claims, route-rejected-claims]
+            template: archive-results-template
+            arguments:
+              artifacts:
+                - name: validation-results
+                  from: "{{tasks.validate-claims.outputs.artifacts.validation-results}}"
+              parameters:
+                - name: s3-bucket
+                  value: "{{workflow.parameters.s3-bucket}}"
+          
+          # Step 6: Calculate and report metrics
+          - name: report-metrics
+            dependencies: [archive-results]
+            template: report-metrics-template
+            arguments:
+              artifacts:
+                - name: validation-results
+                  from: "{{tasks.validate-claims.outputs.artifacts.validation-results}}"
+              parameters:
+                - name: first-pass-rate-target
+                  value: "{{workflow.parameters.first-pass-rate-target}}"
+
+    # Ingest Claims Template
+    - name: ingest-claims-template
+      inputs:
+        parameters:
+          - name: source-type
+          - name: sftp-host
+          - name: sftp-folder
+          - name: file-pattern
+      outputs:
+        artifacts:
+          - name: claim-files
+            path: /data/output
+            archive:
+              none: {}
+          - name: file-manifest
+            path: /data/manifest.json
+      container:
+        image: cloudhealthoffice/sftp-fetcher:latest
+        args:
+          - "--host"
+          - "{{inputs.parameters.sftp-host}}"
+          - "--folder"
+          - "{{inputs.parameters.sftp-folder}}"
+          - "--pattern"
+          - "{{inputs.parameters.file-pattern}}"
+          - "--output"
+          - "/data/output"
+          - "--json"
+        env:
+          - name: SOURCE_TYPE
+            value: "{{inputs.parameters.source-type}}"
+          - name: SFTP_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: claims-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: claims-sftp-secret
+                key: password
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+          - name: sftp-credentials
+            mountPath: /secrets
+            readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+    # Parse X12 837 Template
+    - name: parse-x12-837-template
+      inputs:
+        parameters:
+          - name: claim-types
+        artifacts:
+          - name: edi-files
+            path: /data/input
+      outputs:
+        artifacts:
+          - name: parsed-claims
+            path: /data/output/claims.json
+      container:
+        image: cloudhealthoffice/x12-parser:latest
+        args:
+          - "/data/input/*.edi"
+          - "--output"
+          - "/data/output/claims.json"
+          - "--transaction-types"
+          - "{{inputs.parameters.claim-types}}"
+          - "--format"
+          - "json"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+    # Validate Claims Template
+    - name: validate-claims-template
+      inputs:
+        parameters:
+          - name: payer-id
+        artifacts:
+          - name: parsed-claims
+            path: /data/input/claims.json
+      outputs:
+        artifacts:
+          - name: validation-results
+            path: /data/output/results.json
+        parameters:
+          - name: summary
+            valueFrom:
+              path: /data/output/summary.json
+      container:
+        image: cloudhealthoffice/claims-scrubber:latest
+        command: ["node", "dist/validate-batch.js"]
+        args:
+          - "--input"
+          - "/data/input/claims.json"
+          - "--output"
+          - "/data/output/results.json"
+          - "--summary"
+          - "/data/output/summary.json"
+          - "--payer-id"
+          - "{{inputs.parameters.payer-id}}"
+        env:
+          - name: PARALLEL_RULES
+            value: "true"
+          - name: MAX_RULE_CONCURRENCY
+            value: "10"
+          - name: ENABLE_NCCI_EDITS
+            value: "true"
+          - name: ENABLE_DUPLICATE_DETECTION
+            value: "true"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+          - name: rules-config
+            mountPath: /config/rules
+            readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+
+    # Route Claims Template
+    - name: route-claims-template
+      inputs:
+        parameters:
+          - name: status-filter
+          - name: kafka-topic
+        artifacts:
+          - name: validation-results
+            path: /data/input/results.json
+      outputs:
+        parameters:
+          - name: routed-count
+            valueFrom:
+              path: /data/output/count.txt
+      container:
+        image: cloudhealthoffice/claims-router:latest
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            from kafka import KafkaProducer
+            
+            status_filter = "{{inputs.parameters.status-filter}}"
+            topic = "{{inputs.parameters.kafka-topic}}"
+            
+            with open('/data/input/results.json') as f:
+                results = json.load(f)
+            
+            filtered = [r for r in results if r.get('status') == status_filter]
+            
+            if filtered:
+                producer = KafkaProducer(
+                    bootstrap_servers=os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092'),
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                )
+                
+                for result in filtered:
+                    producer.send(topic, value={
+                        'claim': result.get('claim'),
+                        'validationResult': result,
+                        'routedAt': __import__('datetime').datetime.utcnow().isoformat() + 'Z'
+                    })
+                
+                producer.flush()
+                producer.close()
+            
+            with open('/data/output/count.txt', 'w') as f:
+                f.write(str(len(filtered)))
+            
+            print(f"Routed {len(filtered)} {status_filter} claims to {topic}")
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+          - name: KAFKA_SECURITY_PROTOCOL
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: security-protocol
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Archive Results Template
+    - name: archive-results-template
+      inputs:
+        parameters:
+          - name: s3-bucket
+        artifacts:
+          - name: validation-results
+            path: /data/input/results.json
+      container:
+        image: amazon/aws-cli:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            timestamp=$(date +%Y%m%d%H%M%S)
+            year=$(date +%Y)
+            month=$(date +%m)
+            day=$(date +%d)
+            
+            s3_path="s3://{{inputs.parameters.s3-bucket}}/validation-results/${year}/${month}/${day}/results-${timestamp}.json"
+            
+            aws s3 cp /data/input/results.json "$s3_path" --sse AES256
+            
+            echo "Archived results to $s3_path"
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: access-key-id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials-secret
+                key: secret-access-key
+          - name: AWS_DEFAULT_REGION
+            valueFrom:
+              configMapKeyRef:
+                name: s3-config
+                key: region
+                optional: true
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Report Metrics Template
+    - name: report-metrics-template
+      inputs:
+        parameters:
+          - name: first-pass-rate-target
+        artifacts:
+          - name: validation-results
+            path: /data/input/results.json
+      outputs:
+        parameters:
+          - name: metrics
+            valueFrom:
+              path: /data/output/metrics.json
+      container:
+        image: cloudhealthoffice/claims-scrubber:latest
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            
+            target = float("{{inputs.parameters.first-pass-rate-target}}")
+            
+            with open('/data/input/results.json') as f:
+                results = json.load(f)
+            
+            total = len(results)
+            clean = len([r for r in results if r.get('status') == 'clean'])
+            flagged = len([r for r in results if r.get('status') == 'flagged'])
+            rejected = len([r for r in results if r.get('status') == 'rejected'])
+            
+            first_pass_rate = (clean / total * 100) if total > 0 else 0
+            meets_target = first_pass_rate >= target
+            
+            # Collect edit code statistics
+            edit_codes = {}
+            for r in results:
+                for result in r.get('results', []):
+                    if not result.get('passed') and result.get('editCode'):
+                        code = result['editCode']
+                        edit_codes[code] = edit_codes.get(code, 0) + 1
+            
+            metrics = {
+                'totalClaims': total,
+                'cleanClaims': clean,
+                'flaggedClaims': flagged,
+                'rejectedClaims': rejected,
+                'firstPassRate': round(first_pass_rate, 2),
+                'targetRate': target,
+                'meetsTarget': meets_target,
+                'topEditCodes': sorted(edit_codes.items(), key=lambda x: x[1], reverse=True)[:10],
+                'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z'
+            }
+            
+            with open('/data/output/metrics.json', 'w') as f:
+                json.dump(metrics, f, indent=2)
+            
+            print(f"First-Pass Rate: {first_pass_rate:.2f}% (Target: {target}%)")
+            print(f"Status: {'✓ MEETS TARGET' if meets_target else '✗ BELOW TARGET'}")
+            print(f"Clean: {clean}, Flagged: {flagged}, Rejected: {rejected}")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+    # Error Handler Template
+    - name: error-handler
+      inputs:
+        parameters:
+          - name: error-message
+          - name: failed-step
+      container:
+        image: cloudhealthoffice/kafka-publisher:latest
+        args:
+          - "--topic"
+          - "claims-dlq"
+          - "--message"
+          - '{"workflow": "x12-837-claims-scrubbing", "failedStep": "{{inputs.parameters.failed-step}}", "error": "{{inputs.parameters.error-message}}", "timestamp": "{{workflow.creationTimestamp}}"}'
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              configMapKeyRef:
+                name: kafka-config
+                key: bootstrap-servers
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+  # Exit handler for cleanup and error notification
+  onExit: exit-handler
+  
+  - name: exit-handler
+    steps:
+      - - name: notify-completion
+          template: notify-template
+          when: "{{workflow.status}} == Succeeded"
+      - - name: notify-failure
+          template: error-handler
+          when: "{{workflow.status}} != Succeeded"
+          arguments:
+            parameters:
+              - name: error-message
+                value: "Workflow failed"
+              - name: failed-step
+                value: "{{workflow.failures}}"
+
+  - name: notify-template
+    container:
+      image: curlimages/curl:latest
+      command: ["echo"]
+      args: ["Claims scrubbing workflow completed successfully"]
