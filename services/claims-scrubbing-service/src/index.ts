@@ -99,16 +99,23 @@ function sendJson(res: http.ServerResponse, statusCode: number, data: unknown): 
 }
 
 // CORS handling
-const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '*').split(',').map(o => o.trim());
+// CORS_ALLOWED_ORIGINS should be a comma-separated list of trusted domains (e.g. "https://payer1.cloudhealthoffice.com,https://payer2.cloudhealthoffice.com")
+// Default to empty array (no origins allowed) if not set
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(o => o.length > 0);
 
 function handleCors(req: http.IncomingMessage, res: http.ServerResponse): boolean {
   const origin = req.headers.origin || '';
   
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
     res.setHeader('Access-Control-Max-Age', '86400');
+  } else if (origin) {
+    // Origin is present but not allowed; reject with 403 Forbidden
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'CORS origin not allowed by Cloud Health Office Sentinel.' }));
+    return true;
   }
 
   // Handle preflight
