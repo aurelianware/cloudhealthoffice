@@ -256,7 +256,7 @@ docker build -t claims-scrubber:latest .
 # Run container
 docker run -p 3000:3000 \
   -e COSMOS_ENDPOINT=https://... \
-  -e SERVICE_BUS_NAMESPACE=... \
+  -e KAFKA_BOOTSTRAP_SERVERS=broker1:9092,broker2:9092 \
   claims-scrubber:latest
 ```
 
