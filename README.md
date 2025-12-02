@@ -2,62 +2,65 @@
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
 [![Kubernetes](https://img.shields.io/badge/Deploy%20to-Kubernetes-326CE5?logo=kubernetes&logoColor=white)](./docs/MULTI-CLOUD-DEPLOYMENT.md#option-2-kubernetes-deployment-akseksgke)
-[![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
+[![Version](https://img.shields.io/badge/version-v3.0.0-brightgreen)](./docs/releases/RELEASE_NOTES_v3.0.0.md)
+[![Tests](https://img.shields.io/badge/tests-424%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 An open-source, **multi-cloud** platform for multi-payer EDI integration in healthcare. Deploy to **Azure Logic Apps** (fastest) or **Kubernetes** (AKS, EKS, GKE) for cloud independence.
 
-> **📢 Major Updates Since v1.0.0**: Zero-code payer onboarding, FHIR R4 integration, ValueAdds277 enhanced claim status, production-grade security with high security maturity, and comprehensive testing suite. See **[What's New](./WHATS-NEW.md)** for highlights or [FEATURES.md](./FEATURES.md) for complete details.
+> **📢 v3.0.0 — The Open Frontier Release**: Multi-cloud independence with Kubernetes/Argo Workflows, Azure Marketplace ready, AI-powered ClaimRiskScorer, and commercial launch materials. See **[What's New](./WHATS-NEW.md)** for highlights or **[v3.0.0 Release Notes](./docs/releases/RELEASE_NOTES_v3.0.0.md)** for complete details.
 
-## 🎯 What's New in V2
+## 🚀 What's New in v3.0.0
 
-Cloud Health Office V2 delivers **complete CMS-0057-F compliance** with production-ready FHIR R4 APIs, positioning payers for the January 1, 2027 regulatory deadline with **18 months to spare**.
+Cloud Health Office v3.0.0 delivers **multi-cloud independence**, enabling deployment on Azure, AWS, GCP, or any Kubernetes cluster—while maintaining HIPAA compliance and production-grade security.
 
-### V2 Highlights
+### v3.0.0 Highlights
 
 | Capability | Description | Status |
 |------------|-------------|--------|
-| **FHIR R4 APIs** | Complete X12 → FHIR transformation (270/837/278/835) | ✅ Production Ready |
-| **Patient Access API** | Claims, encounters, clinical data via FHIR R4 | ✅ CMS-0057-F Compliant |
-| **Provider Access API** | Real-time patient data with SMART on FHIR | ✅ Ready |
-| **Prior Authorization API** | 72-hour urgent, 7-day standard response tracking | ✅ Automated |
-| **Payer-to-Payer API** | Bulk FHIR export, 5-year historical data | ✅ Ready |
-| **Da Vinci IGs** | PDex, PAS, CRD, DTR profile conformance | ✅ Validated |
+| **🌐 Multi-Cloud Deployment** | Deploy on Azure, AWS (EKS), GCP (GKE), or any Kubernetes cluster | ✅ Complete |
+| **🔄 Argo Workflows** | Cloud-native EDI processing replacing Azure Logic Apps | ✅ Complete |
+| **📨 Apache Kafka** | Cloud-agnostic messaging system replacing Azure Service Bus | ✅ Complete |
+| **🔐 HashiCorp Vault** | Open-source secrets management alternative | ✅ Complete |
+| **🤖 ClaimRiskScorer** | ML-powered fraud detection with PyTorch (0-100 scoring) | ✅ Complete |
+| **🛒 Azure Marketplace** | Managed application with meter-based billing | ✅ Ready |
+| **💼 Commercial Materials** | Sales collateral, ROI calculator, pitch deck | ✅ Complete |
+| **📊 Eligibility Service** | Dual X12 270/271 + FHIR interface microservice | ✅ Complete |
 
-### CMS-0057-F Compliance Dashboard
+### Cloud Independence Dashboard
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│               CMS-0057-F Compliance Status                      │
+│               Multi-Cloud Deployment Status                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  Patient Access API ..................... ✅ READY              │
-│  Provider Access API .................... ✅ READY              │
-│  Payer-to-Payer API .................... ✅ READY              │
-│  Prior Authorization API ................ ✅ READY              │
-│  72-Hour Urgent Response ................ ✅ AUTOMATED          │
-│  7-Day Standard Response ................ ✅ AUTOMATED          │
-│  USCDI v1/v2 Data Classes ............... ✅ COMPLETE           │
-│  Da Vinci IG Conformance ................ ✅ VALIDATED          │
+│  Azure Logic Apps .................... ✅ SUPPORTED             │
+│  Azure Kubernetes (AKS) .............. ✅ SUPPORTED             │
+│  AWS Elastic Kubernetes (EKS) ........ ✅ SUPPORTED             │
+│  Google Kubernetes Engine (GKE) ...... ✅ SUPPORTED             │
+│  HashiCorp Vault ..................... ✅ INTEGRATED            │
+│  Apache Kafka ........................ ✅ INTEGRATED            │
+│  Argo Workflows ...................... ✅ INTEGRATED            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Overall Readiness: ██████████████████████ 100%                │
-│  Days Until Deadline: 401 (January 1, 2027)                     │
+│  Cloud Providers Supported: 3 (Azure, AWS, GCP)                  │
+│  Total Tests Passing: 424                                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### V2 FHIR Transformation Coverage
+### v3.0.0 Microservices
 
-| X12 Transaction | FHIR Resource | Profile | Tests |
-|-----------------|---------------|---------|-------|
-| 270 Eligibility | Patient, CoverageEligibilityRequest | US Core 3.1.1 | 19 |
-| 837 Claims | Claim | Da Vinci PDex | 12 |
-| 278 Prior Auth | ServiceRequest | Da Vinci PAS | 8 |
-| 835 Remittance | ExplanationOfBenefit | Da Vinci PDex | 6 |
-| **Total** | — | — | **45** |
+| Service | Interface | Features |
+|---------|-----------|----------|
+| **Eligibility Service** | X12 270/271 + FHIR | Cosmos DB caching, Event Grid publishing |
+| **ClaimRiskScorer** | Service Bus trigger | PyTorch model, custom ZZZ segment |
+| **Provider Directory API** | FHIR | NPPES NPI real-time lookup |
+| **Prior Auth API** | Da Vinci PAS | 72-hour SLA automated tracking |
 
 ### Quick Links
 
-- 📋 **[Release Notes](./site/release-notes.html)** - Detailed feature breakdown and sandbox access
+- 📋 **[v3.0.0 Release Notes](./docs/releases/RELEASE_NOTES_v3.0.0.md)** - Detailed release information
+- 🌐 **[Multi-Cloud Deployment](./docs/MULTI-CLOUD-DEPLOYMENT.md)** - Kubernetes deployment guide
+- 🔄 **[Argo Migration Guide](./docs/ARGO-MIGRATION-GUIDE.md)** - Logic Apps to Argo migration
 - 📖 **[CMS-0057-F Compliance Guide](./docs/CMS-0057-F-COMPLIANCE.md)** - Implementation checklist
 - 🔗 **[FHIR Integration Guide](./docs/FHIR-INTEGRATION.md)** - Technical documentation
 - 🧪 **[Sandbox Testing](./site/release-notes.html#sandbox-testing)** - Try before you deploy
