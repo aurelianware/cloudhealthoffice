@@ -81,7 +81,7 @@ This is the third major release of Cloud Health Office — the open-source, mult
 | Total Tests | 424 passing |
 | Security Vulnerabilities | 0 |
 | CMS-0057-F Ready | 100% |
-| Vendor References Removed | 1,295 Azure-specific references across 185 files |
+| Vendor References Removed | 1,295 vendor-specific references (Cognizant, QNXT, Facets, Availity) across 185 files |
 | New PRs Merged | 17 since v2.0.0 |
 | Deployment Targets | Azure, AWS (EKS), GCP (GKE) |
 
@@ -111,9 +111,35 @@ New documentation in v3.0.0:
 
 ---
 
+## PRs Merged (17 since v2.0.0)
+
+| PR | Title | Category |
+|----|-------|----------|
+| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references | Platform |
+| [#115](https://github.com/aurelianware/cloudhealthoffice/pull/115) | Multi-cloud deployment and HashiCorp Vault | Multi-Cloud |
+| [#114](https://github.com/aurelianware/cloudhealthoffice/pull/114) | Container build workflow fix | CI/CD |
+| [#113](https://github.com/aurelianware/cloudhealthoffice/pull/113) | Argo Workflows and Kafka migration | Multi-Cloud |
+| [#112](https://github.com/aurelianware/cloudhealthoffice/pull/112) | VC fundraising strategy | Commercial |
+| [#111](https://github.com/aurelianware/cloudhealthoffice/pull/111) | Commercial launch materials | Commercial |
+| [#110](https://github.com/aurelianware/cloudhealthoffice/pull/110) | CMS-0057-F whitepaper enhancements | Documentation |
+| [#109](https://github.com/aurelianware/cloudhealthoffice/pull/109) | CMS-0057-F compliance whitepaper | Documentation |
+| [#108](https://github.com/aurelianware/cloudhealthoffice/pull/108) | 2026 product roadmap | Roadmap |
+| [#107](https://github.com/aurelianware/cloudhealthoffice/pull/107) | Community governance | Governance |
+| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Blazor migration wizard | Tools |
+| [#105](https://github.com/aurelianware/cloudhealthoffice/pull/105) | Azure Marketplace offer structure | Marketplace |
+| [#104](https://github.com/aurelianware/cloudhealthoffice/pull/104) | ClaimRiskScorer Azure Function | Microservices |
+| [#103](https://github.com/aurelianware/cloudhealthoffice/pull/103) | Eligibility service (X12 + FHIR) | Microservices |
+| [#102](https://github.com/aurelianware/cloudhealthoffice/pull/102) | CMS-0057-F Compliance Dashboard | Compliance |
+| [#101](https://github.com/aurelianware/cloudhealthoffice/pull/101) | patient_access_api workflow fix | Bug Fix |
+| [#100](https://github.com/aurelianware/cloudhealthoffice/pull/100) | ProviderDirectoryApi and PriorAuthApi | Microservices |
+
+For detailed PR descriptions, see the [Full Changelog](./CHANGELOG.md).
+
+---
+
 ## Contributors
 
-Special thanks to all contributors who made this release possible, including the 17 PRs merged since v2.0.0.
+Special thanks to all contributors who made this release possible.
 
 ---
 
