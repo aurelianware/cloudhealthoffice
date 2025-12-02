@@ -3,7 +3,7 @@ name: cloudhealthoffice
 description: Cloud Health Office - Kubernetes-native X12 EDI processing platform
 type: application
 version: 1.0.0
-appVersion: "1.0.0"
+python3 -m pip install pytest -r functions/ClaimRiskScorer/requirements.txtpython3 -m pip install pytest -r functions/ClaimRiskScorer/requirements.txtpython3 -m pip install pytest -r functions/ClaimRiskScorer/requirements.txtappVersion: "1.0.0"
 
 keywords:
   - healthcare
