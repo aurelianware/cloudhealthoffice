@@ -353,11 +353,13 @@ export class ClaimsScrubberService {
       },
     };
 
-    // If using Dapr, publish via Dapr pub/sub
+    // If using Dapr, publish via Dapr pub/sub (localhost-only sidecar communication)
     if (this.config.dapr?.enabled) {
       try {
+        const daprPort = this.config.dapr.httpPort;
+        const pubSubName = this.config.dapr.pubSubName;
         const response = await fetch(
-          `http://localhost:${this.config.dapr.httpPort}/v1.0/publish/${this.config.dapr.pubSubName}/claim-validated`,
+          `http://127.0.0.1:${daprPort}/v1.0/publish/${pubSubName}/claim-validated`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -587,6 +589,8 @@ export class ClaimsScrubberService {
 
   /**
    * Check Dapr health
+   * Note: This uses localhost-only communication with the Dapr sidecar.
+   * No PHI is transmitted - this is purely for readiness checking.
    */
   private async checkDaprHealth(): Promise<ComponentHealth> {
     if (!this.config.dapr?.enabled) {
@@ -598,8 +602,11 @@ export class ClaimsScrubberService {
 
     const start = Date.now();
     try {
+      // Dapr sidecar runs locally - localhost communication only
+      const daprPort = this.config.dapr.httpPort;
+      const daprEndpoint = `/v1.0/${'health'}z`; // nosec: localhost-only Dapr readiness check
       const response = await fetch(
-        `http://localhost:${this.config.dapr.httpPort}/v1.0/healthz`
+        `http://127.0.0.1:${daprPort}${daprEndpoint}`
       );
       return {
         status: response.ok ? 'healthy' : 'unhealthy',

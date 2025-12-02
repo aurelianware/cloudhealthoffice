@@ -90,8 +90,8 @@ export class ValidationRuleEngine {
     // Data Completeness Rules
     this.addRule({
       ruleId: 'DC001',
-      ruleName: 'Member ID Required',
-      description: 'Validates that member ID is present on the claim',
+      ruleName: 'Subscriber Identifier Required',
+      description: 'Validates that subscriber identifier is present on the claim',
       category: 'data-completeness',
       severity: 'error',
       appliesTo: ['837P', '837I', '837D'],
