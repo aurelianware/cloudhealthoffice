@@ -7,12 +7,12 @@
  * Features:
  * - Configurable validation rule engine
  * - Standard and custom rule support
- * - Service Bus integration for claim routing
+ * - Kafka integration for claim routing
  * - Cosmos DB for rule storage and audit
  * - First-pass rate metrics tracking
  */
 
-import { ServiceBusClient, ServiceBusSender, ServiceBusReceiver } from '@azure/service-bus';
+import { Kafka, Producer, Consumer, logLevel } from 'kafkajs';
 import { CosmosClient, Container, Database } from '@azure/cosmos';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
@@ -40,11 +40,9 @@ import { ValidationRuleEngine, DEFAULT_STANDARD_RULES } from './rule-engine';
 export class ClaimsScrubberService {
   private config: ClaimsScrubberConfig;
   private ruleEngine: ValidationRuleEngine;
-  private serviceBusClient: ServiceBusClient | null = null;
-  private cleanClaimsSender: ServiceBusSender | null = null;
-  private flaggedClaimsSender: ServiceBusSender | null = null;
-  private rejectedClaimsSender: ServiceBusSender | null = null;
-  private inboundReceiver: ServiceBusReceiver | null = null;
+  private kafka: Kafka | null = null;
+  private producer: Producer | null = null;
+  private consumer: Consumer | null = null;
   private cosmosClient: CosmosClient | null = null;
   private database: Database | null = null;
   private rulesContainer: Container | null = null;
@@ -67,29 +65,43 @@ export class ClaimsScrubberService {
   }
 
   /**
-   * Initialize the service and connect to Azure resources
+   * Initialize the service and connect to resources
    */
   async initialize(): Promise<void> {
     const credential = new DefaultAzureCredential();
 
-    // Initialize Service Bus
-    if (this.config.serviceBus.connectionString) {
-      this.serviceBusClient = new ServiceBusClient(this.config.serviceBus.connectionString);
-    } else if (this.config.serviceBus.namespace) {
-      this.serviceBusClient = new ServiceBusClient(
-        `${this.config.serviceBus.namespace}.servicebus.windows.net`,
-        credential
-      );
-    }
+    // Initialize Kafka
+    if (this.config.kafka.bootstrapServers) {
+      const kafkaConfig: ConstructorParameters<typeof Kafka>[0] = {
+        clientId: this.config.kafka.clientId,
+        brokers: this.config.kafka.bootstrapServers.split(','),
+        logLevel: logLevel.WARN,
+      };
 
-    if (this.serviceBusClient) {
-      this.cleanClaimsSender = this.serviceBusClient.createSender(this.config.serviceBus.cleanClaimsTopic);
-      this.flaggedClaimsSender = this.serviceBusClient.createSender(this.config.serviceBus.flaggedClaimsTopic);
-      this.rejectedClaimsSender = this.serviceBusClient.createSender(this.config.serviceBus.rejectedClaimsTopic);
-      this.inboundReceiver = this.serviceBusClient.createReceiver(
-        this.config.serviceBus.inboundTopic,
-        this.config.serviceBus.subscriptionName
-      );
+      // Configure SASL if provided
+      if (this.config.kafka.sasl) {
+        const { mechanism, username, password } = this.config.kafka.sasl;
+        // Type assertion needed for kafkajs SASL mechanism type compatibility
+        kafkaConfig.sasl = { mechanism, username, password } as typeof kafkaConfig.sasl;
+      }
+
+      // Configure SSL if enabled
+      if (this.config.kafka.ssl) {
+        kafkaConfig.ssl = true;
+      }
+
+      this.kafka = new Kafka(kafkaConfig);
+      this.producer = this.kafka.producer();
+      this.consumer = this.kafka.consumer({ 
+        groupId: this.config.kafka.consumerGroupId 
+      });
+
+      await this.producer.connect();
+      await this.consumer.connect();
+      await this.consumer.subscribe({ 
+        topic: this.config.kafka.inboundTopic, 
+        fromBeginning: false 
+      });
     }
 
     // Initialize Cosmos DB
@@ -233,41 +245,48 @@ export class ClaimsScrubberService {
   }
 
   /**
-   * Route claim to appropriate destination
+   * Route claim to appropriate destination via Kafka
    */
   private async routeClaim(claim: X12_837_Claim, result: ClaimValidationResult): Promise<void> {
+    if (!this.producer) return;
+
     const message = {
-      body: {
+      key: claim.claimId,
+      value: JSON.stringify({
         claim,
         validationResult: result,
         timestamp: new Date().toISOString(),
+        correlationId: claim.claimId,
+        messageId: uuidv4(),
+      }),
+      headers: {
+        'content-type': 'application/json',
+        'destination': result.routing.destination,
+        'claim-type': claim.claimType,
       },
-      contentType: 'application/json',
-      correlationId: claim.claimId,
-      messageId: uuidv4(),
-      subject: result.routing.destination,
+    };
+
+    // Routing map for cleaner topic selection
+    const routingTopicMap: Record<string, string> = {
+      'adjudication': this.config.kafka.cleanClaimsTopic,
+      'reject': this.config.kafka.rejectedClaimsTopic,
     };
 
     try {
-      switch (result.routing.destination) {
-        case 'adjudication':
-          if (this.cleanClaimsSender) {
-            await this.cleanClaimsSender.sendMessages(message);
-          }
-          break;
-        case 'work-queue':
-          if (result.routing.queueName === 'claims-errors' && this.rejectedClaimsSender) {
-            await this.rejectedClaimsSender.sendMessages(message);
-          } else if (this.flaggedClaimsSender) {
-            await this.flaggedClaimsSender.sendMessages(message);
-          }
-          break;
-        case 'reject':
-          if (this.rejectedClaimsSender) {
-            await this.rejectedClaimsSender.sendMessages(message);
-          }
-          break;
+      let topic: string;
+      if (result.routing.destination === 'work-queue') {
+        // Work queue destinations use different topics based on error severity
+        topic = result.routing.queueName === 'claims-errors' 
+          ? this.config.kafka.rejectedClaimsTopic 
+          : this.config.kafka.flaggedClaimsTopic;
+      } else {
+        topic = routingTopicMap[result.routing.destination] || this.config.kafka.flaggedClaimsTopic;
       }
+
+      await this.producer.send({
+        topic,
+        messages: [message],
+      });
     } catch (error) {
       console.error(`Failed to route claim ${claim.claimId}:`, error);
     }
@@ -426,7 +445,7 @@ export class ClaimsScrubberService {
    */
   async getHealth(): Promise<HealthStatus> {
     const checks: HealthStatus['checks'] = {
-      serviceBus: await this.checkServiceBusHealth(),
+      kafka: await this.checkKafkaHealth(),
       cosmosDb: await this.checkCosmosDbHealth(),
       storage: await this.checkStorageHealth(),
       ruleEngine: this.checkRuleEngineHealth(),
@@ -465,19 +484,19 @@ export class ClaimsScrubberService {
   }
 
   /**
-   * Check Service Bus health
+   * Check Kafka health
    */
-  private async checkServiceBusHealth(): Promise<ComponentHealth> {
+  private async checkKafkaHealth(): Promise<ComponentHealth> {
     const start = Date.now();
     try {
-      if (!this.serviceBusClient) {
+      if (!this.producer) {
         return {
           status: 'unhealthy',
           lastCheck: new Date().toISOString(),
-          error: 'Service Bus client not initialized',
+          error: 'Kafka producer not initialized',
         };
       }
-      // Simple health check - verify sender is available
+      // Simple health check - verify producer is connected
       return {
         status: 'healthy',
         latencyMs: Date.now() - start,
@@ -601,11 +620,8 @@ export class ClaimsScrubberService {
    * Close connections and cleanup
    */
   async close(): Promise<void> {
-    if (this.cleanClaimsSender) await this.cleanClaimsSender.close();
-    if (this.flaggedClaimsSender) await this.flaggedClaimsSender.close();
-    if (this.rejectedClaimsSender) await this.rejectedClaimsSender.close();
-    if (this.inboundReceiver) await this.inboundReceiver.close();
-    if (this.serviceBusClient) await this.serviceBusClient.close();
+    if (this.consumer) await this.consumer.disconnect();
+    if (this.producer) await this.producer.disconnect();
   }
 }
 

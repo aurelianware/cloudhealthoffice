@@ -619,10 +619,12 @@ export interface CustomRuleTestCase {
  * Claims scrubbing service configuration
  */
 export interface ClaimsScrubberConfig {
-  /** Service Bus configuration */
-  serviceBus: {
-    connectionString?: string;
-    namespace?: string;
+  /** Kafka configuration */
+  kafka: {
+    /** Kafka bootstrap servers */
+    bootstrapServers: string;
+    /** Client ID for Kafka */
+    clientId: string;
     /** Topic for incoming claims */
     inboundTopic: string;
     /** Topic for clean claims (to adjudication) */
@@ -631,8 +633,16 @@ export interface ClaimsScrubberConfig {
     flaggedClaimsTopic: string;
     /** Topic for rejected claims */
     rejectedClaimsTopic: string;
-    /** Subscription name */
-    subscriptionName: string;
+    /** Consumer group ID */
+    consumerGroupId: string;
+    /** SASL configuration */
+    sasl?: {
+      mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512';
+      username: string;
+      password: string;
+    };
+    /** Enable SSL/TLS */
+    ssl?: boolean;
   };
   /** Storage configuration for claim archival */
   storage: {
@@ -759,7 +769,7 @@ export interface HealthStatus {
   uptime: number;
   timestamp: string;
   checks: {
-    serviceBus: ComponentHealth;
+    kafka: ComponentHealth;
     cosmosDb: ComponentHealth;
     storage: ComponentHealth;
     ruleEngine: ComponentHealth;
