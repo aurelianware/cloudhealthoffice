@@ -274,5 +274,9 @@ async function start(): Promise<void> {
 
 start();
 
-// Export for testing
-export { service, config };
+// Export for testing only - not exposed in production builds
+// These exports allow unit tests to access the service and config
+// In production, the service runs as an HTTP server and doesn't export these
+const isTest = process.env.NODE_ENV === 'test';
+export const testService = isTest ? service : undefined;
+export const testConfig = isTest ? config : undefined;
