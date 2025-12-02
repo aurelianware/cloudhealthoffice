@@ -2,7 +2,26 @@
 
 This directory contains comprehensive documentation for the CloudHealthOffice platform.
 
+## 🚀 v3.0.0 Documentation
+
+CloudHealthOffice v3.0.0 — The Open Frontier Release delivers multi-cloud independence and commercial launch readiness.
+
+| Document | Description |
+|----------|-------------|
+| [v3.0.0 Features Overview](./releases/v3.0.0-features-overview.md) | Comprehensive features matrix and capability overview |
+| [v3.0.0 Release Notes](./releases/RELEASE_NOTES_v3.0.0.md) | Detailed release notes with upgrade instructions |
+| [v3.0.0 Announcement](./announcements/v3.0.0-announcement.md) | Executive summary and stakeholder benefits |
+| [Release Documentation Index](./releases/README.md) | All release documentation and migration guides |
+
 ## Key Documents
+
+### Multi-Cloud & Deployment
+
+| Document | Description |
+|----------|-------------|
+| [MULTI-CLOUD-DEPLOYMENT.md](MULTI-CLOUD-DEPLOYMENT.md) | Deploy on Azure, AWS (EKS), GCP (GKE), or any Kubernetes cluster |
+| [ARGO-MIGRATION-GUIDE.md](ARGO-MIGRATION-GUIDE.md) | Migrate from Azure Logic Apps to Argo Workflows |
+| [ARGO-OPERATIONS.md](ARGO-OPERATIONS.md) | Argo Workflows operational runbook |
 
 ### Compliance & Regulatory
 
