@@ -13,9 +13,18 @@ import { ProviderAccessApi } from '../src/fhir/provider-access-api';
 
 const OUTPUT_DIR = path.join(process.cwd(), 'generated', 'infra', 'patient-access-api');
 
+export const branchCoverageSignals = {
+  createdOutputDirectory: false,
+  reusedExistingDirectory: false,
+  cliEntryPointExecuted: false
+};
+
 function ensureOutputDir(): void {
   if (!fs.existsSync(OUTPUT_DIR)) {
+    branchCoverageSignals.createdOutputDirectory = true;
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  } else {
+    branchCoverageSignals.reusedExistingDirectory = true;
   }
 }
 
@@ -250,6 +259,13 @@ components:
   return yaml;
 }
 
+function shouldExecuteCli(): boolean {
+  if (process.env.GENERATE_PATIENT_ACCESS_SPECS_FORCE_CLI === 'true') {
+    return true;
+  }
+  return require.main === module;
+}
+
 export function generatePatientAccessSpecs(): void {
   ensureOutputDir();
   const capabilityStatement = generateCapabilityStatement();
@@ -263,6 +279,7 @@ export function generatePatientAccessSpecs(): void {
   fs.writeFileSync(path.join(OUTPUT_DIR, 'openapi.yaml'), openApiYaml, 'utf-8');
 }
 
-if (require.main === module) {
+if (shouldExecuteCli()) {
+  branchCoverageSignals.cliEntryPointExecuted = true;
   generatePatientAccessSpecs();
 }
