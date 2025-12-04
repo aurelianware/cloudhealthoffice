@@ -307,7 +307,7 @@ export class EligibilityService {
     };
 
     if (this.config.backendConfig) {
-      checks.backendSystem = await this.checkBackendHealth();
+      checks.backendConfig = await this.checkBackendHealth();
     }
 
     if (this.config.fhirServer) {
