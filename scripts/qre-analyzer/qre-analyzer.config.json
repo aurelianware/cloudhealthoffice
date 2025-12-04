@@ -8,6 +8,14 @@
     "validateEnvelopes": true,
     "checkDuplicateSegments": true
   },
+  "envelopeExpectations": {
+    "ISA06": "SENDER",
+    "ISA08": "RECEIVER",
+    "GS02": "SENDER",
+    "GS03": "RECEIVER",
+    "ST01": "278",
+    "ST03Suffix": "X215"
+  },
   "qreRequirements": {
     "minimalDataPrinciple": true,
     "requiredSegments": [
@@ -32,6 +40,49 @@
       "MSG",
       "AAA"
     ],
+    "minimalDataExpectations": {
+      "bht01InquiryCodes": [
+        "0007"
+      ],
+      "umSegmentRequired": true,
+      "hcrRecommendedCodes": [
+        "I1",
+        "A1",
+        "A2",
+        "A3",
+        "A4"
+      ]
+    },
+    "attachmentExpectations": {
+      "supportsAttachments": true,
+      "requireAttachmentAtSubmission": false,
+      "allowedReportTypes": []
+    },
+    "serviceExpectations": {
+      "allowedServiceTypeCodes": [
+        "HS"
+      ],
+      "allowedPlaceOfServiceCodes": [],
+      "allowedQuantityTypes": [],
+      "requireQuantitySegment": false
+    },
+    "apiExpectations": {
+      "isAuthRequired": {
+        "enabled": false,
+        "endpoint": ""
+      },
+      "providerSearch": {
+        "enabled": false,
+        "endpoint": "",
+        "requiresUniqueId": false,
+        "uniqueIdField": ""
+      },
+      "epa": {
+        "enabled": false,
+        "requiresRoutingConfig": false,
+        "routingEndpoint": ""
+      }
+    },
     "queryMethods": {
       "byAuthorizationNumber": true,
       "byMemberDemographics": true
