@@ -92,8 +92,12 @@ class X12_278_QRE_Analyzer:
         
         # Run validations
         self._validate_envelopes(segments)
+        self._validate_envelope_values(segments)
         self._validate_required_segments()
         self._validate_qre_requirements(segments)
+        self._validate_attachment_requirements(segments)
+        self._validate_service_requirements(segments)
+        self._validate_api_expectations()
         self._detect_query_method(segments)
         
         # Generate report
@@ -133,6 +137,8 @@ class X12_278_QRE_Analyzer:
         
         # Check ST - must have transaction code 278
         st_segments = [s for s in segments if s.startswith('ST*')]
+        expectations = self.config.get('envelopeExpectations', {})
+
         if len(st_segments) == 0:
             self.results.append(ValidationResult(
                 severity=Severity.ERROR,
@@ -142,21 +148,85 @@ class X12_278_QRE_Analyzer:
             ))
         else:
             st_elements = st_segments[0].split('*')
-            if len(st_elements) >= 2 and st_elements[1] != '278':
+            expected_st01 = expectations.get('ST01', '278')
+            if len(st_elements) >= 2 and st_elements[1].strip() != expected_st01:
                 self.results.append(ValidationResult(
                     severity=Severity.ERROR,
                     code="ENV005",
-                    message=f"Invalid transaction code: expected '278', found '{st_elements[1]}'",
+                    message=f"Invalid transaction code: expected '{expected_st01}', found '{st_elements[1]}'",
                     segment="ST"
                 ))
-            if len(st_elements) >= 4 and not st_elements[3].endswith('X215'):
+            expected_suffix = expectations.get('ST03Suffix')
+            if expected_suffix and len(st_elements) >= 4 and not st_elements[3].endswith(expected_suffix):
                 self.results.append(ValidationResult(
                     severity=Severity.WARNING,
                     code="ENV006",
-                    message=f"Implementation guide version '{st_elements[3]}' may not be 005010X215",
+                    message=f"Implementation guide version '{st_elements[3]}' does not end with '{expected_suffix}'",
                     segment="ST",
                     context={"version": st_elements[3]}
                 ))
+
+    def _validate_envelope_values(self, segments: List[str]):
+        """Validate critical envelope identifiers against expectations"""
+        expectations = self.config.get('envelopeExpectations', {})
+        if not expectations:
+            return
+
+        def _first_segment(prefix: str) -> Optional[List[str]]:
+            for seg in segments:
+                if seg.startswith(prefix):
+                    return seg.split('*')
+            return None
+
+        isa_elements = _first_segment('ISA*')
+        if isa_elements:
+            expected_isa06 = expectations.get('ISA06')
+            if expected_isa06 and len(isa_elements) >= 7:
+                actual = isa_elements[6].strip()
+                if actual != expected_isa06:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ENV007",
+                        message=f"ISA06 sender id expected '{expected_isa06}', found '{actual}'",
+                        segment="ISA",
+                        context={"element": "ISA06", "expected": expected_isa06, "actual": actual}
+                    ))
+            expected_isa08 = expectations.get('ISA08')
+            if expected_isa08 and len(isa_elements) >= 9:
+                actual = isa_elements[8].strip()
+                if actual != expected_isa08:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ENV008",
+                        message=f"ISA08 receiver id expected '{expected_isa08}', found '{actual}'",
+                        segment="ISA",
+                        context={"element": "ISA08", "expected": expected_isa08, "actual": actual}
+                    ))
+
+        gs_elements = _first_segment('GS*')
+        if gs_elements:
+            expected_gs02 = expectations.get('GS02')
+            if expected_gs02 and len(gs_elements) >= 3:
+                actual = gs_elements[2].strip()
+                if actual != expected_gs02:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ENV009",
+                        message=f"GS02 application sender code expected '{expected_gs02}', found '{actual}'",
+                        segment="GS",
+                        context={"element": "GS02", "expected": expected_gs02, "actual": actual}
+                    ))
+            expected_gs03 = expectations.get('GS03')
+            if expected_gs03 and len(gs_elements) >= 4:
+                actual = gs_elements[3].strip()
+                if actual != expected_gs03:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ENV010",
+                        message=f"GS03 application receiver code expected '{expected_gs03}', found '{actual}'",
+                        segment="GS",
+                        context={"element": "GS03", "expected": expected_gs03, "actual": actual}
+                    ))
     
     def _validate_required_segments(self):
         """Validate required X12 segments per QRE"""
@@ -176,23 +246,28 @@ class X12_278_QRE_Analyzer:
         if not self.config['qreRequirements']['minimalDataPrinciple']:
             return
         
+        minimal_cfg = self.config['qreRequirements'].get('minimalDataExpectations', {})
+        allowed_bht_codes = minimal_cfg.get('bht01InquiryCodes', ['0007'])
+        hcr_recommended = minimal_cfg.get('hcrRecommendedCodes', ['I1', 'A1', 'A2', 'A3', 'A4'])
+        um_required = minimal_cfg.get('umSegmentRequired', True)
+
         # Check for BHT segment with correct hierarchy code
         bht_segments = [s for s in segments if s.startswith('BHT*')]
         if bht_segments:
             bht_elements = bht_segments[0].split('*')
             if len(bht_elements) >= 2:
-                if bht_elements[1] != '0007':
+                if allowed_bht_codes and bht_elements[1] not in allowed_bht_codes:
                     self.results.append(ValidationResult(
                         severity=Severity.WARNING,
                         code="QRE002",
-                        message=f"BHT01 should be '0007' for inquiry, found '{bht_elements[1]}'",
+                        message=f"BHT01 should be one of {allowed_bht_codes} for inquiry, found '{bht_elements[1]}'",
                         segment="BHT",
                         context={"bht01": bht_elements[1]}
                     ))
         
         # Check for UM segment (service type)
         um_segments = [s for s in segments if s.startswith('UM*')]
-        if not um_segments:
+        if um_required and not um_segments:
             self.results.append(ValidationResult(
                 severity=Severity.WARNING,
                 code="QRE003",
@@ -206,15 +281,162 @@ class X12_278_QRE_Analyzer:
             hcr_elements = hcr_segments[0].split('*')
             if len(hcr_elements) >= 2:
                 # HCR01 should be 'I1' for inquiry
-                if hcr_elements[1] not in ['I1', 'A1', 'A2', 'A3', 'A4']:
+                if hcr_elements[1] not in hcr_recommended:
                     self.results.append(ValidationResult(
                         severity=Severity.INFO,
                         code="QRE004",
-                        message=f"HCR01 action code is '{hcr_elements[1]}' (I1=Inquiry is recommended)",
+                        message=f"HCR01 action code is '{hcr_elements[1]}' (recommended values: {hcr_recommended})",
                         segment="HCR",
                         context={"hcr01": hcr_elements[1]}
                     ))
+
+    def _validate_attachment_requirements(self, segments: List[str]):
+        """Validate attachment-related expectations from the questionnaire"""
+        qre_config = self.config.get('qreRequirements', {})
+        attachment_cfg = qre_config.get('attachmentExpectations')
+        if not attachment_cfg:
+            return
+
+        require_at_submission = attachment_cfg.get('requireAttachmentAtSubmission', False)
+        allowed_report_types = attachment_cfg.get('allowedReportTypes', [])
+
+        pwk_segments = [seg for seg in segments if seg.startswith('PWK*')]
+
+        if require_at_submission and not pwk_segments:
+            self.results.append(ValidationResult(
+                severity=Severity.ERROR,
+                code="ATT001",
+                message="Attachments are required at submission, but no PWK segments were found",
+                segment="PWK"
+            ))
+
+        if allowed_report_types and pwk_segments:
+            normalized_allowed = {code.strip() for code in allowed_report_types if code.strip()}
+            for seg in pwk_segments:
+                elements = seg.split('*')
+                report_type = elements[1].strip() if len(elements) > 1 else ''
+                if report_type and normalized_allowed and report_type not in normalized_allowed:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ATT002",
+                        message=f"Attachment report type '{report_type}' is not in the allowed set {sorted(normalized_allowed)}",
+                        segment="PWK",
+                        context={"report_type": report_type, "allowed": sorted(normalized_allowed)}
+                    ))
+                elif not report_type:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="ATT003",
+                        message="Attachment PWK segment is missing a report type code",
+                        segment="PWK"
+                    ))
     
+    def _validate_service_requirements(self, segments: List[str]):
+        """Validate service type, place of service, and quantity expectations"""
+        qre_config = self.config.get('qreRequirements', {})
+        service_cfg = qre_config.get('serviceExpectations')
+        if not service_cfg:
+            return
+
+        allowed_service_types = set(code.strip() for code in service_cfg.get('allowedServiceTypeCodes', []) if code.strip())
+        allowed_place_codes = set(code.strip() for code in service_cfg.get('allowedPlaceOfServiceCodes', []) if code.strip())
+        allowed_quantity_types = set(code.strip() for code in service_cfg.get('allowedQuantityTypes', []) if code.strip())
+        require_quantity = service_cfg.get('requireQuantitySegment', False)
+
+        um_segments = [seg for seg in segments if seg.startswith('UM*')]
+        if um_segments and allowed_service_types:
+            um_elements = um_segments[0].split('*')
+            service_type = um_elements[1].strip() if len(um_elements) > 1 else ''
+            if service_type and service_type not in allowed_service_types:
+                self.results.append(ValidationResult(
+                    severity=Severity.ERROR,
+                    code="SRV001",
+                    message=f"Service type '{service_type}' is not in the allowed set {sorted(allowed_service_types)}",
+                    segment="UM",
+                    context={"service_type": service_type, "allowed": sorted(allowed_service_types)}
+                ))
+
+            if allowed_place_codes and len(um_elements) > 4:
+                place_component = um_elements[4].strip()
+                place_code = place_component.split(':')[0] if place_component else ''
+                if place_code and place_code not in allowed_place_codes:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="SRV002",
+                        message=f"Place of service '{place_code}' is not in the allowed set {sorted(allowed_place_codes)}",
+                        segment="UM",
+                        context={"place_of_service": place_code, "allowed": sorted(allowed_place_codes)}
+                    ))
+
+        hsd_segments = [seg for seg in segments if seg.startswith('HSD*')]
+        if require_quantity and not hsd_segments:
+            self.results.append(ValidationResult(
+                severity=Severity.ERROR,
+                code="SRV003",
+                message="Quantity segment (HSD) is required but not present",
+                segment="HSD"
+            ))
+        elif hsd_segments and allowed_quantity_types:
+            hsd_elements = hsd_segments[0].split('*')
+            quantity_type = hsd_elements[1].strip() if len(hsd_elements) > 1 else ''
+            if quantity_type and quantity_type not in allowed_quantity_types:
+                self.results.append(ValidationResult(
+                    severity=Severity.ERROR,
+                    code="SRV004",
+                    message=f"Quantity type '{quantity_type}' is not in the allowed set {sorted(allowed_quantity_types)}",
+                    segment="HSD",
+                    context={"quantity_type": quantity_type, "allowed": sorted(allowed_quantity_types)}
+                ))
+
+    def _validate_api_expectations(self):
+        """Validate API integration requirements from questionnaire"""
+        qre_config = self.config.get('qreRequirements', {})
+        api_cfg = qre_config.get('apiExpectations')
+        if not api_cfg:
+            return
+
+        iar_cfg = api_cfg.get('isAuthRequired', {})
+        if iar_cfg.get('enabled'):
+            endpoint = (iar_cfg.get('endpoint') or '').strip()
+            if not endpoint:
+                self.results.append(ValidationResult(
+                    severity=Severity.ERROR,
+                    code="API001",
+                    message="Is Auth Required API is enabled but no endpoint is configured",
+                    segment=None
+                ))
+
+        provider_cfg = api_cfg.get('providerSearch', {})
+        if provider_cfg.get('enabled'):
+            endpoint = (provider_cfg.get('endpoint') or '').strip()
+            if not endpoint:
+                self.results.append(ValidationResult(
+                    severity=Severity.ERROR,
+                    code="API002",
+                    message="Provider Search API is enabled but no endpoint is configured",
+                    segment=None
+                ))
+            if provider_cfg.get('requiresUniqueId'):
+                unique_field = (provider_cfg.get('uniqueIdField') or '').strip()
+                if not unique_field:
+                    self.results.append(ValidationResult(
+                        severity=Severity.ERROR,
+                        code="API003",
+                        message="Provider Search API requires a unique identifier field but none is specified",
+                        segment=None
+                    ))
+
+        epa_cfg = api_cfg.get('epa', {})
+        if epa_cfg.get('enabled') and epa_cfg.get('requiresRoutingConfig'):
+            routing_endpoint = (epa_cfg.get('routingEndpoint') or '').strip()
+            if not routing_endpoint:
+                self.results.append(ValidationResult(
+                    severity=Severity.ERROR,
+                    code="API004",
+                    message="EPA integration requires routing configuration but no routing endpoint is specified",
+                    segment=None
+                ))
+
     def _detect_query_method(self, segments: List[str]):
         """Detect query method (by auth number or member demographics)"""
         has_ref_auth = any(s.startswith('REF*D9*') for s in segments)
