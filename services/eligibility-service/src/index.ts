@@ -55,8 +55,44 @@ const DEFAULT_CONFIG: EligibilityServiceConfig = {
 const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000';
 
 // Initialize service
-let eligibilityService: EligibilityService;
+let eligibilityService: EligibilityService | null = null;
+let activeConfig: EligibilityServiceConfig = DEFAULT_CONFIG;
 const x12Mapper = new X12EligibilityMapper();
+
+/**
+ * Ensure an eligibility service instance exists
+ */
+function getEligibilityService(): EligibilityService {
+  if (!eligibilityService) {
+    initializeEligibilityService();
+  }
+  return eligibilityService!;
+}
+
+/**
+ * Initialize eligibility service (allows test injection)
+ */
+function initializeEligibilityService(
+  config?: EligibilityServiceConfig,
+  serviceInstance?: EligibilityService
+): EligibilityService {
+  if (serviceInstance) {
+    eligibilityService = serviceInstance;
+    return eligibilityService;
+  }
+
+  activeConfig = config ?? DEFAULT_CONFIG;
+  eligibilityService = new EligibilityService(activeConfig);
+  return eligibilityService;
+}
+
+/**
+ * Reset eligibility service instance (primarily for tests)
+ */
+function resetEligibilityService(): void {
+  eligibilityService = null;
+  activeConfig = DEFAULT_CONFIG;
+}
 
 /**
  * Parse request body as JSON
@@ -117,7 +153,8 @@ async function handleX12Eligibility(req: http.IncomingMessage, res: http.ServerR
     const skipCache = url.searchParams.get('skipCache') === 'true';
     const correlationId = req.headers['x-correlation-id'] as string || undefined;
     
-    const response = await eligibilityService.checkX12Eligibility(
+    const service = getEligibilityService();
+    const response = await service.checkX12Eligibility(
       x12Request,
       skipCache,
       correlationId
@@ -178,7 +215,8 @@ async function handleFHIREligibility(req: http.IncomingMessage, res: http.Server
     const skipCache = url.searchParams.get('skipCache') === 'true';
     const correlationId = req.headers['x-correlation-id'] as string || undefined;
     
-    const response = await eligibilityService.checkFHIREligibility(
+    const service = getEligibilityService();
+    const response = await service.checkFHIREligibility(
       fhirRequest,
       skipCache,
       correlationId
@@ -214,7 +252,8 @@ async function handleUnifiedEligibility(req: http.IncomingMessage, res: http.Ser
     const correlationId = req.headers['x-correlation-id'] as string || request.correlationId;
     request.correlationId = correlationId;
     
-    const response = await eligibilityService.checkEligibility(request);
+    const service = getEligibilityService();
+    const response = await service.checkEligibility(request);
     
     res.writeHead(200, {
       'Content-Type': 'application/json',
@@ -236,7 +275,8 @@ async function handleUnifiedEligibility(req: http.IncomingMessage, res: http.Ser
  */
 async function handleHealth(res: http.ServerResponse): Promise<void> {
   try {
-    const health = await eligibilityService.getHealth();
+    const service = getEligibilityService();
+    const health = await service.getHealth();
     const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
     sendJson(res, statusCode, health);
   } catch (error) {
@@ -259,7 +299,8 @@ function handleLiveness(res: http.ServerResponse): void {
  */
 async function handleReadiness(res: http.ServerResponse): Promise<void> {
   try {
-    const health = await eligibilityService.getHealth();
+    const service = getEligibilityService();
+    const health = await service.getHealth();
     if (health.status === 'unhealthy') {
       sendJson(res, 503, { status: 'not ready', checks: health.checks });
     } else {
@@ -275,7 +316,7 @@ async function handleReadiness(res: http.ServerResponse): Promise<void> {
  */
 function handleDaprSubscribe(res: http.ServerResponse): void {
   sendJson(res, 200, [{
-    pubsubname: DEFAULT_CONFIG.dapr.pubSubName,
+    pubsubname: activeConfig.dapr.pubSubName,
     topic: 'eligibility-requests',
     route: '/api/dapr/eligibility'
   }]);
@@ -339,16 +380,16 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 /**
  * Start the server
  */
-async function startServer(): Promise<void> {
+async function startServer(config?: EligibilityServiceConfig): Promise<http.Server> {
   // Initialize the eligibility service
-  eligibilityService = new EligibilityService(DEFAULT_CONFIG);
+  const service = initializeEligibilityService(config);
   
   // Load backend rules if CSV file is provided
   const rulesFile = process.env.BACKEND_RULES_FILE;
   if (rulesFile) {
     try {
       const rules = await loadBackendRulesFromCSV(rulesFile);
-      eligibilityService.loadEligibilityRules(rules);
+      service.loadEligibilityRules(rules);
       console.log(`Loaded ${rules.length} eligibility rules from ${rulesFile}`);
     } catch (error) {
       console.warn(`Failed to load backend rules: ${error}`);
@@ -358,23 +399,30 @@ async function startServer(): Promise<void> {
   const port = parseInt(process.env.PORT || '3000', 10);
   const server = http.createServer(handleRequest);
   
-  server.listen(port, () => {
-    console.log(`Eligibility service listening on port ${port}`);
-    console.log(`X12 270/271 endpoint: POST /api/eligibility/x12`);
-    console.log(`FHIR endpoint: POST /api/eligibility/fhir`);
-    console.log(`FHIR endpoint: POST /fhir/CoverageEligibilityRequest`);
-    console.log(`Unified endpoint: POST /api/eligibility`);
-    console.log(`Health endpoint: GET /health`);
-    if (DEFAULT_CONFIG.dapr.enabled) {
-      console.log(`Dapr enabled with app ID: ${DEFAULT_CONFIG.dapr.appId}`);
-    }
+  await new Promise<void>(resolve => {
+    server.listen(port, () => {
+      console.log(`Eligibility service listening on port ${port}`);
+      console.log(`X12 270/271 endpoint: POST /api/eligibility/x12`);
+      console.log(`FHIR endpoint: POST /api/eligibility/fhir`);
+      console.log(`FHIR endpoint: POST /fhir/CoverageEligibilityRequest`);
+      console.log(`Unified endpoint: POST /api/eligibility`);
+      console.log(`Health endpoint: GET /health`);
+      if (activeConfig.dapr.enabled) {
+        console.log(`Dapr enabled with app ID: ${activeConfig.dapr.appId}`);
+      }
+      resolve();
+    });
   });
+
+  return server;
 }
 
 // Start the server
-startServer().catch(error => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test') {
+  startServer().catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}
 
-export { startServer, handleRequest };
+export { startServer, handleRequest, initializeEligibilityService, resetEligibilityService };

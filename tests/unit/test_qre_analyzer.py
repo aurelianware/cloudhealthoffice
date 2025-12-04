@@ -62,6 +62,8 @@ BASE_SEGMENTS: Sequence[str] = (
     "GE*1*1~",
     "IEA*1*000000905~",
 )
+
+
 def build_edi(
     remove: Optional[Iterable[str]] = None,
     replacements: Optional[dict] = None,
@@ -92,8 +94,31 @@ def analyze(tmp_path: Path, edi: str, overrides: Optional[dict] = None):
     return report
 
 
+def analyze_with_analyzer(tmp_path: Path, edi: str, overrides: Optional[dict] = None):
+    config_path = write_config(tmp_path, overrides)
+    edi_path = tmp_path / "sample.edi"
+    edi_path.write_text(edi, encoding="utf-8")
+    analyzer = X12_278_QRE_Analyzer(str(config_path))
+    report = analyzer.analyze_file(str(edi_path))
+    return analyzer, report
+
+
 def collect_codes(report) -> set:
     return {(result.code, result.severity.value) for result in report.results}
+
+
+def add_pwk_segment(edi: str, pwk_segment: str = "PWK*AA*EL~") -> str:
+    anchor = "HCR*I1*AA~"
+    if anchor not in edi:
+        raise ValueError("Anchor segment for insertion not found in EDI payload")
+    return edi.replace(anchor, f"{anchor}{pwk_segment}")
+
+
+def add_hsd_segment(edi: str, hsd_segment: str = "HSD*VS*6~") -> str:
+    anchor = "DMG*D8*19850615~"
+    if anchor not in edi:
+        raise ValueError("Anchor segment for insertion not found in EDI payload")
+    return edi.replace(anchor, f"{hsd_segment}{anchor}")
 
 
 def test_authorization_number_query_detected(tmp_path):
@@ -184,3 +209,290 @@ def test_missing_file_returns_system_error(tmp_path):
     assert report.is_valid is False
     codes = collect_codes(report)
     assert ("SYS001", "ERROR") in codes
+
+
+def test_duplicate_isa_segment_triggers_env002(tmp_path):
+    duplicate_edi = build_edi() + BASE_SEGMENTS[0]
+    report = analyze(tmp_path, duplicate_edi)
+    codes = collect_codes(report)
+    assert ("ENV002", "WARNING") in codes
+
+
+def test_invalid_transaction_code_emits_env005_error(tmp_path):
+    edi = build_edi(replacements={"ST": "ST*123*0001*005010X215~"})
+    report = analyze(tmp_path, edi)
+    codes = collect_codes(report)
+    assert ("ENV005", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_hcr_non_inquiry_code_prompts_qre004_info(tmp_path):
+    edi = build_edi(replacements={"HCR": "HCR*ZZ*AA~"})
+    report = analyze(tmp_path, edi)
+    codes = collect_codes(report)
+    assert ("QRE004", "INFO") in codes
+
+
+def test_envelope_sender_id_mismatch_triggers_env007(tmp_path):
+    edi = build_edi(
+        replacements={
+            "ISA": "ISA*00*          *00*          *ZZ*WRONGID       *ZZ*RECEIVER       *210101*1253*^*00501*000000905*0*T*:~"
+        }
+    )
+    report = analyze(tmp_path, edi)
+    codes = collect_codes(report)
+    assert ("ENV007", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_envelope_receiver_code_mismatch_triggers_env010(tmp_path):
+    edi = build_edi(
+        replacements={
+            "GS": "GS*HI*SENDER*BADRCVR*20210101*1253*1*X*005010X215~"
+        }
+    )
+    report = analyze(tmp_path, edi)
+    codes = collect_codes(report)
+    assert ("ENV010", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_minimal_data_disabled_suppresses_bht_warning(tmp_path):
+    overrides = {"qreRequirements": {"minimalDataPrinciple": False}}
+    edi = build_edi(replacements={"BHT": "BHT*0006*13*AUTHREQ*20210101*1253*13~"})
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert ("QRE002", "WARNING") not in codes
+
+
+def test_attachment_required_without_pwk_triggers_att001(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "attachmentExpectations": {
+                "requireAttachmentAtSubmission": True
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("ATT001", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_attachment_allowed_report_type_passes(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "attachmentExpectations": {
+                "requireAttachmentAtSubmission": True,
+                "allowedReportTypes": ["AA"]
+            }
+        }
+    }
+    edi = add_pwk_segment(build_edi(), "PWK*AA*EL~")
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert all(code not in {"ATT001", "ATT002", "ATT003"} for code, _ in codes)
+    assert report.is_valid is True
+
+
+def test_attachment_invalid_report_type_triggers_att002(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "attachmentExpectations": {
+                "requireAttachmentAtSubmission": True,
+                "allowedReportTypes": ["AA"]
+            }
+        }
+    }
+    edi = add_pwk_segment(build_edi(), "PWK*ZZ*EL~")
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert ("ATT002", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_service_type_outside_allowed_set_triggers_srv001(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "serviceExpectations": {
+                "allowedServiceTypeCodes": ["SC"]
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("SRV001", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_place_of_service_outside_allowed_set_triggers_srv002(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "serviceExpectations": {
+                "allowedServiceTypeCodes": ["HS"],
+                "allowedPlaceOfServiceCodes": ["21", "22"]
+            }
+        }
+    }
+    edi = build_edi(replacements={"UM": "UM*HS*I*MH*99:B**E~"})
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert ("SRV002", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_quantity_segment_required_missing_triggers_srv003(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "serviceExpectations": {
+                "allowedServiceTypeCodes": ["HS"],
+                "requireQuantitySegment": True
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("SRV003", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_quantity_type_outside_allowed_set_triggers_srv004(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "serviceExpectations": {
+                "allowedServiceTypeCodes": ["HS"],
+                "allowedQuantityTypes": ["VS"],
+                "requireQuantitySegment": True
+            }
+        }
+    }
+    edi = add_hsd_segment(build_edi(), "HSD*UN*6~")
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert ("SRV004", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_quantity_type_allowed_passes(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "serviceExpectations": {
+                "allowedServiceTypeCodes": ["HS"],
+                "allowedQuantityTypes": ["VS"],
+                "requireQuantitySegment": True
+            }
+        }
+    }
+    edi = add_hsd_segment(build_edi(), "HSD*VS*6~")
+    report = analyze(tmp_path, edi, overrides=overrides)
+    codes = collect_codes(report)
+    assert all(code not in {"SRV001", "SRV002", "SRV003", "SRV004"} for code, _ in codes)
+    assert report.is_valid is True
+
+
+def test_is_auth_required_enabled_without_endpoint_triggers_api001(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "apiExpectations": {
+                "isAuthRequired": {
+                    "enabled": True,
+                    "endpoint": ""
+                }
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("API001", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_provider_search_missing_endpoint_triggers_api002(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "apiExpectations": {
+                "providerSearch": {
+                    "enabled": True,
+                    "endpoint": ""
+                }
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("API002", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_provider_search_missing_unique_id_triggers_api003(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "apiExpectations": {
+                "providerSearch": {
+                    "enabled": True,
+                    "endpoint": "https://example.com/provider",
+                    "requiresUniqueId": True,
+                    "uniqueIdField": ""
+                }
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("API003", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_epa_missing_routing_endpoint_triggers_api004(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "apiExpectations": {
+                "epa": {
+                    "enabled": True,
+                    "requiresRoutingConfig": True,
+                    "routingEndpoint": ""
+                }
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert ("API004", "ERROR") in codes
+    assert report.is_valid is False
+
+
+def test_api_expectations_satisfied_passes(tmp_path):
+    overrides = {
+        "qreRequirements": {
+            "apiExpectations": {
+                "isAuthRequired": {
+                    "enabled": True,
+                    "endpoint": "https://example.com/iar"
+                },
+                "providerSearch": {
+                    "enabled": True,
+                    "endpoint": "https://example.com/provider",
+                    "requiresUniqueId": True,
+                    "uniqueIdField": "providerId"
+                },
+                "epa": {
+                    "enabled": True,
+                    "requiresRoutingConfig": True,
+                    "routingEndpoint": "https://example.com/epa"
+                }
+            }
+        }
+    }
+    report = analyze(tmp_path, build_edi(), overrides=overrides)
+    codes = collect_codes(report)
+    assert all(code not in {"API001", "API002", "API003", "API004"} for code, _ in codes)
+    assert report.is_valid is True
+
+
+def test_export_report_json_persists_results(tmp_path):
+    analyzer, report = analyze_with_analyzer(tmp_path, build_edi())
+    output_path = tmp_path / "report.json"
+    analyzer.export_report_json(report, str(output_path))
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["query_method"] == "ByAuthorizationNumber"
+    assert any(result["code"] == "QRE005" for result in data["results"])
