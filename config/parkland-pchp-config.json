@@ -1,0 +1,236 @@
+{
+  "payerId": "66917",
+  "payerName": "Parkland Community Health Plan",
+  "organizationName": "Parkland Community Health Plan - Parkland Hospital System",
+  "contactInfo": {
+    "primaryContact": "Integration Team",
+    "email": "integration@parklandhospital.com",
+    "phone": "+1-214-590-8000",
+    "supportEmail": "itsupport@parklandhospital.com"
+  },
+  "deployment": {
+    "type": "private",
+    "architecture": "kubernetes",
+    "azureSubscription": "parkland-hospital-subscription",
+    "networkConfig": {
+      "expressRoute": true,
+      "expressRouteCircuit": "parkland-hospital-er",
+      "spokeVNet": "parkland-cho-spoke-vnet",
+      "vpnToCognizant": {
+        "enabled": true,
+        "purpose": "QNXT connectivity",
+        "gatewayName": "parkland-cognizant-vpn"
+      }
+    }
+  },
+  "enabledModules": {
+    "memberInteroperabilityAPI": true,
+    "fileIngestion": true,
+    "appeals": false,
+    "ecs": false,
+    "attachments": false,
+    "authorizations": false,
+    "claimsProcessing": false
+  },
+  "memberInteroperabilityAPI": {
+    "enabled": true,
+    "authentication": {
+      "type": "okta",
+      "oktaDomain": "parkland.okta.com",
+      "clientIdSecretName": "okta-member-api-client-id",
+      "clientSecretName": "okta-member-api-client-secret",
+      "authorizationServer": "default",
+      "scopes": ["openid", "profile", "email", "fhir_user"]
+    },
+    "fhirEndpoint": {
+      "baseUrl": "https://fhir.parklandhospital.com/api",
+      "version": "R4",
+      "capabilities": [
+        "Patient",
+        "Coverage",
+        "ExplanationOfBenefit",
+        "Claim",
+        "Encounter",
+        "Procedure",
+        "Observation"
+      ]
+    },
+    "memberPortal": {
+      "enabled": true,
+      "allowRegistration": true,
+      "allowDownloadRecords": true,
+      "recordFormats": ["FHIR", "PDF", "CCD"]
+    },
+    "rateLimits": {
+      "requestsPerMinute": 100,
+      "requestsPerHour": 1000,
+      "burstLimit": 200
+    }
+  },
+  "backendSystems": {
+    "qnxt": {
+      "enabled": true,
+      "vendor": "Cognizant",
+      "connectivity": "vpn",
+      "endpoints": {
+        "claims": "https://qnxt-claims.cognizant.parkland.internal/api/v1",
+        "eligibility": "https://qnxt-eligibility.cognizant.parkland.internal/api/v1",
+        "member": "https://qnxt-member.cognizant.parkland.internal/api/v1",
+        "provider": "https://qnxt-provider.cognizant.parkland.internal/api/v1"
+      },
+      "authentication": {
+        "type": "apiKey",
+        "keyVaultSecretName": "qnxt-api-key"
+      },
+      "timeout": 30000,
+      "retryCount": 3,
+      "retryInterval": 5000
+    }
+  },
+  "fileIngestion": {
+    "enabled": true,
+    "sources": [
+      {
+        "type": "sftp",
+        "name": "cognizant-bpass-files",
+        "host": "sftp.cognizant.parkland.internal",
+        "port": 22,
+        "authType": "key",
+        "keyVaultSecretName": "cognizant-sftp-key",
+        "inboundPath": "/outbound/parkland",
+        "filePatterns": ["*.edi", "*.x12", "*.837", "*.835"],
+        "pollingInterval": 300
+      }
+    ],
+    "destinations": [
+      {
+        "type": "azureBlob",
+        "container": "parkland-file-ingestion",
+        "pathPattern": "incoming/{fileType}/{yyyy}/{MM}/{dd}/",
+        "retentionDays": 2555
+      }
+    ],
+    "processing": {
+      "validateX12": true,
+      "archiveOriginals": true,
+      "notifyOnFailure": true
+    }
+  },
+  "kubernetes": {
+    "cluster": {
+      "name": "parkland-cho-aks",
+      "resourceGroup": "parkland-cho-rg",
+      "region": "centralus",
+      "nodeCount": 3,
+      "nodeSize": "Standard_D4s_v3",
+      "networkPlugin": "azure",
+      "networkPolicy": "calico"
+    },
+    "namespaces": [
+      "parkland-cho-system",
+      "parkland-cho-services",
+      "parkland-cho-workflows"
+    ],
+    "services": [
+      "member-interoperability-api",
+      "file-ingestion-service",
+      "fhir-gateway",
+      "okta-auth-proxy"
+    ],
+    "storage": {
+      "class": "managed-premium",
+      "persistentVolumes": true
+    }
+  },
+  "security": {
+    "privateEndpoints": true,
+    "vnetIntegration": true,
+    "expressRouteOnly": true,
+    "keyVault": {
+      "name": "parkland-cho-kv",
+      "sku": "premium",
+      "enableSoftDelete": true,
+      "softDeleteRetentionDays": 90,
+      "enablePurgeProtection": true
+    },
+    "managedIdentity": true,
+    "encryption": {
+      "atRest": true,
+      "inTransit": true,
+      "customerManagedKeys": false
+    },
+    "hipaaCompliance": true,
+    "auditLogging": {
+      "enabled": true,
+      "retentionDays": 2555
+    }
+  },
+  "monitoring": {
+    "applicationInsights": true,
+    "logAnalytics": true,
+    "prometheus": true,
+    "grafana": true,
+    "alerting": {
+      "enabled": true,
+      "notificationChannels": ["email", "teams"],
+      "emailRecipients": ["itsupport@parklandhospital.com"],
+      "teamsWebhook": "https://parkland.webhook.office.com/webhookb2/..."
+    }
+  },
+  "compliance": {
+    "hipaa": true,
+    "hitech": true,
+    "cms0057f": true,
+    "stateRegulations": ["Texas"],
+    "auditSchedule": "quarterly"
+  },
+  "operationsMigration": {
+    "fromCognizantBPass": true,
+    "phaseApproach": true,
+    "phases": [
+      {
+        "phase": 1,
+        "name": "Member Interoperability API",
+        "status": "initial",
+        "services": ["member-api", "okta-auth", "fhir-gateway"],
+        "timeline": "Q1 2026"
+      },
+      {
+        "phase": 2,
+        "name": "File Ingestion",
+        "status": "planned",
+        "services": ["sftp-ingestion", "file-validation", "archive"],
+        "timeline": "Q2 2026"
+      },
+      {
+        "phase": 3,
+        "name": "Claims Processing",
+        "status": "planned",
+        "services": ["837-processing", "835-processing", "claim-status"],
+        "timeline": "Q3 2026"
+      },
+      {
+        "phase": 4,
+        "name": "Prior Authorization",
+        "status": "planned",
+        "services": ["278-processing", "pas-api", "crd-integration"],
+        "timeline": "Q4 2026"
+      },
+      {
+        "phase": 5,
+        "name": "Full Operations",
+        "status": "future",
+        "services": ["complete-bpass-replacement"],
+        "timeline": "2027+"
+      }
+    ]
+  },
+  "notes": {
+    "purpose": "Private integration environment for Parkland Community Health Plan",
+    "scope": "Replace and extend Cognizant BPass operations gradually",
+    "architecture": "Kubernetes-based for flexibility and control",
+    "network": "Deployed as spoke off Parkland Hospital ExpressRoute",
+    "initialFocus": "Member access to healthcare records via app",
+    "futureGrowth": "Complete integration environment for all EDI and API operations"
+  }
+}
