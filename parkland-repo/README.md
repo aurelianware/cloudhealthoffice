@@ -2,6 +2,8 @@
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fparkland-pchp%2Fintegration-platform%2Fmain%2Fazuredeploy.json)
 
+> **Note:** The "Deploy to Azure" button will work after you create the `parkland-pchp/integration-platform` repository and publish the `azuredeploy.json` file. Until then, use the manual deployment instructions below.
+
 **Private Integration Environment for Parkland Community Health Plan**
 
 *A subsidiary of Parkland Hospital System*
@@ -74,7 +76,7 @@ Parkland Hospital System (Parent Company)
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-[**View Detailed Architecture Diagram**](./docs/architecture-diagram.png)
+[**View Detailed Architecture Diagram**](./docs/architecture-diagram.svg)
 
 ## Cost Estimate
 
@@ -193,7 +195,7 @@ pchp-integration-platform/
 │   ├── NETWORK-INTEGRATION.md        # ExpressRoute & VPN setup
 │   ├── OKTA-CONFIGURATION.md         # Okta setup guide for PCHP
 │   ├── QNXT-INTEGRATION.md           # QNXT connectivity guide
-│   ├── architecture-diagram.png      # Architecture diagram
+│   ├── architecture-diagram.svg      # Architecture diagram
 │   └── cost-breakdown.xlsx           # Cost calculator
 ├── infra/
 │   ├── main.bicep                    # Main Bicep template

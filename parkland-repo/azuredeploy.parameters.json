@@ -3,13 +3,13 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "baseName": {
-      "value": "pchp-integration"
+      "value": "parkland-pchp"
     },
     "environment": {
       "value": "dev"
     },
     "hubVNetId": {
-      "value": "/subscriptions/{subscription-id}/resourceGroups/{hub-rg}/providers/Microsoft.Network/virtualNetworks/{hub-vnet}"
+      "value": "/subscriptions/REPLACE-WITH-SUBSCRIPTION-ID/resourceGroups/REPLACE-WITH-HUB-RG/providers/Microsoft.Network/virtualNetworks/REPLACE-WITH-HUB-VNET"
     },
     "enablePrivateEndpoints": {
       "value": true

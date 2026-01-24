@@ -5,17 +5,17 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "11383561823096604845"
+      "templateHash": "492724601614827133"
     }
   },
   "parameters": {
     "baseName": {
       "type": "string",
-      "defaultValue": "parkland-cho",
+      "defaultValue": "parkland-pchp",
       "minLength": 3,
       "maxLength": 20,
       "metadata": {
-        "description": "Base name for all resources (e.g., parkland-cho)"
+        "description": "Base name for all resources (e.g., parkland-pchp)"
       }
     },
     "location": {
@@ -228,8 +228,8 @@
           "name": "PerGB2018"
         },
         "retentionInDays": 730,
-        "publicNetworkAccessForIngestion": "Enabled",
-        "publicNetworkAccessForQuery": "Enabled"
+        "publicNetworkAccessForIngestion": "[if(parameters('enablePrivateEndpoints'), 'Disabled', 'Enabled')]",
+        "publicNetworkAccessForQuery": "[if(parameters('enablePrivateEndpoints'), 'Disabled', 'Enabled')]"
       }
     },
     {
@@ -243,8 +243,8 @@
         "Application_Type": "web",
         "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
         "RetentionInDays": 90,
-        "publicNetworkAccessForIngestion": "Enabled",
-        "publicNetworkAccessForQuery": "Enabled"
+        "publicNetworkAccessForIngestion": "[if(parameters('enablePrivateEndpoints'), 'Disabled', 'Enabled')]",
+        "publicNetworkAccessForQuery": "[if(parameters('enablePrivateEndpoints'), 'Disabled', 'Enabled')]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
@@ -488,6 +488,10 @@
       "properties": {
         "dnsPrefix": "[format('{0}-{1}', parameters('baseName'), parameters('environment'))]",
         "enableRBAC": true,
+        "apiServerAccessProfile": {
+          "enablePrivateCluster": "[parameters('enablePrivateEndpoints')]",
+          "enablePrivateClusterPublicFQDN": false
+        },
         "networkProfile": {
           "networkPlugin": "azure",
           "networkPolicy": "calico",
