@@ -65,6 +65,7 @@ This document provides a detailed cost breakdown for the PCHP Integration Platfo
 | Azure Resource Tags | Unlimited | - | $0 | $0 |
 | Azure Policy | Basic policies | - | $0 | $0 |
 | Cost Management | Included | - | $0 | $0 |
+| Additional Azure Platform Services | DNS zones, monitoring overage, action groups, minor utilities | Bundled estimate | - | $582.00 |
 | **Contingency (10%)** | - | - | - | $154.80 |
 | **TOTAL DEVELOPMENT** | | | | **$1,725/month** |
 
