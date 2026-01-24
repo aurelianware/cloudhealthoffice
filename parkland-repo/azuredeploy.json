@@ -5,17 +5,17 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "492724601614827133"
+      "templateHash": "14077125917967544510"
     }
   },
   "parameters": {
     "baseName": {
       "type": "string",
-      "defaultValue": "parkland-pchp",
+      "defaultValue": "pchp-integration",
       "minLength": 3,
       "maxLength": 20,
       "metadata": {
-        "description": "Base name for all resources (e.g., parkland-pchp)"
+        "description": "Base name for all resources (e.g., pchp-integration)"
       }
     },
     "location": {

@@ -15,7 +15,7 @@
     "networkConfig": {
       "expressRoute": true,
       "expressRouteCircuit": "parkland-hospital-er",
-      "spokeVNet": "parkland-pchp-spoke-vnet",
+      "spokeVNet": "pchp-integration-spoke-vnet",
       "vpnToCognizant": {
         "enabled": true,
         "purpose": "QNXT connectivity",
@@ -118,8 +118,8 @@
   },
   "kubernetes": {
     "cluster": {
-      "name": "parkland-pchp-aks",
-      "resourceGroup": "parkland-pchp-rg",
+      "name": "pchp-integration-aks",
+      "resourceGroup": "pchp-integration-rg",
       "region": "centralus",
       "nodeCount": 3,
       "nodeSize": "Standard_D4s_v3",
@@ -127,9 +127,9 @@
       "networkPolicy": "calico"
     },
     "namespaces": [
-      "parkland-pchp-system",
-      "parkland-pchp-services",
-      "parkland-pchp-workflows"
+      "pchp-integration-system",
+      "pchp-integration-services",
+      "pchp-integration-workflows"
     ],
     "services": [
       "member-interoperability-api",
@@ -147,7 +147,7 @@
     "vnetIntegration": true,
     "expressRouteOnly": true,
     "keyVault": {
-      "name": "parkland-pchp-kv",
+      "name": "pchp-integration-kv",
       "sku": "premium",
       "enableSoftDelete": true,
       "softDeleteRetentionDays": 90,

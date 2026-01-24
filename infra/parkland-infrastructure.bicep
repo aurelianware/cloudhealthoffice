@@ -4,10 +4,10 @@
 
 targetScope = 'resourceGroup'
 
-@description('Base name for all resources (e.g., parkland-pchp)')
+@description('Base name for all resources (e.g., pchp-integration)')
 @minLength(3)
 @maxLength(20)
-param baseName string = 'parkland-pchp'
+param baseName string = 'pchp-integration'
 
 @description('Azure region for deployment')
 param location string = resourceGroup().location

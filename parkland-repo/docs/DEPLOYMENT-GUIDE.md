@@ -89,7 +89,7 @@ This guide provides deployment instructions for Parkland Community Health Plan's
 ### Azure Resources
 
 1. **Azure Subscription**: Parkland Hospital System subscription
-2. **Resource Group**: `parkland-pchp-rg` (or custom name)
+2. **Resource Group**: `pchp-integration-rg` (or custom name)
 3. **Region**: Central US (or preferred region near Parkland)
 4. **Permissions**: 
    - Contributor role on subscription
@@ -127,22 +127,22 @@ This guide provides deployment instructions for Parkland Community Health Plan's
 ```bash
 # Create spoke VNet
 az network vnet create \
-  --resource-group parkland-pchp-rg \
-  --name parkland-pchp-spoke-vnet \
+  --resource-group pchp-integration-rg \
+  --name pchp-integration-spoke-vnet \
   --address-prefix 10.200.0.0/16 \
   --location centralus
 
 # Create AKS subnet
 az network vnet subnet create \
-  --resource-group parkland-pchp-rg \
-  --vnet-name parkland-pchp-spoke-vnet \
+  --resource-group pchp-integration-rg \
+  --vnet-name pchp-integration-spoke-vnet \
   --name aks-subnet \
   --address-prefix 10.200.0.0/20
 
 # Create services subnet
 az network vnet subnet create \
-  --resource-group parkland-pchp-rg \
-  --vnet-name parkland-pchp-spoke-vnet \
+  --resource-group pchp-integration-rg \
+  --vnet-name pchp-integration-spoke-vnet \
   --name services-subnet \
   --address-prefix 10.200.16.0/24
 ```
@@ -152,9 +152,9 @@ az network vnet subnet create \
 ```bash
 # Peer spoke VNet to hub VNet (containing ExpressRoute gateway)
 az network vnet peering create \
-  --resource-group parkland-pchp-rg \
+  --resource-group pchp-integration-rg \
   --name spoke-to-hub \
-  --vnet-name parkland-pchp-spoke-vnet \
+  --vnet-name pchp-integration-spoke-vnet \
   --remote-vnet /subscriptions/{subscription-id}/resourceGroups/{hub-rg}/providers/Microsoft.Network/virtualNetworks/{hub-vnet} \
   --allow-vnet-access \
   --allow-forwarded-traffic \
@@ -188,14 +188,14 @@ cognizant.parkland.internal -> Cognizant DNS servers
 # Create PRIVATE AKS cluster with Azure CNI and network policy
 # Note: Private cluster means API server is only accessible via ExpressRoute
 az aks create \
-  --resource-group parkland-pchp-rg \
-  --name parkland-pchp-aks \
+  --resource-group pchp-integration-rg \
+  --name pchp-integration-aks \
   --location centralus \
   --node-count 3 \
   --node-vm-size Standard_D4s_v3 \
   --network-plugin azure \
   --network-policy calico \
-  --vnet-subnet-id /subscriptions/{subscription-id}/resourceGroups/parkland-pchp-rg/providers/Microsoft.Network/virtualNetworks/parkland-pchp-spoke-vnet/subnets/aks-subnet \
+  --vnet-subnet-id /subscriptions/{subscription-id}/resourceGroups/pchp-integration-rg/providers/Microsoft.Network/virtualNetworks/pchp-integration-spoke-vnet/subnets/aks-subnet \
   --enable-managed-identity \
   --enable-addons monitoring \
   --enable-private-cluster \
@@ -205,8 +205,8 @@ az aks create \
 
 # Get credentials (must be run from machine with ExpressRoute connectivity)
 az aks get-credentials \
-  --resource-group parkland-pchp-rg \
-  --name parkland-pchp-aks
+  --resource-group pchp-integration-rg \
+  --name pchp-integration-aks
 ```
 
 **Security Note:** The `--enable-private-cluster` flag ensures the Kubernetes API server is NOT exposed to the public internet and is only accessible via the Parkland Hospital System ExpressRoute connection. This is critical for HIPAA compliance and security.
@@ -221,27 +221,27 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 
 # Create namespaces
-kubectl create namespace parkland-pchp-system
-kubectl create namespace parkland-pchp-services
-kubectl create namespace parkland-pchp-workflows
+kubectl create namespace pchp-integration-system
+kubectl create namespace pchp-integration-services
+kubectl create namespace pchp-integration-workflows
 
 # Install Argo Workflows
 helm install argo-workflows argo/argo-workflows \
-  --namespace parkland-pchp-workflows \
+  --namespace pchp-integration-workflows \
   --version 0.41.0 \
   --set server.enabled=true \
-  --set controller.workflowNamespaces={parkland-pchp-workflows}
+  --set controller.workflowNamespaces={pchp-integration-workflows}
 
 # Install Apache Kafka
 helm install kafka bitnami/kafka \
-  --namespace parkland-pchp-system \
+  --namespace pchp-integration-system \
   --set replicaCount=3 \
   --set persistence.enabled=true \
   --set persistence.size=100Gi
 
 # Install Prometheus + Grafana
 helm install monitoring prometheus-community/kube-prometheus-stack \
-  --namespace parkland-pchp-system \
+  --namespace pchp-integration-system \
   --set grafana.enabled=true \
   --set prometheus.prometheusSpec.retention=30d
 ```
@@ -251,9 +251,9 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
 ```bash
 # Deploy infrastructure using Bicep
 az deployment group create \
-  --resource-group parkland-pchp-rg \
+  --resource-group pchp-integration-rg \
   --template-file infra/parkland-infrastructure.bicep \
-  --parameters @config/parkland-pchp-config.json
+  --parameters @config/pchp-integration-config.json
 ```
 
 ### Step 4: Configure Secrets
@@ -261,8 +261,8 @@ az deployment group create \
 ```bash
 # Create Key Vault
 az keyvault create \
-  --name parkland-pchp-kv \
-  --resource-group parkland-pchp-rg \
+  --name pchp-integration-kv \
+  --resource-group pchp-integration-rg \
   --location centralus \
   --sku premium \
   --enable-soft-delete true \
@@ -270,24 +270,24 @@ az keyvault create \
 
 # Store QNXT API key
 az keyvault secret set \
-  --vault-name parkland-pchp-kv \
+  --vault-name pchp-integration-kv \
   --name qnxt-api-key \
   --value "{qnxt-api-key}"
 
 # Store Okta credentials
 az keyvault secret set \
-  --vault-name parkland-pchp-kv \
+  --vault-name pchp-integration-kv \
   --name okta-member-api-client-id \
   --value "{okta-client-id}"
 
 az keyvault secret set \
-  --vault-name parkland-pchp-kv \
+  --vault-name pchp-integration-kv \
   --name okta-member-api-client-secret \
   --value "{okta-client-secret}"
 
 # Store Cognizant SFTP key
 az keyvault secret set \
-  --vault-name parkland-pchp-kv \
+  --vault-name pchp-integration-kv \
   --name cognizant-sftp-key \
   --file ~/.ssh/cognizant_sftp_rsa
 ```
@@ -297,7 +297,7 @@ az keyvault secret set \
 ```bash
 # Deploy using Helm chart
 helm install member-api ./helm/member-interoperability-api \
-  --namespace parkland-pchp-services \
+  --namespace pchp-integration-services \
   --set config.oktaDomain=parkland.okta.com \
   --set config.fhirEndpoint=https://fhir.parklandhospital.com/api \
   --set config.qnxtBackend.enabled=true
@@ -308,7 +308,7 @@ helm install member-api ./helm/member-interoperability-api \
 ```bash
 # Install NGINX Ingress Controller
 helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace parkland-pchp-system \
+  --namespace pchp-integration-system \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"="true"
 
 # Apply ingress rules
@@ -536,7 +536,7 @@ curl -X GET "https://api.parklandhospital.com/api/v1/member/records/download?for
 All services send telemetry to Azure Application Insights:
 
 ```
-Workspace ID: parkland-pchp-logs
+Workspace ID: pchp-integration-logs
 Key Vault Secret: application-insights-connection-string
 ```
 
@@ -546,7 +546,7 @@ Access Grafana dashboards:
 
 ```bash
 # Port-forward Grafana
-kubectl port-forward -n parkland-pchp-system svc/monitoring-grafana 3000:80
+kubectl port-forward -n pchp-integration-system svc/monitoring-grafana 3000:80
 
 # Access at http://localhost:3000
 # Default credentials: admin / prom-operator
@@ -653,24 +653,24 @@ curl https://parkland.okta.com/api/v1/health
 
 # Verify client credentials in Key Vault
 az keyvault secret show \
-  --vault-name parkland-pchp-kv \
+  --vault-name pchp-integration-kv \
   --name okta-member-api-client-id
 
 # Check pod logs
-kubectl logs -n parkland-pchp-services deployment/member-api -f
+kubectl logs -n pchp-integration-services deployment/member-api -f
 ```
 
 #### AKS Pod Failures
 
 ```bash
 # Check pod status
-kubectl get pods -n parkland-pchp-services
+kubectl get pods -n pchp-integration-services
 
 # View pod logs
-kubectl logs -n parkland-pchp-services <pod-name>
+kubectl logs -n pchp-integration-services <pod-name>
 
 # Describe pod for events
-kubectl describe pod -n parkland-pchp-services <pod-name>
+kubectl describe pod -n pchp-integration-services <pod-name>
 
 # Check node status
 kubectl get nodes
@@ -691,7 +691,7 @@ kubectl describe node <node-name>
 
 ### Configuration Files
 
-- Primary config: `/config/parkland-pchp-config.json`
+- Primary config: `/config/pchp-integration-config.json`
 - Kubernetes manifests: `/k8s/parkland/`
 - Helm values: `/helm/parkland/values.yaml`
 - Bicep templates: `/infra/parkland-infrastructure.bicep`
