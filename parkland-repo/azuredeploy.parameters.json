@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "baseName": {
-      "value": "parkland-pchp"
+      "value": "pchp-integration"
     },
     "environment": {
       "value": "dev"

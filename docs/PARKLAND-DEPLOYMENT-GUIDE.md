@@ -248,7 +248,7 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
 az deployment group create \
   --resource-group parkland-cho-rg \
   --template-file infra/parkland-infrastructure.bicep \
-  --parameters @config/parkland-pchp-config.json
+  --parameters @config/pchp-integration-config.json
 ```
 
 ### Step 4: Configure Secrets
@@ -686,7 +686,7 @@ kubectl describe node <node-name>
 
 ### Configuration Files
 
-- Primary config: `/config/parkland-pchp-config.json`
+- Primary config: `/config/pchp-integration-config.json`
 - Kubernetes manifests: `/k8s/parkland/`
 - Helm values: `/helm/parkland/values.yaml`
 - Bicep templates: `/infra/parkland-infrastructure.bicep`
