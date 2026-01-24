@@ -1,13 +1,13 @@
 // Parkland Community Health Plan - Infrastructure Template
-// Deploys Azure resources for Parkland's private CHO integration environment
+// Deploys Azure resources for Parkland's private PCHP integration environment
 // Network: Spoke VNet connected to Parkland Hospital ExpressRoute
 
 targetScope = 'resourceGroup'
 
-@description('Base name for all resources (e.g., parkland-cho)')
+@description('Base name for all resources (e.g., parkland-pchp)')
 @minLength(3)
 @maxLength(20)
-param baseName string = 'parkland-cho'
+param baseName string = 'parkland-pchp'
 
 @description('Azure region for deployment')
 param location string = resourceGroup().location
@@ -197,8 +197,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 730 // 2 years for HIPAA compliance
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
+    publicNetworkAccessForIngestion: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
+    publicNetworkAccessForQuery: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
   }
 }
 
@@ -211,8 +211,8 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     Application_Type: 'web'
     WorkspaceResourceId: logAnalytics.id
     RetentionInDays: 90
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
+    publicNetworkAccessForIngestion: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
+    publicNetworkAccessForQuery: enablePrivateEndpoints ? 'Disabled' : 'Enabled'
   }
 }
 
@@ -450,6 +450,10 @@ resource aks 'Microsoft.ContainerService/managedClusters@2023-10-01' = {
   properties: {
     dnsPrefix: '${baseName}-${environment}'
     enableRBAC: true
+    apiServerAccessProfile: {
+      enablePrivateCluster: enablePrivateEndpoints
+      enablePrivateClusterPublicFQDN: false
+    }
     networkProfile: {
       networkPlugin: 'azure'
       networkPolicy: 'calico'
