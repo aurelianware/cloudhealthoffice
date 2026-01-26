@@ -17,6 +17,14 @@ This guide explains how Cloud Health Office maps HIPAA X12 transactions to HL7 F
 
 - [Overview](#overview)
 - [CMS-0057-F Compliance](#cms-0057-f-compliance)
+- [Patient Access API (CMS-0057-F & CMS-9115-F)](#patient-access-api-cms-0057-f--cms-9115-f)
+  - [Key Features](#key-features)
+  - [Supported Resources](#supported-resources)
+  - [Authentication Flow](#authentication-flow-oauth-20)
+  - [API Endpoints](#api-endpoints)
+  - [X12 to FHIR Mapping](#x12-to-fhir-mapping)
+  - [Security & Compliance](#security--compliance)
+  - [Testing](#testing)
 - [Provider Access API (CMS-0057-F)](#provider-access-api-cms-0057-f)
 - [Architecture](#architecture)
 - [X12 270 to FHIR R4 Mapping](#x12-270-to-fhir-r4-mapping)
@@ -73,7 +81,7 @@ Cloud Health Office provides comprehensive FHIR R4 integration for healthcare pa
 
 **CMS-0057-F** (Advancing Interoperability and Improving Prior Authorization Processes) requires payers to implement FHIR-based APIs for prior authorization and patient data exchange. Our implementation provides complete coverage:
 
-#### CMS-0057-F Requirements
+### CMS-0057-F Requirements
 
 1. **Prior Authorization API (§438.242(c))**
    - FHIR-based prior authorization submission and status
@@ -81,10 +89,13 @@ Cloud Health Office provides comprehensive FHIR R4 integration for healthcare pa
    - Real-time decision support (Da Vinci CRD)
    - Documentation templates (Da Vinci DTR)
    
-2. **Patient Access API (§438.242(b)(2))**
-   - FHIR R4-based API for patient data access
-   - Claims and encounter data via FHIR resources
-   - Prior authorization data in standardized format
+2. **Patient Access API (§438.242(b)(2))** ✅ **NEW**
+   - FHIR R4-based API for patient data access with OAuth 2.0
+   - Claim resources via X12 837 mapping
+   - Encounter data in standardized format
+   - ExplanationOfBenefit via X12 835 mapping
+   - CoverageEligibilityResponse for benefits information
+   - PHI redaction and audit logging
    
 3. **Provider Access API (§438.242(b)(3))**
    - Access to patient data for in-network providers
@@ -149,6 +160,462 @@ The Payer-to-Payer Exchange rule (effective 2027) requires payers to exchange pa
 - **US Core 3.1.1**: US Core Implementation Guide
 - **Da Vinci PDex**: Payer Data Exchange Implementation Guide
 - **SMART on FHIR**: Authorization framework for healthcare apps
+
+---
+
+## Patient Access API (CMS-0057-F & CMS-9115-F)
+
+The Patient Access API enables patients to securely access their own health data through third-party applications using OAuth 2.0 authentication via Azure AD. This implementation aligns with CMS-0057-F and CMS-9115-F requirements effective January 1, 2026.
+
+### Key Features
+
+✅ **OAuth 2.0 Authentication** - Patient consent via Azure AD for third-party applications  
+✅ **CMS-0057-F Compliant** - Meets all Patient Access API requirements  
+✅ **FHIR R4 Endpoints** - Patient, Claim, Encounter, EOB, CoverageEligibilityResponse  
+✅ **X12 to FHIR Mapping** - Automated conversion of X12 837 (Claims) and 835 (Remittances)  
+✅ **PHI Redaction** - Automatic redaction of sensitive health information  
+✅ **HIPAA Audit Logging** - Complete audit trail for all data access  
+✅ **US Core v3.1.1 Compliance** - US Core Patient profile and USCDI data elements  
+✅ **Da Vinci PDex Alignment** - Compatible with Payer Data Exchange Implementation Guide  
+
+### Supported Resources
+
+The Patient Access API supports the following FHIR R4 resources:
+
+| Resource Type | Purpose | X12 Source | Standards |
+|---------------|---------|------------|-----------|
+| **Patient** | Patient demographics and identifiers | Backend | US Core v3.1.1 |
+| **Claim** | Professional, Institutional, Dental claims | X12 837 | FHIR R4 |
+| **Encounter** | Clinical encounters and visits | Backend | FHIR R4 |
+| **ExplanationOfBenefit** | Claim adjudication and payment details | X12 835 | FHIR R4 |
+| **CoverageEligibilityResponse** | Benefits and eligibility information | Backend | FHIR R4 |
+
+### Authentication Flow (OAuth 2.0)
+
+The Patient Access API uses OAuth 2.0 for secure patient authentication:
+
+```text
+1. Patient authorizes third-party app via Azure AD
+   ↓
+2. Patient authenticates with Azure AD credentials
+   ↓
+3. Patient grants consent for data access scopes
+   ↓
+4. Access token issued with patient context
+   ↓
+5. Third-party app makes FHIR API requests with Bearer token
+   ↓
+6. API validates token, checks consent, returns FHIR resources
+   ↓
+7. All access logged to audit trail (HIPAA compliance)
+```
+
+### API Endpoints
+
+#### GET /Patient/{id}
+
+Retrieve patient demographics (US Core Patient profile v3.1.1).
+
+**Request:**
+```http
+GET /Patient/PAT123
+Authorization: Bearer {oauth2_access_token}
+```
+
+**Response:**
+```json
+{
+  "resourceType": "Patient",
+  "id": "PAT123",
+  "meta": {
+    "profile": ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+  },
+  "identifier": [{
+    "system": "http://example.org/fhir/member-id",
+    "value": "PAT123"
+  }],
+  "name": [{
+    "use": "official",
+    "family": "Doe",
+    "given": ["John"]
+  }],
+  "gender": "male",
+  "birthDate": "1980-01-01",
+  "address": [{
+    "use": "home",
+    "line": ["123 Main St"],
+    "city": "Boston",
+    "state": "MA",
+    "postalCode": "02101"
+  }]
+}
+```
+
+#### GET /Claim?patient={id}
+
+Search claims for a patient (mapped from X12 837 Professional/Institutional/Dental).
+
+**Request:**
+```http
+GET /Claim?patient=PAT123&date=ge2024-01-01
+Authorization: Bearer {oauth2_access_token}
+```
+
+**Response:**
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "total": 2,
+  "link": [{
+    "relation": "self",
+    "url": "/Claim?patient=PAT123"
+  }],
+  "entry": [{
+    "fullUrl": "Claim/CLM001",
+    "resource": {
+      "resourceType": "Claim",
+      "id": "CLM001",
+      "status": "active",
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code": "professional"
+        }]
+      },
+      "use": "claim",
+      "patient": {
+        "reference": "Patient/PAT123"
+      },
+      "billablePeriod": {
+        "start": "2024-03-15"
+      },
+      "total": {
+        "value": 250.00,
+        "currency": "USD"
+      }
+    }
+  }]
+}
+```
+
+#### GET /Encounter?patient={id}
+
+Search encounters for a patient.
+
+**Request:**
+```http
+GET /Encounter?patient=PAT123&status=finished
+Authorization: Bearer {oauth2_access_token}
+```
+
+**Response:**
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "total": 5,
+  "entry": [{
+    "fullUrl": "Encounter/ENC001",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "ENC001",
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "subject": {
+        "reference": "Patient/PAT123"
+      },
+      "period": {
+        "start": "2024-03-15T09:00:00Z",
+        "end": "2024-03-15T10:30:00Z"
+      }
+    }
+  }]
+}
+```
+
+#### GET /ExplanationOfBenefit?patient={id}
+
+Search Explanation of Benefit resources (mapped from X12 835 Remittance Advice).
+
+**Request:**
+```http
+GET /ExplanationOfBenefit?patient=PAT123
+Authorization: Bearer {oauth2_access_token}
+```
+
+**Response:**
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "total": 3,
+  "entry": [{
+    "fullUrl": "ExplanationOfBenefit/EOB001",
+    "resource": {
+      "resourceType": "ExplanationOfBenefit",
+      "id": "EOB001",
+      "status": "active",
+      "type": {
+        "coding": [{
+          "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code": "professional"
+        }]
+      },
+      "use": "claim",
+      "patient": {
+        "reference": "Patient/PAT123"
+      },
+      "outcome": "complete",
+      "payment": {
+        "amount": {
+          "value": 200.00,
+          "currency": "USD"
+        },
+        "date": "2024-04-01"
+      }
+    }
+  }]
+}
+```
+
+#### GET /CoverageEligibilityResponse?patient={id}
+
+Search coverage eligibility responses for a patient.
+
+**Request:**
+```http
+GET /CoverageEligibilityResponse?patient=PAT123
+Authorization: Bearer {oauth2_access_token}
+```
+
+**Response:**
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "total": 1,
+  "entry": [{
+    "fullUrl": "CoverageEligibilityResponse/ELIG001",
+    "resource": {
+      "resourceType": "CoverageEligibilityResponse",
+      "id": "ELIG001",
+      "status": "active",
+      "purpose": ["benefits"],
+      "patient": {
+        "reference": "Patient/PAT123"
+      },
+      "outcome": "complete"
+    }
+  }]
+}
+```
+
+### Usage Example (TypeScript)
+
+```typescript
+import { PatientAccessApi } from './src/fhir/patient-access-api';
+
+// Initialize API
+const api = new PatientAccessApi(process.env.ENCRYPTION_KEY);
+
+// Authenticate patient with OAuth 2.0 token
+const token = 'oauth2-bearer-token-from-azure-ad';
+
+// Get patient demographics
+const patient = await api.getPatient('PAT123', token);
+console.log(`Patient: ${patient.name[0].given[0]} ${patient.name[0].family}`);
+
+// Search claims
+const claimsBundle = await api.searchClaims(
+  { resourceType: 'Claim', patient: 'PAT123' },
+  token
+);
+console.log(`Found ${claimsBundle.total} claims`);
+
+// Search EOBs (from X12 835 remittances)
+const eobBundle = await api.searchExplanationOfBenefit(
+  { resourceType: 'ExplanationOfBenefit', patient: 'PAT123' },
+  token
+);
+console.log(`Found ${eobBundle.total} EOBs`);
+
+// Review audit logs
+const logs = api.getAuditLogs();
+console.log(`Audit events: ${logs.length}`);
+```
+
+### X12 to FHIR Mapping
+
+The Patient Access API automatically converts X12 EDI transactions to FHIR resources:
+
+#### X12 837 → FHIR Claim
+
+```typescript
+import { mapX12837ToFhirClaim } from './src/fhir/mapping/x12-to-fhir';
+
+const x12Claim: X12_837_Claim = {
+  claimId: 'CLM12345',
+  claimType: 'P', // Professional
+  totalChargeAmount: 250.00,
+  patient: {
+    memberId: 'MEM123',
+    firstName: 'Jane',
+    lastName: 'Smith',
+    dob: '1985-05-15',
+    gender: 'F'
+  },
+  billingProvider: {
+    npi: '1234567890',
+    organizationName: 'City Medical Center'
+  },
+  serviceLines: [{
+    lineNumber: 1,
+    procedureCode: '99213',
+    serviceDate: '2024-03-15',
+    units: 1,
+    chargeAmount: 250.00
+  }],
+  diagnosisCodes: [{
+    sequence: 1,
+    code: 'E11.9',
+    type: 'principal'
+  }]
+};
+
+const fhirClaim = mapX12837ToFhirClaim(x12Claim);
+// Result: FHIR R4 Claim resource
+```
+
+#### X12 835 → FHIR ExplanationOfBenefit
+
+```typescript
+import { mapX12835ToFhirEob } from './src/fhir/mapping/x12-to-fhir';
+
+const x12Remittance: X12_835_Remittance = {
+  transactionId: 'RMT98765',
+  payer: {
+    payerId: 'PAYER001',
+    payerName: 'Health Insurance Co'
+  },
+  payee: {
+    npi: '1234567890',
+    organizationName: 'City Medical Center'
+  },
+  payment: {
+    paymentMethodCode: 'ACH',
+    paymentAmount: 200.00,
+    paymentDate: '2024-04-01'
+  },
+  claims: [{
+    claimId: 'CLM12345',
+    patient: {
+      memberId: 'MEM123',
+      firstName: 'Jane',
+      lastName: 'Smith'
+    },
+    claimAmounts: {
+      billedAmount: 250.00,
+      allowedAmount: 225.00,
+      paidAmount: 200.00,
+      deductible: 25.00
+    },
+    serviceLines: [/* ... */]
+  }]
+};
+
+const fhirEob = mapX12835ToFhirEob(x12Remittance);
+// Result: FHIR R4 ExplanationOfBenefit resource
+```
+
+### Security & Compliance
+
+#### PHI Redaction
+
+The Patient Access API automatically redacts sensitive PHI before returning FHIR resources:
+
+```typescript
+import { redactPHI } from './src/security/hipaaLogger';
+
+const patient = await api.getPatient('PAT123', token);
+// SSN, detailed address info automatically redacted
+```
+
+#### HIPAA Audit Logging
+
+All API access is logged for HIPAA compliance:
+
+```typescript
+const logs = api.getAuditLogs();
+logs.forEach(log => {
+  console.log(`${log.timestamp} - ${log.eventType} - ${log.userId} - ${log.result}`);
+});
+
+// Example output:
+// 2024-03-15T10:00:00Z - auth_success - PAT123 - success
+// 2024-03-15T10:00:01Z - consent_check - PAT123 - success
+// 2024-03-15T10:00:02Z - read - PAT123 - success
+```
+
+#### Da Vinci PDex Compliance
+
+Validate resources against Da Vinci PDex profiles:
+
+```typescript
+const patient = await api.getPatient('PAT123', token);
+const isCompliant = await api.validatePDexCompliance(patient);
+console.log(`PDex compliant: ${isCompliant}`);
+```
+
+### Testing
+
+Run Patient Access API tests:
+
+```bash
+# Run all Patient Access API tests
+npm test -- src/fhir/__tests__/patient-access-api.test.ts
+
+# Run all FHIR tests (includes Patient Access API)
+npm run test:fhir
+```
+
+**Test Coverage:**
+- OAuth 2.0 authentication and token validation
+- Patient consent checking
+- FHIR endpoint operations (Patient, Claim, Encounter, EOB, CoverageEligibilityResponse)
+- X12 to FHIR mapping accuracy
+- PHI redaction verification
+- HIPAA audit logging
+- Da Vinci PDex compliance validation
+- End-to-end patient access workflow
+
+### Integration with Azure Services
+
+The Patient Access API integrates with Azure services for production deployment:
+
+```typescript
+// Azure AD for OAuth 2.0
+// - Patient authentication
+// - Token validation and refresh
+// - Scope management
+
+// Azure Key Vault for PHI encryption
+const encryptionKey = await keyVaultClient.getSecret('patient-access-encryption-key');
+const api = new PatientAccessApi(encryptionKey.value);
+
+// Azure Cosmos DB for backend data
+// - Patient demographics
+// - Encounter records
+// - Eligibility responses
+
+// Azure Storage for X12 files
+// - X12 837 claims archives
+// - X12 835 remittance archives
+```
 
 ---
 
