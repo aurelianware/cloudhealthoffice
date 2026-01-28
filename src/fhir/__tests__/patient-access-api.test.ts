@@ -5,8 +5,7 @@
  * Tests OAuth 2.0 authentication, FHIR endpoints, X12 mapping, and PHI redaction
  */
 
-import { PatientAccessApi, AuthenticationError, ConsentDeniedError } from '../patient-access-api';
-import { X12_837_Claim, X12_835_Remittance } from '../x12ClaimTypes';
+import { PatientAccessApi, AuthenticationError } from '../patient-access-api';
 
 describe('PatientAccessApi', () => {
   let api: PatientAccessApi;
