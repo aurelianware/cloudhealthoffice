@@ -481,16 +481,16 @@ export function checkSlaCompliance(
 
 /**
  * Generates a unique ID for resources
- * Uses crypto.randomUUID when available, falls back to timestamp + random
+ * Uses crypto.randomUUID (required for security)
  */
 function generateUniqueId(prefix: string): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
-  // Fallback: timestamp + random string for environments without crypto.randomUUID
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 10);
-  return `${prefix}-${timestamp}-${randomPart}`;
+  // Use crypto.randomBytes as secure fallback
+  const { randomBytes } = require('crypto');
+  const randomHex = randomBytes(16).toString('hex');
+  return `${prefix}-${randomHex}`;
 }
 
 /**
