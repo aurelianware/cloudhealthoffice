@@ -411,7 +411,7 @@ export class ClaimsScrubberService {
 
       await this.auditContainer.items.create(auditRecord);
     } catch (error) {
-      console.error(`Failed to audit claim ${claim.claimId}:`, error);
+      console.error('Failed to audit claim', { claimId: claim.claimId }, error);
     }
   }
 
