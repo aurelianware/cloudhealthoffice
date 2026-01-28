@@ -3,6 +3,9 @@
  * 
  * Comprehensive test suite for CMS-0057-F Patient Access API implementation
  * Tests OAuth 2.0 authentication, FHIR endpoints, X12 mapping, and PHI redaction
+ * 
+ * SECURITY NOTE: All tokens and credentials in this file are synthetic test values only.
+ * These are NOT real credentials and should never be used in production environments.
  */
 
 import { PatientAccessApi, AuthenticationError } from '../patient-access-api';

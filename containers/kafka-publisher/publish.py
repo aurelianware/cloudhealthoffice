@@ -24,6 +24,8 @@ Environment Variables:
     KAFKA_SASL_MECHANISM: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
     KAFKA_SASL_USERNAME: SASL username
     KAFKA_SASL_PASSWORD: SASL password
+                         SECURITY: Use Azure Key Vault or Kubernetes Secrets in production.
+                         Environment variables are not secure for sensitive credentials.
     LOG_LEVEL: Logging level
 """
 
