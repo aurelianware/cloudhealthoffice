@@ -519,11 +519,13 @@ describe('Provider Directory API - NPPES Integration', () => {
     });
 
     it('should throw error when API returns non-ok response', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       jest.spyOn(global, 'fetch').mockImplementation(() => 
         createMockResponse({}, false, 500, 'Internal Server Error')
       );
 
       await expect(api.lookupNPPES('1234567893')).rejects.toThrow('NPPES API error');
+      consoleSpy.mockRestore();
     });
 
     it('should throw and log error on fetch failure', async () => {
@@ -569,11 +571,13 @@ describe('Provider Directory API - NPPES Integration', () => {
     });
 
     it('should throw error when API returns non-ok response', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       jest.spyOn(global, 'fetch').mockImplementation(() => 
         createMockResponse({}, false, 400, 'Bad Request')
       );
 
       await expect(api.searchNPPES({ last_name: 'Smith' })).rejects.toThrow('NPPES API error');
+      consoleSpy.mockRestore();
     });
 
     it('should include all query parameters', async () => {
