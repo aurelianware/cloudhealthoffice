@@ -133,8 +133,10 @@ export function logPHIAccess(entry: AuditLogEntry): void {
   // For now, log to console (should be replaced with proper audit system)
   console.log('[HIPAA-AUDIT]', JSON.stringify(redactedEntry));
 
-  // TODO: Integrate with Azure Monitor/Application Insights for production
-  // TODO: Store in immutable audit log storage (e.g., Azure Data Explorer)
+  // TODO: SECURITY - Integrate with Azure Monitor/Application Insights for production
+  // TODO: SECURITY - Store in immutable audit log storage (e.g., Azure Data Explorer, Azure Log Analytics)
+  // TODO: COMPLIANCE - Ensure audit logs are retained for 6+ years per HIPAA requirements
+  // TODO: COMPLIANCE - Enable write-once-read-many (WORM) storage for audit trail integrity
 }
 
 /**
