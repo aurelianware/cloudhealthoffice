@@ -27,7 +27,7 @@
  * @module prior-auth-api
  */
 
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 
 import {
   Binary,
@@ -484,13 +484,14 @@ export function checkSlaCompliance(
  * Uses crypto.randomUUID (required for security)
  */
 function generateUniqueId(prefix: string): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}-${crypto.randomUUID()}`;
+  // Use crypto.randomUUID as primary method
+  try {
+    return `${prefix}-${randomUUID()}`;
+  } catch {
+    // Fallback: Use crypto.randomBytes for secure random generation
+    const randomHex = randomBytes(16).toString('hex');
+    return `${prefix}-${randomHex}`;
   }
-  // Use crypto.randomBytes as secure fallback
-  const { randomBytes } = require('crypto');
-  const randomHex = randomBytes(16).toString('hex');
-  return `${prefix}-${randomHex}`;
 }
 
 /**

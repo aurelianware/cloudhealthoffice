@@ -362,20 +362,34 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // CORS headers - validate origin before setting (prevent header injection)
   const origin = req.headers.origin || '';
   const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(o => o.length > 0);
-  // Only set Access-Control-Allow-Origin if the origin is explicitly allowed
-  if (origin && allowedOrigins.length > 0 && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+  
+  // Determine if request is allowed and set appropriate CORS headers
+  let corsAllowed = false;
+  if (allowedOrigins.includes('*')) {
+    // Wildcard: allow all origins
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    corsAllowed = true;
+  } else if (origin && allowedOrigins.includes(origin)) {
+    // Specific origin is allowed
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin && allowedOrigins.length > 0 && !allowedOrigins.includes('*')) {
-    // No origin header, use first allowed origin as fallback (for non-browser clients)
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    corsAllowed = true;
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
   
   if (method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+    // Only allow OPTIONS preflight if CORS is allowed
+    if (corsAllowed) {
+      res.writeHead(204);
+      res.end();
+      return;
+    } else {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'CORS origin not allowed' }));
+      return;
+    }
   }
   
   try {
