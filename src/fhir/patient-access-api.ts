@@ -587,7 +587,7 @@ export class PatientAccessApi {
   /**
    * Map backend eligibility response to FHIR CoverageEligibilityResponse
    */
-  mapBackendEligibilityToFhir(response: any): CoverageEligibilityResponse {
+  mapBackendEligibilityToFhir(response: { responseId: string; memberId: string; responseDate?: string; requestId?: string }): CoverageEligibilityResponse {
     return {
       resourceType: 'CoverageEligibilityResponse',
       id: response.responseId,
@@ -630,22 +630,22 @@ export class PatientAccessApi {
     };
   }
 
-  private async fetchBackendClaims(patientId: string, params: SearchParameters): Promise<X12_837_Claim[]> {
+  private async fetchBackendClaims(_patientId: string, _params: SearchParameters): Promise<X12_837_Claim[]> {
     // In production: query backend claims database
     return [];
   }
 
-  private async fetchBackendEncounters(patientId: string, params: SearchParameters): Promise<BackendEncounter[]> {
+  private async fetchBackendEncounters(_patientId: string, _params: SearchParameters): Promise<BackendEncounter[]> {
     // In production: query backend encounters database
     return [];
   }
 
-  private async fetchBackendRemittances(patientId: string, params: SearchParameters): Promise<X12_835_Remittance[]> {
+  private async fetchBackendRemittances(_patientId: string, _params: SearchParameters): Promise<X12_835_Remittance[]> {
     // In production: query backend remittance database
     return [];
   }
 
-  private async fetchBackendEligibilityResponses(patientId: string, params: SearchParameters): Promise<any[]> {
+  private async fetchBackendEligibilityResponses(_patientId: string, _params: SearchParameters): Promise<Array<{ responseId: string; memberId: string; responseDate?: string; requestId?: string }>> {
     // In production: query backend eligibility database
     return [];
   }
@@ -682,7 +682,7 @@ export class PatientAccessApi {
   /**
    * Extract patient ID from OAuth 2.0 token
    */
-  private extractPatientFromToken(token: string): string | undefined {
+  private extractPatientFromToken(_token: string): string | undefined {
     // In production: decode JWT and extract patient claim
     return 'PAT001';
   }
@@ -722,7 +722,7 @@ export class PatientAccessApi {
       issue: [
         {
           severity,
-          code: code as any,
+          code: code as OperationOutcome['issue'][0]['code'],
           diagnostics: details
         }
       ]
@@ -732,7 +732,7 @@ export class PatientAccessApi {
   /**
    * Validate Da Vinci PDex compliance
    */
-  async validatePDexCompliance(resource: Resource): Promise<boolean> {
+  async validatePDexCompliance(_resource: Resource): Promise<boolean> {
     // In production: validate against Da Vinci PDex profiles
     // Check required elements, cardinality, terminology bindings
     return true;
