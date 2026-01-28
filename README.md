@@ -52,6 +52,7 @@ Cloud Health Office v3.0.0 delivers **multi-cloud independence**, enabling deplo
 | Service | Interface | Features |
 |---------|-----------|----------|
 | **Eligibility Service** | X12 270/271 + FHIR | Cosmos DB caching, Event Grid publishing |
+| **Patient Access API** | FHIR R4 | OAuth 2.0, CMS-0057-F compliant, Da Vinci PDex |
 | **ClaimRiskScorer** | Service Bus trigger | PyTorch model, custom ZZZ segment |
 | **Provider Directory API** | FHIR | NPPES NPI real-time lookup |
 | **Prior Auth API** | Da Vinci PAS | 72-hour SLA automated tracking |
