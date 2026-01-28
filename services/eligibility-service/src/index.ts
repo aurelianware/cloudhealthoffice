@@ -140,13 +140,23 @@ async function handleX12Eligibility(req: http.IncomingMessage, res: http.ServerR
     
     if (contentType.includes('application/json')) {
       // JSON format request
-      x12Request = JSON.parse(body);
+      try {
+        x12Request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
     } else if (contentType.includes('application/x12') || contentType.includes('text/plain')) {
       // Raw X12 EDI format
       x12Request = x12Mapper.parseX12270(body);
     } else {
       // Assume JSON by default
-      x12Request = JSON.parse(body);
+      try {
+        x12Request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
     }
     
     const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -196,7 +206,20 @@ async function handleX12Eligibility(req: http.IncomingMessage, res: http.ServerR
 async function handleFHIREligibility(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   try {
     const body = await parseBody(req);
-    const fhirRequest: CoverageEligibilityRequest = JSON.parse(body);
+    let fhirRequest: CoverageEligibilityRequest;
+    try {
+      fhirRequest = JSON.parse(body);
+    } catch (error) {
+      sendFhirJson(res, 400, {
+        resourceType: 'OperationOutcome',
+        issue: [{
+          severity: 'error',
+          code: 'invalid',
+          diagnostics: 'Invalid JSON in request body'
+        }]
+      });
+      return;
+    }
     
     // Validate resource type
     if (fhirRequest.resourceType !== 'CoverageEligibilityRequest') {
@@ -247,7 +270,13 @@ async function handleFHIREligibility(req: http.IncomingMessage, res: http.Server
 async function handleUnifiedEligibility(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   try {
     const body = await parseBody(req);
-    const request: EligibilityCheckRequest = JSON.parse(body);
+    let request: EligibilityCheckRequest;
+    try {
+      request = JSON.parse(body);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid JSON in request body' });
+      return;
+    }
     
     const correlationId = req.headers['x-correlation-id'] as string || request.correlationId;
     request.correlationId = correlationId;
@@ -330,11 +359,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const path = url.pathname;
   const method = req.method || 'GET';
   
-  // CORS headers - use configured allowed origins
+  // CORS headers - validate origin before setting (prevent header injection)
   const origin = req.headers.origin || '';
-  const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim());
-  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-    res.setHeader('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+  const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(o => o.length > 0);
+  // Only set Access-Control-Allow-Origin if the origin is explicitly allowed
+  if (origin && allowedOrigins.length > 0 && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin && allowedOrigins.length > 0 && !allowedOrigins.includes('*')) {
+    // No origin header, use first allowed origin as fallback (for non-browser clients)
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
