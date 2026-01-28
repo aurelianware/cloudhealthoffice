@@ -140,13 +140,23 @@ async function handleX12Eligibility(req: http.IncomingMessage, res: http.ServerR
     
     if (contentType.includes('application/json')) {
       // JSON format request
-      x12Request = JSON.parse(body);
+      try {
+        x12Request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
     } else if (contentType.includes('application/x12') || contentType.includes('text/plain')) {
       // Raw X12 EDI format
       x12Request = x12Mapper.parseX12270(body);
     } else {
       // Assume JSON by default
-      x12Request = JSON.parse(body);
+      try {
+        x12Request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
     }
     
     const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -196,7 +206,20 @@ async function handleX12Eligibility(req: http.IncomingMessage, res: http.ServerR
 async function handleFHIREligibility(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   try {
     const body = await parseBody(req);
-    const fhirRequest: CoverageEligibilityRequest = JSON.parse(body);
+    let fhirRequest: CoverageEligibilityRequest;
+    try {
+      fhirRequest = JSON.parse(body);
+    } catch (error) {
+      sendFhirJson(res, 400, {
+        resourceType: 'OperationOutcome',
+        issue: [{
+          severity: 'error',
+          code: 'invalid',
+          diagnostics: 'Invalid JSON in request body'
+        }]
+      });
+      return;
+    }
     
     // Validate resource type
     if (fhirRequest.resourceType !== 'CoverageEligibilityRequest') {
@@ -247,7 +270,13 @@ async function handleFHIREligibility(req: http.IncomingMessage, res: http.Server
 async function handleUnifiedEligibility(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   try {
     const body = await parseBody(req);
-    const request: EligibilityCheckRequest = JSON.parse(body);
+    let request: EligibilityCheckRequest;
+    try {
+      request = JSON.parse(body);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid JSON in request body' });
+      return;
+    }
     
     const correlationId = req.headers['x-correlation-id'] as string || request.correlationId;
     request.correlationId = correlationId;
@@ -330,19 +359,41 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const path = url.pathname;
   const method = req.method || 'GET';
   
-  // CORS headers - use configured allowed origins
+  // CORS headers - validate origin before setting (prevent header injection)
   const origin = req.headers.origin || '';
-  const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim());
-  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-    res.setHeader('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+  const allowedOrigins = CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(o => o.length > 0);
+  
+  // Determine if request is allowed and set appropriate CORS headers
+  let corsAllowed = false;
+  if (allowedOrigins.includes('*')) {
+    // Wildcard: allow all origins
+    // NOTE: Wildcard ('*') CORS cannot be used with Access-Control-Allow-Credentials.
+    // If credentials are required, use specific origin list instead of wildcard.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    corsAllowed = true;
+  } else if (origin && allowedOrigins.includes(origin)) {
+    // Specific origin is allowed
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    corsAllowed = true;
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
   
   if (method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+    // Only allow OPTIONS preflight if CORS is allowed
+    if (corsAllowed) {
+      res.writeHead(204);
+      res.end();
+      return;
+    } else {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'CORS origin not allowed' }));
+      return;
+    }
   }
   
   try {

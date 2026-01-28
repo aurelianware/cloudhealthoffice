@@ -15,7 +15,9 @@ Environment Variables:
     SFTP_PORT: SFTP server port (default: 22)
     SFTP_USERNAME: SFTP username
     SFTP_PASSWORD: SFTP password (if not using SSH key)
-    SSH_KEY_PATH: Path to SSH private key file
+                   SECURITY: Use Azure Key Vault or Kubernetes Secrets in production.
+                   Environment variables are not secure for sensitive credentials.
+    SSH_KEY_PATH: Path to SSH private key file (preferred over password auth)
     LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
 """
 

@@ -106,23 +106,52 @@ const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(o
 function handleCors(req: http.IncomingMessage, res: http.ServerResponse): boolean {
   const origin = req.headers.origin || '';
   
-  if (allowedOrigins.includes(origin)) {
+  // Check if origin is allowed or wildcard is set
+  const isWildcard = allowedOrigins.includes('*');
+  const isOriginAllowed = origin && allowedOrigins.includes(origin);
+  
+  if (isWildcard) {
+    // Wildcard configuration: allow any origin, but echo back the requesting origin
+    // instead of using "*" to remain compatible with credentialed requests.
+    // NOTE: Wildcard ('*') CORS cannot be used with Access-Control-Allow-Credentials.
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+  } else if (isOriginAllowed) {
+    // Specific origin is allowed
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
     res.setHeader('Access-Control-Max-Age', '86400');
-  } else if (origin) {
+  } else if (origin && allowedOrigins.length > 0) {
     // Origin is present but not allowed; reject with 403 Forbidden
     res.writeHead(403, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'CORS origin not allowed by Cloud Health Office Sentinel.' }));
     return true;
   }
+  // If no allowedOrigins configured or no origin header, no CORS headers are set
 
-  // Handle preflight
+  // Handle preflight - only allow if CORS is allowed
   if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return true;
+    if (isWildcard || isOriginAllowed) {
+      res.writeHead(204);
+      res.end();
+      return true;
+    } else if (origin && allowedOrigins.length > 0) {
+      // Origin not allowed for preflight
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'CORS origin not allowed by Cloud Health Office Sentinel.' }));
+      return true;
+    } else {
+      // No origin header or no CORS configured - allow OPTIONS for non-browser clients
+      res.writeHead(204);
+      res.end();
+      return true;
+    }
   }
 
   return false;
@@ -163,7 +192,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // Validate single claim
     if (pathname === '/api/claims/validate' && method === 'POST') {
       const body = await parseBody(req);
-      const request: ValidateClaimRequest = JSON.parse(body);
+      let request: ValidateClaimRequest;
+      try {
+        request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
       request.correlationId = request.correlationId || req.headers['x-correlation-id'] as string;
       
       const response = await service.validateClaim(request);
@@ -174,7 +209,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // Validate batch of claims
     if (pathname === '/api/claims/validate/batch' && method === 'POST') {
       const body = await parseBody(req);
-      const request: BatchValidateRequest = JSON.parse(body);
+      let request: BatchValidateRequest;
+      try {
+        request = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
       request.correlationId = request.correlationId || req.headers['x-correlation-id'] as string;
       
       const response = await service.validateBatch(request);
@@ -219,7 +260,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // Dapr claims endpoint
     if (pathname === '/api/dapr/claims' && method === 'POST') {
       const body = await parseBody(req);
-      const cloudEvent = JSON.parse(body);
+      let cloudEvent;
+      try {
+        cloudEvent = JSON.parse(body);
+      } catch (error) {
+        sendJson(res, 400, { error: 'Invalid JSON in request body' });
+        return;
+      }
       const claim = cloudEvent.data as X12_837_Claim;
       
       const response = await service.validateClaim({
