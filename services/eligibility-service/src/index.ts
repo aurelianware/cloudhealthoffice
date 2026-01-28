@@ -367,15 +367,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let corsAllowed = false;
   if (allowedOrigins.includes('*')) {
     // Wildcard: allow all origins
+    // NOTE: Wildcard ('*') CORS cannot be used with Access-Control-Allow-Credentials.
+    // If credentials are required, use specific origin list instead of wildcard.
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    res.setHeader('Access-Control-Max-Age', '86400');
     corsAllowed = true;
   } else if (origin && allowedOrigins.includes(origin)) {
     // Specific origin is allowed
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+    res.setHeader('Access-Control-Max-Age', '86400');
     corsAllowed = true;
   }
   

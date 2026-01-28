@@ -111,11 +111,16 @@ function handleCors(req: http.IncomingMessage, res: http.ServerResponse): boolea
   const isOriginAllowed = origin && allowedOrigins.includes(origin);
   
   if (isWildcard) {
-    // Wildcard: allow all origins
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
-    res.setHeader('Access-Control-Max-Age', '86400');
+    // Wildcard configuration: allow any origin, but echo back the requesting origin
+    // instead of using "*" to remain compatible with credentialed requests.
+    // NOTE: Wildcard ('*') CORS cannot be used with Access-Control-Allow-Credentials.
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Correlation-Id');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
   } else if (isOriginAllowed) {
     // Specific origin is allowed
     res.setHeader('Access-Control-Allow-Origin', origin);
