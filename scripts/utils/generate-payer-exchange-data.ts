@@ -8,6 +8,14 @@
  * - Encounter resources
  * - ServiceRequest (PriorAuthorizationRequest) resources
  * 
+ * SECURITY NOTE: This script uses Math.random() for generating synthetic test data only.
+ * Math.random() is NOT cryptographically secure and should NEVER be used for:
+ * - Security tokens
+ * - Encryption keys
+ * - Production patient identifiers
+ * - Session IDs
+ * For production use cases, use crypto.randomBytes() or crypto.randomUUID() instead.
+ * 
  * Usage:
  *   node dist/scripts/utils/generate-payer-exchange-data.js [count] [output-dir]
  */
