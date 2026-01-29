@@ -288,7 +288,7 @@ export class ClaimsScrubberService {
         messages: [message],
       });
     } catch (error) {
-      console.error(`Failed to route claim ${claim.claimId}:`, error);
+      console.error('Failed to route claim', { claimId: claim.claimId }, error);
     }
   }
 
@@ -320,7 +320,7 @@ export class ClaimsScrubberService {
         blobHTTPHeaders: { blobContentType: 'application/json' },
       });
     } catch (error) {
-      console.error(`Failed to archive claim ${claim.claimId}:`, error);
+      console.error('Failed to archive claim', { claimId: claim.claimId }, error);
     }
   }
 
@@ -411,7 +411,7 @@ export class ClaimsScrubberService {
 
       await this.auditContainer.items.create(auditRecord);
     } catch (error) {
-      console.error(`Failed to audit claim ${claim.claimId}:`, error);
+      console.error('Failed to audit claim', { claimId: claim.claimId }, error);
     }
   }
 
