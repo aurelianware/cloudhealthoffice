@@ -96,7 +96,7 @@ export class EligibilityService {
         throw new Error('Invalid request format or missing request data');
       }
     } catch (error) {
-      console.error(`Eligibility check failed: ${error}`);
+      console.error('Eligibility check failed:', error);
       throw error;
     }
   }
@@ -381,7 +381,7 @@ export class EligibilityService {
 
       return record;
     } catch (error) {
-      console.error(`Cache lookup failed: ${error}`);
+      console.error('Cache lookup failed:', error);
       return null;
     }
   }
@@ -425,7 +425,7 @@ export class EligibilityService {
     try {
       await this.container.items.create(record);
     } catch (error) {
-      console.error(`Cache write failed: ${error}`);
+      console.error('Cache write failed:', error);
     }
   }
 
@@ -460,7 +460,7 @@ export class EligibilityService {
     try {
       await this.container.items.create(record);
     } catch (error) {
-      console.error(`FHIR cache write failed: ${error}`);
+      console.error('FHIR cache write failed:', error);
     }
   }
 
@@ -593,7 +593,7 @@ export class EligibilityService {
     try {
       await this.eventGridClient.send([event]);
     } catch (error) {
-      console.error(`Failed to publish EligibilityChecked event: ${error}`);
+      console.error('Failed to publish EligibilityChecked event:', error);
     }
   }
 
