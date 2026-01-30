@@ -1,6 +1,8 @@
 name: pr-lint
 permissions:
   contents: read
+  checks: write
+  pull-requests: write
 on:
   pull_request:
     branches: [main, 'release/*', 'feature/*']
