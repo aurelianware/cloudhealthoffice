@@ -49,13 +49,13 @@ function generateSyntheticPatients(count: number): Patient[] {
   const states = ['WA', 'OR', 'CA', 'CA', 'AZ', 'CO', 'TX', 'IL', 'NY', 'MA'];
 
   for (let i = 1; i <= count; i++) {
-    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-    const gender = Math.random() > 0.5 ? 'male' : 'female';
+    const firstName = firstNames[secureRandomInt(0, firstNames.length)];
+    const lastName = lastNames[secureRandomInt(0, lastNames.length)];
+    const gender = secureRandomInt(0, 2) === 0 ? 'male' : 'female';
     const birthYear = secureRandomInt(1940, 2010);
     const birthMonth = String(secureRandomInt(1, 13)).padStart(2, '0');
     const birthDay = String(secureRandomInt(1, 29)).padStart(2, '0');
-    const cityIndex = Math.floor(Math.random() * cities.length);
+    const cityIndex = secureRandomInt(0, cities.length);
 
     const patient: Patient = {
       resourceType: 'Patient',
