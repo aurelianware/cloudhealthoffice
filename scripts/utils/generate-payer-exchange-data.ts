@@ -109,7 +109,7 @@ function generateSyntheticPatients(count: number): Patient[] {
       maritalStatus: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus',
-          ...(secureRandomInt(0, 2) === 0 
+          ...(secureRandomInt(0, 2) === 0
             ? { code: 'M', display: 'Married' } 
             : { code: 'S', display: 'Single' })
         }]
