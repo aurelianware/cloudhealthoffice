@@ -23,6 +23,7 @@
 import { Patient, Claim, Encounter, ExplanationOfBenefit, ServiceRequest } from 'fhir/r4';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 interface SyntheticDataOptions {
   patientCount: number;
@@ -31,6 +32,10 @@ interface SyntheticDataOptions {
   eobsPerPatient: number;
   priorAuthsPerPatient: number;
   outputDir: string;
+}
+
+function secureRandomInt(min: number, maxExclusive: number): number {
+  return crypto.randomInt(min, maxExclusive);
 }
 
 /**
@@ -47,9 +52,9 @@ function generateSyntheticPatients(count: number): Patient[] {
     const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     const gender = Math.random() > 0.5 ? 'male' : 'female';
-    const birthYear = 1940 + Math.floor(Math.random() * 70);
-    const birthMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
-    const birthDay = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+    const birthYear = secureRandomInt(1940, 2010);
+    const birthMonth = String(secureRandomInt(1, 13)).padStart(2, '0');
+    const birthDay = String(secureRandomInt(1, 29)).padStart(2, '0');
     const cityIndex = Math.floor(Math.random() * cities.length);
 
     const patient: Patient = {
