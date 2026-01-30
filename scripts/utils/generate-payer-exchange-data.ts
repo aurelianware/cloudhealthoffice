@@ -71,7 +71,7 @@ function generateSyntheticPatients(count: number): Patient[] {
         },
         {
           system: 'http://hl7.org/fhir/sid/us-ssn',
-          value: `${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 90 + 10)}-${String(i).padStart(4, '0')}`
+          value: `${secureRandomInt(100, 1000)}-${secureRandomInt(10, 100)}-${String(i).padStart(4, '0')}`
         },
         {
           system: 'http://payer.example.org/member-id',
@@ -87,7 +87,7 @@ function generateSyntheticPatients(count: number): Patient[] {
       telecom: [
         {
           system: 'phone',
-          value: `${Math.floor(Math.random() * 900 + 100)}-555-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
+          value: `${secureRandomInt(100, 1000)}-555-${String(secureRandomInt(0, 10000)).padStart(4, '0')}`,
           use: 'home'
         },
         {
@@ -100,16 +100,16 @@ function generateSyntheticPatients(count: number): Patient[] {
       birthDate: `${birthYear}-${birthMonth}-${birthDay}`,
       address: [{
         use: 'home',
-        line: [`${Math.floor(Math.random() * 9999 + 1)} Main St`],
+        line: [`${secureRandomInt(1, 10000)} Main St`],
         city: cities[cityIndex],
         state: states[cityIndex],
-        postalCode: `${Math.floor(Math.random() * 90000 + 10000)}`,
+        postalCode: `${secureRandomInt(10000, 100000)}`,
         country: 'US'
       }],
       maritalStatus: {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus',
-          ...(Math.random() > 0.5 
+          ...(secureRandomInt(0, 2) === 0 
             ? { code: 'M', display: 'Married' } 
             : { code: 'S', display: 'Single' })
         }]
