@@ -60,6 +60,8 @@ jobs:
     needs: approval-gate
     runs-on: ubuntu-latest
     environment: UAT
+    permissions:
+      contents: read
     outputs:
       bicep-path: ${{ steps.set-params.outputs.bicep-path }}
       workflows-path: ${{ steps.set-params.outputs.workflows-path }}
