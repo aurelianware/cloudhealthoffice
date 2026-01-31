@@ -8,6 +8,8 @@ on:
 jobs:
   # Pre-approval security validation
   pre-approval-checks:
+    permissions:
+      contents: read
     uses: ./.github/workflows/pre-approval-checks.yml
     with:
       environment: PROD
