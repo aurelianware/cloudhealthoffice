@@ -17,6 +17,8 @@ jobs:
     needs: pre-approval-checks
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     environment:
       name: PROD-approval
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
