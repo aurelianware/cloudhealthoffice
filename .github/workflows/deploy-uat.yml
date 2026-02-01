@@ -1,5 +1,8 @@
 name: Deploy UAT - Cloud Health Office
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
