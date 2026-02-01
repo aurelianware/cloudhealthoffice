@@ -28,6 +28,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     environment: DEV
+    permissions:
+      contents: read
     outputs:
       bicep-path: ${{ steps.set-params.outputs.bicep-path }}
       workflows-path: ${{ steps.set-params.outputs.workflows-path }}
