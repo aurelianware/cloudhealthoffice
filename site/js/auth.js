@@ -1,6 +1,6 @@
 /**
  * Cloud Health Office - Authentication Helper Library
- * Provides authentication utilities for Azure AD B2C integration
+ * Provides authentication utilities for multi-tenant Microsoft Entra ID integration
  */
 
 /**
