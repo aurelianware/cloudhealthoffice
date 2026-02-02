@@ -4,7 +4,7 @@ name: Deploy Static Site with Custom Domain
 # Static Site Deployment Workflow
 # =============================================================================
 # Purpose: Deploy Cloud Health Office static website to Azure Static Web Apps
-# 
+#
 # Secrets Used:
 #   - AZURE_CLIENT_ID: Service Principal for OIDC deployment authentication
 #   - AZURE_TENANT_ID: Azure AD Tenant ID
