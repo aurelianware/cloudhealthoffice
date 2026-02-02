@@ -1,9 +1,32 @@
 {
-  "navigationFallback": {
-    "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/css/*", "/js/*", "/graphics/*"]
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://<your-b2c-tenant>.b2clogin.com/<tenant-id>/v2.0/",
+          "clientIdSettingName": "AZURE_AD_B2C_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_AD_B2C_CLIENT_SECRET"
+        },
+        "userDetailsClaim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
+        "login": {
+          "loginParameters": ["p=B2C_1_SignUpSignIn"]
+        }
+      }
+    }
   },
   "routes": [
+    {
+      "route": "/login.html",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/portal/*",
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    },
     {
       "route": "/*.html",
       "headers": {
@@ -29,7 +52,15 @@
       }
     }
   ],
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/portal/*", "/api/*", "/.auth/*", "/assets/*", "/css/*", "/js/*", "/graphics/*"]
+  },
   "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/aad?post_login_redirect_uri=.referrer",
+      "statusCode": 302
+    },
     "404": {
       "rewrite": "/index.html",
       "statusCode": 404
