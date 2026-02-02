@@ -1,5 +1,10 @@
 # Azure AD B2C Authentication - Implementation Visual Guide
 
+> **⚠️ DEPRECATED - February 2026**  
+> This guide documents the legacy Azure AD B2C implementation which has been replaced with **multi-tenant Microsoft Entra ID** authentication.  
+> Azure AD B2C cannot be provisioned after May 1, 2025, and B2C is not the correct pattern for B2B SaaS platforms.  
+> See `site/README.md` for current authentication setup instructions.
+
 ## Login Page Preview
 
 ### Layout Description
