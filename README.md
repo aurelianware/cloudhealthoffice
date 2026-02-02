@@ -330,6 +330,9 @@ Cloud Health Office is backend-agnostic and designed to integrate seamlessly wit
 - **[Multi-Cloud Deployment](./docs/MULTI-CLOUD-DEPLOYMENT.md)** - Kubernetes (AKS/EKS/GKE) deployment
 - [Gated Release Guide](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows
 - **[Federated Credentials Setup](./docs/FEDERATED-CREDENTIALS-SETUP.md)** - GitHub Actions OIDC authentication for Azure deployment
+- **[Secrets Management](./DEPLOYMENT-SECRETS-SETUP.md)** - GitHub Secrets and Azure Key Vault setup
+  - **[Secrets Inventory](./docs/SECRETS-INVENTORY.md)** - Complete categorization of deployment secrets
+  - **[Key Vault Migration Guide](./docs/SECRETS-MIGRATION-GUIDE.md)** - Migrate secrets to Azure Key Vault for enhanced security
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
 
 ### Cloud Independence

@@ -1,5 +1,27 @@
 name: Deploy Static Site with Custom Domain
 
+# =============================================================================
+# Static Site Deployment Workflow
+# =============================================================================
+# Purpose: Deploy Cloud Health Office static website to Azure Static Web Apps
+# 
+# Secrets Used:
+#   - AZURE_CLIENT_ID: Service Principal for OIDC deployment authentication
+#   - AZURE_TENANT_ID: Azure AD Tenant ID
+#   - AZURE_SUBSCRIPTION_ID: Azure Subscription ID
+#   - GITHUB_TOKEN: Automatically provided by GitHub Actions
+#
+# User Authentication Secrets (NOT in GitHub Secrets):
+#   - User login credentials (Azure AD multi-tenant) should be configured in
+#     Azure Static Web Apps settings in the Azure Portal, not here.
+#   - See: docs/FEDERATED-CREDENTIALS-SETUP.md for details on deployment vs user auth
+#
+# For more information:
+#   - Deployment secrets: DEPLOYMENT-SECRETS-SETUP.md
+#   - OIDC setup: docs/FEDERATED-CREDENTIALS-SETUP.md
+#   - Secrets inventory: docs/SECRETS-INVENTORY.md
+# =============================================================================
+
 on:
   push:
     branches: ["main"]
