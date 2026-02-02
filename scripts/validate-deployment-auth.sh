@@ -146,11 +146,12 @@ check_prerequisites() {
         print_warning "GitHub CLI not found (optional). Install from: https://cli.github.com/"
     fi
 
-    # Check jq
+    # Check jq (required for JSON parsing of Azure CLI output)
     if command -v jq &> /dev/null; then
         print_success "jq installed"
     else
-        print_warning "jq not found (optional but recommended for JSON parsing)"
+        print_error "jq not found. Install jq to enable required JSON parsing: https://stedolan.github.io/jq/download/"
+        prereq_failed=1
     fi
 
     if [[ $prereq_failed -eq 1 ]]; then
