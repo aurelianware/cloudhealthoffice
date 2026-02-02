@@ -144,7 +144,7 @@ npm install -g @azure/static-web-apps-cli
 Start the local development server:
 
 ```bash
-cd /home/runner/work/cloudhealthoffice/cloudhealthoffice
+# From the repository root of Cloud Health Office
 swa start site --app-location site
 ```
 
