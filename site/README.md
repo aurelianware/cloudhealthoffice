@@ -26,110 +26,99 @@ site/
 └── README.md               # This file
 ```
 
-## Authentication with Azure AD B2C
+## Authentication Setup - Multi-Tenant Microsoft Entra ID
 
-The site includes Azure AD B2C authentication for secure user access to the portal.
+### Overview
+Cloud Health Office uses **multi-tenant Microsoft Entra ID (Azure AD)** authentication for organizational sign-ups. Healthcare organizations sign in with their existing corporate Microsoft accounts.
 
-### Azure AD B2C Configuration
+### Prerequisites
+- Azure subscription
+- Azure CLI or Azure Portal access
 
-#### 1. Create Azure AD B2C Tenant
+### Step 1: Create Multi-Tenant App Registration
 
-Follow the official Microsoft documentation to create an Azure AD B2C tenant:
-https://learn.microsoft.com/azure/active-directory-b2c/tutorial-create-tenant
-
-**Important configuration:**
-- Tenant name: Choose a meaningful name (e.g., `cloudhealthoffice`)
-- Initial domain: `<your-tenant>.onmicrosoft.com`
-- Country/Region: Select your primary region
-
-#### 2. Register the Application
-
-1. Navigate to Azure AD B2C → App registrations → New registration
-2. Configure the application:
-   - **Name:** Cloud Health Office Portal
-   - **Supported account types:** Accounts in any identity provider or organizational directory (for authenticating users with user flows)
-   - **Redirect URI:** 
-     - Type: Web
+1. Go to [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations**
+2. Click **New registration**
+3. Configure:
+   - **Name**: `Cloud Health Office`
+   - **Supported account types**: **Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant)**
+   - **Redirect URI**: 
+     - Platform: **Web**
      - URI: `https://<your-static-web-app>.azurestaticapps.net/.auth/login/aad/callback`
-     - For custom domain: `https://cloudhealthoffice.com/.auth/login/aad/callback`
+4. Click **Register**
 
-3. After registration, note the **Application (client) ID**
+### Step 2: Configure App Registration
 
-#### 3. Create Client Secret
+1. **Copy Application (client) ID** - You'll need this for `AZURE_AD_CLIENT_ID`
 
-1. Go to App registrations → Your app → Certificates & secrets
-2. Click "New client secret"
-3. Add description: "Cloud Health Office Static Web App"
-4. Set expiration (recommended: 24 months)
-5. Copy the **Value** (this is your client secret - save it securely)
+2. **Create Client Secret**:
+   - Go to **Certificates & secrets** → **New client secret**
+   - Description: `StaticWebApp`
+   - Expiration: Choose appropriate duration
+   - Click **Add**
+   - **Copy the secret value** - You'll need this for `AZURE_AD_CLIENT_SECRET`
 
-#### 4. Configure User Flows
+3. **Configure API Permissions** (optional, for future API access):
+   - Go to **API permissions** → **Add a permission**
+   - Add **Microsoft Graph** → **Delegated permissions**:
+     - `User.Read` (basic profile)
+     - `openid`, `profile`, `email`
+   - Click **Grant admin consent** if you're admin
 
-Create the following user flows in Azure AD B2C:
+4. **Configure Token Configuration**:
+   - Go to **Token configuration** → **Add optional claim**
+   - Token type: **ID**
+   - Add claims: `email`, `preferred_username`, `upn`
 
-**Sign up and sign in flow:**
-1. Navigate to Azure AD B2C → User flows → New user flow
-2. Select "Sign up and sign in" → Recommended version
-3. Name: `B2C_1_SignUpSignIn`
-4. Identity providers: Select "Email signup"
-5. User attributes and claims:
-   - Collect: Display Name, Email Address
-   - Return: Display Name, Email Addresses, User's Object ID
-6. Create the flow
+### Step 3: Configure Static Web App Secrets
 
-**Password reset flow (optional but recommended):**
-1. Select "Password reset" → Recommended version
-2. Name: `B2C_1_PasswordReset`
-3. Configure similar to sign-up flow
-4. Create the flow
+Add these secrets to your **GitHub repository** or **Azure Static Web App configuration**:
 
-**Profile editing flow (optional):**
-1. Select "Profile editing" → Recommended version
-2. Name: `B2C_1_ProfileEdit`
-3. Configure user attributes to edit
-4. Create the flow
+**GitHub Secrets** (for deployment):
+1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+2. Add:
+   - `AZURE_AD_CLIENT_ID`: Application (client) ID from Step 2.1
+   - `AZURE_AD_CLIENT_SECRET`: Secret value from Step 2.2
 
-#### 5. Update staticwebapp.config.json
+**Azure Static Web App Configuration**:
+1. Go to Azure Portal → Your Static Web App → **Configuration**
+2. Add application settings:
+   - `AZURE_AD_CLIENT_ID`: Application (client) ID
+   - `AZURE_AD_CLIENT_SECRET`: Secret value
 
-The configuration file has placeholders that need to be replaced:
+### Step 4: Test Authentication
 
-```json
-{
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://<your-b2c-tenant>.b2clogin.com/<tenant-id>/v2.0/",
-          "clientIdSettingName": "AZURE_AD_B2C_CLIENT_ID",
-          "clientSecretSettingName": "AZURE_AD_B2C_CLIENT_SECRET"
-        }
-      }
-    }
-  }
-}
+1. Deploy the site (or test locally with Static Web Apps CLI)
+2. Navigate to `/login.html`
+3. Click "Sign in with your organization account"
+4. Sign in with any organizational Microsoft account
+5. First-time users may see admin consent prompt
+6. Verify redirect to portal after successful authentication
+
+### Organizational Sign-Up Flow
+
+1. **User from Organization A** clicks "Sign In"
+2. Redirected to Microsoft login page
+3. Signs in with their work account (e.g., `user@hospital.org`)
+4. If first user from this organization, may need admin consent
+5. After consent, user is authenticated and redirected to portal
+6. User profile available at `/.auth/me`
+
+### Admin Consent
+
+For organizations to use Cloud Health Office, an admin may need to grant consent:
+
+**Option 1: User-triggered consent**
+- First user from organization sees consent prompt
+- Can request admin approval
+
+**Option 2: Admin consent URL**
+Share this URL with organization admins:
+```
+https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=<YOUR_CLIENT_ID>&redirect_uri=<YOUR_REDIRECT_URI>
 ```
 
-Replace `<your-b2c-tenant>` and `<tenant-id>` with your values:
-- Find tenant ID: Azure AD B2C → Overview → Directory ID
-- Example: `https://cloudhealthoffice.b2clogin.com/12345678-1234-1234-1234-123456789abc/v2.0/`
-
-#### 6. Configure GitHub Secrets
-
-Add the following secrets to your GitHub repository (Settings → Secrets and variables → Actions):
-
-```bash
-AZURE_AD_B2C_CLIENT_ID=<your-application-client-id>
-AZURE_AD_B2C_CLIENT_SECRET=<your-client-secret-value>
-```
-
-#### 7. Configure Static Web App Settings
-
-In the Azure Portal, add application settings to your Static Web App:
-
-1. Navigate to your Static Web App → Configuration → Application settings
-2. Add the following settings:
-   - **Name:** `AZURE_AD_B2C_CLIENT_ID` | **Value:** `<your-client-id>`
-   - **Name:** `AZURE_AD_B2C_CLIENT_SECRET` | **Value:** `<your-client-secret>`
+Replace `<YOUR_CLIENT_ID>` with your Application (client) ID and `<YOUR_REDIRECT_URI>` with your callback URL.
 
 ### Testing Authentication
 
@@ -152,30 +141,24 @@ swa start site --app-location site
 
 #### Test User Flow
 
-1. **Registration Test:**
+1. **Sign-In Test:**
    - Navigate to `/login.html`
-   - Click "Create Account"
-   - Complete registration form
-   - Verify email (if configured)
-   - Redirected to portal
-
-2. **Login Test:**
-   - Navigate to `/login.html`
-   - Click "Sign In with Azure AD B2C"
-   - Enter credentials
+   - Click "Sign in with your organization account"
+   - Sign in with organizational Microsoft account (e.g., `user@contoso.com`)
+   - If first user from organization, may see admin consent prompt
    - Verify redirect to `/portal/`
 
-3. **Authentication Status:**
+2. **Authentication Status:**
    - Navigate to `/.auth/me`
    - Should return user profile JSON when authenticated
    - Should return empty when not authenticated
 
-4. **Protected Routes:**
+3. **Protected Routes:**
    - Navigate to `/portal/` when not authenticated
    - Should redirect to login page
    - After login, should access portal successfully
 
-5. **Logout Test:**
+4. **Logout Test:**
    - Click "Sign Out" in navigation
    - Should redirect to home page
    - `/.auth/me` should return empty
@@ -256,9 +239,9 @@ location.reload();
 Required environment variables for authentication:
 
 ```bash
-# Azure AD B2C Configuration
-AZURE_AD_B2C_CLIENT_ID=<application-client-id>
-AZURE_AD_B2C_CLIENT_SECRET=<client-secret-value>
+# Multi-tenant Microsoft Entra ID Configuration
+AZURE_AD_CLIENT_ID=<application-client-id>
+AZURE_AD_CLIENT_SECRET=<client-secret-value>
 
 # Optional: Custom domain configuration
 AZURE_STATIC_WEB_APP_URL=https://cloudhealthoffice.com
