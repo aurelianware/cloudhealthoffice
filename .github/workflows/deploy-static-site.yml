@@ -17,7 +17,6 @@ permissions:
 jobs:
   deploy-site:
     runs-on: ubuntu-latest
-    environment: PROD
 
     steps:
       - name: Checkout code
