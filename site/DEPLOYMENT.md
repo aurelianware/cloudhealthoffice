@@ -175,7 +175,7 @@ Horizontal rule
 6. **Generate DNS instructions** (artifact download)
 7. **Verify deployment** (HTTP 200 check)
 
-**Environment:** PROD
+**Authentication:** Branch-based OIDC (subject: `repo:aurelianware/cloudhealthoffice:ref:refs/heads/main`)
 
 **Permissions:**
 - `id-token: write` (OIDC authentication)
