@@ -7,7 +7,7 @@ This directory contains the Cloud Health Office marketing website with platform 
 ```
 site/
 ├── index.html              # Homepage with hero and Calendly integration
-├── login.html              # Login/registration page with Azure AD B2C
+├── login.html              # Login/registration page with multi-tenant Entra ID
 ├── platform.html           # Platform overview and capabilities
 ├── insights.html           # Market insights with Magic Quadrant visualization
 ├── assessment.html         # Generated from assets/cho-assessment.md
@@ -137,7 +137,7 @@ Start the local development server:
 swa start site --app-location site
 ```
 
-**Note:** Local authentication testing with Azure AD B2C requires additional configuration. For full authentication testing, deploy to Azure Static Web Apps.
+**Note:** Local authentication testing with multi-tenant Entra ID requires additional configuration. For full authentication testing, deploy to Azure Static Web Apps.
 
 #### Test User Flow
 
@@ -195,7 +195,7 @@ await updateNavigation('#mainNav');
 #### Common Authentication Issues
 
 **Issue: Redirect loop after login**
-- Verify redirect URIs in Azure AD B2C match exactly (including protocol and trailing slash)
+- Verify redirect URIs in app registration match exactly (including protocol and trailing slash)
 - Check that client ID and secret are correctly configured
 
 **Issue: "Invalid client secret" error**
@@ -213,7 +213,7 @@ await updateNavigation('#mainNav');
 - Verify Static Web App has correct authentication configuration
 
 **Issue: Local testing doesn't work**
-- Azure AD B2C authentication requires deployment to Azure Static Web Apps
+- Multi-tenant Entra ID authentication requires deployment to Azure Static Web Apps
 - Use local emulation with mock auth or deploy to staging environment
 
 #### Debug Mode
