@@ -96,11 +96,11 @@ az role assignment create \
 
 #### 2.1 Review Key Vault Bicep Module
 
-The repository already has a HIPAA-compliant Key Vault module at `infra/modules/keyvault.bicep`.
+The repository already has a HIPAA-compliant Key Vault module at `infra/modules/deployment-keyvault.bicep`.
 
 **Check current configuration:**
 ```bash
-cat infra/modules/keyvault.bicep
+cat infra/modules/deployment-keyvault.bicep
 ```
 
 **Key features:**
@@ -128,6 +128,10 @@ module deploymentKeyVault 'modules/keyvault.bicep' = {
     enableRbacAuthorization: true
     publicNetworkAccess: 'Enabled'  // For GitHub Actions access
     networkAclsDefaultAction: 'Allow'  // Adjust based on security requirements
+    // NOTE: This assumes infra/main.bicep defines a `logAnalyticsWorkspace` module
+    // with a `workspaceId` output. If you do not yet deploy Log Analytics, either:
+    //   - Add a Log Analytics workspace module and expose `workspaceId` as an output, or
+    //   - Remove/comment out the `logAnalyticsWorkspaceId` parameter below
     logAnalyticsWorkspaceId: logAnalyticsWorkspace.outputs.workspaceId
     tags: {
       Environment: environment
@@ -667,7 +671,7 @@ az keyvault show --name <KV_NAME> --query "{publicNetworkAccess:properties.publi
 - [Secrets Inventory](./SECRETS-INVENTORY.md) - Complete categorization of all secrets
 - [Federated Credentials Setup](./FEDERATED-CREDENTIALS-SETUP.md) - OIDC configuration
 - [Deployment Secrets Setup](../DEPLOYMENT-SECRETS-SETUP.md) - Original setup guide
-- [Key Vault Bicep Module](../infra/modules/keyvault.bicep) - Infrastructure as Code
+- [Key Vault Bicep Module](../infra/modules/deployment-keyvault.bicep) - Infrastructure as Code
 - [Azure Key Vault Best Practices](https://learn.microsoft.com/en-us/azure/key-vault/general/best-practices)
 
 ---

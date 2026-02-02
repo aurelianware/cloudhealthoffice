@@ -260,7 +260,6 @@ if az keyvault secret show --vault-name "$VAULT_NAME" --name "$TEST_SECRET" --qu
     SECRET_VALUE=$(az keyvault secret show --vault-name "$VAULT_NAME" --name "$TEST_SECRET" --query "value" -o tsv)
     SECRET_LENGTH=${#SECRET_VALUE}
     print_info "Secret length: $SECRET_LENGTH characters"
-    print_info "Secret value: ${SECRET_VALUE:0:3}...${SECRET_VALUE: -3} (first/last 3 chars)"
   fi
 else
   print_error "Secret '$TEST_SECRET' not found or cannot be retrieved"
