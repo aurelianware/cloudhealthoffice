@@ -17,7 +17,7 @@ permissions:
 jobs:
   deploy-site:
     runs-on: ubuntu-latest
-    environment: PROD
+    # environment: PROD  # Removed to use branch-based OIDC subject claim (repo:aurelianware/cloudhealthoffice:ref:refs/heads/main)
 
     steps:
       - name: Checkout code
