@@ -329,6 +329,7 @@ Cloud Health Office is backend-agnostic and designed to integrate seamlessly wit
 - [Deployment Guide](./DEPLOYMENT.md) - Step-by-step Azure deployment
 - **[Multi-Cloud Deployment](./docs/MULTI-CLOUD-DEPLOYMENT.md)** - Kubernetes (AKS/EKS/GKE) deployment
 - [Gated Release Guide](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows
+- **[Federated Credentials Setup](./docs/FEDERATED-CREDENTIALS-SETUP.md)** - GitHub Actions OIDC authentication for Azure deployment
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
 
 ### Cloud Independence

@@ -68,18 +68,83 @@ jobs:
 
           echo ""
           if [ $FAILED -eq 1 ]; then
+            echo "=========================================="
             echo "❌ Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Required GitHub secrets and/or variables are not configured."
+            echo ""
+            echo "📚 Setup Instructions:"
+            echo "   See: docs/FEDERATED-CREDENTIALS-SETUP.md"
+            echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+            echo ""
+            echo "🔧 Quick Fix:"
+            echo "   1. Go to Settings → Secrets and variables → Actions"
+            echo "   2. Add missing Repository secrets:"
+            echo "      - AZURE_CLIENT_ID (Application ID from Azure AD)"
+            echo "      - AZURE_TENANT_ID (Directory ID from Azure AD)"
+            echo "      - AZURE_SUBSCRIPTION_ID (Azure Subscription ID)"
+            echo "   3. Add missing Repository variables:"
+            echo "      - AZURE_RG_NAME (Resource group name)"
+            echo "      - BASE_NAME (Resource naming prefix)"
+            echo ""
             exit 1
           else
             echo "✅ Validation PASSED"
           fi
 
       - name: Azure Login (OIDC)
+        id: azure-login
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        continue-on-error: true
+
+      - name: Azure Login Error Handler
+        if: steps.azure-login.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "❌ Azure Authentication Failed"
+          echo "=========================================="
+          echo ""
+          echo "The Azure OIDC login failed. This is typically caused by:"
+          echo ""
+          echo "1. ❌ Federated credential not configured or incorrect"
+          echo "2. ❌ Application (Client) ID is wrong or doesn't exist"
+          echo "3. ❌ Service principal doesn't exist for the application"
+          echo "4. ❌ Workflow permissions missing 'id-token: write'"
+          echo ""
+          echo "📚 Complete Setup Guide:"
+          echo "   docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo ""
+          echo "🔍 Troubleshooting Steps:"
+          echo ""
+          echo "Step 1: Verify federated credential is configured"
+          echo "   Expected subject: repo:aurelianware/cloudhealthoffice:ref:refs/heads/main"
+          echo "   Run: az ad app federated-credential list --id \$AZURE_CLIENT_ID"
+          echo ""
+          echo "Step 2: Verify application exists"
+          echo "   Run: az ad app show --id \$AZURE_CLIENT_ID"
+          echo ""
+          echo "Step 3: Verify service principal exists"
+          echo "   Run: az ad sp show --id \$AZURE_CLIENT_ID"
+          echo "   If not found, create: az ad sp create --id \$AZURE_CLIENT_ID"
+          echo ""
+          echo "Step 4: Check workflow has correct permissions"
+          echo "   File: .github/workflows/deploy-static-site.yml"
+          echo "   Required: permissions.id-token = write"
+          echo ""
+          echo "🛠️  Validation Tool:"
+          echo "   Run locally: ./scripts/validate-deployment-auth.sh --app-id \$AZURE_CLIENT_ID"
+          echo ""
+          echo "📖 Common Issues & Solutions:"
+          echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md#troubleshooting-common-issues"
+          echo ""
+          exit 1
 
       - name: Get Static Web App Details
         id: get-swa
@@ -374,6 +439,15 @@ jobs:
           echo "3. Ensure AZURE_CLIENT_ID has 'Website Contributor' role"
           echo "4. Verify resource group ${{ vars.AZURE_RG_NAME }} exists"
           echo ""
+          echo "**Authentication Issues:**"
+          echo "If you see OIDC or federated credential errors, see:"
+          echo "  docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo "  https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo ""
+          echo "**Validation Tool:**"
+          echo "Run the validation script to diagnose issues:"
+          echo "  ./scripts/validate-deployment-auth.sh"
+          echo ""
           echo "**To Retry:**"
           echo "- Fix any configuration issues"
           echo "- Re-run this workflow from Actions tab"
@@ -388,3 +462,12 @@ jobs:
           echo "   az staticwebapp deploy --name ${{ vars.BASE_NAME }}-swa \\"
           echo "     --resource-group ${{ vars.AZURE_RG_NAME }} \\"
           echo "     --source ./site"
+          echo ""
+          echo "**Debug Information:**"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Run Number: ${{ github.run_number }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
+          echo ""
