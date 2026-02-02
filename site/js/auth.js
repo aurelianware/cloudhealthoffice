@@ -129,7 +129,11 @@ async function updateNavigation(navSelector = 'nav ul') {
     // Add user menu
     const userMenuItem = document.createElement('li');
     userMenuItem.className = 'auth-link';
-    userMenuItem.innerHTML = `<a href="/portal/" style="color:#00ff88;">Portal (${userName})</a>`;
+    const portalLink = document.createElement('a');
+    portalLink.href = '/portal/';
+    portalLink.style.color = '#00ff88';
+    portalLink.textContent = `Portal (${userName})`;
+    userMenuItem.appendChild(portalLink);
     nav.appendChild(userMenuItem);
 
     // Add logout link
