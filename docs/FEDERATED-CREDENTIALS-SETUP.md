@@ -8,6 +8,8 @@ This guide provides comprehensive instructions for setting up Azure federated cr
 
 **Scope**: This guide focuses specifically on the **deployment authentication** for GitHub Actions workflows, which is separate from the **user authentication** configured for the static website application.
 
+> **🔐 Important:** This guide covers OIDC credentials for GitHub → Azure authentication. For runtime secrets (SFTP credentials, API keys), see [Secrets Management Guide](../DEPLOYMENT-SECRETS-SETUP.md) and [Key Vault Migration Guide](./SECRETS-MIGRATION-GUIDE.md).
+
 ## Why Federated Credentials?
 
 Azure federated credentials using OIDC provide several security advantages over traditional service principal secrets:
@@ -31,16 +33,21 @@ It's important to understand the distinction between two different Azure AD appl
 **Required Permissions**:
 - **Website Contributor** role on Static Web App resource
 - **Contributor** role on resource group (for deployments)
+- **Key Vault Secrets User** role on deployment Key Vault (for retrieving runtime secrets)
 
 **Federated Credential Subject Pattern**:
 ```
 repo:aurelianware/cloudhealthoffice:ref:refs/heads/main
 ```
 
-**GitHub Secrets Required**:
+**GitHub Secrets Required** (ONLY these - runtime secrets go in Key Vault):
 - `AZURE_CLIENT_ID` - The deployment app's Application ID
 - `AZURE_TENANT_ID` - Your Azure AD tenant ID
 - `AZURE_SUBSCRIPTION_ID` - Your Azure subscription ID
+
+**Runtime Secrets** (stored in Azure Key Vault, not GitHub):
+- `SFTP_HOST`, `SFTP_USERNAME`, `SFTP_PASSWORD` - Stored in Key Vault for enhanced security
+- See [Key Vault Migration Guide](./SECRETS-MIGRATION-GUIDE.md) for setup
 
 ### User Authentication App Registration (Separate)
 
@@ -54,6 +61,8 @@ repo:aurelianware/cloudhealthoffice:ref:refs/heads/main
 
 **Configuration**: Handled separately in Azure Static Web Apps authentication settings
 
+**Note**: User authentication credentials (for portal login) should be configured in Azure Static Web Apps settings, NOT in GitHub Secrets or Key Vault. See Azure Static Web Apps documentation for multi-tenant Azure AD setup.
+
 ---
 
 ## Prerequisites
@@ -64,7 +73,7 @@ Before you begin, ensure you have:
 - [ ] **GitHub Repository** admin access (`aurelianware/cloudhealthoffice`)
 - [ ] **Azure CLI** installed locally (`az --version` ≥ 2.50.0)
 - [ ] **Permissions to create App Registrations** in Azure AD
-- [ ] **Permissions to assign Azure roles** (Contributor, Website Contributor)
+- [ ] **Permissions to assign Azure roles** (Contributor, Website Contributor, Key Vault Secrets User)
 
 ## Step-by-Step Setup Guide
 

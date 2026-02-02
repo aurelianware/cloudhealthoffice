@@ -2,11 +2,13 @@
 
 This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the Cloud Health Office Logic Apps solution.
 
-> **🚀 Quick Validation:** Run `./validate-github-secrets.sh` to verify your configuration!
+> **🚀 Quick Validation:** Run `./validate-github-secrets.sh` to verify your configuration!  
+> **🔐 Enhanced Security:** See [Azure Key Vault Migration Guide](docs/SECRETS-MIGRATION-GUIDE.md) for storing runtime secrets in Key Vault
 
 ## Table of Contents
 - [Overview](#overview)
 - [Quick Reference](#quick-reference)
+- [Azure Key Vault for Runtime Secrets (Recommended)](#azure-key-vault-for-runtime-secrets-recommended)
 - [GitHub Secrets Setup](#github-secrets-setup)
 - [Repository Variables Setup](#repository-variables-setup)
 - [Step-by-Step Setup for New Team Members](#step-by-step-setup-for-new-team-members)
@@ -22,6 +24,37 @@ The Cloud Health Office deployment uses GitHub Actions workflows with OIDC (Open
 - **OIDC Authentication**: Federated identity credentials for secure, passwordless authentication
 - **Environment-Specific Secrets**: Separate secrets for DEV, UAT, and PROD environments
 - **Repository Variables**: Shared configuration across workflows
+- **Azure Key Vault (Recommended)**: Runtime secrets stored in Key Vault for enhanced security and HIPAA compliance
+
+### What Goes Where?
+
+| Secret Type | Recommended Location | Reason |
+|-------------|---------------------|--------|
+| OIDC Credentials (CLIENT_ID, TENANT_ID, SUBSCRIPTION_ID) | GitHub Secrets | Required before Azure access |
+| SFTP Credentials | Azure Key Vault | Runtime config, HIPAA compliance, easier rotation |
+| API Keys | Azure Key Vault | Sensitive credentials, audit logging |
+| Third-party Tokens (CodeCov, Snyk) | GitHub Secrets | Workflow integrations |
+
+## Azure Key Vault for Runtime Secrets (Recommended)
+
+**🎯 RECOMMENDED:** For enhanced security and HIPAA compliance, store runtime secrets (SFTP credentials, API keys) in Azure Key Vault instead of GitHub Secrets.
+
+### Benefits
+- ✅ **HIPAA Compliance:** Premium Key Vault with HSM-backed keys and audit logging
+- ✅ **Easier Rotation:** Update secrets in one place without updating GitHub
+- ✅ **Audit Trail:** Track who accessed which secrets and when
+- ✅ **Environment Isolation:** Separate Key Vaults for DEV/UAT/PROD
+- ✅ **Managed Identity:** Logic Apps access secrets without storing credentials
+
+### Migration Path
+
+1. **Review:** [Secrets Inventory](docs/SECRETS-INVENTORY.md) - Understand which secrets to migrate
+2. **Deploy Key Vault:** Use `infra/modules/deployment-keyvault.bicep`
+3. **Populate Secrets:** Run `./scripts/setup-deployment-keyvault.sh`
+4. **Update Workflows:** Use pattern from `deploy.yml` (already configured with backward compatibility)
+5. **Complete Migration:** Follow [Secrets Migration Guide](docs/SECRETS-MIGRATION-GUIDE.md)
+
+**Note:** The PROD deployment workflow (`deploy.yml`) is already configured to retrieve secrets from Key Vault if available, falling back to GitHub Secrets if not.
 
 ## Quick Reference
 
@@ -31,7 +64,9 @@ The Cloud Health Office deployment uses GitHub Actions workflows with OIDC (Open
 |-------------|----------------------------|-----------------------------|-----------------------------------|-----------|---------------|---------------|
 | DEV         | `AZURE_CLIENT_ID`          | `AZURE_TENANT_ID`           | `AZURE_SUBSCRIPTION_ID`           | -         | -             | -             |
 | UAT         | `AZURE_CLIENT_ID_UAT`      | `AZURE_TENANT_ID_UAT`       | `AZURE_SUBSCRIPTION_ID_UAT`       | -         | -             | -             |
-| PROD        | `AZURE_CLIENT_ID`          | `AZURE_TENANT_ID`           | `AZURE_SUBSCRIPTION_ID`           | `SFTP_HOST` | `SFTP_USERNAME` | `SFTP_PASSWORD` |
+| PROD        | `AZURE_CLIENT_ID`          | `AZURE_TENANT_ID`           | `AZURE_SUBSCRIPTION_ID`           | `SFTP_HOST`* | `SFTP_USERNAME`* | `SFTP_PASSWORD`* |
+
+**\*Note:** SFTP credentials can be stored in GitHub Secrets (legacy) or Azure Key Vault (recommended). See [Key Vault Migration Guide](docs/SECRETS-MIGRATION-GUIDE.md).
 
 ### Required Repository Variables (PROD)
 
