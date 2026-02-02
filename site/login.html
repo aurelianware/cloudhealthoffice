@@ -178,7 +178,7 @@
       <div class="login-header">
         <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Sentinel Logo">
         <h1>Welcome to Cloud Health Office</h1>
-        <p>Sign in to access your payer EDI integration portal</p>
+        <p>Healthcare organizations use their existing Microsoft Entra ID (Azure AD) credentials</p>
       </div>
 
       <div class="loading-message" id="loadingMessage">
@@ -188,20 +188,20 @@
       <div id="loginContent">
         <div class="login-options">
           <a href="/.auth/login/aad?post_login_redirect_uri=/portal/" class="login-button" id="signInButton">
-            Sign In with Azure AD B2C
+            Sign in with your organization account
           </a>
 
           <div class="divider">
-            <span>New to Cloud Health Office?</span>
+            <span>First time signing in?</span>
           </div>
 
-          <a href="/.auth/login/aad?post_login_redirect_uri=/portal/" class="login-button login-button-secondary">
-            Create Account
-          </a>
+          <p style="text-align: center; color: var(--medium-gray); font-size: 0.9rem; margin: 0;">
+            Your IT admin may need to approve this app for your organization
+          </p>
         </div>
 
         <div class="social-proof">
-          <h3>Why Cloud Health Office?</h3>
+          <h3>Trusted by Healthcare Organizations</h3>
           <ul>
             <li>Deploy production-grade payer EDI in under 1 hour</li>
             <li>Zero custom code required</li>
