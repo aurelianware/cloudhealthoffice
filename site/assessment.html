@@ -10,19 +10,27 @@
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css">
+  <script src="js/auth.js"></script>
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav>
-    <ul>
+    <ul id="assessmentNav">
       <li><a href="index.html">Home</a></li>
       <li><a href="platform.html">Platform</a></li>
+      <li><a href="release-notes.html">Release Notes</a></li>
       <li><a href="insights.html">Insights</a></li>
       <li><a href="assessment.html">Assessment</a></li>
       <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
     </ul>
   </nav>
+  <script>
+    // Update navigation with auth status on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      updateNavigation('#assessmentNav');
+    });
+  </script>
 
   <main id="main-content">
     <div class="hero circuit-veins">
