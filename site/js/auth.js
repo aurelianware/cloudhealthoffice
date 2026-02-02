@@ -135,7 +135,15 @@ async function updateNavigation(navSelector = 'nav ul') {
     // Add logout link
     const logoutItem = document.createElement('li');
     logoutItem.className = 'auth-link';
-    logoutItem.innerHTML = `<a href="#" onclick="logout(); return false;" style="color:#888;">Sign Out</a>`;
+    const logoutLink = document.createElement('a');
+    logoutLink.href = '#';
+    logoutLink.style.color = '#888';
+    logoutLink.textContent = 'Sign Out';
+    logoutLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      logout();
+    });
+    logoutItem.appendChild(logoutLink);
     nav.appendChild(logoutItem);
   } else {
     // Add sign in link
