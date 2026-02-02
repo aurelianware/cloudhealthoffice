@@ -39,7 +39,8 @@ param enabledForDiskEncryption bool = true
 @description('Enable Key Vault for template deployment')
 param enabledForTemplateDeployment bool = true
 
-@description('Public network access - Enabled for GitHub Actions access')
+// IMPORTANT: Default 'Enabled' is for CI/CD (e.g., GitHub Actions). For production/HIPAA workloads, explicitly review this and typically set to 'Disabled' with private endpoints.
+@description('Public network access for Key Vault (review for production/HIPAA; consider Disabled with private endpoints)')
 @allowed(['Enabled', 'Disabled'])
 param publicNetworkAccess string = 'Enabled'
 
@@ -96,7 +97,7 @@ resource deploymentKeyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     publicNetworkAccess: publicNetworkAccess
     networkAcls: {
       defaultAction: networkAclsDefaultAction
-      bypass: 'AzureServices'  // Allow trusted Azure services (including GitHub Actions via OIDC)
+      bypass: 'AzureServices'  // Allow trusted Azure platform services to bypass network ACLs (GitHub Actions uses publicNetworkAccess, not this bypass)
       ipRules: [
         for ipRange in allowedIpRanges: {
           value: ipRange
@@ -115,7 +116,7 @@ resource deploymentKeyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 // =========================
 // Diagnostic Settings for Audit Logging
 // =========================
-resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(logAnalyticsWorkspaceId)) {
+resource diagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01' = if (!empty(logAnalyticsWorkspaceId)) {
   name: '${keyVaultName}-diagnostics'
   scope: deploymentKeyVault
   properties: {

@@ -238,6 +238,7 @@ else
   if [[ -z "$SFTP_HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
     print_error "In non-interactive mode, all secrets must be provided:"
     print_error "  --sftp-host, --sftp-username, --sftp-password"
+    print_error "Alternatively, rerun with -i or --interactive to be prompted for missing secrets."
     exit 1
   fi
 
@@ -249,8 +250,8 @@ echo ""
 # Step 4: Validate secret values
 print_header "Step 4: Validating Secret Values"
 
-# Validate SFTP Host format (basic check)
-if [[ ! "$SFTP_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+# Validate SFTP Host format (basic check for hostname or IPv4 address)
+if [[ ! "$SFTP_HOST" =~ ^(([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}|([0-9]{1,3}\.){3}[0-9]{1,3})$ ]]; then
   print_warning "SFTP Host format looks unusual: $SFTP_HOST"
   print_warning "Expected format: sftp.example.com or 192.168.1.100"
 fi
@@ -276,8 +277,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
   print_warning "DRY RUN MODE - No changes will be made"
   echo ""
   print_info "Would create the following secrets:"
-  echo "  - sftp-host: $SFTP_HOST"
-  echo "  - sftp-username: $SFTP_USERNAME"
+  echo "  - sftp-host: ********"
+  echo "  - sftp-username: ********"
   echo "  - sftp-password: ********"
   echo ""
 else
