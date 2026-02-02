@@ -7,13 +7,16 @@ This directory contains the Cloud Health Office marketing website with platform 
 ```
 site/
 ├── index.html              # Homepage with hero and Calendly integration
+├── login.html              # Login/registration page with Azure AD B2C
 ├── platform.html           # Platform overview and capabilities
 ├── insights.html           # Market insights with Magic Quadrant visualization
 ├── assessment.html         # Generated from assets/cho-assessment.md
 ├── css/
 │   └── sentinel.css        # Sentinel theme styling (Absolute black, neon cyan/green)
 ├── js/
-│   └── markdown-converter.js  # Build script to convert .md to .html
+│   ├── auth.js             # Authentication helper library
+│   ├── markdown-converter.js  # Build script to convert .md to .html
+│   └── validate-accessibility.js
 ├── graphics/
 │   ├── MQ_Objective_GartnerBlue.svg
 │   └── MQ_Objective_Minimalist.svg
@@ -21,6 +24,244 @@ site/
 │   └── cho-assessment.md   # Source Markdown for assessment page
 ├── staticwebapp.config.json  # Azure Static Web Apps configuration
 └── README.md               # This file
+```
+
+## Authentication with Azure AD B2C
+
+The site includes Azure AD B2C authentication for secure user access to the portal.
+
+### Azure AD B2C Configuration
+
+#### 1. Create Azure AD B2C Tenant
+
+Follow the official Microsoft documentation to create an Azure AD B2C tenant:
+https://learn.microsoft.com/azure/active-directory-b2c/tutorial-create-tenant
+
+**Important configuration:**
+- Tenant name: Choose a meaningful name (e.g., `cloudhealthoffice`)
+- Initial domain: `<your-tenant>.onmicrosoft.com`
+- Country/Region: Select your primary region
+
+#### 2. Register the Application
+
+1. Navigate to Azure AD B2C → App registrations → New registration
+2. Configure the application:
+   - **Name:** Cloud Health Office Portal
+   - **Supported account types:** Accounts in any identity provider or organizational directory (for authenticating users with user flows)
+   - **Redirect URI:** 
+     - Type: Web
+     - URI: `https://<your-static-web-app>.azurestaticapps.net/.auth/login/aad/callback`
+     - For custom domain: `https://cloudhealthoffice.com/.auth/login/aad/callback`
+
+3. After registration, note the **Application (client) ID**
+
+#### 3. Create Client Secret
+
+1. Go to App registrations → Your app → Certificates & secrets
+2. Click "New client secret"
+3. Add description: "Cloud Health Office Static Web App"
+4. Set expiration (recommended: 24 months)
+5. Copy the **Value** (this is your client secret - save it securely)
+
+#### 4. Configure User Flows
+
+Create the following user flows in Azure AD B2C:
+
+**Sign up and sign in flow:**
+1. Navigate to Azure AD B2C → User flows → New user flow
+2. Select "Sign up and sign in" → Recommended version
+3. Name: `B2C_1_SignUpSignIn`
+4. Identity providers: Select "Email signup"
+5. User attributes and claims:
+   - Collect: Display Name, Email Address
+   - Return: Display Name, Email Addresses, User's Object ID
+6. Create the flow
+
+**Password reset flow (optional but recommended):**
+1. Select "Password reset" → Recommended version
+2. Name: `B2C_1_PasswordReset`
+3. Configure similar to sign-up flow
+4. Create the flow
+
+**Profile editing flow (optional):**
+1. Select "Profile editing" → Recommended version
+2. Name: `B2C_1_ProfileEdit`
+3. Configure user attributes to edit
+4. Create the flow
+
+#### 5. Update staticwebapp.config.json
+
+The configuration file has placeholders that need to be replaced:
+
+```json
+{
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://<your-b2c-tenant>.b2clogin.com/<tenant-id>/v2.0/",
+          "clientIdSettingName": "AZURE_AD_B2C_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_AD_B2C_CLIENT_SECRET"
+        }
+      }
+    }
+  }
+}
+```
+
+Replace `<your-b2c-tenant>` and `<tenant-id>` with your values:
+- Find tenant ID: Azure AD B2C → Overview → Directory ID
+- Example: `https://cloudhealthoffice.b2clogin.com/12345678-1234-1234-1234-123456789abc/v2.0/`
+
+#### 6. Configure GitHub Secrets
+
+Add the following secrets to your GitHub repository (Settings → Secrets and variables → Actions):
+
+```bash
+AZURE_AD_B2C_CLIENT_ID=<your-application-client-id>
+AZURE_AD_B2C_CLIENT_SECRET=<your-client-secret-value>
+```
+
+#### 7. Configure Static Web App Settings
+
+In the Azure Portal, add application settings to your Static Web App:
+
+1. Navigate to your Static Web App → Configuration → Application settings
+2. Add the following settings:
+   - **Name:** `AZURE_AD_B2C_CLIENT_ID` | **Value:** `<your-client-id>`
+   - **Name:** `AZURE_AD_B2C_CLIENT_SECRET` | **Value:** `<your-client-secret>`
+
+### Testing Authentication
+
+#### Local Testing with Azure Static Web Apps CLI
+
+Install the CLI globally:
+
+```bash
+npm install -g @azure/static-web-apps-cli
+```
+
+Start the local development server:
+
+```bash
+cd /home/runner/work/cloudhealthoffice/cloudhealthoffice
+swa start site --app-location site
+```
+
+**Note:** Local authentication testing with Azure AD B2C requires additional configuration. For full authentication testing, deploy to Azure Static Web Apps.
+
+#### Test User Flow
+
+1. **Registration Test:**
+   - Navigate to `/login.html`
+   - Click "Create Account"
+   - Complete registration form
+   - Verify email (if configured)
+   - Redirected to portal
+
+2. **Login Test:**
+   - Navigate to `/login.html`
+   - Click "Sign In with Azure AD B2C"
+   - Enter credentials
+   - Verify redirect to `/portal/`
+
+3. **Authentication Status:**
+   - Navigate to `/.auth/me`
+   - Should return user profile JSON when authenticated
+   - Should return empty when not authenticated
+
+4. **Protected Routes:**
+   - Navigate to `/portal/` when not authenticated
+   - Should redirect to login page
+   - After login, should access portal successfully
+
+5. **Logout Test:**
+   - Click "Sign Out" in navigation
+   - Should redirect to home page
+   - `/.auth/me` should return empty
+
+### Authentication Helper Functions
+
+The `js/auth.js` library provides helper functions:
+
+```javascript
+// Check if user is authenticated
+const authenticated = await isAuthenticated();
+
+// Get user profile
+const user = await loadUserProfile();
+
+// Redirect to login if not authenticated
+await requireAuth();
+
+// Make authenticated API call
+const response = await callAuthenticatedAPI('/api/claims');
+
+// Logout
+logout('/');
+
+// Get user display name
+const name = await getUserDisplayName();
+
+// Update navigation with auth links
+await updateNavigation('#mainNav');
+```
+
+### Troubleshooting
+
+#### Common Authentication Issues
+
+**Issue: Redirect loop after login**
+- Verify redirect URIs in Azure AD B2C match exactly (including protocol and trailing slash)
+- Check that client ID and secret are correctly configured
+
+**Issue: "Invalid client secret" error**
+- Verify client secret hasn't expired
+- Check that secret is correctly configured in Static Web App settings
+- Ensure no extra whitespace in secret value
+
+**Issue: User redirected to wrong page after login**
+- Check `post_login_redirect_uri` parameter in login links
+- Verify route configuration in `staticwebapp.config.json`
+
+**Issue: `/.auth/me` returns empty even when logged in**
+- Clear browser cookies and try again
+- Check browser console for errors
+- Verify Static Web App has correct authentication configuration
+
+**Issue: Local testing doesn't work**
+- Azure AD B2C authentication requires deployment to Azure Static Web Apps
+- Use local emulation with mock auth or deploy to staging environment
+
+#### Debug Mode
+
+Enable verbose logging in browser console:
+
+```javascript
+// In browser console
+localStorage.setItem('debug', 'auth:*');
+location.reload();
+```
+
+### Security Considerations
+
+1. **HTTPS Only:** All authentication endpoints require HTTPS
+2. **Secrets Management:** Never commit client secrets to source control
+3. **Token Expiration:** Tokens expire after configured period (default: 8 hours)
+4. **CORS Configuration:** Ensure proper CORS settings for API endpoints
+5. **Content Security Policy:** Review CSP headers for authentication flows
+
+### Environment Variables
+
+Required environment variables for authentication:
+
+```bash
+# Azure AD B2C Configuration
+AZURE_AD_B2C_CLIENT_ID=<application-client-id>
+AZURE_AD_B2C_CLIENT_SECRET=<client-secret-value>
+
+# Optional: Custom domain configuration
+AZURE_STATIC_WEB_APP_URL=https://cloudhealthoffice.com
 ```
 
 ## Building the Site
