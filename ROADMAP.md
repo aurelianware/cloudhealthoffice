@@ -68,9 +68,9 @@ This document outlines the strategic vision and planned enhancements for the Clo
 **Description**: Enable customer organizations to use their Azure AD for single sign-on (SSO) to Cloud Health Office portal and APIs.
 
 **Deliverables**:
-- [ ] Azure AD B2C tenant configuration
-- [ ] SAML 2.0 and OAuth 2.0 support
-- [ ] Multi-tenant Azure AD app registration
+- [x] Multi-tenant Microsoft Entra ID app registration (completed Feb 2026)
+- [ ] SAML 2.0 support for legacy systems
+- [x] OAuth 2.0 and OpenID Connect authentication
 - [ ] Customer admin portal for user management
 - [ ] Role-based access control (RBAC) with custom roles
 - [ ] MFA enforcement and conditional access policies
