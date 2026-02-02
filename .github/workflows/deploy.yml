@@ -152,12 +152,11 @@ jobs:
             echo "LOGIC_APP_NAME=${{ vars.BASE_NAME }}-la"
           } >> "$GITHUB_ENV"
 
-      - name: Get Secrets from Key Vault (if using Key Vault migration)
+      - name: Retrieve Secrets from Key Vault
         id: get-secrets
         shell: bash
-        continue-on-error: true  # Continue if Key Vault doesn't exist (fallback to GitHub Secrets)
         run: |
-          set -euo pipefail
+          # Exit codes: 0 = success, 1 = Key Vault found but error, 2 = Key Vault not found
           
           # Deployment Key Vault naming pattern: {baseName}-deploy-kv
           KV_NAME="${{ vars.BASE_NAME }}-deploy-kv"
@@ -173,6 +172,7 @@ jobs:
             echo "⚠️ Key Vault '$KV_NAME' not found"
             echo "   Falling back to GitHub Secrets"
             echo "   To migrate to Key Vault, see: docs/SECRETS-MIGRATION-GUIDE.md"
+            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
             exit 0  # Exit gracefully, workflow will use GitHub Secrets
           fi
           
@@ -182,15 +182,31 @@ jobs:
           # Retrieve SFTP secrets from Key Vault
           echo "Retrieving SFTP credentials from Key Vault..."
           
-          SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null || echo "")
-          SFTP_USERNAME=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-username --query value -o tsv 2>/dev/null || echo "")
-          SFTP_PASSWORD=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-password --query value -o tsv 2>/dev/null || echo "")
+          # Try to retrieve all secrets, exit with error if any fail unexpectedly
+          if ! SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null); then
+            echo "⚠️ Failed to retrieve sftp-host - falling back to GitHub Secrets"
+            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
           
-          # Check if all secrets were retrieved
+          if ! SFTP_USERNAME=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-username --query value -o tsv 2>/dev/null); then
+            echo "⚠️ Failed to retrieve sftp-username - falling back to GitHub Secrets"
+            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          
+          if ! SFTP_PASSWORD=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-password --query value -o tsv 2>/dev/null); then
+            echo "⚠️ Failed to retrieve sftp-password - falling back to GitHub Secrets"
+            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          
+          # Check if all secrets were retrieved successfully
           if [[ -z "$SFTP_HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
-            echo "⚠️ Not all secrets found in Key Vault"
+            echo "⚠️ Not all secrets found in Key Vault (empty values)"
             echo "   Missing secrets - falling back to GitHub Secrets"
-            exit 0  # Exit gracefully
+            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            exit 0
           fi
           
           # Mask secrets in logs (CRITICAL for security)
@@ -238,6 +254,17 @@ jobs:
             echo "  3. Grant Service Principal 'Key Vault Secrets User' role"
             echo "  4. See: docs/SECRETS-MIGRATION-GUIDE.md"
             echo ""
+            
+            # Validate GitHub Secrets are available before using them
+            if [[ -z "${{ secrets.SFTP_HOST }}" || -z "${{ secrets.SFTP_USERNAME }}" || -z "${{ secrets.SFTP_PASSWORD }}" ]]; then
+              echo "❌ ERROR: Neither Key Vault nor GitHub Secrets have the required SFTP credentials"
+              echo "Please configure secrets in one of the following locations:"
+              echo "  - Azure Key Vault: ${{ vars.BASE_NAME }}-deploy-kv (recommended)"
+              echo "  - GitHub Secrets: SFTP_HOST, SFTP_USERNAME, SFTP_PASSWORD"
+              echo ""
+              echo "See: docs/SECRETS-MIGRATION-GUIDE.md for setup instructions"
+              exit 1
+            fi
             
             # Set final secret variables from GitHub Secrets
             {

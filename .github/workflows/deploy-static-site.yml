@@ -13,7 +13,8 @@ name: Deploy Static Site with Custom Domain
 #
 # User Authentication Secrets (NOT in GitHub Secrets):
 #   - User login credentials (Azure AD multi-tenant) should be configured in
-#     Azure Static Web Apps settings in the Azure Portal, not here.
+#     Azure Portal → Static Web Apps → [resource name] → Configuration → Application settings,
+#     not in GitHub or workflow secrets.
 #   - See: docs/FEDERATED-CREDENTIALS-SETUP.md for details on deployment vs user auth
 #
 # For more information:
