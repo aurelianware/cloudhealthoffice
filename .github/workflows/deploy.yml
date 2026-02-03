@@ -30,27 +30,27 @@ jobs:
     outputs:
       app-id: ${{ steps.ensure-app.outputs.app-id }}
       sp-id: ${{ steps.ensure-sp.outputs.sp-id }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set default secrets if not configured
         id: set-defaults
         shell: bash
         run: |
           # Use secure defaults for missing secrets
           # These are placeholders - real secrets should be in GitHub Secrets or Key Vault
-          
+
           # Azure authentication secrets (required)
           CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
           TENANT_ID="${{ secrets.AZURE_TENANT_ID }}"
           SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          
+
           # SFTP secrets (can be in Key Vault)
           SFTP_HOST="${{ secrets.SFTP_HOST }}"
           SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
           SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
-          
+
           # Export to environment
           {
             echo "CLIENT_ID=${CLIENT_ID}"
@@ -61,9 +61,9 @@ jobs:
             echo "SFTP_PASSWORD=${SFTP_PASSWORD:-changeme}"
             echo "HAS_AZURE_CREDS=$([[ -n \"$CLIENT_ID\" && -n \"$TENANT_ID\" && -n \"$SUBSCRIPTION_ID\" ]] && echo 'true' || echo 'false')"
           } >> "$GITHUB_ENV"
-          
+
           echo "✅ Defaults configured"
-      
+
       - name: Azure Login (OIDC) - Optional if secrets exist
         if: env.HAS_AZURE_CREDS == 'true'
         id: azure-login
@@ -73,14 +73,14 @@ jobs:
           tenant-id: ${{ env.TENANT_ID }}
           subscription-id: ${{ env.SUBSCRIPTION_ID }}
         continue-on-error: true
-      
+
       - name: Ensure App Registration
         if: steps.azure-login.outcome == 'success' || env.HAS_AZURE_CREDS == 'false'
         id: ensure-app
         shell: bash
         run: |
           set -euo pipefail
-          
+
           # Only run if logged in to Azure
           if ! az account show &>/dev/null; then
             echo "⚠️  Not logged in to Azure - skipping app registration setup"
@@ -88,47 +88,47 @@ jobs:
             echo "app-id=${{ env.CLIENT_ID }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          
+
           echo "=========================================="
           echo "Ensuring App Registration"
           echo "=========================================="
-          
+
           APP_NAME="${{ env.BASE_NAME }}-prod"
           TENANT_ID="${{ env.TENANT_ID }}"
           GITHUB_REPO="${{ github.repository }}"
-          
+
           # Run app registration script
           APP_ID=$(bash scripts/ensure-app-registration.sh "$APP_NAME" "$TENANT_ID" "$GITHUB_REPO" | tail -1)
-          
+
           echo "app-id=$APP_ID" >> "$GITHUB_OUTPUT"
           echo "✅ App registration ensured: $APP_ID"
-      
+
       - name: Ensure Service Principal
         if: steps.azure-login.outcome == 'success' || env.HAS_AZURE_CREDS == 'false'
         id: ensure-sp
         shell: bash
         run: |
           set -euo pipefail
-          
+
           # Only run if logged in to Azure
           if ! az account show &>/dev/null; then
             echo "⚠️  Not logged in to Azure - skipping service principal setup"
             echo "Manual setup required: ./scripts/ensure-service-principal.sh"
             exit 0
           fi
-          
+
           echo "=========================================="
           echo "Ensuring Service Principal"
           echo "=========================================="
-          
+
           APP_ID="${{ steps.ensure-app.outputs.app-id || env.CLIENT_ID }}"
           SUBSCRIPTION_ID="${{ env.SUBSCRIPTION_ID }}"
           RESOURCE_GROUP="${{ env.AZURE_RESOURCE_GROUP }}"
           BASE_NAME="${{ env.BASE_NAME }}"
-          
+
           # Run service principal script
           SP_ID=$(bash scripts/ensure-service-principal.sh "$APP_ID" "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$BASE_NAME" | tail -1)
-          
+
           echo "sp-id=$SP_ID" >> "$GITHUB_OUTPUT"
           echo "✅ Service principal ensured: $SP_ID"
 
@@ -194,7 +194,7 @@ jobs:
             echo "STORAGE_SKU=${{ env.STORAGE_SKU }}"
             echo "LOGIC_APP_NAME=${{ env.BASE_NAME }}-la"
           } >> "$GITHUB_ENV"
-          
+
           echo "✅ Environment variables configured with defaults"
 
       - name: Azure Login (OIDC)
@@ -209,10 +209,10 @@ jobs:
         shell: bash
         run: |
           # Exit codes: 0 = success (using Key Vault or GitHub Secrets)
-          
+
           # Deployment Key Vault naming pattern: {baseName}-deploy-kv
           KV_NAME="${{ env.BASE_NAME }}-deploy-kv"
-          
+
           echo "================================================"
           echo "Secret Retrieval Strategy"
           echo "================================================"
@@ -220,18 +220,18 @@ jobs:
           echo "Priority 2: GitHub Secrets"
           echo "Priority 3: Secure defaults (non-production use only)"
           echo ""
-          
+
           # Check if Key Vault exists
           if ! az keyvault show --name "$KV_NAME" &>/dev/null; then
             echo "⚠️  Key Vault '$KV_NAME' not found"
             echo "   Using GitHub Secrets or secure defaults"
             echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            
+
             # Use GitHub Secrets if available, otherwise defaults
             SFTP_HOST="${{ secrets.SFTP_HOST }}"
             SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
             SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
-            
+
             # Apply defaults if GitHub Secrets are empty
             if [ -z "$SFTP_HOST" ]; then
               echo "ℹ️  Using default SFTP_HOST (placeholder)"
@@ -245,44 +245,44 @@ jobs:
               echo "ℹ️  Using default SFTP_PASSWORD (placeholder)"
               SFTP_PASSWORD="changeme-replace-with-real-password"
             fi
-            
+
             # Mask and export
             echo "::add-mask::$SFTP_HOST"
             echo "::add-mask::$SFTP_USERNAME"
             echo "::add-mask::$SFTP_PASSWORD"
-            
+
             {
               echo "SFTP_HOST=$SFTP_HOST"
               echo "SFTP_USERNAME=$SFTP_USERNAME"
               echo "SFTP_PASSWORD=$SFTP_PASSWORD"
             } >> "$GITHUB_ENV"
-            
+
             echo ""
             echo "✅ Using GitHub Secrets with secure defaults"
             exit 0
           fi
-          
+
           echo "✓ Key Vault found: $KV_NAME"
           echo ""
-          
+
           # Retrieve SFTP secrets from Key Vault
           echo "Retrieving SFTP credentials from Key Vault..."
-          
+
           # Try to retrieve all secrets
           SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null || echo "")
           SFTP_USERNAME=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-username --query value -o tsv 2>/dev/null || echo "")
           SFTP_PASSWORD=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-password --query value -o tsv 2>/dev/null || echo "")
-          
+
           # Check if all secrets were retrieved
           if [[ -z "$SFTP_HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
             echo "⚠️  Not all secrets found in Key Vault - using GitHub Secrets fallback"
             echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            
+
             # Fallback to GitHub Secrets
             SFTP_HOST="${{ secrets.SFTP_HOST }}"
             SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
             SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
-            
+
             # Apply defaults if still empty
             SFTP_HOST="${SFTP_HOST:-sftp.example.com}"
             SFTP_USERNAME="${SFTP_USERNAME:-logicapp}"
@@ -290,19 +290,19 @@ jobs:
           else
             echo "USING_KEY_VAULT=true" >> "$GITHUB_ENV"
           fi
-          
+
           # Mask secrets in logs
           echo "::add-mask::$SFTP_HOST"
           echo "::add-mask::$SFTP_USERNAME"
           echo "::add-mask::$SFTP_PASSWORD"
-          
+
           # Export as environment variables
           {
             echo "SFTP_HOST=$SFTP_HOST"
             echo "SFTP_USERNAME=$SFTP_USERNAME"
             echo "SFTP_PASSWORD=$SFTP_PASSWORD"
           } >> "$GITHUB_ENV"
-          
+
           echo ""
           echo "✓ Secrets retrieved successfully"
           echo "✓ Secrets masked in workflow logs"
