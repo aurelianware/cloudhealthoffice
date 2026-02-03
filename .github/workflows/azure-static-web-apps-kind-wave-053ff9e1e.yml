@@ -42,10 +42,10 @@ jobs:
           result-encoding: string
       
       - name: Azure Login (OIDC)
-        if: env.AZURE_CLIENT_ID != ''
+        # Only use OIDC for main branch pushes - PR builds use deployment token directly
+        # OIDC federated credentials are configured for 'ref:refs/heads/main' subject only
+        if: github.event_name == 'push'
         uses: azure/login@v2
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -56,42 +56,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
+
           echo "Retrieving Static Web App deployment token..."
-          
+
           # Use secret if available, otherwise will be retrieved from Azure
           DEPLOYMENT_TOKEN="${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E }}"
-          
+
           if [ -z "$DEPLOYMENT_TOKEN" ]; then
             echo "⚠️  Deployment token not found in secrets"
-            echo "   Will attempt to retrieve from Azure using OIDC"
-            
-            # Only try to get from Azure if we have OIDC credentials
-            if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+
+            # Only try to get from Azure for push events (OIDC is only available for main branch)
+            if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+              echo "   Will attempt to retrieve from Azure using OIDC"
               echo "Using OIDC authentication to retrieve token..."
-              
+
               # The azure/login action should already be invoked in the workflow
               # Get deployment token from Azure
               BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
               RG_NAME="${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}"
               SWA_NAME="${BASE_NAME}-swa"
-              
+
               DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
                 --name "${SWA_NAME}" \
                 --resource-group "${RG_NAME}" \
                 --query "properties.apiKey" -o tsv 2>/dev/null || echo "")
             fi
-            
+
             if [ -z "$DEPLOYMENT_TOKEN" ]; then
               echo "❌ Unable to retrieve deployment token"
               echo "Please ensure:"
-              echo "1. Secret AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E is set, OR"
-              echo "2. Azure OIDC credentials are configured and Static Web App exists, OR"
-              echo "3. azure/login action has been called prior to this step"
+              echo "1. Secret AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E is set"
+              if [ "${{ github.event_name }}" = "push" ]; then
+                echo "2. OR: Azure OIDC credentials are configured and Static Web App exists"
+              else
+                echo "2. Note: OIDC is only available for main branch pushes, not PR builds"
+              fi
               exit 1
             fi
           fi
-          
+
           echo "::add-mask::$DEPLOYMENT_TOKEN"
           echo "deployment-token=$DEPLOYMENT_TOKEN" >> "$GITHUB_OUTPUT"
           echo "✅ Deployment token retrieved"
@@ -120,12 +123,19 @@ jobs:
           RG_NAME="${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}"
           SWA_NAME="${BASE_NAME}-swa"
 
-          # Try to get hostname from Azure, fall back to constructed name
-          HOSTNAME=$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RG_NAME" \
-            --query "defaultHostname" -o tsv 2>/dev/null || echo "")
+          # Try to get hostname from Azure (only works for push events with OIDC)
+          HOSTNAME=""
+          if [ "${{ github.event_name }}" = "push" ]; then
+            HOSTNAME=$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RG_NAME" \
+              --query "defaultHostname" -o tsv 2>/dev/null || echo "")
+          fi
 
           if [ -z "$HOSTNAME" ]; then
-            echo "⚠️  Could not retrieve hostname from Azure, using default pattern"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "ℹ️  PR build - using default hostname pattern (OIDC not available for PRs)"
+            else
+              echo "⚠️  Could not retrieve hostname from Azure, using default pattern"
+            fi
             HOSTNAME="${SWA_NAME}.azurestaticapps.net"
           fi
           
