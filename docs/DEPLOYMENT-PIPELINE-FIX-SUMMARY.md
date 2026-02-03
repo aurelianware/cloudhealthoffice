@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document summarizes the comprehensive fix to the Cloud Health Office deployment pipeline, implementing automated infrastructure provisioning, secure defaults, and streamlined production-only deployment.
+This document summarizes the comprehensive fix to the Cloud Health Office
+deployment pipeline, implementing automated infrastructure provisioning,
+secure defaults, and streamlined production-only deployment.
 
 **Date**: 2026-02-03  
 **Branch**: `copilot/fix-deployment-pipeline-issues`  
@@ -11,6 +13,7 @@ This document summarizes the comprehensive fix to the Cloud Health Office deploy
 ## Problem Statement
 
 The deployment pipeline was experiencing multiple failures:
+
 - Static Web App deployment failing (run #21613620392)
 - Production deployment failing (run #21613620326)
 - Missing or incorrectly configured secrets causing authentication failures
@@ -24,6 +27,7 @@ The deployment pipeline was experiencing multiple failures:
 **New Scripts Created**:
 
 #### `scripts/ensure-app-registration.sh`
+
 - **Purpose**: Automatically create or verify Azure AD app registration
 - **Features**:
   - Idempotent - safe to run multiple times
@@ -36,6 +40,7 @@ The deployment pipeline was experiencing multiple failures:
 - **Output**: Application (Client) ID
 
 #### `scripts/ensure-service-principal.sh`
+
 - **Purpose**: Automatically create service principal with required RBAC roles
 - **Features**:
   - Idempotent - safe to run multiple times
@@ -52,7 +57,7 @@ The deployment pipeline was experiencing multiple failures:
 
 **Three-Tier Secret Fallback Strategy**:
 
-```
+```text
 Priority 1: Azure Key Vault (cloudhealthoffice-deploy-kv)
     ↓ (if not found or empty)
 Priority 2: GitHub Secrets
@@ -61,12 +66,14 @@ Priority 3: Secure Defaults (placeholders)
 ```
 
 **Benefits**:
+
 - ✅ No deployment failures due to missing secrets
 - ✅ Seamless migration path to Key Vault
 - ✅ Maintains security while providing flexibility
 - ✅ Clear upgrade path documented
 
 **Default Values**:
+
 - `BASE_NAME`: `cloudhealthoffice`
 - `AZURE_RESOURCE_GROUP`: `rg-cloudhealthoffice-prod`
 - `LOCATION`: `eastus`
@@ -77,6 +84,7 @@ Priority 3: Secure Defaults (placeholders)
 ### 3. Production-Only Deployment
 
 **Simplified Workflow Structure**:
+
 - ✅ Single production environment only
 - ✅ DEV/UAT workflows disabled (renamed to `.disabled`)
 - ✅ Reduced complexity
@@ -84,9 +92,12 @@ Priority 3: Secure Defaults (placeholders)
 - ✅ Faster deployment cycles
 
 **Main Workflow**: `.github/workflows/deploy.yml`
-- **Triggers**: Push to `main` branch (paths: `infra/**`, `site/**`, `logicapps/**`)
+
+- **Triggers**: Push to `main` branch (paths: `infra/**`, `site/**`,
+  `logicapps/**`)
 - **Jobs**:
-  1. `setup-infrastructure` - Pre-deployment app registration and service principal setup
+  1. `setup-infrastructure` - Pre-deployment app registration and
+     service principal setup
   2. `pre-approval-checks` - Security validation
   3. `approval-gate` - Manual approval required
   4. `deploy` - Infrastructure and application deployment
@@ -96,6 +107,7 @@ Priority 3: Secure Defaults (placeholders)
 **Enhanced Deployment**:
 
 #### `.github/workflows/azure-static-web-apps-kind-wave-053ff9e1e.yml`
+
 - ✅ Deployment token retrieval with fallback
 - ✅ Auto-retry logic (attempts to retrieve from Azure if secret missing)
 - ✅ Deployment verification with 10 retries
@@ -103,6 +115,7 @@ Priority 3: Secure Defaults (placeholders)
 - ✅ Accepts HTTP 200, 301, 302 as success
 
 #### `.github/workflows/deploy-static-site.yml`
+
 - ✅ Deployment verification with 10 retries
 - ✅ 10-second intervals between retries
 - ✅ Enhanced error messages
@@ -111,12 +124,14 @@ Priority 3: Secure Defaults (placeholders)
 ### 5. Multi-Tenant Azure AD Authentication
 
 **Configuration**: `site/staticwebapp.config.json`
+
 - ✅ Multi-tenant support (`common/v2.0` endpoint)
 - ✅ Domain hint for organizations (`domain_hint=organizations`)
 - ✅ Proper redirect URIs configured
 - ✅ Response overrides for 401 (redirect to login)
 
 **Benefits over Azure B2C**:
+
 - Single app registration for all customers
 - Supports organizational accounts from any Azure AD tenant
 - Simplified configuration (no separate B2C tenant)
@@ -126,6 +141,7 @@ Priority 3: Secure Defaults (placeholders)
 ### 6. Deployment Key Vault Integration
 
 **Infrastructure**: `infra/main.bicep`
+
 - ✅ Integrated `modules/deployment-keyvault.bicep`
 - ✅ Deployed automatically with infrastructure
 - ✅ Premium SKU for HIPAA compliance
@@ -134,6 +150,7 @@ Priority 3: Secure Defaults (placeholders)
 - ✅ RBAC authorization enabled
 
 **Key Vault Features**:
+
 - Name: `cloudhealthoffice-deploy-kv`
 - Public network access: Enabled (for GitHub Actions)
 - Diagnostic logging: Configured (when Log Analytics available)
@@ -142,11 +159,13 @@ Priority 3: Secure Defaults (placeholders)
 ## Files Changed
 
 ### Created Files
+
 1. `scripts/ensure-app-registration.sh` (267 lines)
 2. `scripts/ensure-service-principal.sh` (281 lines)
 3. `docs/PRODUCTION-DEPLOYMENT-GUIDE.md` (456 lines)
 
 ### Modified Files
+
 1. `.github/workflows/deploy.yml` - Added setup-infrastructure job, secure defaults
 2. `.github/workflows/azure-static-web-apps-kind-wave-053ff9e1e.yml` - Retry logic
 3. `.github/workflows/deploy-static-site.yml` - Enhanced verification
@@ -155,37 +174,47 @@ Priority 3: Secure Defaults (placeholders)
 6. `README.md` - Updated Quick Start section
 
 ### Disabled Files
+
 1. `.github/workflows/deploy-dev.yml` → `.github/workflows/deploy-dev.yml.disabled`
 2. `.github/workflows/deploy-uat.yml` → `.github/workflows/deploy-uat.yml.disabled`
 
 ## Validation Results
 
 ### Bicep Template Compilation
+
 ```bash
 az bicep build --file infra/main.bicep --outfile /tmp/arm-template.json
 ```
+
 **Result**: ✅ Success (150KB ARM template, 1776 lines)  
 **Warnings**: Expected and acceptable (BCP318 - null checks, outputs with secrets)
 
 ### Script Syntax Validation
+
 ```bash
 bash -n scripts/ensure-app-registration.sh
 bash -n scripts/ensure-service-principal.sh
 ```
+
 **Result**: ✅ Both scripts pass syntax validation
 
 ### Workflow YAML Validation
+
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/deploy.yml'))"
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/azure-static-web-apps-kind-wave-053ff9e1e.yml'))"
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/deploy-static-site.yml'))"
 ```
+
 **Result**: ✅ All workflows have valid YAML syntax
 
 ### Logic App Workflow JSON Validation
+
 ```bash
-find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
+find logicapps/workflows -name "workflow.json" -exec \
+  jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
 ```
+
 **Result**: ✅ All 18 workflow JSON files valid
 
 ## Acceptance Criteria
@@ -220,6 +249,7 @@ All acceptance criteria from the problem statement have been met:
 ## Documentation
 
 ### New Documentation
+
 - `docs/PRODUCTION-DEPLOYMENT-GUIDE.md` - Comprehensive production deployment guide
   - Prerequisites and setup
   - Step-by-step deployment process
@@ -230,6 +260,7 @@ All acceptance criteria from the problem statement have been met:
   - Security considerations
 
 ### Updated Documentation
+
 - `README.md` - Updated Quick Start section with automated deployment instructions
 
 ## Deployment Time Estimates
@@ -247,6 +278,7 @@ All acceptance criteria from the problem statement have been met:
 ## Next Steps
 
 ### For Users
+
 1. Fork repository to GitHub account
 2. Configure GitHub Secrets (minimum: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID)
 3. Push to main branch or trigger workflow manually
@@ -254,6 +286,7 @@ All acceptance criteria from the problem statement have been met:
 5. Monitor deployment progress
 
 ### For Developers
+
 1. Test automated app registration script with test tenant
 2. Test service principal script with test subscription
 3. Verify Key Vault integration in deployed environment
@@ -261,6 +294,7 @@ All acceptance criteria from the problem statement have been met:
 5. Validate end-to-end workflow
 
 ### Future Enhancements
+
 1. Add automated secret rotation for Key Vault
 2. Implement Azure Policy for compliance enforcement
 3. Add more comprehensive health checks
@@ -270,12 +304,14 @@ All acceptance criteria from the problem statement have been met:
 ## Testing Recommendations
 
 ### Pre-Deployment Testing
+
 1. Validate Bicep templates compile (✅ Done)
 2. Test scripts in non-production environment
 3. Verify OIDC authentication works
 4. Test Key Vault secret retrieval
 
 ### Post-Deployment Testing
+
 1. Verify app registration created with correct configuration
 2. Verify service principal has correct RBAC roles
 3. Verify Key Vault deployed with correct settings
@@ -295,7 +331,8 @@ If issues arise during deployment:
 
 ## Conclusion
 
-This implementation successfully addresses all deployment pipeline issues while introducing significant improvements:
+This implementation successfully addresses all deployment pipeline issues
+while introducing significant improvements:
 
 - **Reduced complexity**: Single production environment
 - **Improved reliability**: Retry logic and secure defaults
@@ -303,7 +340,8 @@ This implementation successfully addresses all deployment pipeline issues while 
 - **Better automation**: App registration and service principal provisioning
 - **Clear documentation**: Comprehensive guides and troubleshooting
 
-The deployment pipeline is now production-ready with automated infrastructure provisioning, secure defaults, and comprehensive error handling.
+The deployment pipeline is now production-ready with automated infrastructure
+provisioning, secure defaults, and comprehensive error handling.
 
 ---
 
