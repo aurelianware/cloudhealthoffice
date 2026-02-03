@@ -1,0 +1,434 @@
+# Production Deployment Guide - Cloud Health Office
+
+## Overview
+
+This guide covers the simplified, production-only deployment pipeline for Cloud Health Office. The deployment has been streamlined to focus on a single production environment with automated infrastructure provisioning and secure defaults.
+
+## Key Features
+
+### 🔒 Automated Infrastructure Provisioning
+- **App Registration**: Automatically created if missing with multi-tenant support
+- **Service Principal**: Automatically created with required RBAC roles
+- **Key Vault**: Deployment Key Vault for storing secrets (SFTP credentials, API keys)
+
+### 🔐 Secure Defaults
+- **Three-tier secret fallback**: Azure Key Vault → GitHub Secrets → Secure placeholders
+- **No deployment failures**: Pipeline continues with secure defaults if secrets are missing
+- **OIDC authentication**: No long-lived credentials in GitHub Secrets
+
+### 🌐 Static Web App Deployment
+- **Automatic retry logic**: Up to 10 attempts with 10-15 second intervals
+- **Token retrieval fallback**: Uses GitHub Secrets or retrieves from Azure CLI
+- **Deployment verification**: Automatic health checks after deployment
+
+### ✅ Production-Only Focus
+- **Simplified workflow**: Single production deployment on main branch
+- **No environment drift**: DEV/UAT workflows disabled
+- **Single resource group**: `rg-cloudhealthoffice-prod`
+
+## Prerequisites
+
+### Required GitHub Secrets
+
+**Minimum Required (OIDC Authentication)**:
+- `AZURE_CLIENT_ID` - Application (Client) ID from Azure AD app registration
+- `AZURE_TENANT_ID` - Azure AD Tenant ID
+- `AZURE_SUBSCRIPTION_ID` - Azure Subscription ID
+
+**Optional (If not using Key Vault)**:
+- `SFTP_HOST` - SFTP server hostname
+- `SFTP_USERNAME` - SFTP username
+- `SFTP_PASSWORD` - SFTP password
+
+**Static Web App (Optional)**:
+- `AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E` - Deployment token (auto-retrieved if missing)
+
+### Required GitHub Variables
+
+**With Secure Defaults** (optional):
+- `AZURE_RG_NAME` - Default: `rg-cloudhealthoffice-prod`
+- `BASE_NAME` - Default: `cloudhealthoffice`
+- `AZURE_LOCATION` - Default: `eastus`
+- `AZURE_CONNECTOR_LOCATION` - Default: `eastus`
+- `IA_NAME` - Default: `prod-integration-account`
+- `SERVICE_BUS_NAME` - Default: `cloudhealthoffice-sb`
+- `STORAGE_SKU` - Default: `Standard_LRS`
+
+## Deployment Process
+
+### Step 1: Initial Setup (One-Time)
+
+If you don't have Azure credentials configured, run these scripts manually:
+
+```bash
+# 1. Login to Azure
+az login
+
+# 2. Set subscription
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+
+# 3. Create app registration
+./scripts/ensure-app-registration.sh "cloudhealthoffice-prod"
+
+# Output will include:
+# - Application (Client) ID
+# - Tenant ID
+# Save these for GitHub Secrets
+
+# 4. Create service principal with RBAC roles
+./scripts/ensure-service-principal.sh "APPLICATION_CLIENT_ID"
+
+# This will:
+# - Create service principal
+# - Assign Contributor role on resource group
+# - Assign Website Contributor on Static Web App (if exists)
+# - Assign Key Vault Secrets User on Key Vault (if exists)
+```
+
+### Step 2: Configure GitHub Secrets
+
+Add the following secrets in GitHub repository settings (Settings → Secrets and variables → Actions):
+
+1. Go to `https://github.com/aurelianware/cloudhealthoffice/settings/secrets/actions`
+2. Add secrets:
+   - `AZURE_CLIENT_ID`: Application ID from Step 1.3
+   - `AZURE_TENANT_ID`: Tenant ID from Step 1.3
+   - `AZURE_SUBSCRIPTION_ID`: Your Azure Subscription ID
+
+### Step 3: Trigger Deployment
+
+**Option 1: Push to main branch**
+```bash
+git push origin main
+```
+
+**Option 2: Manual workflow dispatch**
+1. Go to Actions tab in GitHub
+2. Select "Deploy Production - Cloud Health Office"
+3. Click "Run workflow"
+4. Select branch: `main`
+5. Click "Run workflow"
+
+### Step 4: Approve Deployment
+
+1. Wait for pre-approval security checks to complete
+2. Navigate to deployment run in Actions tab
+3. Review security scan results
+4. Click "Review deployments"
+5. Select "PROD-approval"
+6. Click "Approve and deploy"
+
+### Step 5: Monitor Deployment
+
+The deployment includes these stages:
+
+1. **Setup Infrastructure** (5-10 minutes)
+   - Ensures app registration exists
+   - Ensures service principal exists with RBAC roles
+   
+2. **Pre-Approval Checks** (2-3 minutes)
+   - Security scans
+   - Validation checks
+   
+3. **Approval Gate**
+   - Manual approval required (wait for reviewer)
+   
+4. **Deploy** (15-30 minutes)
+   - Retrieve secrets (Key Vault → GitHub Secrets → defaults)
+   - Deploy infrastructure via Bicep
+   - Package and deploy Logic App workflows
+   - Deploy Static Web App
+   - Run health checks
+
+## Automated Infrastructure
+
+### App Registration
+
+**Created if missing**:
+- Display Name: `cloudhealthoffice-prod`
+- Sign-in Audience: Multi-tenant (`AzureADMultipleOrgs`)
+- Redirect URIs:
+  - `https://cloudhealthoffice.com/.auth/login/aad/callback`
+  - `https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback`
+  - `http://localhost:3000/.auth/login/aad/callback` (dev)
+- API Permissions:
+  - Microsoft Graph: User.Read, openid, profile, email
+- Federated Credentials:
+  - GitHub Actions (main branch): `repo:aurelianware/cloudhealthoffice:ref:refs/heads/main`
+  - GitHub Actions (pull requests): `repo:aurelianware/cloudhealthoffice:pull_request`
+
+### Service Principal
+
+**Created if missing**:
+- Based on app registration above
+- RBAC Roles:
+  - **Contributor** on resource group `rg-cloudhealthoffice-prod`
+  - **Website Contributor** on Static Web App (if exists)
+  - **Key Vault Secrets User** on deployment Key Vault (if exists)
+
+### Deployment Key Vault
+
+**Deployed by infrastructure**:
+- Name: `cloudhealthoffice-deploy-kv`
+- SKU: Premium (HIPAA-compliant with HSM-backed keys)
+- Soft Delete: Enabled (90-day retention)
+- Purge Protection: Enabled
+- Public Network Access: Enabled (for GitHub Actions)
+- RBAC Authorization: Enabled
+
+**Expected Secrets**:
+- `sftp-host`: SFTP server hostname
+- `sftp-username`: SFTP username
+- `sftp-password`: SFTP password
+
+## Secret Management Strategy
+
+### Three-Tier Fallback
+
+```
+Priority 1: Azure Key Vault (cloudhealthoffice-deploy-kv)
+    ↓ (if not found or empty)
+Priority 2: GitHub Secrets
+    ↓ (if not configured)
+Priority 3: Secure Defaults (placeholders for non-production)
+```
+
+### Migrating to Key Vault
+
+**Step 1: Deploy Key Vault** (automatic in infrastructure deployment)
+
+**Step 2: Populate secrets**
+```bash
+# Set Key Vault name
+KV_NAME="cloudhealthoffice-deploy-kv"
+
+# Add SFTP secrets
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-host --value "sftp.example.com"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-username --value "username"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-password --value "password"
+```
+
+**Step 3: Grant service principal access** (automatic in setup-infrastructure job)
+
+**Step 4: Remove GitHub Secrets** (optional)
+Once Key Vault is populated and tested, you can remove SFTP secrets from GitHub Secrets.
+
+## Static Web App Deployment
+
+### Multi-Tenant Authentication
+
+The Static Web App is configured for multi-tenant Azure AD authentication:
+
+```json
+{
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/common/v2.0",
+          "clientIdSettingName": "AZURE_AD_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_AD_CLIENT_SECRET"
+        },
+        "login": {
+          "loginParameters": ["domain_hint=organizations"]
+        }
+      }
+    }
+  }
+}
+```
+
+**Benefits**:
+- Single app registration for all customers
+- Supports organizational accounts from any Azure AD tenant
+- No separate B2C tenant needed
+- Better for SaaS/multi-customer scenarios
+
+### Configuration
+
+After deployment, configure the Static Web App in Azure Portal:
+
+1. Navigate to Static Web App: `cloudhealthoffice-swa`
+2. Go to Configuration → Application settings
+3. Add settings:
+   - `AZURE_AD_CLIENT_ID`: Application ID from app registration
+   - `AZURE_AD_CLIENT_SECRET`: Generate client secret in app registration
+
+## Deployed Resources
+
+### Resource Group: rg-cloudhealthoffice-prod
+
+| Resource | Type | Purpose |
+|----------|------|---------|
+| `cloudhealthoffice-deploy-kv` | Key Vault | Deployment secrets storage |
+| `stagingXXXXXXXX` | Storage Account | HIPAA attachments (ADLS Gen2) |
+| `cloudhealthoffice-sb` | Service Bus | EDI transaction messaging |
+| `cloudhealthoffice-la` | Logic App Standard | EDI workflow processing |
+| `cloudhealthoffice-swa` | Static Web App | Portal frontend |
+| `cloudhealthoffice-ai` | Application Insights | Monitoring and telemetry |
+| `prod-integration-account` | Integration Account | X12 schemas and agreements |
+
+## Troubleshooting
+
+### Deployment Failures
+
+**Issue: App registration creation failed**
+```
+Error: Insufficient privileges to complete the operation
+```
+
+**Solution**: Ensure you have permissions to create app registrations in Azure AD
+```bash
+# Check current user permissions
+az ad signed-in-user show --query "userPrincipalName"
+
+# Required role: Application Administrator or Global Administrator
+```
+
+---
+
+**Issue: Service principal creation failed**
+```
+Error: The service principal does not exist
+```
+
+**Solution**: Create service principal manually
+```bash
+az ad sp create --id "YOUR_APP_CLIENT_ID"
+```
+
+---
+
+**Issue: Key Vault secrets not found**
+```
+Warning: Key Vault 'cloudhealthoffice-deploy-kv' not found
+```
+
+**Solution**: This is expected on first deployment. The workflow will use GitHub Secrets or defaults. After infrastructure deployment completes, populate Key Vault with secrets.
+
+---
+
+**Issue: Static Web App deployment token not found**
+```
+Error: Unable to retrieve deployment token
+```
+
+**Solution**: Add GitHub Secret `AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E`
+```bash
+# Get deployment token from Azure
+az staticwebapp secrets list \
+  --name "cloudhealthoffice-swa" \
+  --resource-group "rg-cloudhealthoffice-prod" \
+  --query "properties.apiKey" -o tsv
+```
+
+---
+
+**Issue: Static Web App returns HTTP 404 after deployment**
+
+**Solution**: This is normal for new deployments. The site typically needs 2-5 minutes to propagate. The deployment verification includes automatic retries.
+
+## Health Checks
+
+### Post-Deployment Verification
+
+The workflow automatically performs health checks:
+
+1. **Logic App Status**: Verifies app is in "Running" state
+2. **Workflow Count**: Checks for 4 workflows (ingest275, ingest278, replay278, rfai277)
+3. **Application Insights**: Verifies telemetry connection
+4. **Storage Account**: Confirms ADLS Gen2 storage exists
+5. **Service Bus**: Validates namespace and topics exist
+
+### Manual Verification
+
+```bash
+# Set variables
+RG_NAME="rg-cloudhealthoffice-prod"
+BASE_NAME="cloudhealthoffice"
+
+# Check Logic App
+az webapp show -g "$RG_NAME" -n "${BASE_NAME}-la" --query "state" -o tsv
+
+# Check Static Web App
+az staticwebapp show -n "${BASE_NAME}-swa" -g "$RG_NAME" --query "defaultHostname" -o tsv
+
+# Check Key Vault
+az keyvault show -n "${BASE_NAME}-deploy-kv" --query "properties.vaultUri" -o tsv
+
+# Check Service Bus
+az servicebus namespace show -g "$RG_NAME" -n "${BASE_NAME}-sb" --query "provisioningState" -o tsv
+```
+
+## Rollback
+
+### Automated Rollback Options
+
+**Option 1: Re-run previous successful deployment**
+1. Go to Actions tab
+2. Find last successful deployment run
+3. Click "Re-run all jobs"
+
+**Option 2: Revert to last known good commit**
+```bash
+# Find last good commit
+git log --oneline
+
+# Revert to specific commit
+git revert <bad-commit-sha>
+git push origin main
+```
+
+**Option 3: Manual rollback via workflow_dispatch**
+1. Go to Actions → Deploy Production
+2. Click "Run workflow"
+3. Select a previous commit SHA or tag
+
+### Manual Rollback
+
+If automation fails, use Azure Portal:
+
+1. Navigate to resource group `rg-cloudhealthoffice-prod`
+2. Select "Deployments" in left menu
+3. Find last successful deployment
+4. Click "Redeploy"
+
+## Security Considerations
+
+### HIPAA Compliance
+- All storage encrypted at rest (TLS 1.2 minimum)
+- Premium Key Vault with HSM-backed keys
+- Soft delete and purge protection enabled
+- Audit logging to Application Insights
+- RBAC-based access control
+
+### Secret Rotation
+Key Vault facilitates easier secret rotation:
+1. Update secret in Key Vault
+2. No workflow changes required
+3. Secrets automatically picked up on next deployment
+
+### Least Privilege
+Service principal only has required roles:
+- **Contributor** (infrastructure deployment only)
+- **Website Contributor** (Static Web App deployment only)
+- **Key Vault Secrets User** (read secrets only, cannot manage)
+
+## Support
+
+### Documentation
+- Main README: [README.md](../README.md)
+- Deployment Secrets: [DEPLOYMENT-SECRETS-SETUP.md](../DEPLOYMENT-SECRETS-SETUP.md)
+- Architecture: [ARCHITECTURE.md](../ARCHITECTURE.md)
+
+### Getting Help
+1. Review deployment logs in GitHub Actions
+2. Check Application Insights for runtime errors
+3. Review Azure Portal resource health
+4. Check [TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
+
+### Escalation
+- Infrastructure issues: DevOps team
+- Logic App workflows: Application team
+- Security concerns: Security team
+- HIPAA compliance: Compliance officer
