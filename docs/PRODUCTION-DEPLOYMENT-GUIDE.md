@@ -237,7 +237,8 @@ az keyvault secret set --vault-name "$KV_NAME" --name sftp-password --value "pas
 **Step 3: Grant service principal access** (automatic in setup-infrastructure job)
 
 **Step 4: Remove GitHub Secrets** (optional)
-Once Key Vault is populated and tested, you can remove SFTP secrets from GitHub Secrets.
+Once Key Vault is populated and tested, you can remove SFTP secrets from
+GitHub Secrets.
 
 ## Static Web App Deployment
 
@@ -286,14 +287,14 @@ After deployment, configure the Static Web App in Azure Portal:
 ### Resource Group: rg-cloudhealthoffice-prod
 
 | Resource | Type | Purpose |
-|----------|------|---------|
+| -------- | ---- | ------- |
 | `cloudhealthoffice-deploy-kv` | Key Vault | Deployment secrets storage |
 | `stagingXXXXXXXX` | Storage Account | HIPAA attachments (ADLS Gen2) |
 | `cloudhealthoffice-sb` | Service Bus | EDI transaction messaging |
 | `cloudhealthoffice-la` | Logic App Standard | EDI workflow processing |
 | `cloudhealthoffice-swa` | Static Web App | Portal frontend |
 | `cloudhealthoffice-ai` | Application Insights | Monitoring and telemetry |
-| `prod-integration-account` | Integration Account | X12 schemas and agreements |
+| `prod-integration-account` | Integration Account | X12 schemas/agreements |
 
 ## Troubleshooting
 
@@ -375,7 +376,8 @@ retries.
 The workflow automatically performs health checks:
 
 1. **Logic App Status**: Verifies app is in "Running" state
-2. **Workflow Count**: Checks for 4 workflows (ingest275, ingest278, replay278, rfai277)
+2. **Workflow Count**: Checks for 4 workflows (ingest275, ingest278,
+   replay278, rfai277)
 3. **Application Insights**: Verifies telemetry connection
 4. **Storage Account**: Confirms ADLS Gen2 storage exists
 5. **Service Bus**: Validates namespace and topics exist
