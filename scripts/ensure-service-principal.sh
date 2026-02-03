@@ -27,8 +27,39 @@ NC='\033[0m' # No Color
 # Script parameters
 APP_ID="${1:-}"
 SUBSCRIPTION_ID="${2:-}"
-RESOURCE_GROUP="${3:-rg-cloudhealthoffice-prod}"
-BASE_NAME="${4:-cloudhealthoffice}"
+RESOURCE_GROUP_PARAM="${3:-}"
+BASE_NAME_PARAM="${4:-}"
+KEY_VAULT_NAME="${5:-}"
+
+# =============================================================================
+# Helper Functions for Key Vault Configuration
+# =============================================================================
+
+get_or_set_vault_config() {
+    local vault_name="$1"
+    local secret_name="$2"
+    local default_value="$3"
+    local description="$4"
+    
+    # Try to get the value from Key Vault
+    local value=$(az keyvault secret show --vault-name "$vault_name" --name "$secret_name" --query "value" -o tsv 2>/dev/null || echo "")
+    
+    if [ -z "$value" ]; then
+        echo -e "${YELLOW}⚠️  Config '$secret_name' not found in Key Vault${NC}"
+        echo -e "${BLUE}Setting default value for $description: $default_value${NC}"
+        
+        # Set the default value in Key Vault
+        az keyvault secret set --vault-name "$vault_name" --name "$secret_name" --value "$default_value" --description "$description" >/dev/null 2>&1 || {
+            echo -e "${YELLOW}⚠️  Could not set in Key Vault, using default${NC}"
+        }
+        
+        value="$default_value"
+    else
+        echo -e "${GREEN}✓${NC} Using config from Key Vault: $description"
+    fi
+    
+    echo "$value"
+}
 
 # Banner
 echo -e "${BLUE}=========================================${NC}"
@@ -39,7 +70,7 @@ echo ""
 # Validate parameters
 if [ -z "$APP_ID" ]; then
     echo -e "${RED}❌ Error: Application ID is required${NC}"
-    echo "Usage: $0 <app-id> [subscription-id] [resource-group] [base-name]"
+    echo "Usage: $0 <app-id> [subscription-id] [resource-group] [base-name] [key-vault-name]"
     echo ""
     echo "Example:"
     echo "  $0 12345678-1234-1234-1234-123456789abc"
@@ -57,6 +88,34 @@ fi
 if [ -z "$SUBSCRIPTION_ID" ]; then
     SUBSCRIPTION_ID=$(az account show --query id -o tsv)
     echo -e "${BLUE}Using current subscription: ${SUBSCRIPTION_ID}${NC}"
+fi
+
+# Determine Key Vault name if not provided
+if [ -z "$KEY_VAULT_NAME" ]; then
+    # Try to find a deployment key vault
+    KEY_VAULT_NAME=$(az keyvault list --query "[?contains(name, 'deploy-kv')].name | [0]" -o tsv 2>/dev/null || echo "")
+    
+    if [ -z "$KEY_VAULT_NAME" ]; then
+        echo -e "${YELLOW}⚠️  No deployment Key Vault found${NC}"
+        echo -e "${YELLOW}   Using hardcoded defaults (will not persist)${NC}"
+        USE_VAULT=false
+    else
+        echo -e "${GREEN}✓${NC} Using Key Vault: $KEY_VAULT_NAME"
+        USE_VAULT=true
+    fi
+else
+    USE_VAULT=true
+    echo -e "${GREEN}✓${NC} Using Key Vault: $KEY_VAULT_NAME"
+fi
+
+# Get configuration values from vault or use defaults
+if [ "$USE_VAULT" = true ]; then
+    RESOURCE_GROUP=$(get_or_set_vault_config "$KEY_VAULT_NAME" "resource-group-name" "${RESOURCE_GROUP_PARAM:-rg-cloudhealthoffice-prod}" "Azure Resource Group Name")
+    BASE_NAME=$(get_or_set_vault_config "$KEY_VAULT_NAME" "base-name" "${BASE_NAME_PARAM:-cloudhealthoffice}" "Base Name for Resources")
+else
+    RESOURCE_GROUP="${RESOURCE_GROUP_PARAM:-rg-cloudhealthoffice-prod}"
+    BASE_NAME="${BASE_NAME_PARAM:-cloudhealthoffice}"
+    echo -e "${YELLOW}⚠️  Using hardcoded defaults (no Key Vault)${NC}"
 fi
 
 echo "Application ID: $APP_ID"
