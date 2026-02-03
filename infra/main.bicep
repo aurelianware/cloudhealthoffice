@@ -77,7 +77,7 @@ module deploymentKeyVault 'modules/deployment-keyvault.bicep' = if (enableDeploy
     enablePurgeProtection: true
     publicNetworkAccess: 'Enabled'  // For GitHub Actions access
     networkAclsDefaultAction: 'Allow'
-    logAnalyticsWorkspaceId: appInsights.id
+    logAnalyticsWorkspaceId: ''  // Will be configured post-deployment if needed
   }
 }
 
