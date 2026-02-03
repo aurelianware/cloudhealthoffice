@@ -35,6 +35,7 @@
   "dependencies": {
     "@azure/cosmos": "^4.2.0",
     "@azure/identity": "^4.13.0",
+    "@azure/keyvault-secrets": "^4.9.0",
     "@azure/storage-blob": "^12.29.1",
     "kafkajs": "^2.2.4",
     "uuid": "^11.0.0"
