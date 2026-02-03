@@ -63,13 +63,18 @@ jobs:
             # Parse and display coverage percentages (single file read)
             python3 <<'EOF'
           import json
-          with open('coverage/coverage-summary.json') as f:
-              data = json.load(f)
-              total = data['total']
-              print(f"Lines:      {total['lines']['pct']}%")
-              print(f"Statements: {total['statements']['pct']}%")
-              print(f"Functions:  {total['functions']['pct']}%")
-              print(f"Branches:   {total['branches']['pct']}%")
+          import sys
+          try:
+              with open('coverage/coverage-summary.json') as f:
+                  data = json.load(f)
+                  total = data['total']
+                  print(f"Lines:      {total['lines']['pct']}%")
+                  print(f"Statements: {total['statements']['pct']}%")
+                  print(f"Functions:  {total['functions']['pct']}%")
+                  print(f"Branches:   {total['branches']['pct']}%")
+          except (KeyError, json.JSONDecodeError) as e:
+              print(f"⚠️  Error parsing coverage summary: {e}", file=sys.stderr)
+              sys.exit(1)
           EOF
             echo ""
             echo "📤 Report uploaded to Codecov"
