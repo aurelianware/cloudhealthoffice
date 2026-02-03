@@ -61,7 +61,7 @@ jobs:
         with:
           configuration-path: .github/auto-assign.yml
 
-  # NOTE: PR title validation (conventional commits) has been removed from this initial PR
-  # to avoid self-blocking. Once the team adopts conventional commits format, consider
-  # adding a separate workflow with amannn/action-semantic-pull-request@v5
-  # See: https://www.conventionalcommits.org/
+# NOTE: PR title validation (conventional commits) has been removed from this initial PR
+# to avoid self-blocking. Once the team adopts conventional commits format, consider
+# adding a separate workflow with amannn/action-semantic-pull-request@v5
+# See: https://www.conventionalcommits.org/

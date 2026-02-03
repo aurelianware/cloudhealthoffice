@@ -417,20 +417,20 @@ jobs:
 
           MAX_RETRIES=10
           RETRY_DELAY=10
-          
+
           for i in $(seq 1 "$MAX_RETRIES"); do
             echo "⏳ Verification attempt $i/$MAX_RETRIES..."
-            
+
             # Test the endpoint
             HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
-            
+
             if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "301" ] || [ "$HTTP_STATUS" = "302" ]; then
               echo "✅ Deployment verified - HTTP $HTTP_STATUS"
               echo ""
               echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
               exit 0
             fi
-            
+
             if [ $i -lt $MAX_RETRIES ]; then
               echo "   HTTP $HTTP_STATUS - waiting ${RETRY_DELAY}s before retry..."
               sleep $RETRY_DELAY
@@ -441,7 +441,7 @@ jobs:
           echo "   This is normal for new deployments. The site will be available shortly."
           echo ""
           echo "🌐 Check your site at: https://$SWA_HOSTNAME"
-          
+
           # Don't fail - deployment may be successful but propagating
           exit 0
 
