@@ -61,21 +61,7 @@ jobs:
             echo "✅ Coverage data generated successfully"
             echo ""
             # Parse and display coverage percentages (single file read)
-            python3 <<'EOF'
-          import json
-          import sys
-          try:
-              with open('coverage/coverage-summary.json') as f:
-                  data = json.load(f)
-                  total = data['total']
-                  print(f"Lines:      {total['lines']['pct']}%")
-                  print(f"Statements: {total['statements']['pct']}%")
-                  print(f"Functions:  {total['functions']['pct']}%")
-                  print(f"Branches:   {total['branches']['pct']}%")
-          except (KeyError, json.JSONDecodeError) as e:
-              print(f"⚠️  Error parsing coverage summary: {e}", file=sys.stderr)
-              sys.exit(1)
-          EOF
+            node -e "const fs = require('fs'); try { const raw = fs.readFileSync('coverage/coverage-summary.json', 'utf8'); const data = JSON.parse(raw); const total = data.total; console.log('Lines:      ' + total.lines.pct + '%'); console.log('Statements: ' + total.statements.pct + '%'); console.log('Functions:  ' + total.functions.pct + '%'); console.log('Branches:   ' + total.branches.pct + '%'); } catch (e) { console.error('⚠️  Error parsing coverage summary: ' + e); process.exit(1); }"
             echo ""
             echo "📤 Report uploaded to Codecov"
           else
