@@ -48,6 +48,10 @@ param backendBaseUrl string = 'https://claims-backend-api.example.com'
 @secure()
 param backendApiToken string = ''
 
+// Deployment Key Vault parameters
+param enableDeploymentKeyVault bool = true
+param deploymentKeyVaultName string = '${baseName}-deploy-kv'
+
 // =========================
  // Variables
 var storageAccountName = 'staging${uniqueString(resourceGroup().id)}'
@@ -56,6 +60,26 @@ var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].v
 
 // IA name resolved whether creating new or reusing existing
 var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
+
+// =========================
+// Deployment Key Vault (for storing deployment secrets)
+// =========================
+module deploymentKeyVault 'modules/deployment-keyvault.bicep' = if (enableDeploymentKeyVault) {
+  name: 'deployment-keyvault'
+  params: {
+    keyVaultName: deploymentKeyVaultName
+    location: location
+    environment: 'PROD'
+    skuName: 'premium'
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'  // For GitHub Actions access
+    networkAclsDefaultAction: 'Allow'
+    logAnalyticsWorkspaceId: ''  // Will be configured post-deployment if needed
+  }
+}
 
 
 // =========================
@@ -526,3 +550,8 @@ output cosmosDbConnectionId string = enableCosmosDb ? connCosmosDb.id : 'disable
 output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'
 output claimRiskScorerFunctionUrl string = enableClaimRiskScorer ? 'https://${claimRiskScorerFunc.properties.defaultHostName}' : 'disabled'
 output edi837ClaimsTopicName string = sbTopicEdi837Claims.name
+
+// Deployment Key Vault outputs
+output deploymentKeyVaultName string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultName : 'disabled'
+output deploymentKeyVaultId string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultId : 'disabled'
+output deploymentKeyVaultUri string = enableDeploymentKeyVault ? deploymentKeyVault.outputs.keyVaultUri : 'disabled'
