@@ -20,6 +20,8 @@ import { ClaimsScrubberService } from './claims-scrubber';
 import { autoConfigureKeyVault, commonSecretMappings } from './keyvault-config';
 
 // Auto-configure Key Vault on startup (before loading configuration)
+// Note: This is a module-level flag suitable for Node.js single-threaded execution
+// The service is designed to be initialized once on startup, not concurrently
 let keyVaultConfigured = false;
 
 // Default configuration (can be overridden by environment variables)

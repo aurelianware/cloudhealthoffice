@@ -186,7 +186,7 @@ export async function autoConfigureKeyVault(mappings: SecretMapping[]): Promise<
 }
 
 /**
- * Common secret mappings for Cloud Health Office services
+ * Common secret mappings for Cloud Health Office eligibility service
  */
 export const commonSecretMappings: SecretMapping[] = [
   // Cosmos DB
@@ -201,7 +201,7 @@ export const commonSecretMappings: SecretMapping[] = [
     required: false
   },
   
-  // Storage
+  // Storage (for caching/archival if needed)
   {
     envVar: 'STORAGE_ACCOUNT_NAME',
     secretName: 'storage-account-name',
@@ -237,20 +237,10 @@ export const commonSecretMappings: SecretMapping[] = [
     required: false
   },
   
-  // Kafka
+  // FHIR Server
   {
-    envVar: 'KAFKA_BOOTSTRAP_SERVERS',
-    secretName: 'kafka-bootstrap-servers',
-    required: false
-  },
-  {
-    envVar: 'KAFKA_SASL_USERNAME',
-    secretName: 'kafka-sasl-username',
-    required: false
-  },
-  {
-    envVar: 'KAFKA_SASL_PASSWORD',
-    secretName: 'kafka-sasl-password',
+    envVar: 'FHIR_SERVER_URL',
+    secretName: 'fhir-server-url',
     required: false
   }
 ];
