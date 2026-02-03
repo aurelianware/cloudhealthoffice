@@ -331,6 +331,79 @@ az ad app federated-credential update \
   }"
 ```
 
+### CI/CD Pipeline Failures
+
+#### Issue: TruffleHog "BASE and HEAD commits are the same"
+
+**Error Message:**
+```
+##[error]BASE and HEAD commits are the same. TruffleHog won't scan anything.
+```
+
+**Cause:** Pre-approval security check workflow has conflicting TruffleHog configuration where both BASE and HEAD resolve to the same commit SHA on push events to main branch.
+
+**Impact:** All production deployments fail at the pre-approval-checks phase, blocking deployments completely.
+
+**Symptoms:**
+- Deployments to main branch fail immediately after push
+- Error occurs in `pre-approval-checks / security-checks` job
+- TruffleHog exits with code 1
+- Deployment never reaches infrastructure deployment phase
+
+**Solution:**
+
+The fix requires updating `.github/workflows/pre-approval-checks.yml`:
+
+**Before (broken):**
+```yaml
+- name: Security Scan - Secrets Detection
+  uses: trufflesecurity/trufflehog@main
+  with:
+    path: ./
+    base: ${{ github.event.repository.default_branch }}
+    head: HEAD
+    extra_args: --json --only-verified
+```
+
+**After (fixed):**
+```yaml
+- name: Security Scan - Secrets Detection
+  uses: trufflesecurity/trufflehog@main
+  with:
+    path: ./
+    base: ${{ github.event.before || '' }}
+    head: ${{ github.sha }}
+    extra_args: --json --only-verified
+```
+
+**Why this works:**
+- `github.event.before` - SHA of the commit before the push (parent commit)
+- `github.sha` - SHA of the current commit being deployed
+- For push events, these are guaranteed to be different
+- If `before` is empty (first push to branch), falls back to empty string which TruffleHog handles gracefully by scanning entire history
+
+**Verification:**
+```bash
+# After applying fix, verify workflow passes
+# 1. Push to main branch
+git push origin main
+
+# 2. Monitor workflow
+gh run watch
+
+# 3. Expected: pre-approval-checks job should pass
+# 4. TruffleHog will scan commits between before and after SHA
+```
+
+**Historical Context:**
+- Issue introduced when using branch name as base instead of commit SHA
+- On push events, both `main` branch and `HEAD` resolve to same commit
+- TruffleHog requires different SHAs to compute diff for scanning
+
+**Related Files:**
+- `.github/workflows/pre-approval-checks.yml` - Security checks workflow
+- `.github/workflows/deploy.yml` - Main production deployment workflow
+
 ### Infrastructure Deployment Failures
 
 #### Issue: Insufficient Quota
