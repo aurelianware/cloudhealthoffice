@@ -184,3 +184,6 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E }}
           action: "close"
+        # Continue on error - preview environment cleanup is not critical
+        # This may fail if the deployment token is not set or invalid
+        continue-on-error: true
