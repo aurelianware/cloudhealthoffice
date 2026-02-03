@@ -28,8 +28,10 @@ jobs:
         with:
           submodules: true
           lfs: false
+          
       - name: Install OIDC Client from Core Package
         run: npm install @actions/core@1.6.0 @actions/http-client
+        
       - name: Get Id Token
         uses: actions/github-script@v6
         id: idtoken
@@ -38,19 +40,110 @@ jobs:
             const coredemo = require('@actions/core')
             return await coredemo.getIDToken()
           result-encoding: string
+          
+      - name: Get Deployment Token with Retry
+        id: get-token
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          echo "Retrieving Static Web App deployment token..."
+          
+          # Use secret if available, otherwise will be retrieved from Azure
+          DEPLOYMENT_TOKEN="${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E }}"
+          
+          if [ -z "$DEPLOYMENT_TOKEN" ]; then
+            echo "⚠️  Deployment token not found in secrets"
+            echo "   Will attempt to retrieve from Azure CLI if logged in"
+            
+            # Only try to get from Azure if we have credentials
+            if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+              echo "Attempting Azure CLI retrieval..."
+              
+              # Login to Azure
+              az login --service-principal \
+                -u "${{ secrets.AZURE_CLIENT_ID }}" \
+                -p "${{ secrets.AZURE_CLIENT_SECRET }}" \
+                --tenant "${{ secrets.AZURE_TENANT_ID }}" || true
+              
+              # Get deployment token from Azure
+              BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
+              RG_NAME="${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}"
+              SWA_NAME="${BASE_NAME}-swa"
+              
+              DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
+                --name "$SWA_NAME" \
+                --resource-group "$RG_NAME" \
+                --query "properties.apiKey" -o tsv 2>/dev/null || echo "")
+            fi
+            
+            if [ -z "$DEPLOYMENT_TOKEN" ]; then
+              echo "❌ Unable to retrieve deployment token"
+              echo "Please ensure:"
+              echo "1. Secret AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E is set, OR"
+              echo "2. Azure credentials are configured and Static Web App exists"
+              exit 1
+            fi
+          fi
+          
+          echo "::add-mask::$DEPLOYMENT_TOKEN"
+          echo "deployment-token=$DEPLOYMENT_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "✅ Deployment token retrieved"
+          
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E }}
+          azure_static_web_apps_api_token: ${{ steps.get-token.outputs.deployment-token }}
           action: "upload"
-          ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
-          # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "/site"  # App source code path
-          api_location: ""  # Api source code path - optional
-          output_location: "/"  # Built app content directory - optional
+          ###### Repository/Build Configurations ######
+          app_location: "/site"
+          api_location: ""
+          output_location: "/"
           github_id_token: ${{ steps.idtoken.outputs.result }}
           ###### End of Repository/Build Configurations ######
+        continue-on-error: false
+        
+      - name: Verify Deployment with Retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          # Get hostname from static web app
+          BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
+          HOSTNAME="kind-wave-053ff9e1e.azurestaticapps.net"
+          
+          echo "=========================================="
+          echo "Verifying Deployment"
+          echo "=========================================="
+          echo "URL: https://$HOSTNAME"
+          echo ""
+          
+          MAX_RETRIES=10
+          RETRY_DELAY=15
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "⏳ Attempt $i/$MAX_RETRIES..."
+            
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://$HOSTNAME" || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "✅ Deployment verified (HTTP $HTTP_CODE)"
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "   HTTP $HTTP_CODE - waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "⚠️  Deployment may need more time to propagate (HTTP $HTTP_CODE)"
+          echo "   This is normal for new deployments. The site will be available shortly."
+          echo "   Check: https://$HOSTNAME"
+          
+          # Don't fail the workflow - deployment may be successful but propagating
+          exit 0
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

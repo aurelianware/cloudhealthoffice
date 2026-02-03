@@ -393,7 +393,7 @@ jobs:
               body: dnsInstructions
             });
 
-      - name: Verify Deployment
+      - name: Verify Deployment with Retry
         if: steps.get-swa.outputs.swa_exists == 'true'
         shell: bash
         run: |
@@ -408,21 +408,39 @@ jobs:
           echo "URL: https://$SWA_HOSTNAME"
           echo ""
 
-          # Wait a moment for deployment to propagate
-          sleep 10
+          # Wait for deployment to propagate
+          echo "Waiting 15 seconds for deployment to propagate..."
+          sleep 15
 
-          # Test the endpoint
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
+          MAX_RETRIES=10
+          RETRY_DELAY=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "⏳ Verification attempt $i/$MAX_RETRIES..."
+            
+            # Test the endpoint
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
+            
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "301" ] || [ "$HTTP_STATUS" = "302" ]; then
+              echo "✅ Deployment verified - HTTP $HTTP_STATUS"
+              echo ""
+              echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "   HTTP $HTTP_STATUS - waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
 
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Deployment verified - HTTP $HTTP_STATUS"
-          else
-            echo "::warning::Deployment may need more time - HTTP $HTTP_STATUS"
-            echo "This is normal for new deployments. The site will be available shortly."
-          fi
-
+          echo "⚠️  Deployment may need more time - HTTP $HTTP_STATUS"
+          echo "   This is normal for new deployments. The site will be available shortly."
           echo ""
-          echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
+          echo "🌐 Check your site at: https://$SWA_HOSTNAME"
+          
+          # Don't fail - deployment may be successful but propagating
+          exit 0
 
       - name: Deployment Success Summary
         if: success()

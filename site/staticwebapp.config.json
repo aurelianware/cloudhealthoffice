@@ -7,6 +7,9 @@
           "clientIdSettingName": "AZURE_AD_CLIENT_ID",
           "clientSecretSettingName": "AZURE_AD_CLIENT_SECRET"
         },
+        "login": {
+          "loginParameters": ["domain_hint=organizations"]
+        },
         "userDetailsClaim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
       }
     }
