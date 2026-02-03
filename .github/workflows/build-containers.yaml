@@ -26,7 +26,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository_owner }}/cloudhealthoffice
+  IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
   build-containers:
