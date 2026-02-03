@@ -31,8 +31,35 @@ INFO="ℹ️"
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_OWNER="aurelianware"
-REPO_NAME="cloudhealthoffice"
+
+# Auto-detect repository info from git remote or use environment variables
+if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+    # Running in GitHub Actions - use GITHUB_REPOSITORY (format: owner/repo)
+    REPO_OWNER="${GITHUB_REPOSITORY%%/*}"
+    REPO_NAME="${GITHUB_REPOSITORY##*/}"
+elif git remote get-url origin &>/dev/null; then
+    # Extract from git remote URL
+    REMOTE_URL=$(git remote get-url origin)
+    # Handle both HTTPS and SSH URLs
+    if [[ "$REMOTE_URL" == *"github.com"* ]]; then
+        # Remove .git suffix if present
+        REMOTE_URL="${REMOTE_URL%.git}"
+        # Extract owner/repo from URL
+        if [[ "$REMOTE_URL" == git@* ]]; then
+            # SSH format: git@github.com:owner/repo
+            REPO_PATH="${REMOTE_URL#*:}"
+        else
+            # HTTPS format: https://github.com/owner/repo
+            REPO_PATH="${REMOTE_URL#*github.com/}"
+        fi
+        REPO_OWNER="${REPO_PATH%%/*}"
+        REPO_NAME="${REPO_PATH##*/}"
+    fi
+fi
+
+# Fallback to defaults if auto-detection failed
+REPO_OWNER="${REPO_OWNER:-aurelianware}"
+REPO_NAME="${REPO_NAME:-cloudhealthoffice}"
 EXPECTED_BRANCH="main"
 
 # Variables
@@ -273,7 +300,7 @@ validate_azure_app() {
     else
         print_error "Application not found with ID: $APP_ID"
         print_info "Create application with:"
-        echo "  az ad app create --display-name 'cloudhealthoffice-static-site-deployment'"
+        echo "  az ad app create --display-name '${REPO_NAME}-static-site-deployment'"
         return
     fi
 
@@ -307,13 +334,13 @@ validate_federated_credentials() {
         print_error "No federated credentials found"
         echo ""
         print_info "Create federated credential with:"
-        cat << 'EOF'
-  az ad app federated-credential create \
-    --id "$APP_ID" \
+        cat << EOF
+  az ad app federated-credential create \\
+    --id "\$APP_ID" \\
     --parameters '{
-      "name": "cloudhealthoffice-main-branch",
+      "name": "${REPO_NAME}-main-branch",
       "issuer": "https://token.actions.githubusercontent.com",
-      "subject": "repo:aurelianware/cloudhealthoffice:ref:refs/heads/main",
+      "subject": "repo:${REPO_OWNER}/${REPO_NAME}:ref:refs/heads/main",
       "audiences": ["api://AzureADTokenExchange"]
     }'
 EOF
