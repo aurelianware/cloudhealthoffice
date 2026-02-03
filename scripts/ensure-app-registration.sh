@@ -26,9 +26,40 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Script parameters
-APP_NAME="${1:-cloudhealthoffice-prod}"
+APP_NAME_PARAM="${1:-}"
 TENANT_ID="${2:-}"
-GITHUB_REPO="${3:-aurelianware/cloudhealthoffice}"
+GITHUB_REPO_PARAM="${3:-}"
+KEY_VAULT_NAME="${4:-}"
+
+# =============================================================================
+# Helper Functions for Key Vault Configuration
+# =============================================================================
+
+get_or_set_vault_config() {
+    local vault_name="$1"
+    local secret_name="$2"
+    local default_value="$3"
+    local description="$4"
+    
+    # Try to get the value from Key Vault
+    local value=$(az keyvault secret show --vault-name "$vault_name" --name "$secret_name" --query "value" -o tsv 2>/dev/null || echo "")
+    
+    if [ -z "$value" ]; then
+        echo -e "${YELLOW}⚠️  Config '$secret_name' not found in Key Vault${NC}"
+        echo -e "${BLUE}Setting default value for $description: $default_value${NC}"
+        
+        # Set the default value in Key Vault
+        az keyvault secret set --vault-name "$vault_name" --name "$secret_name" --value "$default_value" --description "$description" >/dev/null 2>&1 || {
+            echo -e "${YELLOW}⚠️  Could not set in Key Vault, using default${NC}"
+        }
+        
+        value="$default_value"
+    else
+        echo -e "${GREEN}✓${NC} Using config from Key Vault: $description"
+    fi
+    
+    echo "$value"
+}
 
 # Banner
 echo -e "${BLUE}=========================================${NC}"
@@ -49,9 +80,41 @@ if [ -z "$TENANT_ID" ]; then
     echo -e "${BLUE}Using current tenant: ${TENANT_ID}${NC}"
 fi
 
+# Determine Key Vault name if not provided
+if [ -z "$KEY_VAULT_NAME" ]; then
+    # Try to find a deployment key vault
+    KEY_VAULT_NAME=$(az keyvault list --query "[?contains(name, 'deploy-kv')].name | [0]" -o tsv 2>/dev/null || echo "")
+    
+    if [ -z "$KEY_VAULT_NAME" ]; then
+        echo -e "${YELLOW}⚠️  No deployment Key Vault found${NC}"
+        echo -e "${YELLOW}   Using hardcoded defaults (will not persist)${NC}"
+        USE_VAULT=false
+    else
+        echo -e "${GREEN}✓${NC} Using Key Vault: $KEY_VAULT_NAME"
+        USE_VAULT=true
+    fi
+else
+    USE_VAULT=true
+    echo -e "${GREEN}✓${NC} Using Key Vault: $KEY_VAULT_NAME"
+fi
+
+# Get configuration values from vault or use defaults
+if [ "$USE_VAULT" = true ]; then
+    APP_NAME=$(get_or_set_vault_config "$KEY_VAULT_NAME" "app-registration-name" "${APP_NAME_PARAM:-cloudhealthoffice-prod}" "Azure AD App Registration Name")
+    GITHUB_REPO=$(get_or_set_vault_config "$KEY_VAULT_NAME" "github-repository" "${GITHUB_REPO_PARAM:-aurelianware/cloudhealthoffice}" "GitHub Repository")
+    OIDC_ISSUER=$(get_or_set_vault_config "$KEY_VAULT_NAME" "oidc-issuer" "https://token.actions.githubusercontent.com" "OIDC Issuer for GitHub Actions")
+else
+    APP_NAME="${APP_NAME_PARAM:-cloudhealthoffice-prod}"
+    GITHUB_REPO="${GITHUB_REPO_PARAM:-aurelianware/cloudhealthoffice}"
+    OIDC_ISSUER="https://token.actions.githubusercontent.com"
+    echo -e "${YELLOW}⚠️  Using hardcoded defaults (no Key Vault)${NC}"
+fi
+
+echo ""
 echo "App Name: $APP_NAME"
 echo "Tenant ID: $TENANT_ID"
 echo "GitHub Repo: $GITHUB_REPO"
+echo "OIDC Issuer: $OIDC_ISSUER"
 echo ""
 
 # Check if app registration already exists
@@ -106,8 +169,24 @@ echo -e "${BLUE}Configuring redirect URIs...${NC}"
 # Get app object ID
 APP_OBJECT_ID=$(az ad app show --id "$APP_ID" --query "id" -o tsv)
 
+# Get redirect URIs from Key Vault or set defaults
+if [ "$USE_VAULT" = true ]; then
+    REDIRECT_URI_1=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-production" "https://cloudhealthoffice.com/.auth/login/aad/callback" "Production redirect URI")
+    REDIRECT_URI_2=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-azure" "https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback" "Azure Static Web App redirect URI")
+    REDIRECT_URI_3=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-local" "http://localhost:3000/.auth/login/aad/callback" "Local development redirect URI")
+else
+    REDIRECT_URI_1="https://cloudhealthoffice.com/.auth/login/aad/callback"
+    REDIRECT_URI_2="https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback"
+    REDIRECT_URI_3="http://localhost:3000/.auth/login/aad/callback"
+fi
+
 # Define redirect URIs
-REDIRECT_URIS='["https://cloudhealthoffice.com/.auth/login/aad/callback","https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback","http://localhost:3000/.auth/login/aad/callback"]'
+REDIRECT_URIS="[\"$REDIRECT_URI_1\",\"$REDIRECT_URI_2\",\"$REDIRECT_URI_3\"]"
+
+echo "Redirect URIs:"
+echo "  - $REDIRECT_URI_1"
+echo "  - $REDIRECT_URI_2"
+echo "  - $REDIRECT_URI_3"
 
 # Update web redirect URIs
 az ad app update --id "$APP_ID" \
@@ -175,7 +254,7 @@ else
         --id "$APP_ID" \
         --parameters "{
             \"name\": \"${FEDERATED_CRED_NAME}\",
-            \"issuer\": \"https://token.actions.githubusercontent.com\",
+            \"issuer\": \"${OIDC_ISSUER}\",
             \"subject\": \"${FEDERATED_SUBJECT}\",
             \"audiences\": [\"api://AzureADTokenExchange\"],
             \"description\": \"GitHub Actions OIDC for main branch\"
@@ -198,7 +277,7 @@ if [ -z "$EXISTING_CRED_PR" ]; then
         --id "$APP_ID" \
         --parameters "{
             \"name\": \"${FEDERATED_CRED_PR_NAME}\",
-            \"issuer\": \"https://token.actions.githubusercontent.com\",
+            \"issuer\": \"${OIDC_ISSUER}\",
             \"subject\": \"${FEDERATED_SUBJECT_PR}\",
             \"audiences\": [\"api://AzureADTokenExchange\"],
             \"description\": \"GitHub Actions OIDC for pull requests\"

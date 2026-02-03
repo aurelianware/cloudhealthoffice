@@ -40,6 +40,14 @@ jobs:
             const coredemo = require('@actions/core')
             return await coredemo.getIDToken()
           result-encoding: string
+      
+      - name: Azure Login (OIDC)
+        if: secrets.AZURE_CLIENT_ID != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           
       - name: Get Deployment Token with Retry
         id: get-token
@@ -54,18 +62,13 @@ jobs:
           
           if [ -z "$DEPLOYMENT_TOKEN" ]; then
             echo "⚠️  Deployment token not found in secrets"
-            echo "   Will attempt to retrieve from Azure CLI if logged in"
+            echo "   Will attempt to retrieve from Azure using OIDC"
             
-            # Only try to get from Azure if we have credentials
+            # Only try to get from Azure if we have OIDC credentials
             if [ -n "${{ secrets.AZURE_CLIENT_ID }}" ]; then
-              echo "Attempting Azure CLI retrieval..."
+              echo "Using OIDC authentication to retrieve token..."
               
-              # Login to Azure
-              az login --service-principal \
-                -u "${{ secrets.AZURE_CLIENT_ID }}" \
-                -p "${{ secrets.AZURE_CLIENT_SECRET }}" \
-                --tenant "${{ secrets.AZURE_TENANT_ID }}" || true
-              
+              # The azure/login action should already be invoked in the workflow
               # Get deployment token from Azure
               BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
               RG_NAME="${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}"
@@ -81,7 +84,8 @@ jobs:
               echo "❌ Unable to retrieve deployment token"
               echo "Please ensure:"
               echo "1. Secret AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_WAVE_053FF9E1E is set, OR"
-              echo "2. Azure credentials are configured and Static Web App exists"
+              echo "2. Azure OIDC credentials are configured and Static Web App exists, OR"
+              echo "3. azure/login action has been called prior to this step"
               exit 1
             fi
           fi
