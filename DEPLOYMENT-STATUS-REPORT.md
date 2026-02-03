@@ -91,9 +91,11 @@ When a push event triggers the workflow on the `main` branch:
 ### Why This Fix Works
 
 1. **`github.event.before`**: Provides the SHA of the parent commit (before the push)
+   - For push events: Parent commit SHA, or all-zeros SHA (`0000000000000000000000000000000000000000`) on first push
+   - For workflow_call/workflow_dispatch: May be undefined (fallback to empty string)
 2. **`github.sha`**: Provides the SHA of the current commit being deployed
-3. **Guaranteed Difference**: For push events, these are always different commits
-4. **Graceful Fallback**: Empty string fallback for first push to branch
+3. **Guaranteed Difference**: For push events, these are always different (even first push uses all-zeros, not current SHA)
+4. **Graceful Fallback**: Empty string fallback for non-push event types where `before` is undefined, causing full history scan
 
 ### Technical Validation
 

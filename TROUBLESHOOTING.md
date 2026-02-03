@@ -378,9 +378,12 @@ The fix requires updating `.github/workflows/pre-approval-checks.yml`:
 
 **Why this works:**
 - `github.event.before` - SHA of the commit before the push (parent commit)
+  - On push events: Set to parent commit SHA, or all-zeros SHA (`0000000000000000000000000000000000000000`) on first push to branch
+  - On workflow_call/workflow_dispatch: May be undefined/empty
 - `github.sha` - SHA of the current commit being deployed
-- For push events, these are guaranteed to be different
-- If `before` is empty (first push to branch), falls back to empty string which TruffleHog handles gracefully by scanning entire history
+- For push events, these are guaranteed to be different (even first push uses all-zeros SHA, not same as current)
+- The `|| ''` fallback handles non-push events (workflow_call, workflow_dispatch) where `before` may be undefined
+- Empty string causes TruffleHog to scan entire history from the head commit
 
 **Verification:**
 ```bash
