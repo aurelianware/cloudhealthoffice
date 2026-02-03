@@ -38,7 +38,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           echo "🧪 Running tests with coverage..."
-          npm test -- --coverage --coverageReporters=lcov
+          npm test -- --coverage --coverageReporters=lcov --coverageReporters=json-summary --coverageReporters=text
           echo "✅ Tests complete"
 
       - name: Upload coverage to Codecov
@@ -58,9 +58,14 @@ jobs:
           echo "📊 Code Coverage Report"
           echo "=========================================="
           if [ -f coverage/coverage-summary.json ]; then
-            echo "Coverage data generated successfully"
-            echo "Report uploaded to Codecov"
+            echo "✅ Coverage data generated successfully"
+            echo ""
+            # Parse and display coverage percentages (single file read)
+            node -e "const fs = require('fs'); try { const raw = fs.readFileSync('coverage/coverage-summary.json', 'utf8'); const data = JSON.parse(raw); const total = data.total; console.log('Lines:      ' + total.lines.pct + '%'); console.log('Statements: ' + total.statements.pct + '%'); console.log('Functions:  ' + total.functions.pct + '%'); console.log('Branches:   ' + total.branches.pct + '%'); } catch (e) { console.error('⚠️  Error parsing coverage summary: ' + e); process.exit(1); }"
+            echo ""
+            echo "📤 Report uploaded to Codecov"
           else
             echo "⚠️  No coverage summary found"
           fi
           echo ""
+          echo "=========================================="
