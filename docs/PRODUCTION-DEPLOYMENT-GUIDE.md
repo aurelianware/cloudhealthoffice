@@ -198,11 +198,40 @@ The deployment includes these stages:
 - Public Network Access: Enabled (for GitHub Actions)
 - RBAC Authorization: Enabled
 
-**Expected Secrets**:
+**Deployment Secrets** (Runtime credentials):
 
-- `sftp-host`: SFTP server hostname
-- `sftp-username`: SFTP username
-- `sftp-password`: SFTP password
+- `sftp-host`: SFTP server hostname (e.g., `sftp.clearinghouse.com`)
+- `sftp-username`: SFTP username for clearinghouse access
+- `sftp-password`: SFTP password (securely stored)
+
+**Configuration Values** (Infrastructure settings):
+
+These are automatically managed by the provisioning scripts
+(`ensure-app-registration.sh` and `ensure-service-principal.sh`):
+
+- `app-registration-name`: Azure AD app registration display name
+  (default: `cloudhealthoffice-prod`)
+- `github-repository`: GitHub repository for OIDC federated credentials
+  (default: `aurelianware/cloudhealthoffice`)
+- `oidc-issuer`: OIDC token issuer for GitHub Actions
+  (default: `https://token.actions.githubusercontent.com`)
+- `redirect-uri-production`: Production domain redirect URI
+  (default: `https://cloudhealthoffice.com/.auth/login/aad/callback`)
+- `redirect-uri-azure`: Azure Static Web App redirect URI
+  (default: `https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback`)
+- `redirect-uri-local`: Local development redirect URI
+  (default: `http://localhost:3000/.auth/login/aad/callback`)
+- `resource-group-name`: Azure resource group name
+  (default: `rg-cloudhealthoffice-prod`)
+- `base-name`: Base name for all Azure resources
+  (default: `cloudhealthoffice`)
+
+**How it works**:
+
+1. First run: Scripts detect Key Vault and populate with defaults
+2. Subsequent runs: Scripts read values from Key Vault
+3. Override: Update values in Key Vault to customize configuration
+4. No code changes needed to adjust settings
 
 ## Secret Management Strategy
 
@@ -229,14 +258,55 @@ Priority 3: Secure Defaults (placeholders for non-production)
 KV_NAME="cloudhealthoffice-deploy-kv"
 
 # Add SFTP secrets
-az keyvault secret set --vault-name "$KV_NAME" --name sftp-host --value "sftp.example.com"
-az keyvault secret set --vault-name "$KV_NAME" --name sftp-username --value "username"
-az keyvault secret set --vault-name "$KV_NAME" --name sftp-password --value "password"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-host \
+  --value "sftp.clearinghouse.com"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-username \
+  --value "your-username"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-password \
+  --value "your-secure-password"
 ```
 
-**Step 3: Grant service principal access** (automatic in setup-infrastructure job)
+#### Step 3: View current configuration values
 
-**Step 4: Remove GitHub Secrets** (optional)
+```bash
+# List all secrets (names only)
+az keyvault secret list --vault-name "$KV_NAME" --query "[].name" -o table
+
+# View specific secret value
+az keyvault secret show --vault-name "$KV_NAME" --name sftp-host \
+  --query "value" -o tsv
+
+# View all configuration values (non-sensitive)
+az keyvault secret show --vault-name "$KV_NAME" --name app-registration-name \
+  --query "value" -o tsv
+az keyvault secret show --vault-name "$KV_NAME" --name resource-group-name \
+  --query "value" -o tsv
+az keyvault secret show --vault-name "$KV_NAME" --name base-name \
+  --query "value" -o tsv
+```
+
+#### Step 4: Update configuration values (if needed)
+
+```bash
+# Override redirect URI for production custom domain
+az keyvault secret set --vault-name "$KV_NAME" \
+  --name redirect-uri-production \
+  --value "https://portal.yourcompany.com/.auth/login/aad/callback"
+
+# Update resource group name
+az keyvault secret set --vault-name "$KV_NAME" \
+  --name resource-group-name \
+  --value "rg-yourcompany-prod"
+
+# Update Static Web App redirect URI
+az keyvault secret set --vault-name "$KV_NAME" \
+  --name redirect-uri-azure \
+  --value "https://your-static-app.azurestaticapps.net/.auth/login/aad/callback"
+```
+
+**Step 5: Grant service principal access** (automatic in setup-infrastructure job)
+
+**Step 6: Remove GitHub Secrets** (optional)
 Once Key Vault is populated and tested, you can remove SFTP secrets from
 GitHub Secrets.
 
@@ -440,6 +510,53 @@ If automation fails, use Azure Portal:
 2. Select "Deployments" in left menu
 3. Find last successful deployment
 4. Click "Redeploy"
+
+## Key Vault Secrets Reference
+
+### Complete Secrets List
+
+| Secret Name | Type | Purpose | Default Value | Required |
+| ----------- | ---- | ------- | ------------- | -------- |
+| `sftp-host` | Runtime | SFTP server hostname | `sftp.example.com` | Yes* |
+| `sftp-username` | Runtime | SFTP username | `logicapp` | Yes* |
+| `sftp-password` | Runtime | SFTP password | `changeme...` | Yes* |
+| `app-registration-name` | Config | Azure AD app name | `...prod` | Auto |
+| `github-repository` | Config | GitHub repo | `aurelianware/...` | Auto |
+| `oidc-issuer` | Config | OIDC issuer | `https://...` | Auto |
+| `redirect-uri-production` | Config | Prod redirect | `https://...` | Auto |
+| `redirect-uri-azure` | Config | Azure redirect | `https://...` | Auto |
+| `redirect-uri-local` | Config | Local redirect | `http://...` | Auto |
+| `resource-group-name` | Config | Resource group | `rg-...prod` | Auto |
+| `base-name` | Config | Base name | `cloudhealthoffice` | Auto |
+
+\* Required for production use. Pipeline will use defaults if not set.  
+Auto = Automatically populated by provisioning scripts on first run.
+
+### How to Populate Required Secrets
+
+```bash
+KV_NAME="cloudhealthoffice-deploy-kv"
+
+# Production SFTP credentials (required)
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-host \
+  --value "production.sftp.clearinghouse.com"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-username \
+  --value "prod-user"
+az keyvault secret set --vault-name "$KV_NAME" --name sftp-password \
+  --value "your-secure-password"
+```
+
+### Viewing All Secrets
+
+```bash
+# List all secret names
+az keyvault secret list --vault-name "$KV_NAME" \
+  --query "[].{Name:name, Enabled:attributes.enabled}" -o table
+
+# View secret value (example)
+az keyvault secret show --vault-name "$KV_NAME" --name sftp-host \
+  --query "{Name:name, Value:value}" -o table
+```
 
 ## Security Considerations
 
