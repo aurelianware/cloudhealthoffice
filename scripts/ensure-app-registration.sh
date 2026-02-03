@@ -169,14 +169,31 @@ echo -e "${BLUE}Configuring redirect URIs...${NC}"
 # Get app object ID
 APP_OBJECT_ID=$(az ad app show --id "$APP_ID" --query "id" -o tsv)
 
+# Try to dynamically determine the SWA hostname
+SWA_HOSTNAME=""
+RG_NAME="${RESOURCE_GROUP_PARAM:-rg-${APP_NAME_PARAM:-cloudhealthoffice}-prod}"
+SWA_NAME="${APP_NAME_PARAM:-cloudhealthoffice}-swa"
+
+# Attempt to get hostname from Azure (if SWA exists)
+SWA_HOSTNAME=$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RG_NAME" \
+    --query "defaultHostname" -o tsv 2>/dev/null || echo "")
+
+if [ -z "$SWA_HOSTNAME" ]; then
+    echo -e "${YELLOW}⚠️  Static Web App not found, using placeholder for Azure redirect URI${NC}"
+    SWA_HOSTNAME="${SWA_NAME}.azurestaticapps.net"
+fi
+
+# Determine production domain from APP_NAME or default
+PROD_DOMAIN="${CUSTOM_DOMAIN:-cloudhealthoffice.com}"
+
 # Get redirect URIs from Key Vault or set defaults
 if [ "$USE_VAULT" = true ]; then
-    REDIRECT_URI_1=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-production" "https://cloudhealthoffice.com/.auth/login/aad/callback" "Production redirect URI")
-    REDIRECT_URI_2=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-azure" "https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback" "Azure Static Web App redirect URI")
+    REDIRECT_URI_1=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-production" "https://${PROD_DOMAIN}/.auth/login/aad/callback" "Production redirect URI")
+    REDIRECT_URI_2=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-azure" "https://${SWA_HOSTNAME}/.auth/login/aad/callback" "Azure Static Web App redirect URI")
     REDIRECT_URI_3=$(get_or_set_vault_config "$KEY_VAULT_NAME" "redirect-uri-local" "http://localhost:3000/.auth/login/aad/callback" "Local development redirect URI")
 else
-    REDIRECT_URI_1="https://cloudhealthoffice.com/.auth/login/aad/callback"
-    REDIRECT_URI_2="https://kind-wave-053ff9e1e.azurestaticapps.net/.auth/login/aad/callback"
+    REDIRECT_URI_1="https://${PROD_DOMAIN}/.auth/login/aad/callback"
+    REDIRECT_URI_2="https://${SWA_HOSTNAME}/.auth/login/aad/callback"
     REDIRECT_URI_3="http://localhost:3000/.auth/login/aad/callback"
 fi
 

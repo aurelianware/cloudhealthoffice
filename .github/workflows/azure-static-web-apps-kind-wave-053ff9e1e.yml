@@ -114,9 +114,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # Get hostname from static web app
-          HOSTNAME="kind-wave-053ff9e1e.azurestaticapps.net"
+
+          # Get hostname from static web app dynamically
+          BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
+          RG_NAME="${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}"
+          SWA_NAME="${BASE_NAME}-swa"
+
+          # Try to get hostname from Azure, fall back to constructed name
+          HOSTNAME=$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RG_NAME" \
+            --query "defaultHostname" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$HOSTNAME" ]; then
+            echo "⚠️  Could not retrieve hostname from Azure, using default pattern"
+            HOSTNAME="${SWA_NAME}.azurestaticapps.net"
+          fi
           
           echo "=========================================="
           echo "Verifying Deployment"
