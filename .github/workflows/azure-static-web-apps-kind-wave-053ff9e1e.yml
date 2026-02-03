@@ -24,7 +24,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
           lfs: false
@@ -33,7 +33,7 @@ jobs:
         run: npm install @actions/core@1.6.0 @actions/http-client
         
       - name: Get Id Token
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         id: idtoken
         with:
           script: |
@@ -42,8 +42,10 @@ jobs:
           result-encoding: string
       
       - name: Azure Login (OIDC)
-        if: secrets.AZURE_CLIENT_ID != ''
+        if: env.AZURE_CLIENT_ID != ''
         uses: azure/login@v2
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -75,8 +77,8 @@ jobs:
               SWA_NAME="${BASE_NAME}-swa"
               
               DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
-                --name "$SWA_NAME" \
-                --resource-group "$RG_NAME" \
+                --name "${SWA_NAME}" \
+                --resource-group "${RG_NAME}" \
                 --query "properties.apiKey" -o tsv 2>/dev/null || echo "")
             fi
             
@@ -114,7 +116,6 @@ jobs:
           set -euo pipefail
           
           # Get hostname from static web app
-          BASE_NAME="${{ vars.BASE_NAME || 'cloudhealthoffice' }}"
           HOSTNAME="kind-wave-053ff9e1e.azurestaticapps.net"
           
           echo "=========================================="
@@ -126,7 +127,7 @@ jobs:
           MAX_RETRIES=10
           RETRY_DELAY=15
           
-          for i in $(seq 1 $MAX_RETRIES); do
+          for i in $(seq 1 "$MAX_RETRIES"); do
             echo "⏳ Attempt $i/$MAX_RETRIES..."
             
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://$HOSTNAME" || echo "000")
