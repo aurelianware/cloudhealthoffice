@@ -313,9 +313,7 @@ jobs:
             echo "Found Markdown files in site/assets"
 
             # Run the build
-            npm run build:site
-
-            if [ $? -ne 0 ]; then
+            if ! npm run build:site; then
               echo "::error::Site build failed"
               exit 1
             fi
@@ -358,7 +356,7 @@ jobs:
                 ul_count=$(grep -o "<ul>" site/assessment.html | wc -l)
                 ol_count=$(grep -o "<ol>" site/assessment.html | wc -l)
 
-                if [ $((ul_count + ol_count)) -eq 0 ] && [ $li_count -gt 0 ]; then
+                if [ $(("$ul_count" + "$ol_count")) -eq 0 ] && [ "$li_count" -gt 0 ]; then
                   echo "::error file=site/assessment.html::Found <li> tags without parent <ul> or <ol>"
                   exit 1
                 fi
