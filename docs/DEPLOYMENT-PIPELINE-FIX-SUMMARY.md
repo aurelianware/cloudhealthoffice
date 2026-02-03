@@ -266,7 +266,7 @@ All acceptance criteria from the problem statement have been met:
 ## Deployment Time Estimates
 
 | Stage | Duration | Notes |
-|-------|----------|-------|
+| ----- | -------- | ----- |
 | Setup Infrastructure | 5-10 min | App registration + service principal |
 | Pre-Approval Checks | 2-3 min | Security scans |
 | Approval Gate | Variable | Manual approval |
