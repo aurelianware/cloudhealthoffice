@@ -80,9 +80,11 @@ head: ${{ github.sha }}
 
 **Why It Works**:
 - `github.event.before` = SHA of commit before the push (parent)
+  - Push events: Parent commit SHA, or all-zeros SHA on first push to branch
+  - Non-push events (workflow_call/dispatch): May be undefined (uses empty fallback)
 - `github.sha` = SHA of current commit (after push)
-- These are guaranteed to be different on push events
-- Fallback to empty string for first push (TruffleHog handles gracefully)
+- These are guaranteed to be different on push events (even first push uses all-zeros SHA)
+- Fallback to empty string for non-push event types where `before` is undefined
 
 ---
 
