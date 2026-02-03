@@ -6,6 +6,7 @@
  * - FHIR R4 CoverageEligibilityRequest/Response endpoints
  * - Health check endpoints
  * - Dapr integration
+ * - Auto-configuration with Azure Key Vault
  */
 
 import * as http from 'http';
@@ -15,48 +16,57 @@ import { EligibilityService } from './eligibility-service';
 import { X12_270_Request, EligibilityServiceConfig, EligibilityCheckRequest } from './types';
 import { X12EligibilityMapper } from './x12-mapper';
 import { loadBackendRulesFromCSV } from './migration';
+import { autoConfigureKeyVault, commonSecretMappings } from './keyvault-config';
 
-// Default configuration
-const DEFAULT_CONFIG: EligibilityServiceConfig = {
-  cosmosDb: {
-    endpoint: process.env.COSMOS_ENDPOINT || 'https://localhost:8081',
-    databaseName: process.env.COSMOS_DATABASE || 'eligibility-db',
-    containerName: process.env.COSMOS_CONTAINER || 'eligibility-cache',
-    defaultTtlSeconds: 86400 // 24 hours
-  },
-  eventGrid: {
-    topicEndpoint: process.env.EVENT_GRID_ENDPOINT || ''
-  },
-  backendConfig: process.env.BACKEND_BASE_URL ? {
-    baseUrl: process.env.BACKEND_BASE_URL,
-    timeout: 30000
-  } : undefined,
-  fhirServer: process.env.FHIR_SERVER_URL ? {
-    baseUrl: process.env.FHIR_SERVER_URL,
-    authType: 'managed_identity'
-  } : undefined,
-  cache: {
-    enabled: process.env.CACHE_ENABLED !== 'false',
-    activeMemberTtl: parseInt(process.env.CACHE_ACTIVE_TTL || '86400', 10), // 24 hours
-    inactiveMemberTtl: parseInt(process.env.CACHE_INACTIVE_TTL || '3600', 10), // 1 hour
-    maxCacheAge: parseInt(process.env.CACHE_MAX_AGE || '43200', 10) // 12 hours
-  },
-  dapr: {
-    enabled: process.env.DAPR_ENABLED === 'true',
-    httpPort: parseInt(process.env.DAPR_HTTP_PORT || '3500', 10),
-    grpcPort: parseInt(process.env.DAPR_GRPC_PORT || '50001', 10),
-    appId: process.env.DAPR_APP_ID || 'eligibility-service',
-    stateStoreName: process.env.DAPR_STATE_STORE || 'eligibility-state',
-    pubSubName: process.env.DAPR_PUBSUB || 'eligibility-pubsub'
-  }
-};
+// Auto-configure Key Vault on startup (before loading configuration)
+// This will load secrets from Key Vault and set environment variables
+// Note: This is a module-level flag suitable for Node.js single-threaded execution
+// The service is designed to be initialized once on startup, not concurrently
+let keyVaultConfigured = false;
+
+// Default configuration (loaded after Key Vault auto-configuration)
+function getDefaultConfig(): EligibilityServiceConfig {
+  return {
+    cosmosDb: {
+      endpoint: process.env.COSMOS_ENDPOINT || 'https://localhost:8081',
+      databaseName: process.env.COSMOS_DATABASE || 'eligibility-db',
+      containerName: process.env.COSMOS_CONTAINER || 'eligibility-cache',
+      defaultTtlSeconds: 86400 // 24 hours
+    },
+    eventGrid: {
+      topicEndpoint: process.env.EVENT_GRID_ENDPOINT || ''
+    },
+    backendConfig: process.env.BACKEND_BASE_URL ? {
+      baseUrl: process.env.BACKEND_BASE_URL,
+      timeout: 30000
+    } : undefined,
+    fhirServer: process.env.FHIR_SERVER_URL ? {
+      baseUrl: process.env.FHIR_SERVER_URL,
+      authType: 'managed_identity'
+    } : undefined,
+    cache: {
+      enabled: process.env.CACHE_ENABLED !== 'false',
+      activeMemberTtl: parseInt(process.env.CACHE_ACTIVE_TTL || '86400', 10), // 24 hours
+      inactiveMemberTtl: parseInt(process.env.CACHE_INACTIVE_TTL || '3600', 10), // 1 hour
+      maxCacheAge: parseInt(process.env.CACHE_MAX_AGE || '43200', 10) // 12 hours
+    },
+    dapr: {
+      enabled: process.env.DAPR_ENABLED === 'true',
+      httpPort: parseInt(process.env.DAPR_HTTP_PORT || '3500', 10),
+      grpcPort: parseInt(process.env.DAPR_GRPC_PORT || '50001', 10),
+      appId: process.env.DAPR_APP_ID || 'eligibility-service',
+      stateStoreName: process.env.DAPR_STATE_STORE || 'eligibility-state',
+      pubSubName: process.env.DAPR_PUBSUB || 'eligibility-pubsub'
+    }
+  };
+}
 
 // CORS allowed origins (comma-separated list, defaults to localhost for security)
 const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000';
 
 // Initialize service
 let eligibilityService: EligibilityService | null = null;
-let activeConfig: EligibilityServiceConfig = DEFAULT_CONFIG;
+let activeConfig: EligibilityServiceConfig = getDefaultConfig();
 const x12Mapper = new X12EligibilityMapper();
 
 /**
@@ -81,7 +91,7 @@ function initializeEligibilityService(
     return eligibilityService;
   }
 
-  activeConfig = config ?? DEFAULT_CONFIG;
+  activeConfig = config ?? getDefaultConfig();
   eligibilityService = new EligibilityService(activeConfig);
   return eligibilityService;
 }
@@ -91,7 +101,7 @@ function initializeEligibilityService(
  */
 function resetEligibilityService(): void {
   eligibilityService = null;
-  activeConfig = DEFAULT_CONFIG;
+  activeConfig = getDefaultConfig();
 }
 
 /**
@@ -432,7 +442,20 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
  * Start the server
  */
 async function startServer(config?: EligibilityServiceConfig): Promise<http.Server> {
-  // Initialize the eligibility service
+  // Auto-configure Key Vault secrets (if not already configured)
+  if (!keyVaultConfigured && process.env.KEY_VAULT_URI) {
+    console.log('[Startup] Auto-configuring Key Vault...');
+    try {
+      keyVaultConfigured = await autoConfigureKeyVault(commonSecretMappings);
+      if (keyVaultConfigured) {
+        console.log('[Startup] Key Vault auto-configuration complete');
+      }
+    } catch (error) {
+      console.warn('[Startup] Key Vault auto-configuration failed:', error);
+    }
+  }
+  
+  // Initialize the eligibility service (after Key Vault configuration)
   const service = initializeEligibilityService(config);
   
   // Load backend rules if CSV file is provided
