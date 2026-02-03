@@ -37,6 +37,9 @@ permissions:
   contents: read
   pull-requests: write
 
+env:
+  CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN || 'cloudhealthoffice.com' }}
+
 jobs:
   deploy-site:
     runs-on: ubuntu-latest
@@ -99,7 +102,7 @@ jobs:
             echo ""
             echo "📚 Setup Instructions:"
             echo "   See: docs/FEDERATED-CREDENTIALS-SETUP.md"
-            echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+            echo "   ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
             echo ""
             echo "🔧 Quick Fix:"
             echo "   1. Go to Settings → Secrets and variables → Actions"
@@ -142,12 +145,12 @@ jobs:
           echo ""
           echo "📚 Complete Setup Guide:"
           echo "   docs/FEDERATED-CREDENTIALS-SETUP.md"
-          echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo "   ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
           echo ""
           echo "🔍 Troubleshooting Steps:"
           echo ""
           echo "Step 1: Verify federated credential is configured"
-          echo "   Expected subject: repo:aurelianware/cloudhealthoffice:ref:refs/heads/main"
+          echo "   Expected subject: repo:${{ github.repository }}:ref:refs/heads/main"
           echo "   Run: az ad app federated-credential list --id \$AZURE_CLIENT_ID"
           echo ""
           echo "Step 2: Verify application exists"
@@ -165,7 +168,7 @@ jobs:
           echo "   Run locally: ./scripts/validate-deployment-auth.sh --app-id \$AZURE_CLIENT_ID"
           echo ""
           echo "📖 Common Issues & Solutions:"
-          echo "   https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md#troubleshooting-common-issues"
+          echo "   ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md#troubleshooting-common-issues"
           echo ""
           exit 1
 
@@ -251,7 +254,7 @@ jobs:
           set -euo pipefail
           RG_NAME="${{ vars.AZURE_RG_NAME }}"
           SWA_NAME="${{ steps.get-swa.outputs.swa_name }}"
-          CUSTOM_DOMAIN="cloudhealthoffice.com"
+          CUSTOM_DOMAIN="${{ env.CUSTOM_DOMAIN }}"
 
           echo "=========================================="
           echo "Configuring Custom Domain"
@@ -294,7 +297,7 @@ jobs:
           echo "DNS Configuration Required"
           echo "=========================================="
           echo ""
-          echo "For ROOT DOMAIN (cloudhealthoffice.com):"
+          echo "For ROOT DOMAIN ($CUSTOM_DOMAIN):"
           echo "  Record Type: ALIAS or ANAME (required for root domains)"
           echo "  Host/Name: @ (or leave blank)"
           echo "  Points to: $SWA_DEFAULT_HOSTNAME"
@@ -304,7 +307,7 @@ jobs:
           echo "Standard CNAME records do NOT work for root domains (@)."
           echo ""
           echo "If your DNS provider does not support ALIAS/ANAME records,"
-          echo "use 'www.cloudhealthoffice.com' instead:"
+          echo "use 'www.$CUSTOM_DOMAIN' instead:"
           echo "  Record Type: CNAME"
           echo "  Host/Name: www"
           echo "  Points to: $SWA_DEFAULT_HOSTNAME"
@@ -315,7 +318,7 @@ jobs:
 
           # Save DNS instructions for artifact
           {
-            echo "# DNS Configuration for cloudhealthoffice.com"
+            echo "# DNS Configuration for $CUSTOM_DOMAIN"
             echo ""
             echo "**Static Web App:** $SWA_NAME"
             echo "**Default Hostname:** $SWA_DEFAULT_HOSTNAME"
@@ -323,7 +326,7 @@ jobs:
             echo ""
             echo "## DNS Records to Add"
             echo ""
-            echo "### For Root Domain (cloudhealthoffice.com) - REQUIRED"
+            echo "### For Root Domain ($CUSTOM_DOMAIN) - REQUIRED"
             echo ""
             echo "**IMPORTANT:** Root domains require ALIAS or ANAME records. Standard CNAME records do NOT work for root domains (@)."
             echo ""
@@ -393,7 +396,7 @@ jobs:
               body: dnsInstructions
             });
 
-      - name: Verify Deployment
+      - name: Verify Deployment with Retry
         if: steps.get-swa.outputs.swa_exists == 'true'
         shell: bash
         run: |
@@ -408,21 +411,39 @@ jobs:
           echo "URL: https://$SWA_HOSTNAME"
           echo ""
 
-          # Wait a moment for deployment to propagate
-          sleep 10
+          # Wait for deployment to propagate
+          echo "Waiting 15 seconds for deployment to propagate..."
+          sleep 15
 
-          # Test the endpoint
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
+          MAX_RETRIES=10
+          RETRY_DELAY=10
 
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Deployment verified - HTTP $HTTP_STATUS"
-          else
-            echo "::warning::Deployment may need more time - HTTP $HTTP_STATUS"
-            echo "This is normal for new deployments. The site will be available shortly."
-          fi
+          for i in $(seq 1 "$MAX_RETRIES"); do
+            echo "⏳ Verification attempt $i/$MAX_RETRIES..."
 
+            # Test the endpoint
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SWA_HOSTNAME" || echo "000")
+
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "301" ] || [ "$HTTP_STATUS" = "302" ]; then
+              echo "✅ Deployment verified - HTTP $HTTP_STATUS"
+              echo ""
+              echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
+              exit 0
+            fi
+
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "   HTTP $HTTP_STATUS - waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+
+          echo "⚠️  Deployment may need more time - HTTP $HTTP_STATUS"
+          echo "   This is normal for new deployments. The site will be available shortly."
           echo ""
-          echo "🌐 Your site is accessible at: https://$SWA_HOSTNAME"
+          echo "🌐 Check your site at: https://$SWA_HOSTNAME"
+
+          # Don't fail - deployment may be successful but propagating
+          exit 0
 
       - name: Deployment Success Summary
         if: success()
@@ -434,7 +455,7 @@ jobs:
           echo "**Deployed Resources:**"
           echo "- Static Web App: ${{ steps.get-swa.outputs.swa_name }}"
           echo "- Default URL: https://${{ steps.get-swa.outputs.swa_hostname }}"
-          echo "- Custom Domain: cloudhealthoffice.com (pending DNS verification)"
+          echo "- Custom Domain: ${{ env.CUSTOM_DOMAIN }} (pending DNS verification)"
           echo ""
           echo "**Next Steps:**"
           echo "1. Download the 'dns-configuration-instructions' artifact from this workflow run"
@@ -444,7 +465,7 @@ jobs:
           echo ""
           echo "**Important Notes:**"
           echo "- For root domain (@), use ALIAS or ANAME record if supported by your DNS provider"
-          echo "- If ALIAS/ANAME is not available, use 'www.cloudhealthoffice.com' instead"
+          echo "- If ALIAS/ANAME is not available, use 'www.${{ env.CUSTOM_DOMAIN }}' instead"
           echo "- SSL/TLS certificate will be automatically provisioned by Azure"
 
       - name: Rollback on Failure
@@ -465,7 +486,7 @@ jobs:
           echo "**Authentication Issues:**"
           echo "If you see OIDC or federated credential errors, see:"
           echo "  docs/FEDERATED-CREDENTIALS-SETUP.md"
-          echo "  https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
+          echo "  ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/FEDERATED-CREDENTIALS-SETUP.md"
           echo ""
           echo "**Validation Tool:**"
           echo "Run the validation script to diagnose issues:"

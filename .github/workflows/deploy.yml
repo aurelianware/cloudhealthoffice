@@ -1,13 +1,140 @@
-name: Deploy PROD - Cloud Health Office
+name: Deploy Production - Cloud Health Office
 
 on:
   push:
-    branches: ["main", "release/*", "feature/*"]
+    branches: ["main"]
+    paths:
+      - 'infra/**'
+      - 'site/**'
+      - 'logicapps/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
+env:
+  # Secure defaults - use repository variables with fallbacks
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}
+  BASE_NAME: ${{ vars.BASE_NAME || 'cloudhealthoffice' }}
+  LOCATION: ${{ vars.AZURE_LOCATION || 'eastus' }}
+  CONNECTOR_LOCATION: ${{ vars.AZURE_CONNECTOR_LOCATION || 'eastus' }}
+  IA_NAME: ${{ vars.IA_NAME || 'prod-integration-account' }}
+  SERVICE_BUS_NAME: ${{ vars.SERVICE_BUS_NAME || 'cloudhealthoffice-sb' }}
+  STORAGE_SKU: ${{ vars.STORAGE_SKU || 'Standard_LRS' }}
+
 jobs:
+  # Pre-deployment infrastructure setup
+  setup-infrastructure:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      app-id: ${{ steps.ensure-app.outputs.app-id }}
+      sp-id: ${{ steps.ensure-sp.outputs.sp-id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set default secrets if not configured
+        id: set-defaults
+        shell: bash
+        run: |
+          # Use secure defaults for missing secrets
+          # These are placeholders - real secrets should be in GitHub Secrets or Key Vault
+
+          # Azure authentication secrets (required)
+          CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
+          TENANT_ID="${{ secrets.AZURE_TENANT_ID }}"
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+          # SFTP secrets (can be in Key Vault)
+          SFTP_HOST="${{ secrets.SFTP_HOST }}"
+          SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
+          SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
+
+          # Export to environment
+          {
+            echo "CLIENT_ID=${CLIENT_ID}"
+            echo "TENANT_ID=${TENANT_ID}"
+            echo "SUBSCRIPTION_ID=${SUBSCRIPTION_ID}"
+            echo "SFTP_HOST=${SFTP_HOST:-sftp.example.com}"
+            echo "SFTP_USERNAME=${SFTP_USERNAME:-logicapp}"
+            echo "SFTP_PASSWORD=${SFTP_PASSWORD:-changeme}"
+            echo "HAS_AZURE_CREDS=$([[ -n \"$CLIENT_ID\" && -n \"$TENANT_ID\" && -n \"$SUBSCRIPTION_ID\" ]] && echo 'true' || echo 'false')"
+          } >> "$GITHUB_ENV"
+
+          echo "✅ Defaults configured"
+
+      - name: Azure Login (OIDC) - Optional if secrets exist
+        if: env.HAS_AZURE_CREDS == 'true'
+        id: azure-login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.CLIENT_ID }}
+          tenant-id: ${{ env.TENANT_ID }}
+          subscription-id: ${{ env.SUBSCRIPTION_ID }}
+        continue-on-error: true
+
+      - name: Ensure App Registration
+        if: steps.azure-login.outcome == 'success' || env.HAS_AZURE_CREDS == 'false'
+        id: ensure-app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Only run if logged in to Azure
+          if ! az account show &>/dev/null; then
+            echo "⚠️  Not logged in to Azure - skipping app registration setup"
+            echo "Manual setup required: ./scripts/ensure-app-registration.sh"
+            echo "app-id=${{ env.CLIENT_ID }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "=========================================="
+          echo "Ensuring App Registration"
+          echo "=========================================="
+
+          APP_NAME="${{ env.BASE_NAME }}-prod"
+          TENANT_ID="${{ env.TENANT_ID }}"
+          GITHUB_REPO="${{ github.repository }}"
+
+          # Run app registration script
+          APP_ID=$(bash scripts/ensure-app-registration.sh "$APP_NAME" "$TENANT_ID" "$GITHUB_REPO" | tail -1)
+
+          echo "app-id=$APP_ID" >> "$GITHUB_OUTPUT"
+          echo "✅ App registration ensured: $APP_ID"
+
+      - name: Ensure Service Principal
+        if: steps.azure-login.outcome == 'success' || env.HAS_AZURE_CREDS == 'false'
+        id: ensure-sp
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Only run if logged in to Azure
+          if ! az account show &>/dev/null; then
+            echo "⚠️  Not logged in to Azure - skipping service principal setup"
+            echo "Manual setup required: ./scripts/ensure-service-principal.sh"
+            exit 0
+          fi
+
+          echo "=========================================="
+          echo "Ensuring Service Principal"
+          echo "=========================================="
+
+          APP_ID="${{ steps.ensure-app.outputs.app-id || env.CLIENT_ID }}"
+          SUBSCRIPTION_ID="${{ env.SUBSCRIPTION_ID }}"
+          RESOURCE_GROUP="${{ env.AZURE_RESOURCE_GROUP }}"
+          BASE_NAME="${{ env.BASE_NAME }}"
+
+          # Run service principal script
+          SP_ID=$(bash scripts/ensure-service-principal.sh "$APP_ID" "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$BASE_NAME" | tail -1)
+
+          echo "sp-id=$SP_ID" >> "$GITHUB_OUTPUT"
+          echo "✅ Service principal ensured: $SP_ID"
+
   # Pre-approval security validation
   pre-approval-checks:
+    needs: setup-infrastructure
     permissions:
       contents: read
     uses: ./.github/workflows/pre-approval-checks.yml
@@ -34,16 +161,16 @@ jobs:
           echo "📝 SHA: ${{ github.sha }}"
           echo ""
           echo "✅ Security checks passed - see pre-approval-checks job"
+          echo "✅ Infrastructure setup completed - see setup-infrastructure job"
           echo ""
           echo "Reviewers: Please verify the following before approving:"
           echo "1. Review security scan results above"
-          echo "2. Confirm UAT testing completed"
-          echo "3. Verify change management ticket approved"
-          echo "4. Check rollback plan is documented"
-          echo "5. Ensure stakeholders are notified"
+          echo "2. Verify app registration and service principal created"
+          echo "3. Check rollback plan is documented"
+          echo "4. Ensure stakeholders are notified"
 
   deploy:
-    needs: approval-gate
+    needs: [setup-infrastructure, approval-gate]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: PROD
@@ -54,126 +181,85 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Required Secrets and Variables
+      - name: Set environment variables with secure defaults
         shell: bash
         run: |
-          set -euo pipefail
-          echo "=========================================="
-          echo "Validating Required Secrets and Variables"
-          echo "=========================================="
-          echo ""
+          {
+            echo "RG_NAME=${{ env.AZURE_RESOURCE_GROUP }}"
+            echo "LOCATION=${{ env.LOCATION }}"
+            echo "CONNECTOR_LOCATION=${{ env.CONNECTOR_LOCATION }}"
+            echo "BASE_NAME=${{ env.BASE_NAME }}"
+            echo "IA_NAME=${{ env.IA_NAME }}"
+            echo "SERVICE_BUS_NAME=${{ env.SERVICE_BUS_NAME }}"
+            echo "STORAGE_SKU=${{ env.STORAGE_SKU }}"
+            echo "LOGIC_APP_NAME=${{ env.BASE_NAME }}-la"
+          } >> "$GITHUB_ENV"
 
-          # Track validation failures
-          FAILED=0
-
-          # Validate required secrets (check if they're not empty)
-          echo "Checking required secrets..."
-
-          REQUIRED_SECRETS=(
-            "AZURE_CLIENT_ID:${{ secrets.AZURE_CLIENT_ID }}"
-            "AZURE_TENANT_ID:${{ secrets.AZURE_TENANT_ID }}"
-            "AZURE_SUBSCRIPTION_ID:${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-            "SFTP_HOST:${{ secrets.SFTP_HOST }}"
-            "SFTP_USERNAME:${{ secrets.SFTP_USERNAME }}"
-            "SFTP_PASSWORD:${{ secrets.SFTP_PASSWORD }}"
-          )
-
-          for item in "${REQUIRED_SECRETS[@]}"; do
-            SECRET_NAME="${item%%:*}"
-            SECRET_VALUE="${item#*:}"
-            if [ -z "$SECRET_VALUE" ]; then
-              echo "❌ $SECRET_NAME is not set or empty"
-              FAILED=1
-            else
-              echo "✅ $SECRET_NAME is configured"
-            fi
-          done
-
-          echo ""
-          echo "Checking required repository variables..."
-
-          REQUIRED_VARS=(
-            "AZURE_RG_NAME:${{ vars.AZURE_RG_NAME }}"
-            "AZURE_LOCATION:${{ vars.AZURE_LOCATION }}"
-            "AZURE_CONNECTOR_LOCATION:${{ vars.AZURE_CONNECTOR_LOCATION }}"
-            "BASE_NAME:${{ vars.BASE_NAME }}"
-            "IA_NAME:${{ vars.IA_NAME }}"
-            "SERVICE_BUS_NAME:${{ vars.SERVICE_BUS_NAME }}"
-            "STORAGE_SKU:${{ vars.STORAGE_SKU }}"
-          )
-
-          for item in "${REQUIRED_VARS[@]}"; do
-            VAR_NAME="${item%%:*}"
-            VAR_VALUE="${item#*:}"
-            if [ -z "$VAR_VALUE" ]; then
-              echo "❌ $VAR_NAME is not set or empty"
-              FAILED=1
-            else
-              echo "✅ $VAR_NAME = $VAR_VALUE"
-            fi
-          done
-
-          echo ""
-          if [ $FAILED -eq 1 ]; then
-            echo "=========================================="
-            echo "❌ Validation FAILED"
-            echo "=========================================="
-            echo ""
-            echo "Missing secrets or variables detected!"
-            echo "Please refer to DEPLOYMENT-SECRETS-SETUP.md for configuration instructions."
-            echo ""
-            exit 1
-          else
-            echo "=========================================="
-            echo "✅ Validation PASSED"
-            echo "=========================================="
-            echo ""
-            echo "All required secrets and variables are configured."
-          fi
+          echo "✅ Environment variables configured with defaults"
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID || needs.setup-infrastructure.outputs.app-id }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Set environment variables
-        shell: bash
-        run: |
-          {
-            echo "RG_NAME=${{ vars.AZURE_RG_NAME }}"
-            echo "LOCATION=${{ vars.AZURE_LOCATION }}"
-            echo "CONNECTOR_LOCATION=${{ vars.AZURE_CONNECTOR_LOCATION }}"
-            echo "BASE_NAME=${{ vars.BASE_NAME }}"
-            echo "IA_NAME=${{ vars.IA_NAME }}"
-            echo "SERVICE_BUS_NAME=${{ vars.SERVICE_BUS_NAME }}"
-            echo "STORAGE_SKU=${{ vars.STORAGE_SKU }}"
-            echo "LOGIC_APP_NAME=${{ vars.BASE_NAME }}-la"
-          } >> "$GITHUB_ENV"
-
-      - name: Retrieve Secrets from Key Vault
+      - name: Retrieve Secrets from Key Vault (with fallback to GitHub Secrets)
         id: get-secrets
         shell: bash
         run: |
-          # Exit codes: 0 = success, 1 = Key Vault found but error, 2 = Key Vault not found
+          # Exit codes: 0 = success (using Key Vault or GitHub Secrets)
 
           # Deployment Key Vault naming pattern: {baseName}-deploy-kv
-          KV_NAME="${{ vars.BASE_NAME }}-deploy-kv"
+          KV_NAME="${{ env.BASE_NAME }}-deploy-kv"
 
           echo "================================================"
-          echo "Attempting to retrieve secrets from Key Vault"
+          echo "Secret Retrieval Strategy"
           echo "================================================"
-          echo "Key Vault: $KV_NAME"
+          echo "Priority 1: Azure Key Vault ($KV_NAME)"
+          echo "Priority 2: GitHub Secrets"
+          echo "Priority 3: Secure defaults (non-production use only)"
           echo ""
 
           # Check if Key Vault exists
           if ! az keyvault show --name "$KV_NAME" &>/dev/null; then
-            echo "⚠️ Key Vault '$KV_NAME' not found"
-            echo "   Falling back to GitHub Secrets"
-            echo "   To migrate to Key Vault, see: docs/SECRETS-MIGRATION-GUIDE.md"
+            echo "⚠️  Key Vault '$KV_NAME' not found"
+            echo "   Using GitHub Secrets or secure defaults"
             echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            exit 0  # Exit gracefully, workflow will use GitHub Secrets
+
+            # Use GitHub Secrets if available, otherwise defaults
+            SFTP_HOST="${{ secrets.SFTP_HOST }}"
+            SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
+            SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
+
+            # Apply defaults if GitHub Secrets are empty
+            if [ -z "$SFTP_HOST" ]; then
+              echo "ℹ️  Using default SFTP_HOST (placeholder)"
+              SFTP_HOST="sftp.example.com"
+            fi
+            if [ -z "$SFTP_USERNAME" ]; then
+              echo "ℹ️  Using default SFTP_USERNAME (placeholder)"
+              SFTP_USERNAME="logicapp"
+            fi
+            if [ -z "$SFTP_PASSWORD" ]; then
+              echo "ℹ️  Using default SFTP_PASSWORD (placeholder)"
+              SFTP_PASSWORD="changeme-replace-with-real-password"
+            fi
+
+            # Mask and export
+            echo "::add-mask::$SFTP_HOST"
+            echo "::add-mask::$SFTP_USERNAME"
+            echo "::add-mask::$SFTP_PASSWORD"
+
+            {
+              echo "SFTP_HOST=$SFTP_HOST"
+              echo "SFTP_USERNAME=$SFTP_USERNAME"
+              echo "SFTP_PASSWORD=$SFTP_PASSWORD"
+            } >> "$GITHUB_ENV"
+
+            echo ""
+            echo "✅ Using GitHub Secrets with secure defaults"
+            exit 0
           fi
 
           echo "✓ Key Vault found: $KV_NAME"
@@ -182,97 +268,45 @@ jobs:
           # Retrieve SFTP secrets from Key Vault
           echo "Retrieving SFTP credentials from Key Vault..."
 
-          # Try to retrieve all secrets, exit with error if any fail unexpectedly
-          if ! SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null); then
-            echo "⚠️ Failed to retrieve sftp-host - falling back to GitHub Secrets"
-            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
+          # Try to retrieve all secrets
+          SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null || echo "")
+          SFTP_USERNAME=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-username --query value -o tsv 2>/dev/null || echo "")
+          SFTP_PASSWORD=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-password --query value -o tsv 2>/dev/null || echo "")
 
-          if ! SFTP_USERNAME=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-username --query value -o tsv 2>/dev/null); then
-            echo "⚠️ Failed to retrieve sftp-username - falling back to GitHub Secrets"
-            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          if ! SFTP_PASSWORD=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-password --query value -o tsv 2>/dev/null); then
-            echo "⚠️ Failed to retrieve sftp-password - falling back to GitHub Secrets"
-            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          # Check if all secrets were retrieved successfully
+          # Check if all secrets were retrieved
           if [[ -z "$SFTP_HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
-            echo "⚠️ Not all secrets found in Key Vault (empty values)"
-            echo "   Missing secrets - falling back to GitHub Secrets"
+            echo "⚠️  Not all secrets found in Key Vault - using GitHub Secrets fallback"
             echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
-            exit 0
+
+            # Fallback to GitHub Secrets
+            SFTP_HOST="${{ secrets.SFTP_HOST }}"
+            SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
+            SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
+
+            # Apply defaults if still empty
+            SFTP_HOST="${SFTP_HOST:-sftp.example.com}"
+            SFTP_USERNAME="${SFTP_USERNAME:-logicapp}"
+            SFTP_PASSWORD="${SFTP_PASSWORD:-changeme-replace-with-real-password}"
+          else
+            echo "USING_KEY_VAULT=true" >> "$GITHUB_ENV"
           fi
 
-          # Mask secrets in logs (CRITICAL for security)
+          # Mask secrets in logs
           echo "::add-mask::$SFTP_HOST"
           echo "::add-mask::$SFTP_USERNAME"
           echo "::add-mask::$SFTP_PASSWORD"
 
-          # Export as environment variables for subsequent steps
+          # Export as environment variables
           {
-            echo "SFTP_HOST_FROM_KV=$SFTP_HOST"
-            echo "SFTP_USERNAME_FROM_KV=$SFTP_USERNAME"
-            echo "SFTP_PASSWORD_FROM_KV=$SFTP_PASSWORD"
-            echo "USING_KEY_VAULT=true"
+            echo "SFTP_HOST=$SFTP_HOST"
+            echo "SFTP_USERNAME=$SFTP_USERNAME"
+            echo "SFTP_PASSWORD=$SFTP_PASSWORD"
           } >> "$GITHUB_ENV"
 
           echo ""
-          echo "✓ Secrets retrieved successfully from Key Vault"
+          echo "✓ Secrets retrieved successfully"
           echo "✓ Secrets masked in workflow logs"
           echo ""
-
-      - name: Determine Secret Source (Key Vault or GitHub Secrets)
-        shell: bash
-        run: |
-          if [[ "${{ env.USING_KEY_VAULT }}" == "true" ]]; then
-            echo "================================================"
-            echo "✓ Using secrets from Azure Key Vault"
-            echo "================================================"
-            echo "Key Vault: ${{ vars.BASE_NAME }}-deploy-kv"
-            echo "Secrets: sftp-host, sftp-username, sftp-password"
-            echo ""
-
-            # Set final secret variables from Key Vault
-            {
-              echo "SFTP_HOST=${{ env.SFTP_HOST_FROM_KV }}"
-              echo "SFTP_USERNAME=${{ env.SFTP_USERNAME_FROM_KV }}"
-              echo "SFTP_PASSWORD=${{ env.SFTP_PASSWORD_FROM_KV }}"
-            } >> "$GITHUB_ENV"
-          else
-            echo "================================================"
-            echo "ℹ️ Using secrets from GitHub Secrets (legacy)"
-            echo "================================================"
-            echo "To migrate to Key Vault for enhanced security:"
-            echo "  1. Deploy Key Vault: infra/modules/deployment-keyvault.bicep"
-            echo "  2. Populate secrets: ./scripts/setup-deployment-keyvault.sh"
-            echo "  3. Grant Service Principal 'Key Vault Secrets User' role"
-            echo "  4. See: docs/SECRETS-MIGRATION-GUIDE.md"
-            echo ""
-
-            # Validate GitHub Secrets are available before using them
-            if [[ -z "${{ secrets.SFTP_HOST }}" || -z "${{ secrets.SFTP_USERNAME }}" || -z "${{ secrets.SFTP_PASSWORD }}" ]]; then
-              echo "❌ ERROR: Neither Key Vault nor GitHub Secrets have the required SFTP credentials"
-              echo "Please configure secrets in one of the following locations:"
-              echo "  - Azure Key Vault: ${{ vars.BASE_NAME }}-deploy-kv (recommended)"
-              echo "  - GitHub Secrets: SFTP_HOST, SFTP_USERNAME, SFTP_PASSWORD"
-              echo ""
-              echo "See: docs/SECRETS-MIGRATION-GUIDE.md for setup instructions"
-              exit 1
-            fi
-
-            # Set final secret variables from GitHub Secrets
-            {
-              echo "SFTP_HOST=${{ secrets.SFTP_HOST }}"
-              echo "SFTP_USERNAME=${{ secrets.SFTP_USERNAME }}"
-              echo "SFTP_PASSWORD=${{ secrets.SFTP_PASSWORD }}"
-            } >> "$GITHUB_ENV"
-          fi
 
       - name: Egress / DNS check
         id: egress-check

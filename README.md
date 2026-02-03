@@ -88,6 +88,29 @@ Deploy a complete HIPAA-compliant EDI platform in **<5 minutes**:
 
 ### Option A: Azure Logic Apps (Recommended for Azure-first)
 
+**Automated Deployment with GitHub Actions** ⭐ NEW
+
+The simplest way to deploy - fully automated with secure defaults:
+
+1. **Fork this repository** to your GitHub account
+2. **Configure GitHub Secrets** (minimum required):
+   - `AZURE_CLIENT_ID` - Application (Client) ID
+   - `AZURE_TENANT_ID` - Azure AD Tenant ID  
+   - `AZURE_SUBSCRIPTION_ID` - Azure Subscription ID
+3. **Push to main branch** - Deployment automatically starts
+4. **Approve deployment** - Review and approve in GitHub Actions
+
+See [Production Deployment Guide](./docs/PRODUCTION-DEPLOYMENT-GUIDE.md) for complete instructions.
+
+**Features**:
+- ✅ Automated app registration and service principal creation
+- ✅ Three-tier secret fallback (Key Vault → GitHub Secrets → defaults)
+- ✅ Static Web App with multi-tenant Azure AD authentication
+- ✅ Automatic retry logic and health checks
+- ✅ Single production environment (no DEV/UAT complexity)
+
+**Manual Deploy to Azure** (Alternative)
+
 1. **Click Deploy to Azure** ☝️ (button above)
 2. **Configure** basic settings (baseName, region)
 3. **Deploy workflows** via CLI
