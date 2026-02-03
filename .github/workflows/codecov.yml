@@ -38,7 +38,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           echo "🧪 Running tests with coverage..."
-          npm test -- --coverage --coverageReporters=lcov
+          npm test -- --coverage --coverageReporters=lcov --coverageReporters=json-summary --coverageReporters=text
           echo "✅ Tests complete"
 
       - name: Upload coverage to Codecov
@@ -58,9 +58,22 @@ jobs:
           echo "📊 Code Coverage Report"
           echo "=========================================="
           if [ -f coverage/coverage-summary.json ]; then
-            echo "Coverage data generated successfully"
-            echo "Report uploaded to Codecov"
+            echo "✅ Coverage data generated successfully"
+            echo ""
+            # Parse and display coverage percentages
+            LINES_PCT=$(cat coverage/coverage-summary.json | python3 -c "import sys, json; print(json.load(sys.stdin)['total']['lines']['pct'])")
+            STATEMENTS_PCT=$(cat coverage/coverage-summary.json | python3 -c "import sys, json; print(json.load(sys.stdin)['total']['statements']['pct'])")
+            FUNCTIONS_PCT=$(cat coverage/coverage-summary.json | python3 -c "import sys, json; print(json.load(sys.stdin)['total']['functions']['pct'])")
+            BRANCHES_PCT=$(cat coverage/coverage-summary.json | python3 -c "import sys, json; print(json.load(sys.stdin)['total']['branches']['pct'])")
+            
+            echo "Lines:      ${LINES_PCT}%"
+            echo "Statements: ${STATEMENTS_PCT}%"
+            echo "Functions:  ${FUNCTIONS_PCT}%"
+            echo "Branches:   ${BRANCHES_PCT}%"
+            echo ""
+            echo "📤 Report uploaded to Codecov"
           else
             echo "⚠️  No coverage summary found"
           fi
           echo ""
+          echo "=========================================="
