@@ -5,11 +5,27 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - December 1, 2025
+## [Unreleased]
 
-### The Open Frontier Release
+### v4.0 - Planned Q2 2026
 
-Cloud Health Office v3.0.0 delivers multi-cloud independence, commercial launch readiness, and Kubernetes-native workflow orchestration—making enterprise-grade healthcare EDI accessible across any cloud platform.
+**Enhanced Provider Management & Multi-Market Expansion**
+
+- Enhanced practice management features for small-to-medium practices
+- Advanced provider network analytics and reporting
+- Expanded core system integrations (Epic Tapestry, additional CAPS)
+- Mobile provider app (React Native) for iOS and Android
+- Provider-facing scheduling and patient communication tools
+- Enhanced claims scrubbing with AI-powered validation
+- Multi-location practice support with centralized billing
+
+---
+
+## [3.0.0] - February 2026 (Current Production Release)
+
+### Dual-Market Healthcare Integration Platform
+
+Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/Facets augmentation) and **healthcare providers** (practice management with direct EDI). This release delivers multi-cloud independence, CMS-0057-F compliance, and commercial launch readiness.
 
 ### Added
 

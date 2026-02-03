@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Cloud Health Office V2 - Deploy production-grade payer EDI integration in under 1 hour. CMS-0057-F compliant FHIR R4 APIs. Zero custom code. Azure-native. HIPAA-engineered. Open source." />
-  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, X12 transactions, multi-tenant SaaS, prior authorization, FHIR R4, CMS-0057-F" />
-  <title>Cloud Health Office - Streamlined Payer EDI Integration</title>
+  <meta name="description" content="Cloud Health Office v3.0 - Modern healthcare integration platform. Extend QNXT/Facets with FHIR APIs for payers. Direct EDI for providers. Deploy in <1 hour. CMS-0057-F compliant. $99/month starting." />
+  <meta name="keywords" content="QNXT integration, Facets integration, healthcare EDI, practice management, CMS-0057-F, FHIR R4, prior authorization, clearinghouse alternative, Azure Logic Apps, HIPAA compliance" />
+  <title>Cloud Health Office - QNXT/Facets Integration & Practice Management Platform</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
@@ -17,7 +17,19 @@
     .cta-box { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:40px; margin:60px auto; max-width:800px; box-shadow:0 0 30px rgba(0,255,255,0.2); }
     .cta-box h2 { color:#00ffff; text-shadow:0 0 20px rgba(0,255,255,0.8); font-size:2.5rem; margin-bottom:20px; }
     .cta-box p { font-size:1.2rem; margin:20px 0; }
-    .v2-banner { background:linear-gradient(135deg, #00ffff 0%, #00ff88 100%); color:#000; padding:15px 30px; border-radius:8px; display:inline-block; margin:20px 0; font-weight:bold; font-size:1.2rem; }
+    .version-badge { background:linear-gradient(135deg, #00ffff 0%, #00ff88 100%); color:#000; padding:12px 24px; border-radius:8px; display:inline-block; margin:20px 0; font-weight:bold; font-size:1rem; }
+    .hero-split { display:grid; grid-template-columns:1fr 1fr; gap:40px; max-width:1200px; margin:40px auto; text-align:left; }
+    .hero-left, .hero-right { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; }
+    .hero-right { border-color:#00ff88; }
+    .hero-split h2 { color:#00ffff; font-size:1.8rem; margin-bottom:15px; }
+    .hero-right h2 { color:#00ff88; }
+    .benefit-list { list-style:none; padding:0; margin:20px 0; }
+    .benefit-list li { padding:8px 0; padding-left:25px; position:relative; }
+    .benefit-list li:before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; }
+    .stats-row { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; margin:40px 0; }
+    .stat { text-align:center; }
+    .stat strong { display:block; color:#00ffff; font-size:2rem; margin-bottom:5px; }
+    @media (max-width: 768px) { .hero-split { grid-template-columns:1fr; } }
     .fhir-announcement { background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; margin:40px auto; max-width:900px; }
     .fhir-announcement h2 { color:#00ff88; margin-top:0; }
     .compliance-badge { display:inline-block; background:rgba(0,255,136,0.2); color:#00ff88; border:1px solid #00ff88; padding:6px 16px; border-radius:16px; font-size:0.9rem; margin:5px; }
@@ -29,10 +41,11 @@
   <nav style="margin-bottom:20px;">
     <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
       <li><a href="index.html" style="color:#00ffff;" aria-current="page">Home</a></li>
+      <li><a href="solutions-payers.html" style="color:#888;">For Payers</a></li>
+      <li><a href="solutions-providers.html" style="color:#888;">For Providers</a></li>
+      <li><a href="pricing.html" style="color:#888;">Pricing</a></li>
       <li><a href="platform.html" style="color:#888;">Platform</a></li>
-      <li><a href="release-notes.html" style="color:#00ff88; font-weight:bold;">V2 Release Notes</a></li>
-      <li><a href="insights.html" style="color:#888;">Insights</a></li>
-      <li><a href="assessment.html" style="color:#888;">Assessment</a></li>
+      <li><a href="release-notes.html" style="color:#888;">Versions</a></li>
       <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#888;">GitHub</a></li>
     </ul>
   </nav>
@@ -44,22 +57,55 @@
   </script>
 
   <main id="main-content">
-  <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Sentinel Logo - Obsidian monolith shield with digital eye and holographic circuit veins">
+  <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:400px;">
   
-  <div class="v2-banner">🚀 V2 Now Available — Complete CMS-0057-F Compliance</div>
+  <div class="version-badge">v3.0 Production Ready • v4.0 Coming Q2 2026</div>
   
-  <h1>Cloud Health Office</h1>
+  <h1>Modern Healthcare Integration Platform</h1>
   
-  <p style="font-size:2rem;">
-    Production payer EDI integration in under one hour.<br>
-    Zero custom code. Azure-native. HIPAA-engineered.
+  <p style="font-size:1.5rem; max-width:900px; margin:20px auto;">
+    Extend QNXT/Facets with CMS-Compliant FHIR APIs<br>
+    <strong>Or</strong> Power Your Practice with Direct Payer EDI
   </p>
+  
+  <div class="hero-split">
+    <div class="hero-left">
+      <h2>For Health Plans</h2>
+      <p class="lead">Extend QNXT/Facets with CMS-0057-F compliant FHIR APIs. Don't replace your core system—augment it.</p>
+      <ul class="benefit-list">
+        <li>Deploy in <strong>&lt;1 hour</strong> (vs 12-18 months)</li>
+        <li><strong>$50k-250k</strong> implementation (vs $2M+ upgrade)</li>
+        <li>Multi-clearinghouse support</li>
+        <li>January 2027 ready today</li>
+      </ul>
+      <a href="solutions-payers.html" class="button" style="margin-top:20px;">Payer Solutions →</a>
+    </div>
+    
+    <div class="hero-right">
+      <h2>For Practices</h2>
+      <p class="lead">Modern practice management with direct payer EDI. Bypass clearinghouse fees and delays.</p>
+      <ul class="benefit-list">
+        <li>Starting at <strong>$99/month</strong> per provider</li>
+        <li>Real-time eligibility & prior auth</li>
+        <li>Direct payer connections</li>
+        <li>Simple, fast, modern</li>
+      </ul>
+      <a href="solutions-providers.html" class="button" style="margin-top:20px; background:#00ff88; border-color:#00ff88;">Provider Solutions →</a>
+    </div>
+  </div>
+  
+  <div class="stats-row">
+    <div class="stat"><strong>82%</strong><span>cost reduction vs traditional platforms</span></div>
+    <div class="stat"><strong>&lt;1 hour</strong><span>production deployment</span></div>
+    <div class="stat"><strong>480+</strong><span>tests, 100% pass rate</span></div>
+    <div class="stat"><strong>Apache 2.0</strong><span>open source</span></div>
+  </div>
 
-  <!-- V2 FHIR API Announcement -->
+  <!-- CMS-0057-F Compliance Announcement -->
   <div class="fhir-announcement">
-    <h2>🔥 V2: Production-Ready FHIR R4 APIs</h2>
+    <h2>✅ CMS-0057-F Compliant — 18 Months Early</h2>
     <p style="font-size:1.2rem;">
-      Complete <strong>CMS-0057-F compliance</strong> with 18 months to spare before the January 1, 2027 deadline.
+      Complete <strong>CMS-0057-F compliance</strong> ahead of the January 1, 2027 deadline.
     </p>
     <div style="margin:20px 0;">
       <span class="compliance-badge">✅ Patient Access API</span>
@@ -71,27 +117,43 @@
     </div>
     <p>
       Transform X12 EDI (270/837/278/835) to FHIR R4 with zero external dependencies.<br>
-      <strong>480 comprehensive tests. 100% pass rate. Production-ready.</strong>
+      <strong>480 comprehensive tests. 100% pass rate. Production-ready v3.0.</strong>
     </p>
-    <a href="release-notes.html" class="button" style="margin-top:20px;">View V2 Release Notes →</a>
+    <a href="release-notes.html" class="button" style="margin-top:20px;">View Version History →</a>
     <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" class="button" style="background:#00ff88; border-color:#00ff88; margin-top:20px;" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a>
   </div>
 
-  <!-- Assessment CTA Section -->
-  <div class="cta-box">
-    <h2>Platform Assessment</h2>
-    <p>
-      Comprehensive technical analysis reveals <strong>82% cost reduction</strong> and 
-      <strong>sub-1-hour deployment (based on internal testing)</strong> compared to traditional EDI platforms.
-    </p>
-    <p style="opacity:0.9;">
-      ✓ Competitive positioning<br>
-      ✓ Security & compliance audit<br>
-      ✓ ROI calculations<br>
-      ✓ Deployment roadmap
-    </p>
-    <a href="assessment.html" class="button">Read Full Assessment →</a>
-    <a href="platform.html" class="button" style="background:#00ff88; border-color:#00ff88;">Platform Overview</a>
+  <!-- CTA Sections -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px; max-width:1200px; margin:60px auto;">
+    <div class="cta-box">
+      <h2>For Health Plans</h2>
+      <p>
+        Avoid $2M+ QNXT/Facets upgrades. Get CMS-0057-F compliant in <strong>&lt;1 hour</strong> with a microservices augmentation layer.
+      </p>
+      <p style="opacity:0.9;">
+        ✓ QNXT/Facets integration<br>
+        ✓ Multi-clearinghouse support<br>
+        ✓ 18 months ahead of deadline<br>
+        ✓ Zero vendor lock-in
+      </p>
+      <a href="solutions-payers.html" class="button">Payer Solutions →</a>
+      <a href="pricing.html" class="button" style="background:#00ff88; border-color:#00ff88;">View Pricing</a>
+    </div>
+    
+    <div class="cta-box" style="border-color:#00ff88;">
+      <h2 style="color:#00ff88;">For Practices</h2>
+      <p>
+        Eliminate clearinghouse fees. Connect directly to payers. Starting at <strong>$99/month</strong> per provider.
+      </p>
+      <p style="opacity:0.9;">
+        ✓ Real-time eligibility<br>
+        ✓ Direct payer EDI<br>
+        ✓ Modern practice management<br>
+        ✓ Simple deployment
+      </p>
+      <a href="solutions-providers.html" class="button" style="background:#00ff88; border-color:#00ff88;">Provider Solutions →</a>
+      <a href="pricing.html" class="button">View Pricing</a>
+    </div>
   </div>
   
   <!-- Email Signup Section -->
@@ -131,13 +193,14 @@
 
   <footer>
     <p>
-      <strong>Cloud Health Office V2 — The Sentinel</strong><br>
-      Capabilities beyond question. Systems that do not fail.
+      <strong>Cloud Health Office v3.0</strong><br>
+      Modern healthcare integration for payers and providers.
     </p>
     <p>
-      Apache 2.0 • Not affiliated with third-party vendors • © 2025 Aurelianware<br>
+      Apache 2.0 License • Not affiliated with Cognizant, TriZetto, or other third-party vendors • © 2026 Aurelianware<br>
       <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
-      <a href="mailto:mark@aurelianware.com">Contact</a>
+      <a href="mailto:mark@aurelianware.com">Contact</a> • 
+      <a href="pricing.html">Pricing</a>
     </p>
   </footer>
 </body>
