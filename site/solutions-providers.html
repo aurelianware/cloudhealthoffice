@@ -3,214 +3,63 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Cloud Health Office for healthcare practices - Direct payer EDI connections, real-time eligibility, prior authorization automation. Replace expensive clearinghouses with modern API-first platform." />
-  <meta name="keywords" content="practice management, medical billing software, clearinghouse alternative, direct EDI, FHIR practice management, real-time eligibility" />
-  <title>For Healthcare Practices - Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office - Additional solutions for healthcare providers coming in 2026." />
+  <meta name="keywords" content="Cloud Health Office, healthcare technology, coming soon" />
+  <title>Additional Solutions Coming Soon - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
-  <style>
-    body { padding:40px 20px; max-width:1200px; margin:0 auto; }
-    .hero { text-align:center; margin-bottom:60px; padding:60px 20px; background:linear-gradient(135deg, #0a0a0a 0%, #001a0a 100%); border-radius:12px; border:2px solid #00ff88; }
-    .hero h1 { color:#00ff88; font-size:3rem; margin-bottom:20px; }
-    .hero-subtitle { font-size:1.5rem; color:#fff; margin-bottom:30px; }
-    .pain-points { margin:60px 0; }
-    .pain-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:30px; margin-top:40px; }
-    .pain-card { background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:30px; }
-    .pain-card h3 { color:#00ff88; margin-top:0; }
-    .value-section { margin:60px 0; padding:40px; background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; }
-    .benefit-list { list-style:none; padding:0; margin:30px 0; }
-    .benefit-list li { padding:15px 0; padding-left:35px; position:relative; font-size:1.1rem; }
-    .benefit-list li:before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; font-size:1.5rem; }
-    .testimonial { background:#0a0a0a; border-left:4px solid #00ff88; padding:30px; margin:40px 0; font-style:italic; }
-    .cta-box { text-align:center; margin:60px 0; padding:50px; background:linear-gradient(135deg, #001a0a 0%, #0a0a0a 100%); border:2px solid #00ff88; border-radius:12px; }
-  </style>
 </head>
-<body>
+<body style="text-align:center; padding:100px 20px;">
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-  <nav style="margin-bottom:40px; text-align:center;">
+  <nav style="margin-bottom:40px;">
     <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
       <li><a href="index.html" style="color:#888;">Home</a></li>
-      <li><a href="solutions-payers.html" style="color:#888;">For Payers</a></li>
-      <li><a href="solutions-providers.html" style="color:#00ff88;" aria-current="page">For Providers</a></li>
+      <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
       <li><a href="pricing.html" style="color:#888;">Pricing</a></li>
       <li><a href="platform.html" style="color:#888;">Platform</a></li>
       <li><a href="release-notes.html" style="color:#888;">Versions</a></li>
       <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#888;">GitHub</a></li>
     </ul>
   </nav>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });
-  </script>
 
-  <main id="main-content">
-    <div class="hero">
-      <h1>Practice Management, Modernized</h1>
-      <p class="hero-subtitle">
-        Stop paying 3-5% per transaction to clearinghouses.<br>
-        Connect directly to payers with modern APIs.
-      </p>
-      <p style="font-size:1.2rem; margin-top:30px;">
-        <strong>Starting at $99/month</strong> • No setup fees • No transaction fees
-      </p>
-      <a href="mailto:mark@aurelianware.com?subject=Provider Demo Request" class="button" style="font-size:1.3rem; padding:15px 40px; background:#00ff88; border-color:#00ff88; margin-top:20px;">Request Demo</a>
-    </div>
-
-    <div class="pain-points">
-      <h2 style="text-align:center; color:#00ff88; font-size:2.5rem;">You Shouldn't Have to Live With This</h2>
-      
-      <div class="pain-grid">
-        <div class="pain-card">
-          <h3>💸 Transaction Fee Bleed</h3>
-          <p>Clearinghouses charge 3-5% of every claim. For a 3-provider practice, that's <strong>$30k+ per year</strong> in pure overhead.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>$0 per transaction.</strong></p>
-        </div>
-
-        <div class="pain-card">
-          <h3>⏳ 14-Day Payment Cycles</h3>
-          <p>Traditional clearinghouses batch claims daily or weekly. Your cash flow is held hostage by antiquated batch processing.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>Real-time submission & eligibility checks.</strong></p>
-        </div>
-
-        <div class="pain-card">
-          <h3>📞 Support Black Holes</h3>
-          <p>Legacy PM systems: "Submit a ticket and wait 3-5 business days." Meanwhile, your staff is on hold with payers for hours.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>Direct support, no ticket queue.</strong></p>
-        </div>
-
-        <div class="pain-card">
-          <h3>🔒 Vendor Lock-In</h3>
-          <p>Switching costs are astronomical. Data migration takes months. Your PM vendor knows you're trapped.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>Open-source core, export anytime.</strong></p>
-        </div>
-
-        <div class="pain-card">
-          <h3>🚫 No API Access</h3>
-          <p>Want to integrate telehealth? Patient portal? Lab results? Legacy systems make you pay for custom development.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>FHIR API included at all tiers.</strong></p>
-        </div>
-
-        <div class="pain-card">
-          <h3>📊 Opaque Reporting</h3>
-          <p>You can't see denial patterns, payer performance, or revenue cycle bottlenecks without paying for "premium" analytics modules.</p>
-          <p style="margin-top:15px; opacity:0.8;">Cloud Health Office: <strong>Full analytics dashboard included.</strong></p>
-        </div>
-      </div>
-    </div>
-
-    <div class="value-section">
-      <h2 style="text-align:center; color:#00ff88; margin-top:0;">What You Get Instead</h2>
-      
-      <ul class="benefit-list">
-        <li><strong>Direct Payer Connections:</strong> Submit to UHC, Anthem, Aetna, Humana directly. No middleman. No transaction fees.</li>
-        <li><strong>Real-Time Eligibility:</strong> Check coverage before the patient walks in. Reduce claim denials by 40%+.</li>
-        <li><strong>Prior Auth Automation:</strong> Auto-submit 278s and track status in real-time. Cut prior auth turnaround from days to hours.</li>
-        <li><strong>Mobile-First Interface:</strong> iOS/Android apps for providers on the go. Sign notes, review charts, submit claims from anywhere.</li>
-        <li><strong>Open API Architecture:</strong> FHIR R4 API included. Integrate with EHR, telehealth, patient portals, labs - no extra fees.</li>
-        <li><strong>Transparent Pricing:</strong> $99-4,999/month based on provider count. No hidden fees. No surprises. Cancel anytime.</li>
-        <li><strong>Sub-1-Hour Onboarding:</strong> Deploy to your Azure tenant (or ours) in under 60 minutes. Start submitting claims same day.</li>
-        <li><strong>24/7 Support (Growth+):</strong> Real people. No ticket queue. Phone & email support that actually responds.</li>
-      </ul>
-
-      <div style="text-align:center; margin-top:40px;">
-        <a href="pricing.html" class="button" style="font-size:1.2rem; padding:12px 35px; background:#00ff88; border-color:#00ff88;">View Pricing Plans →</a>
-      </div>
-    </div>
-
-    <div class="testimonial">
-      <p style="font-size:1.2rem; margin:0;">
-        "We were paying $3,200/month to our clearinghouse plus 4% per claim. Cloud Health Office cut our billing overhead by 78%. Same-day eligibility checks alone saved us 15+ hours per week."
-      </p>
-      <p style="margin-top:20px; font-style:normal; opacity:0.8;">
-        — <strong>Dr. Sarah Chen, MD</strong><br>
-        Founding Practices Program participant (anonymized)
-      </p>
-    </div>
-
-    <div style="margin:60px 0;">
-      <h2 style="text-align:center; color:#00ff88;">Common Questions</h2>
-      
-      <div style="max-width:900px; margin:40px auto;">
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">Do I need to change my EHR?</summary>
-          <p style="margin-top:15px;">No. Cloud Health Office sits alongside your existing EHR (Epic, Cerner, Athena, eClinicalWorks, etc.) via FHIR API integration. You keep your current clinical workflow.</p>
-        </details>
-
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">What payers do you support?</summary>
-          <p style="margin-top:15px;">Direct connections to UnitedHealthcare, Anthem, Aetna, Humana, Cigna, Blue Cross Blue Shield (major markets), Medicare, and Medicaid. Additional payers added monthly.</p>
-        </details>
-
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">Is there a contract?</summary>
-          <p style="margin-top:15px;">No. Solo & Small Group tiers are month-to-month. Group Practice tier requires 3-month minimum. Cancel anytime with 30-day notice.</p>
-        </details>
-
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">How long does onboarding take?</summary>
-          <p style="margin-top:15px;">Technical deployment: <1 hour. Payer credentialing (NPI enrollment, etc.): 2-4 weeks (standard industry timeline, not specific to us). You can start submitting test claims same day.</p>
-        </details>
-
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">What about HIPAA compliance?</summary>
-          <p style="margin-top:15px;">Architected for HIPAA from day one. Azure Private Link, encryption at rest/in transit, audit logging, BAA included. SOC 2 Type II certification in progress (Q3 2026).</p>
-        </details>
-
-        <details style="background:#0a0a0a; padding:20px; margin:15px 0; border:1px solid #333; border-radius:8px;">
-          <summary style="cursor:pointer; font-weight:bold; color:#00ff88;">Can I export my data?</summary>
-          <p style="margin-top:15px;">Yes. Full data export via API or CSV at any time. No export fees. No restrictions. You own your data.</p>
-        </details>
-      </div>
-    </div>
-
-    <div class="cta-box">
-      <h2 style="color:#00ff88; margin-top:0;">🎉 Founding Practices Program</h2>
-      <p style="font-size:1.3rem; margin:20px 0;">
-        Join the first 50 practices at <strong>$99/month for the first year</strong><br>
-        (regardless of provider count - limited offer)
-      </p>
-      <ul class="benefit-list" style="text-align:left; max-width:600px; margin:30px auto;">
-        <li>Priority feature requests - we build what you need</li>
-        <li>Dedicated onboarding specialist</li>
-        <li>Direct access to the engineering team</li>
-        <li>Grandfathered pricing when v4.0 launches (Q2 2026)</li>
-        <li>Listed as founding practice on our website (optional)</li>
-      </ul>
-      <a href="mailto:mark@aurelianware.com?subject=Founding Practices Program Application" class="button" style="font-size:1.3rem; padding:15px 40px; background:#00ff88; border-color:#00ff88; margin-top:20px;">Apply Now →</a>
-      <p style="margin-top:20px; opacity:0.8;">Applications close when we reach 50 practices. Currently: 17/50 enrolled.</p>
-    </div>
-
-    <div style="text-align:center; margin:60px 0;">
-      <h2>Ready to Modernize Your Practice?</h2>
-      <p style="font-size:1.2rem; margin:20px 0;">Schedule a 15-minute demo to see Cloud Health Office in action.</p>
-      <a href="mailto:mark@aurelianware.com?subject=Practice Demo Request" class="button" style="font-size:1.2rem; padding:15px 40px; background:#00ff88; border-color:#00ff88;">Request Demo</a>
-      <p style="margin-top:30px; opacity:0.8;">Or explore the <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">open-source codebase on GitHub</a> →</p>
-    </div>
-
+  <main id="main-content" style="max-width:800px; margin:0 auto;">
+    <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" 
+         alt="Cloud Health Office Logo" 
+         style="max-width:300px; margin:0 auto 40px;">
+    
+    <h1 style="font-size:3rem; margin-bottom:20px;">Additional Solutions Coming 2026</h1>
+    
+    <p style="font-size:1.3rem; max-width:700px; margin:30px auto; opacity:0.9;">
+      Cloud Health Office is expanding beyond health plan integration.<br>
+      New offerings for healthcare providers launching later in 2026.
+    </p>
+    
+    <p style="margin:40px 0;">
+      <a href="index.html" class="button" style="font-size:1.2rem; padding:15px 40px;">View Current Solutions for Health Plans →</a>
+    </p>
+    
+    <p style="opacity:0.7; margin-top:60px;">
+      Interested in provider solutions? <a href="mailto:contact@cloudhealthoffice.com" style="color:#00ff88;">Contact us</a> to learn more.
+    </p>
   </main>
 
-  <footer style="text-align:center; margin-top:80px; padding:40px 0; border-top:2px solid #333;">
+  <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:100px;">
     <p>
       <strong>Cloud Health Office v3.0</strong><br>
-      Modern healthcare integration for payers and providers.
+      Modern integration platform for health plans running QNXT/Facets
+    </p>
+    <p style="opacity:0.8; margin:20px 0;">
+      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
     </p>
     <p>
-      <a href="index.html">Home</a> •
-      <a href="solutions-payers.html">For Payers</a> •
-      <a href="pricing.html">Pricing</a> •
-      <a href="platform.html">Platform</a> •
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
+      <a href="pricing.html">Pricing</a>
     </p>
-    <p style="opacity:0.7; font-size:0.9rem;">
-      Apache 2.0 License • © 2026 Aurelianware • Not affiliated with third-party vendors
+    <p style="opacity:0.6; font-size:0.9rem; margin-top:20px;">
+      © 2026 Cloud Health Office • Built by healthcare payer system experts
     </p>
   </footer>
-
-  <script>
-    // Track provider solutions page views
-    if (window.plausible) {
-      plausible('pageview', { props: { page: 'solutions-providers' } });
-    }
-  </script>
 </body>
 </html>
