@@ -63,10 +63,11 @@ function generateHtmlPage(title, content, filename) {
   <nav>
     <ul id="assessmentNav">
       <li><a href="index.html">Home</a></li>
+      <li><a href="solutions-payers.html">For Payers</a></li>
+      <li><a href="solutions-providers.html">For Providers</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
       <li><a href="platform.html">Platform</a></li>
-      <li><a href="release-notes.html">Release Notes</a></li>
-      <li><a href="insights.html">Insights</a></li>
-      <li><a href="assessment.html">Assessment</a></li>
+      <li><a href="release-notes.html">Versions</a></li>
       <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
     </ul>
   </nav>
