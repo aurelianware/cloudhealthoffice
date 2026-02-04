@@ -27,8 +27,8 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ github.event.before || '' }}
+          head: ${{ github.sha }}
           extra_args: --json --only-verified
 
       - name: Security Scan - PII/PHI Detection
