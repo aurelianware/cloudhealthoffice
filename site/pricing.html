@@ -3,27 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Cloud Health Office pricing for health plans and practices. Payers: $50k-250k implementation. Providers: Starting at $99/month. Transparent pricing, no hidden fees." />
-  <meta name="keywords" content="healthcare EDI pricing, QNXT integration cost, practice management pricing, FHIR API pricing, clearinghouse alternative cost" />
-  <title>Pricing - Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office pricing for health plans running QNXT/Facets. Transparent pricing for FHIR compliance and EDI integration. SaaS or BYOS deployment models." />
+  <meta name="keywords" content="QNXT integration pricing, Facets integration cost, CMS-0057-F compliance cost, FHIR API pricing, health plan EDI costs" />
+  <title>Pricing for Health Plans - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
   <style>
-    body { padding:40px 20px; max-width:1400px; margin:0 auto; }
+    body { padding:40px 20px; max-width:1200px; margin:0 auto; }
     .pricing-hero { text-align:center; margin-bottom:60px; }
-    .pricing-grid { display:grid; grid-template-columns:1fr 1fr; gap:60px; margin:60px 0; }
-    .pricing-section h2 { color:#00ffff; font-size:2rem; margin-bottom:30px; text-align:center; }
-    .pricing-section.providers h2 { color:#00ff88; }
-    .pricing-tier { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; margin-bottom:30px; }
-    .providers .pricing-tier { border-color:#00ff88; }
-    .tier-name { color:#00ffff; font-size:1.5rem; font-weight:bold; margin-bottom:10px; }
-    .providers .tier-name { color:#00ff88; }
-    .tier-price { font-size:2rem; font-weight:bold; color:#fff; margin:15px 0; }
-    .tier-description { opacity:0.8; margin-bottom:20px; }
-    .tier-features { list-style:none; padding:0; margin:20px 0; }
-    .tier-features li { padding:8px 0; padding-left:25px; position:relative; }
-    .tier-features li:before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; }
-    .comparison-note { background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; margin:40px 0; text-align:center; }
+    .deployment-models { max-width:1000px; margin:60px auto; }
+    .pricing-grid { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-bottom:60px; }
+    .pricing-tier { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:40px; }
+    .price-header { text-align:center; margin-bottom:30px; }
+    .price-label { font-size:1.3rem; color:#00ffff; margin-bottom:10px; }
+    .price-amount { font-size:2.5rem; font-weight:bold; margin-bottom:10px; }
+    .price-period { opacity:0.8; }
+    .tier-features { list-style:none; padding:0; margin:30px 0; }
+    .tier-features li { padding:8px 0; }
+    .comparison-table { background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:40px; margin:60px auto; }
+    .roi-section { background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%); border:2px solid #00ff88; border-radius:12px; padding:50px; margin:60px auto; text-align:center; }
     @media (max-width: 900px) { .pricing-grid { grid-template-columns:1fr; } }
   </style>
 </head>
@@ -33,8 +31,7 @@
   <nav style="margin-bottom:40px; text-align:center;">
     <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
       <li><a href="index.html" style="color:#888;">Home</a></li>
-      <li><a href="solutions-payers.html" style="color:#888;">For Payers</a></li>
-      <li><a href="solutions-providers.html" style="color:#888;">For Providers</a></li>
+      <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
       <li><a href="pricing.html" style="color:#00ffff;" aria-current="page">Pricing</a></li>
       <li><a href="platform.html" style="color:#888;">Platform</a></li>
       <li><a href="release-notes.html" style="color:#888;">Versions</a></li>
@@ -47,179 +44,189 @@
 
   <main id="main-content">
     <div class="pricing-hero">
-      <h1>Transparent Pricing</h1>
+      <h1>Pricing for Health Plans</h1>
       <p style="font-size:1.3rem; max-width:800px; margin:20px auto;">
-        Choose the plan that fits your organization. No hidden fees. Cancel anytime.
+        Transparent pricing for QNXT/Facets integration and CMS-0057-F compliance.<br>
+        No hidden fees. Flexible deployment models.
       </p>
     </div>
 
-    <div class="pricing-grid">
-      <!-- Payer Pricing -->
-      <div class="pricing-section payers">
-        <h2>For Health Plans</h2>
-        
+    <!-- Deployment Model Pricing -->
+    <div class="deployment-models">
+      <h2 style="text-align:center; margin-bottom:40px;">Choose Your Deployment Model</h2>
+      
+      <div class="pricing-grid">
+        <!-- SaaS Model -->
         <div class="pricing-tier">
-          <div class="tier-name">Starter</div>
-          <div class="tier-price">Contact Us</div>
-          <div class="tier-description">50k-250k members</div>
+          <h3 style="color:#00ffff; text-align:center; font-size:1.8rem;">SaaS Model</h3>
+          <p style="text-align:center; opacity:0.9; margin-bottom:30px;">
+            We host on our Azure infrastructure. You pay monthly subscription.
+          </p>
+          
+          <div class="price-header">
+            <div class="price-label">Starting at</div>
+            <div class="price-amount">$10k-50k</div>
+            <div class="price-period">/month</div>
+          </div>
+          
           <ul class="tier-features">
-            <li>FHIR API compliance layer</li>
-            <li>Single clearinghouse integration</li>
-            <li>QNXT/Facets connector</li>
-            <li>Standard SLA (99.5% uptime)</li>
-            <li>Email support (business hours)</li>
-            <li>Monthly compliance reports</li>
+            <li>✓ Full platform hosting</li>
+            <li>✓ 24/7 monitoring & support</li>
+            <li>✓ Automatic updates</li>
+            <li>✓ HIPAA-compliant infrastructure</li>
+            <li>✓ 99.9% uptime SLA</li>
+            <li>✓ Managed clearinghouse connections</li>
+            <li>✓ Compliance reporting included</li>
           </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Implementation: $50k-100k</p>
-          <a href="mailto:mark@aurelianware.com?subject=Starter Plan Inquiry" class="button" style="width:100%; text-align:center; margin-top:10px;">Contact Sales</a>
+          
+          <p style="text-align:center; opacity:0.7; font-size:0.9rem; margin:20px 0;">
+            Pricing based on member count and transaction volume
+          </p>
+          
+          <div style="text-align:center; margin-top:20px;">
+            <a href="mailto:contact@cloudhealthoffice.com?subject=SaaS Pricing Inquiry" class="button" style="width:100%;">Request Quote</a>
+          </div>
         </div>
 
+        <!-- BYOS Model -->
         <div class="pricing-tier">
-          <div class="tier-name">Growth</div>
-          <div class="tier-price">Contact Us</div>
-          <div class="tier-description">250k-1M members</div>
+          <h3 style="color:#00ffff; text-align:center; font-size:1.8rem;">BYOS Model</h3>
+          <p style="text-align:center; opacity:0.9; margin-bottom:30px;">
+            Deploy to your Azure subscription. You own and control the infrastructure.
+          </p>
+          
+          <div class="price-header">
+            <div class="price-label">Implementation</div>
+            <div class="price-amount">$50k-250k</div>
+            <div class="price-period">one-time</div>
+          </div>
+          
           <ul class="tier-features">
-            <li>Everything in Starter, plus:</li>
-            <li>Multi-clearinghouse support</li>
-            <li>Real-time prior authorization</li>
-            <li>Premium SLA (99.9% uptime)</li>
-            <li>Phone & email support (24/5)</li>
-            <li>Dedicated success manager</li>
-            <li>Custom integration workflows</li>
+            <li>✓ Full implementation services</li>
+            <li>✓ QNXT/Facets integration</li>
+            <li>✓ Team training & enablement</li>
+            <li>✓ Documentation & runbooks</li>
+            <li>✓ 90-day post-launch support</li>
+            <li>✓ Source code access (Apache 2.0)</li>
+            <li>✓ Infrastructure as code included</li>
           </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Implementation: $100k-200k</p>
-          <a href="mailto:mark@aurelianware.com?subject=Growth Plan Inquiry" class="button" style="width:100%; text-align:center; margin-top:10px;">Contact Sales</a>
-        </div>
-
-        <div class="pricing-tier">
-          <div class="tier-name">Enterprise</div>
-          <div class="tier-price">Contact Us</div>
-          <div class="tier-description">1M+ members</div>
-          <ul class="tier-features">
-            <li>Everything in Growth, plus:</li>
-            <li>Unlimited clearinghouses</li>
-            <li>Custom workflow development</li>
-            <li>Enterprise SLA (99.95% uptime)</li>
-            <li>24/7 priority support</li>
-            <li>Dedicated DevOps engineer</li>
-            <li>Compliance consultation</li>
-            <li>White-glove migration</li>
-          </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Implementation: $200k-250k</p>
-          <a href="mailto:mark@aurelianware.com?subject=Enterprise Plan Inquiry" class="button" style="width:100%; text-align:center; margin-top:10px;">Contact Sales</a>
-        </div>
-      </div>
-
-      <!-- Provider Pricing -->
-      <div class="pricing-section providers">
-        <h2>For Practices</h2>
-        
-        <div class="pricing-tier">
-          <div class="tier-name">Solo Practice</div>
-          <div class="tier-price">$99-199/mo</div>
-          <div class="tier-description">1 provider</div>
-          <ul class="tier-features">
-            <li>Unlimited claim submissions</li>
-            <li>Real-time eligibility checks</li>
-            <li>Direct payer connections (top 10)</li>
-            <li>Basic reporting dashboard</li>
-            <li>Email support (business hours)</li>
-            <li>Mobile app access</li>
-          </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Setup: $0 • No contract</p>
-          <a href="mailto:mark@aurelianware.com?subject=Solo Practice Signup" class="button" style="width:100%; text-align:center; margin-top:10px; background:#00ff88; border-color:#00ff88;">Get Started</a>
-        </div>
-
-        <div class="pricing-tier">
-          <div class="tier-name">Small Group</div>
-          <div class="tier-price">$499-999/mo</div>
-          <div class="tier-description">2-10 providers</div>
-          <ul class="tier-features">
-            <li>Everything in Solo, plus:</li>
-            <li>Multi-provider scheduling</li>
-            <li>Advanced analytics & reporting</li>
-            <li>Priority email & phone support</li>
-            <li>Unlimited payer connections</li>
-            <li>Claims scrubbing engine</li>
-            <li>Patient portal integration</li>
-          </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Setup: $0 • No contract</p>
-          <a href="mailto:mark@aurelianware.com?subject=Small Group Signup" class="button" style="width:100%; text-align:center; margin-top:10px; background:#00ff88; border-color:#00ff88;">Get Started</a>
-        </div>
-
-        <div class="pricing-tier">
-          <div class="tier-name">Group Practice</div>
-          <div class="tier-price">$1,999-4,999/mo</div>
-          <div class="tier-description">11-25 providers</div>
-          <ul class="tier-features">
-            <li>Everything in Small Group, plus:</li>
-            <li>Custom workflow automation</li>
-            <li>API access for integrations</li>
-            <li>Dedicated success manager</li>
-            <li>Multi-location support</li>
-            <li>Centralized billing</li>
-            <li>Premium support (24/7)</li>
-            <li>On-site training available</li>
-          </ul>
-          <p style="text-align:center; margin-top:20px; opacity:0.8;">Setup: Contact Us</p>
-          <a href="mailto:mark@aurelianware.com?subject=Group Practice Inquiry" class="button" style="width:100%; text-align:center; margin-top:10px; background:#00ff88; border-color:#00ff88;">Contact Sales</a>
-        </div>
-
-        <div class="comparison-note" style="margin-top:30px;">
-          <h3 style="color:#00ff88; margin-top:0;">🎉 Founding Practices Program</h3>
-          <p>Join our beta at <strong>$99/month</strong> for the first year (limited to first 50 practices).</p>
-          <p style="opacity:0.8; margin-top:15px;">Get priority feature requests, dedicated onboarding, and grandfathered pricing when v4.0 launches.</p>
-          <a href="mailto:mark@aurelianware.com?subject=Founding Practices Program" class="button" style="background:#00ff88; border-color:#00ff88; margin-top:15px;">Apply Now</a>
+          
+          <div style="text-align:center; margin:20px 0; padding:20px; background:#0a0a0a; border-radius:8px;">
+            <div style="font-size:1.1rem; margin-bottom:10px;">Optional Support</div>
+            <div style="font-size:1.5rem; font-weight:bold;">$5k-15k/month</div>
+            <div style="opacity:0.7; font-size:0.9rem; margin-top:10px;">
+              Ongoing support, updates, enhancements
+            </div>
+          </div>
+          
+          <div style="text-align:center; margin-top:20px;">
+            <a href="mailto:contact@cloudhealthoffice.com?subject=BYOS Pricing Inquiry" class="button" style="width:100%;">Request Quote</a>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="comparison-note">
-      <h2 style="margin-top:0;">Compare to Traditional Solutions</h2>
+    <!-- Comparison Table -->
+    <div class="comparison-table">
+      <h3 style="text-align:center; margin-bottom:30px;">Deployment Model Comparison</h3>
+      <table style="width:100%; border-collapse:collapse;">
+        <tr style="border-bottom:1px solid #333;">
+          <th style="text-align:left; padding:15px;">Factor</th>
+          <th style="text-align:center; padding:15px; color:#00ffff;">SaaS</th>
+          <th style="text-align:center; padding:15px; color:#00ffff;">BYOS</th>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:15px;">Upfront Cost</td>
+          <td style="text-align:center; padding:15px;">Low</td>
+          <td style="text-align:center; padding:15px;">Medium-High</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:15px;">Monthly Cost</td>
+          <td style="text-align:center; padding:15px;">Higher</td>
+          <td style="text-align:center; padding:15px;">Lower (Azure only)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:15px;">Operational Control</td>
+          <td style="text-align:center; padding:15px;">Managed by us</td>
+          <td style="text-align:center; padding:15px;">Full control</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:15px;">Internal Resources</td>
+          <td style="text-align:center; padding:15px;">Minimal</td>
+          <td style="text-align:center; padding:15px;">Moderate</td>
+        </tr>
+        <tr>
+          <td style="padding:15px;">Best For</td>
+          <td style="text-align:center; padding:15px;">Quick deployment, less overhead</td>
+          <td style="text-align:center; padding:15px;">BPaaS exit, internal ops</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ROI Comparison -->
+    <div class="roi-section">
+      <h3 style="color:#00ff88; text-align:center; margin-bottom:20px;">
+        Compare to Traditional QNXT/Facets Upgrade
+      </h3>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:30px; text-align:left;">
         <div>
-          <h3 style="color:#00ffff;">Health Plans</h3>
-          <p><strong>Cloud Health Office:</strong> $50k-250k implementation, <1 hour deployment</p>
-          <p><strong>QNXT/Facets Upgrade:</strong> $2M+ implementation, 12-18 months deployment</p>
-          <p style="margin-top:20px;"><strong>Savings: 82%+ reduction in total cost</strong></p>
+          <h4 style="color:#ff3333; text-align:center;">Traditional Vendor</h4>
+          <ul style="padding:0 20px;">
+            <li>$2M+ implementation cost</li>
+            <li>12-18 month timeline</li>
+            <li>Ongoing vendor dependency</li>
+            <li>Per-transaction fees</li>
+            <li>Limited customization</li>
+            <li>Proprietary code</li>
+          </ul>
         </div>
         <div>
-          <h3 style="color:#00ff88;">Practices</h3>
-          <p><strong>Cloud Health Office:</strong> $99-4,999/month, $0 setup, direct EDI</p>
-          <p><strong>Traditional PM + Clearinghouse:</strong> $200-10,000/month + 3-5% fees per transaction</p>
-          <p style="margin-top:20px;"><strong>Savings: $30k+/year for typical 3-provider practice</strong></p>
+          <h4 style="color:#00ff88; text-align:center;">Cloud Health Office</h4>
+          <ul style="padding:0 20px;">
+            <li>$50k-250k implementation (BYOS)</li>
+            <li>4-12 week timeline</li>
+            <li>Full source code access (Apache 2.0)</li>
+            <li>Predictable Azure costs</li>
+            <li>Fully customizable</li>
+            <li>No vendor lock-in</li>
+          </ul>
         </div>
       </div>
+      <p style="text-align:center; margin-top:30px; font-size:1.2rem; font-weight:bold; color:#00ff88;">
+        Potential savings: $1.5M+ over 3 years
+      </p>
     </div>
 
+    <!-- Contact CTA -->
     <div style="text-align:center; margin:60px 0;">
-      <h2>Have Questions?</h2>
-      <p style="font-size:1.2rem; margin:20px 0;">Contact us to discuss your specific needs and get a custom quote.</p>
-      <a href="mailto:mark@aurelianware.com" class="button" style="font-size:1.2rem; padding:15px 40px;">Contact Sales</a>
+      <h2>Questions About Pricing?</h2>
+      <p style="font-size:1.1rem; margin:20px 0;">
+        Schedule a call to discuss your specific requirements and get a custom quote.
+      </p>
+      <a href="#schedule-demo" class="button" style="font-size:1.1rem; padding:15px 40px;">Schedule Technical Demo</a>
     </div>
 
   </main>
 
-  <footer style="text-align:center; margin-top:80px; padding:40px 0; border-top:2px solid #333;">
+  <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
     <p>
       <strong>Cloud Health Office v3.0</strong><br>
-      Modern healthcare integration for payers and providers.
+      Modern integration platform for health plans running QNXT/Facets
+    </p>
+    <p style="opacity:0.8; margin:20px 0;">
+      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
     </p>
     <p>
-      <a href="index.html">Home</a> •
-      <a href="solutions-payers.html">For Payers</a> •
-      <a href="solutions-providers.html">For Providers</a> •
-      <a href="pricing.html">Pricing</a> •
-      <a href="platform.html">Platform</a> •
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
+      <a href="pricing.html">Pricing</a>
     </p>
-    <p style="opacity:0.7; font-size:0.9rem;">
-      Apache 2.0 License • © 2026 Aurelianware • Not affiliated with third-party vendors
+    <p style="opacity:0.6; font-size:0.9rem; margin-top:20px;">
+      © 2026 Cloud Health Office • Built by healthcare payer system experts
     </p>
   </footer>
 
   <script>
-    // Track pricing page views
     if (window.plausible) {
       plausible('pageview', { props: { page: 'pricing' } });
     }
