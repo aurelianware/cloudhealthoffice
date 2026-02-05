@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: claims-adjudication-template
+  namespace: cho-workflows
+spec:
+  entrypoint: adjudicate-claim
+  
+  # Reusable template for claims adjudication
+  # Can be triggered via Argo Events, CronWorkflow, or manually
+  
+  arguments:
+    parameters:
+    - name: claim-id
+      value: ""
+    - name: tenant-id
+      value: ""
+  
+  serviceAccountName: argo-workflow
+  
+  # Define timeouts and retry policy
+  activeDeadlineSeconds: 300  # 5 minutes max
+  retryStrategy:
+    limit: "2"
+    retryPolicy: "OnFailure"
+    backoff:
+      duration: "5s"
+      factor: 2
+      maxDuration: "1m"
+  
+  # Workflow will reference the main claims-adjudication-workflow.yaml
+  workflowTemplateRef:
+    name: claims-adjudication
+  
+  # Metadata for tracking
+  metadata:
+    labels:
+      workflows.argoproj.io/archive-strategy: "true"
+      app: claims-adjudication
+      version: "1.0"
+    annotations:
+      description: "Automated claims adjudication workflow - <500ms target"
+      owner: "cloud-health-office"

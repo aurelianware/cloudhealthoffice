@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: claims-event-source
+  namespace: cho-workflows
+spec:
+  # Webhook event source for claim submissions
+  webhook:
+    claim-submitted:
+      port: "12000"
+      endpoint: /claims
+      method: POST
+  
+  # Can also add Kafka event source for high-volume processing
+  # kafka:
+  #   claims-topic:
+  #     url: kafka-service.cho-svcs:9092
+  #     topic: claims.submitted
+  #     partition: "0"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: claims-adjudication-sensor
+  namespace: cho-workflows
+spec:
+  dependencies:
+  - name: claim-submitted
+    eventSourceName: claims-event-source
+    eventName: claim-submitted
+  
+  triggers:
+  - template:
+      name: trigger-adjudication
+      argoWorkflow:
+        operation: submit
+        source:
+          resource:
+            apiVersion: argoproj.io/v1alpha1
+            kind: Workflow
+            metadata:
+              generateName: claims-adjudication-
+              namespace: cho-workflows
+              labels:
+                triggered-by: event
+            spec:
+              workflowTemplateRef:
+                name: claims-adjudication-template
+              
+              # Extract parameters from webhook payload
+              arguments:
+                parameters:
+                - name: claim-id
+                  value: ""  # Will be set from event payload
+                - name: tenant-id
+                  value: ""  # Will be set from event payload
+        
+        # Parameter bindings from event
+        parameters:
+        - src:
+            dependencyName: claim-submitted
+            dataKey: body.claimId
+          dest: spec.arguments.parameters.0.value
+        - src:
+            dependencyName: claim-submitted
+            dataKey: body.tenantId
+          dest: spec.arguments.parameters.1.value
+---
+# Service to expose webhook endpoint
+apiVersion: v1
+kind: Service
+metadata:
+  name: claims-event-source-svc
+  namespace: cho-workflows
+spec:
+  type: ClusterIP
+  ports:
+  - port: 12000
+    targetPort: 12000
+  selector:
+    eventsource-name: claims-event-source

@@ -1,0 +1,679 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: claims-adjudication-
+  namespace: cho-workflows
+spec:
+  entrypoint: adjudicate-claim
+  
+  # Workflow arguments
+  arguments:
+    parameters:
+    - name: claim-id
+      value: ""
+    - name: tenant-id
+      value: ""
+  
+  # Service account with RBAC to call microservices
+  serviceAccountName: argo-workflow
+  
+  # Workflow templates
+  templates:
+  
+  # Main DAG orchestrating all steps
+  - name: adjudicate-claim
+    dag:
+      tasks:
+      # Step 1: Get claim details
+      - name: get-claim
+        template: http-request
+        arguments:
+          parameters:
+          - name: url
+            value: "http://claims-service.cho-svcs/api/claims/{{workflow.parameters.claim-id}}"
+          - name: method
+            value: "GET"
+          - name: headers
+            value: |
+              X-Tenant-ID: {{workflow.parameters.tenant-id}}
+      
+      # Step 2: Verify coverage (depends on get-claim)
+      - name: verify-coverage
+        dependencies: [get-claim]
+        template: verify-coverage-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 3: Validate provider (parallel with coverage)
+      - name: validate-provider
+        dependencies: [get-claim]
+        template: validate-provider-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 4: Validate codes (parallel with coverage/provider)
+      - name: validate-codes
+        dependencies: [get-claim]
+        template: validate-codes-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+      
+      # Step 5: Check prior authorization (depends on code validation)
+      - name: check-prior-auth
+        dependencies: [validate-codes, verify-coverage]
+        template: check-prior-auth-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: codes-result
+            value: "{{tasks.validate-codes.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 6: Get benefit rules (depends on coverage)
+      - name: get-benefits
+        dependencies: [verify-coverage]
+        template: get-benefits-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: coverage-result
+            value: "{{tasks.verify-coverage.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 7: Get contracted rates (depends on provider validation)
+      - name: get-rates
+        dependencies: [validate-provider, verify-coverage]
+        template: get-rates-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: provider-result
+            value: "{{tasks.validate-provider.outputs.result}}"
+          - name: coverage-result
+            value: "{{tasks.verify-coverage.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 8: Calculate allowed amount (depends on rates and benefits)
+      - name: calculate-allowed
+        dependencies: [get-rates, get-benefits, validate-codes]
+        template: calculate-allowed-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: rates-result
+            value: "{{tasks.get-rates.outputs.result}}"
+          - name: benefits-result
+            value: "{{tasks.get-benefits.outputs.result}}"
+      
+      # Step 9: Calculate member cost-sharing (depends on allowed amount)
+      - name: calculate-cost-sharing
+        dependencies: [calculate-allowed, verify-coverage]
+        template: calculate-cost-sharing-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: allowed-result
+            value: "{{tasks.calculate-allowed.outputs.result}}"
+          - name: coverage-result
+            value: "{{tasks.verify-coverage.outputs.result}}"
+          - name: benefits-result
+            value: "{{tasks.get-benefits.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 10: Update claim with adjudication results (final step)
+      - name: update-claim
+        dependencies: [calculate-cost-sharing, check-prior-auth]
+        template: update-claim-step
+        arguments:
+          parameters:
+          - name: claim-id
+            value: "{{workflow.parameters.claim-id}}"
+          - name: cost-sharing-result
+            value: "{{tasks.calculate-cost-sharing.outputs.result}}"
+          - name: prior-auth-result
+            value: "{{tasks.check-prior-auth.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+  
+  # HTTP request template (generic)
+  - name: http-request
+    inputs:
+      parameters:
+      - name: url
+      - name: method
+      - name: headers
+        value: ""
+      - name: body
+        value: ""
+    container:
+      image: curlimages/curl:8.5.0
+      command: [sh, -c]
+      args:
+      - |
+        curl -X {{inputs.parameters.method}} \
+          -H "Content-Type: application/json" \
+          {{inputs.parameters.headers}} \
+          {{inputs.parameters.body}} \
+          {{inputs.parameters.url}}
+  
+  # Step 1: Verify Coverage
+  - name: verify-coverage-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        import sys
+        import os
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        member_id = claim.get('memberId')
+        service_date = claim.get('serviceDateFrom')
+        
+        # Call Coverage Service
+        url = f"http://coverage-service.cho-svcs/api/coverage/member/{member_id}/active?serviceDate={service_date}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+        
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                coverage = json.loads(response.read().decode())
+                
+                if not coverage:
+                    result = {
+                        "status": "DENIED",
+                        "reason": "No active coverage for service date",
+                        "carc": "26"  # CARC 26: Expenses incurred prior to coverage
+                    }
+                else:
+                    result = {
+                        "status": "APPROVED",
+                        "planId": coverage.get('planId'),
+                        "groupNumber": coverage.get('groupNumber'),
+                        "coverageLevel": coverage.get('coverageLevel'),
+                        "lineOfBusiness": coverage.get('lineOfBusiness')
+                    }
+                
+                print(json.dumps(result))
+        except Exception as e:
+            print(json.dumps({
+                "status": "ERROR",
+                "reason": f"Coverage verification failed: {str(e)}"
+            }), file=sys.stderr)
+            sys.exit(1)
+  
+  # Step 2: Validate Provider
+  - name: validate-provider-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        import sys
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        billing_npi = claim.get('billingProviderNPI')
+        
+        # Call Provider Service
+        url = f"http://provider-service.cho-svcs/api/providers/{billing_npi}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                provider = json.loads(response.read().decode())
+                
+                if provider.get('credentialingStatus') != 'Approved':
+                    result = {
+                        "status": "DENIED",
+                        "reason": "Provider not credentialed",
+                        "carc": "185"  # CARC 185: Provider not credentialed
+                    }
+                elif provider.get('providerStatus') != 'Active':
+                    result = {
+                        "status": "DENIED",
+                        "reason": "Provider not active",
+                        "carc": "185"
+                    }
+                else:
+                    result = {
+                        "status": "APPROVED",
+                        "npi": billing_npi,
+                        "providerName": provider.get('organizationName') or f"{provider.get('firstName')} {provider.get('lastName')}",
+                        "specialty": provider.get('primarySpecialty')
+                    }
+                
+                print(json.dumps(result))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(json.dumps({
+                    "status": "DENIED",
+                    "reason": "Provider not found",
+                    "carc": "185"
+                }))
+            else:
+                print(json.dumps({
+                    "status": "ERROR",
+                    "reason": f"Provider validation failed: {e}"
+                }), file=sys.stderr)
+                sys.exit(1)
+        except Exception as e:
+            print(json.dumps({
+                "status": "ERROR",
+                "reason": f"Provider validation failed: {str(e)}"
+            }), file=sys.stderr)
+            sys.exit(1)
+  
+  # Step 3: Validate Codes
+  - name: validate-codes-step
+    inputs:
+      parameters:
+      - name: claim-data
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        import sys
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        
+        # Validate diagnosis codes
+        diagnosis_codes = claim.get('diagnosisCodes', [])
+        invalid_dx = []
+        non_billable_dx = []
+        requires_auth = False
+        
+        for dx in diagnosis_codes:
+            code = dx.get('code')
+            url = f"http://reference-data-service.cho-svcs/api/referencedata/icd10/{code}/validate"
+            
+            try:
+                with urllib.request.urlopen(url, timeout=3) as response:
+                    result = json.loads(response.read().decode())
+                    if not result.get('isValid'):
+                        invalid_dx.append(code)
+                    elif not result.get('isBillable'):
+                        non_billable_dx.append(code)
+            except:
+                invalid_dx.append(code)
+        
+        # Validate procedure codes
+        claim_lines = claim.get('claimLines', [])
+        invalid_cpt = []
+        
+        for line in claim_lines:
+            code = line.get('procedureCode')
+            url = f"http://reference-data-service.cho-svcs/api/referencedata/cpt/{code}/validate"
+            
+            try:
+                with urllib.request.urlopen(url, timeout=3) as response:
+                    result = json.loads(response.read().decode())
+                    if not result.get('isValid'):
+                        invalid_cpt.append(code)
+                    elif result.get('requiresPriorAuth'):
+                        requires_auth = True
+            except:
+                invalid_cpt.append(code)
+        
+        if invalid_dx or non_billable_dx or invalid_cpt:
+            result = {
+                "status": "DENIED",
+                "reason": "Invalid or non-billable codes",
+                "invalidDiagnosis": invalid_dx,
+                "nonBillableDiagnosis": non_billable_dx,
+                "invalidProcedure": invalid_cpt,
+                "carc": "11"  # CARC 11: Diagnosis inconsistent with procedure
+            }
+        else:
+            result = {
+                "status": "APPROVED",
+                "requiresPriorAuth": requires_auth
+            }
+        
+        print(json.dumps(result))
+  
+  # Step 4: Check Prior Authorization
+  - name: check-prior-auth-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: codes-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        import sys
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        codes_result = json.loads('''{{inputs.parameters.codes-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        requires_auth = codes_result.get('requiresPriorAuth', False)
+        auth_number = claim.get('priorAuthorizationNumber')
+        
+        if not requires_auth:
+            # No auth required
+            result = {"status": "NOT_REQUIRED"}
+            print(json.dumps(result))
+            sys.exit(0)
+        
+        if not auth_number:
+            # Auth required but not provided
+            result = {
+                "status": "DENIED",
+                "reason": "Prior authorization required but not provided",
+                "carc": "197"  # CARC 197: Precertification/authorization absent
+            }
+            print(json.dumps(result))
+            sys.exit(0)
+        
+        # Validate authorization
+        service_date = claim.get('serviceDateFrom')
+        claim_lines = claim.get('claimLines', [])
+        cpt_code = claim_lines[0].get('procedureCode') if claim_lines else ''
+        
+        url = f"http://authorization-service.cho-svcs/api/authorizations/{auth_number}/validate?procedureCode={cpt_code}&serviceDate={service_date}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                auth_result = json.loads(response.read().decode())
+                
+                if not auth_result.get('isValid'):
+                    result = {
+                        "status": "DENIED",
+                        "reason": auth_result.get('message', 'Authorization invalid'),
+                        "carc": "197"
+                    }
+                else:
+                    result = {
+                        "status": "APPROVED",
+                        "authorizationNumber": auth_number,
+                        "approvedUnits": auth_result.get('approvedUnits')
+                    }
+                
+                print(json.dumps(result))
+        except Exception as e:
+            result = {
+                "status": "DENIED",
+                "reason": f"Authorization validation failed: {str(e)}",
+                "carc": "197"
+            }
+            print(json.dumps(result))
+  
+  # Step 5: Get Benefits
+  - name: get-benefits-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: coverage-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        plan_id = coverage.get('planId')
+        
+        # Determine service category from place of service
+        pos = claim.get('placeOfServiceCode')
+        if pos in ['21', '51', '61']:
+            service_category = 'Inpatient Hospital'
+        elif pos in ['22', '19', '62']:
+            service_category = 'Outpatient Hospital'
+        elif pos == '23':
+            service_category = 'Emergency Room'
+        elif pos == '11':
+            service_category = 'Office Visit'
+        else:
+            service_category = 'Other'
+        
+        url = f"http://benefit-plan-service.cho-svcs/api/benefitplans/{plan_id}/benefits?serviceCategory={service_category}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            benefits = json.loads(response.read().decode())
+            if benefits:
+                result = benefits[0]  # Get first matching benefit
+            else:
+                result = {
+                    "serviceCategory": service_category,
+                    "copayAmount": 0,
+                    "coinsurancePercentage": 20,
+                    "deductibleApplies": True
+                }
+            
+            print(json.dumps(result))
+  
+  # Step 6: Get Contracted Rates
+  - name: get-rates-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: provider-result
+      - name: coverage-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        provider = json.loads('''{{inputs.parameters.provider-result}}''')
+        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        npi = provider.get('npi')
+        plan_id = coverage.get('planId')
+        lob = coverage.get('lineOfBusiness')
+        
+        url = f"http://provider-service.cho-svcs/api/providers/{npi}/rates?planId={plan_id}&lineOfBusiness={lob}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                rates = json.loads(response.read().decode())
+                print(json.dumps(rates))
+        except:
+            # Default to 100% of Medicare if no contracted rate
+            result = {
+                "feeScheduleName": "Medicare",
+                "percentOfMedicare": 100.0
+            }
+            print(json.dumps(result))
+  
+  # Step 7: Calculate Allowed Amount
+  - name: calculate-allowed-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: rates-result
+      - name: benefits-result
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        rates = json.loads('''{{inputs.parameters.rates-result}}''')
+        
+        total_charge = claim.get('totalChargeAmount', 0)
+        percent_of_medicare = rates.get('percentOfMedicare', 100.0)
+        
+        # Simplified: allowed = charge * (percent / 150)
+        # In production, would look up Medicare rates from Reference Data
+        allowed_amount = total_charge * (percent_of_medicare / 150.0)
+        
+        result = {
+            "allowedAmount": round(allowed_amount, 2),
+            "chargeAmount": total_charge,
+            "contractedRate": f"{percent_of_medicare}% of Medicare"
+        }
+        
+        print(json.dumps(result))
+  
+  # Step 8: Calculate Member Cost-Sharing
+  - name: calculate-cost-sharing-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: allowed-result
+      - name: coverage-result
+      - name: benefits-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        allowed = json.loads('''{{inputs.parameters.allowed-result}}''')
+        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
+        benefits = json.loads('''{{inputs.parameters.benefits-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        plan_id = coverage.get('planId')
+        allowed_amount = allowed.get('allowedAmount')
+        service_category = benefits.get('serviceCategory')
+        
+        # For now, use simplified cost-sharing (would call Benefit Plan Service in production)
+        deductible = 0  # Assume deductible met
+        copay = benefits.get('copayAmount', 0)
+        coinsurance_pct = benefits.get('coinsurancePercentage', 20)
+        
+        if copay > 0:
+            patient_responsibility = copay
+        else:
+            patient_responsibility = allowed_amount * (coinsurance_pct / 100.0)
+        
+        payer_payment = allowed_amount - patient_responsibility
+        
+        result = {
+            "allowedAmount": allowed_amount,
+            "deductibleAmount": deductible,
+            "coinsuranceAmount": patient_responsibility if copay == 0 else 0,
+            "copayAmount": copay if copay > 0 else 0,
+            "patientResponsibility": round(patient_responsibility, 2),
+            "payerPayment": round(payer_payment, 2)
+        }
+        
+        print(json.dumps(result))
+  
+  # Step 9: Update Claim
+  - name: update-claim-step
+    inputs:
+      parameters:
+      - name: claim-id
+      - name: cost-sharing-result
+      - name: prior-auth-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+        
+        claim_id = "{{inputs.parameters.claim-id}}"
+        cost_sharing = json.loads('''{{inputs.parameters.cost-sharing-result}}''')
+        prior_auth = json.loads('''{{inputs.parameters.prior-auth-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        
+        # Check if any step resulted in denial
+        if prior_auth.get('status') == 'DENIED':
+            adjudication = {
+                "allowedAmount": 0,
+                "patientResponsibility": 0,
+                "payerPayment": 0,
+                "denialReasonCode": prior_auth.get('carc'),
+                "denialReason": prior_auth.get('reason'),
+                "claimAdjustmentReasons": [{
+                    "groupCode": "CO",
+                    "reasonCode": prior_auth.get('carc'),
+                    "amount": 0,
+                    "description": prior_auth.get('reason')
+                }]
+            }
+            status = "Denied"
+        else:
+            adjudication = cost_sharing
+            adjudication['claimAdjustmentReasons'] = []
+            status = "Approved"
+        
+        url = f"http://claims-service.cho-svcs/api/claims/{claim_id}/adjudication"
+        data = json.dumps(adjudication).encode('utf-8')
+        
+        req = urllib.request.Request(url, data=data, method='PUT')
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            result = json.loads(response.read().decode())
+            
+            # Update status
+            status_url = f"http://claims-service.cho-svcs/api/claims/{claim_id}/status"
+            status_data = json.dumps({"status": status}).encode('utf-8')
+            
+            status_req = urllib.request.Request(status_url, data=status_data, method='PUT')
+            status_req.add_header('X-Tenant-ID', tenant_id)
+            status_req.add_header('Content-Type', 'application/json')
+            
+            with urllib.request.urlopen(status_req, timeout=5) as status_response:
+                print(json.dumps({
+                    "claimId": claim_id,
+                    "status": status,
+                    "adjudication": adjudication
+                }))
