@@ -67,6 +67,15 @@ Traditional payer integration takes **6-8 weeks per payer**. Each requires custo
 
 ## **📊 Platform Performance**
 
+### **Latest E2E Workflow Timing (Real Services, AKS)**
+
+- **Status:** ✅ Succeeded (10/10 steps)
+- **Total Task Time:** 106,000 ms
+- **Kubernetes Overhead:** 18,000 ms
+- **Total Workflow Time:** 124,000 ms
+
+Per-step highlights: get-claim 17s • validate-codes 11s • verify-coverage 13s • validate-provider 12s • check-prior-auth 11s • get-benefits 11s • get-rates 8s • calculate-allowed 10s • calculate-cost-sharing 5s • update-claim 8s.
+
 | Metric | Traditional | Cloud Health Office | Improvement |
 |--------|-------------|---------------------|-------------|
 | **Claims Adjudication** | 7-14 days | <500ms | **99.9% faster** |
