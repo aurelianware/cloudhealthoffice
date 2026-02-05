@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: argo-workflows-metrics
+  namespace: cho-monitoring
+  labels:
+    app: argo-workflows
+spec:
+  selector:
+    matchLabels:
+      app: workflow-controller
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+  namespace: cho-workflows
+data:
+  # Enable Prometheus metrics
+  metricsConfig: |
+    enabled: true
+    path: /metrics
+    port: 9090
+  
+  # Workflow parallelism
+  parallelism: "50"
+  
+  # Resource limits for workflows
+  resourceRateLimit: |
+    limit: 100
+    burst: 150
+  
+  # Workflow archive (store completed workflows)
+  persistence: |
+    archive: true
+    archiveTTL: 7d
+  
+  # Custom metrics for claims adjudication
+  telemetryConfig: |
+    enabled: true
+    servicePort: 8081
+    servicePath: /telemetry
