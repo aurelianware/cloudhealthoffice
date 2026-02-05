@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production=false
+# Install dependencies (using npm install since package-lock may be out of sync)
+RUN npm install --production=false
 
 # Copy source code
 COPY tsconfig.json ./
