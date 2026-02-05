@@ -1,0 +1,66 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-3">Cloud Health Office</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mr-4">Tenant: <strong>Demo Health Plan</strong></MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
+        <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" />
+    </MudAppBar>
+    
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="ClipMode.Always">
+        <MudNavMenu>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt">Claims</MudNavLink>
+            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser">Eligibility</MudNavLink>
+            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Members</MudNavLink>
+            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital">Providers</MudNavLink>
+            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Authorizations</MudNavLink>
+            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">Workflows</MudNavLink>
+            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Reports</MudNavLink>
+            <MudDivider Class="my-2" />
+            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+    
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private MudTheme _theme = new()
+    {
+        Palette = new PaletteLight
+        {
+            Primary = "#1976d2",
+            Secondary = "#26a69a",
+            AppbarBackground = "#1976d2",
+            Success = "#4caf50",
+            Error = "#f44336",
+            Warning = "#ff9800",
+            Info = "#2196f3"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#90caf9",
+            Secondary = "#80cbc4",
+            AppbarBackground = "#1e1e1e"
+        }
+    };
+
+    void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}
