@@ -11,6 +11,13 @@ public class BenefitPlan
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    /// <summary>
+    /// Tenant ID for multi-tenant isolation (partition key)
+    /// </summary>
+    [Required]
+    [JsonPropertyName("tenantId")]
+    public string TenantId { get; set; } = string.Empty;
+
     [Required]
     [JsonPropertyName("planId")]
     public string PlanId { get; set; } = string.Empty;

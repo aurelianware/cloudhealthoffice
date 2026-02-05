@@ -18,6 +18,11 @@ public class BenefitPlansController : ControllerBase
     }
 
     /// <summary>
+    /// Get current tenant ID from request context
+    /// </summary>
+    private string TenantId => HttpContext.GetTenantId() ?? throw new InvalidOperationException("Tenant context missing");
+
+    /// <summary>
     /// Get all benefit plans with optional filtering
     /// </summary>
     [HttpGet]
@@ -27,10 +32,10 @@ public class BenefitPlansController : ControllerBase
         [FromQuery] string? planType = null,
         [FromQuery] bool? activeOnly = true)
     {
-        _logger.LogInformation("Getting benefit plans: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}", 
-            payer, planType, activeOnly);
+        _logger.LogInformation("Getting benefit plans for tenant {TenantId}: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}", 
+            TenantId, payer, planType, activeOnly);
         
-        var plans = await _service.GetPlansAsync(payer, planType, activeOnly ?? true);
+        var plans = await _service.GetPlansAsync(TenantId, payer, planType, activeOnly ?? true);
         return Ok(plans);
     }
 
