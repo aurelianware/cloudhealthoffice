@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using ReferenceDataService.Middleware;
 using ReferenceDataService.Models;
 using ReferenceDataService.Repositories;
 
