@@ -1,0 +1,189 @@
+---
+# Simple Kubernetes Job to test SFTP upload/download
+# No Argo Workflows required - uses basic Kubernetes primitives
+#
+# Usage:
+#   kubectl apply -f k8s/sftp-test-job.yaml
+#   kubectl logs -n cho-sftp job/sftp-integration-test -f
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: workflows
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sftp-integration-test
+  namespace: cho-workflows
+  labels:
+    app: sftp-test
+    component: integration-test
+spec:
+  ttlSecondsAfterFinished: 3600  # Auto-delete after 1 hour
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: sftp-test
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: work-volume
+          emptyDir:
+            sizeLimit: "100Mi"
+      containers:
+      - name: sftp-test
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            echo "=========================================="
+            echo "SFTP Integration Test"
+            echo "=========================================="
+            echo ""
+            
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            apk add --no-cache sshpass openssh-client coreutils
+            
+            # SFTP connection details
+            SFTP_HOST="sftp-service.cho-sftp.svc.cluster.local"
+            SFTP_PORT=22
+            SFTP_USER="logicapp"
+            SFTP_PASS="sJ8p8WAsE4Es6PgMbUACErOs"  # Updated password from earlier
+            
+            TEST_FILE="test-278-$(date +%s).x12"
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 1: Generate Test EDI File"
+            echo "=========================================="
+            echo ""
+            
+            cat > /work/${TEST_FILE} <<'EOF'
+            ISA*00*          *00*          *ZZ*CLEARINGHOUSE  *ZZ*HEALTHPLAN     *240204*1430*^*00501*000000001*0*P*:~
+            GS*HS*CLEARINGHOUSE*HEALTHPLAN*20240204*1430*1*X*005010X217~
+            ST*278*0001*005010X217~
+            BHT*0007*13*TESTAUTH001*20240204*1430~
+            HL*1**20*1~
+            NM1*X3*2*CLEARINGHOUSE*****PI*030240928~
+            HL*2*1*21*1~
+            NM1*1P*2*TEST PROVIDER*****XX*1234567890~
+            HL*3*2*22*0~
+            NM1*IL*1*DOE*JOHN****MI*123456789~
+            HI*BK:78605~
+            UM*HS*I*******Y~
+            SE*12*0001~
+            GE*1*1~
+            IEA*1*000000001~
+            EOF
+            
+            echo "✅ Generated test file: ${TEST_FILE}"
+            echo "File size: $(wc -c < /work/${TEST_FILE}) bytes"
+            echo ""
+            
+            # Calculate original hash
+            ORIGINAL_HASH=$(sha256sum /work/${TEST_FILE} | awk '{print $1}')
+            echo "Original SHA256: ${ORIGINAL_HASH}"
+            echo ""
+            
+            echo "=========================================="
+            echo "Step 2: Upload to SFTP Server"
+            echo "=========================================="
+            echo ""
+            
+            echo "Host: ${SFTP_HOST}:${SFTP_PORT}"
+            echo "User: ${SFTP_USER}"
+            echo "Remote path: /upload/278/${TEST_FILE}"
+            echo ""
+            
+            # Upload file (using relative paths - SFTP chroots to /home/logicapp)
+            sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_UPLOAD
+            cd upload
+            -mkdir 278
+            cd 278
+            put /work/${TEST_FILE}
+            ls -l
+            bye
+            SFTP_UPLOAD
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Upload successful!"
+            else
+              echo "❌ Upload failed!"
+              exit 1
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 3: Verify File Exists"
+            echo "=========================================="
+            echo ""
+            
+            # List files to verify
+            sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_VERIFY
+            ls -lh upload/278/${TEST_FILE}
+            bye
+            SFTP_VERIFY
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ File verified on SFTP server!"
+            else
+              echo "❌ File not found!"
+              exit 1
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 4: Download from SFTP Server"
+            echo "=========================================="
+            echo ""
+            
+            # Download file
+            sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_DOWNLOAD
+            get upload/278/${TEST_FILE} /work/downloaded-${TEST_FILE}
+            bye
+            SFTP_DOWNLOAD
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Download successful!"
+            else
+              echo "❌ Download failed!"
+              exit 1
+            fi
+            
+            echo ""
+            echo "=========================================="
+            echo "Step 5: Verify File Integrity"
+            echo "=========================================="
+            echo ""
+            
+            DOWNLOADED_HASH=$(sha256sum /work/downloaded-${TEST_FILE} | awk '{print $1}')
+            
+            echo "Original SHA256:   ${ORIGINAL_HASH}"
+            echo "Downloaded SHA256: ${DOWNLOADED_HASH}"
+            echo ""
+            
+            if [ "${ORIGINAL_HASH}" = "${DOWNLOADED_HASH}" ]; then
+              echo "✅ File integrity verified!"
+              echo "✅ Upload/download cycle successful!"
+              echo ""
+              echo "=========================================="
+              echo "SUCCESS: All Tests Passed"
+              echo "=========================================="
+              exit 0
+            else
+              echo "❌ File integrity check failed!"
+              echo "Hashes do not match!"
+              exit 1
+            fi
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work

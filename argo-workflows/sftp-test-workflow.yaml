@@ -1,0 +1,355 @@
+# SFTP Integration Test Workflow
+# Tests bi-directional file transfer with Kubernetes-hosted SFTP server
+#
+# Workflow Steps:
+#   1. generate-test-file - Create sample EDI file
+#   2. upload-to-sftp - Push file to SFTP server
+#   3. verify-upload - Check file exists on SFTP
+#   4. download-from-sftp - Pull file from SFTP server
+#   5. verify-download - Validate file integrity
+#
+# Usage:
+#   kubectl apply -f argo-workflows/sftp-test-workflow.yaml
+#   argo submit argo-workflows/sftp-test-workflow.yaml -n cloudhealthoffice
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: sftp-test-workflow
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: sftp-test-workflow
+    app.kubernetes.io/component: integration-test
+    app.kubernetes.io/part-of: cloudhealthoffice
+  annotations:
+    description: "Test SFTP server integration with upload/download cycle"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: sftp-integration-test
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 3600
+    secondsAfterSuccess: 1800
+    secondsAfterFailure: 7200
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 600 # 10 minutes max
+  
+  arguments:
+    parameters:
+      - name: sftp-host
+        value: "sftp-service.cho-sftp.svc.cluster.local"
+        description: "Internal Kubernetes DNS name for SFTP service"
+      - name: sftp-port
+        value: "22"
+      - name: sftp-username
+        value: "logicapp"
+      - name: test-filename
+        value: "test-278-{{ workflow.uid }}.x12"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "100Mi"
+    - name: sftp-credentials
+      secret:
+        secretName: sftp-users
+        items:
+          - key: users.conf
+            path: users.conf
+  
+  templates:
+    # Main orchestration template (DAG)
+    - name: sftp-integration-test
+      dag:
+        tasks:
+          # Step 1: Generate test EDI file
+          - name: generate-test-file
+            template: generate-edi-template
+            arguments:
+              parameters:
+                - name: filename
+                  value: "{{workflow.parameters.test-filename}}"
+          
+          # Step 2: Upload to SFTP
+          - name: upload-to-sftp
+            template: sftp-upload-template
+            dependencies: [generate-test-file]
+            arguments:
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-port
+                  value: "{{workflow.parameters.sftp-port}}"
+                - name: sftp-username
+                  value: "{{workflow.parameters.sftp-username}}"
+                - name: filename
+                  value: "{{workflow.parameters.test-filename}}"
+                - name: remote-path
+                  value: "/upload/278/{{workflow.parameters.test-filename}}"
+          
+          # Step 3: Verify upload succeeded
+          - name: verify-upload
+            template: sftp-verify-template
+            dependencies: [upload-to-sftp]
+            arguments:
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-port
+                  value: "{{workflow.parameters.sftp-port}}"
+                - name: sftp-username
+                  value: "{{workflow.parameters.sftp-username}}"
+                - name: remote-path
+                  value: "/upload/278/{{workflow.parameters.test-filename}}"
+          
+          # Step 4: Download from SFTP (simulating inbound flow)
+          - name: download-from-sftp
+            template: sftp-download-template
+            dependencies: [verify-upload]
+            arguments:
+              parameters:
+                - name: sftp-host
+                  value: "{{workflow.parameters.sftp-host}}"
+                - name: sftp-port
+                  value: "{{workflow.parameters.sftp-port}}"
+                - name: sftp-username
+                  value: "{{workflow.parameters.sftp-username}}"
+                - name: remote-path
+                  value: "/upload/278/{{workflow.parameters.test-filename}}"
+                - name: local-filename
+                  value: "downloaded-{{workflow.parameters.test-filename}}"
+          
+          # Step 5: Verify file integrity
+          - name: verify-download
+            template: verify-integrity-template
+            dependencies: [download-from-sftp]
+            arguments:
+              parameters:
+                - name: original-filename
+                  value: "{{workflow.parameters.test-filename}}"
+                - name: downloaded-filename
+                  value: "downloaded-{{workflow.parameters.test-filename}}"
+    
+    # ========================================
+    # Template: Generate Test EDI File
+    # ========================================
+    - name: generate-edi-template
+      inputs:
+        parameters:
+          - name: filename
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            cat > /work/{{inputs.parameters.filename}} <<'EOF'
+            ISA*00*          *00*          *ZZ*CLEARINGHOUSE  *ZZ*HEALTHPLAN     *240204*1430*^*00501*000000001*0*P*:~
+            GS*HS*CLEARINGHOUSE*HEALTHPLAN*20240204*1430*1*X*005010X217~
+            ST*278*0001*005010X217~
+            BHT*0007*13*TESTAUTH001*20240204*1430~
+            HL*1**20*1~
+            NM1*X3*2*CLEARINGHOUSE*****PI*030240928~
+            HL*2*1*21*1~
+            NM1*1P*2*TEST PROVIDER*****XX*1234567890~
+            HL*3*2*22*0~
+            NM1*IL*1*DOE*JOHN****MI*123456789~
+            HI*BK:78605~
+            UM*HS*I*******Y~
+            SE*12*0001~
+            GE*1*1~
+            IEA*1*000000001~
+            EOF
+            
+            echo "Generated test file: /work/{{inputs.parameters.filename}}"
+            cat /work/{{inputs.parameters.filename}}
+            
+            # Verify file was created
+            ls -lh /work/{{inputs.parameters.filename}}
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+    
+    # ========================================
+    # Template: Upload File to SFTP
+    # ========================================
+    - name: sftp-upload-template
+      inputs:
+        parameters:
+          - name: sftp-host
+          - name: sftp-port
+          - name: sftp-username
+          - name: filename
+          - name: remote-path
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            
+            # Install sshpass and openssh-client
+            apk add --no-cache sshpass openssh-client
+            
+            # Extract password from secret (format: username:password:uid:gid:dir)
+            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            
+            echo "Uploading file to SFTP server..."
+            echo "Host: {{inputs.parameters.sftp-host}}:{{inputs.parameters.sftp-port}}"
+            echo "User: {{inputs.parameters.sftp-username}}"
+            echo "Remote path: {{inputs.parameters.remote-path}}"
+            
+            # Create directory structure on SFTP server
+            sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
+              -P {{inputs.parameters.sftp-port}} \
+              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
+            mkdir 278
+            put /work/{{inputs.parameters.filename}} {{inputs.parameters.remote-path}}
+            ls -l 278/
+            bye
+            SFTP_EOF
+            
+            echo "✅ Upload successful!"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+          - name: sftp-credentials
+            mountPath: /credentials
+            readOnly: true
+    
+    # ========================================
+    # Template: Verify File Exists on SFTP
+    # ========================================
+    - name: sftp-verify-template
+      inputs:
+        parameters:
+          - name: sftp-host
+          - name: sftp-port
+          - name: sftp-username
+          - name: remote-path
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            
+            apk add --no-cache sshpass openssh-client
+            
+            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            
+            echo "Verifying file exists on SFTP..."
+            
+            sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
+              -P {{inputs.parameters.sftp-port}} \
+              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
+            ls -l {{inputs.parameters.remote-path}}
+            bye
+            SFTP_EOF
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ File exists on SFTP server!"
+            else
+              echo "❌ File not found on SFTP server"
+              exit 1
+            fi
+        volumeMounts:
+          - name: sftp-credentials
+            mountPath: /credentials
+            readOnly: true
+    
+    # ========================================
+    # Template: Download File from SFTP
+    # ========================================
+    - name: sftp-download-template
+      inputs:
+        parameters:
+          - name: sftp-host
+          - name: sftp-port
+          - name: sftp-username
+          - name: remote-path
+          - name: local-filename
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            
+            apk add --no-cache sshpass openssh-client
+            
+            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            
+            echo "Downloading file from SFTP..."
+            
+            sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
+              -P {{inputs.parameters.sftp-port}} \
+              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
+            get {{inputs.parameters.remote-path}} /work/{{inputs.parameters.local-filename}}
+            bye
+            SFTP_EOF
+            
+            echo "Downloaded file:"
+            ls -lh /work/{{inputs.parameters.local-filename}}
+            
+            echo ""
+            echo "File contents:"
+            cat /work/{{inputs.parameters.local-filename}}
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+          - name: sftp-credentials
+            mountPath: /credentials
+            readOnly: true
+    
+    # ========================================
+    # Template: Verify File Integrity
+    # ========================================
+    - name: verify-integrity-template
+      inputs:
+        parameters:
+          - name: original-filename
+          - name: downloaded-filename
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            
+            echo "Verifying file integrity..."
+            
+            ORIGINAL_HASH=$(sha256sum /work/{{inputs.parameters.original-filename}} | awk '{print $1}')
+            DOWNLOADED_HASH=$(sha256sum /work/{{inputs.parameters.downloaded-filename}} | awk '{print $1}')
+            
+            echo "Original SHA256:   $ORIGINAL_HASH"
+            echo "Downloaded SHA256: $DOWNLOADED_HASH"
+            
+            if [ "$ORIGINAL_HASH" = "$DOWNLOADED_HASH" ]; then
+              echo ""
+              echo "✅ File integrity verified! Upload/download cycle successful."
+              exit 0
+            else
+              echo ""
+              echo "❌ File integrity check failed! Hashes do not match."
+              exit 1
+            fi
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+---
+# Optional: WorkflowEventBinding to auto-run on schedule
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: sftp-test-schedule
+  namespace: cloudhealthoffice
+spec:
+  schedule: "0 2 * * *" # Daily at 2 AM
+  timezone: "America/Los_Angeles"
+  concurrencyPolicy: "Forbid"
+  workflowSpec:
+    workflowTemplateRef:
+      name: sftp-test-workflow

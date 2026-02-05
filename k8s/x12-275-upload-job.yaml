@@ -1,0 +1,291 @@
+---
+# X12 275 Attachment Upload to Clearinghouse via SFTP
+# Kubernetes Job-based workflow for prior authorization attachments
+#
+# This workflow:
+#   1. Generates/retrieves 275 attachment bundle
+#   2. Uploads to clearinghouse SFTP server
+#   3. Records transaction in audit log
+#
+# Usage:
+#   kubectl create job --from=cronjob/x12-275-upload-job upload-275-manual -n cho-workflows
+#   kubectl logs -n cho-workflows job/x12-275-upload-job-xxxxx -f
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-275-upload-job
+  namespace: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: edi-275-upload
+    hipaa-compliance: required
+spec:
+  # Run every hour to check for pending attachments
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    metadata:
+      labels:
+        app: x12-275-upload
+        hipaa-compliance: required
+    spec:
+      ttlSecondsAfterFinished: 86400  # 24 hours
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: x12-275-upload
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: default
+          volumes:
+            - name: work-volume
+              emptyDir:
+                sizeLimit: "500Mi"
+            - name: config
+              configMap:
+                name: x12-config
+                optional: true
+          containers:
+          - name: upload-275-attachments
+            image: alpine:latest
+            env:
+              # SFTP Configuration
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_PORT
+                value: "22"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+                    optional: true
+              # Clearinghouse Configuration
+              - name: CLEARINGHOUSE_NAME
+                value: "Availity"  # or "ChangeHealthcare", "Optum"
+              - name: PAYER_ID
+                value: "HEALTHPLAN"
+              - name: SENDER_ID
+                value: "030240928"
+            command: ["/bin/sh"]
+            args:
+              - -c
+              - |
+                set -e
+                
+                echo "=========================================="
+                echo "X12 275 Attachment Upload Workflow"
+                echo "=========================================="
+                echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                echo "Clearinghouse: ${CLEARINGHOUSE_NAME}"
+                echo "SFTP Host: ${SFTP_HOST}"
+                echo ""
+                
+                # Install dependencies
+                echo "📦 Installing dependencies..."
+                apk add --no-cache sshpass openssh-client curl jq coreutils
+                
+                # Use default password if secret doesn't exist
+                if [ -z "${SFTP_PASS}" ]; then
+                  echo "⚠️  SFTP_PASS not set, using default (UPDATE IN PRODUCTION!)"
+                  SFTP_PASS="sJ8p8WAsE4Es6PgMbUACErOs"
+                fi
+                
+                echo ""
+                echo "=========================================="
+                echo "Step 1: Generate 275 Attachment Bundle"
+                echo "=========================================="
+                echo ""
+                
+                # In production, this would fetch pending attachments from backend API
+                # For now, generate sample 275 transaction
+                
+                BATCH_ID=$(date +%Y%m%d%H%M%S)
+                FILENAME="275_${PAYER_ID}_${BATCH_ID}.x12"
+                
+                cat > /work/${FILENAME} <<'EOF'
+                ISA*00*          *00*          *ZZ*HEALTHPLAN     *ZZ*030240928      *$(date +%y%m%d)*$(date +%H%M)*^*00501*${BATCH_ID}*0*P*:~
+                GS*HR*HEALTHPLAN*030240928*$(date +%Y%m%d)*$(date +%H%M)*${BATCH_ID}*X*005010X210~
+                ST*275*0001*005010X210~
+                BHT*0085*08*ATT${BATCH_ID}*$(date +%Y%m%d)*$(date +%H%M)~
+                NM1*41*2*HEALTH PLAN*****46*HEALTHPLAN~
+                PER*IC*PRIOR AUTH DEPT*TE*8005551234~
+                NM1*AO*2*CLEARINGHOUSE*****46*030240928~
+                HL*1**20*1~
+                NM1*PR*2*HEALTH PLAN*****PI*HEALTHPLAN~
+                N3*PO BOX 12345~
+                N4*LOS ANGELES*CA*90001~
+                HL*2*1*19*1~
+                NM1*1P*2*PROVIDER CLINIC*****XX*1234567890~
+                N3*123 MEDICAL DRIVE~
+                N4*SAN FRANCISCO*CA*94102~
+                HL*3*2*PT*0~
+                NM1*QC*1*DOE*JOHN****MI*123456789~
+                DMG*D8*19800115*M~
+                PWK*03*EL***AC*MEDICAL~
+                PWK*OZ*EL***AC*IMAGING~
+                SE*19*0001~
+                GE*1*${BATCH_ID}~
+                IEA*1*${BATCH_ID}~
+                EOF
+                
+                # Substitute environment variables in file
+                eval "echo \"$(cat /work/${FILENAME})\"" > /work/${FILENAME}.tmp
+                mv /work/${FILENAME}.tmp /work/${FILENAME}
+                
+                echo "✅ Generated 275 bundle: ${FILENAME}"
+                echo "File size: $(wc -c < /work/${FILENAME}) bytes"
+                echo ""
+                echo "Preview (first 500 chars):"
+                head -c 500 /work/${FILENAME}
+                echo ""
+                echo ""
+                
+                FILE_HASH=$(sha256sum /work/${FILENAME} | awk '{print $1}')
+                echo "SHA256: ${FILE_HASH}"
+                echo ""
+                
+                echo "=========================================="
+                echo "Step 2: Upload to Clearinghouse SFTP"
+                echo "=========================================="
+                echo ""
+                
+                REMOTE_PATH="upload/275/${FILENAME}"
+                
+                echo "Uploading to: ${SFTP_HOST}:${SFTP_PORT}"
+                echo "Remote path: ${REMOTE_PATH}"
+                echo ""
+                
+                # Upload file to SFTP
+                sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
+                  -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_UPLOAD
+                cd upload
+                -mkdir 275
+                cd 275
+                put /work/${FILENAME}
+                ls -lh ${FILENAME}
+                bye
+                SFTP_UPLOAD
+                
+                UPLOAD_STATUS=$?
+                
+                if [ ${UPLOAD_STATUS} -eq 0 ]; then
+                  echo ""
+                  echo "✅ Upload successful!"
+                  UPLOAD_RESULT="SUCCESS"
+                else
+                  echo ""
+                  echo "❌ Upload failed with exit code: ${UPLOAD_STATUS}"
+                  UPLOAD_RESULT="FAILED"
+                  exit 1
+                fi
+                
+                echo ""
+                echo "=========================================="
+                echo "Step 3: Verify Upload"
+                echo "=========================================="
+                echo ""
+                
+                # Verify file exists on SFTP
+                sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                  -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_VERIFY
+                ls -lh upload/275/${FILENAME}
+                bye
+                SFTP_VERIFY
+                
+                if [ $? -eq 0 ]; then
+                  echo "✅ File verified on SFTP server"
+                else
+                  echo "⚠️  Could not verify file on SFTP server"
+                fi
+                
+                echo ""
+                echo "=========================================="
+                echo "Step 4: Record Audit Log"
+                echo "=========================================="
+                echo ""
+                
+                # Create audit log entry (in production, send to logging API)
+                cat > /work/audit-${BATCH_ID}.json <<AUDIT_EOF
+                {
+                  "transaction_type": "275",
+                  "batch_id": "${BATCH_ID}",
+                  "filename": "${FILENAME}",
+                  "file_hash": "${FILE_HASH}",
+                  "clearinghouse": "${CLEARINGHOUSE_NAME}",
+                  "sftp_host": "${SFTP_HOST}",
+                  "remote_path": "${REMOTE_PATH}",
+                  "upload_status": "${UPLOAD_RESULT}",
+                  "upload_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                  "payer_id": "${PAYER_ID}",
+                  "sender_id": "${SENDER_ID}",
+                  "hipaa_compliant": true
+                }
+                AUDIT_EOF
+                
+                echo "Audit log:"
+                cat /work/audit-${BATCH_ID}.json | jq .
+                
+                # In production, POST to audit API:
+                # curl -X POST http://audit-service.cloudhealthoffice.svc.cluster.local/api/v1/audit \
+                #   -H "Content-Type: application/json" \
+                #   -d @/work/audit-${BATCH_ID}.json
+                
+                echo ""
+                echo "=========================================="
+                echo "SUCCESS: 275 Attachment Upload Complete"
+                echo "=========================================="
+                echo ""
+                echo "Summary:"
+                echo "  File: ${FILENAME}"
+                echo "  Size: $(wc -c < /work/${FILENAME}) bytes"
+                echo "  Hash: ${FILE_HASH:0:16}..."
+                echo "  Destination: ${CLEARINGHOUSE_NAME} SFTP"
+                echo "  Status: ${UPLOAD_RESULT}"
+                echo ""
+                
+                exit 0
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work
+              - name: config
+                mountPath: /config
+                readOnly: true
+---
+# Secret for SFTP credentials (create separately)
+# kubectl create secret generic sftp-credentials \
+#   --from-literal=password='YOUR_SECURE_PASSWORD' \
+#   -n cho-workflows
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sftp-credentials
+  namespace: cho-workflows
+type: Opaque
+stringData:
+  password: "sJ8p8WAsE4Es6PgMbUACErOs"  # UPDATE THIS IN PRODUCTION!
+  username: "logicapp"
+---
+# Optional: ConfigMap for clearinghouse-specific settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: x12-config
+  namespace: cho-workflows
+data:
+  availity.sftp.host: "sftp-service.cho-sftp.svc.cluster.local"
+  availity.sftp.port: "22"
+  availity.sender.id: "030240928"
+  
+  changehealthcare.sftp.host: "sftp-service.cho-sftp.svc.cluster.local"
+  changehealthcare.sftp.port: "22"
+  changehealthcare.sender.id: "030240928"
+  
+  payer.id: "HEALTHPLAN"
+  payer.name: "Sample Health Plan"
