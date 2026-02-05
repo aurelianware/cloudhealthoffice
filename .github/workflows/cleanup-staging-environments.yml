@@ -1,0 +1,88 @@
+name: Cleanup Staging Environments
+
+# =============================================================================
+# Cleanup Workflow for Static Web App Staging Environments
+# =============================================================================
+# Purpose: Automatically delete staging environments when PRs are closed
+# This prevents hitting the maximum staging environment limit
+# =============================================================================
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - 'site/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete PR Staging Environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          BASE_NAME="${{ vars.BASE_NAME }}"
+          SWA_NAME="${BASE_NAME}-site"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          
+          echo "=========================================="
+          echo "Cleaning up staging environment for PR #$PR_NUMBER"
+          echo "=========================================="
+          
+          # Try to delete the staging environment
+          # Environment names are typically the PR number
+          az staticwebapp environment delete \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --environment-name "$PR_NUMBER" \
+            --yes || echo "⚠️ Environment may not exist or already deleted"
+          
+          echo "✅ Cleanup complete for PR #$PR_NUMBER"
+
+      - name: Clean up old environments (keep last 2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          BASE_NAME="${{ vars.BASE_NAME }}"
+          SWA_NAME="${BASE_NAME}-site"
+          
+          echo "=========================================="
+          echo "Cleaning up old staging environments"
+          echo "=========================================="
+          
+          # List all environments except 'default', sorted, keeping only the newest 2
+          OLD_ENVS=$(az staticwebapp environment list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "[?name!='default'] | sort_by(@, &name) | [0:-2].name" \
+            -o tsv || true)
+          
+          if [ -n "$OLD_ENVS" ]; then
+            echo "Deleting old staging environments:"
+            for env in $OLD_ENVS; do
+              echo "  - Deleting environment: $env"
+              az staticwebapp environment delete \
+                --name "$SWA_NAME" \
+                --resource-group "$RG_NAME" \
+                --environment-name "$env" \
+                --yes || echo "  ⚠️ Failed to delete $env"
+            done
+            echo "✅ Cleanup complete"
+          else
+            echo "✅ No old environments to clean up"
+          fi
