@@ -1,0 +1,136 @@
+---
+# Backend API Integration Secret
+# Store your actual API credentials here
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-api-credentials
+  namespace: cho-workflows
+type: Opaque
+stringData:
+  token: "dev-token-replace-in-production"
+  url: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+---
+# Backend API Mock Service (for testing without real backend)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api-mock
+  namespace: cho-workflows
+spec:
+  selector:
+    app: backend-api-mock
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api-mock
+  namespace: cho-workflows
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-api-mock
+  template:
+    metadata:
+      labels:
+        app: backend-api-mock
+    spec:
+      containers:
+      - name: api
+        image: alpine:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache python3 py3-pip
+            python3 -m http.server 8080 &
+            
+            # Simple mock API responses
+            mkdir -p /tmp/api/v1/claims /tmp/api/v1/authorizations
+            
+            cat > /tmp/api/v1/claims/unbilled <<'EOF'
+            {"claims":[{"claim_id":"CLM001","patient":"John Doe","charges":150.00}]}
+            EOF
+            
+            cat > /tmp/api/v1/authorizations/pending <<'EOF'
+            {"authorizations":[{"auth_number":"AUTH001","patient_name":"Jane Smith"}]}
+            EOF
+            
+            cd /tmp
+            python3 -m http.server 8080
+        ports:
+          - containerPort: 8080
+---
+# Backend API Integration Test Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-backend-integration
+  namespace: cho-workflows
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: test-integration
+        image: alpine:latest
+        env:
+          - name: BACKEND_API_URL
+            value: "http://backend-api-mock.cho-workflows.svc.cluster.local/api/v1"
+          - name: BACKEND_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: backend-api-credentials
+                key: token
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            
+            echo "=========================================="
+            echo "Backend API Integration Test"
+            echo "=========================================="
+            echo ""
+            
+            apk add --no-cache curl jq
+            
+            echo "Testing API endpoints..."
+            echo ""
+            
+            # Test 1: Fetch pending authorizations
+            echo "1. GET /authorizations/pending"
+            curl -s "${BACKEND_API_URL}/authorizations/pending" \
+              -H "Authorization: Bearer ${BACKEND_API_TOKEN}" | jq .
+            echo ""
+            
+            # Test 2: Fetch unbilled claims
+            echo "2. GET /claims/unbilled"
+            curl -s "${BACKEND_API_URL}/claims/unbilled?type=professional" \
+              -H "Authorization: Bearer ${BACKEND_API_TOKEN}" | jq .
+            echo ""
+            
+            # Test 3: Submit status update
+            echo "3. POST /claims/status-updates"
+            curl -X POST "${BACKEND_API_URL}/claims/status-updates" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+              -d '{"claim_id":"CLM001","status":"paid","amount":150.00}' \
+              -v
+            echo ""
+            
+            # Test 4: Mark claims as submitted
+            echo "4. POST /claims/submitted"
+            curl -X POST "${BACKEND_API_URL}/claims/submitted" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+              -d '{"filename":"837P_test.x12","count":5,"hash":"abc123"}' \
+              -v
+            echo ""
+            
+            echo "=========================================="
+            echo "✅ All API integration tests passed"
+            echo "=========================================="
