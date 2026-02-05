@@ -13,19 +13,33 @@ Complete migration of Cloud Health Office components from Azure Static Web Apps 
 - **Migration Wizard** (`tools/migration-wizard/`): Blazor web app for legacy system migration
 - **EDI Workflows**: X12 275/277/278/837 (Kubernetes CronJobs) ✅ Already in cluster
 
-### Target State
-All components running in AKS cluster with:
-- **Frontend**: Blazor or React SPA
+### Target State - EDI-Aligned Microservices
+All components running in AKS cluster aligned with HIPAA X12 transaction flows:
+
+**Core Services (834 Enrollment Foundation):**
+- **Sponsor Service** (new) - Employer/group data populated by 834 transactions
+- **Member Service** (new) - Subscriber/dependent data populated by 834 transactions  
+- **Coverage Service** (new) - Links Member → Sponsor → Plan with effective dates (834)
+
+**Claims & Authorization Services (837/835/278):**
+- **Claims Service** (new) - Claims data populated by 837, updated by 835/277
+- **Authorization Service** (new) - Prior auth requests/responses (278)
+- **Claims Scrubbing Service** (existing) - Pre-submission validation
+
+**Benefit & Provider Services:**
+- **Benefit Plan Service** (in progress) - Insurance product definitions
+- **Provider Directory Service** (new) - NPI lookup, credentialing, network participation
+- **Eligibility Service** (existing) - Real-time 270/271 queries
+
+**Supporting Services:**
+- **Reference Data Service** (new) - CPT/HCPCS/ICD-10 codes (PostgreSQL)
+- **Portal Backend API** (new) - User management, dashboards, reporting
+
+**Infrastructure:**
+- **Frontend**: Blazor Server
 - **API Gateway**: Kong or Azure API Management  
-- **Microservices**: 
-  - Eligibility Service (existing)
-  - Benefit Plan Config Service (new)
-  - Provider Directory Service (new)
-  - Reference Data Service - CPT/HCPCS/ICD codes (new)
-  - Claims Scrubbing Service (existing)
-  - Portal Backend API (new)
-- **Databases**: Cosmos DB, PostgreSQL (reference data), Redis (caching)
-- **Authentication**: Azure AD B2C / Entra ID
+- **Databases**: Cosmos DB (partition by tenantId), PostgreSQL (reference data), Redis (caching)
+- **Authentication**: Azure AD B2C multi-tenant
 - **Service Mesh**: Dapr for service-to-service communication
 
 ---
@@ -194,22 +208,139 @@ cho-system      # Dapr, cert-manager, ingress
 
 **Decision: Start with Blazor Server** (can add WASM hosting mode later)
 
-### Backend Services
+### Backend Services (EDI-Aligned)
 
-| Service | Language | Framework | Database | Port |
-|---------|----------|-----------|----------|------|
-| Eligibility | TypeScript | Node.js/Express | Cosmos DB | 3000 |
-| Benefit Config | C# | ASP.NET Core | Cosmos DB | 3001 |
-| Provider Directory | C# | ASP.NET Core | Cosmos DB | 3002 |
-| Reference Data | C# | ASP.NET Core | PostgreSQL | 3003 |
-| Claims Scrubbing | TypeScript | Node.js/Express | Cosmos DB | 3004 |
-| Portal Backend | C# | ASP.NET Core | Cosmos DB | 3005 |
+| Service | Language | Framework | Database | Port | Populated By |
+|---------|----------|-----------|----------|------|--------------|
+| Sponsor | C# | ASP.NET Core | Cosmos DB | 3000 | 834 Enrollment |
+| Member | C# | ASP.NET Core | Cosmos DB | 3001 | 834 Enrollment |
+| Coverage | C# | ASP.NET Core | Cosmos DB | 3002 | 834 Enrollment |
+| Benefit Plan | C# | ASP.NET Core | Cosmos DB | 3003 | Manual/Admin |
+| Claims | C# | ASP.NET Core | Cosmos DB | 3004 | 837/835/277 |
+| Authorization | C# | ASP.NET Core | Cosmos DB | 3005 | 278 Transactions |
+| Eligibility | TypeScript | Node.js/Express | Cosmos DB | 3006 | 270/271 Real-time |
+| Provider Directory | C# | ASP.NET Core | Cosmos DB | 3007 | Manual/CAQH |
+| Reference Data | C# | ASP.NET Core | PostgreSQL | 3008 | CMS Bulk Import |
+| Claims Scrubbing | TypeScript | Node.js/Express | Cosmos DB | 3009 | Pre-837 Validation |
+| Portal Backend | C# | ASP.NET Core | Cosmos DB | 3010 | User Actions |
 
 ---
 
-## New Microservices Design
+## EDI Transaction Flow Architecture
 
-### 1. Benefit Plan Configuration Service
+### 834 Enrollment Processing Flow
+```
+834 Transaction → Parse EDI
+  ├─> Sponsor Service: Create/update employer group (INS/NM1/N3/N4/PER segments)
+  ├─> Member Service: Create subscriber + dependents (INS/NM1/DMG/REF segments)
+  └─> Coverage Service: Link member → sponsor → plan (HD/COB/DTP segments)
+```
+
+### 837 Claims Processing Flow
+```
+837 Transaction → Claims Service (store claim)
+  ├─> Query Coverage Service (active coverage?)
+  ├─> Query Provider Service (in-network?)
+  ├─> Query Benefit Plan Service (copay/deductible rules)
+  ├─> Query Authorization Service (prior auth approved?)
+  ├─> Adjudication Engine
+  └─> Generate 835 Remittance + 277 Status
+```
+
+### 270/271 Eligibility Check Flow
+```
+270 Request → Eligibility Service
+  ├─> Query Coverage Service (find active coverage by member ID + DOB)
+  ├─> Query Member Service (demographics)
+  ├─> Query Benefit Plan Service (plan details, deductibles, copays)
+  └─> Return 271 Response with coverage details
+```
+
+### 278 Prior Authorization Flow
+```
+278 Request → Authorization Service (store auth request)
+  ├─> Query Coverage Service (coverage active?)
+  ├─> Query Benefit Plan Service (prior auth required for CPT?)
+  ├─> Medical Review (manual or automated)
+  └─> Return 278 Response (approved/denied/pended)
+```
+
+---
+
+## New Microservices Design (EDI-Aligned)
+
+### 1. Sponsor Service (834 Foundation)
+
+**Purpose**: Manage employers/groups that purchase health coverage (834 sponsor segments)
+
+**Endpoints**:
+```http
+GET    /api/v1/sponsors                 # List all sponsors
+GET    /api/v1/sponsors/{groupNumber}   # Get sponsor details
+POST   /api/v1/sponsors                 # Create sponsor
+PUT    /api/v1/sponsors/{groupNumber}   # Update sponsor
+DELETE /api/v1/sponsors/{groupNumber}   # Deactivate sponsor
+
+GET    /api/v1/sponsors/{groupNumber}/members  # Get all members under sponsor
+GET    /api/v1/sponsors/{groupNumber}/coverage-summary # Coverage stats
+```
+
+**Data Model**:
+```csharp
+public class Sponsor
+{
+    public string TenantId { get; set; }           // Multi-tenant partition key
+    public string GroupNumber { get; set; }        // REF*1L segment
+    public string EmployerName { get; set; }       // NM1 segment
+    public string TaxId { get; set; }              // REF*EI segment
+    public string Address { get; set; }            // N3 segment
+    public string City { get; set; }               // N4 segment
+    public string State { get; set; }              // N4 segment
+    public string ZipCode { get; set; }            // N4 segment
+    public string ContactName { get; set; }        // PER segment
+    public string ContactPhone { get; set; }       // PER segment
+    public string ContactEmail { get; set; }       // PER segment
+    public DateTime EffectiveDate { get; set; }    // DTP*348 segment
+    public DateTime? TerminationDate { get; set; } // DTP*349 segment
+    public SponsorStatus Status { get; set; }
+    public BillingInfo BillingInfo { get; set; }
+    public int TotalMembers { get; set; }          // Calculated
+    public DateTime CreatedDate { get; set; }
+    public DateTime LastUpdatedDate { get; set; }
+}
+
+public enum SponsorStatus
+{
+    Active,
+    Suspended,
+    Terminated,
+    PendingActivation
+}
+
+public class BillingInfo
+{
+    public decimal PremiumAmount { get; set; }
+    public BillingFrequency Frequency { get; set; }
+    public int BillingDay { get; set; }           // Day of month
+    public string BillingAccountNumber { get; set; }
+}
+
+public enum BillingFrequency
+{
+    Monthly,
+    Quarterly,
+    Annual
+}
+```
+
+**Key Features**:
+- Multi-tenant (partition by TenantId)
+- Populated by 834 enrollment transactions
+- Tracks employer groups and contract dates
+- Links to members via Coverage Service
+- Billing and premium management
+
+### 2. Member Service (834 Enrollment)
 
 **Purpose**: Manage payer benefit plan configurations, copays, deductibles, coverage rules
 
