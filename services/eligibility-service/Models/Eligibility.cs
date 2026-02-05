@@ -41,6 +41,14 @@ public class EligibilityInquiry
     public string ControlNumber { get; set; } = string.Empty;  // ST02/GS06
     public EligibilityInquiryStatus Status { get; set; } = EligibilityInquiryStatus.Pending;
     public DateTime? ResponseDate { get; set; }
+    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+    public DateTime? ModifiedDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public string? ResponseId { get; set; }
+    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedDate { get; set; }
+    public string? ResponseId { get; set; }
+    public DateTime ModifiedDate { get; set; } = DateTime.UtcNow;
     
     // Line of Business
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -78,6 +86,9 @@ public class EligibilityResponse
     
     // Additional coverage info
     public List<AdditionalInsurance>? AdditionalInsurances { get; set; }
+    
+    // Timestamps
+    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     
     // Response metadata
     public DateTime ResponseDate { get; set; } = DateTime.UtcNow;
@@ -149,6 +160,8 @@ public class AdditionalInsurance
     public string GroupNumber { get; set; } = string.Empty;
     public DateTime? EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+    public DateTime? CoverageBeginDate { get; set; }
+    public DateTime? CoverageEndDate { get; set; }
 }
 
 public enum EligibilityInquiryStatus
