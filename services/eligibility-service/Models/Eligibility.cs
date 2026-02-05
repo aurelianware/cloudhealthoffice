@@ -45,10 +45,6 @@ public class EligibilityInquiry
     public DateTime? ModifiedDate { get; set; }
     public DateTime? CompletedDate { get; set; }
     public string? ResponseId { get; set; }
-    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
-    public DateTime? CompletedDate { get; set; }
-    public string? ResponseId { get; set; }
-    public DateTime ModifiedDate { get; set; } = DateTime.UtcNow;
     
     // Line of Business
     [JsonConverter(typeof(JsonStringEnumConverter))]
