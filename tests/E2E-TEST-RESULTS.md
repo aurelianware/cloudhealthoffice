@@ -42,22 +42,22 @@
 
 | Step | Name | Duration | Status |
 |------|------|----------|--------|
-| 1 | get-claim | 8,000 ms | ✓ Succeeded |
-| 2 | verify-coverage | 10,000 ms | ✓ Succeeded |
-| 3 | validate-provider | 8,000 ms | ✓ Succeeded |
-| 4 | validate-codes | 9,000 ms | ✓ Succeeded |
-| 5 | check-prior-auth | 9,000 ms | ✓ Succeeded |
-| 6 | get-benefits | 9,000 ms | ✓ Succeeded |
-| 7 | get-rates | 9,000 ms | ✓ Succeeded |
-| 8 | calculate-allowed | 5,000 ms | ✓ Succeeded |
-| 9 | calculate-cost-sharing | 6,000 ms | ✓ Succeeded |
-| 10 | update-claim | 9,000 ms | ✓ Succeeded |
+| 1 | get-claim | 17,000 ms | ✓ Succeeded |
+| 2 | validate-codes | 11,000 ms | ✓ Succeeded |
+| 3 | verify-coverage | 13,000 ms | ✓ Succeeded |
+| 4 | validate-provider | 12,000 ms | ✓ Succeeded |
+| 5 | check-prior-auth | 11,000 ms | ✓ Succeeded |
+| 6 | get-benefits | 11,000 ms | ✓ Succeeded |
+| 7 | get-rates | 8,000 ms | ✓ Succeeded |
+| 8 | calculate-allowed | 10,000 ms | ✓ Succeeded |
+| 9 | calculate-cost-sharing | 5,000 ms | ✓ Succeeded |
+| 10 | update-claim | 8,000 ms | ✓ Succeeded |
 
 ### Timing Analysis
 
-**Total Task Execution Time:** 82,000 ms (82 seconds)  
-**Kubernetes Overhead:** 29,000 ms (29 seconds)  
-**Total Workflow Time:** 111,000 ms (111 seconds)
+**Total Task Execution Time:** 106,000 ms (106 seconds)  
+**Kubernetes Overhead:** 18,000 ms (18 seconds)  
+**Total Workflow Time:** 124,000 ms (124 seconds)
 
 **Note:** The execution times include:
 - Kubernetes pod scheduling and startup (~29 seconds overhead)
@@ -136,10 +136,9 @@ In production with pre-warmed services and actual microservice implementations, 
 ## Known Limitations
 
 ### Current Test Environment
-1. **Mock Services:** Using hashicorp/http-echo for all microservices
-   - Returns generic JSON responses
-   - Does not perform real business logic
-   - Network calls have timeout handling
+1. **Environment Overhead:** Kubernetes scheduling and container startup adds ~18s
+   - Pre-warming pods reduces this overhead
+   - Network I/O between services adds additional latency
 
 2. **Performance:** Test focused on orchestration, not speed
    - Kubernetes pod scheduling adds ~29s overhead
@@ -157,9 +156,9 @@ In production with pre-warmed services and actual microservice implementations, 
 
 ### Immediate (Week 1)
 1. ✅ End-to-end testing completed
-2. ⬜ Build Docker images for all 9 microservices
-3. ⬜ Replace mock services with real service deployments
-4. ⬜ Re-run E2E test with real services
+2. ✅ Build Docker images for all microservices
+3. ✅ Replace mock services with real service deployments
+4. ✅ Re-run E2E test with real services
 5. ⬜ Optimize for <500ms target processing time
 
 ### Production Readiness (Week 2-3)
@@ -196,7 +195,7 @@ The end-to-end test **proves the platform's core architecture works**:
 5. **Error handling** gracefully manages service timeouts
 
 ### 📊 Performance Notes
-- Current test: 111 seconds total (82s tasks + 29s K8s overhead)
+- Current test: 124 seconds total (106s tasks + 18s K8s overhead)
 - Production target: <500ms for adjudication logic
 - Gap addressable by:
   - Pre-warmed containers (eliminate cold start)
