@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using CoverageService.Middleware;
 using CoverageService.Models;
 using System;
 using System.Collections.Generic;

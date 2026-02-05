@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using ClaimsService.Middleware;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 

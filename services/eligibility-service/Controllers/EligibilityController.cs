@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using EligibilityService.Middleware;
 using EligibilityService.Models;
 using EligibilityService.Services;
 
