@@ -10,6 +10,9 @@ builder.Services.AddDbContext<ReferenceDataContext>(options =>
 // Add repositories
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
 
+// Add memory cache for hot code lookups
+builder.Services.AddMemoryCache();
+
 // Add controllers
 builder.Services.AddControllers();
 
