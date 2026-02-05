@@ -48,7 +48,7 @@ public class BenefitPlansController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BenefitPlan>> GetPlan(string id)
     {
-        var plan = await _service.GetPlanAsync(id);
+        var plan = await _service.GetPlanAsync(id, TenantId);
         if (plan == null)
         {
             return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -70,7 +70,7 @@ public class BenefitPlansController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var created = await _service.CreatePlanAsync(plan);
+        var created = await _service.CreatePlanAsync(plan, TenantId);
         return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
     }
 
@@ -87,7 +87,7 @@ public class BenefitPlansController : ControllerBase
             return BadRequest(new { message = "ID mismatch" });
         }
 
-        var updated = await _service.UpdatePlanAsync(plan);
+        var updated = await _service.UpdatePlanAsync(plan, TenantId);
         if (updated == null)
         {
             return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -104,7 +104,7 @@ public class BenefitPlansController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePlan(string id)
     {
-        var deleted = await _service.DeletePlanAsync(id);
+        var deleted = await _service.DeletePlanAsync(id, TenantId);
         if (!deleted)
         {
             return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -120,7 +120,7 @@ public class BenefitPlansController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<Benefit>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Benefit>>> GetPlanBenefits(string id)
     {
-        var plan = await _service.GetPlanAsync(id);
+        var plan = await _service.GetPlanAsync(id, TenantId);
         if (plan == null)
         {
             return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -136,7 +136,7 @@ public class BenefitPlansController : ControllerBase
     [ProducesResponseType(typeof(Benefit), StatusCodes.Status201Created)]
     public async Task<ActionResult<Benefit>> AddBenefit(string id, [FromBody] Benefit benefit)
     {
-        var added = await _service.AddBenefitAsync(id, benefit);
+        var added = await _service.AddBenefitAsync(id, TenantId, benefit);
         if (added == null)
         {
             return NotFound(new { message = $"Benefit plan '{id}' not found" });
