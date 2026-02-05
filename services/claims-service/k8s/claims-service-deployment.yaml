@@ -41,7 +41,7 @@ spec:
     spec:
       containers:
       - name: claims-service
-        image: your-acr.azurecr.io/claims-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-claims-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
