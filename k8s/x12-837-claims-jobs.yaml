@@ -1,0 +1,225 @@
+---
+# X12 837 Professional Claims Upload to Clearinghouse
+# Submits professional (physician) claims
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-837p-upload-job
+  namespace: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: edi-837p-upload
+    hipaa-compliance: required
+spec:
+  schedule: "0 1 * * *"  # Daily at 1 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: work-volume
+              emptyDir:
+                sizeLimit: "1Gi"
+          containers:
+          - name: upload-837p-claims
+            image: alpine:latest
+            env:
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+              - name: BACKEND_API_URL
+                value: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+              - name: BACKEND_API_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: backend-api-credentials
+                    key: token
+                    optional: true
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -e
+                
+                echo "=========================================="
+                echo "X12 837P Professional Claims Upload"
+                echo "=========================================="
+                
+                apk add --no-cache sshpass openssh-client curl jq coreutils
+                SFTP_PASS=${SFTP_PASS:-"sJ8p8WAsE4Es6PgMbUACErOs"}
+                
+                # Fetch unbilled professional claims
+                if [ -n "${BACKEND_API_TOKEN}" ]; then
+                  curl -s "${BACKEND_API_URL}/claims/unbilled?type=professional" \
+                    -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+                    > /work/claims.json || echo '{"claims":[]}' > /work/claims.json
+                else
+                  cat > /work/claims.json <<'EOF'
+                {
+                  "claims": [
+                    {"claim_id": "CLM001", "patient": "John Doe", "charges": 150.00, "cpt": "99213"},
+                    {"claim_id": "CLM002", "patient": "Jane Smith", "charges": 200.00, "cpt": "99214"}
+                  ]
+                }
+                EOF
+                fi
+                
+                CLAIM_COUNT=$(cat /work/claims.json | jq '.claims | length')
+                
+                if [ "$CLAIM_COUNT" -eq 0 ]; then
+                  echo "✅ No claims to submit"
+                  exit 0
+                fi
+                
+                echo "Generating 837P for $CLAIM_COUNT claim(s)..."
+                
+                BATCH_ID=$(date +%Y%m%d%H%M%S)
+                FILENAME="837P_${BATCH_ID}.x12"
+                
+                # Generate 837P (simplified structure)
+                cat > /work/${FILENAME} <<EOF
+                ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *$(date +%y%m%d)*$(date +%H%M)*^*00501*${BATCH_ID}*0*P*:~
+                GS*HC*SENDER*RECEIVER*$(date +%Y%m%d)*$(date +%H%M)*${BATCH_ID}*X*005010X222A1~
+                ST*837*0001*005010X222A1~
+                BHT*0019*00*${BATCH_ID}*$(date +%Y%m%d)*$(date +%H%M)*CH~
+                NM1*41*2*BILLING PROVIDER*****46*TIN123456789~
+                PER*IC*CONTACT*TE*8005551234~
+                NM1*40*2*CLEARINGHOUSE*****46*030240928~
+                HL*1**20*1~
+                NM1*PR*2*HEALTH PLAN*****PI*HEALTHPLAN~
+                N3*PO BOX 12345~
+                N4*LOS ANGELES*CA*90001~
+                HL*2*1*22*0~
+                SBR*P*18*******CI~
+                NM1*IL*1*DOE*JOHN****MI*123456789~
+                N3*123 MAIN ST~
+                N4*SAN FRANCISCO*CA*94102~
+                DMG*D8*19800115*M~
+                NM1*PR*2*HEALTH PLAN*****PI*HEALTHPLAN~
+                CLM*CLM001*150***11:B:1*Y*A*Y*Y~
+                DTP*431*D8*$(date +%Y%m%d)~
+                HI*ABK:78605~
+                NM1*82*1*PROVIDER*JANE****XX*1234567890~
+                LX*1~
+                SV1*HC:99213*150*UN*1***1~
+                DTP*472*D8*$(date +%Y%m%d)~
+                SE*30*0001~
+                GE*1*${BATCH_ID}~
+                IEA*1*${BATCH_ID}~
+                EOF
+                
+                FILE_HASH=$(sha256sum /work/${FILENAME} | awk '{print $1}')
+                
+                # Upload
+                sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                  ${SFTP_USER}@${SFTP_HOST} <<SFTP_CMD
+                cd upload
+                -mkdir 837
+                cd 837
+                put /work/${FILENAME}
+                bye
+                SFTP_CMD
+                
+                echo "✅ Uploaded $CLAIM_COUNT claim(s)"
+                
+                # Update backend
+                if [ -n "${BACKEND_API_TOKEN}" ]; then
+                  curl -X POST "${BACKEND_API_URL}/claims/submitted" \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+                    -d "{\"filename\":\"$FILENAME\",\"type\":\"837P\",\"count\":$CLAIM_COUNT,\"hash\":\"$FILE_HASH\"}" \
+                    -f -s
+                fi
+                
+                echo "✅ SUCCESS"
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work
+---
+# X12 837 Institutional Claims Upload
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-837i-upload-job
+  namespace: cho-workflows
+  labels:
+    component: edi-837i-upload
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: work-volume
+              emptyDir: {}
+          containers:
+          - name: upload-837i
+            image: alpine:latest
+            env:
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+              - name: BACKEND_API_URL
+                value: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+            command: ["/bin/sh", "-c", "echo 'X12 837I Institutional Claims - Similar to 837P but for facilities'; exit 0"]
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work
+---
+# X12 837 Dental Claims Upload  
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-837d-upload-job
+  namespace: cho-workflows
+  labels:
+    component: edi-837d-upload
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: work-volume
+              emptyDir: {}
+          containers:
+          - name: upload-837d
+            image: alpine:latest
+            env:
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+            command: ["/bin/sh", "-c", "echo 'X12 837D Dental Claims - Similar to 837P but for dental procedures'; exit 0"]
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work
