@@ -13,14 +13,14 @@ public interface IBenefitPlanService
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
 }
 
-public class BenefitPlanService : IBenefitPlanService
+public class BenefitPlanServiceImpl : IBenefitPlanService
 {
     private readonly IBenefitPlanRepository _repository;
-    private readonly ILogger<BenefitPlanService> _logger;
+    private readonly ILogger<BenefitPlanServiceImpl> _logger;
 
-    public BenefitPlanService(
+    public BenefitPlanServiceImpl(
         IBenefitPlanRepository repository,
-        ILogger<BenefitPlanService> logger)
+        ILogger<BenefitPlanServiceImpl> logger)
     {
         _repository = repository;
         _logger = logger;
