@@ -99,7 +99,7 @@ spec:
     spec:
       containers:
       - name: reference-data-service
-        image: cloudhealthoffice/reference-data-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-reference-data-service:latest
         ports:
         - containerPort: 8080
         envFrom:
