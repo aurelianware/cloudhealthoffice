@@ -4,17 +4,17 @@ using System.Net.Http.Json;
 
 namespace EligibilityService.Services;
 
-public class EligibilityService : IEligibilityService
+public class EligibilityServiceImpl : IEligibilityService
 {
     private readonly IEligibilityRepository _repository;
     private readonly HttpClient _httpClient;
-    private readonly ILogger<EligibilityService> _logger;
+    private readonly ILogger<EligibilityServiceImpl> _logger;
     private readonly IConfiguration _configuration;
 
-    public EligibilityService(
+    public EligibilityServiceImpl(
         IEligibilityRepository repository,
         HttpClient httpClient,
-        ILogger<EligibilityService> logger,
+        ILogger<EligibilityServiceImpl> logger,
         IConfiguration configuration)
     {
         _repository = repository;
