@@ -148,6 +148,13 @@ public class Member
     public EnrollmentStatus Status { get; set; } = EnrollmentStatus.Active;
 
     /// <summary>
+    /// Line of Business (Commercial, Medicare, Medicaid, Exchange)
+    /// Inherited from sponsor/plan selection
+    /// </summary>
+    [Required]
+    public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+
+    /// <summary>
     /// Maintenance type code from 834 INS03 segment
     /// 001 = Change, 021 = Addition, 024 = Cancellation or Termination, 030 = Audit or Compare
     /// </summary>
@@ -285,4 +292,17 @@ public static class RelationshipCodes
     public const string FosterChild = "10";
     public const string DomesticPartner = "53";
     public const string Other = "G8";
+}
+
+/// <summary>
+/// Line of Business - determines regulatory requirements and benefit rules
+/// </summary>
+public enum LineOfBusiness
+{
+    Commercial = 1,
+    Medicare = 2,
+    Medicaid = 3,
+    Exchange = 4,
+    TRICARE = 5,
+    VA = 6
 }

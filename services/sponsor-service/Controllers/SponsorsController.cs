@@ -30,6 +30,7 @@ public class SponsorsController : ControllerBase
     /// List all sponsors for the current tenant
     /// </summary>
     /// <param name="status">Filter by sponsor status</param>
+    /// <param name="lineOfBusiness">Filter by line of business</param>
     /// <param name="activeOnly">Return only active sponsors</param>
     /// <param name="pageSize">Page size (max 100)</param>
     /// <param name="continuationToken">Continuation token for pagination</param>
@@ -37,6 +38,7 @@ public class SponsorsController : ControllerBase
     [ProducesResponseType(typeof(SponsorListResponse), 200)]
     public async Task<IActionResult> GetSponsors(
         [FromQuery] SponsorStatus? status = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
         [FromQuery] bool activeOnly = false,
         [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] string? continuationToken = null)

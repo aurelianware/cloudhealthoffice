@@ -33,6 +33,7 @@ public class CoverageController : ControllerBase
     /// <param name="memberId">Filter by member ID</param>
     /// <param name="groupNumber">Filter by sponsor group number</param>
     /// <param name="planId">Filter by benefit plan ID</param>
+    /// <param name="lineOfBusiness">Filter by line of business</param>
     /// <param name="activeOnly">Return only active coverage</param>
     /// <param name="asOfDate">Check coverage active as of specific date</param>
     /// <param name="pageSize">Page size (max 100)</param>
@@ -43,6 +44,7 @@ public class CoverageController : ControllerBase
         [FromQuery] string? memberId = null,
         [FromQuery] string? groupNumber = null,
         [FromQuery] string? planId = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
         [FromQuery] bool activeOnly = false,
         [FromQuery] DateTime? asOfDate = null,
         [FromQuery][Range(1, 100)] int pageSize = 20,

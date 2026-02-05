@@ -44,6 +44,14 @@ public class BenefitPlan
     [JsonPropertyName("metalLevel")]
     public MetalLevel? MetalLevel { get; set; }
 
+    /// <summary>
+    /// Line of Business (Commercial, Medicare, Medicaid, Exchange)
+    /// Determines regulatory requirements, benefit mandates, and network rules
+    /// </summary>
+    [Required]
+    [JsonPropertyName("lineOfBusiness")]
+    public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+
     [JsonPropertyName("benefits")]
     public List<Benefit> Benefits { get; set; } = new();
 
@@ -188,4 +196,44 @@ public enum MetalLevel
     Gold,
     Platinum,
     Catastrophic
+}
+
+/// <summary>
+/// Line of Business - determines regulatory requirements and benefit rules
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum LineOfBusiness
+{
+    /// <summary>
+    /// Commercial employer-sponsored coverage (ERISA regulated)
+    /// </summary>
+    Commercial = 1,
+
+    /// <summary>
+    /// Medicare Advantage (Part C) or Medicare Supplement
+    /// CMS regulated, must follow Medicare coverage rules
+    /// </summary>
+    Medicare = 2,
+
+    /// <summary>
+    /// Medicaid Managed Care (state + federal regulated)
+    /// EPSDT requirements, different benefit mandates per state
+    /// </summary>
+    Medicaid = 3,
+
+    /// <summary>
+    /// ACA Exchange/Marketplace individual plans
+    /// QHP certification, Essential Health Benefits, metal levels required
+    /// </summary>
+    Exchange = 4,
+
+    /// <summary>
+    /// TRICARE (military health coverage)
+    /// </summary>
+    TRICARE = 5,
+
+    /// <summary>
+    /// Veterans Affairs health coverage
+    /// </summary>
+    VA = 6
 }

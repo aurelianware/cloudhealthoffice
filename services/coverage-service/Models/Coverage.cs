@@ -74,6 +74,13 @@ public class Coverage
     public CoverageStatus Status { get; set; } = CoverageStatus.Active;
 
     /// <summary>
+    /// Line of Business (Commercial, Medicare, Medicaid, Exchange)
+    /// Critical for determining applicable regulations and benefit rules
+    /// </summary>
+    [Required]
+    public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+
+    /// <summary>
     /// Is this COBRA continuation coverage?
     /// </summary>
     public bool IsCOBRA { get; set; }
@@ -276,4 +283,17 @@ public static class InsuranceLineCodes
     public const string Life = "LIF";
     public const string LongTermDisability = "LTD";
     public const string ShortTermDisability = "STD";
+}
+
+/// <summary>
+/// Line of Business - determines regulatory requirements and benefit rules
+/// </summary>
+public enum LineOfBusiness
+{
+    Commercial = 1,
+    Medicare = 2,
+    Medicaid = 3,
+    Exchange = 4,
+    TRICARE = 5,
+    VA = 6
 }
