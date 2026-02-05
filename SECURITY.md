@@ -1,5 +1,26 @@
 # Security and HIPAA Compliance Guide
 
+## 🚨 Reporting Security Vulnerabilities
+
+**Please do not report security vulnerabilities through public GitHub issues.**
+
+Report vulnerabilities via email to: **security@cloudhealthoffice.com**
+
+You should receive a response within 48 hours. Include:
+- Type of vulnerability and affected components
+- Steps to reproduce
+- Proof-of-concept code (if applicable)
+- Potential impact
+
+## Supported Versions
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 1.x     | ✅ Security patches |
+| < 1.0   | ❌ Not supported   |
+
+---
+
 This document outlines security requirements, HIPAA compliance measures, and secure development practices for the Cloud Health Office system.
 
 ## Table of Contents

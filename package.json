@@ -66,5 +66,16 @@
     "markdownlint-cli": "^0.46.0",
     "ts-jest": "^29.0.0",
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "lodash": "^4.17.21",
+    "lodash.merge": "^4.6.2",
+    "lodash.includes": "^4.3.0",
+    "lodash.isboolean": "^3.0.3",
+    "lodash.isinteger": "^4.0.4",
+    "lodash.isnumber": "^3.0.3",
+    "lodash.isplainobject": "^4.0.6",
+    "lodash.isstring": "^4.0.1",
+    "lodash.once": "^4.1.1"
   }
 }
