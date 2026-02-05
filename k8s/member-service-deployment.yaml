@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: member-service-config
+  namespace: cho-svcs
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  CosmosDb__MemberContainerName: "Members"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: member-service-secrets
+  namespace: cho-svcs
+type: Opaque
+stringData:
+  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
+  CosmosDb__Key: "your-cosmos-primary-key-here"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: member-service
+  namespace: cho-svcs
+  labels:
+    app: member-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: member-service
+  template:
+    metadata:
+      labels:
+        app: member-service
+        version: v1
+    spec:
+      containers:
+      - name: member-service
+        image: your-acr.azurecr.io/member-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: member-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: CosmosDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: member-service-config
+              key: CosmosDb__DatabaseName
+        - name: CosmosDb__Endpoint
+          valueFrom:
+            secretKeyRef:
+              name: member-service-secrets
+              key: CosmosDb__Endpoint
+        - name: CosmosDb__Key
+          valueFrom:
+            secretKeyRef:
+              name: member-service-secrets
+              key: CosmosDb__Key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: member-service
+  namespace: cho-svcs
+  labels:
+    app: member-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: member-service
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: member-service-hpa
+  namespace: cho-svcs
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: member-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
