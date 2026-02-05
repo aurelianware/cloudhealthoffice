@@ -39,7 +39,12 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 });
 
 // HTTP Client for service calls
-builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>();
+builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(5);
+    });
 
 // Repository and Service
 builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();

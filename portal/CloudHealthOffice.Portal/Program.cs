@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Web;
 using MudBlazor.Services;
 using CloudHealthOffice.Portal.Services;
 using CloudHealthOffice.Portal.Hubs;
+using System.Net.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +13,14 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
 
 // Add HttpClient for service calls
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+        MaxConnectionsPerServer = 50
+    });
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();

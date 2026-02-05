@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using ReferenceDataService.Models;
 using ReferenceDataService.Repositories;
 
@@ -11,12 +12,15 @@ public class ReferenceDataController : ControllerBase
 {
     private readonly IReferenceDataRepository _referenceDataRepository;
     private readonly ILogger<ReferenceDataController> _logger;
+    private readonly IMemoryCache _cache;
 
     public ReferenceDataController(
         IReferenceDataRepository referenceDataRepository,
+        IMemoryCache cache,
         ILogger<ReferenceDataController> logger)
     {
         _referenceDataRepository = referenceDataRepository;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -30,20 +34,25 @@ public class ReferenceDataController : ControllerBase
     {
         _logger.LogInformation("Validating CPT code: {Code}", code);
 
-        var cptCode = await _referenceDataRepository.GetCptCodeAsync(code);
-        
-        var response = new CodeValidationResponse
+        var response = await _cache.GetOrCreateAsync($"cpt:{code}", async entry =>
         {
-            Code = code,
-            IsValid = cptCode != null && cptCode.StatusCode == "A",
-            CodeType = "CPT",
-            Description = cptCode?.ShortDescription,
-            Status = cptCode?.StatusCode,
-            RequiresPriorAuth = cptCode?.RequiresPriorAuth ?? false,
-            ValidationMessage = cptCode == null ? "Code not found" :
-                               cptCode.StatusCode != "A" ? "Code is not active" :
-                               "Code is valid"
-        };
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+
+            var cptCode = await _referenceDataRepository.GetCptCodeAsync(code);
+
+            return new CodeValidationResponse
+            {
+                Code = code,
+                IsValid = cptCode != null && cptCode.StatusCode == "A",
+                CodeType = "CPT",
+                Description = cptCode?.ShortDescription,
+                Status = cptCode?.StatusCode,
+                RequiresPriorAuth = cptCode?.RequiresPriorAuth ?? false,
+                ValidationMessage = cptCode == null ? "Code not found" :
+                                   cptCode.StatusCode != "A" ? "Code is not active" :
+                                   "Code is valid"
+            };
+        });
 
         return Ok(response);
     }
@@ -58,21 +67,26 @@ public class ReferenceDataController : ControllerBase
     {
         _logger.LogInformation("Validating ICD-10 code: {Code}", code);
 
-        var icd10Code = await _referenceDataRepository.GetIcd10CodeAsync(code);
-        
-        var response = new CodeValidationResponse
+        var response = await _cache.GetOrCreateAsync($"icd10:{code}", async entry =>
         {
-            Code = code,
-            IsValid = icd10Code != null && icd10Code.StatusCode == "A" && icd10Code.Billable,
-            CodeType = "ICD-10",
-            Description = icd10Code?.ShortDescription,
-            Status = icd10Code?.StatusCode,
-            IsBillable = icd10Code?.Billable,
-            ValidationMessage = icd10Code == null ? "Code not found" :
-                               icd10Code.StatusCode != "A" ? "Code is not active" :
-                               !icd10Code.Billable ? "Code is not billable (header code only)" :
-                               "Code is valid"
-        };
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+
+            var icd10Code = await _referenceDataRepository.GetIcd10CodeAsync(code);
+
+            return new CodeValidationResponse
+            {
+                Code = code,
+                IsValid = icd10Code != null && icd10Code.StatusCode == "A" && icd10Code.Billable,
+                CodeType = "ICD-10",
+                Description = icd10Code?.ShortDescription,
+                Status = icd10Code?.StatusCode,
+                IsBillable = icd10Code?.Billable,
+                ValidationMessage = icd10Code == null ? "Code not found" :
+                                   icd10Code.StatusCode != "A" ? "Code is not active" :
+                                   !icd10Code.Billable ? "Code is not billable (header code only)" :
+                                   "Code is valid"
+            };
+        });
 
         return Ok(response);
     }
@@ -86,19 +100,24 @@ public class ReferenceDataController : ControllerBase
     {
         _logger.LogInformation("Validating HCPCS code: {Code}", code);
 
-        var hcpcsCode = await _referenceDataRepository.GetHcpcsCodeAsync(code);
-        
-        var response = new CodeValidationResponse
+        var response = await _cache.GetOrCreateAsync($"hcpcs:{code}", async entry =>
         {
-            Code = code,
-            IsValid = hcpcsCode != null && hcpcsCode.StatusCode == "A",
-            CodeType = "HCPCS",
-            Description = hcpcsCode?.ShortDescription,
-            Status = hcpcsCode?.StatusCode,
-            ValidationMessage = hcpcsCode == null ? "Code not found" :
-                               hcpcsCode.StatusCode != "A" ? "Code is not active" :
-                               "Code is valid"
-        };
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+
+            var hcpcsCode = await _referenceDataRepository.GetHcpcsCodeAsync(code);
+
+            return new CodeValidationResponse
+            {
+                Code = code,
+                IsValid = hcpcsCode != null && hcpcsCode.StatusCode == "A",
+                CodeType = "HCPCS",
+                Description = hcpcsCode?.ShortDescription,
+                Status = hcpcsCode?.StatusCode,
+                ValidationMessage = hcpcsCode == null ? "Code not found" :
+                                   hcpcsCode.StatusCode != "A" ? "Code is not active" :
+                                   "Code is valid"
+            };
+        });
 
         return Ok(response);
     }
