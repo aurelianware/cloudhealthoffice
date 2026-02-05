@@ -102,6 +102,13 @@ public class Sponsor
     public SponsorStatus Status { get; set; } = SponsorStatus.Active;
 
     /// <summary>
+    /// Line of Business (Commercial, Medicare, Medicaid, Exchange)
+    /// Determines regulatory requirements and benefit rules
+    /// </summary>
+    [Required]
+    public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
+
+    /// <summary>
     /// Billing configuration
     /// </summary>
     public BillingInfo? BillingInfo { get; set; }
@@ -229,4 +236,43 @@ public enum BillingFrequency
     /// Billed annually (once per year)
     /// </summary>
     Annual = 12
+}
+
+/// <summary>
+/// Line of Business - determines regulatory requirements and benefit rules
+/// </summary>
+public enum LineOfBusiness
+{
+    /// <summary>
+    /// Commercial employer-sponsored coverage (ERISA regulated)
+    /// </summary>
+    Commercial = 1,
+
+    /// <summary>
+    /// Medicare Advantage (Part C) or Medicare Supplement
+    /// CMS regulated, 65+ or disabled
+    /// </summary>
+    Medicare = 2,
+
+    /// <summary>
+    /// Medicaid Managed Care (state + federal regulated)
+    /// Low income, pregnant women, children, disabled
+    /// </summary>
+    Medicaid = 3,
+
+    /// <summary>
+    /// ACA Exchange/Marketplace individual plans
+    /// QHP certification required, metal levels, subsidies
+    /// </summary>
+    Exchange = 4,
+
+    /// <summary>
+    /// TRICARE (military health coverage)
+    /// </summary>
+    TRICARE = 5,
+
+    /// <summary>
+    /// Veterans Affairs health coverage
+    /// </summary>
+    VA = 6
 }
