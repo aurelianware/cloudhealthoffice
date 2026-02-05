@@ -110,6 +110,21 @@ public class Benefit
     [JsonPropertyName("priorAuthRequired")]
     public bool PriorAuthRequired { get; set; } = false;
 
+    [JsonPropertyName("copayAmount")]
+    public decimal? CopayAmount { get; set; }
+
+    [JsonPropertyName("coinsurancePercentage")]
+    public decimal? CoinsurancePercentage { get; set; }
+
+    [JsonPropertyName("requiresPriorAuth")]
+    public bool RequiresPriorAuth { get; set; }
+
+    [JsonPropertyName("visitLimit")]
+    public int? VisitLimit { get; set; }
+
+    [JsonPropertyName("visitLimitPeriod")]
+    public string? VisitLimitPeriod { get; set; }
+
     [JsonPropertyName("limitations")]
     public string? Limitations { get; set; }
 
@@ -155,6 +170,18 @@ public class CostSharing
 
     [JsonPropertyName("familyOutOfPocketMax")]
     public decimal FamilyOutOfPocketMax { get; set; }
+
+    [JsonPropertyName("inNetworkDeductible")]
+    public decimal InNetworkDeductible { get; set; }
+
+    [JsonPropertyName("outOfNetworkDeductible")]
+    public decimal OutOfNetworkDeductible { get; set; }
+
+    [JsonPropertyName("inNetworkOutOfPocketMax")]
+    public decimal InNetworkOutOfPocketMax { get; set; }
+
+    [JsonPropertyName("outOfNetworkOutOfPocketMax")]
+    public decimal OutOfNetworkOutOfPocketMax { get; set; }
 
     [JsonPropertyName("outNetworkIndividualDeductible")]
     public decimal? OutNetworkIndividualDeductible { get; set; }

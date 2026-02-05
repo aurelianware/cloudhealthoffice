@@ -8,6 +8,12 @@ namespace BenefitPlanService.Services;
 /// </summary>
 public interface IBenefitPlanService
 {
+    Task<IEnumerable<BenefitPlan>> GetPlansAsync(string tenantId, string? payer, string? planType, bool activeOnly);
+    Task<BenefitPlan?> GetPlanAsync(string id, string tenantId);
+    Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId);
+    Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId);
+    Task<bool> DeletePlanAsync(string id, string tenantId);
+    Task<Benefit?> AddBenefitAsync(string planId, string tenantId, Benefit benefit);
     Task<BenefitAppliedResult?> ApplyBenefitRules(string planId, string tenantId, string serviceCategory, string? cptCode, decimal chargeAmount);
     Task<bool> CheckPriorAuthRequirement(string planId, string tenantId, string serviceCategory, string? cptCode);
     Task<MemberCostSharingResult> CalculateMemberCostSharing(string planId, string tenantId, decimal allowedAmount, decimal deductibleAccumulation, decimal oopAccumulation, string serviceCategory, bool inNetwork);
@@ -24,6 +30,81 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
     {
         _repository = repository;
         _logger = logger;
+    }
+
+    public async Task<IEnumerable<BenefitPlan>> GetPlansAsync(
+        string tenantId,
+        string? payer,
+        string? planType,
+        bool activeOnly)
+    {
+        var plans = await _repository.SearchAsync(tenantId, null, planType, null, 1, 500);
+
+        if (!string.IsNullOrEmpty(payer))
+        {
+            plans = plans.Where(p => string.Equals(p.Payer, payer, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (activeOnly)
+        {
+            plans = plans.Where(p => p.IsActive);
+        }
+
+        return plans;
+    }
+
+    public Task<BenefitPlan?> GetPlanAsync(string id, string tenantId)
+    {
+        return _repository.GetByIdAsync(id, tenantId);
+    }
+
+    public async Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId)
+    {
+        plan.TenantId = tenantId;
+        plan.CreatedAt = DateTime.UtcNow;
+        plan.UpdatedAt = DateTime.UtcNow;
+        return await _repository.CreateAsync(plan);
+    }
+
+    public async Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId)
+    {
+        var existing = await _repository.GetByIdAsync(plan.Id, tenantId);
+        if (existing == null)
+        {
+            return null;
+        }
+
+        plan.TenantId = tenantId;
+        plan.UpdatedAt = DateTime.UtcNow;
+        return await _repository.UpdateAsync(plan);
+    }
+
+    public async Task<bool> DeletePlanAsync(string id, string tenantId)
+    {
+        var existing = await _repository.GetByIdAsync(id, tenantId);
+        if (existing == null)
+        {
+            return false;
+        }
+
+        existing.IsActive = false;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _repository.UpdateAsync(existing);
+        return true;
+    }
+
+    public async Task<Benefit?> AddBenefitAsync(string planId, string tenantId, Benefit benefit)
+    {
+        var plan = await _repository.GetByIdAsync(planId, tenantId);
+        if (plan == null)
+        {
+            return null;
+        }
+
+        plan.Benefits.Add(benefit);
+        plan.UpdatedAt = DateTime.UtcNow;
+        await _repository.UpdateAsync(plan);
+        return benefit;
     }
 
     /// <summary>
