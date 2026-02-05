@@ -258,41 +258,5 @@
         public string LastName { get; set; } = string.Empty;
         public string ServiceType { get; set; } = "30";
     }
-
-    public class EligibilityResponse
-    {
-        public bool IsCovered { get; set; }
-        public string? RejectionReason { get; set; }
-        public string InsurancePlanName { get; set; } = string.Empty;
-        public string GroupNumber { get; set; } = string.Empty;
-        public string CoverageLevel { get; set; } = string.Empty;
-        public DateTime? CoverageBeginDate { get; set; }
-        public DeductibleInfo? Deductible { get; set; }
-        public OutOfPocketInfo? OutOfPocket { get; set; }
-        public List<Benefit>? Benefits { get; set; }
-    }
-
-    public class DeductibleInfo
-    {
-        public decimal IndividualAmount { get; set; }
-        public decimal IndividualMet { get; set; }
-        public decimal FamilyAmount { get; set; }
-        public decimal FamilyMet { get; set; }
-    }
-
-    public class OutOfPocketInfo
-    {
-        public decimal IndividualAmount { get; set; }
-        public decimal IndividualMet { get; set; }
-        public decimal FamilyAmount { get; set; }
-        public decimal FamilyMet { get; set; }
-    }
-
-    public class Benefit
-    {
-        public string ServiceTypeName { get; set; } = string.Empty;
-        public decimal? MonetaryAmount { get; set; }
-        public decimal? Percentage { get; set; }
-        public bool AuthorizationRequired { get; set; }
-    }
 }
+

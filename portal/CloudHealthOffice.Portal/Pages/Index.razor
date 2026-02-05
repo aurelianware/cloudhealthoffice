@@ -218,27 +218,5 @@
     {
         _refreshTimer?.Dispose();
     }
-
-    // Models
-    public class DashboardMetrics
-    {
-        public int TotalClaims { get; set; }
-        public double ClaimsTrend { get; set; }
-        public double ApprovalRate { get; set; }
-        public int AvgProcessingTimeMs { get; set; }
-        public decimal TotalPayerAmount { get; set; }
-        public int ApprovedClaims { get; set; }
-        public int DeniedClaims { get; set; }
-        public int PendingClaims { get; set; }
-    }
-
-    public class ClaimSummary
-    {
-        public string ClaimId { get; set; } = string.Empty;
-        public string MemberName { get; set; } = string.Empty;
-        public string ProviderName { get; set; } = string.Empty;
-        public decimal TotalChargeAmount { get; set; }
-        public string Status { get; set; } = string.Empty;
-        public int ProcessingTimeMs { get; set; }
-    }
 }
+
