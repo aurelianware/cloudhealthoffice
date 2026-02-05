@@ -1,0 +1,170 @@
+---
+# X12 277 Claim Status Response Download from Clearinghouse
+# Polls SFTP for status responses and processes them
+#
+# This workflow:
+#   1. Downloads 277 files from clearinghouse SFTP
+#   2. Parses claim status responses
+#   3. Updates backend API with claim statuses
+#   4. Archives processed files
+#
+# Usage:
+#   Runs automatically every 15 minutes via CronJob
+#   Manual: kubectl create job --from=cronjob/x12-277-download-job download-277 -n cho-workflows
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-277-download-job
+  namespace: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: edi-277-download
+    hipaa-compliance: required
+spec:
+  # Poll every 15 minutes for status updates
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: work-volume
+              emptyDir:
+                sizeLimit: "500Mi"
+          containers:
+          - name: download-277-responses
+            image: alpine:latest
+            env:
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_PORT
+                value: "22"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+              - name: BACKEND_API_URL
+                value: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+              - name: BACKEND_API_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: backend-api-credentials
+                    key: token
+                    optional: true
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -e
+                
+                echo "=========================================="
+                echo "X12 277 Claim Status Download Workflow"
+                echo "=========================================="
+                echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                echo ""
+                
+                apk add --no-cache sshpass openssh-client curl jq coreutils
+                
+                # Use default if not set
+                SFTP_PASS=${SFTP_PASS:-"sJ8p8WAsE4Es6PgMbUACErOs"}
+                
+                echo "Step 1: Download 277 files from clearinghouse"
+                echo "=============================================="
+                
+                # List available files
+                FILES=$(sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                  -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_LIST
+                ls -1 download/277/*.x12
+                bye
+                SFTP_LIST
+                ) || FILES=""
+                
+                if [ -z "$FILES" ]; then
+                  echo "✅ No new 277 files to process"
+                  exit 0
+                fi
+                
+                echo "Found files to download:"
+                echo "$FILES"
+                echo ""
+                
+                PROCESSED_COUNT=0
+                
+                # Download and process each file
+                for REMOTE_FILE in $FILES; do
+                  FILENAME=$(basename "$REMOTE_FILE")
+                  echo "Processing: $FILENAME"
+                  
+                  # Download file
+                  sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                    -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_DOWNLOAD
+                get $REMOTE_FILE /work/$FILENAME
+                bye
+                SFTP_DOWNLOAD
+                  
+                  if [ ! -f "/work/$FILENAME" ]; then
+                    echo "❌ Failed to download $FILENAME"
+                    continue
+                  fi
+                  
+                  FILE_HASH=$(sha256sum /work/$FILENAME | awk '{print $1}')
+                  
+                  # Parse 277 (simplified - in production, use proper X12 parser)
+                  echo "Parsing claim statuses..."
+                  
+                  # Extract claim numbers from ST*277 segments
+                  CLAIM_NUMBERS=$(grep -o 'CLM\*[^*]*' /work/$FILENAME | cut -d'*' -f2 || echo "")
+                  
+                  # Create status update payload
+                  cat > /work/status-update-${FILENAME}.json <<EOF
+                {
+                  "transaction_type": "277",
+                  "filename": "$FILENAME",
+                  "file_hash": "$FILE_HASH",
+                  "received_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                  "claim_numbers": $(echo "$CLAIM_NUMBERS" | jq -R -s 'split("\n") | map(select(length > 0))'),
+                  "status": "received"
+                }
+                EOF
+                  
+                  # Send to backend API
+                  if [ -n "${BACKEND_API_TOKEN}" ]; then
+                    echo "Updating backend API..."
+                    curl -X POST "${BACKEND_API_URL}/claims/status-updates" \
+                      -H "Content-Type: application/json" \
+                      -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+                      -d @/work/status-update-${FILENAME}.json \
+                      -f -s || echo "⚠️  Backend API update failed"
+                  else
+                    echo "Status update payload:"
+                    cat /work/status-update-${FILENAME}.json | jq .
+                  fi
+                  
+                  # Archive processed file (move to processed folder)
+                  sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                    -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_ARCHIVE
+                -mkdir download/277/processed
+                rename $REMOTE_FILE download/277/processed/$FILENAME
+                bye
+                SFTP_ARCHIVE
+                  
+                  PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
+                  echo "✅ Processed $FILENAME"
+                  echo ""
+                done
+                
+                echo "=========================================="
+                echo "SUCCESS: Processed $PROCESSED_COUNT file(s)"
+                echo "=========================================="
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work

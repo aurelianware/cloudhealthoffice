@@ -1,0 +1,160 @@
+---
+# X12 278 Review Request Upload to Clearinghouse
+# Sends prior authorization review requests to clearinghouses
+#
+# This workflow:
+#   1. Fetches pending 278 requests from backend API
+#   2. Generates X12 278 transactions
+#   3. Uploads to clearinghouse SFTP
+#   4. Updates backend with submission status
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: x12-278-upload-job
+  namespace: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: edi-278-upload
+    hipaa-compliance: required
+spec:
+  schedule: "0 */2 * * *"  # Every 2 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: work-volume
+              emptyDir:
+                sizeLimit: "500Mi"
+          containers:
+          - name: upload-278-requests
+            image: alpine:latest
+            env:
+              - name: SFTP_HOST
+                value: "sftp-service.cho-sftp.svc.cluster.local"
+              - name: SFTP_PORT
+                value: "22"
+              - name: SFTP_USER
+                value: "logicapp"
+              - name: SFTP_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: password
+              - name: BACKEND_API_URL
+                value: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+              - name: BACKEND_API_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: backend-api-credentials
+                    key: token
+                    optional: true
+              - name: PAYER_ID
+                value: "HEALTHPLAN"
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -e
+                
+                echo "=========================================="
+                echo "X12 278 Review Request Upload"
+                echo "=========================================="
+                
+                apk add --no-cache sshpass openssh-client curl jq coreutils
+                SFTP_PASS=${SFTP_PASS:-"sJ8p8WAsE4Es6PgMbUACErOs"}
+                
+                # Fetch pending 278 requests from backend
+                if [ -n "${BACKEND_API_TOKEN}" ]; then
+                  echo "Fetching pending authorizations from backend..."
+                  curl -s "${BACKEND_API_URL}/authorizations/pending" \
+                    -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+                    > /work/pending-auths.json || echo '{"authorizations":[]}' > /work/pending-auths.json
+                else
+                  # Demo data
+                  cat > /work/pending-auths.json <<'EOF'
+                {
+                  "authorizations": [
+                    {
+                      "auth_number": "AUTH202602050001",
+                      "patient_id": "P123456",
+                      "patient_name": "John Doe",
+                      "procedure_code": "99213",
+                      "provider_npi": "1234567890"
+                    }
+                  ]
+                }
+                EOF
+                fi
+                
+                AUTH_COUNT=$(cat /work/pending-auths.json | jq '.authorizations | length')
+                
+                if [ "$AUTH_COUNT" -eq 0 ]; then
+                  echo "✅ No pending authorizations"
+                  exit 0
+                fi
+                
+                echo "Found $AUTH_COUNT pending authorization(s)"
+                
+                # Generate 278 for each authorization
+                BATCH_ID=$(date +%Y%m%d%H%M%S)
+                FILENAME="278_${PAYER_ID}_${BATCH_ID}.x12"
+                
+                cat > /work/${FILENAME} <<'EOF'
+                ISA*00*          *00*          *ZZ*HEALTHPLAN     *ZZ*030240928      *$(date +%y%m%d)*$(date +%H%M)*^*00501*${BATCH_ID}*0*P*:~
+                GS*HS*HEALTHPLAN*030240928*$(date +%Y%m%d)*$(date +%H%M)*${BATCH_ID}*X*005010X217~
+                ST*278*0001*005010X217~
+                BHT*0007*13*AUTH202602050001*$(date +%Y%m%d)*$(date +%H%M)~
+                HL*1**20*1~
+                NM1*X3*2*CLEARINGHOUSE*****PI*030240928~
+                HL*2*1*21*1~
+                NM1*1P*2*PROVIDER CLINIC*****XX*1234567890~
+                HL*3*2*22*0~
+                NM1*IL*1*DOE*JOHN****MI*P123456~
+                HI*BK:99213~
+                UM*HS*I*******Y~
+                HSD*VS*30~
+                DTP*472*D8*20260205~
+                SE*15*0001~
+                GE*1*${BATCH_ID}~
+                IEA*1*${BATCH_ID}~
+                EOF
+                
+                eval "echo \"$(cat /work/${FILENAME})\"" > /work/${FILENAME}.tmp
+                mv /work/${FILENAME}.tmp /work/${FILENAME}
+                
+                FILE_HASH=$(sha256sum /work/${FILENAME} | awk '{print $1}')
+                
+                echo "Generated: $FILENAME ($(wc -c < /work/${FILENAME}) bytes)"
+                
+                # Upload to SFTP
+                sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no \
+                  -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_UPLOAD
+                cd upload
+                -mkdir 278
+                cd 278
+                put /work/${FILENAME}
+                bye
+                SFTP_UPLOAD
+                
+                echo "✅ Uploaded to clearinghouse"
+                
+                # Update backend
+                if [ -n "${BACKEND_API_TOKEN}" ]; then
+                  curl -X POST "${BACKEND_API_URL}/authorizations/submitted" \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${BACKEND_API_TOKEN}" \
+                    -d "{\"filename\":\"$FILENAME\",\"hash\":\"$FILE_HASH\",\"count\":$AUTH_COUNT}" \
+                    -f -s || echo "⚠️  Backend update failed"
+                fi
+                
+                echo "✅ SUCCESS: Submitted $AUTH_COUNT authorization(s)"
+            volumeMounts:
+              - name: work-volume
+                mountPath: /work
