@@ -67,6 +67,12 @@ public class BenefitPlan
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    [JsonPropertyName("createdDate")]
+    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+
+    [JsonPropertyName("modifiedDate")]
+    public DateTime? ModifiedDate { get; set; }
+
     [JsonPropertyName("createdBy")]
     public string CreatedBy { get; set; } = string.Empty;
 
