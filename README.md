@@ -313,6 +313,7 @@ npm run generate -- interactive --output my-config.json --generate
 - ✅ **837 Claims** - Professional, Institutional, and Dental claims submission support
 - ✅ **270/271 Eligibility** - Real-time eligibility verification with 6 search methods
 - ✅ **276/277 Claim Status** - Claim status inquiries with date range filtering
+- ✅ **SFTP Clearinghouse Integration** - Kubernetes-hosted SFTP server for bi-directional EDI exchange
 
 ### Zero-Code Payer Onboarding
 
@@ -490,6 +491,9 @@ Cloud Health Office is backend-agnostic and designed to integrate seamlessly wit
 
 - [Deployment Guide](./DEPLOYMENT.md) - Step-by-step Azure deployment
 - **[Multi-Cloud Deployment](./docs/MULTI-CLOUD-DEPLOYMENT.md)** - Kubernetes (AKS/EKS/GKE) deployment
+- **[AKS Cluster Setup](./docs/AKS-CLUSTER-SETUP.md)** - Create production-ready Azure Kubernetes cluster
+- **[SFTP Integration Guide](./docs/SFTP-INTEGRATION-GUIDE.md)** - Kubernetes SFTP server for clearinghouse connectivity
+- **[SFTP Quick Start](./docs/SFTP-QUICKSTART.md)** - 5-minute SFTP deployment reference
 - [Gated Release Guide](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows
 - **[Federated Credentials Setup](./docs/FEDERATED-CREDENTIALS-SETUP.md)** - GitHub Actions OIDC authentication for Azure deployment
 - **[Secrets Management](./DEPLOYMENT-SECRETS-SETUP.md)** - GitHub Secrets and Azure Key Vault setup

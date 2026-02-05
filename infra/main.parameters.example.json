@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "baseName": {
+      "value": "cho-prod"
+    },
+    "location": {
+      "value": "westus2"
+    },
+    "connectorLocation": {
+      "value": "westus2"
+    },
+    "sftpHost": {
+      "value": "REPLACE_WITH_K8S_LOADBALANCER_IP"
+    },
+    "sftpUsername": {
+      "value": "logicapp"
+    },
+    "sftpPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/YOUR_KEYVAULT_NAME"
+        },
+        "secretName": "sftp-logicapp-password"
+      }
+    },
+    "storageSku": {
+      "value": "Standard_LRS"
+    },
+    "iaSku": {
+      "value": "Standard"
+    },
+    "useExistingIa": {
+      "value": false
+    },
+    "iaName": {
+      "value": "cho-integration-account"
+    },
+    "enableB2B": {
+      "value": true
+    },
+    "blobAccountName": {
+      "value": ""
+    },
+    "blobAccountKey": {
+      "value": ""
+    },
+    "serviceBusConnectionString": {
+      "value": ""
+    },
+    "appServicePlanName": {
+      "value": "cho-prod-plan"
+    },
+    "serviceBusName": {
+      "value": "cho-prod-servicebus"
+    },
+    "enableEcs": {
+      "value": true
+    },
+    "backendBaseUrl": {
+      "value": "https://cho-backend-api.azurewebsites.net"
+    },
+    "backendApiToken": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/YOUR_KEYVAULT_NAME"
+        },
+        "secretName": "backend-api-token"
+      }
+    }
+  }
+}
