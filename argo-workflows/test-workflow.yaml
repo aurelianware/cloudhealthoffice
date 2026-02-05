@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: test-claims-workflow
+  namespace: cho-workflows
+spec:
+  entrypoint: simple-test
+  serviceAccountName: argo-workflow
+  
+  templates:
+  - name: simple-test
+    steps:
+    - - name: test-mock-service
+        template: call-mock-service
+  
+  - name: call-mock-service
+    container:
+      image: curlimages/curl:8.5.0
+      command: [sh, -c]
+      args:
+      - |
+        echo "Testing mock microservices..."
+        
+        echo "1. Coverage Service:"
+        curl -s http://coverage-service.cho-svcs/
+        echo ""
+        
+        echo "2. Provider Service:"
+        curl -s http://provider-service.cho-svcs/
+        echo ""
+        
+        echo "3. Claims Service:"
+        curl -s http://claims-service.cho-svcs/
+        echo ""
+        
+        echo "4. Authorization Service:"
+        curl -s http://authorization-service.cho-svcs/
+        echo ""
+        
+        echo "5. Benefit Plan Service:"
+        curl -s http://benefit-plan-service.cho-svcs/
+        echo ""
+        
+        echo "All services responding!"

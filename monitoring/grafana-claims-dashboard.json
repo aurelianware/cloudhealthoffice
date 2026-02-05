@@ -1,0 +1,404 @@
+{
+  "dashboard": {
+    "title": "Claims Adjudication - Real-Time Processing",
+    "tags": ["claims", "adjudication", "edi", "hipaa"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "refresh": "5s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Claims Processing Volume (Last Hour)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(argo_workflows_count{status=\"Succeeded\",name=~\"claims-adjudication.*\"}[5m])",
+            "legendFormat": "Approved Claims/min",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(argo_workflows_count{status=\"Failed\",name=~\"claims-adjudication.*\"}[5m])",
+            "legendFormat": "Denied Claims/min",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "tooltip": {"mode": "multi"}
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "custom": {"lineWidth": 2, "fillOpacity": 10}
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Approval vs Denial Rate",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(argo_workflows_count{status=\"Succeeded\",name=~\"claims-adjudication.*\"})",
+            "legendFormat": "Approved",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(argo_workflows_count{status=\"Failed\",name=~\"claims-adjudication.*\"})",
+            "legendFormat": "Denied",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "list", "placement": "right"},
+          "pieType": "donut",
+          "tooltip": {"mode": "single"}
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          },
+          "overrides": [
+            {"matcher": {"id": "byName", "options": "Approved"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
+            {"matcher": {"id": "byName", "options": "Denied"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Processing Time Statistics",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(argo_workflows_duration_seconds_bucket{name=~\"claims-adjudication.*\"}[5m]))",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(argo_workflows_duration_seconds_bucket{name=~\"claims-adjudication.*\"}[5m]))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(argo_workflows_duration_seconds_bucket{name=~\"claims-adjudication.*\"}[5m]))",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "decimals": 3,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 0.5, "color": "yellow"},
+                {"value": 1.0, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Target: <500ms",
+        "type": "gauge",
+        "gridPos": {"x": 18, "y": 4, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "avg(rate(argo_workflows_duration_seconds_sum{name=~\"claims-adjudication.*\"}[5m]) / rate(argo_workflows_duration_seconds_count{name=~\"claims-adjudication.*\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "auto",
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "min": 0,
+            "max": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 0.5, "color": "yellow"},
+                {"value": 1.0, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Workflow Step Timing (Waterfall)",
+        "type": "bargauge",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"verify-coverage\"})",
+            "legendFormat": "1. Verify Coverage",
+            "refId": "A"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"validate-provider\"})",
+            "legendFormat": "2. Validate Provider",
+            "refId": "B"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"validate-codes\"})",
+            "legendFormat": "3. Validate Codes",
+            "refId": "C"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"check-prior-auth\"})",
+            "legendFormat": "4. Check Prior Auth",
+            "refId": "D"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"get-benefits\"})",
+            "legendFormat": "5. Get Benefits",
+            "refId": "E"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"get-rates\"})",
+            "legendFormat": "6. Get Rates",
+            "refId": "F"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"calculate-allowed\"})",
+            "legendFormat": "7. Calculate Allowed",
+            "refId": "G"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"calculate-cost-sharing\"})",
+            "legendFormat": "8. Calculate Cost-Sharing",
+            "refId": "H"
+          },
+          {
+            "expr": "avg(argo_workflows_step_duration_seconds{name=~\"claims-adjudication.*\",step=\"update-claim\"})",
+            "legendFormat": "9. Update Claim",
+            "refId": "I"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 80, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Top Denial Reasons (CARC Codes)",
+        "type": "barchart",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "topk(10, sum by (carc_code) (claims_denied_total))",
+            "legendFormat": "{{carc_code}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "orientation": "horizontal"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 7,
+        "title": "Total Claims Processed",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(argo_workflows_count{name=~\"claims-adjudication.*\"})",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "blue"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Approval Rate %",
+        "type": "stat",
+        "gridPos": {"x": 4, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "100 * sum(argo_workflows_count{status=\"Succeeded\",name=~\"claims-adjudication.*\"}) / sum(argo_workflows_count{name=~\"claims-adjudication.*\"})",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "red"},
+                {"value": 70, "color": "yellow"},
+                {"value": 85, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Average Processing Time",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "avg(rate(argo_workflows_duration_seconds_sum{name=~\"claims-adjudication.*\"}[5m]) / rate(argo_workflows_duration_seconds_count{name=~\"claims-adjudication.*\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "decimals": 0,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": null, "color": "green"},
+                {"value": 500, "color": "yellow"},
+                {"value": 1000, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Total Payer Payment (24h)",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(increase(claims_payer_payment_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Total Patient Responsibility (24h)",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(increase(claims_patient_responsibility_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Claims by Line of Business",
+        "type": "piechart",
+        "gridPos": {"x": 20, "y": 16, "w": 4, "h": 4},
+        "targets": [
+          {
+            "expr": "sum by (line_of_business) (claims_processed_total)",
+            "legendFormat": "{{line_of_business}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "list", "placement": "right"},
+          "pieType": "pie"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      }
+    ]
+  }
+}
