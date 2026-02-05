@@ -10,6 +10,7 @@
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./tests/E2E-TEST-RESULTS.md)
+[![E2E Timing](https://img.shields.io/badge/E2E%20timing-124s-blue)](./tests/E2E-TEST-RESULTS.md)
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
