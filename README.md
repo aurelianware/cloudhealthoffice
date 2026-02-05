@@ -1,15 +1,154 @@
 # Cloud Health Office
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
+**Turn weeks of payer EDI onboarding into minutes.**  
+X12 270/271/837/278 ↔ FHIR R4  
+Multi-cloud (Azure/AKS/EKS/GKE) + Argo + Kafka  
+CMS-0057-F ready • HIPAA hardened
+
+<div align="center">
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json)
 [![Kubernetes](https://img.shields.io/badge/Deploy%20to-Kubernetes-326CE5?logo=kubernetes&logoColor=white)](./docs/MULTI-CLOUD-DEPLOYMENT.md#option-2-kubernetes-deployment-akseksgke)
 [![Version](https://img.shields.io/badge/version-v3.0.0-brightgreen)](./docs/releases/RELEASE_NOTES_v3.0.0.md)
 [![Tests](https://img.shields.io/badge/tests-424%20passing-brightgreen)](https://github.com/aurelianware/cloudhealthoffice)
 [![HIPAA Compliant](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
+[🚀 Quick Start](#-try-it-now---interactive-demo) • [📖 Docs](./docs) • [💬 Community](#-join-the-community) • [⭐ Star to Support](https://github.com/aurelianware/cloudhealthoffice)
+
+</div>
+
+---
+
+## Why Cloud Health Office?
+
+<table>
+<tr>
+<td width="33%" align="center">
+  <h3>⚡ 95% Faster</h3>
+  <p>Weeks → Minutes for payer onboarding</p>
+  <p><em>Traditional: 6-8 weeks</em><br/><strong>Cloud Health Office: 5 minutes</strong></p>
+</td>
+<td width="33%" align="center">
+  <h3>☁️ True Multi-Cloud</h3>
+  <p>Azure, AWS, GCP - No lock-in</p>
+  <p><em>Deploy once, run anywhere</em><br/><strong>AKS • EKS • GKE</strong></p>
+</td>
+<td width="33%" align="center">
+  <h3>🔒 HIPAA Ready</h3>
+  <p>Production-grade security built-in</p>
+  <p><em>CMS-0057-F compliant</em><br/><strong>Jan 2027 deadline</strong></p>
+</td>
+</tr>
+</table>
+
+## 🎯 Perfect For
+
+- 🏥 **Payers** needing CMS-0057-F compliance by Jan 2027
+- 🏢 **Clearinghouses** wanting multi-cloud flexibility  
+- 💼 **Healthcare SaaS** building EDI capabilities
+- 🚀 **Startups** launching payer platforms fast
+
+---
+
+## 🚀 Try It Now - Interactive Demo
+
+**Choose your path:**
+
+<details>
+<summary>🎯 <strong>I want the fastest deploy (5 min) → Azure</strong></summary>
+
+<br/>
+
+```bash
+# Clone and deploy
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+npm install && npm run build
+
+# Interactive wizard
+npm run generate -- interactive --output my-config.json --generate
+
+# Deploy to Azure
+az deployment group create \
+  --resource-group my-rg \
+  --template-file infrastructure/azure/main.json
+```
+
+**What you get:**
+- ✅ Complete EDI processing platform
+- ✅ FHIR R4 APIs (X12 ↔ FHIR transformation)
+- ✅ HIPAA-compliant infrastructure
+- ✅ 424 passing tests
+
+📖 [Full Azure deployment guide](./docs/PRODUCTION-DEPLOYMENT-GUIDE.md)
+
+</details>
+
+<details>
+<summary>☸️ <strong>I want multi-cloud flexibility → Kubernetes</strong></summary>
+
+<br/>
+
+```bash
+# Add Helm repos
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+# Deploy to any Kubernetes cluster (AKS/EKS/GKE)
+helm install cloudhealthoffice ./helm/cloudhealthoffice \
+  --namespace cloudhealthoffice \
+  --create-namespace
+```
+
+**Supports:**
+- ✅ Azure Kubernetes Service (AKS)
+- ✅ Amazon Elastic Kubernetes Service (EKS)
+- ✅ Google Kubernetes Engine (GKE)
+- ✅ Any CNCF-compliant Kubernetes
+
+📖 [Multi-cloud deployment guide](./docs/MULTI-CLOUD-DEPLOYMENT.md)
+
+</details>
+
+<details>
+<summary>🧪 <strong>I just want to test it → Try the examples</strong></summary>
+
+<br/>
+
+```bash
+# Clone the repo
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice && npm install && npm run build
+
+# Run FHIR compliance tests
+npm run test:fhir
+
+# Generate synthetic test data
+node dist/scripts/utils/generate-837-claims.js 837P 10 ./test-data
+
+# Explore example configurations
+ls core/examples/
+# → medicaid-mco-config.json
+# → regional-blues-config.json
+```
+
+**Test without deploying:**
+- ✅ 424 automated tests
+- ✅ Synthetic test data generator
+- ✅ Example payer configurations
+- ✅ FHIR validation tools
+
+📖 [Testing guide](./TESTING.md)
+
+</details>
+
+---
+
 An open-source, **multi-cloud** platform for multi-payer EDI integration in healthcare. Deploy to **Azure Logic Apps** (fastest) or **Kubernetes** (AKS, EKS, GKE) for cloud independence.
 
-> **📢 v3.0.0 — The Open Frontier Release**: Multi-cloud independence with Kubernetes/Argo Workflows, Azure Marketplace ready, AI-powered ClaimRiskScorer, and commercial launch materials. See **[What's New](./WHATS-NEW.md)** for highlights or **[v3.0.0 Release Notes](./docs/releases/RELEASE_NOTES_v3.0.0.md)** for complete details.
+> **📢 v3.0.0 — The Open Frontier Release**: Multi-cloud independence with Kubernetes/Argo Workflows, Azure Marketplace ready, AI-powered ClaimRiskScorer, and commercial launch materials. See [Release Notes](./docs/releases/RELEASE_NOTES_v3.0.0.md)
 
 ## 🚀 What's New in v3.0.0
 
@@ -31,9 +170,9 @@ Cloud Health Office v3.0.0 delivers **multi-cloud independence**, enabling deplo
 ### Cloud Independence Dashboard
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────┐
 │               Multi-Cloud Deployment Status                      │
-├─────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────┤
 │  Azure Logic Apps .................... ✅ SUPPORTED             │
 │  Azure Kubernetes (AKS) .............. ✅ SUPPORTED             │
 │  AWS Elastic Kubernetes (EKS) ........ ✅ SUPPORTED             │
@@ -41,10 +180,10 @@ Cloud Health Office v3.0.0 delivers **multi-cloud independence**, enabling deplo
 │  HashiCorp Vault ..................... ✅ INTEGRATED            │
 │  Apache Kafka ........................ ✅ INTEGRATED            │
 │  Argo Workflows ...................... ✅ INTEGRATED            │
-├─────────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────────┤
 │  Cloud Providers Supported: 3 (Azure, AWS, GCP)                  │
 │  Total Tests Passing: 424                                        │
-└─────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### v3.0.0 Microservices
@@ -322,7 +461,7 @@ Production-ready security for PHI workloads with high security maturity (self-as
 
 ## 🤝 Integration Focus
 
-Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like claims adjudication systems, providing enhancements to EDI workflows without requiring full replacements.
+Cloud Health Office is backend-agnostic and designed to integrate seamlessly with existing systems like claims adjudication systems, providing enhancements to EDI workflows without requiring full system replacement.
 
 ## 📖 Documentation
 
@@ -479,13 +618,25 @@ Cloud Health Office is designed to support **CMS-0057-F** (CMS Interoperability 
 
 **For Complete Details:** See [CMS-0057-F Compliance Documentation](./docs/CMS-0057-F-COMPLIANCE.md)
 
+## 💬 Join the Community
+
+- **GitHub Discussions:** [Ask questions & share ideas](https://github.com/aurelianware/cloudhealthoffice/discussions)
+- **Issues:** [Report bugs & request features](https://github.com/aurelianware/cloudhealthoffice/issues)
+- **Email:** [early-adopters@aurelianware.com](mailto:early-adopters@aurelianware.com)
+
+## ⭐ Star History
+
+If Cloud Health Office helps your project, give us a star! ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=aurelianware/cloudhealthoffice&type=Date)](https://star-history.com/#aurelianware/cloudhealthoffice&Date)
+
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## AI-Assisted Development
 
-Contributors: Install GitHub Copilot in VS Code. Prefix code blocks with detailed comments like '// Implement [feature] with [constraints]'. Review AI-generated code for security and compliance—never commit secrets. Run 'npm test' before submitting PRs.  
+Contributors: Install GitHub Copilot in VS Code. Prefix code blocks with detailed comments like '// Implement [feature] with [constraints]'. Review AI-generated code for security and compliance.
 All output must remain HIPAA-safe—redact PHI, never log confidential info, and validate AI completions before merging.
 
 ## 📄 License
@@ -502,4 +653,4 @@ Cloud Health Office is designed to complement leading core administrative platfo
 
 **Cloud Health Office** – Advancing Healthcare EDI Integration
 
-**Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
+**Open Source | Azure-Native | Production-Grade | HIPAA-Compliant

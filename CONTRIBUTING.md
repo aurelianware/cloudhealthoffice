@@ -1,17 +1,91 @@
 # Contributing to Cloud Health Office
 
-Welcome to the Cloud Health Office platform repository! This guide will help you get started with development and contributions to our multi-tenant SaaS platform for healthcare EDI integration.
+Welcome to the Cloud Health Office platform repository! We’re building a modern integration layer for health plans running QNXT/Facets, helping them achieve CMS-0057-F compliance and reduce dependency on expensive vendor implementations.
 
 ## Table of Contents
+
+- [About the Project](#about-the-project)
+- [Ways to Contribute](#ways-to-contribute)
 - [License and Contribution Agreement](#license-and-contribution-agreement)
 - [Getting Started](#getting-started)
-- [Prerequisites](#prerequisites)
 - [Development Setup](#development-setup)
 - [Development Workflow](#development-workflow)
 - [Validation and Testing](#validation-and-testing)
 - [Code Review Standards](#code-review-standards)
-- [Troubleshooting](#troubleshooting)
 - [Best Practices](#best-practices)
+
+## About the Project
+
+Cloud Health Office is an open-source healthcare integration platform built by former QNXT architects and implementation specialists. We’re solving real problems faced by health plans:
+
+- **CMS-0057-F Compliance**: January 2027 deadline approaching, $2M+ vendor upgrades required
+- **Vendor Lock-in**: Expensive BPaaS dependencies with limited operational control
+- **Integration Complexity**: 6-18 month implementation timelines for basic EDI connections
+- **Multi-Clearinghouse**: Business continuity risk from single-vendor dependency
+
+### Target Audience
+
+This platform serves:
+
+- **Medicaid Managed Care Organizations** (MCOs)
+- **Medicare Advantage Plans**
+- **Commercial Health Plans** running TriZetto QNXT or Facets
+- **Third-Party Administrators** (TPAs) needing modern EDI infrastructure
+
+### Core Capabilities
+
+- FHIR R4 APIs (Patient Access, Provider Access, Prior Authorization, Payer-to-Payer)
+- X12 EDI (270/271, 275, 276/277, 278, 835, 837)
+- Multi-clearinghouse support (Availity, Change Healthcare, Optum, Inovalon)
+- Azure Logic Apps OR Kubernetes multi-cloud deployment
+- QNXT/Facets integration without core system replacement
+
+## Ways to Contribute
+
+### For Healthcare IT Professionals
+
+Even if you’re not a developer, you can contribute valuable domain expertise:
+
+- **Document Use Cases**: Share your health plan’s integration challenges
+- **Provide Feedback**: Test features and report what works/doesn’t work
+- **Compliance Review**: Review CMS-0057-F implementation for accuracy
+- **Integration Testing**: Help validate QNXT/Facets connectors with your systems
+
+**How to start**: Open a [GitHub Discussion](https://github.com/aurelianware/cloudhealthoffice/discussions) to share your experience.
+
+### For Developers
+
+We welcome code contributions in several areas:
+
+- **Core System Connectors**: Epic Tapestry, HealthEdge, additional CAPS platforms
+- **FHIR APIs**: Enhancements to Patient/Provider Access APIs
+- **EDI Processing**: Additional X12 transaction types, clearinghouse integrations
+- **Security**: HIPAA compliance improvements, audit logging, encryption
+- **DevOps**: CI/CD improvements, deployment automation, monitoring
+
+**How to start**: See [Development Setup](#development-setup) below.
+
+### For Technical Writers
+
+Help us improve documentation:
+
+- **User Guides**: Deployment guides for different health plan sizes
+- **Integration Guides**: Step-by-step QNXT/Facets connection procedures
+- **Compliance Docs**: CMS-0057-F checklists and validation procedures
+- **Troubleshooting**: Common issues and solutions
+
+**How to start**: Fork the repo and submit PRs to improve any `.md` files.
+
+### For Security Researchers
+
+Help us maintain HIPAA compliance:
+
+- **Security Audits**: Review code for PHI handling, encryption, access controls
+- **Penetration Testing**: Identify vulnerabilities (please report privately)
+- **Compliance Verification**: Validate against HIPAA Security Rule requirements
+- **Threat Modeling**: Identify potential attack vectors in healthcare workflows
+
+**How to start**: Review <SECURITY.md> and report findings via our security process.
 
 ## License and Contribution Agreement
 
@@ -22,23 +96,26 @@ This project is licensed under the **Apache License 2.0**. By contributing to th
 - **License Grant**: All contributions are subject to the Apache License 2.0
 - **Patent Grant**: Contributors grant a patent license for their contributions as defined in the Apache License 2.0
 - **Copyright**: Contributors retain copyright to their contributions while granting the project rights under Apache 2.0
-- **HIPAA Compliance**: Contributors should be aware this project handles PHI; review [SECURITY.md](SECURITY.md) for compliance guidelines
+- **HIPAA Compliance**: Contributors should be aware this project handles PHI; review <SECURITY.md> for compliance guidelines
 
-For the full license text, see [LICENSE](LICENSE).
+For the full license text, see <LICENSE>.
 
 ### Why Apache 2.0?
 
 We chose Apache 2.0 because it:
+
 - Is widely accepted in healthcare and enterprise environments
 - Provides patent protection for contributors and users
-- Supports commercial use in HIPAA-regulated environments
+- Supports commercial use in HIPAA-regulated environments (including by health plans)
 - Has clear, well-understood terms for contributions
+- Allows health plans to deploy internally without licensing concerns
 
 ## Getting Started
 
-This repository implements an Azure Logic Apps solution for processing HIPAA-compliant medical attachments with secure X12 EDI processing, Service Bus messaging, and Data Lake storage.
+This repository implements both Azure Logic Apps and Kubernetes deployment options for processing HIPAA-compliant EDI transactions with secure X12 processing, Service Bus/Kafka messaging, and Data Lake storage.
 
 ### Quick Links
+
 - 📖 **[Architecture Documentation](ARCHITECTURE.md)** - System design and data flows
 - 🚀 **[Deployment Guide](DEPLOYMENT.md)** - Step-by-step deployment procedures
 - 🌿 **[Branching Strategy](BRANCHING-STRATEGY.md)** - Branch conventions and merge requirements
@@ -46,19 +123,27 @@ This repository implements an Azure Logic Apps solution for processing HIPAA-com
 - 🔧 **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
 - 🔒 **[Security Guide](SECURITY.md)** - HIPAA compliance and secure development
 
-## Prerequisites
+### Prerequisites
 
 Before you begin, ensure you have the following tools installed:
 
-### Required Tools
+#### Required Tools
 
-| Tool | Minimum Version | Purpose | Installation |
-|------|----------------|---------|--------------|
-| **Azure CLI** | 2.77.0+ | Azure resource management | [Install Guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) |
-| **Bicep CLI** | 0.37.0+ | Infrastructure as Code | `az bicep install` |
-| **PowerShell** | 7.4+ | Deployment scripts | [Install Guide](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell) |
-| **jq** | 1.7+ | JSON validation and processing | [Install Guide](https://stedolan.github.io/jq/download/) |
-| **Git** | 2.x+ | Version control | [Install Guide](https://git-scm.com/downloads) |
+|Tool          |Minimum Version|Purpose                       |Installation                                                                                        |
+|--------------|---------------|------------------------------|----------------------------------------------------------------------------------------------------|
+|**Azure CLI** |2.77.0+        |Azure resource management     |[Install Guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)                       |
+|**Bicep CLI** |0.37.0+        |Infrastructure as Code        |`az bicep install`                                                                                  |
+|**PowerShell**|7.4+           |Deployment scripts            |[Install Guide](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell)|
+|**jq**        |1.7+           |JSON validation and processing|[Install Guide](https://stedolan.github.io/jq/download/)                                            |
+|**Git**       |2.x+           |Version control               |[Install Guide](https://git-scm.com/downloads)                                                      |
+
+#### For Kubernetes Deployment (Optional)
+
+|Tool       |Minimum Version|Purpose                   |
+|-----------|---------------|--------------------------|
+|**kubectl**|1.28+          |Kubernetes CLI            |
+|**helm**   |3.12+          |Kubernetes package manager|
+|**Docker** |24.0+          |Container runtime         |
 
 ### Verify Prerequisites
 
@@ -77,6 +162,11 @@ jq --version
 
 # Check Git version
 git --version
+
+# Optional: Check Kubernetes tools
+kubectl version --client
+helm version
+docker --version
 ```
 
 ### Azure Access Requirements
@@ -91,8 +181,8 @@ git --version
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/aurelianware/hipaa-attachments.git
-cd hipaa-attachments
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
 ```
 
 ### 2. Verify Repository Structure
@@ -104,6 +194,7 @@ pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
 ```
 
 **Expected Output:**
+
 ```
 Repository structure verified and normalized
 ✓ All workflows in correct locations
@@ -132,7 +223,7 @@ All validation commands should complete without errors.
 
 We follow a structured branching strategy aligned with semantic versioning and automated deployments.
 
-**For complete branching guidelines, see [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md)**
+**For complete branching guidelines, see <BRANCHING-STRATEGY.md>**
 
 **Quick Reference:**
 
@@ -145,16 +236,18 @@ main (protected)                    # Production-ready code, deploys to PROD
 ```
 
 **Branch Naming Conventions:**
+
 - Features: `feature/{issue-number}-{description}` or `feature/{description}`
 - Bug fixes: `bugfix/{issue-number}-{description}` or `bugfix/{description}`
 - Releases: `release/v{MAJOR}.{MINOR}.{PATCH}`
 - Hotfixes: `hotfix/v{MAJOR}.{MINOR}.{PATCH+1}-{description}`
 
 **Key Points:**
+
 - All merges to `main` require PR approval and passing checks
 - `release/*` branches auto-deploy to UAT
 - Use conventional commits for semantic versioning
-- See [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md) for detailed workflows
+- See <BRANCHING-STRATEGY.md> for detailed workflows
 
 ### Making Changes
 
@@ -170,27 +263,38 @@ git checkout -b bugfix/issue-description
 
 #### 2. Make Your Changes
 
-Follow these guidelines based on what you're changing:
+Follow these guidelines based on what you’re changing:
 
 **Logic Apps Workflows** (`logicapps/workflows/*/workflow.json`):
+
 - All workflows MUST be `"kind": "Stateful"`
 - Required keys: `definition`, `kind`, `parameters`
 - Validate JSON syntax after changes
 - Test workflow structure validation
 
 **Infrastructure** (`infra/*.bicep`):
+
 - Follow Azure naming conventions
 - Use descriptive parameter names with `@description` decorators
 - Accept warnings about Service Bus topic parent properties (known issue)
 - Test Bicep compilation after changes
 
+**Kubernetes Manifests** (`k8s/*.yaml`, `argo-workflows/*.yaml`):
+
+- Follow Kubernetes API conventions
+- Include resource limits and requests
+- Use namespaces appropriately
+- Validate YAML syntax
+
 **PowerShell Scripts** (`*.ps1`):
+
 - Use approved PowerShell verbs (Get, Set, New, Remove, etc.)
 - Follow PascalCase for functions and parameters
 - Use kebab-case for file names
 - Include comment-based help
 
 **GitHub Actions** (`.github/workflows/*.yml`):
+
 - Use only `true`/`false` for boolean values (not `on`/`off`/`yes`/`no`)
 - Note: `on` is reserved for workflow trigger events
 - Include descriptive `name` fields for steps
@@ -217,488 +321,112 @@ while IFS= read -r -d '' f; do
     echo "ERROR: Missing required keys in $f"
     exit 1
   fi
-  echo "✓ Valid: $f"
 done
 
 # Validate Bicep templates
 az bicep build --file infra/main.bicep --outfile /tmp/arm.json
-echo "✓ Bicep validation passed"
 
-# Validate PowerShell scripts
-for script in *.ps1; do
-  pwsh -Command "Get-Content './$script' | Out-Null" && echo "✓ Valid: $script"
-done
+# Validate Kubernetes manifests (if applicable)
+kubectl apply --dry-run=client -f k8s/
+
+# Validate PowerShell syntax
+pwsh -Command "Get-ChildItem -Filter '*.ps1' -Recurse | ForEach-Object { $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $_.FullName -Raw), [ref]$null) }"
 ```
-
-#### 4. Test Your Changes
-
-**Local Testing (when applicable):**
-
-```bash
-# Test workflow packaging
-cd logicapps && zip -r ../workflows.zip workflows/
-unzip -l ../workflows.zip  # Verify structure
-
-# Test PowerShell scripts with -WhatIf
-pwsh -c "./deploy-workflows.ps1 -WhatIf"
-
-# Run workflow tests (requires Azure access)
-pwsh -c "./test-workflows.ps1 -TestInbound275"
-```
-
-#### 5. Commit Your Changes
-
-Use clear, descriptive commit messages following [Conventional Commits](https://www.conventionalcommits.org/):
-
-```bash
-git add .
-git commit -m "feat(workflows): Add replay endpoint for 278 transactions
-
-- Implemented HTTP trigger for deterministic replay
-- Added blobUrl validation
-- Integrated with edi-278 Service Bus topic
-- Updated documentation"
-```
-
-**Commit Message Format:**
-- `feat:` - New features (MINOR version bump)
-- `fix:` - Bug fixes (PATCH version bump)
-- `docs:` - Documentation changes (no version bump)
-- `refactor:` - Code refactoring (no version bump)
-- `test:` - Test additions or modifications (no version bump)
-- `chore:` - Maintenance tasks (no version bump)
-- `perf:` - Performance improvements (PATCH version bump)
-- `ci:` - CI/CD changes (no version bump)
-
-**For detailed commit conventions and semantic versioning, see [BRANCHING-STRATEGY.md](BRANCHING-STRATEGY.md#commit-message-conventions)**
-
-#### 6. Push and Create Pull Request
-
-```bash
-# Push your branch
-git push origin feature/your-feature-name
-
-# Create a pull request on GitHub
-# Fill in the PR template with:
-# - Description of changes
-# - Testing performed
-# - Related issues
-```
-
-### Pull Request Process
-
-1. **Create PR**: Open a pull request against the `main` branch
-2. **Automated Checks**: CI/CD will run:
-   - JSON workflow validation
-   - Bicep compilation
-   - YAML linting (actionlint, yamllint)
-   - PowerShell syntax validation
-3. **Code Review**: At least one approval required
-4. **Address Feedback**: Make requested changes and push updates
-5. **Merge**: Once approved and checks pass, PR will be merged
 
 ## Validation and Testing
 
-### Automated CI/CD Checks
+### Automated Validation
 
-All pull requests automatically run these validations:
+GitHub Actions automatically validates all pull requests:
 
-#### 1. JSON Workflow Validation
-Validates all `workflow.json` files for:
-- Valid JSON syntax
-- Required keys: `definition`, `kind`, `parameters`
-- Stateful/Stateless kind verification
+1. **Bicep Validation** (~4 seconds)
+- Compiles all Bicep templates
+- Checks for syntax errors
+- Validates Azure resource configurations
+1. **JSON Linting** (<1 second)
+- Validates all workflow.json files
+- Checks required keys (definition, kind, parameters)
+- Verifies stateful workflow configuration
+1. **PowerShell Testing**
+- PSScriptAnalyzer for code quality
+- Syntax validation
+- Best practices compliance
+1. **Branch Protection Checks**
+- Conventional commit format
+- PR title requirements
+- Required reviews
 
-#### 2. Bicep Validation
-Compiles all `.bicep` files to verify:
-- Syntax correctness
-- Parameter validation
-- Resource configuration
+### Manual Testing
 
-**Expected Warnings:**
-- "use-parent-property" for Service Bus topics - **SAFE TO IGNORE**
+Before submitting a PR, test locally:
 
-#### 3. YAML Linting
-Validates GitHub Actions workflows:
-- Syntax correctness (actionlint)
-- YAML formatting (yamllint)
-- Best practices
-
-#### 4. PowerShell Validation
-Checks all `.ps1` files for:
-- Syntax errors
-- PSScriptAnalyzer best practices (errors only)
-- Script structure and conventions
-
-#### 5. EDI X12 Validation
-Validates all `.edi` files for:
-- X12 envelope structure (ISA/GS/ST/SE/GE/IEA)
-- Trading partner identifiers (Clearinghouse/Health Plan)
-- Transaction types (275/277/278)
-- Segment counts and format
-
-#### 6. Security Scanning
-Scans code for security issues:
-- Secret detection (Trufflehog)
-- PII/PHI pattern detection
-- Hardcoded credentials
-- HIPAA compliance violations
-
-#### 7. File Encoding Checks
-Validates file encodings:
-- UTF-8 encoding (recommended)
-- No binary content in text files
-- No BOM (Byte Order Mark) in source files
-
-#### 8. HIPAA Compliance Patterns
-Checks for HIPAA compliance:
-- HTTPS usage (no unencrypted HTTP)
-- Encryption settings in infrastructure
-- PHI handling in code
-- Secure logging practices
-
-### Local Validation Commands
-
-Run these before pushing to catch issues early:
-
-#### Quick Validation Suite
+**For Logic Apps Changes:**
 
 ```bash
-# Complete validation suite
-cd /home/runner/work/hipaa-attachments/hipaa-attachments
-
-# 1. JSON validation
-echo "=== Validating JSON workflows ==="
-find logicapps/workflows -name "workflow.json" -exec jq -e 'has("definition") and has("kind") and has("parameters")' {} \;
-
-# 2. Bicep validation
-echo "=== Validating Bicep templates ==="
-az bicep build --file infra/main.bicep --outfile /tmp/arm.json
-
-# 3. PowerShell validation
-echo "=== Validating PowerShell scripts ==="
-pwsh -Command "Get-Content './test-workflows.ps1' | Out-Null"
-pwsh -Command "Get-Content './fix_repo_structure.ps1' | Out-Null"
-
-# 4. EDI X12 validation
-echo "=== Validating EDI files ==="
-pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
-
-# 5. Security scan for PII/PHI
-echo "=== Scanning for PII/PHI ==="
-pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
-
-echo "✅ All validations passed"
+# Test workflow deployment to DEV environment
+./deploy-workflows.ps1 -Environment dev -WorkflowName your-workflow
 ```
 
-#### Advanced Validation Tools
+**For Infrastructure Changes:**
 
-The repository includes specialized validation scripts:
-
-**EDI X12 Validator** (`scripts/validate-edi-x12.ps1`):
-```powershell
-# Validate a single EDI file
-pwsh -File scripts/validate-edi-x12.ps1 -Path test-x12-275-clearinghouse-inbound.edi
-
-# Validate all EDI files with strict checking
-pwsh -File scripts/validate-edi-x12.ps1 -Path . -Strict
-
-# Validate specific transaction type
-pwsh -File scripts/validate-edi-x12.ps1 -Path test-file.edi -TransactionType 275
+```bash
+# Deploy to DEV environment with what-if analysis
+az deployment group what-if \
+  --resource-group rg-dev \
+  --template-file infra/main.bicep \
+  --parameters @infra/dev.parameters.json
 ```
 
-**Features:**
-- ISA/IEA envelope validation
-- GS/GE functional group validation
-- ST/SE transaction set validation
-- Trading partner ID verification (Clearinghouse: {config.clearinghouseId}, Health Plan: {config.payerId})
-- Segment count validation
-- Transaction type detection (275/277/278)
+**For Kubernetes Changes:**
 
-**Security Scanner** (`scripts/scan-for-phi-pii.ps1`):
-```powershell
-# Scan entire repository
-pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git","node_modules"
+```bash
+# Test Kubernetes manifests
+kubectl apply --dry-run=client -f k8s/
 
-# Scan specific directory with strict mode
-pwsh -File scripts/scan-for-phi-pii.ps1 -Path logicapps/ -FailOnWarning
-
-# Scan for secrets before commit
-pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
+# Test Argo Workflows
+argo lint argo-workflows/
 ```
-
-**Detects:**
-- Social Security Numbers (SSN) - formatted (XXX-XX-XXXX)
-- Medical Record Numbers (MRN)
-- Date of Birth (DOB)
-- Credit card numbers
-- Email addresses and phone numbers
-- Patient/Member IDs
-- Azure API keys and secrets
-- Hardcoded passwords
-- Connection strings
-- Private keys
-- JWT tokens
-- Unencrypted PHI transmission
-- PHI in logs
-
-**Context-Aware Filtering:**
-- Excludes test files (test-*.edi, test-*.json)
-- Excludes documentation (.md files)
-- Excludes trading partner IDs (030240928, {config.payerId})
-- Provides severity levels (Critical, High, Medium, Low)
-
-### Continuous Integration Checks
-
-When you create a pull request, the following automated checks run:
-
-**Smoke Tests** (`.github/workflows/sanity.yml`):
-- Repository structure validation
-- All 4 Logic Apps workflows validation
-- Bicep template compilation
-- Service Bus configuration verification
-- X12 schema presence checks
-- PowerShell script syntax validation
-- EDI file format validation
-- Security scanning
-- Test data validation
-
-**PR Lint** (`.github/workflows/pr-lint.yml`):
-- JSON workflow validation
-- GitHub Actions workflow linting (actionlint)
-- YAML linting (yamllint)
-- Bicep compilation
-- PowerShell Script Analyzer (PSScriptAnalyzer)
-- EDI X12 validation
-- Secret detection (Trufflehog)
-- PII/PHI scanning
-- File encoding validation
-- HIPAA compliance pattern checks
-
-### Testing Workflows
-
-Use the provided test script to validate Logic Apps workflows:
-
-```powershell
-# Test 275 attachment ingestion
-pwsh -c "./test-workflows.ps1 -TestInbound275"
-
-# Test 277 RFAI generation
-pwsh -c "./test-workflows.ps1 -TestOutbound277"
-
-# Test 278 processing
-pwsh -c "./test-workflows.ps1 -TestInbound278"
-
-# Full end-to-end test
-pwsh -c "./test-workflows.ps1 -TestFullWorkflow"
-```
-
-**Test Files Available:**
-- `test-x12-275-clearinghouse-inbound.edi` - Sample 275 EDI file
-- `test-backend-response-payload.json` - Sample claims backend API response
-- `test-plan-trading-partners.md` - Detailed test plan
-
-### Pre-Commit Checklist
-
-Before committing, ensure:
-
-- [ ] All JSON files are valid (run `jq` validation)
-- [ ] Bicep templates compile without errors
-- [ ] PowerShell scripts have no syntax errors
-- [ ] Changes follow repository conventions
-- [ ] Documentation updated if behavior changed
-- [ ] Tests pass locally (if applicable)
-- [ ] Commit message is clear and descriptive
-- [ ] No secrets or credentials in code
 
 ## Code Review Standards
 
-### What Reviewers Look For
+### Pull Request Requirements
 
-1. **Code Quality**
-   - Follows established patterns and conventions
-   - Minimal changes to achieve goal
-   - No unnecessary refactoring
+1. **Descriptive Title**: Use conventional commits format
+- `feat(component): Add new feature`
+- `fix(component): Resolve bug`
+- `docs(component): Update documentation`
+1. **Clear Description**: Explain:
+- What problem does this solve?
+- How does it solve it?
+- What testing was performed?
+- Any breaking changes?
+1. **Linked Issues**: Reference related issues with `Fixes #123`
+1. **Passing Checks**: All automated validation must pass
+1. **Signed Commits**: DCO sign-off required (see below)
 
-2. **Security**
-   - No hardcoded credentials or secrets
-   - Proper use of managed identities
-   - HIPAA compliance maintained
-   - Encryption requirements met
+### Review Process
 
-3. **Functionality**
-   - Changes accomplish stated goal
-   - Edge cases handled
-   - Error handling appropriate
-   - Retry logic for transient failures
-
-4. **Testing**
-   - Validation commands pass
-   - Appropriate testing performed
-   - Test results documented
-
-5. **Documentation**
-   - Code is self-documenting or has comments
-   - README/docs updated if needed
-   - Breaking changes clearly noted
-
-### Review Checklist for Reviewers
-
-**Logic Apps Changes:**
-- [ ] Workflow JSON is valid
-- [ ] All workflows are `"kind": "Stateful"`
-- [ ] Required keys present (`definition`, `kind`, `parameters`)
-- [ ] Actions have meaningful names
-- [ ] Error handling included
-- [ ] Retry policies appropriate
-
-**Infrastructure Changes:**
-- [ ] Bicep compiles without errors
-- [ ] Parameters have descriptions
-- [ ] Resource naming follows conventions
-- [ ] HIPAA compliance maintained
-- [ ] No breaking changes to existing resources
-
-**PowerShell Script Changes:**
-- [ ] Syntax is valid
-- [ ] Uses approved verbs
-- [ ] Includes comment-based help
-- [ ] Error handling implemented
-- [ ] Parameters properly defined
-
-**GitHub Actions Changes:**
-- [ ] YAML syntax valid
-- [ ] Boolean values use `true`/`false`
-- [ ] Timeouts appropriate for tasks
-- [ ] OIDC authentication preserved
-- [ ] Environment secrets properly referenced
-
-### Providing Feedback
-
-**Constructive Feedback:**
-- Be specific about what needs to change
-- Explain why the change is needed
-- Suggest alternative approaches when helpful
-- Acknowledge good solutions
-
-**Examples:**
-- ✅ "Consider adding retry logic here for transient failures (claims backend API can timeout)"
-- ✅ "This workflow should be Stateful instead of Stateless for Logic Apps Standard"
-- ❌ "This is wrong" (not specific enough)
-- ❌ "Rewrite everything" (not constructive)
-
-## Troubleshooting
-
-### Common Development Issues
-
-#### JSON Validation Errors
-
-**Issue:** `jq: parse error: Expected separator between values`
-
-**Solution:**
-```bash
-# Find the syntax error
-jq . logicapps/workflows/ingest275/workflow.json
-
-# Common causes:
-# - Missing comma between elements
-# - Trailing comma before closing }
-# - Unescaped quotes in strings
-# - Mismatched brackets
-```
-
-#### Bicep Compilation Errors
-
-**Issue:** Parameter validation errors
-
-**Solution:**
-```bash
-# Check parameter definitions
-az bicep build --file infra/main.bicep --outfile /tmp/arm.json
-
-# Review output for specific parameter issues
-# Common causes:
-# - Missing required parameters
-# - Invalid parameter types
-# - Constraint violations
-```
-
-**Expected Warnings:**
-```
-Warning use-parent-property: Use a reference to the parent resource instead of repeating name/type
-```
-These warnings about Service Bus topics are **SAFE TO IGNORE**.
-
-#### PowerShell Execution Errors
-
-**Issue:** Script won't execute
-
-**Solution:**
-```powershell
-# Check execution policy
-Get-ExecutionPolicy
-
-# Set for current session
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# Verify syntax
-pwsh -Command "Get-Content './script.ps1' | Out-Null"
-```
-
-#### Workflow Package Issues
-
-**Issue:** ZIP structure incorrect
-
-**Solution:**
-```bash
-# Correct structure: workflows/ as top-level directory
-cd logicapps
-zip -r ../workflows.zip workflows/
-
-# Verify structure
-unzip -l ../workflows.zip
-
-# Should show:
-# workflows/ingest275/workflow.json
-# workflows/ingest278/workflow.json
-# workflows/replay278/workflow.json
-# workflows/rfai277/workflow.json
-```
-
-#### Git Issues
-
-**Issue:** Merge conflicts
-
-**Solution:**
-```bash
-# Update your branch with latest main
-git fetch origin
-git merge origin/main
-
-# Resolve conflicts manually
-# Then mark as resolved
-git add .
-git commit -m "Merge main and resolve conflicts"
-```
-
-For more troubleshooting guidance, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+- All PRs require at least one approving review
+- Maintainers will provide feedback within 48-72 hours
+- Address review comments and re-request review
+- Merges to `main` are performed by maintainers after approval
 
 ## Best Practices
 
 ### General Guidelines
 
-1. **Minimal Changes**: Make the smallest change necessary to achieve your goal
-2. **Test Early**: Validate and test as soon as possible after making changes
-3. **Document Clearly**: Update docs when changing behavior
-4. **Security First**: Never commit secrets or credentials
-5. **HIPAA Aware**: Maintain compliance with all changes
+1. **Follow Existing Patterns**: Review existing code for conventions
+1. **Write Clear Comments**: Explain “why”, not just “what”
+1. **Keep Changes Focused**: One feature/fix per PR
+1. **Test Thoroughly**: Include both positive and negative test cases
+1. **HIPAA Aware**: Maintain compliance with all changes
 
 ### Workflow Development
 
 - Use meaningful action names that describe their purpose
 - Include error handling for all external calls
 - Add retry policies for transient failures (claims backend API, SFTP)
-- Use Service Bus for async/decoupled processing
+- Use Service Bus/Kafka for async/decoupled processing
 - Archive all files to Data Lake with date partitioning
 
 ### Infrastructure Development
@@ -720,11 +448,11 @@ For more troubleshooting guidance, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 ### Security Practices
 
 - Use managed identities instead of connection strings
-- Store secrets in Azure Key Vault
+- Store secrets in Azure Key Vault or HashiCorp Vault
 - Accept secrets as `[SecureString]` parameters
 - Enable audit logging for all operations
 - Follow principle of least privilege
-- Review [SECURITY.md](SECURITY.md) for detailed guidelines
+- Review <SECURITY.md> for detailed guidelines
 
 ### Performance Tips
 
@@ -737,19 +465,28 @@ For more troubleshooting guidance, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 ## Additional Resources
 
 ### Documentation
+
 - [Architecture Overview](ARCHITECTURE.md) - System design and data flows
 - [Deployment Guide](DEPLOYMENT.md) - Deployment procedures
+- [Multi-Cloud Deployment](docs/MULTI-CLOUD-DEPLOYMENT.md) - Kubernetes deployment guide
+- [CMS-0057-F Compliance](docs/CMS-0057-F-COMPLIANCE.md) - FHIR API implementation
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
 - [Security Guide](SECURITY.md) - HIPAA compliance and security
 
 ### External Resources
+
 - [Azure Logic Apps Documentation](https://docs.microsoft.com/en-us/azure/logic-apps/)
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Argo Workflows Documentation](https://argoproj.github.io/argo-workflows/)
 - [Bicep Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
 - [X12 EDI Standards](https://x12.org/)
 - [HIPAA Compliance Guide](https://www.hhs.gov/hipaa/index.html)
+- [CMS Interoperability Rule](https://www.cms.gov/regulations-and-guidance/guidance/interoperability)
 
 ### GitHub Copilot Instructions
+
 This repository includes comprehensive instructions for GitHub Copilot:
+
 - [Repository-wide instructions](.github/copilot-instructions.md)
 - [Workflow-specific guidance](.github/instructions/)
 
@@ -759,23 +496,24 @@ This repository includes comprehensive instructions for GitHub Copilot:
 
 If you encounter issues:
 
-1. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
-2. Review existing [GitHub Issues](https://github.com/aurelianware/hipaa-attachments/issues)
-3. Check Application Insights for runtime errors
-4. Create a new issue with detailed information:
-   - Steps to reproduce
-   - Expected vs actual behavior
-   - Error messages and logs
-   - Environment details
+1. Check <TROUBLESHOOTING.md> for common issues
+1. Review existing [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)
+1. Check Application Insights for runtime errors
+1. Create a new issue with detailed information:
+- Steps to reproduce
+- Expected vs actual behavior
+- Error messages and logs
+- Environment details (Azure/Kubernetes, versions, etc.)
 
 ## Questions?
 
 For questions or clarifications:
-- Open a [GitHub Discussion](https://github.com/aurelianware/hipaa-attachments/discussions)
+
+- Open a [GitHub Discussion](https://github.com/aurelianware/cloudhealthoffice/discussions)
 - Review existing documentation
 - Check GitHub Copilot instructions for guidance
 
----
+-----
 
 ## Legal and Licensing
 
@@ -785,7 +523,7 @@ All contributions to this project must be signed off under the [Developer Certif
 
 **What is the DCO?**
 
-The DCO is a statement that you, as a contributor, have the legal right to make your contribution and are willing to have it distributed under the project's license.
+The DCO is a statement that you, as a contributor, have the legal right to make your contribution and are willing to have it distributed under the project’s license.
 
 **Full text of the DCO (v1.1):**
 
@@ -869,15 +607,16 @@ By submitting a pull request or contribution to this project, you agree to the f
 **Summary of CLA Terms:**
 
 1. **Original Work**: Your contribution is your original work, or you have obtained all necessary rights and permissions to submit it
-2. **License Grant**: You agree to license your contribution under the Apache License 2.0, the same license as the project
-3. **Patent Grant**: You grant a perpetual, worldwide, royalty-free patent license as specified in the Apache License 2.0 for any patents you own that are necessarily infringed by your contribution
-4. **No Conflicts**: Your contribution does not violate any third-party intellectual property rights, contractual obligations, or other legal restrictions
-5. **Compliance Awareness**: You understand this project handles Protected Health Information (PHI) and have reviewed the [SECURITY.md](SECURITY.md) guidelines
-6. **Right to Grant**: You have the legal authority to enter into this agreement and grant these licenses
+1. **License Grant**: You agree to license your contribution under the Apache License 2.0, the same license as the project
+1. **Patent Grant**: You grant a perpetual, worldwide, royalty-free patent license as specified in the Apache License 2.0 for any patents you own that are necessarily infringed by your contribution
+1. **No Conflicts**: Your contribution does not violate any third-party intellectual property rights, contractual obligations, or other legal restrictions
+1. **Compliance Awareness**: You understand this project handles Protected Health Information (PHI) and have reviewed the <SECURITY.md> guidelines
+1. **Right to Grant**: You have the legal authority to enter into this agreement and grant these licenses
 
 **Corporate Contributions:**
 
 If you are contributing on behalf of your employer or another entity:
+
 - You must have authorization to submit contributions on their behalf
 - You represent that your employer has waived any rights to the work you contribute
 - Please contact the maintainers if your organization requires a separate corporate CLA
@@ -891,6 +630,7 @@ If you are contributing on behalf of your employer or another entity:
 ### Third-Party Code
 
 If your contribution includes third-party code or dependencies:
+
 - Ensure compatibility with Apache 2.0 license
 - Document the source, license, and any required attribution
 - Update dependency documentation as needed
@@ -899,11 +639,12 @@ If your contribution includes third-party code or dependencies:
 ### Security and Compliance
 
 Contributors working on HIPAA-related features must:
-- Review [SECURITY.md](SECURITY.md) for compliance requirements
+
+- Review <SECURITY.md> for compliance requirements
 - Never commit PHI or test data containing real patient information
 - Follow secure coding practices and encryption requirements
 - Report security vulnerabilities responsibly (see SECURITY.md)
 
----
+-----
 
-Thank you for contributing to the Cloud Health Office platform! Your efforts help maintain a secure, compliant, and efficient multi-tenant SaaS platform for healthcare EDI processing.
+Thank you for contributing to the Cloud Health Office platform! Your efforts help health plans achieve regulatory compliance, reduce vendor dependencies, and modernize their integration infrastructure.
