@@ -163,7 +163,7 @@ public class EligibilityServiceImpl : IEligibilityService
         var benefits = await GetBenefitsAsync(tenantId, coverage.BenefitPlanId, serviceTypeCode);
         var benefit = benefits.FirstOrDefault(b => b.ServiceTypeCode == serviceTypeCode);
 
-        if (benefit?.AuthorizationRequired == true)
+        if (benefit?.AuthorizationRequired == "Y")
         {
             return (true, $"Prior authorization required for {benefit.ServiceTypeName}");
         }
