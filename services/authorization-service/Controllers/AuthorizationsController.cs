@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 

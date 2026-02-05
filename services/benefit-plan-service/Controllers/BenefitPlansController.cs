@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Services;
 
