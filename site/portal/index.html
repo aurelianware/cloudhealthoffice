@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal - Cloud Health Office</title>
+  <link rel="stylesheet" href="../css/sentinel.css" />
+  <script src="../js/auth.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../solutions-payers.html">Solutions</a></li>
+      <li><a href="../pricing.html">Pricing</a></li>
+      <li><a href="../platform.html">Platform</a></li>
+      <li><a href="../release-notes.html">Versions</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <script>
+    // Mobile menu toggle
+    document.addEventListener('DOMContentLoaded', () => {
+      const menuToggle = document.getElementById('mobileMenuToggle');
+      const mainNav = document.getElementById('mainNav');
+      
+      if (menuToggle && mainNav) {
+        menuToggle.addEventListener('click', () => {
+          const isOpen = mainNav.classList.toggle('mobile-menu-open');
+          menuToggle.setAttribute('aria-expanded', isOpen);
+          menuToggle.textContent = isOpen ? '✕' : '☰';
+        });
+        
+        mainNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          });
+        });
+        
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('nav')) {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          }
+        });
+      }
+      
+      updateNavigation('#mainNav');
+    });
+  </script>
+
+  <main id="main-content" class="container">
+    <div style="text-align: center; padding: 60px 20px;">
+      <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:300px; margin-bottom:40px;">
+      
+      <h1>Cloud Health Office Portal</h1>
+      
+      <div id="loadingMessage" style="display: block; color: var(--neon-cyan); margin: 40px 0;">
+        <p>Loading your account...</p>
+      </div>
+
+      <div id="portalContent" style="display: none;">
+        <p style="font-size: 1.2rem; margin: 20px 0;">
+          Welcome, <strong id="userName" style="color: var(--neon-cyan);">User</strong>
+        </p>
+
+        <div style="max-width: 800px; margin: 60px auto; text-align: left;">
+          <h2>Your Portal Dashboard</h2>
+          
+          <div class="features-grid">
+            <div class="card">
+              <h3>EDI Integrations</h3>
+              <p>Manage your clearinghouse connections and X12 transaction flows.</p>
+              <a href="#" class="button-secondary" style="margin-top: 20px;">View Integrations</a>
+            </div>
+
+            <div class="card">
+              <h3>FHIR APIs</h3>
+              <p>CMS-0057-F compliant FHIR R4 endpoints for payer data exchange.</p>
+              <a href="#" class="button-secondary" style="margin-top: 20px;">API Documentation</a>
+            </div>
+
+            <div class="card">
+              <h3>Deployment Status</h3>
+              <p>Monitor your Cloud Health Office deployment and health checks.</p>
+              <a href="#" class="button-secondary" style="margin-top: 20px;">View Status</a>
+            </div>
+          </div>
+
+          <div style="margin-top: 60px; padding: 40px; background: var(--dark-gray); border: 2px solid var(--neon-cyan); border-radius: 12px;">
+            <h3>Quick Links</h3>
+            <ul style="list-style: none; padding: 0;">
+              <li style="margin: 15px 0;">
+                <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">
+                  📖 Documentation on GitHub
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="../platform.html">🔧 Platform Overview</a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="../pricing.html">💰 Pricing Information</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="text-align: center; margin-top: 80px; padding: 40px 20px; border-top: 1px solid #333;">
+    <p>
+      <strong>Cloud Health Office v3.0</strong><br>
+      Modern integration platform for payer core administration systems
+    </p>
+    <p style="opacity: 0.8; margin: 20px 0;">
+      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
+    </p>
+    <p>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
+      <a href="../pricing.html">Pricing</a>
+    </p>
+  </footer>
+
+  <script>
+    // Require authentication for portal
+    (async function() {
+      const loadingMessage = document.getElementById('loadingMessage');
+      const portalContent = document.getElementById('portalContent');
+      const userNameElement = document.getElementById('userName');
+
+      try {
+        // Check authentication
+        await requireAuth('/portal/');
+        
+        // Load user profile
+        const user = await loadUserProfile();
+        if (user) {
+          const userName = user.userDetails || user.userId || 'User';
+          userNameElement.textContent = userName;
+          
+          loadingMessage.style.display = 'none';
+          portalContent.style.display = 'block';
+        } else {
+          // Redirect to login if no user profile
+          window.location.href = '/login.html';
+        }
+      } catch (error) {
+        console.error('Portal error:', error);
+        loadingMessage.innerHTML = '<p style="color: var(--neon-green);">Error loading portal. Redirecting to login...</p>';
+        setTimeout(() => {
+          window.location.href = '/login.html';
+        }, 2000);
+      }
+    })();
+  </script>
+</body>
+</html>

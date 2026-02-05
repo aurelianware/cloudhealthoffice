@@ -235,6 +235,38 @@ jobs:
           echo "deployment_token=$DEPLOYMENT_TOKEN" >> "$GITHUB_OUTPUT"
           echo "✅ Deployment token retrieved"
 
+      - name: Clean up old staging environments
+        if: steps.get-swa.outputs.swa_exists == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="${{ vars.AZURE_RG_NAME }}"
+          SWA_NAME="${{ steps.get-swa.outputs.swa_name }}"
+
+          echo "Checking for old staging environments..."
+
+          # List all environments except 'default' and the most recent 2
+          OLD_ENVS=$(az staticwebapp environment list \
+            --name "$SWA_NAME" \
+            --resource-group "$RG_NAME" \
+            --query "[?name!='default'] | sort_by(@, &name) | [0:-2].name" \
+            -o tsv || true)
+
+          if [ -n "$OLD_ENVS" ]; then
+            echo "Deleting old staging environments:"
+            for env in $OLD_ENVS; do
+              echo "  - Deleting environment: $env"
+              az staticwebapp environment delete \
+                --name "$SWA_NAME" \
+                --resource-group "$RG_NAME" \
+                --environment-name "$env" \
+                --yes || echo "  ⚠️  Failed to delete $env (may already be deleted)"
+            done
+            echo "✅ Cleanup complete"
+          else
+            echo "✅ No old environments to clean up"
+          fi
+
       - name: Deploy to Azure Static Web Apps
         if: steps.get-swa.outputs.swa_exists == 'true'
         uses: Azure/static-web-apps-deploy@v1
@@ -245,6 +277,7 @@ jobs:
           app_location: "/site"
           skip_app_build: true
           skip_api_build: true
+          production_branch: "main"
 
       - name: Configure Custom Domain
         if: steps.get-swa.outputs.swa_exists == 'true'

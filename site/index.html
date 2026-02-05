@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Cloud Health Office - Modern integration layer for QNXT/Facets health plans. CMS-0057-F FHIR compliance without $2M+ upgrades. Built by former QNXT architects. Deploy in <1 hour." />
   <meta name="keywords" content="QNXT integration, Facets integration, CMS-0057-F compliance, FHIR R4 payer API, health plan EDI, Medicaid MCO, Medicare Advantage, clearinghouse integration, Azure Logic Apps" />
-  <title>Cloud Health Office - QNXT/Facets Integration Platform for Health Plans</title>
+  <title>Cloud Health Office - Integration Platform for Health Plans</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
@@ -39,6 +39,9 @@
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav style="margin-bottom:20px;">
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
     <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
       <li><a href="index.html" style="color:#00ffff;" aria-current="page">Home</a></li>
       <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
@@ -49,8 +52,38 @@
     </ul>
   </nav>
   <script>
-    // Update navigation with auth status on page load
+    // Mobile menu toggle
     document.addEventListener('DOMContentLoaded', () => {
+      const menuToggle = document.getElementById('mobileMenuToggle');
+      const mainNav = document.getElementById('mainNav');
+      
+      if (menuToggle && mainNav) {
+        menuToggle.addEventListener('click', () => {
+          const isOpen = mainNav.classList.toggle('mobile-menu-open');
+          menuToggle.setAttribute('aria-expanded', isOpen);
+          menuToggle.textContent = isOpen ? '✕' : '☰';
+        });
+        
+        // Close menu when clicking a link
+        mainNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          });
+        });
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('nav')) {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          }
+        });
+      }
+      
+      // Update navigation with auth status
       updateNavigation('#mainNav');
     });
   </script>
@@ -60,16 +93,16 @@
   
   <div class="version-badge">v3.0 Production Ready • v4.0 Coming Q2 2026</div>
   
-  <h1>Modern Integration Layer for QNXT/Facets Health Plans</h1>
+  <h1>Modern Integration Layer for Health Plans</h1>
   
   <p style="font-size:1.5rem; max-width:900px; margin:20px auto;">
     Avoid $2M+ upgrades. Achieve CMS-0057-F compliance.<br>
-    <strong>Built by former QNXT architects and implementation specialists.</strong>
+    <strong>Built by engineers who've shipped 50+ payer platform implementations.</strong>
   </p>
   
   <div style="max-width:800px; margin:40px auto; text-align:left;">
     <ul class="benefit-list" style="font-size:1.1rem;">
-      <li><strong>Extend QNXT/Facets</strong> without replacing your core system</li>
+      <li><strong>Extend your core claims platform</strong> without replatforming</li>
       <li><strong>CMS-0057-F compliant</strong> — 18 months ahead of January 2027 deadline</li>
       <li><strong>Multi-clearinghouse</strong> — Availity, Change Healthcare, Optum, Inovalon</li>
       <li><strong>Flexible deployment</strong> — Azure Logic Apps or Kubernetes multi-cloud</li>
@@ -116,7 +149,7 @@
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:30px;">
       <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
         <h3 style="color:#00ffff;">CMS Compliance</h3>
-        <p>Mid-sized Medicaid MCO needs CMS-0057-F compliance without $2M+ QNXT upgrade project.</p>
+        <p>Mid-sized Medicaid MCO needs CMS-0057-F compliance without 18-month core platform upgrade.</p>
         <ul class="benefit-list" style="font-size:0.95rem;">
           <li>Deploy FHIR APIs in test environment</li>
           <li>Validate compliance requirements</li>
@@ -132,7 +165,7 @@
           <li>Add secondary clearinghouse connections</li>
           <li>Failover capability during outages</li>
           <li>Reduce vendor lock-in risk</li>
-          <li>Same QNXT workflows maintained</li>
+          <li>Zero impact to existing operational workflows</li>
         </ul>
       </div>
       
@@ -157,8 +190,8 @@
       experience building and implementing core administration platforms:
     </p>
     <ul style="max-width:600px; margin:30px auto; font-size:1.05rem; text-align:left;">
-      <li>TriZetto QNXT implementations</li>
-      <li>TriZetto Facets deployments</li>
+      <li>Core Admin Health Plan implementations</li>
+      <li>Integrates with any Claims Platform</li>
       <li>Major health plan integrations</li>
       <li>Clearinghouse EDI protocols</li>
     </ul>
@@ -210,7 +243,7 @@
       Currently accepting pilot deployments for select health plans in 2026.
     </p>
     <p style="opacity:0.9; margin-bottom:30px;">
-      Medicaid MCOs, Medicare Advantage, and commercial payers running QNXT or Facets.
+      Medicaid MCOs, Medicare Advantage, and commercial payers with on-premise core systems.
     </p>
     
     <!-- Calendly inline widget -->
@@ -225,7 +258,7 @@
   <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
     <p>
       <strong>Cloud Health Office v3.0</strong><br>
-      Modern integration platform for health plans running QNXT/Facets
+      Modern integration platform for payer core administration systems
     </p>
     <p style="opacity:0.8; margin:20px 0;">
       Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
