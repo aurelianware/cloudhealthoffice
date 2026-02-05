@@ -41,7 +41,7 @@ spec:
     spec:
       containers:
       - name: authorization-service
-        image: your-acr.azurecr.io/authorization-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-authorization-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
