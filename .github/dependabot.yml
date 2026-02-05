@@ -1,0 +1,141 @@
+version: 2
+updates:
+  # Root package.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "aurelianware"
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Claims Scrubbing Service
+  - package-ecosystem: "npm"
+    directory: "/services/claims-scrubbing-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "aurelianware"
+    labels:
+      - "dependencies"
+      - "claims-scrubbing"
+
+  # .NET Services
+  - package-ecosystem: "nuget"
+    directory: "/services/sponsor-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "aurelianware"
+    labels:
+      - "dependencies"
+      - "dotnet"
+
+  - package-ecosystem: "nuget"
+    directory: "/services/member-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/coverage-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/provider-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/claims-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/authorization-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/reference-data-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/benefit-plan-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/services/eligibility-service"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "aurelianware"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "aurelianware"
+    labels:
+      - "dependencies"
+      - "github-actions"
