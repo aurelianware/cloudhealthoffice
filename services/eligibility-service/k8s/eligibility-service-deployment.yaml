@@ -1,0 +1,175 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eligibility-service-config
+  namespace: cho-svcs
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Services__CoverageService: "http://coverage-service.cho-svcs/api"
+  Services__MemberService: "http://member-service.cho-svcs/api"
+  Services__BenefitPlanService: "http://benefit-plan-service.cho-svcs/api"
+  CosmosDb__DatabaseName: "EligibilityDB"
+  CosmosDb__InquiriesContainer: "Inquiries"
+  CosmosDb__ResponsesContainer: "Responses"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: eligibility-service-secret
+  namespace: cho-svcs
+type: Opaque
+stringData:
+  COSMOSDB_CONNECTION_STRING: "AccountEndpoint=https://your-cosmos.documents.azure.com:443/;AccountKey=your-key-here=="
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eligibility-service
+  namespace: cho-svcs
+  labels:
+    app: eligibility-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eligibility-service
+  template:
+    metadata:
+      labels:
+        app: eligibility-service
+        version: v1
+    spec:
+      containers:
+      - name: eligibility-service
+        image: cloudhealthoffice/eligibility-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: Services__CoverageService
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: Services__CoverageService
+        - name: Services__MemberService
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: Services__MemberService
+        - name: Services__BenefitPlanService
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: Services__BenefitPlanService
+        - name: CosmosDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: CosmosDb__DatabaseName
+        - name: CosmosDb__InquiriesContainer
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: CosmosDb__InquiriesContainer
+        - name: CosmosDb__ResponsesContainer
+          valueFrom:
+            configMapKeyRef:
+              name: eligibility-service-config
+              key: CosmosDb__ResponsesContainer
+        - name: CosmosDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: eligibility-service-secret
+              key: COSMOSDB_CONNECTION_STRING
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eligibility-service
+  namespace: cho-svcs
+  labels:
+    app: eligibility-service
+spec:
+  type: ClusterIP
+  selector:
+    app: eligibility-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: eligibility-service-hpa
+  namespace: cho-svcs
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: eligibility-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
