@@ -1,0 +1,288 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+
+namespace MemberService.Models;
+
+/// <summary>
+/// Represents a health plan member (subscriber or dependent).
+/// Populated by X12 834 Enrollment transactions (INS/NM1/DMG segments).
+/// </summary>
+public class Member
+{
+    /// <summary>
+    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// </summary>
+    [Required]
+    public string TenantId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Unique identifier (Cosmos DB document id)
+    /// </summary>
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// Member ID from 834 REF*0F segment or generated
+    /// </summary>
+    [Required]
+    [StringLength(50)]
+    public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Social Security Number from 834 REF*SY segment (encrypted/masked in production)
+    /// </summary>
+    [StringLength(11)]
+    public string? SSN { get; set; }
+
+    /// <summary>
+    /// Group number linking to Sponsor Service (834 REF*1L)
+    /// </summary>
+    [Required]
+    [StringLength(50)]
+    public string GroupNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Is this member a subscriber (true) or dependent (false) - 834 INS01 segment
+    /// INS*Y = Subscriber, INS*N = Dependent
+    /// </summary>
+    [Required]
+    public bool IsSubscriber { get; set; }
+
+    /// <summary>
+    /// For dependents: link to subscriber's MemberId
+    /// </summary>
+    [StringLength(50)]
+    public string? SubscriberMemberId { get; set; }
+
+    /// <summary>
+    /// Relationship to subscriber from 834 INS02 segment
+    /// 18 = Self, 01 = Spouse, 19 = Child, 53 = Life Partner, etc.
+    /// </summary>
+    [StringLength(2)]
+    public string? RelationshipCode { get; set; }
+
+    /// <summary>
+    /// First name from 834 NM104 segment
+    /// </summary>
+    [Required]
+    [StringLength(100)]
+    public string FirstName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Last name from 834 NM103 segment
+    /// </summary>
+    [Required]
+    [StringLength(100)]
+    public string LastName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Middle name from 834 NM105 segment
+    /// </summary>
+    [StringLength(100)]
+    public string? MiddleName { get; set; }
+
+    /// <summary>
+    /// Date of birth from 834 DMG02 segment (format: CCYYMMDD)
+    /// </summary>
+    [Required]
+    public DateTime DateOfBirth { get; set; }
+
+    /// <summary>
+    /// Gender from 834 DMG03 segment (M = Male, F = Female, U = Unknown)
+    /// </summary>
+    [StringLength(1)]
+    public string? Gender { get; set; }
+
+    /// <summary>
+    /// Street address from 834 N3 segment
+    /// </summary>
+    [StringLength(300)]
+    public string? Address { get; set; }
+
+    /// <summary>
+    /// City from 834 N4 segment
+    /// </summary>
+    [StringLength(100)]
+    public string? City { get; set; }
+
+    /// <summary>
+    /// State code from 834 N4 segment (e.g., "TX", "CA")
+    /// </summary>
+    [StringLength(2)]
+    public string? State { get; set; }
+
+    /// <summary>
+    /// ZIP code from 834 N4 segment
+    /// </summary>
+    [StringLength(10)]
+    public string? ZipCode { get; set; }
+
+    /// <summary>
+    /// Phone number from 834 PER segment
+    /// </summary>
+    [Phone]
+    [StringLength(20)]
+    public string? Phone { get; set; }
+
+    /// <summary>
+    /// Email address from 834 PER segment
+    /// </summary>
+    [EmailAddress]
+    [StringLength(200)]
+    public string? Email { get; set; }
+
+    /// <summary>
+    /// Coverage effective date from 834 DTP*348 segment
+    /// </summary>
+    [Required]
+    public DateTime EffectiveDate { get; set; }
+
+    /// <summary>
+    /// Coverage termination date from 834 DTP*349 segment
+    /// </summary>
+    public DateTime? TerminationDate { get; set; }
+
+    /// <summary>
+    /// Enrollment status
+    /// </summary>
+    [Required]
+    public EnrollmentStatus Status { get; set; } = EnrollmentStatus.Active;
+
+    /// <summary>
+    /// Maintenance type code from 834 INS03 segment
+    /// 001 = Change, 021 = Addition, 024 = Cancellation or Termination, 030 = Audit or Compare
+    /// </summary>
+    [StringLength(3)]
+    public string? MaintenanceTypeCode { get; set; }
+
+    /// <summary>
+    /// Maintenance reason code from 834 INS04 segment
+    /// 25 = Change in Identifying Data, 32 = Divorce, 33 = Birth, etc.
+    /// </summary>
+    [StringLength(3)]
+    public string? MaintenanceReasonCode { get; set; }
+
+    /// <summary>
+    /// Employment status from 834 EMP segment
+    /// </summary>
+    public EmploymentStatus? EmploymentStatus { get; set; }
+
+    /// <summary>
+    /// Tobacco use indicator (affects premium calculations)
+    /// </summary>
+    public bool? TobaccoUser { get; set; }
+
+    /// <summary>
+    /// Student status (for dependent age 19-26)
+    /// </summary>
+    public bool? IsStudent { get; set; }
+
+    /// <summary>
+    /// Audit: Record creation timestamp
+    /// </summary>
+    public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Audit: Last modification timestamp
+    /// </summary>
+    public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Audit: Created by user/system
+    /// </summary>
+    [StringLength(200)]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Audit: Last updated by user/system
+    /// </summary>
+    [StringLength(200)]
+    public string? LastUpdatedBy { get; set; }
+
+    /// <summary>
+    /// Full name helper property
+    /// </summary>
+    public string FullName => $"{FirstName} {MiddleName} {LastName}".Replace("  ", " ").Trim();
+}
+
+/// <summary>
+/// Member enrollment status
+/// </summary>
+public enum EnrollmentStatus
+{
+    /// <summary>
+    /// Member is actively enrolled with coverage
+    /// </summary>
+    Active = 1,
+
+    /// <summary>
+    /// Member enrollment is pending (not yet effective)
+    /// </summary>
+    Pending = 2,
+
+    /// <summary>
+    /// Member coverage is terminated
+    /// </summary>
+    Terminated = 3,
+
+    /// <summary>
+    /// Member enrollment is suspended (e.g., COBRA grace period)
+    /// </summary>
+    Suspended = 4,
+
+    /// <summary>
+    /// COBRA continuation coverage
+    /// </summary>
+    COBRA = 5
+}
+
+/// <summary>
+/// Employment status (affects eligibility)
+/// </summary>
+public enum EmploymentStatus
+{
+    /// <summary>
+    /// Active full-time employee
+    /// </summary>
+    FullTime = 1,
+
+    /// <summary>
+    /// Active part-time employee
+    /// </summary>
+    PartTime = 2,
+
+    /// <summary>
+    /// Retired
+    /// </summary>
+    Retired = 3,
+
+    /// <summary>
+    /// Leave of absence
+    /// </summary>
+    LeaveOfAbsence = 4,
+
+    /// <summary>
+    /// Terminated employment
+    /// </summary>
+    Terminated = 5,
+
+    /// <summary>
+    /// Not employed (dependent)
+    /// </summary>
+    NotEmployed = 6
+}
+
+/// <summary>
+/// Common X12 834 relationship codes
+/// </summary>
+public static class RelationshipCodes
+{
+    public const string Self = "18";
+    public const string Spouse = "01";
+    public const string Child = "19";
+    public const string Employee = "18";
+    public const string LifePartner = "53";
+    public const string Stepchild = "17";
+    public const string FosterChild = "10";
+    public const string DomesticPartner = "53";
+    public const string Other = "G8";
+}
