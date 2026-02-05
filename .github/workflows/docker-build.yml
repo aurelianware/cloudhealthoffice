@@ -29,6 +29,7 @@ jobs:
       packages: write
     
     strategy:
+      fail-fast: false  # Build all services to see all errors
       matrix:
         service:
           - member-service
