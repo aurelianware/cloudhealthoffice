@@ -34,7 +34,7 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             // 1. Check active coverage
-            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom);
+            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom ?? DateTime.UtcNow);
             
             if (coverage == null || !coverage.IsActive)
             {
@@ -251,7 +251,7 @@ public class EligibilityServiceImpl : IEligibilityService
                 Percentage = b.Percentage,
                 Quantity = b.Quantity,
                 NetworkIndicator = b.NetworkIndicator,
-                AuthorizationRequired = b.AuthorizationRequired,
+                AuthorizationRequired = b.AuthorizationRequired ? "Y" : "N",
                 BenefitBeginDate = b.BenefitBeginDate,
                 BenefitEndDate = b.BenefitEndDate
             }).ToList();
