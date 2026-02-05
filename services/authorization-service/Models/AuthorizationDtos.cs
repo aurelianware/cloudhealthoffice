@@ -80,6 +80,7 @@ public class AuthorizationsSummary
     public int PendedAuthorizations { get; set; }
     public int ModifiedAuthorizations { get; set; }
     public int ExpiredAuthorizations { get; set; }
+    public decimal AverageReviewDays { get; set; }
     public decimal AverageTurnaroundDays { get; set; }
     public decimal ApprovalRate { get; set; }
 }
