@@ -66,6 +66,7 @@ app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
 app.MapHub<WorkflowHub>("/hubs/workflows");
+app.MapGet("/health", () => Results.Ok("ok"));
 app.MapFallbackToPage("/_Host");
 
 app.Run();
