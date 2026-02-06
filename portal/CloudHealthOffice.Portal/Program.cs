@@ -62,6 +62,7 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
 
+app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
 app.MapHub<WorkflowHub>("/hubs/workflows");

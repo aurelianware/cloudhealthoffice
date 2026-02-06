@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
       - name: portal
-        image: cloudhealthoffice/portal:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-portal:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
