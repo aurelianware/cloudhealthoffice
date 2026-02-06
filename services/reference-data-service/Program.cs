@@ -3,9 +3,22 @@ using ReferenceDataService.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Resolve PostgreSQL connection string (supports env var substitution)
+var postgresConnection = builder.Configuration.GetConnectionString("PostgreSQL") ?? string.Empty;
+var postgresPassword = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+if (!string.IsNullOrEmpty(postgresPassword))
+{
+    postgresConnection = postgresConnection.Replace("${POSTGRES_PASSWORD}", postgresPassword);
+}
+
+if (string.IsNullOrWhiteSpace(postgresConnection))
+{
+    throw new InvalidOperationException("PostgreSQL connection string is not configured.");
+}
+
 // Add PostgreSQL DbContext
 builder.Services.AddDbContext<ReferenceDataContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
+    options.UseNpgsql(postgresConnection));
 
 // Add repositories
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
@@ -22,7 +35,7 @@ builder.Services.AddSwaggerGen();
 
 // Add health checks
 builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("PostgreSQL")!);
+    .AddNpgSql(postgresConnection);
 
 // Add CORS
 builder.Services.AddCors(options =>
