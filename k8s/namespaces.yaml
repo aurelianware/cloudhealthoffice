@@ -63,6 +63,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               name: cho-workflows
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
           port: 3000
@@ -76,3 +79,9 @@ spec:
           port: 3004
         - protocol: TCP
           port: 3005
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8089
