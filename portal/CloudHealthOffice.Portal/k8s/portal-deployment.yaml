@@ -125,7 +125,7 @@ metadata:
   labels:
     app: portal
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: portal
   ports:
