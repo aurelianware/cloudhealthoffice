@@ -121,12 +121,14 @@ spec:
             path: /health/live
             port: 8080
           initialDelaySeconds: 30
+          timeoutSeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health/ready
             port: 8080
           initialDelaySeconds: 10
+          timeoutSeconds: 5
           periodSeconds: 5
 ---
 apiVersion: v1
