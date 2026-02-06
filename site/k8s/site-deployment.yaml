@@ -53,7 +53,7 @@ metadata:
   labels:
     app: site
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: site
   ports:
