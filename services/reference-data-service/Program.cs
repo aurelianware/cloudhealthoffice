@@ -35,7 +35,8 @@ builder.Services.AddSwaggerGen();
 
 // Add health checks
 builder.Services.AddHealthChecks()
-    .AddNpgSql(postgresConnection);
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
+    .AddNpgSql(postgresConnection, name: "postgres");
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -64,6 +65,10 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Name == "self"
+});
 
 app.Run();
