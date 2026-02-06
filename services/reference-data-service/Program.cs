@@ -36,7 +36,7 @@ builder.Services.AddSwaggerGen();
 // Add health checks
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
-    .AddNpgSql(postgresConnection, name: "postgres");
+    .AddNpgSql(postgresConnection, name: "postgres", timeout: TimeSpan.FromSeconds(10));
 
 // Add CORS
 builder.Services.AddCors(options =>
