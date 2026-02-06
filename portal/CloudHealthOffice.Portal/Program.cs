@@ -13,7 +13,7 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
 
 // Add HttpClient for service calls
-builder.Services.AddHttpClient()
+builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
@@ -21,6 +21,9 @@ builder.Services.AddHttpClient()
         PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
         MaxConnectionsPerServer = 50
     });
+
+builder.Services.AddScoped(sp =>
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();
