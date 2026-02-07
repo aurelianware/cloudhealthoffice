@@ -4,17 +4,17 @@ using System.Net.Http.Json;
 
 namespace EligibilityService.Services;
 
-public class EligibilityService : IEligibilityService
+public class EligibilityServiceImpl : IEligibilityService
 {
     private readonly IEligibilityRepository _repository;
     private readonly HttpClient _httpClient;
-    private readonly ILogger<EligibilityService> _logger;
+    private readonly ILogger<EligibilityServiceImpl> _logger;
     private readonly IConfiguration _configuration;
 
-    public EligibilityService(
+    public EligibilityServiceImpl(
         IEligibilityRepository repository,
         HttpClient httpClient,
-        ILogger<EligibilityService> logger,
+        ILogger<EligibilityServiceImpl> logger,
         IConfiguration configuration)
     {
         _repository = repository;
@@ -34,7 +34,7 @@ public class EligibilityService : IEligibilityService
         try
         {
             // 1. Check active coverage
-            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom);
+            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom ?? DateTime.UtcNow);
             
             if (coverage == null || !coverage.IsActive)
             {
@@ -163,7 +163,7 @@ public class EligibilityService : IEligibilityService
         var benefits = await GetBenefitsAsync(tenantId, coverage.BenefitPlanId, serviceTypeCode);
         var benefit = benefits.FirstOrDefault(b => b.ServiceTypeCode == serviceTypeCode);
 
-        if (benefit?.AuthorizationRequired == true)
+        if (benefit?.AuthorizationRequired == "Y")
         {
             return (true, $"Prior authorization required for {benefit.ServiceTypeName}");
         }
@@ -251,7 +251,7 @@ public class EligibilityService : IEligibilityService
                 Percentage = b.Percentage,
                 Quantity = b.Quantity,
                 NetworkIndicator = b.NetworkIndicator,
-                AuthorizationRequired = b.AuthorizationRequired,
+                AuthorizationRequired = b.AuthorizationRequired ? "Y" : "N",
                 BenefitBeginDate = b.BenefitBeginDate,
                 BenefitEndDate = b.BenefitEndDate
             }).ToList();

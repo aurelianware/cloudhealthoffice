@@ -42,7 +42,7 @@ spec:
     spec:
       containers:
       - name: eligibility-service
-        image: cloudhealthoffice/eligibility-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-eligibility-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SponsorService.Middleware;
 using SponsorService.Models;
 using System;
 using System.Collections.Generic;
