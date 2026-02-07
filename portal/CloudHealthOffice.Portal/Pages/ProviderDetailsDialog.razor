@@ -1,0 +1,384 @@
+@inject IProviderService ProviderService
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_provider != null)
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+                <!-- Overview Tab -->
+                <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid Class="mt-2">
+                        <!-- Basic Information -->
+                        <MudItem xs="12" md="6">
+                            <MudCard Elevation="0">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.h6" GutterBottom="true">Provider Information</MudText>
+                                    <MudDivider Class="mb-3" />
+                                    
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">NPI</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_provider.NPI</MudText>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Provider Name</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2"><strong>@_provider.Name</strong></MudText>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Practice Type</MudText>
+                                    <MudChip Size="Size.Small" Color="@(_provider.PracticeType == "Individual" ? Color.Info : Color.Secondary)" Class="mb-2">
+                                        @_provider.PracticeType
+                                    </MudChip>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Specialty</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_provider.Specialty</MudText>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Taxonomy Code</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-2">@_provider.TaxonomyCode</MudText>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Practice Name</MudText>
+                                    <MudText Typo="Typo.body1">@_provider.PracticeName</MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+
+                        <!-- Status & Network -->
+                        <MudItem xs="12" md="6">
+                            <MudCard Elevation="0">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.h6" GutterBottom="true">Status & Network</MudText>
+                                    <MudDivider Class="mb-3" />
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Network Status</MudText>
+                                    <MudChip Size="Size.Small" Color="@GetNetworkStatusColor(_provider.NetworkStatus)" Class="mb-3">
+                                        @_provider.NetworkStatus
+                                    </MudChip>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Credentialing Status</MudText>
+                                    <MudChip Size="Size.Small" Color="@GetCredentialStatusColor(_provider.CredentialingStatus)" Class="mb-3">
+                                        @_provider.CredentialingStatus
+                                    </MudChip>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Network Assignments</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-3">@_provider.NetworkCount networks</MudText>
+
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Last Claim Date</MudText>
+                                    <MudText Typo="Typo.body1">
+                                        @if (_provider.LastClaimDate.HasValue)
+                                        {
+                                            @_provider.LastClaimDate.Value.ToString("MMMM d, yyyy")
+                                        }
+                                        else
+                                        {
+                                            <span class="mud-text-secondary">No claims submitted</span>
+                                        }
+                                    </MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+
+                        <!-- Board Certifications -->
+                        @if (_provider.BoardCertifications.Any())
+                        {
+                            <MudItem xs="12">
+                                <MudCard Elevation="0">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" GutterBottom="true">Board Certifications</MudText>
+                                        <MudDivider Class="mb-3" />
+                                        @foreach (var cert in _provider.BoardCertifications)
+                                        {
+                                            <MudChip Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="ma-1">@cert</MudChip>
+                                        }
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Locations Tab -->
+                <MudTabPanel Text="Locations" Icon="@Icons.Material.Filled.LocationOn">
+                    <MudGrid Class="mt-2">
+                        @foreach (var location in _provider.Locations)
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudCard Elevation="1">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6">
+                                            @location.Name
+                                            @if (location.IsPrimary)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Primary" Class="ml-2">Primary</MudChip>
+                                            }
+                                        </MudText>
+                                        <MudDivider Class="my-2" />
+                                        
+                                        <MudText Typo="Typo.body2">@location.AddressLine1</MudText>
+                                        @if (!string.IsNullOrEmpty(location.AddressLine2))
+                                        {
+                                            <MudText Typo="Typo.body2">@location.AddressLine2</MudText>
+                                        }
+                                        <MudText Typo="Typo.body2">@location.City, @location.State @location.ZipCode</MudText>
+                                        
+                                        <MudText Typo="Typo.body2" Class="mt-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" /> @location.Phone
+                                        </MudText>
+                                        @if (!string.IsNullOrEmpty(location.Fax))
+                                        {
+                                            <MudText Typo="Typo.body2">
+                                                <MudIcon Icon="@Icons.Material.Filled.Print" Size="Size.Small" /> @location.Fax
+                                            </MudText>
+                                        }
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Network Assignments Tab -->
+                <MudTabPanel Text="Networks" Icon="@Icons.Material.Filled.Hub">
+                    <MudTable Items="@_provider.NetworkAssignments" Class="mt-2" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Network Name</MudTh>
+                            <MudTh>Plan Name</MudTh>
+                            <MudTh>Effective Date</MudTh>
+                            <MudTh>Termination Date</MudTh>
+                            <MudTh>Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Network Name">@context.NetworkName</MudTd>
+                            <MudTd DataLabel="Plan Name">@context.PlanName</MudTd>
+                            <MudTd DataLabel="Effective Date">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                            <MudTd DataLabel="Termination Date">
+                                @if (context.TerminationDate.HasValue)
+                                {
+                                    @context.TerminationDate.Value.ToString("MM/dd/yyyy")
+                                }
+                                else
+                                {
+                                    <MudText Color="Color.Secondary">-</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip Size="Size.Small" Color="@(context.Status == "Active" ? Color.Success : Color.Default)">
+                                    @context.Status
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <!-- Credentials Tab -->
+                <MudTabPanel Text="Credentials" Icon="@Icons.Material.Filled.Badge">
+                    <MudTable Items="@_provider.Credentials" Class="mt-2" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Number</MudTh>
+                            <MudTh>Issuing State</MudTh>
+                            <MudTh>Issue Date</MudTh>
+                            <MudTh>Expiration Date</MudTh>
+                            <MudTh>Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Type">@context.CredentialType</MudTd>
+                            <MudTd DataLabel="Number">@context.Number</MudTd>
+                            <MudTd DataLabel="Issuing State">@context.IssuingState</MudTd>
+                            <MudTd DataLabel="Issue Date">@context.IssueDate.ToString("MM/dd/yyyy")</MudTd>
+                            <MudTd DataLabel="Expiration Date">@context.ExpirationDate.ToString("MM/dd/yyyy")</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip Size="Size.Small" Color="@GetCredentialStatusColor(context.Status)">
+                                    @context.Status
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                <!-- Contract Tab -->
+                <MudTabPanel Text="Contract" Icon="@Icons.Material.Filled.Description">
+                    @if (_provider.Contract != null)
+                    {
+                        <MudGrid Class="mt-2">
+                            <MudItem xs="12" md="6">
+                                <MudCard Elevation="0">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" GutterBottom="true">Contract Details</MudText>
+                                        <MudDivider Class="mb-3" />
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Contract ID</MudText>
+                                        <MudText Typo="Typo.body1" Class="mb-2">@_provider.Contract.ContractId</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Reimbursement Method</MudText>
+                                        <MudText Typo="Typo.body1" Class="mb-2">@_provider.Contract.ReimbursementMethod</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Fee Schedule Tier</MudText>
+                                        <MudText Typo="Typo.body1" Class="mb-2">@_provider.Contract.FeeScheduleTier</MudText>
+
+                                        @if (_provider.Contract.CapitationRate.HasValue)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Capitation Rate</MudText>
+                                            <MudText Typo="Typo.body1" Class="mb-2">@_provider.Contract.CapitationRate.Value.ToString("C2") PMPM</MudText>
+                                        }
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Effective Date</MudText>
+                                        <MudText Typo="Typo.body1" Class="mb-2">@_provider.Contract.EffectiveDate.ToString("MM/dd/yyyy")</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Termination Date</MudText>
+                                        <MudText Typo="Typo.body1">
+                                            @if (_provider.Contract.TerminationDate.HasValue)
+                                            {
+                                                @_provider.Contract.TerminationDate.Value.ToString("MM/dd/yyyy")
+                                            }
+                                            else
+                                            {
+                                                <span class="mud-text-secondary">-</span>
+                                            }
+                                        </MudText>
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-2">No contract information available</MudAlert>
+                    }
+                </MudTabPanel>
+
+                <!-- Performance Tab -->
+                <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Analytics">
+                    @if (_provider.Performance != null)
+                    {
+                        <MudGrid Class="mt-2">
+                            <!-- Claims Activity -->
+                            <MudItem xs="12" md="6">
+                                <MudCard Elevation="1">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" GutterBottom="true">Claims Activity (Last 90 Days)</MudText>
+                                        <MudDivider Class="mb-3" />
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Claims</MudText>
+                                        <MudText Typo="Typo.h5" Class="mb-2">@_provider.Performance.ClaimsLast90Days</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Billed</MudText>
+                                        <MudText Typo="Typo.h6" Class="mb-2">@_provider.Performance.TotalBilledLast90Days.ToString("C2")</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Average Claim Amount</MudText>
+                                        <MudText Typo="Typo.body1">@_provider.Performance.AvgClaimAmount.ToString("C2")</MudText>
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+
+                            <!-- Authorization Metrics -->
+                            <MudItem xs="12" md="6">
+                                <MudCard Elevation="1">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" GutterBottom="true">Authorization Metrics</MudText>
+                                        <MudDivider Class="mb-3" />
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Requests</MudText>
+                                        <MudText Typo="Typo.h5" Class="mb-2">@_provider.Performance.AuthorizationRequests</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Approval Rate</MudText>
+                                        <MudText Typo="Typo.h6" Class="mb-2" Color="@(_provider.Performance.AuthorizationApprovalRate >= 0.85m ? Color.Success : Color.Warning)">
+                                            @(_provider.Performance.AuthorizationApprovalRate.ToString("P1"))
+                                        </MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Processing Time</MudText>
+                                        <MudText Typo="Typo.body1">@_provider.Performance.AvgProcessingTimeDays.ToString("F1") days</MudText>
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+
+                            <!-- Quality & Compliance -->
+                            <MudItem xs="12" md="6">
+                                <MudCard Elevation="1">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" GutterBottom="true">Quality & Compliance</MudText>
+                                        <MudDivider Class="mb-3" />
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Denial Count</MudText>
+                                        <MudText Typo="Typo.h5" Class="mb-2">@_provider.Performance.DenialCount</MudText>
+
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Denial Rate</MudText>
+                                        <MudText Typo="Typo.body1" Class="mb-2" Color="@(_provider.Performance.DenialRate <= 0.05m ? Color.Success : Color.Warning)">
+                                            @(_provider.Performance.DenialRate.ToString("P2"))
+                                        </MudText>
+
+                                        @if (_provider.Performance.QualityScore.HasValue)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Quality Score</MudText>
+                                            <MudRating ReadOnly="true" SelectedValue="@((int)_provider.Performance.QualityScore.Value)" MaxValue="5" />
+                                        }
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-2">No performance data available</MudAlert>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => OnEdit.InvokeAsync(_provider?.ProviderId))">
+            Edit Provider
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+    [Parameter] public EventCallback OnProviderUpdated { get; set; }
+
+    private bool _loading = false;
+    private ProviderDetails? _provider;
+
+    public async Task OpenAsync(string providerId)
+    {
+        _loading = true;
+        MudDialog?.Show();
+        
+        _provider = await ProviderService.GetProviderByIdAsync(providerId);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close();
+    }
+
+    private EventCallback<string?> OnEdit => EventCallback.Factory.Create<string?>(this, async (providerId) =>
+    {
+        Close();
+        await OnProviderUpdated.InvokeAsync();
+    });
+
+    private Color GetNetworkStatusColor(string status)
+    {
+        return status switch
+        {
+            "In-Network" => Color.Success,
+            "Out-of-Network" => Color.Warning,
+            "Pending" => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetCredentialStatusColor(string status)
+    {
+        return status switch
+        {
+            "Active" => Color.Success,
+            "Pending" => Color.Warning,
+            "Expired" => Color.Error,
+            _ => Color.Default
+        };
+    }
+}

@@ -18,7 +18,7 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
 
 // Add business logic services
-builder.Services.AddScoped<IBenefitPlanService, Services.BenefitPlanService>();
+builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
 
 // Add controllers
 builder.Services.AddControllers();

@@ -53,6 +53,8 @@ spec:
         ports:
         - containerPort: 5432
         env:
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
         - name: POSTGRES_DB
           value: "referencedata"
         - name: POSTGRES_USER
@@ -99,7 +101,7 @@ spec:
     spec:
       containers:
       - name: reference-data-service
-        image: cloudhealthoffice/reference-data-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-reference-data-service:latest
         ports:
         - containerPort: 8080
         envFrom:
@@ -116,15 +118,17 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
           initialDelaySeconds: 30
+          timeoutSeconds: 5
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
           initialDelaySeconds: 10
+          timeoutSeconds: 5
           periodSeconds: 5
 ---
 apiVersion: v1

@@ -18,6 +18,12 @@ public class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (IsHealthCheckPath(context.Request.Path))
+        {
+            await _next(context);
+            return;
+        }
+
         var tenantId = ExtractTenantId(context);
 
         if (string.IsNullOrEmpty(tenantId))
@@ -33,6 +39,13 @@ public class TenantMiddleware
         _logger.LogInformation("Request from tenant: {TenantId}", tenantId);
 
         await _next(context);
+    }
+
+    private static bool IsHealthCheckPath(PathString path)
+    {
+        return path.StartsWithSegments("/health") ||
+               path.StartsWithSegments("/ready") ||
+               path.StartsWithSegments("/live");
     }
 
     private string? ExtractTenantId(HttpContext context)
