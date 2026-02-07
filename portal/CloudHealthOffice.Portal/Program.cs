@@ -36,6 +36,7 @@ builder.Services.AddScoped<IProviderService, ProviderService>();
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
+builder.Services.AddScoped<ISponsorService, SponsorService>();
 
 // Add SignalR
 builder.Services.AddSignalR();
