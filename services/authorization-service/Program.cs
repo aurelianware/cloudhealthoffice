@@ -1,11 +1,35 @@
 using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using Microsoft.Identity.Web;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AuthorizationService;
 using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Azure AD Authentication (Multi-tenant organizational accounts)
+// Frontend passes bearer token, services validate independently
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(options =>
+    {
+        builder.Configuration.Bind("AzureAd", options);
+        options.TokenValidationParameters.ValidateIssuer = true;
+        options.TokenValidationParameters.ValidateAudience = true;
+        options.TokenValidationParameters.ValidateLifetime = true;
+    },
+    options => { builder.Configuration.Bind("AzureAd", options); });
+
+// Authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAuthenticatedUser", policy =>
+        policy.RequireAuthenticatedUser());
+    
+    options.AddPolicy("PriorAuthManager", policy =>
+        policy.RequireRole("PriorAuthManager", "Administrator"));
+});
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -18,6 +42,32 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "Prior authorization management for Cloud Health Office. " +
                      "Handles 278 prior auth requests/responses, validates authorizations before claim submission."
+    });
+    
+    // Add JWT Bearer authentication to Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token from Azure AD.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT"
+    });
+    
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 
@@ -82,12 +132,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
+// Authentication MUST come before authorization
+app.UseAuthentication();
 app.UseAuthorization();
+
+// Multi-tenant middleware (extract TenantId from validated JWT claims)
+app.UseTenantMiddleware();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
