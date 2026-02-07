@@ -64,17 +64,21 @@ CosmosDb__ContainerName: Claims
 
 **Test Results**:
 - ✅ Successfully submitted professional claim (837P)
-- ✅ 3 service lines with diagnosis code pointers
-- ✅ Total charge $350.00 (Office visit + 2 lab tests)
+- ✅ Successfully submitted institutional claim (837I)
+- ✅ Professional: 3 service lines with CPT codes and diagnosis pointers
+- ✅ Institutional: 5 service lines with revenue codes (ICU, cardiac cath, labs, pharmacy)
+- ✅ Total charges: $350 (professional), $27,650 (institutional)
 - ✅ Multi-tenant isolation verified
 - ✅ Claims retrieval from Cosmos DB working
 
-**Sample Claim**:
+**Sample Professional Claim (837P)**:
 ```json
 {
   "claimNumber": "CLM2025010700001",
+  "claimType": 1,
   "memberId": "BSCA123456789",
   "totalChargeAmount": 350.00,
+  "placeOfServiceCode": "11",
   "diagnosisCodes": [
     {"code": "E11.9", "description": "Type 2 diabetes mellitus"},
     {"code": "I10", "description": "Essential hypertension"}
@@ -83,6 +87,29 @@ CosmosDb__ContainerName: Claims
     {"procedureCode": "99213", "chargeAmount": 150.00},
     {"procedureCode": "80053", "chargeAmount": 75.00},
     {"procedureCode": "83036", "chargeAmount": 125.00}
+  ]
+}
+```
+
+**Sample Institutional Claim (837I)**:
+```json
+{
+  "claimNumber": "CLM2025010700002",
+  "claimType": 2,
+  "facilityName": "City General Hospital - Main Campus",
+  "totalChargeAmount": 27650.00,
+  "placeOfServiceCode": "21",
+  "diagnosisCodes": [
+    {"code": "I21.09", "description": "ST elevation myocardial infarction"},
+    {"code": "I10", "description": "Essential hypertension"},
+    {"code": "E11.9", "description": "Type 2 diabetes mellitus"}
+  ],
+  "claimLines": [
+    {"lineNumber": 1, "revenueCode": "0200", "chargeAmount": 8500.00, "description": "ICU room and board"},
+    {"lineNumber": 2, "revenueCode": "0730", "chargeAmount": 450.00, "description": "ECG"},
+    {"lineNumber": 3, "revenueCode": "0481", "chargeAmount": 4200.00, "description": "Cardiac catheterization"},
+    {"lineNumber": 4, "revenueCode": "0300", "chargeAmount": 600.00, "description": "Laboratory"},
+    {"lineNumber": 5, "revenueCode": "0250", "chargeAmount": 1500.00, "description": "Pharmacy"}
   ]
 }
 ```
@@ -179,7 +206,9 @@ See `test-enrollment-payload.json` for a complete 834 enrollment import test pay
 
 ### Test Claim Payload
 
-See `test-claim-payload.json` for a complete 837 professional claim test payload.
+See `test-claim-payload.json` for a complete 837P professional claim test payload.
+
+See `test-claim-institutional-payload.json` for a complete 837I institutional claim test payload.
 
 ### Port Forwarding for Local Testing
 
@@ -198,11 +227,17 @@ kubectl port-forward -n cho-svcs svc/claims-service 8082:80
 curl -X POST http://localhost:8081/api/v1/enrollments \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: test-tenant-001" \
-  -d @test-enrollment-payload.json
-
-# Test claim submission
+  -d @tprofessional claim (837P)
 curl -X POST http://localhost:8082/api/Claims \
   -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: test-tenant-001" \
+  -d @test-claim-payload.json
+
+# Test institutional claim (837I)
+curl -X POST http://localhost:8082/api/Claims \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: test-tenant-001" \
+  -d @test-claim-institutionalpe: application/json" \
   -H "X-Tenant-ID: test-tenant-001" \
   -d @test-claim-payload.json
 
