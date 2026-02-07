@@ -1,0 +1,366 @@
+using System.Text.Json.Serialization;
+
+namespace EnrollmentImportService.Models;
+
+/// <summary>
+/// Parsed 834 enrollment transaction
+/// </summary>
+public class Enrollment834
+{
+    [JsonPropertyName("fileName")]
+    public string FileName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("parsedAt")]
+    public DateTime ParsedAt { get; set; }
+    
+    [JsonPropertyName("transactionCount")]
+    public int TransactionCount { get; set; }
+    
+    [JsonPropertyName("enrollments")]
+    public List<MemberEnrollment> Enrollments { get; set; } = new();
+}
+
+public class MemberEnrollment
+{
+    [JsonPropertyName("relationship")]
+    public string Relationship { get; set; } = string.Empty; // 18=Employee, 01=Spouse, 19=Child
+    
+    [JsonPropertyName("maintenanceType")]
+    public string MaintenanceType { get; set; } = string.Empty; // 001=Change, 021=Addition, 024=Termination
+    
+    [JsonPropertyName("maintenanceReason")]
+    public string? MaintenanceReason { get; set; }
+    
+    [JsonPropertyName("benefitStatus")]
+    public string BenefitStatus { get; set; } = string.Empty; // A=Active, C=COBRA, T=Terminated
+    
+    [JsonPropertyName("subscriberId")]
+    public string? SubscriberId { get; set; }
+    
+    [JsonPropertyName("groupNumber")]
+    public string? GroupNumber { get; set; }
+    
+    [JsonPropertyName("employeeId")]
+    public string? EmployeeId { get; set; }
+    
+    [JsonPropertyName("enrollmentDate")]
+    public string? EnrollmentDate { get; set; }
+    
+    [JsonPropertyName("terminationDate")]
+    public string? TerminationDate { get; set; }
+    
+    [JsonPropertyName("employmentStartDate")]
+    public string? EmploymentStartDate { get; set; }
+    
+    [JsonPropertyName("demographics")]
+    public Demographics? Demographics { get; set; }
+    
+    [JsonPropertyName("sponsor")]
+    public Sponsor? Sponsor { get; set; }
+    
+    [JsonPropertyName("coverage")]
+    public List<CoverageDetail> Coverage { get; set; } = new();
+    
+    [JsonPropertyName("dependents")]
+    public List<Dependent> Dependents { get; set; } = new();
+}
+
+public class Demographics
+{
+    [JsonPropertyName("entityType")]
+    public string? EntityType { get; set; }
+    
+    [JsonPropertyName("lastName")]
+    public string LastName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("firstName")]
+    public string FirstName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("middleName")]
+    public string? MiddleName { get; set; }
+    
+    [JsonPropertyName("suffix")]
+    public string? Suffix { get; set; }
+    
+    [JsonPropertyName("idQualifier")]
+    public string? IdQualifier { get; set; }
+    
+    [JsonPropertyName("id")]
+    public string? Id { get; set; } // SSN or Member ID
+    
+    [JsonPropertyName("address1")]
+    public string? Address1 { get; set; }
+    
+    [JsonPropertyName("address2")]
+    public string? Address2 { get; set; }
+    
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+    
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+    
+    [JsonPropertyName("zip")]
+    public string? Zip { get; set; }
+    
+    [JsonPropertyName("dateOfBirth")]
+    public string? DateOfBirth { get; set; }
+    
+    [JsonPropertyName("gender")]
+    public string? Gender { get; set; } // M, F, U
+}
+
+public class Sponsor
+{
+    [JsonPropertyName("qualifier")]
+    public string Qualifier { get; set; } = string.Empty;
+    
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+    
+    [JsonPropertyName("idQualifier")]
+    public string? IdQualifier { get; set; }
+    
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+}
+
+public class CoverageDetail
+{
+    [JsonPropertyName("maintenanceType")]
+    public string? MaintenanceType { get; set; }
+    
+    [JsonPropertyName("maintenanceReason")]
+    public string? MaintenanceReason { get; set; }
+    
+    [JsonPropertyName("insuranceLineCode")]
+    public string InsuranceLineCode { get; set; } = string.Empty; // HLT, DEN, VIS
+    
+    [JsonPropertyName("planCoverageDescription")]
+    public string? PlanCoverageDescription { get; set; }
+    
+    [JsonPropertyName("coverageLevel")]
+    public string? CoverageLevel { get; set; } // EMP, ESP, ECH, FAM
+}
+
+public class Dependent
+{
+    [JsonPropertyName("entityType")]
+    public string? EntityType { get; set; }
+    
+    [JsonPropertyName("lastName")]
+    public string LastName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("firstName")]
+    public string FirstName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("middleName")]
+    public string? MiddleName { get; set; }
+    
+    [JsonPropertyName("suffix")]
+    public string? Suffix { get; set; }
+    
+    [JsonPropertyName("idQualifier")]
+    public string? IdQualifier { get; set; }
+    
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+    
+    [JsonPropertyName("address1")]
+    public string? Address1 { get; set; }
+    
+    [JsonPropertyName("address2")]
+    public string? Address2 { get; set; }
+    
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+    
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+    
+    [JsonPropertyName("zip")]
+    public string? Zip { get; set; }
+    
+    [JsonPropertyName("dateOfBirth")]
+    public string? DateOfBirth { get; set; }
+    
+    [JsonPropertyName("gender")]
+    public string? Gender { get; set; }
+    
+    [JsonPropertyName("coverage")]
+    public List<CoverageDetail>? Coverage { get; set; }
+}
+
+/// <summary>
+/// Member entity for Cosmos DB
+/// </summary>
+public class Member
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    
+    [JsonPropertyName("tenantId")]
+    public string TenantId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("memberId")]
+    public string MemberId { get; set; } = string.Empty; // Generated or from 834
+    
+    [JsonPropertyName("subscriberId")]
+    public string? SubscriberId { get; set; }
+    
+    [JsonPropertyName("firstName")]
+    public string FirstName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("lastName")]
+    public string LastName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("middleName")]
+    public string? MiddleName { get; set; }
+    
+    [JsonPropertyName("suffix")]
+    public string? Suffix { get; set; }
+    
+    [JsonPropertyName("dateOfBirth")]
+    public DateTime? DateOfBirth { get; set; }
+    
+    [JsonPropertyName("gender")]
+    public string? Gender { get; set; }
+    
+    [JsonPropertyName("ssn")]
+    public string? SSN { get; set; } // Encrypted in production
+    
+    [JsonPropertyName("address")]
+    public Address? Address { get; set; }
+    
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "Active"; // Active, Terminated, COBRA
+    
+    [JsonPropertyName("enrollmentDate")]
+    public DateTime? EnrollmentDate { get; set; }
+    
+    [JsonPropertyName("terminationDate")]
+    public DateTime? TerminationDate { get; set; }
+    
+    [JsonPropertyName("sponsorId")]
+    public string? SponsorId { get; set; }
+    
+    [JsonPropertyName("groupNumber")]
+    public string? GroupNumber { get; set; }
+    
+    [JsonPropertyName("employeeId")]
+    public string? EmployeeId { get; set; }
+    
+    [JsonPropertyName("relationship")]
+    public string Relationship { get; set; } = "18"; // 18=Employee, 01=Spouse, 19=Child
+    
+    [JsonPropertyName("dependents")]
+    public List<string> DependentIds { get; set; } = new(); // References to dependent Member records
+    
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    [JsonPropertyName("updatedAt")]
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class Address
+{
+    [JsonPropertyName("line1")]
+    public string? Line1 { get; set; }
+    
+    [JsonPropertyName("line2")]
+    public string? Line2 { get; set; }
+    
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+    
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+    
+    [JsonPropertyName("zip")]
+    public string? Zip { get; set; }
+}
+
+/// <summary>
+/// Coverage entity for Cosmos DB
+/// </summary>
+public class Coverage
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    
+    [JsonPropertyName("tenantId")]
+    public string TenantId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("memberId")]
+    public string MemberId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("subscriberId")]
+    public string? SubscriberId { get; set; }
+    
+    [JsonPropertyName("planId")]
+    public string PlanId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("groupNumber")]
+    public string? GroupNumber { get; set; }
+    
+    [JsonPropertyName("insuranceType")]
+    public string InsuranceType { get; set; } = "HLT"; // HLT, DEN, VIS
+    
+    [JsonPropertyName("coverageLevel")]
+    public string CoverageLevel { get; set; } = "EMP"; // EMP, ESP, ECH, FAM
+    
+    [JsonPropertyName("effectiveDate")]
+    public DateTime EffectiveDate { get; set; }
+    
+    [JsonPropertyName("terminationDate")]
+    public DateTime? TerminationDate { get; set; }
+    
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "Active";
+    
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    [JsonPropertyName("updatedAt")]
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Sponsor (employer/group) entity for Cosmos DB
+/// </summary>
+public class SponsorEntity
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    
+    [JsonPropertyName("tenantId")]
+    public string TenantId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("sponsorId")]
+    public string SponsorId { get; set; } = string.Empty; // From 834
+    
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+    
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "Employer"; // Employer, Group, Association
+    
+    [JsonPropertyName("federalTaxId")]
+    public string? FederalTaxId { get; set; }
+    
+    [JsonPropertyName("groupNumber")]
+    public string? GroupNumber { get; set; }
+    
+    [JsonPropertyName("memberCount")]
+    public int MemberCount { get; set; }
+    
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "Active";
+    
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    [JsonPropertyName("updatedAt")]
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

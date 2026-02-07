@@ -492,6 +492,118 @@ hipaa-attachments-prod-la     Microsoft.Web/sites                    Succeeded  
 hipaa-attachments-prod-ai     Microsoft.Insights/components          Succeeded  eastus
 prod-integration-account      Microsoft.Logic/integrationAccounts    Succeeded  eastus
 ```
+
+### Container Image Build & Deployment (Kubernetes)
+
+For Kubernetes deployments, container images must be built and pushed to GitHub Container Registry (GHCR) before deploying workflows.
+
+#### Automated Build via GitHub Actions
+
+The `.github/workflows/docker-build.yml` workflow automatically builds all container images on push to `main`:
+
+**18 Container Images Built:**
+- **10 Microservices**: member-service, coverage-service, claims-service, eligibility-service, authorization-service, provider-service, benefit-plan-service, reference-data-service, sponsor-service, claims-scrubbing-service
+- **2 UI**: portal (Blazor), site (static)
+- **6 Utility Containers**: x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor
+
+**Trigger Paths:**
+- `services/**` → Builds affected microservices
+- `portal/**` → Builds portal
+- `site/**` → Builds site
+- `containers/**` → Builds utility containers
+
+**Images pushed to**: `ghcr.io/aurelianware/cloudhealthoffice-*:latest`
+
+#### Manual Container Build
+
+If you need to build containers locally:
+
+```bash
+# Build all utility containers
+for container in x12-parser claims-publisher kafka-publisher sftp-fetcher x12-encoder metadata-extractor; do
+  docker build -t ghcr.io/aurelianware/cloudhealthoffice-$container:latest containers/$container
+  docker push ghcr.io/aurelianware/cloudhealthoffice-$container:latest
+done
+
+# Build microservices
+for service in member coverage claims eligibility authorization provider benefit-plan reference-data sponsor claims-scrubbing; do
+  docker build -t ghcr.io/aurelianware/cloudhealthoffice-$service-service:latest services/$service-service
+  docker push ghcr.io/aurelianware/cloudhealthoffice-$service-service:latest
+done
+
+# Build portal and site
+docker build -t ghcr.io/aurelianware/cloudhealthoffice-portal:latest portal/CloudHealthOffice.Portal
+docker push ghcr.io/aurelianware/cloudhealthoffice-portal:latest
+
+docker build -t ghcr.io/aurelianware/cloudhealthoffice-site:latest site
+docker push ghcr.io/aurelianware/cloudhealthoffice-site:latest
+```
+
+#### Verify Images in GHCR
+
+```bash
+# List all images (requires GitHub CLI)
+gh api /orgs/aurelianware/packages?package_type=container | jq -r '.[].name'
+
+# Or visit: https://github.com/orgs/aurelianware/packages?repo_name=cloudhealthoffice
+```
+
+#### Deploy Kafka Topics (Required for 837 Pipeline)
+
+```bash
+# Apply Kafka topics for claims processing
+kubectl apply -f kafka/topics.yaml
+
+# Verify topics created
+kubectl get kafkatopics -n kafka
+
+# Expected output:
+# NAME                      CLUSTER                PARTITIONS   REPLICATION FACTOR
+# edi-raw-files            cloudhealthoffice      3            3
+# claims-adjudication      cloudhealthoffice      6            3
+# claims-work-queue        cloudhealthoffice      3            3
+# claims-rejected          cloudhealthoffice      3            3
+```
+
+#### Deploy Argo Workflows
+
+```bash
+# Deploy 837 ingestion workflow
+kubectl apply -f argo-workflows/x12-837-ingest.yaml
+
+# Verify CronWorkflow created
+kubectl get cronworkflows -n cloudhealthoffice
+kubectl get workflows -n cloudhealthoffice
+
+# Expected output shows CronWorkflow scheduled to run every 5 minutes
+```
+
+#### Deploy Argo Events
+
+```bash
+# Deploy claims adjudication event triggers
+kubectl apply -f argo-events/claims-adjudication-eventsource.yaml
+
+# Verify EventSource and Sensor
+kubectl get eventsources -n argo-events
+kubectl get sensors -n argo-events
+```
+
+#### Verify Container Deployments
+
+```bash
+# Check portal pods (should use new image)
+kubectl get pods -n cho-svcs -l app=portal
+
+# Check service pods
+kubectl get pods -n cho-svcs
+
+# Verify image versions
+kubectl get pods -n cho-svcs -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+```
+
+**For complete 837 claims pipeline documentation**, see [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md).
+
 ## Environment Protection Rules and Approval Gates
 
 This section describes how to configure GitHub Environment protection rules to require manual approvals before deployments to UAT and PROD environments.

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MemberService.Middleware;
 using MemberService.Models;
 using System;
 using System.Collections.Generic;

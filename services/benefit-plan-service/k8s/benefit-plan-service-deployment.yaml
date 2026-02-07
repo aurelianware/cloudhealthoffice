@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: benefit-plan-service
-        image: cloudhealthoffice/benefit-plan-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-benefit-plan-service:latest
         ports:
         - containerPort: 8080
         envFrom:
