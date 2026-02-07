@@ -64,6 +64,14 @@ public interface IMetricsService
     Task<DashboardMetrics> GetDashboardMetricsAsync();
 }
 
+public interface IReferenceDataService
+{
+    Task<List<MedicalCode>> SearchCodesAsync(string? codeSystem = null, string? searchTerm = null);
+    Task<MedicalCodeDetails?> GetCodeDetailsAsync(string codeSystem, string code);
+    Task<List<string>> GetCodeSystemsAsync();
+    Task<CodeUsageStats> GetCodeUsageStatsAsync(string codeSystem, string code);
+}
+
 public interface ISponsorService
 {
     Task<List<SponsorSummary>> SearchSponsorsAsync(string searchTerm);
@@ -434,4 +442,45 @@ public class UpdateSponsorRequest : CreateSponsorRequest
 {
     public string Status { get; set; } = string.Empty;
     public DateTime? ContractEndDate { get; set; }
+}
+
+public class MedicalCode
+{
+    public string CodeSystem { get; set; } = string.Empty; // CPT, ICD-10-CM, HCPCS, Revenue, etc.
+    public string Code { get; set; } = string.Empty;
+    public string ShortDescription { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public string Status { get; set; } = string.Empty; // Active, Deprecated
+}
+
+public class MedicalCodeDetails : MedicalCode
+{
+    public string LongDescription { get; set; } = string.Empty;
+    public List<string> Keywords { get; set; } = new();
+    public List<RelatedCode> RelatedCodes { get; set; } = new();
+    public string? ParentCode { get; set; }
+    public List<string> ChildCodes { get; set; } = new();
+    public bool RequiresPriorAuth { get; set; }
+    public string? ClinicalNotes { get; set; }
+}
+
+public class RelatedCode
+{
+    public string CodeSystem { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string RelationType { get; set; } = string.Empty; // CrossReference, Alternative, Replacement
+}
+
+public class CodeUsageStats
+{
+    public string CodeSystem { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public int ClaimsCount { get; set; }
+    public int AuthorizationsCount { get; set; }
+    public int BenefitsCount { get; set; }
+    public DateTime? LastUsedDate { get; set; }
+    public decimal TotalBilledAmount { get; set; }
 }
