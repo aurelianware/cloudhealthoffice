@@ -46,6 +46,11 @@ public interface IProviderService
 public interface IBenefitPlanService
 {
     Task<List<BenefitPlan>> GetBenefitPlansAsync();
+    Task<List<BenefitPlanListItem>> SearchBenefitPlansAsync(string? sponsorId = null, string? productType = null);
+    Task<BenefitPlanDetails?> GetBenefitPlanByIdAsync(string planId);
+    Task<string> CreateBenefitPlanAsync(CreateBenefitPlanRequest request);
+    Task UpdateBenefitPlanAsync(string planId, UpdateBenefitPlanRequest request);
+    Task<List<BenefitItem>> GetAvailableBenefitsAsync();
 }
 
 public interface IWorkflowService
@@ -208,6 +213,81 @@ public class BenefitPlan
     public string PlanType { get; set; } = string.Empty;
     public decimal Deductible { get; set; }
     public decimal OutOfPocketMax { get; set; }
+}
+
+public class BenefitPlanListItem
+{
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string SponsorId { get; set; } = string.Empty;
+    public string SponsorName { get; set; } = string.Empty;
+    public string ProductType { get; set; } = string.Empty; // HMO, PPO, EPO, HDHP
+    public string Network { get; set; } = string.Empty;
+    public int EnrolledMembers { get; set; }
+    public int AssignedBenefits { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+}
+
+public class BenefitPlanDetails : BenefitPlanListItem
+{
+    public string MetalTier { get; set; } = string.Empty; // Bronze, Silver, Gold, Platinum
+    public decimal IndividualDeductible { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal IndividualOOPMax { get; set; }
+    public decimal FamilyOOPMax { get; set; }
+    public decimal Coinsurance { get; set; }
+    public decimal MonthlyPremium { get; set; }
+    public string PlanYear { get; set; } = string.Empty;
+    public List<PlanBenefit> Benefits { get; set; } = new();
+    public List<string> Exclusions { get; set; } = new();
+}
+
+public class PlanBenefit
+{
+    public string BenefitId { get; set; } = string.Empty;
+    public string ServiceType { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public decimal? Copay { get; set; }
+    public decimal? CoinsurancePercent { get; set; }
+    public decimal? CoveragePercent { get; set; }
+    public int? AnnualLimit { get; set; }
+    public bool PriorAuthRequired { get; set; }
+}
+
+public class BenefitItem
+{
+    public string BenefitId { get; set; } = string.Empty;
+    public string ServiceType { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty; // Medical, Pharmacy, Dental, Vision, etc.
+    public string Description { get; set; } = string.Empty;
+    public decimal? DefaultCopay { get; set; }
+    public decimal? DefaultCoinsurance { get; set; }
+    public bool RequiresPriorAuth { get; set; }
+}
+
+public class CreateBenefitPlanRequest
+{
+    public string SponsorId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string ProductType { get; set; } = string.Empty;
+    public string Network { get; set; } = string.Empty;
+    public string MetalTier { get; set; } = string.Empty;
+    public decimal IndividualDeductible { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal IndividualOOPMax { get; set; }
+    public decimal FamilyOOPMax { get; set; }
+    public decimal Coinsurance { get; set; }
+    public decimal MonthlyPremium { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public string PlanYear { get; set; } = string.Empty;
+}
+
+public class UpdateBenefitPlanRequest : CreateBenefitPlanRequest
+{
+    public string Status { get; set; } = string.Empty;
+    public DateTime? TerminationDate { get; set; }
 }
 
 public class WorkflowRun
