@@ -209,15 +209,12 @@
     {
         var stats = await ReferenceDataService.GetCodeUsageStatsAsync(codeSystem, code);
         
-        var message = $@"
-Usage Statistics for {codeSystem} {code}:
-
-- Used in {stats.ClaimsCount:N0} claims
-- Used in {stats.AuthorizationsCount:N0} prior authorizations  
-- Assigned to {stats.BenefitsCount} benefit plans
-- Last used: {stats.LastUsedDate?.ToString(""MM/dd/yyyy"") ?? ""Never""}
-- Total billed amount: {stats.TotalBilledAmount:C}
-";
+        var message = $"Usage Statistics for {codeSystem} {code}:\n\n" +
+            $"- Used in {stats.ClaimsCount:N0} claims\n" +
+            $"- Used in {stats.AuthorizationsCount:N0} prior authorizations\n" +
+            $"- Assigned to {stats.BenefitsCount} benefit plans\n" +
+            $"- Last used: {stats.LastUsedDate?.ToString("MM/dd/yyyy") ?? "Never"}\n" +
+            $"- Total billed amount: {stats.TotalBilledAmount:C}";
 
         await DialogService.ShowMessageBox(
             "Code Usage Statistics",
