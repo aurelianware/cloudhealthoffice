@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.Azure.Cosmos;
+using EligibilityService;
 using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
@@ -28,12 +30,15 @@ var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"]
 
 builder.Services.AddSingleton<CosmosClient>(sp =>
 {
+    var jsonOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    
     var options = new CosmosClientOptions
     {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
+        Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
     };
     return new CosmosClient(cosmosConnectionString, options);
 });
