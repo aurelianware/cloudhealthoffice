@@ -791,3 +791,289 @@ public class AttachmentService : IAttachmentService
     }
 }
 
+public class SponsorService : ISponsorService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SponsorService> _logger;
+
+    public SponsorService(HttpClient httpClient, IConfiguration configuration, ILogger<SponsorService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<SponsorSummary>> SearchSponsorsAsync(string searchTerm)
+    {
+        var baseUrl = _configuration["Services:SponsorService"];
+        try
+        {
+            var sponsors = await _httpClient.GetFromJsonAsync<List<SponsorSummary>>($"{baseUrl}/sponsors?search={searchTerm}");
+            return sponsors ?? new List<SponsorSummary>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching sponsors, returning mock data");
+            return GetMockSponsors(searchTerm);
+        }
+    }
+
+    public async Task<SponsorDetails?> GetSponsorByIdAsync(string sponsorId)
+    {
+        var baseUrl = _configuration["Services:SponsorService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<SponsorDetails>($"{baseUrl}/sponsors/{sponsorId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching sponsor {SponsorId}, returning mock data", sponsorId);
+            return GetMockSponsorDetails(sponsorId);
+        }
+    }
+
+    public async Task<string> CreateSponsorAsync(CreateSponsorRequest request)
+    {
+        var baseUrl = _configuration["Services:SponsorService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/sponsors", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CreateSponsorResponse>();
+            return result?.SponsorId ?? $"SPNSR{Random.Shared.Next(10000, 99999)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error creating sponsor, generating mock ID");
+            await Task.Delay(500);
+            return $"SPNSR{Random.Shared.Next(10000, 99999)}";
+        }
+    }
+
+    public async Task UpdateSponsorAsync(string sponsorId, UpdateSponsorRequest request)
+    {
+        var baseUrl = _configuration["Services:SponsorService"];
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/sponsors/{sponsorId}", request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error updating sponsor {SponsorId}, mock update successful", sponsorId);
+            await Task.Delay(300);
+        }
+    }
+
+    private List<SponsorSummary> GetMockSponsors(string searchTerm)
+    {
+        var sponsors = new List<SponsorSummary>
+        {
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10001",
+                Name = "Acme Corporation",
+                Type = "Employer",
+                State = "CA",
+                ActiveBenefitPlans = 3,
+                TotalMembers = 2847,
+                Status = "Active",
+                ContractStartDate = new DateTime(2024, 1, 1),
+                ContractEndDate = new DateTime(2026, 12, 31)
+            },
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10002",
+                Name = "TechStart Industries",
+                Type = "Employer",
+                State = "TX",
+                ActiveBenefitPlans = 2,
+                TotalMembers = 1523,
+                Status = "Active",
+                ContractStartDate = new DateTime(2025, 1, 1),
+                ContractEndDate = new DateTime(2027, 12, 31)
+            },
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10003",
+                Name = "United Workers Local 247",
+                Type = "Union",
+                State = "NY",
+                ActiveBenefitPlans = 4,
+                TotalMembers = 4521,
+                Status = "Active",
+                ContractStartDate = new DateTime(2023, 6, 1)
+            },
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10004",
+                Name = "Healthcare Associates",
+                Type = "Employer",
+                State = "FL",
+                ActiveBenefitPlans = 2,
+                TotalMembers = 892,
+                Status = "Active",
+                ContractStartDate = new DateTime(2025, 3, 1),
+                ContractEndDate = new DateTime(2028, 2, 28)
+            },
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10005",
+                Name = "Regional Business Alliance",
+                Type = "Association",
+                State = "WA",
+                ActiveBenefitPlans = 5,
+                TotalMembers = 6234,
+                Status = "Active",
+                ContractStartDate = new DateTime(2024, 7, 1),
+                ContractEndDate = new DateTime(2027, 6, 30)
+            },
+            new SponsorSummary
+            {
+                SponsorId = "SPNSR10006",
+                Name = "Metro Manufacturing Inc",
+                Type = "Employer",
+                State = "MI",
+                ActiveBenefitPlans = 1,
+                TotalMembers = 456,
+                Status = "Pending",
+                ContractStartDate = new DateTime(2026, 1, 1),
+                ContractEndDate = new DateTime(2029, 12, 31)
+            }
+        };
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return sponsors;
+
+        return sponsors.Where(s => 
+            s.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            s.SponsorId.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            s.State.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+    }
+
+    private SponsorDetails GetMockSponsorDetails(string sponsorId)
+    {
+        var sponsors = new Dictionary<string, SponsorDetails>
+        {
+            ["SPNSR10001"] = new SponsorDetails
+            {
+                SponsorId = "SPNSR10001",
+                Name = "Acme Corporation",
+                Type = "Employer",
+                State = "CA",
+                ActiveBenefitPlans = 3,
+                TotalMembers = 2847,
+                Status = "Active",
+                ContractStartDate = new DateTime(2024, 1, 1),
+                ContractEndDate = new DateTime(2026, 12, 31),
+                TaxId = "12-3456789",
+                AddressLine1 = "123 Business Park Drive",
+                City = "San Francisco",
+                ZipCode = "94105",
+                ContactName = "Jane Smith",
+                ContactPhone = "(415) 555-0123",
+                ContactEmail = "benefits@acmecorp.com",
+                BillingFrequency = "Monthly",
+                PaymentMethod = "ACH",
+                GroupSizeTier = "Large (50+)",
+                BenefitPlans = new List<BenefitPlanSummary>
+                {
+                    new BenefitPlanSummary
+                    {
+                        PlanId = "PLAN1001",
+                        PlanName = "Gold PPO Plus",
+                        ProductType = "PPO",
+                        EnrolledMembers = 1523,
+                        EffectiveDate = new DateTime(2024, 1, 1)
+                    },
+                    new BenefitPlanSummary
+                    {
+                        PlanId = "PLAN1002",
+                        PlanName = "Silver HMO Standard",
+                        ProductType = "HMO",
+                        EnrolledMembers = 982,
+                        EffectiveDate = new DateTime(2024, 1, 1)
+                    },
+                    new BenefitPlanSummary
+                    {
+                        PlanId = "PLAN1003",
+                        PlanName = "Bronze HDHP Value",
+                        ProductType = "HDHP",
+                        EnrolledMembers = 342,
+                        EffectiveDate = new DateTime(2025, 1, 1)
+                    }
+                }
+            },
+            ["SPNSR10002"] = new SponsorDetails
+            {
+                SponsorId = "SPNSR10002",
+                Name = "TechStart Industries",
+                Type = "Employer",
+                State = "TX",
+                ActiveBenefitPlans = 2,
+                TotalMembers = 1523,
+                Status = "Active",
+                ContractStartDate = new DateTime(2025, 1, 1),
+                ContractEndDate = new DateTime(2027, 12, 31),
+                TaxId = "98-7654321",
+                AddressLine1 = "500 Innovation Boulevard",
+                City = "Austin",
+                ZipCode = "78701",
+                ContactName = "Michael Chen",
+                ContactPhone = "(512) 555-0187",
+                ContactEmail = "hr@techstart.com",
+                BillingFrequency = "Quarterly",
+                PaymentMethod = "Wire",
+                GroupSizeTier = "Large (50+)",
+                BenefitPlans = new List<BenefitPlanSummary>
+                {
+                    new BenefitPlanSummary
+                    {
+                        PlanId = "PLAN2001",
+                        PlanName = "Premium EPO Network",
+                        ProductType = "EPO",
+                        EnrolledMembers = 923,
+                        EffectiveDate = new DateTime(2025, 1, 1)
+                    },
+                    new BenefitPlanSummary
+                    {
+                        PlanId = "PLAN2002",
+                        PlanName = "High Deductible HSA",
+                        ProductType = "HDHP",
+                        EnrolledMembers = 600,
+                        EffectiveDate = new DateTime(2025, 1, 1)
+                    }
+                }
+            }
+        };
+
+        return sponsors.TryGetValue(sponsorId, out var sponsor) 
+            ? sponsor 
+            : new SponsorDetails
+            {
+                SponsorId = sponsorId,
+                Name = "Unknown Sponsor",
+                Type = "Employer",
+                State = "CA",
+                Status = "Active",
+                ContractStartDate = DateTime.Now.AddYears(-1),
+                TaxId = "00-0000000",
+                AddressLine1 = "123 Main St",
+                City = "Unknown",
+                ZipCode = "00000",
+                ContactName = "Contact Person",
+                ContactPhone = "(000) 000-0000",
+                ContactEmail = "contact@example.com",
+                BillingFrequency = "Monthly",
+                PaymentMethod = "ACH",
+                GroupSizeTier = "Small (<50)"
+            };
+    }
+
+    private class CreateSponsorResponse
+    {
+        public string SponsorId { get; set; } = string.Empty;
+    }
+}

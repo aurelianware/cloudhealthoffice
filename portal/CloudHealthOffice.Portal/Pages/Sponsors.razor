@@ -1,0 +1,286 @@
+@page "/sponsors"
+@using CloudHealthOffice.Portal.Services
+@inject ISponsorService SponsorService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Sponsors - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Business" Class="mr-2" />
+        Sponsors
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Manage employer groups, unions, and associations
+    </MudText>
+
+    <!-- Filters & Actions Bar -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_searchTerm" 
+                             Label="Search sponsors" 
+                             Placeholder="Name, ID, State..."
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.End" 
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_typeFilter" 
+                          Label="Sponsor Type" 
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@("All")">All Types</MudSelectItem>
+                    <MudSelectItem Value="@("Employer")">Employer</MudSelectItem>
+                    <MudSelectItem Value="@("Union")">Union</MudSelectItem>
+                    <MudSelectItem Value="@("Association")">Association</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_statusFilter" 
+                          Label="Status" 
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@("All")">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                    <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                    <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          FullWidth="true"
+                          OnClick="OpenCreateDialog">
+                    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+                    New Sponsor
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Stats Cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Sponsors</MudText>
+                    <MudText Typo="Typo.h4">@_filteredSponsors.Count</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Active Sponsors</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Success">@_filteredSponsors.Count(s => s.Status == "Active")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Members</MudText>
+                    <MudText Typo="Typo.h4">@_filteredSponsors.Sum(s => s.TotalMembers).ToString("N0")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Benefit Plans</MudText>
+                    <MudText Typo="Typo.h4">@_filteredSponsors.Sum(s => s.ActiveBenefitPlans)</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Sponsors Table -->
+    <MudTable Items="@_filteredSponsors" 
+              Hover="true" 
+              Striped="true" 
+              Loading="@_isLoading"
+              LoadingProgressColor="Color.Primary"
+              Elevation="2">
+        <HeaderContent>
+            <MudTh>Sponsor ID</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Benefit Plans</MudTh>
+            <MudTh>Members</MudTh>
+            <MudTh>Contract Dates</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Sponsor ID">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.SponsorId</MudText>
+            </MudTd>
+            <MudTd DataLabel="Name">
+                <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip Size="Size.Small" Color="GetTypeColor(context.Type)">
+                    @context.Type
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="State">@context.State</MudTd>
+            <MudTd DataLabel="Benefit Plans">@context.ActiveBenefitPlans</MudTd>
+            <MudTd DataLabel="Members">@context.TotalMembers.ToString("N0")</MudTd>
+            <MudTd DataLabel="Contract Dates">
+                <MudText Typo="Typo.body2">@context.ContractStartDate.ToString("MM/dd/yyyy")</MudText>
+                @if (context.ContractEndDate.HasValue)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">to @context.ContractEndDate.Value.ToString("MM/dd/yyyy")</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" Color="GetStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                              Size="Size.Small" 
+                              Color="Color.Primary"
+                              OnClick="@(() => OpenDetailsDialog(context.SponsorId))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                              Size="Size.Small" 
+                              Color="Color.Default"
+                              OnClick="@(() => OpenEditDialog(context.SponsorId))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-4">
+                No sponsors found
+            </MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText Typo="Typo.body1" Align="Align.Center">Loading sponsors...</MudText>
+        </LoadingContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<SponsorSummary> _allSponsors = new();
+    private List<SponsorSummary> _filteredSponsors = new();
+    private bool _isLoading = true;
+
+    private string _searchTerm = string.Empty;
+    private string _typeFilter = "All";
+    private string _statusFilter = "All";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSponsors();
+    }
+
+    private async Task LoadSponsors()
+    {
+        _isLoading = true;
+        _allSponsors = await SponsorService.SearchSponsorsAsync(string.Empty);
+        ApplyFilters();
+        _isLoading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredSponsors = _allSponsors;
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _filteredSponsors = _filteredSponsors.Where(s =>
+                s.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                s.SponsorId.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                s.State.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
+
+        if (_typeFilter != "All")
+        {
+            _filteredSponsors = _filteredSponsors.Where(s => s.Type == _typeFilter).ToList();
+        }
+
+        if (_statusFilter != "All")
+        {
+            _filteredSponsors = _filteredSponsors.Where(s => s.Status == _statusFilter).ToList();
+        }
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+        }
+    }
+
+    private async Task OpenDetailsDialog(string sponsorId)
+    {
+        var parameters = new DialogParameters<SponsorDetailsDialog>
+        {
+            { x => x.SponsorId, sponsorId }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<SponsorDetailsDialog>("Sponsor Details", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadSponsors();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateEditSponsorDialog>("Create New Sponsor", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Sponsor created successfully", Severity.Success);
+            await LoadSponsors();
+        }
+    }
+
+    private async Task OpenEditDialog(string sponsorId)
+    {
+        var parameters = new DialogParameters<CreateEditSponsorDialog>
+        {
+            { x => x.SponsorId, sponsorId }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateEditSponsorDialog>("Edit Sponsor", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Sponsor updated successfully", Severity.Success);
+            await LoadSponsors();
+        }
+    }
+
+    private Color GetTypeColor(string type) => type switch
+    {
+        "Employer" => Color.Primary,
+        "Union" => Color.Secondary,
+        "Association" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Pending" => Color.Warning,
+        "Inactive" => Color.Error,
+        _ => Color.Default
+    };
+}
