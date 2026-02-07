@@ -164,6 +164,79 @@ jobs:
 
           echo "✅ X12 schema validation complete"
 
+      # ---------- Microservices structure validation ----------
+      - name: Validate microservices structure
+        run: |
+          echo "🔍 Validating microservices structure..."
+
+          # Check .NET services
+          dotnet_services=(
+            "services/enrollment-import-service/EnrollmentImportService.csproj"
+            "services/enrollment-import-service/Controllers/EnrollmentController.cs"
+            "services/enrollment-import-service/Services/EnrollmentImportService.cs"
+            "services/enrollment-import-service/Services/EnrollmentRepository.cs"
+          )
+
+          for file in "${dotnet_services[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ Found: $file"
+            else
+              echo "::warning::Service file not found: $file"
+            fi
+          done
+
+          # Check Node.js containers
+          node_containers=(
+            "containers/x12-834-parser/package.json"
+            "containers/x12-834-parser/parse-834.js"
+            "containers/x12-834-parser/Dockerfile"
+          )
+
+          for file in "${node_containers[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ Found: $file"
+              
+              # Validate package.json
+              if [[ "$file" == *package.json ]]; then
+                if ! jq . "$file" >/dev/null 2>&1; then
+                  echo "::error file=$file::Invalid JSON"
+                  exit 1
+                fi
+              fi
+            else
+              echo "::warning::Container file not found: $file"
+            fi
+          done
+
+          echo "✅ Microservices structure validated"
+
+      # ---------- Argo Workflows validation ----------
+      - name: Validate Argo Workflows
+        run: |
+          echo "🔍 Validating Argo Workflows..."
+
+          argo_workflows=(
+            "argo-workflows/x12-834-enrollment-import.yaml"
+          )
+
+          for workflow in "${argo_workflows[@]}"; do
+            if [ -f "$workflow" ]; then
+              echo "Checking: $workflow"
+              
+              # Basic YAML validation
+              if ! python3 -c "import yaml; yaml.safe_load(open('$workflow'))" 2>/dev/null; then
+                echo "::error file=$workflow::Invalid YAML syntax"
+                exit 1
+              fi
+              
+              echo "✓ Valid: $workflow"
+            else
+              echo "::warning::Workflow not found: $workflow"
+            fi
+          done
+
+          echo "✅ Argo Workflows validated"
+
       # ---------- PowerShell script validation ----------
       - name: Validate PowerShell scripts
         shell: pwsh
@@ -249,6 +322,7 @@ jobs:
 
           test_files=(
             "test-x12-275-clearinghouse-inbound.edi:275 test data"
+            "test-x12-834-enrollment-sample.edi:834 enrollment test data"
             "test-backend-response-payload.json:claims backend response"
           )
 
@@ -285,8 +359,10 @@ jobs:
           echo "  - Bicep templates"
           echo "  - Service Bus configuration"
           echo "  - X12 schemas"
+          echo "  - Microservices (.NET + Node.js containers)"
+          echo "  - Argo Workflows (834 enrollment pipeline)"
           echo "  - PowerShell scripts"
           echo "  - EDI test files"
           echo "  - Security scan"
-          echo "  - Test data files"
+          echo "  - Test data files (including 834 enrollment)"
           echo ""

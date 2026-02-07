@@ -39,11 +39,16 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 });
 
 // HTTP Client for service calls
-builder.Services.AddHttpClient<IEligibilityService, EligibilityService>();
+builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(5);
+    });
 
 // Repository and Service
 builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
-builder.Services.AddScoped<IEligibilityService, EligibilityService>();
+builder.Services.AddScoped<IEligibilityService, EligibilityServiceImpl>();
 
 // CORS
 builder.Services.AddCors(options =>
