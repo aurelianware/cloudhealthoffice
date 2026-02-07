@@ -1,0 +1,16 @@
+{
+  "tenantId": "blueshield-ca",
+  "authorizationId": "auth-20260207-001",
+  "rfaiReference": "RFAI-2026-12345",
+  "payerId": "BSCA123456789",
+  "payerName": "Blue Shield of California",
+  "providerId": "1234567890",
+  "providerName": "City Medical Center",
+  "subscriberId": "BSCA987654321",
+  "patientFirstName": "John",
+  "patientLastName": "Doe",
+  "documentType": "Medical Records",
+  "documentFormat": "PDF",
+  "rawX12": "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *260207*1430*^*00501*000000001*0*P*:~GS*HS*SENDER*RECEIVER*20260207*1430*1*X*005010X215~ST*275*0001*005010X215~BHT*0010*13*RFAI-2026-12345*20260207*1430~HL*1**20*1~NM1*PR*2*BLUE SHIELD OF CALIFORNIA*****PI*BSCA123456789~HL*2*1*21*1~NM1*1P*2*CITY MEDICAL CENTER*****XX*1234567890~HL*3*2*22*0~NM1*IL*1*DOE*JOHN****MI*BSCA987654321~PWK*03*EL***AC*Medical Records~SE*12*0001~GE*1*1~IEA*1*000000001~",
+  "submittedDate": "2026-02-07T14:30:00Z"
+}
