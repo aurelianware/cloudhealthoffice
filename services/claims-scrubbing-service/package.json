@@ -33,7 +33,7 @@
   "author": "Cloud Health Office Team",
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/cosmos": "^4.2.0",
+    "@azure/cosmos": "^4.9.1",
     "@azure/identity": "^4.13.0",
     "@azure/keyvault-secrets": "^4.9.0",
     "@azure/storage-blob": "^12.30.0",
