@@ -67,6 +67,7 @@ app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
 app.MapHub<WorkflowHub>("/hubs/workflows");
 app.MapGet("/health", () => Results.Ok("ok"));
+app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg"));
 app.MapFallbackToPage("/_Host");
 
 app.Run();
