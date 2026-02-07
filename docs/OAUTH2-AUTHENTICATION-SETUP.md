@@ -16,29 +16,56 @@ Cloud Health Office uses **Azure AD multi-tenant authentication** with JWT beare
 
 ### 1. Create Multi-Tenant App Registration
 
+**IMPORTANT**: Use a **single app registration** for all microservices, not one per service.
+
 ```bash
-# Create app registration for Cloud Health Office
+# Create ONE app registration for Cloud Health Office
 az ad app create \
-  --display-name "Cloud Health Office" \
+  --display-name "Cloud Health Office API" \
   --sign-in-audience "AzureADMultipleOrgs" \
+  --identifier-uris "api://cloudhealthoffice" \
   --web-redirect-uris "https://cloudhealthoffice.com/signin-oidc" \
   --enable-id-token-issuance true \
   --enable-access-token-issuance true
 ```
 
-**Sign-in audience**: `AzureADMultipleOrgs` (any organizational Azure AD tenant)
+**Sign-in audience**: `AzureADMultipleOrgs` (any organizational Azure AD tenant)  
+**Application ID URI**: `api://cloudhealthoffice` (same for all services)
 
 ### 2. Expose API Scopes
 
-Create scopes for each microservice:
+Create scopes for different operations across all microservices:
 
+**Authorization Service:**
 ```
-api://cloudhealthoffice-authorization/Authorization.ReadWrite
-api://cloudhealthoffice-attachments/Attachments.Upload
-api://cloudhealthoffice-attachments/Attachments.Download
-api://cloudhealthoffice-eligibility/Eligibility.Query
-api://cloudhealthoffice-claims/Claims.Submit
+api://cloudhealthoffice/Authorization.Read
+api://cloudhealthoffice/Authorization.ReadWrite
 ```
+
+**Attachment Service:**
+```
+api://cloudhealthoffice/Attachments.Upload
+api://cloudhealthoffice/Attachments.Download
+api://cloudhealthoffice/Attachments.ReadWrite
+```
+
+**Eligibility Service:**
+```
+api://cloudhealthoffice/Eligibility.Query
+```
+
+**Claims Service:**
+```
+api://cloudhealthoffice/Claims.Submit
+api://cloudhealthoffice/Claims.Read
+```
+
+**Why Single App Registration?**
+- ✅ One token contains all scopes user needs
+- ✅ Single consent screen for users
+- ✅ Simpler credential management
+- ✅ Standard Microsoft pattern for microservices
+- ✅ Each service validates same token, checks for its required scopes
 
 ### 3. Add App Roles
 
@@ -76,6 +103,8 @@ Configure `tenant_id` claim mapping:
 
 ## Service Configuration
 
+**All services use the SAME ClientId and Audience** (from single app registration).
+
 ### authorization-service
 
 **appsettings.json:**
@@ -85,25 +114,23 @@ Configure `tenant_id` claim mapping:
     "Instance": "https://login.microsoftonline.com/",
     "TenantId": "common",
     "ClientId": "<YOUR_CLIENT_ID>",
-    "Audience": "api://cloudhealthoffice-authorization",
-    "TokenValidationParameters": {
-      "ValidateIssuer": true,
-      "ValidIssuers": [
-        "https://login.microsoftonline.com/{tenantid}/v2.0"
-      ],
-      "ValidateAudience": true,
-      "ValidateLifetime": true,
-      "ClockSkew": "00:05:00"
-    }
+    "Audience": "api://cloudhealthoffice"
   }
 }
 ```
 
+**Scope validation in code:**
+```csharp
+[Authorize(Policy = "RequireAuthorizationReadWrite")]
+public async Task<ActionResult> SubmitAuthorization(...)
+```
+
 **Kubernetes Secret:**
 ```bash
-kubectl -n cho-svcs create secret generic authorization-service-config \
+kubectl -n cho-svcs create secret generic azure-ad-config \
   --from-literal=AzureAd__ClientId='<CLIENT_ID>' \
-  --from-literal=AzureAd__TenantId='common'
+  --from-literal=AzureAd__TenantId='common' \
+  --from-literal=AzureAd__Audience='api://cloudhealthoffice'
 ```
 
 ### attachment-service
@@ -114,10 +141,16 @@ kubectl -n cho-svcs create secret generic authorization-service-config \
   "AzureAd": {
     "Instance": "https://login.microsoftonline.com/",
     "TenantId": "common",
-    "ClientId": "<YOUR_CLIENT_ID>",
-    "Audience": "api://cloudhealthoffice-attachments"
+    "ClientId": "<SAME_CLIENT_ID>",
+    "Audience": "api://cloudhealthoffice"
   }
 }
+```
+
+**Scope validation in code:**
+```csharp
+[Authorize(Policy = "RequireAttachmentUpload")]
+public async Task<ActionResult> UploadAttachment(...)
 ```
 
 ---
@@ -128,18 +161,24 @@ kubectl -n cho-svcs create secret generic authorization-service-config \
 ```json
 {
   "iss": "https://login.microsoftonline.com/{tenant-id}/v2.0",
-  "aud": "api://cloudhealthoffice-authorization",
+  "aud": "api://cloudhealthoffice",
   "sub": "user-object-id",
   "tid": "organization-azure-ad-tenant-id",
   "oid": "user-object-id",
   "name": "John Doe",
   "preferred_username": "john.doe@payer.com",
-  "roles": ["PriorAuthManager"],
+  "roles": ["PriorAuthManager", "AttachmentManager"],
+  "scp": "Authorization.ReadWrite Attachments.Upload Eligibility.Query",
   "exp": 1738800000,
   "nbf": 1738796400,
   "iat": 1738796400
 }
 ```
+
+**Key Claims:**
+- `aud`: `api://cloudhealthoffice` (same for all services)
+- `scp`: Space-separated list of granted scopes
+- `roles`: App roles assigned to user
 
 ### Custom Claims (CHO-specific)
 ```json
