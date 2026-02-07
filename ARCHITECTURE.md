@@ -14,6 +14,10 @@ This document provides a comprehensive overview of the Cloud Health Office multi
 - [HIPAA Compliance](#hipaa-compliance)
 - [Scalability and Performance](#scalability-and-performance)
 
+## Detailed Architecture Documents
+
+- **[Authorization & Attachments Architecture](docs/AUTHORIZATION-ATTACHMENTS-ARCHITECTURE.md)** - Prior authorization (278), clinical attachments (275), and RFAI workflow
+
 ## Overview
 
 Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
