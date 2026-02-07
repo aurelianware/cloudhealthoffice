@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using AuthorizationService;
 using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
 
@@ -31,7 +33,18 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
         throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
     }
 
-    return new CosmosClient(endpoint, key);
+    var jsonOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    var options = new CosmosClientOptions
+    {
+        Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
+    };
+    
+    return new CosmosClient(endpoint, key, options);
 });
 
 // Repositories
