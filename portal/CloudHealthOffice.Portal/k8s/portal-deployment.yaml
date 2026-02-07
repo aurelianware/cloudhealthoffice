@@ -126,6 +126,7 @@ metadata:
     app: portal
 spec:
   type: ClusterIP
+  sessionAffinity: ClientIP
   selector:
     app: portal
   ports:
