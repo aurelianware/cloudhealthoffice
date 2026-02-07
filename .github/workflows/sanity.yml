@@ -195,7 +195,7 @@ jobs:
           for file in "${node_containers[@]}"; do
             if [ -f "$file" ]; then
               echo "✓ Found: $file"
-              
+
               # Validate package.json
               if [[ "$file" == *package.json ]]; then
                 if ! jq . "$file" >/dev/null 2>&1; then
@@ -222,13 +222,13 @@ jobs:
           for workflow in "${argo_workflows[@]}"; do
             if [ -f "$workflow" ]; then
               echo "Checking: $workflow"
-              
+
               # Basic YAML validation
               if ! python3 -c "import yaml; yaml.safe_load(open('$workflow'))" 2>/dev/null; then
                 echo "::error file=$workflow::Invalid YAML syntax"
                 exit 1
               fi
-              
+
               echo "✓ Valid: $workflow"
             else
               echo "::warning::Workflow not found: $workflow"
