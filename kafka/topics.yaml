@@ -258,6 +258,28 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
+  name: enrollment-import
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: enrollment-import
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: enrollment-import
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days (member enrollment audit log)
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
   name: dead-letter-queue
   namespace: kafka
   labels:
