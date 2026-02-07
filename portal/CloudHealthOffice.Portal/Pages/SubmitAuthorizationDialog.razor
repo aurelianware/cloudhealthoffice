@@ -1,0 +1,171 @@
+@using CloudHealthOffice.Portal.Services
+@inject IAuthorizationService AuthorizationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Submit a new prior authorization request. Most requests are auto-adjudicated within 2 minutes.
+        </MudText>
+
+        <MudForm @ref="_form" @bind-IsValid="@_formValid">
+            <MudGrid>
+                <!-- Member Selection -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-2">Member Information</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.MemberId" 
+                                 Label="Member ID" 
+                                 Placeholder="MBR-2024-XXX"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Member ID is required" />
+                </MudItem>
+
+                <!-- Provider Selection -->
+                <MudItem xs="12" Class="mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Provider Information</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.ProviderId" 
+                                 Label="Provider ID" 
+                                 Placeholder="PRV-XXX"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Provider ID is required" />
+                </MudItem>
+
+                <!-- Service Details -->
+                <MudItem xs="12" Class="mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Service Details</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_request.ServiceType" 
+                              Label="Service Type" 
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              T="string">
+                        <MudSelectItem Value="@("Surgery")">Surgery</MudSelectItem>
+                        <MudSelectItem Value="@("MRI")">MRI</MudSelectItem>
+                        <MudSelectItem Value="@("CT Scan")">CT Scan</MudSelectItem>
+                        <MudSelectItem Value="@("Physical Therapy")">Physical Therapy</MudSelectItem>
+                        <MudSelectItem Value="@("Specialist Consult")">Specialist Consult</MudSelectItem>
+                        <MudSelectItem Value="@("Durable Medical Equipment")">Durable Medical Equipment</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_request.UnitsRequested" 
+                                    Label="Units Requested" 
+                                    Variant="Variant.Outlined"
+                                    Min="1"
+                                    Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.DiagnosisCode" 
+                                 Label="Diagnosis Code (ICD-10)" 
+                                 Placeholder="M54.5"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Diagnosis code is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.ProcedureCode" 
+                                 Label="Procedure Code (CPT)" 
+                                 Placeholder="70553"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Procedure code is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_serviceStartDate" 
+                                  Label="Service Start Date" 
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MinDate="DateTime.Today" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_serviceEndDate" 
+                                  Label="Service End Date (Optional)" 
+                                  Variant="Variant.Outlined"
+                                  MinDate="_serviceStartDate ?? DateTime.Today" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_request.ClinicalNotes" 
+                                 Label="Clinical Notes" 
+                                 Placeholder="Provide clinical justification..."
+                                 Variant="Variant.Outlined"
+                                 Lines="4"
+                                 Required="true"
+                                 RequiredError="Clinical notes are required" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                  Color="Color.Primary" 
+                  OnClick="Submit"
+                  Disabled="@(!_formValid || _submitting)">
+            @if (_submitting)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Submitting...</span>
+            }
+            else
+            {
+                <span>Submit Request</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private bool _formValid;
+    private bool _submitting;
+    private SubmitAuthorizationRequest _request = new() 
+    { 
+        ServiceType = "Surgery",
+        UnitsRequested = 1
+    };
+    private DateTime? _serviceStartDate = DateTime.Today.AddDays(7);
+    private DateTime? _serviceEndDate;
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_formValid)
+            return;
+
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            // Map dates
+            _request.ServiceStartDate = _serviceStartDate ?? DateTime.Today;
+            _request.ServiceEndDate = _serviceEndDate;
+
+            var authId = await AuthorizationService.SubmitAuthorizationAsync(_request);
+            
+            Snackbar.Add($"Authorization request {authId} submitted successfully!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(authId));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Failed to submit authorization request. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
