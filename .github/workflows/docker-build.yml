@@ -41,6 +41,7 @@ jobs:
           - claims-service
           - eligibility-service
           - authorization-service
+          - attachment-service
           - provider-service
           - benefit-plan-service
           - reference-data-service
