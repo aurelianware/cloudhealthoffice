@@ -58,9 +58,11 @@ Traditional payer integration takes **6-8 weeks per payer**. Each requires custo
 
 - ✅ **Multi-tenant architecture** - Isolate multiple payers/health plans on shared infrastructure
 - ✅ **10 microservices** - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Workflow, Claims Scrubbing
+- ✅ **Cosmos DB integration** - **834 enrollment** and **837 claims** services deployed with System.Text.Json serialization, 400 RU/s shared throughput
 - ✅ **Blazor admin portal** - Real-time dashboard, eligibility verification UI, claims tracking, **provider network management** with SignalR push notifications
 - ✅ **Provider Network Management** - Search 13 specialties, track credentials/licenses, manage contracts, monitor performance metrics (claims volume, auth approval rates, quality scores)
-- ✅ **837 Claims Ingestion** - Automated SFTP → X12 parsing → Kafka → adjudication pipeline with Argo Workflows, processes professional/institutional/dental claims
+- ✅ **834 Enrollment Import** - Deployed and tested: subscribers, dependents, coverage records (health/dental/vision) with duplicate detection
+- ✅ **837 Claims Service** - Deployed and tested: professional/institutional/dental claims with diagnosis codes, service lines, and multi-tenant isolation
 - ✅ **SFTP automation** - Secure file exchange with clearinghouses (Availity, Change Healthcare, Optum)
 - ✅ **Argo Workflows + Kafka** - Event-driven orchestration for complex claim processing, 837 ingestion, and adjudication workflows
 - ✅ **18 container images** - 10 microservices + portal + site + 6 utility containers (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
@@ -339,6 +341,7 @@ cat tests/E2E-TEST-RESULTS.md
 ### **Production-Ready Features**
 
 - ✅ **Multi-tenancy** - Isolate payers/health plans with tenant-scoped data
+- ✅ **Cosmos DB persistence** - 834 enrollment and 837 claims services deployed with 400 RU/s shared throughput
 - ✅ **High availability** - HPA auto-scaling (2-5 replicas), load balancing
 - ✅ **Disaster recovery** - Multi-region deployment, backup/restore
 - ✅ **Security** - Automated vulnerability scanning, Dependabot, encrypted at rest
@@ -461,6 +464,18 @@ If Cloud Health Office helps your organization, please **star the repo** to show
 - 💬 **Community:** [GitHub Discussions](https://github.com/aurelianware/cloudhealthoffice/discussions)
 - 🐦 **Twitter:** [@CloudHealthOfc](https://twitter.com/CloudHealthOfc)
 - 💼 **LinkedIn:** [Cloud Health Office](https://linkedin.com/company/cloudhealthoffice)
+
+---
+
+## **📚 Documentation**
+
+- [🚀 Quick Start Guide](./QUICKSTART.md) - Get started in 15 minutes
+- [🏗️ Architecture Overview](./ARCHITECTURE.md) - System design and components
+- [📦 Deployment Guide](./DEPLOYMENT.md) - Production deployment instructions
+- [💾 Cosmos DB Integration](./COSMOS-DB-DEPLOYMENT.md) - **NEW: 834/837 services deployed and tested**
+- [🔒 Security Guide](./SECURITY.md) - HIPAA compliance and security controls
+- [🧪 Testing Guide](./tests/E2E-TEST-RESULTS.md) - End-to-end test results
+- [🤝 Contributing Guide](./CONTRIBUTING.md) - How to contribute to the project
 
 ---
 
