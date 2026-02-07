@@ -182,6 +182,60 @@
                         }
                     </div>
                 </MudTabPanel>
+
+                <!-- Attachments Tab -->
+                <MudTabPanel Text="Attachments" Icon="@Icons.Material.Filled.AttachFile" BadgeData="@_authorization.Attachments.Count" BadgeDot="@(_authorization.Attachments.Count > 0)">
+                    <div class="mt-4">
+                        @if (_authorization.Attachments.Any())
+                        {
+                            <MudTable Items="_authorization.Attachments" 
+                                     Hover="true" 
+                                     Dense="true"
+                                     Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>File Name</MudTh>
+                                    <MudTh>Type</MudTh>
+                                    <MudTh>Size</MudTh>
+                                    <MudTh>Uploaded</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="File Name">
+                                        <MudIcon Icon="@GetFileIcon(context.ContentType)" Size="Size.Small" Class="mr-2" />
+                                        <MudText Typo="Typo.body2">@context.FileName</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Type">
+                                        <MudChip Size="Size.Small" Color="Color.Info">@context.AttachmentType</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Size">
+                                        <MudText Typo="Typo.body2">@FormatFileSize(context.FileSizeBytes)</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Uploaded">
+                                        <MudText Typo="Typo.body2">@context.UploadedDate.ToString("MM/dd/yyyy")</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">by @context.UploadedBy</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Download" 
+                                                      Color="Color.Primary" 
+                                                      Size="Size.Small"
+                                                      Title="Download" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                                                      Color="Color.Info" 
+                                                      Size="Size.Small"
+                                                      Title="Preview" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
+                                No attachments uploaded for this authorization
+                            </MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
             </MudTabs>
         }
         else
@@ -263,6 +317,27 @@
 
         var rate = (_authorization.UnitsApproved.Value / (double)_authorization.UnitsRequested) * 100;
         return $"{rate:F0}%";
+    }
+
+    private string GetFileIcon(string contentType)
+    {
+        return contentType switch
+        {
+            "application/pdf" => Icons.Material.Filled.PictureAsPdf,
+            "image/jpeg" or "image/jpg" or "image/png" => Icons.Material.Filled.Image,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Icons.Material.Filled.Description,
+            _ => Icons.Material.Filled.AttachFile
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} B";
+        else if (bytes < 1024 * 1024)
+            return $"{bytes / 1024.0:F1} KB";
+        else
+            return $"{bytes / (1024.0 * 1024):F1} MB";
     }
 
     private void Close() => MudDialog.Close();
