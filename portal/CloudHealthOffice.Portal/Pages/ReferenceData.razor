@@ -212,11 +212,11 @@
         var message = $@"
 Usage Statistics for {codeSystem} {code}:
 
-• Used in {stats.ClaimsCount:N0} claims
-• Used in {stats.AuthorizationsCount:N0} prior authorizations  
-• Assigned to {stats.BenefitsCount} benefit plans
-• Last used: {stats.LastUsedDate?.ToString("MM/dd/yyyy") ?? "Never"}
-• Total billed amount: {stats.TotalBilledAmount:C}
+- Used in {stats.ClaimsCount:N0} claims
+- Used in {stats.AuthorizationsCount:N0} prior authorizations  
+- Assigned to {stats.BenefitsCount} benefit plans
+- Last used: {stats.LastUsedDate?.ToString(""MM/dd/yyyy"") ?? ""Never""}
+- Total billed amount: {stats.TotalBilledAmount:C}
 ";
 
         await DialogService.ShowMessageBox(
