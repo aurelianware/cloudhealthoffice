@@ -127,6 +127,9 @@ metadata:
 spec:
   type: ClusterIP
   sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours for Blazor Server sessions
   selector:
     app: portal
   ports:
