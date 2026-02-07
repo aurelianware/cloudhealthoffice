@@ -20,7 +20,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     },
     options => { builder.Configuration.Bind("AzureAd", options); });
 
-builder.Services.AddAuthorization();
+// Authorization policies (scope-based for single app registration)
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAuthenticatedUser", policy =>
+        policy.RequireAuthenticatedUser());
+    
+    // Scope-based policies
+    options.AddPolicy("RequireAttachmentUpload", policy =>
+        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Attachments.Upload", "Attachments.ReadWrite"));
+    
+    options.AddPolicy("RequireAttachmentDownload", policy =>
+        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Attachments.Download", "Attachments.ReadWrite"));
+    
+    // Role-based policies
+    options.AddPolicy("AttachmentManager", policy =>
+        policy.RequireRole("AttachmentManager", "Administrator"));
+});
 
 // Add services to the container.
 builder.Services.AddControllers();

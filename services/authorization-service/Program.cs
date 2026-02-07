@@ -21,12 +21,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     },
     options => { builder.Configuration.Bind("AzureAd", options); });
 
-// Authorization policies
+// Authorization policies (scope-based for single app registration)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAuthenticatedUser", policy =>
         policy.RequireAuthenticatedUser());
     
+    // Scope-based policies (from single app registration)
+    options.AddPolicy("RequireAuthorizationReadWrite", policy =>
+        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Authorization.ReadWrite"));
+    
+    options.AddPolicy("RequireAuthorizationRead", policy =>
+        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Authorization.Read", "Authorization.ReadWrite"));
+    
+    // Role-based policies (app roles from single app registration)
     options.AddPolicy("PriorAuthManager", policy =>
         policy.RequireRole("PriorAuthManager", "Administrator"));
 });
