@@ -15,7 +15,12 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
     var endpoint = config["CosmosDb:Endpoint"] ?? "https://localhost:8081";
     var key = config["CosmosDb:Key"] ?? "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
     
-    return new CosmosClient(endpoint, key);
+    var options = new CosmosClientOptions
+    {
+        Serializer = new CosmosSystemTextJsonSerializer()
+    };
+    
+    return new CosmosClient(endpoint, key, options);
 });
 
 // Repositories and services
