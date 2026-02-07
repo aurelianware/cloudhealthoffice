@@ -1,0 +1,13 @@
+@page "/claims/{ClaimId}"
+
+<PageTitle>Claim Details - Cloud Health Office</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Claim Details</MudText>
+<MudText Typo="Typo.body1" Color="Color.Secondary">
+    Viewing claim: @ClaimId
+</MudText>
+
+@code {
+    [Parameter]
+    public string ClaimId { get; set; } = string.Empty;
+}
