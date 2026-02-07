@@ -174,4 +174,30 @@ public class Attachment
     /// Additional notes or processing messages
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Acknowledgment type sent: '999', '824', 'Both', or null if not yet sent
+    /// </summary>
+    [StringLength(10)]
+    public string? AcknowledgmentType { get; set; }
+
+    /// <summary>
+    /// Whether acknowledgment has been sent to provider
+    /// </summary>
+    public bool AcknowledgmentSent { get; set; } = false;
+
+    /// <summary>
+    /// Date/time acknowledgment was sent
+    /// </summary>
+    public DateTime? AcknowledgmentSentDate { get; set; }
+
+    /// <summary>
+    /// Generated 999 Implementation Acknowledgment (raw EDI)
+    /// </summary>
+    public string? Generated999 { get; set; }
+
+    /// <summary>
+    /// Generated 824 Application Advice (raw EDI)
+    /// </summary>
+    public string? Generated824 { get; set; }
 }

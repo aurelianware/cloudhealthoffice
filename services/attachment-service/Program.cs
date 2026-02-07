@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using System.Text.Json;
 using AttachmentService;
 using AttachmentService.Repositories;
+using AttachmentService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +39,7 @@ builder.Services.AddSingleton(s =>
 });
 
 builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
 var app = builder.Build();
 

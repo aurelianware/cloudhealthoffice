@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
+using AttachmentService.Services;
 using Azure.Storage.Blobs;
 using System.Security.Cryptography;
 
@@ -11,15 +12,18 @@ namespace AttachmentService.Controllers;
 public class AttachmentsController : ControllerBase
 {
     private readonly IAttachmentRepository _repository;
+    private readonly IAcknowledgmentService _acknowledgmentService;
     private readonly BlobServiceClient _blobServiceClient;
     private readonly ILogger<AttachmentsController> _logger;
 
     public AttachmentsController(
         IAttachmentRepository repository,
+        IAcknowledgmentService acknowledgmentService,
         BlobServiceClient blobServiceClient,
         ILogger<AttachmentsController> logger)
     {
         _repository = repository;
+        _acknowledgmentService = acknowledgmentService;
         _blobServiceClient = blobServiceClient;
         _logger = logger;
     }
@@ -245,6 +249,113 @@ public class AttachmentsController : ControllerBase
 
         return File(download.Value.Content, contentType, fileName);
     }
+
+    /// <summary>
+    /// Generate acknowledgment (999 or 824) for an attachment based on trading partner config
+    /// </summary>
+    [HttpPost("{id}/acknowledgment")]
+    public async Task<ActionResult<AcknowledgmentResponse>> GenerateAcknowledgment(
+        string id, 
+        [FromQuery] string tenantId,
+        [FromQuery] bool autoSend = false)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            return BadRequest("tenantId query parameter is required");
+        }
+
+        var attachment = await _repository.GetByIdAsync(id, tenantId);
+        if (attachment == null)
+        {
+            return NotFound();
+        }
+
+        if (attachment.AcknowledgmentSent)
+        {
+            return BadRequest($"Acknowledgment already sent on {attachment.AcknowledgmentSentDate}");
+        }
+
+        try
+        {
+            // Get trading partner configuration
+            var tradingPartner = await _acknowledgmentService.GetTradingPartnerByPayerIdAsync(
+                attachment.PayerId, 
+                tenantId);
+
+            var ackType = _acknowledgmentService.GetAcknowledgmentType(tradingPartner);
+
+            // Generate appropriate acknowledgment(s)
+            if (ackType == "999" || ackType == "Both")
+            {
+                attachment.Generated999 = await _acknowledgmentService.Generate999Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment));
+            }
+
+            if (ackType == "824" || ackType == "Both")
+            {
+                attachment.Generated824 = await _acknowledgmentService.Generate824Async(attachment, tradingPartner ?? CreateDefaultTradingPartner(attachment));
+            }
+
+            attachment.AcknowledgmentType = ackType;
+            
+            if (autoSend || tradingPartner?.AutoSendAcknowledgments == true)
+            {
+                attachment.AcknowledgmentSent = true;
+                attachment.AcknowledgmentSentDate = DateTime.UtcNow;
+            }
+
+            var updated = await _repository.UpdateAsync(attachment);
+
+            _logger.LogInformation(
+                "Generated {AckType} acknowledgment for attachment {AttachmentId}",
+                ackType,
+                id);
+
+            return Ok(new AcknowledgmentResponse
+            {
+                AttachmentId = updated.Id,
+                AcknowledgmentType = ackType,
+                Generated999 = updated.Generated999,
+                Generated824 = updated.Generated824,
+                AcknowledgmentSent = updated.AcknowledgmentSent,
+                AcknowledgmentSentDate = updated.AcknowledgmentSentDate,
+                TradingPartnerFound = tradingPartner != null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId}", id);
+            return StatusCode(500, new { error = "Failed to generate acknowledgment", details = ex.Message });
+        }
+    }
+
+    private TradingPartner CreateDefaultTradingPartner(Attachment attachment)
+    {
+        return new TradingPartner
+        {
+            TenantId = attachment.TenantId,
+            PartnerId = attachment.PayerId,
+            PartnerName = attachment.PayerName,
+            AttachmentAckType = "999", // Default to 999
+            InterchangeSenderId = "SENDER",
+            InterchangeReceiverId = attachment.ProviderId,
+            ApplicationSenderId = "SENDER",
+            ApplicationReceiverId = attachment.ProviderId
+        };
+    }
+}
+
+/// <summary>
+/// Response model for acknowledgment generation
+/// </summary>
+public class AcknowledgmentResponse
+{
+    public string AttachmentId { get; set; } = string.Empty;
+    public string AcknowledgmentType { get; set; } = string.Empty;
+    public string? Generated999 { get; set; }
+    public string? Generated824 { get; set; }
+    public bool AcknowledgmentSent { get; set; }
+    public DateTime? AcknowledgmentSentDate { get; set; }
+    public bool TradingPartnerFound { get; set; }
 }
 
 /// <summary>
