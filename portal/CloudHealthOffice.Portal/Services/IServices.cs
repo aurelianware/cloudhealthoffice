@@ -41,6 +41,11 @@ public interface IAttachmentService
 public interface IProviderService
 {
     Task<List<ProviderSummary>> SearchProvidersAsync(string searchTerm);
+    Task<List<ProviderListItem>> SearchProvidersAsync(string? specialty = null, string? networkStatus = null, string? searchTerm = null);
+    Task<ProviderDetails?> GetProviderByIdAsync(string providerId);
+    Task<string> CreateProviderAsync(CreateProviderRequest request);
+    Task UpdateProviderAsync(string providerId, UpdateProviderRequest request);
+    Task<List<string>> GetSpecialtiesAsync();
 }
 
 public interface IBenefitPlanService
@@ -212,6 +217,114 @@ public class ProviderSummary
     public string Specialty { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
+}
+
+public class ProviderListItem
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public string NPI { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string PracticeType { get; set; } = string.Empty; // Individual, Group
+    public string Specialty { get; set; } = string.Empty;
+    public string PracticeName { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string NetworkStatus { get; set; } = string.Empty; // In-Network, Out-of-Network, Pending
+    public string CredentialingStatus { get; set; } = string.Empty; // Active, Pending, Expired
+    public int NetworkCount { get; set; }
+    public DateTime? LastClaimDate { get; set; }
+}
+
+public class ProviderDetails : ProviderListItem
+{
+    public string TaxonomyCode { get; set; } = string.Empty;
+    public List<string> BoardCertifications { get; set; } = new();
+    public List<PracticeLocation> Locations { get; set; } = new();
+    public List<ProviderCredential> Credentials { get; set; } = new();
+    public List<NetworkAssignment> NetworkAssignments { get; set; } = new();
+    public ProviderContract? Contract { get; set; }
+    public ProviderPerformance? Performance { get; set; }
+}
+
+public class PracticeLocation
+{
+    public string LocationId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string AddressLine1 { get; set; } = string.Empty;
+    public string? AddressLine2 { get; set; }
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string ZipCode { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string? Fax { get; set; }
+    public bool IsPrimary { get; set; }
+}
+
+public class ProviderCredential
+{
+    public string CredentialType { get; set; } = string.Empty; // License, DEA, Board Certification
+    public string Number { get; set; } = string.Empty;
+    public string IssuingState { get; set; } = string.Empty;
+    public DateTime IssueDate { get; set; }
+    public DateTime ExpirationDate { get; set; }
+    public string Status { get; set; } = string.Empty; // Active, Expired, Suspended
+}
+
+public class NetworkAssignment
+{
+    public string NetworkId { get; set; } = string.Empty;
+    public string NetworkName { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class ProviderContract
+{
+    public string ContractId { get; set; } = string.Empty;
+    public string ReimbursementMethod { get; set; } = string.Empty; // Fee Schedule, Capitation, Case Rate
+    public string FeeScheduleTier { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public decimal? CapitationRate { get; set; }
+}
+
+public class ProviderPerformance
+{
+    public int ClaimsLast90Days { get; set; }
+    public decimal TotalBilledLast90Days { get; set; }
+    public decimal AvgClaimAmount { get; set; }
+    public int AuthorizationRequests { get; set; }
+    public decimal AuthorizationApprovalRate { get; set; }
+    public int DenialCount { get; set; }
+    public decimal DenialRate { get; set; }
+    public decimal AvgProcessingTimeDays { get; set; }
+    public decimal? QualityScore { get; set; }
+}
+
+public class CreateProviderRequest
+{
+    public string NPI { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string PracticeType { get; set; } = string.Empty;
+    public string Specialty { get; set; } = string.Empty;
+    public string PracticeName { get; set; } = string.Empty;
+    public string TaxonomyCode { get; set; } = string.Empty;
+    public string AddressLine1 { get; set; } = string.Empty;
+    public string? AddressLine2 { get; set; }
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string ZipCode { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string? Fax { get; set; }
+    public string? Email { get; set; }
+}
+
+public class UpdateProviderRequest : CreateProviderRequest
+{
+    public string CredentialingStatus { get; set; } = string.Empty;
+    public string NetworkStatus { get; set; } = string.Empty;
 }
 
 public class BenefitPlan
