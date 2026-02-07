@@ -20,7 +20,7 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 
 // Repositories and services
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
-builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService>();
+builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 
 // Health checks
 builder.Services.AddHealthChecks();
