@@ -59,6 +59,14 @@ public interface IMetricsService
     Task<DashboardMetrics> GetDashboardMetricsAsync();
 }
 
+public interface ISponsorService
+{
+    Task<List<SponsorSummary>> SearchSponsorsAsync(string searchTerm);
+    Task<SponsorDetails?> GetSponsorByIdAsync(string sponsorId);
+    Task<string> CreateSponsorAsync(CreateSponsorRequest request);
+    Task UpdateSponsorAsync(string sponsorId, UpdateSponsorRequest request);
+}
+
 // DTOs
 public class ClaimSummary
 {
@@ -283,4 +291,67 @@ public class AttachmentInfo
     public string UploadedBy { get; set; } = string.Empty;
     public string AttachmentType { get; set; } = string.Empty;
     public string BlobPath { get; set; } = string.Empty;
+}
+
+public class SponsorSummary
+{
+    public string SponsorId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty; // Employer, Union, Association
+    public string State { get; set; } = string.Empty;
+    public int ActiveBenefitPlans { get; set; }
+    public int TotalMembers { get; set; }
+    public string Status { get; set; } = string.Empty; // Active, Inactive, Pending
+    public DateTime ContractStartDate { get; set; }
+    public DateTime? ContractEndDate { get; set; }
+}
+
+public class SponsorDetails : SponsorSummary
+{
+    public string TaxId { get; set; } = string.Empty;
+    public string AddressLine1 { get; set; } = string.Empty;
+    public string? AddressLine2 { get; set; }
+    public string City { get; set; } = string.Empty;
+    public string ZipCode { get; set; } = string.Empty;
+    public string ContactName { get; set; } = string.Empty;
+    public string ContactPhone { get; set; } = string.Empty;
+    public string ContactEmail { get; set; } = string.Empty;
+    public string BillingFrequency { get; set; } = string.Empty; // Monthly, Quarterly, Annual
+    public string PaymentMethod { get; set; } = string.Empty; // ACH, Check, Wire
+    public string GroupSizeTier { get; set; } = string.Empty; // Small (<50), Large (50+)
+    public List<BenefitPlanSummary> BenefitPlans { get; set; } = new();
+}
+
+public class BenefitPlanSummary
+{
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string ProductType { get; set; } = string.Empty; // HMO, PPO, EPO, HDHP
+    public int EnrolledMembers { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+}
+
+public class CreateSponsorRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string TaxId { get; set; } = string.Empty;
+    public string AddressLine1 { get; set; } = string.Empty;
+    public string? AddressLine2 { get; set; }
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string ZipCode { get; set; } = string.Empty;
+    public string ContactName { get; set; } = string.Empty;
+    public string ContactPhone { get; set; } = string.Empty;
+    public string ContactEmail { get; set; } = string.Empty;
+    public string BillingFrequency { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
+    public DateTime ContractStartDate { get; set; }
+}
+
+public class UpdateSponsorRequest : CreateSponsorRequest
+{
+    public string Status { get; set; } = string.Empty;
+    public DateTime? ContractEndDate { get; set; }
 }
