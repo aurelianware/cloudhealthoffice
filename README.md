@@ -57,10 +57,13 @@ Traditional payer integration takes **6-8 weeks per payer**. Each requires custo
 ### **Core Capabilities**
 
 - ✅ **Multi-tenant architecture** - Isolate multiple payers/health plans on shared infrastructure
-- ✅ **9 microservices** - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Workflow
-- ✅ **Blazor admin portal** - Real-time dashboard, eligibility verification UI, claims tracking with SignalR push notifications
+- ✅ **10 microservices** - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Workflow, Claims Scrubbing
+- ✅ **Blazor admin portal** - Real-time dashboard, eligibility verification UI, claims tracking, **provider network management** with SignalR push notifications
+- ✅ **Provider Network Management** - Search 13 specialties, track credentials/licenses, manage contracts, monitor performance metrics (claims volume, auth approval rates, quality scores)
+- ✅ **837 Claims Ingestion** - Automated SFTP → X12 parsing → Kafka → adjudication pipeline with Argo Workflows, processes professional/institutional/dental claims
 - ✅ **SFTP automation** - Secure file exchange with clearinghouses (Availity, Change Healthcare, Optum)
-- ✅ **Argo Workflows** - Kubernetes-native orchestration for complex claim processing pipelines
+- ✅ **Argo Workflows + Kafka** - Event-driven orchestration for complex claim processing, 837 ingestion, and adjudication workflows
+- ✅ **18 container images** - 10 microservices + portal + site + 6 utility containers (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
 - ✅ **Monitoring stack** - Prometheus metrics, Grafana dashboards, alerting rules
 - ✅ **E2E tested** - [Validated 10-step claims workflow](./tests/E2E-TEST-RESULTS.md) with realistic medical scenarios
 
