@@ -117,8 +117,8 @@ spec:
             periodSeconds: 2
             timeoutSeconds: 3
             failureThreshold: 30
-      imagePullSecrets:
-        - name: ghcr-secret
+      # imagePullSecrets:
+      #   - name: ghcr-secret
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
 
