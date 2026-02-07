@@ -45,8 +45,7 @@ jobs:
           - benefit-plan-service
           - reference-data-service
           - sponsor-service
-          - claims-scrubbing-service
-    
+          - claims-scrubbing-service          - tenant-service    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
