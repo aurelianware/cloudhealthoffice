@@ -1,4 +1,5 @@
 @page "/"
+@implements IAsyncDisposable
 @using CloudHealthOffice.Portal.Services
 @inject IMetricsService MetricsService
 @inject IClaimsService ClaimsService
@@ -170,10 +171,15 @@
     private List<ClaimSummary> _recentClaims = new();
     private System.Threading.Timer? _refreshTimer;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         await LoadDashboardData();
-        
+
         // Auto-refresh every 30 seconds
         _refreshTimer = new System.Threading.Timer(async _ =>
         {
@@ -185,17 +191,34 @@
         }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
+    public ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
     private async Task LoadDashboardData()
     {
         try
         {
-            _metrics = await MetricsService.GetDashboardMetricsAsync();
-            _recentClaims = await ClaimsService.GetRecentClaimsAsync(10);
-            _loading = false;
+            var metricsTask = MetricsService.GetDashboardMetricsAsync();
+            var claimsTask = ClaimsService.GetRecentClaimsAsync(10);
+            var allTask = Task.WhenAll(metricsTask, claimsTask);
+            var completed = await Task.WhenAny(allTask, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            if (completed == allTask)
+            {
+                await allTask;
+                _metrics = metricsTask.Result;
+                _recentClaims = claimsTask.Result;
+            }
         }
-        catch (Exception ex)
+        catch
         {
-            // Log error
+            // Ignore errors and render empty state
+        }
+        finally
+        {
             _loading = false;
         }
     }
