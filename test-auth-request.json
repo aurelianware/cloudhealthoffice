@@ -1,0 +1,25 @@
+{
+  "tenantId": "blueshield-ca",
+  "memberId": "M12345678",
+  "patientFirstName": "John",
+  "patientLastName": "Doe",
+  "patientDateOfBirth": "1980-01-15",
+  "requestingProviderNPI": "1234567890",
+  "payerId": "BLUESHIELD-CA",
+  "serviceTypeCode": "30",
+  "authorizationNumber": "AUTH-2026-001",
+  "requestedServices": [
+    {
+      "procedureCode": "70551",
+      "procedureDescription": "MRI Brain",
+      "quantity": 1
+    }
+  ],
+  "diagnosisCodes": [
+    {
+      "code": "G43.909",
+      "codeQualifier": "BK",
+      "description": "Migraine"
+    }
+  ]
+}

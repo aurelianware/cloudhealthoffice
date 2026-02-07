@@ -1,3 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: attachment-service-config
+  namespace: cho-svcs
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  CosmosDb__ContainerName: "Attachments"
+  CosmosDb__TradingPartnersContainerName: "TradingPartners"
+  BlobStorage__ContainerName: "attachments"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +33,31 @@ spec:
         env:
         - name: ASPNETCORE_URLS
           value: "http://+:8080"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: attachment-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: CosmosDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: attachment-service-config
+              key: CosmosDb__DatabaseName
+        - name: CosmosDb__ContainerName
+          valueFrom:
+            configMapKeyRef:
+              name: attachment-service-config
+              key: CosmosDb__ContainerName
+        - name: CosmosDb__TradingPartnersContainerName
+          valueFrom:
+            configMapKeyRef:
+              name: attachment-service-config
+              key: CosmosDb__TradingPartnersContainerName
+        - name: BlobStorage__ContainerName
+          valueFrom:
+            configMapKeyRef:
+              name: attachment-service-config
+              key: BlobStorage__ContainerName
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:

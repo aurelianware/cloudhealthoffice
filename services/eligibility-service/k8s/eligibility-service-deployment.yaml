@@ -8,18 +8,13 @@ data:
   Services__CoverageService: "http://coverage-service.cho-svcs/api"
   Services__MemberService: "http://member-service.cho-svcs/api"
   Services__BenefitPlanService: "http://benefit-plan-service.cho-svcs/api"
-  CosmosDb__DatabaseName: "EligibilityDB"
-  CosmosDb__InquiriesContainer: "Inquiries"
-  CosmosDb__ResponsesContainer: "Responses"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  CosmosDb__InquiriesContainer: "EligibilityInquiries"
+  CosmosDb__ResponsesContainer: "EligibilityResponses"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: eligibility-service-secret
-  namespace: cho-svcs
-type: Opaque
-stringData:
-  COSMOSDB_CONNECTION_STRING: "AccountEndpoint=https://your-cosmos.documents.azure.com:443/;AccountKey=your-key-here=="
+# Secret is created separately via kubectl with actual Cosmos DB credentials
+# kubectl create secret generic eligibility-service-secret \
+#   --from-literal=CosmosDb__ConnectionString='...'
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -88,7 +83,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: eligibility-service-secret
-              key: COSMOSDB_CONNECTION_STRING
+              key: CosmosDb__ConnectionString
         resources:
           requests:
             memory: "128Mi"
