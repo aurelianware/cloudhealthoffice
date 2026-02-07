@@ -5,18 +5,13 @@ metadata:
   namespace: cho-svcs
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "AuthorizationDB"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
   CosmosDb__ContainerName: "Authorizations"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: authorization-service-secrets
-  namespace: cho-svcs
-type: Opaque
-stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-key-here"
+# Secret is created separately via kubectl with actual Cosmos DB credentials
+# kubectl create secret generic authorization-service-secret \
+#   --from-literal=CosmosDb__Endpoint='...' \
+#   --from-literal=CosmosDb__Key='...'
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,12 +60,12 @@ spec:
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
-              name: authorization-service-secrets
+              name: authorization-service-secret
               key: CosmosDb__Endpoint
         - name: CosmosDb__Key
           valueFrom:
             secretKeyRef:
-              name: authorization-service-secrets
+              name: authorization-service-secret
               key: CosmosDb__Key
         resources:
           requests:
