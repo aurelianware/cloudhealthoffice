@@ -96,10 +96,12 @@ Best for: Multi-cloud strategy, existing Kubernetes infrastructure, greater cont
 **Key Components:**
 - Argo Workflows (replaces Logic Apps)
 - Argo Events (event-driven triggers)
-- Apache Kafka (replaces Service Bus)
+- Apache Kafka (replaces Service Bus) with Strimzi operator
 - S3/MinIO (replaces Azure Storage)
 - HashiCorp Vault (replaces Key Vault, optional)
 - Prometheus/Grafana (replaces Application Insights)
+- **10 microservices** (Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing)
+- **6 utility containers** (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
 
 ### Architecture Comparison
 
