@@ -14,7 +14,7 @@ public class Claim
     /// Multi-tenant partition key (required for Cosmos DB isolation)
     /// </summary>
     [Required]
-    public string TenantId { get; set} = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
     /// Unique claim identifier (Cosmos DB document id)
