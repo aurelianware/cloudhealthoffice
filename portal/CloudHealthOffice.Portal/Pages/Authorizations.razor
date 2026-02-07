@@ -211,7 +211,7 @@
 
     private void ApplyFilters()
     {
-        _filteredAuthorizations = _allAuthorizations.AsEnumerable();
+        _filteredAuthorizations = _allAuthorizations.ToList();
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(_searchTerm))
@@ -234,10 +234,8 @@
         // Apply service type filter
         if (_serviceTypeFilter != "All")
         {
-            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.ServiceType == _serviceTypeFilter);
+            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.ServiceType == _serviceTypeFilter).ToList();
         }
-
-        _filteredAuthorizations = _filteredAuthorizations.ToList();
     }
 
     private async Task OnSearchKeyUp(KeyboardEventArgs e)
