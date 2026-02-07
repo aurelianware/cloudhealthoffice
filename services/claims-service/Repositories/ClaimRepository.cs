@@ -60,7 +60,14 @@ public class ClaimRepository : IClaimRepository
         {
             var response = await _container.ReadItemAsync<Claim>(
                 id,
-                new PartitionKey(tenantId));
+                new PartitionKey(id));
+            
+            // Verify tenant isolation
+            if (response.Resource.TenantId != tenantId)
+            {
+                return null;
+            }
+            
             return response.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -268,7 +275,7 @@ public class ClaimRepository : IClaimRepository
         var tenantId = GetTenantId();
         claim.TenantId = tenantId;
 
-        var response = await _container.CreateItemAsync(claim, new PartitionKey(tenantId));
+        var response = await _container.CreateItemAsync(claim, new PartitionKey(claim.Id));
         return response.Resource;
     }
 
@@ -280,13 +287,13 @@ public class ClaimRepository : IClaimRepository
         var response = await _container.ReplaceItemAsync(
             claim,
             claim.Id,
-            new PartitionKey(tenantId));
+            new PartitionKey(claim.Id));
         return response.Resource;
     }
 
     public async Task DeleteAsync(string id)
     {
         var tenantId = GetTenantId();
-        await _container.DeleteItemAsync<Claim>(id, new PartitionKey(tenantId));
+        await _container.DeleteItemAsync<Claim>(id, new PartitionKey(id));
     }
 }
