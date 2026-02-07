@@ -43,8 +43,8 @@ Traditional payer integration takes **6-8 weeks per payer**. Each requires custo
 </td>
 <td width="33%" align="center">
   <h3>🔄 Real-Time EDI</h3>
-  <p><strong>6 transaction types</strong></p>
-  <p>270/271 Eligibility • 837 Claims • 835 Remittance • 834 Enrollment • 277 Status • 278 Prior Auth</p>
+  <p><strong>8 transaction types</strong></p>
+  <p>270/271 Eligibility • 837 Claims • 835 Remittance • 834 Enrollment • 275 Attachments • 276/277 Status • 278 Prior Auth</p>
 </td>
 <td width="33%" align="center">
   <h3>🔒 HIPAA Native</h3>
@@ -57,15 +57,19 @@ Traditional payer integration takes **6-8 weeks per payer**. Each requires custo
 ### **Core Capabilities**
 
 - ✅ **Multi-tenant architecture** - Isolate multiple payers/health plans on shared infrastructure
-- ✅ **10 microservices** - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Workflow, Claims Scrubbing
-- ✅ **Cosmos DB integration** - **834 enrollment** and **837 claims** services deployed with System.Text.Json serialization, 400 RU/s shared throughput
+- ✅ **12 microservices** - Member, Coverage, Claims, Eligibility, Authorization, **Attachment**, Provider, Benefit Plan, Reference Data, Workflow, Claims Scrubbing, Tenant
+- ✅ **Cosmos DB integration** - **834 enrollment**, **837 claims**, **278 authorizations**, **275 attachments** services deployed with System.Text.Json serialization, 400 RU/s shared throughput
+- ✅ **Prior Authorization & RFAI** - Complete 278 workflow with Request for Additional Information (277 RFAI → 275 solicited attachments), tracking via RFAIReference
+- ✅ **Clinical Attachments** - 275 transaction support for Claims, Authorizations, and Appeals with Azure Blob Storage for large files (PDF, images, medical records)
+- ✅ **999/824 Acknowledgments** - Trading partner-specific acknowledgment generation (syntax validation + business responses) with auto-send configuration
+- ✅ **Trading Partner Configuration** - Per-payer rules, EDI identifiers, acknowledgment preferences, timely filing limits stored in Cosmos DB
 - ✅ **Blazor admin portal** - Real-time dashboard, eligibility verification UI, claims tracking, **provider network management** with SignalR push notifications
 - ✅ **Provider Network Management** - Search 13 specialties, track credentials/licenses, manage contracts, monitor performance metrics (claims volume, auth approval rates, quality scores)
 - ✅ **834 Enrollment Import** - Deployed and tested: subscribers, dependents, coverage records (health/dental/vision) with duplicate detection
 - ✅ **837 Claims Service** - Deployed and tested: professional/institutional/dental claims with diagnosis codes, service lines, and multi-tenant isolation
 - ✅ **SFTP automation** - Secure file exchange with clearinghouses (Availity, Change Healthcare, Optum)
 - ✅ **Argo Workflows + Kafka** - Event-driven orchestration for complex claim processing, 837 ingestion, and adjudication workflows
-- ✅ **18 container images** - 10 microservices + portal + site + 6 utility containers (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
+- ✅ **19 container images** - 12 microservices + portal + site + 6 utility containers (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
 - ✅ **Monitoring stack** - Prometheus metrics, Grafana dashboards, alerting rules
 - ✅ **E2E tested** - [Validated 10-step claims workflow](./tests/E2E-TEST-RESULTS.md) with realistic medical scenarios
 
