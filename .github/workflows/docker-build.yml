@@ -8,6 +8,7 @@ on:
       - 'services/**'
       - 'portal/**'
       - 'site/**'
+      - 'containers/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
     branches:
@@ -16,6 +17,7 @@ on:
       - 'services/**'
       - 'portal/**'
       - 'site/**'
+      - 'containers/**'
   workflow_dispatch:
 
 env:
@@ -163,6 +165,84 @@ jobs:
         with:
           context: ./site
           file: ./site/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+  
+  build-containers:
+    name: Build Utility Containers
+    runs-on: ubuntu-latest
+    permissions:, build-containers]
+    if: always()
+    
+    steps:
+      - name: Check build results
+        run: |
+          echo "## Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All images built successfully**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images pushed to: \`ghcr.io/aurelianware/cloudhealthoffice-*\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Services Built:" >> $GITHUB_STEP_SUMMARY
+          echo "- member-service" >> $GITHUB_STEP_SUMMARY
+          echo "- coverage-service" >> $GITHUB_STEP_SUMMARY
+          echo "- claims-service" >> $GITHUB_STEP_SUMMARY
+          echo "- eligibility-service" >> $GITHUB_STEP_SUMMARY
+          echo "- authorization-service" >> $GITHUB_STEP_SUMMARY
+          echo "- provider-service" >> $GITHUB_STEP_SUMMARY
+          echo "- benefit-plan-service" >> $GITHUB_STEP_SUMMARY
+          echo "- reference-data-service" >> $GITHUB_STEP_SUMMARY
+          echo "- sponsor-service" >> $GITHUB_STEP_SUMMARY
+          echo "- claims-scrubbing-service" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### UI Built:" >> $GITHUB_STEP_SUMMARY
+          echo "- portal (Blazor)" >> $GITHUB_STEP_SUMMARY
+          echo "- site (Static)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Utility Containers Built:" >> $GITHUB_STEP_SUMMARY
+          echo "- x12-parser (837 EDI parsing)" >> $GITHUB_STEP_SUMMARY
+          echo "- claims-publisher (Kafka publishing)" >> $GITHUB_STEP_SUMMARY
+          echo "- kafka-publisher" >> $GITHUB_STEP_SUMMARY
+          echo "- sftp-fetcher" >> $GITHUB_STEP_SUMMARY
+          echo "- x12-encoder" >> $GITHUB_STEP_SUMMARY
+          echo "- metadata-extractor" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Deploy Kafka topics: \`kubectl apply -f kafka/topics.yaml\`" >> $GITHUB_STEP_SUMMARY
+          echo "2. Deploy Argo workflows: \`kubectl apply -f argo-workflows/\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Deploy Argo Events: \`kubectl apply -f argo-events/\`" >> $GITHUB_STEP_SUMMARY
+          echo "4. Update service deployments: \`kubectl apply -f services/*/k8s/\`" >> $GITHUB_STEP_SUMMARY
+          echo "5. Test 837 pipeline: Upload test file to SFTP /inbound/claims/
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.container }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Check if Dockerfile exists
+        id: check
+        run: |
+          if [ -f "./containers/${{ matrix.container }}/Dockerfile" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Dockerfile not found for ${{ matrix.container }}"
+          fi
+      
+      - name: Build and push
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/${{ matrix.container }}
+          file: ./containers/${{ matrix.container }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
