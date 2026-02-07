@@ -1577,3 +1577,404 @@ public class SponsorService : ISponsorService
         public string SponsorId { get; set; } = string.Empty;
     }
 }
+
+public class ReferenceDataService : IReferenceDataService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<ReferenceDataService> _logger;
+
+    public ReferenceDataService(HttpClient httpClient, IConfiguration configuration, ILogger<ReferenceDataService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<MedicalCode>> SearchCodesAsync(string? codeSystem = null, string? searchTerm = null)
+    {
+        var baseUrl = _configuration["Services:ReferenceDataService"];
+        try
+        {
+            var query = $"{baseUrl}/codes?";
+            if (!string.IsNullOrEmpty(codeSystem))
+                query += $"codeSystem={codeSystem}&";
+            if (!string.IsNullOrEmpty(searchTerm))
+                query += $"search={searchTerm}";
+
+            var codes = await _httpClient.GetFromJsonAsync<List<MedicalCode>>(query);
+            return codes ?? new List<MedicalCode>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching codes, returning mock data");
+            return GetMockCodes(codeSystem, searchTerm);
+        }
+    }
+
+    public async Task<MedicalCodeDetails?> GetCodeDetailsAsync(string codeSystem, string code)
+    {
+        var baseUrl = _configuration["Services:ReferenceDataService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<MedicalCodeDetails>($"{baseUrl}/codes/{codeSystem}/{code}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching code details for {CodeSystem}/{Code}, returning mock data", codeSystem, code);
+            return GetMockCodeDetails(codeSystem, code);
+        }
+    }
+
+    public async Task<List<string>> GetCodeSystemsAsync()
+    {
+        var baseUrl = _configuration["Services:ReferenceDataService"];
+        try
+        {
+            var systems = await _httpClient.GetFromJsonAsync<List<string>>($"{baseUrl}/code-systems");
+            return systems ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching code systems, returning mock data");
+            return new List<string>
+            {
+                "CPT",
+                "ICD-10-CM",
+                "HCPCS",
+                "Revenue Code",
+                "Place of Service",
+                "DRG",
+                "Modifier"
+            };
+        }
+    }
+
+    public async Task<CodeUsageStats> GetCodeUsageStatsAsync(string codeSystem, string code)
+    {
+        var baseUrl = _configuration["Services:ReferenceDataService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<CodeUsageStats>($"{baseUrl}/codes/{codeSystem}/{code}/usage");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching code usage stats, returning mock data");
+            return GetMockCodeUsageStats(codeSystem, code);
+        }
+    }
+
+    private List<MedicalCode> GetMockCodes(string? codeSystem, string? searchTerm)
+    {
+        var allCodes = new List<MedicalCode>
+        {
+            // CPT Codes
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "99213",
+                ShortDescription = "Office outpatient visit 15 minutes",
+                Category = "Evaluation & Management",
+                EffectiveDate = new DateTime(2020, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "99214",
+                ShortDescription = "Office outpatient visit 25 minutes",
+                Category = "Evaluation & Management",
+                EffectiveDate = new DateTime(2020, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "99215",
+                ShortDescription = "Office outpatient visit 40 minutes",
+                Category = "Evaluation & Management",
+                EffectiveDate = new DateTime(2020, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "70450",
+                ShortDescription = "CT head/brain without contrast",
+                Category = "Radiology",
+                EffectiveDate = new DateTime(2018, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "73721",
+                ShortDescription = "MRI any joint of lower extremity",
+                Category = "Radiology",
+                EffectiveDate = new DateTime(2019, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "27447",
+                ShortDescription = "Total knee arthroplasty",
+                Category = "Surgery",
+                EffectiveDate = new DateTime(2015, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "CPT",
+                Code = "97110",
+                ShortDescription = "Therapeutic exercises",
+                Category = "Physical Medicine",
+                EffectiveDate = new DateTime(2018, 1, 1),
+                Status = "Active"
+            },
+
+            // ICD-10-CM Codes
+            new MedicalCode
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "E11.9",
+                ShortDescription = "Type 2 diabetes mellitus without complications",
+                Category = "Endocrine",
+                EffectiveDate = new DateTime(2015, 10, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "I10",
+                ShortDescription = "Essential (primary) hypertension",
+                Category = "Circulatory",
+                EffectiveDate = new DateTime(2015, 10, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "M17.11",
+                ShortDescription = "Unilateral primary osteoarthritis, right knee",
+                Category = "Musculoskeletal",
+                EffectiveDate = new DateTime(2016, 10, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "J44.1",
+                ShortDescription = "COPD with acute exacerbation",
+                Category = "Respiratory",
+                EffectiveDate = new DateTime(2017, 10, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "Z00.00",
+                ShortDescription = "Encounter for general adult medical examination without abnormal findings",
+                Category = "Factors Influencing Health",
+                EffectiveDate = new DateTime(2015, 10, 1),
+                Status = "Active"
+            },
+
+            // HCPCS Codes
+            new MedicalCode
+            {
+                CodeSystem = "HCPCS",
+                Code = "J0135",
+                ShortDescription = "Adalimumab injection 20 mg",
+                Category = "Drugs",
+                EffectiveDate = new DateTime(2020, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "HCPCS",
+                Code = "E0601",
+                ShortDescription = "Continuous positive airway pressure device",
+                Category = "Durable Medical Equipment",
+                EffectiveDate = new DateTime(2018, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "HCPCS",
+                Code = "L3670",
+                ShortDescription = "Shoulder orthosis",
+                Category = "Orthotics",
+                EffectiveDate = new DateTime(2019, 1, 1),
+                Status = "Active"
+            },
+
+            // Revenue Codes
+            new MedicalCode
+            {
+                CodeSystem = "Revenue Code",
+                Code = "0450",
+                ShortDescription = "Emergency room - general classification",
+                Category = "Hospital Services",
+                EffectiveDate = new DateTime(2010, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "Revenue Code",
+                Code = "0300",
+                ShortDescription = "Laboratory - general classification",
+                Category = "Ancillary Services",
+                EffectiveDate = new DateTime(2010, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "Revenue Code",
+                Code = "0250",
+                ShortDescription = "Pharmacy - general classification",
+                Category = "Pharmacy",
+                EffectiveDate = new DateTime(2010, 1, 1),
+                Status = "Active"
+            },
+
+            // Place of Service
+            new MedicalCode
+            {
+                CodeSystem = "Place of Service",
+                Code = "11",
+                ShortDescription = "Office",
+                Category = "Non-Facility",
+                EffectiveDate = new DateTime(2000, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "Place of Service",
+                Code = "22",
+                ShortDescription = "On Campus-Outpatient Hospital",
+                Category = "Facility",
+                EffectiveDate = new DateTime(2000, 1, 1),
+                Status = "Active"
+            },
+            new MedicalCode
+            {
+                CodeSystem = "Place of Service",
+                Code = "23",
+                ShortDescription = "Emergency Room - Hospital",
+                Category = "Facility",
+                EffectiveDate = new DateTime(2000, 1, 1),
+                Status = "Active"
+            }
+        };
+
+        var filteredCodes = allCodes;
+
+        if (!string.IsNullOrEmpty(codeSystem) && codeSystem != "All")
+        {
+            filteredCodes = filteredCodes.Where(c => c.CodeSystem == codeSystem).ToList();
+        }
+
+        if (!string.IsNullOrEmpty(searchTerm))
+        {
+            filteredCodes = filteredCodes.Where(c =>
+                c.Code.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.ShortDescription.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.Category.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
+
+        return filteredCodes;
+    }
+
+    private MedicalCodeDetails GetMockCodeDetails(string codeSystem, string code)
+    {
+        var codeDetailsDict = new Dictionary<string, MedicalCodeDetails>
+        {
+            ["CPT-99213"] = new MedicalCodeDetails
+            {
+                CodeSystem = "CPT",
+                Code = "99213",
+                ShortDescription = "Office outpatient visit 15 minutes",
+                LongDescription = "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making. When using time for code selection, 20-29 minutes of total time is spent on the date of the encounter.",
+                Category = "Evaluation & Management",
+                EffectiveDate = new DateTime(2021, 1, 1),
+                Status = "Active",
+                Keywords = new List<string> { "office visit", "E&M", "established patient", "level 3" },
+                RelatedCodes = new List<RelatedCode>
+                {
+                    new RelatedCode { CodeSystem = "CPT", Code = "99212", Description = "Office visit level 2", RelationType = "Alternative" },
+                    new RelatedCode { CodeSystem = "CPT", Code = "99214", Description = "Office visit level 4", RelationType = "Alternative" }
+                },
+                RequiresPriorAuth = false,
+                ClinicalNotes = "Most commonly used code for routine established patient visits"
+            },
+            ["CPT-70450"] = new MedicalCodeDetails
+            {
+                CodeSystem = "CPT",
+                Code = "70450",
+                ShortDescription = "CT head/brain without contrast",
+                LongDescription = "Computed tomography, head or brain; without contrast material",
+                Category = "Radiology",
+                EffectiveDate = new DateTime(2018, 1, 1),
+                Status = "Active",
+                Keywords = new List<string> { "CT scan", "head", "brain", "imaging", "radiology" },
+                RelatedCodes = new List<RelatedCode>
+                {
+                    new RelatedCode { CodeSystem = "CPT", Code = "70460", Description = "CT head with contrast", RelationType = "Alternative" },
+                    new RelatedCode { CodeSystem = "ICD-10-CM", Code = "R51.9", Description = "Headache unspecified", RelationType = "CrossReference" }
+                },
+                RequiresPriorAuth = true,
+                ClinicalNotes = "Prior authorization typically required for non-emergency scans"
+            },
+            ["ICD-10-CM-E11.9"] = new MedicalCodeDetails
+            {
+                CodeSystem = "ICD-10-CM",
+                Code = "E11.9",
+                ShortDescription = "Type 2 diabetes mellitus without complications",
+                LongDescription = "Type 2 diabetes mellitus without complications. This code is used when a patient has diabetes mellitus type 2 and there are no documented complications or manifestations.",
+                Category = "Endocrine",
+                EffectiveDate = new DateTime(2015, 10, 1),
+                Status = "Active",
+                Keywords = new List<string> { "diabetes", "type 2", "DM", "uncomplicated" },
+                ParentCode = "E11",
+                ChildCodes = new List<string>(),
+                RelatedCodes = new List<RelatedCode>
+                {
+                    new RelatedCode { CodeSystem = "ICD-10-CM", Code = "E11.65", Description = "Type 2 DM with hyperglycemia", RelationType = "Alternative" },
+                    new RelatedCode { CodeSystem = "CPT", Code = "99213", Description = "Office visit for DM management", RelationType = "CrossReference" }
+                },
+                RequiresPriorAuth = false,
+                ClinicalNotes = "Use more specific code if complications present"
+            }
+        };
+
+        var key = $"{codeSystem}-{code}";
+        return codeDetailsDict.TryGetValue(key, out var details)
+            ? details
+            : new MedicalCodeDetails
+            {
+                CodeSystem = codeSystem,
+                Code = code,
+                ShortDescription = "Code description not available",
+                LongDescription = "Detailed description not available in mock data",
+                Category = "General",
+                EffectiveDate = DateTime.Now.AddYears(-1),
+                Status = "Active"
+            };
+    }
+
+    private CodeUsageStats GetMockCodeUsageStats(string codeSystem, string code)
+    {
+        return new CodeUsageStats
+        {
+            CodeSystem = codeSystem,
+            Code = code,
+            ClaimsCount = Random.Shared.Next(50, 5000),
+            AuthorizationsCount = Random.Shared.Next(10, 500),
+            BenefitsCount = Random.Shared.Next(1, 20),
+            LastUsedDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 90)),
+            TotalBilledAmount = Random.Shared.Next(10000, 1000000)
+        };
+    }
+}
