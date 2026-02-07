@@ -26,11 +26,14 @@ public class EnrollmentController : ControllerBase
         {
             return BadRequest("X-Tenant-ID header is required");
         }
+
+        // Sanitize tenantId to prevent log forging by removing line breaks
+        var safeTenantId = tenantId.Replace("\r", string.Empty).Replace("\n", string.Empty);
         
         _logger.LogInformation("Importing 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
-            enrollment.FileName, tenantId, enrollment.TransactionCount);
+            enrollment.FileName, safeTenantId, enrollment.TransactionCount);
         
-        var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
+        var result = await _importService.ImportEnrollmentAsync(enrollment, safeTenantId);
         
         return Ok(result);
     }
