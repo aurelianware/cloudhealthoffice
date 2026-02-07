@@ -203,7 +203,7 @@
                 c.ClaimId.ToLowerInvariant().Contains(search) ||
                 c.MemberName.ToLowerInvariant().Contains(search) ||
                 c.ProviderName.ToLowerInvariant().Contains(search)
-            );
+            ).ToList();
         }
 
         // Apply status filter

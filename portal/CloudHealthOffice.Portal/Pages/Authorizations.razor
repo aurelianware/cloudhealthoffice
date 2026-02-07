@@ -222,13 +222,13 @@
                 a.MemberName.ToLowerInvariant().Contains(search) ||
                 a.ProviderName.ToLowerInvariant().Contains(search) ||
                 a.ServiceType.ToLowerInvariant().Contains(search)
-            );
+            ).ToList();
         }
 
         // Apply status filter
         if (_statusFilter != "All")
         {
-            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.Status == _statusFilter);
+            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.Status == _statusFilter).ToList();
         }
 
         // Apply service type filter
