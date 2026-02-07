@@ -30,6 +30,14 @@ public interface IAuthorizationService
     Task<string> SubmitAuthorizationAsync(SubmitAuthorizationRequest request);
 }
 
+public interface IAttachmentService
+{
+    Task<List<AttachmentInfo>> GetAttachmentsAsync(string authorizationId);
+    Task<string> UploadAttachmentAsync(string authorizationId, Stream fileStream, string fileName, string contentType);
+    Task<Stream> DownloadAttachmentAsync(string authorizationId, string attachmentId);
+    Task DeleteAttachmentAsync(string authorizationId, string attachmentId);
+}
+
 public interface IProviderService
 {
     Task<List<ProviderSummary>> SearchProvidersAsync(string searchTerm);
@@ -159,6 +167,7 @@ public class AuthorizationDetails : AuthorizationSummary
     public DateTime? ServiceEndDate { get; set; }
     public string ReviewerNotes { get; set; } = string.Empty;
     public string DenialReason { get; set; } = string.Empty;
+    public List<AttachmentInfo> Attachments { get; set; } = new();
 }
 
 public class SubmitAuthorizationRequest
@@ -263,4 +272,15 @@ public class Benefit
     public decimal? MonetaryAmount { get; set; }
     public decimal? Percentage { get; set; }
     public bool AuthorizationRequired { get; set; }
+}
+public class AttachmentInfo
+{
+    public string AttachmentId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public long FileSizeBytes { get; set; }
+    public DateTime UploadedDate { get; set; }
+    public string UploadedBy { get; set; } = string.Empty;
+    public string AttachmentType { get; set; } = string.Empty;
+    public string BlobPath { get; set; } = string.Empty;
 }

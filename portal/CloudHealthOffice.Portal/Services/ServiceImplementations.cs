@@ -521,6 +521,27 @@ public class AuthorizationService : IAuthorizationService
         var hasDecision = status != "Pending";
         var processingTime = hasDecision ? random.Next(45000, 180000) : 0;
 
+        // Generate mock attachments
+        var attachments = new List<AttachmentInfo>();
+        var attachmentCount = random.Next(1, 4);
+        var attachmentTypes = new[] { "Medical Records", "Lab Results", "Imaging Study", "Clinical Notes" };
+        
+        for (int i = 0; i < attachmentCount; i++)
+        {
+            var attType = attachmentTypes[random.Next(attachmentTypes.Length)];
+            attachments.Add(new AttachmentInfo
+            {
+                AttachmentId = $"ATT-{authorizationId}-{i:D2}",
+                FileName = $"{attType.Replace(" ", "_")}_{i + 1}.pdf",
+                ContentType = "application/pdf",
+                FileSizeBytes = random.Next(100000, 3000000),
+                UploadedDate = requestDate.AddHours(random.Next(1, 24)),
+                UploadedBy = "Provider Portal",
+                AttachmentType = attType,
+                BlobPath = $"hipaa-attachments/authorizations/{authorizationId}/doc{i + 1}.pdf"
+            });
+        }
+
         return new AuthorizationDetails
         {
             AuthorizationId = authorizationId,
@@ -548,7 +569,8 @@ public class AuthorizationService : IAuthorizationService
                     : (status == "Review Required" ? "Flagged for clinical review. Complex case requires MD evaluation." : string.Empty)),
             DenialReason = status == "Denied" 
                 ? "Insufficient clinical documentation to support medical necessity. Please provide recent diagnostic imaging and treatment history." 
-                : string.Empty
+                : string.Empty,
+            Attachments = attachments
         };
     }
 
@@ -649,3 +671,123 @@ public class MetricsService : IMetricsService
         };
     }
 }
+
+public class AttachmentService : IAttachmentService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<AttachmentService> _logger;
+
+    public AttachmentService(HttpClient httpClient, IConfiguration configuration, ILogger<AttachmentService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<AttachmentInfo>> GetAttachmentsAsync(string authorizationId)
+    {
+        var baseUrl = _configuration["Services:AttachmentService"];
+        try
+        {
+            var attachments = await _httpClient.GetFromJsonAsync<List<AttachmentInfo>>($"{baseUrl}/attachments/authorization/{authorizationId}");
+            return attachments ?? new List<AttachmentInfo>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching attachments for {AuthorizationId}, returning mock data", authorizationId);
+            return GetMockAttachments(authorizationId);
+        }
+    }
+
+    public async Task<string> UploadAttachmentAsync(string authorizationId, Stream fileStream, string fileName, string contentType)
+    {
+        var baseUrl = _configuration["Services:AttachmentService"];
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(fileStream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            content.Add(streamContent, "file", fileName);
+            content.Add(new StringContent(authorizationId), "authorizationId");
+
+            var response = await _httpClient.PostAsync($"{baseUrl}/attachments/upload", content);
+            response.EnsureSuccessStatusCode();
+            
+            var result = await response.Content.ReadFromJsonAsync<UploadAttachmentResponse>();
+            return result?.AttachmentId ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error uploading attachment for {AuthorizationId}, returning mock ID", authorizationId);
+            return $"ATT-{Guid.NewGuid():N}".Substring(0, 20).ToUpper();
+        }
+    }
+
+    public async Task<Stream> DownloadAttachmentAsync(string authorizationId, string attachmentId)
+    {
+        var baseUrl = _configuration["Services:AttachmentService"];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStreamAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading attachment {AttachmentId}", attachmentId);
+            throw;
+        }
+    }
+
+    public async Task DeleteAttachmentAsync(string authorizationId, string attachmentId)
+    {
+        var baseUrl = _configuration["Services:AttachmentService"];
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting attachment {AttachmentId}", attachmentId);
+            throw;
+        }
+    }
+
+    private List<AttachmentInfo> GetMockAttachments(string authorizationId)
+    {
+        var random = new Random(authorizationId.GetHashCode());
+        var attachmentTypes = new[] { "Medical Records", "Lab Results", "Imaging Study", "Clinical Notes", "Prescription" };
+        var contentTypes = new[] { "application/pdf", "image/jpeg", "image/png", "application/pdf", "application/pdf" };
+        
+        var count = random.Next(0, 4);
+        var attachments = new List<AttachmentInfo>();
+
+        for (int i = 0; i < count; i++)
+        {
+            var typeIndex = random.Next(attachmentTypes.Length);
+            var uploadDate = DateTime.Now.AddDays(-random.Next(1, 30));
+            
+            attachments.Add(new AttachmentInfo
+            {
+                AttachmentId = $"ATT-{Guid.NewGuid():N}".Substring(0, 20).ToUpper(),
+                FileName = $"{attachmentTypes[typeIndex].Replace(" ", "_")}_{i + 1}.pdf",
+                ContentType = contentTypes[typeIndex],
+                FileSizeBytes = random.Next(50000, 5000000),
+                UploadedDate = uploadDate,
+                UploadedBy = "Provider Portal",
+                AttachmentType = attachmentTypes[typeIndex],
+                BlobPath = $"hipaa-attachments/authorizations/{authorizationId}/doc{i + 1}.pdf"
+            });
+        }
+
+        return attachments;
+    }
+
+    private class UploadAttachmentResponse
+    {
+        public string AttachmentId { get; set; } = string.Empty;
+    }
+}
+
