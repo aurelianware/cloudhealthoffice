@@ -61,7 +61,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: cosmos-db-secret
-              key: primary-key
+              key: key
         resources:
           requests:
             cpu: 200m
