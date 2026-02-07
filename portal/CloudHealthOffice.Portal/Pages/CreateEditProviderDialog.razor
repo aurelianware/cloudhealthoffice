@@ -253,8 +253,6 @@
         _providerId = providerId;
         _isEditMode = !string.IsNullOrEmpty(providerId);
 
-        MudDialog?.Show();
-
         if (_isEditMode)
         {
             var provider = await ProviderService.GetProviderByIdAsync(providerId!);

@@ -342,7 +342,6 @@
     public async Task OpenAsync(string providerId)
     {
         _loading = true;
-        MudDialog?.Show();
         
         _provider = await ProviderService.GetProviderByIdAsync(providerId);
         _loading = false;
