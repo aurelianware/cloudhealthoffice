@@ -26,6 +26,8 @@ public interface ICoverageService
 public interface IAuthorizationService
 {
     Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null);
+    Task<AuthorizationDetails?> GetAuthorizationByIdAsync(string authorizationId);
+    Task<string> SubmitAuthorizationAsync(SubmitAuthorizationRequest request);
 }
 
 public interface IProviderService
@@ -139,6 +141,37 @@ public class AuthorizationSummary
     public string Status { get; set; } = string.Empty;
     public DateTime RequestDate { get; set; }
     public DateTime? DecisionDate { get; set; }
+    public string ProviderName { get; set; } = string.Empty;
+    public int ProcessingTimeMs { get; set; }
+}
+
+public class AuthorizationDetails : AuthorizationSummary
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public string DiagnosisCode { get; set; } = string.Empty;
+    public string DiagnosisDescription { get; set; } = string.Empty;
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string ProcedureDescription { get; set; } = string.Empty;
+    public int UnitsRequested { get; set; }
+    public int? UnitsApproved { get; set; }
+    public DateTime ServiceStartDate { get; set; }
+    public DateTime? ServiceEndDate { get; set; }
+    public string ReviewerNotes { get; set; } = string.Empty;
+    public string DenialReason { get; set; } = string.Empty;
+}
+
+public class SubmitAuthorizationRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public string ServiceType { get; set; } = string.Empty;
+    public string DiagnosisCode { get; set; } = string.Empty;
+    public string ProcedureCode { get; set; } = string.Empty;
+    public int UnitsRequested { get; set; }
+    public DateTime ServiceStartDate { get; set; }
+    public DateTime? ServiceEndDate { get; set; }
+    public string ClinicalNotes { get; set; } = string.Empty;
 }
 
 public class ProviderSummary
