@@ -7,7 +7,9 @@ namespace EligibilityService.Models;
 /// </summary>
 public class EligibilityInquiry
 {
+    [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
+    
     public string TenantId { get; set; } = string.Empty;
     
     // Trading Partner
@@ -56,7 +58,9 @@ public class EligibilityInquiry
 /// </summary>
 public class EligibilityResponse
 {
+    [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
+    
     public string InquiryId { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
     
