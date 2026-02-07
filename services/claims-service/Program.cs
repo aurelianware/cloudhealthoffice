@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using ClaimsService;
 using ClaimsService.Middleware;
 using ClaimsService.Repositories;
 
@@ -31,7 +32,11 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
         throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
     }
 
-    return new CosmosClient(endpoint, key);
+    var options = new CosmosClientOptions
+    {
+        Serializer = new CosmosSystemTextJsonSerializer()
+    };
+    return new CosmosClient(endpoint, key, options);
 });
 
 // Repositories

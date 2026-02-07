@@ -5,18 +5,8 @@ metadata:
   namespace: cho-svcs
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "ClaimsDB"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
   CosmosDb__ContainerName: "Claims"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: claims-service-secrets
-  namespace: cho-svcs
-type: Opaque
-stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-key-here"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,13 +55,13 @@ spec:
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
-              name: claims-service-secrets
-              key: CosmosDb__Endpoint
+              name: cosmos-db-secret
+              key: endpoint
         - name: CosmosDb__Key
           valueFrom:
             secretKeyRef:
-              name: claims-service-secrets
-              key: CosmosDb__Key
+              name: cosmos-db-secret
+              key: primary-key
         resources:
           requests:
             cpu: 200m
