@@ -179,6 +179,7 @@
         }
 
         await LoadDashboardData();
+        StateHasChanged();
 
         // Auto-refresh every 30 seconds
         _refreshTimer = new System.Threading.Timer(async _ =>
