@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { X12Parser } = require('@hahntech/x12-parser');
+const X12Parser = require('x12-parser');
 
 const INPUT_DIR = process.env.INPUT_DIR || '/input';
 const OUTPUT_DIR = process.env.OUTPUT_DIR || '/output';

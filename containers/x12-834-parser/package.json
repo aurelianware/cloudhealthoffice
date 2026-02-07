@@ -17,6 +17,6 @@
   "author": "Cloud Health Office",
   "license": "Apache-2.0",
   "dependencies": {
-    "@hahntech/x12-parser": "^1.0.0"
+    "x12-parser": "^4.0.0"
   }
 }
