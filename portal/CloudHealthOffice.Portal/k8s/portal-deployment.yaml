@@ -110,6 +110,16 @@ spec:
             secretKeyRef:
               name: azure-ad-config
               key: ClientSecret
+        - name: STRIPE_PUBLISHABLE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: publishable-key
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: secret-key
         resources:
           requests:
             memory: "256Mi"
