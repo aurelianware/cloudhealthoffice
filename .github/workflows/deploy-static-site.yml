@@ -1,36 +1,37 @@
-name: Deploy Static Site with Custom Domain
+name: Deploy Static Site with Custom Domain (DISABLED - Using AKS)
 
 # =============================================================================
-# Static Site Deployment Workflow
+# Static Site Deployment Workflow - DISABLED
 # =============================================================================
 # Purpose: Deploy Cloud Health Office static website to Azure Static Web Apps
+# Status: DISABLED - Now deploying portal to AKS instead of Static Web Apps
 #
-# Secrets Used:
+# Migration Notes:
+#   - Portal is now deployed as Docker container to AKS (cho-svcs namespace)
+#   - See .github/workflows/docker-build.yml for active portal deployment
+#   - Static web apps deployment is no longer used as of Feb 2026
+#
+# Original Secrets Used:
 #   - AZURE_CLIENT_ID: Service Principal for OIDC deployment authentication
 #   - AZURE_TENANT_ID: Azure AD Tenant ID
 #   - AZURE_SUBSCRIPTION_ID: Azure Subscription ID
 #   - GITHUB_TOKEN: Automatically provided by GitHub Actions
 #
-# User Authentication Secrets (NOT in GitHub Secrets):
-#   - User login credentials (Azure AD multi-tenant) should be configured in
-#     Azure Portal → Static Web Apps → [resource name] → Configuration → Application settings,
-#     not in GitHub or workflow secrets.
-#   - See: docs/FEDERATED-CREDENTIALS-SETUP.md for details on deployment vs user auth
-#
-# For more information:
-#   - Deployment secrets: DEPLOYMENT-SECRETS-SETUP.md
-#   - OIDC setup: docs/FEDERATED-CREDENTIALS-SETUP.md
-#   - Secrets inventory: docs/SECRETS-INVENTORY.md
+# For current deployment:
+#   - See: .github/workflows/docker-build.yml (portal deployment to AKS)
+#   - See: k8s/portal-deployment.yaml (Kubernetes manifests)
+#   - See: docs/DEPLOYMENT.md for AKS deployment details
 # =============================================================================
 
+# WORKFLOW DISABLED - Triggers commented out to prevent execution
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - 'site/**'
-      - '.github/workflows/deploy-static-site.yml'
-      - 'infra/main.bicep'
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger only (disabled by default)
+  # push:
+  #   branches: ["main"]
+  #   paths:
+  #     - 'site/**'
+  #     - '.github/workflows/deploy-static-site.yml'
+  #     - 'infra/main.bicep'
 
 permissions:
   id-token: write
