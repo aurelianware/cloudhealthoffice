@@ -77,7 +77,7 @@
 
 | Field | Response | Notes |
 |-------|----------|-------|
-| **Base Name Prefix** | | e.g., "pchp", "bcbs-tx" |
+| **Base Name Prefix** | | e.g., "payer", "bcbs-tx" |
 | **Environment Suffixes** | DEV: _____ UAT: _____ PROD: _____ | Standard: dev, uat, prod |
 | **Resource Group Pattern** | | e.g., {prefix}-{env}-rg |
 

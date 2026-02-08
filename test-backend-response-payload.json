@@ -1,11 +1,11 @@
 {
   "claimNumber": "CLM20250924001",
-  "memberId": "123456789", 
+  "memberId": "123456789",
   "memberName": "SMITH, JOHN A",
   "providerNpi": "1234567890",
   "providerName": "SAMPLE MEDICAL CENTER",
   "serviceFromDate": "20250901",
-  "serviceToDate": "20250930", 
+  "serviceToDate": "20250930",
   "rfaiReasonCode": "A7",
   "rfaiDescription": "Additional clinical information needed",
   "rfaiReference": "RFAI20250924001",

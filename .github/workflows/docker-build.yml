@@ -187,6 +187,7 @@ jobs:
       matrix:
         container:
           - x12-parser
+          - x12-276-parser
           - claims-publisher
           - kafka-publisher
           - sftp-fetcher
@@ -275,6 +276,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Utility Containers Built:" >> $GITHUB_STEP_SUMMARY
           echo "- x12-parser (837 claims parsing)" >> $GITHUB_STEP_SUMMARY
+          echo "- x12-276-parser (276 claim status inquiry parsing)" >> $GITHUB_STEP_SUMMARY
           echo "- x12-834-parser (834 enrollment parsing)" >> $GITHUB_STEP_SUMMARY
           echo "- claims-publisher (Kafka)" >> $GITHUB_STEP_SUMMARY
           echo "- kafka-publisher" >> $GITHUB_STEP_SUMMARY

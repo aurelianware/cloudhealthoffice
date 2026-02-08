@@ -54,7 +54,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 **Purpose:** Payer-focused landing page (replaces assessment.html conceptually)
 
 **Key Features:**
-- Hero: "Augment QNXT/Facets Without the $2M+ Upgrade"
+- Hero: "Augment aging Core Admin platforms Without the $2M+ Upgrade"
 - CMS-0057-F deadline banner (January 1, 2027) with urgency messaging
 - Pain points grid (6 cards): Upgrade costs, 18-month timelines, vendor lock-in, no multi-payer, manual prior auth, security gaps
 - Value props: FHIR compliance, real-time prior auth, multi-clearinghouse, X12 automation, zero-code deployment, Azure-native
@@ -87,7 +87,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 
 ### 5. site/platform.html ✅
 **Changes Applied:**
-- Meta description: Dual-market positioning ("For payers: QNXT/Facets augmentation. For providers: Direct EDI connections.")
+- Meta description: Dual-market positioning ("For payers: legacy system augmentation. For providers: Direct EDI connections.")
 - Meta keywords: Added practice management, clearinghouse alternative
 - OG/Twitter tags: Updated to dual-market messaging
 - Navigation: Updated to match new site structure (For Payers/Providers/Pricing)
@@ -134,7 +134,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 ### Dual-Market Value Props
 
 **For Health Plans (Payers):**
-- Augment QNXT/Facets without $2M+ core system upgrades
+- Augment aging core admin paltforms without $2M+ core system upgrades
 - CMS-0057-F FHIR compliance in <1 hour
 - Real-time prior authorization (12 days → <2 minutes)
 - Multi-clearinghouse support via unified API
@@ -285,7 +285,7 @@ feat(website): Phase 2 dual-market positioning complete
 
 - Created site/pricing.html (transparent dual-market pricing)
 - Created site/solutions-providers.html (practice management focus)
-- Created site/solutions-payers.html (QNXT/Facets augmentation)
+- Created site/solutions-payers.html (aging core admin platform augmentation)
 - Updated site/platform.html (dual-market hero + nav)
 - Updated site/release-notes.html (v3.0/v4.0 clarity)
 - Updated site/index.html (Phase 1 dual-market hero)
