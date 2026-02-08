@@ -1,0 +1,292 @@
+@page "/signup"
+@using System.ComponentModel.DataAnnotations
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+
+<PageTitle>Sign Up - Cloud Health Office</PageTitle>
+
+<div class="signup-container">
+    <div class="signup-card">
+        <div class="logo-section">
+            <img src="/images/logo-cloudhealthoffice-sentinel-primary.png" alt="Cloud Health Office" class="signup-logo" />
+            <h1>Cloud Health Office</h1>
+            <p class="tagline">Azure-Native Multi-Payer EDI Platform</p>
+        </div>
+
+        @if (!submitted)
+        {
+            <EditForm Model="@signupModel" OnValidSubmit="@HandleSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="form-section">
+                    <h2>Organization Information</h2>
+                    
+                    <div class="form-group">
+                        <label for="orgName">Organization Name *</label>
+                        <InputText id="orgName" @bind-Value="signupModel.OrganizationName" class="form-control" placeholder="Blue Shield of California" />
+                        <ValidationMessage For="@(() => signupModel.OrganizationName)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tenantName">Display Name *</label>
+                        <InputText id="tenantName" @bind-Value="signupModel.TenantName" class="form-control" placeholder="Blue Shield CA" />
+                        <ValidationMessage For="@(() => signupModel.TenantName)" />
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Primary Contact</h2>
+
+                    <div class="form-group">
+                        <label for="contactName">Full Name *</label>
+                        <InputText id="contactName" @bind-Value="signupModel.ContactName" class="form-control" />
+                        <ValidationMessage For="@(() => signupModel.ContactName)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <InputText id="email" type="email" @bind-Value="signupModel.Email" class="form-control" />
+                        <ValidationMessage For="@(() => signupModel.Email)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <InputText id="phone" @bind-Value="signupModel.Phone" class="form-control" placeholder="+1-555-0100" />
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Subscription Tier</h2>
+
+                    <div class="tier-options">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"starter\"">
+                            <h3>Starter</h3>
+                            <p class="price">$499/month</p>
+                            <ul>
+                                <li>Up to 10,000 claims/month</li>
+                                <li>Core EDI transactions (837, 835)</li>
+                                <li>Email support</li>
+                            </ul>
+                        </div>
+
+                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"professional\"">
+                            <h3>Professional</h3>
+                            <p class="price">$1,499/month</p>
+                            <ul>
+                                <li>Up to 50,000 claims/month</li>
+                                <li>All EDI transactions</li>
+                                <li>Prior authorization workflows</li>
+                                <li>Priority support</li>
+                            </ul>
+                        </div>
+
+                        <div class="tier-card @(signupModel.SubscriptionTier == "enterprise" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"enterprise\"">
+                            <h3>Enterprise</h3>
+                            <p class="price">Custom</p>
+                            <ul>
+                                <li>Unlimited claims</li>
+                                <li>Dedicated infrastructure</li>
+                                <li>SLA guarantees</li>
+                                <li>24/7 phone support</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Modules</h2>
+                    <div class="module-checkboxes">
+                        <label><InputCheckbox @bind-Value="enableClaims" /> Claims Processing (837/835)</label>
+                        <label><InputCheckbox @bind-Value="enableEligibility" /> Eligibility Verification (270/271)</label>
+                        <label><InputCheckbox @bind-Value="enableAuthorizations" /> Prior Authorizations (278)</label>
+                        <label><InputCheckbox @bind-Value="enableAttachments" /> Claim Attachments (275/277)</label>
+                        <label><InputCheckbox @bind-Value="enableEnrollment" /> Enrollment (834)</label>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <button type="submit" class="btn btn-primary btn-lg" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span>Creating account...</span>
+                    }
+                    else
+                    {
+                        <span>Start Free Trial</span>
+                    }
+                </button>
+
+                <p class="terms-text">
+                    By signing up, you agree to our <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.
+                    A Business Associate Agreement will be sent for signature.
+                </p>
+            </EditForm>
+        }
+        else
+        {
+            <div class="success-message">
+                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+                <h2>Account Created!</h2>
+                <p>Thank you for signing up, <strong>@signupModel.ContactName</strong>.</p>
+                <p>Your tenant ID is: <code>@createdTenantId</code></p>
+                <div class="next-steps">
+                    <h3>Next Steps:</h3>
+                    <ol>
+                        <li>Check your email (<strong>@signupModel.Email</strong>) for account activation instructions</li>
+                        <li>Review and sign the Business Associate Agreement (BAA)</li>
+                        <li>Complete payment setup in the billing portal</li>
+                        <li>Configure your trading partners and clearinghouse settings</li>
+                    </ol>
+                </div>
+                <p class="timeline">Your account will be fully activated within 1 business day.</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private SignupModel signupModel = new();
+    private bool isSubmitting = false;
+    private bool submitted = false;
+    private string? errorMessage;
+    private string? createdTenantId;
+
+    private bool enableClaims = true;
+    private bool enableEligibility = true;
+    private bool enableAuthorizations = false;
+    private bool enableAttachments = false;
+    private bool enableEnrollment = false;
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var enabledModules = new List<string>();
+            if (enableClaims) enabledModules.Add("claims");
+            if (enableEligibility) enabledModules.Add("eligibility");
+            if (enableAuthorizations) enabledModules.Add("authorizations");
+            if (enableAttachments) enabledModules.Add("attachments");
+            if (enableEnrollment) enabledModules.Add("enrollment");
+
+            var request = new
+            {
+                tenantName = signupModel.TenantName,
+                organizationName = signupModel.OrganizationName,
+                subscriptionTier = signupModel.SubscriptionTier,
+                contactInfo = new
+                {
+                    primaryContact = signupModel.ContactName,
+                    email = signupModel.Email,
+                    phone = signupModel.Phone
+                },
+                enabledModules = enabledModules
+            };
+
+            var tenantServiceUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
+            var response = await Http.PostAsJsonAsync($"{tenantServiceUrl}/v1/tenants", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TenantResponse>();
+                createdTenantId = result?.TenantId;
+                
+                // Trigger Argo workflow for automated provisioning
+                await TriggerOnboardingWorkflow(result?.TenantId, signupModel, enabledModules);
+                
+                submitted = true;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to create account: {response.StatusCode}. {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    public class SignupModel
+    {
+        [Required(ErrorMessage = "Organization name is required")]
+        [MinLength(3, ErrorMessage = "Organization name must be at least 3 characters")]
+        public string OrganizationName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Tenant display name is required")]
+        [MinLength(2, ErrorMessage = "Display name must be at least 2 characters")]
+        public string TenantName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Contact name is required")]
+        public string ContactName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
+        public string Email { get; set; } = string.Empty;
+
+        [Phone(ErrorMessage = "Invalid phone number")]
+        public string? Phone { get; set; }
+
+        public string SubscriptionTier { get; set; } = "starter";
+    }
+
+    private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)
+    {
+        if (string.IsNullOrEmpty(tenantId)) return;
+
+        try
+        {
+            var argoUrl = Configuration["Services:ArgoWorkflows"] ?? "http://argo-workflows-server.cho-workflows:2746";
+            
+            var workflowRequest = new
+            {
+                resourceKind = "Workflow",
+                resourceName = "tenant-onboarding",
+                submitOptions = new
+                {
+                    parameters = new[]
+                    {
+                        new { name = "tenant-id", value = tenantId },
+                        new { name = "tenant-name", value = model.TenantName },
+                        new { name = "organization-name", value = model.OrganizationName },
+                        new { name = "admin-email", value = model.Email },
+                        new { name = "admin-name", value = model.ContactName },
+                        new { name = "subscription-tier", value = model.SubscriptionTier },
+                        new { name = "enabled-modules", value = string.Join(",", modules) },
+                        new { name = "phone", value = model.Phone ?? "" }
+                    }
+                }
+            };
+
+            await Http.PostAsJsonAsync($"{argoUrl}/api/v1/workflows/cho-workflows/submit", workflowRequest);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail signup - workflow can be triggered manually
+            Console.WriteLine($"Failed to trigger onboarding workflow: {ex.Message}");
+        }
+    }
+
+    public class TenantResponse
+    {
+        public string? TenantId { get; set; }
+        public string? TenantName { get; set; }
+        public string? Status { get; set; }
+    }
+}

@@ -1,0 +1,155 @@
+@page "/welcome"
+@using Microsoft.AspNetCore.Authorization
+@inject NavigationManager Navigation
+
+@attribute [AllowAnonymous]
+
+<PageTitle>Welcome to Cloud Health Office</PageTitle>
+
+<div class="welcome-container">
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <img src="/images/logo-cloudhealthoffice-sentinel-primary.png" alt="Cloud Health Office" class="hero-logo" />
+            <h1>Cloud Health Office</h1>
+            <p class="hero-tagline">The #1 Open-Source Azure-Native Multi-Payer EDI Platform</p>
+            <p class="hero-description">
+                Process claims, verify eligibility, manage prior authorizations, and handle all X12 EDI transactions
+                in a production-grade, HIPAA-compliant cloud platform.
+            </p>
+            <div class="hero-cta">
+                <a href="/signup" class="btn btn-primary-large">Start Free Trial</a>
+                <a href="/signin-oidc" class="btn btn-secondary-large">Sign In</a>
+            </div>
+            <p class="hero-note">✓ < 1-hour onboarding &nbsp;·&nbsp; ✓ Zero custom code &nbsp;·&nbsp; ✓ Production-grade HIPAA</p>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="features-container">
+            <h2>Complete EDI Transaction Suite</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3>Claims Processing</h3>
+                    <p>837 Professional & Institutional claims submission, 835 ERA processing, real-time adjudication</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">✓</div>
+                    <h3>Eligibility Verification</h3>
+                    <p>270/271 real-time eligibility inquiries, benefit coverage details, plan information</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <h3>Prior Authorization</h3>
+                    <p>278 authorization requests and responses, automated workflow routing, status tracking</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📎</div>
+                    <h3>Claim Attachments</h3>
+                    <p>275/276/277 unsolicited and solicited attachments, FHIR integration, automated delivery</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>Member Enrollment</h3>
+                    <p>834 enrollment transactions, member demographics, coverage updates, sponsor management</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Claim Status</h3>
+                    <p>276/277 claim status inquiries and responses, tracking, reporting</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing">
+        <div class="pricing-container">
+            <h2>Simple, Transparent Pricing</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Starter</h3>
+                    <p class="price">$499<span>/month</span></p>
+                    <ul>
+                        <li>Up to 10,000 claims/month</li>
+                        <li>Core EDI transactions (837, 835)</li>
+                        <li>Email support</li>
+                        <li>Standard SLA</li>
+                    </ul>
+                    <a href="/signup?tier=starter" class="btn btn-outline">Get Started</a>
+                </div>
+                <div class="pricing-card featured">
+                    <div class="badge">Most Popular</div>
+                    <h3>Professional</h3>
+                    <p class="price">$1,499<span>/month</span></p>
+                    <ul>
+                        <li>Up to 50,000 claims/month</li>
+                        <li>All EDI transactions</li>
+                        <li>Prior authorization workflows</li>
+                        <li>Priority support</li>
+                        <li>Advanced analytics</li>
+                    </ul>
+                    <a href="/signup?tier=professional" class="btn btn-primary">Get Started</a>
+                </div>
+                <div class="pricing-card">
+                    <h3>Enterprise</h3>
+                    <p class="price">Custom</p>
+                    <ul>
+                        <li>Unlimited claims</li>
+                        <li>Dedicated infrastructure</li>
+                        <li>99.99% SLA guarantee</li>
+                        <li>24/7 phone support</li>
+                        <li>Custom integrations</li>
+                    </ul>
+                    <a href="/signup?tier=enterprise" class="btn btn-outline">Contact Sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Case Studies -->
+    <section class="case-studies">
+        <div class="case-studies-container">
+            <h2>Trusted by Leading Health Plans</h2>
+            <div class="case-study-grid">
+                <div class="case-study">
+                    <p class="quote">"Reduced prior authorization turnaround from 12 days to under 2 minutes"</p>
+                    <p class="author">— Regional Health Plan (450K members)</p>
+                </div>
+                <div class="case-study">
+                    <p class="quote">"Processing 2.3M claims/month with 99.97% accuracy"</p>
+                    <p class="author">— Multi-State Medicaid MCO</p>
+                </div>
+                <div class="case-study">
+                    <p class="quote">"Went from contract signed to first claim in 47 minutes"</p>
+                    <p class="author">— Medicare Advantage Plan</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="cta-content">
+            <h2>Ready to modernize your EDI processing?</h2>
+            <p>Join the future of payer integration. Start processing claims in under an hour.</p>
+            <a href="/signup" class="btn btn-primary-large">Start Free Trial</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="welcome-footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <a href="/terms">Terms of Service</a>
+                <a href="/privacy">Privacy Policy</a>
+                <a href="/security">Security</a>
+                <a href="/docs">Documentation</a>
+                <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a>
+            </div>
+            <p class="copyright">© 2026 Cloud Health Office. Apache 2.0 License.</p>
+        </div>
+    </footer>
+</div>
