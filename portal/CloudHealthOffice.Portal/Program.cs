@@ -27,6 +27,21 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     {
         builder.Configuration.Bind("AzureAd", options);
         
+        // Force HTTPS for redirect URIs when behind reverse proxy
+        options.Events.OnRedirectToIdentityProvider = context =>
+        {
+            // Ensure we use HTTPS scheme for redirect URIs
+            if (context.Request.Headers.ContainsKey("X-Forwarded-Proto"))
+            {
+                var forwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+                if (forwardedProto == "https")
+                {
+                    context.ProtocolMessage.RedirectUri = context.ProtocolMessage.RedirectUri?.Replace("http://", "https://");
+                }
+            }
+            return Task.CompletedTask;
+        };
+        
         // Handle authentication failures - detect admin consent required
         options.Events.OnAuthenticationFailed = context =>
         {
