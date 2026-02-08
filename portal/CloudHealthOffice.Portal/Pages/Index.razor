@@ -1,11 +1,27 @@
 @page "/"
-@implements IAsyncDisposable
-@using CloudHealthOffice.Portal.Services
-@inject IMetricsService MetricsService
-@inject IClaimsService ClaimsService
-@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
 
-<PageTitle>Dashboard - Cloud Health Office</PageTitle>
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            // User is authenticated, go to dashboard
+            Navigation.NavigateTo("/dashboard");
+        }
+        else
+        {
+            // User not authenticated, show landing page
+            Navigation.NavigateTo("/welcome");
+        }
+    }
+}
+
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
