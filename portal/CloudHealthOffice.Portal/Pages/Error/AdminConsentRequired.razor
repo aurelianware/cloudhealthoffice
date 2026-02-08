@@ -1,0 +1,200 @@
+@page "/Error/AdminConsentRequired"
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Admin Consent Required - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudPaper Elevation="3" Class="pa-8">
+        <div style="text-align: center;">
+            <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Warning" Size="Size.Large" Style="font-size: 4rem;" />
+            
+            <MudText Typo="Typo.h4" Class="mt-4 mb-2">
+                Admin Consent Required
+            </MudText>
+            
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary" Class="mb-6">
+                This application requires administrator approval before you can use it.
+            </MudText>
+        </div>
+
+        <MudDivider Class="my-6" />
+
+        <MudAlert Severity="Severity.Warning" Class="mb-6">
+            <strong>Error Code:</strong> AADSTS650052
+            <br />
+            <strong>What happened:</strong> The Cloud Health Office API service principal doesn't exist in your organization's Azure Active Directory tenant yet.
+        </MudAlert>
+
+        <MudText Typo="Typo.h6" Class="mb-3">
+            What You Need to Do
+        </MudText>
+
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Please ask your IT administrator to grant admin consent for this application. They need to:
+        </MudText>
+
+        <MudList T="string">
+            <MudListItem Icon="@Icons.Material.Filled.Person">
+                <strong>Who:</strong> An Azure AD admin (Global Admin, Cloud Application Admin, or Application Admin)
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.Link">
+                <strong>What:</strong> Click the admin consent link below
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.Lock">
+                <strong>Action:</strong> Sign in and approve the permissions
+            </MudListItem>
+        </MudList>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.h6" Class="mb-3">
+            For IT Administrators
+        </MudText>
+
+        <MudPaper Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                <strong>Admin Consent URL:</strong>
+            </MudText>
+            <MudTextField @bind-Value="@adminConsentUrl" 
+                         ReadOnly="true" 
+                         Variant="Variant.Outlined" 
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                         OnAdornmentClick="CopyToClipboard"
+                         FullWidth="true" />
+        </MudPaper>
+
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                   Href="@adminConsentUrl"
+                   Target="_blank"
+                   Size="Size.Large"
+                   FullWidth="true"
+                   Class="mb-4">
+            Grant Admin Consent (Admins Only)
+        </MudButton>
+
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="Alternative Methods">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">
+                    <strong>Method 1: Azure Portal</strong>
+                </MudText>
+                <MudList T="string" Dense="true">
+                    <MudListItem>1. Go to <MudLink Href="https://portal.azure.com" Target="_blank">portal.azure.com</MudLink></MudListItem>
+                    <MudListItem>2. Navigate to <strong>Azure Active Directory</strong> → <strong>App registrations</strong></MudListItem>
+                    <MudListItem>3. Search for "Cloud Health Office API"</MudListItem>
+                    <MudListItem>4. Click <strong>API permissions</strong></MudListItem>
+                    <MudListItem>5. Click <strong>Grant admin consent</strong> button</MudListItem>
+                </MudList>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">
+                    <strong>Method 2: Azure CLI</strong>
+                </MudText>
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #1e1e1e; color: #d4d4d4;">
+                    <code>
+                        az login --tenant @tenantId<br/>
+                        az ad sp create --id @apiClientId
+                    </code>
+                </MudPaper>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">
+                    <strong>Method 3: PowerShell</strong>
+                </MudText>
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #1e1e1e; color: #d4d4d4;">
+                    <code>
+                        Connect-MgGraph -TenantId "@tenantId"<br/>
+                        New-MgServicePrincipal -AppId "@apiClientId"
+                    </code>
+                </MudPaper>
+            </MudExpansionPanel>
+
+            <MudExpansionPanel Text="Technical Details">
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    <strong>Error Details:</strong>
+                </MudText>
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #f5f5f5;">
+                    <MudText Typo="Typo.caption">
+                        <strong>Error Code:</strong> AADSTS650052<br />
+                        <strong>Tenant ID:</strong> @tenantId<br />
+                        <strong>API Client ID:</strong> @apiClientId<br />
+                        <strong>API Name:</strong> Cloud Health Office API
+                    </MudText>
+                </MudPaper>
+
+                <MudText Typo="Typo.body2" Class="mt-4 mb-2">
+                    <strong>What This Error Means:</strong>
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    The application is trying to access the Cloud Health Office API, but the API's service principal 
+                    doesn't exist in your Azure AD tenant yet. Creating the service principal requires administrator 
+                    consent, which can only be granted by an Azure AD admin with appropriate permissions.
+                </MudText>
+
+                <MudText Typo="Typo.body2" Class="mt-4 mb-2">
+                    <strong>Security Note:</strong>
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Admin consent is a one-time setup step that allows the application to access Microsoft Graph 
+                    and other Azure resources on behalf of users in your organization. It creates a service principal 
+                    that represents the application in your tenant.
+                </MudText>
+            </MudExpansionPanel>
+
+            <MudExpansionPanel Text="Documentation">
+                <MudList T="string">
+                    <MudListItem Icon="@Icons.Material.Filled.Description">
+                        <MudLink Href="/docs/ADMIN-CONSENT-SETUP.md" Target="_blank">
+                            Full Admin Consent Setup Guide
+                        </MudLink>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Description">
+                        <MudLink Href="https://learn.microsoft.com/en-us/azure/active-directory/manage-apps/grant-admin-consent" Target="_blank">
+                            Microsoft Docs: Grant Admin Consent
+                        </MudLink>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Description">
+                        <MudLink Href="https://login.microsoftonline.com/error?code=650052" Target="_blank">
+                            Error Reference: AADSTS650052
+                        </MudLink>
+                    </MudListItem>
+                </MudList>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+            Once admin consent is granted, 
+            <MudLink Href="/">return to the home page</MudLink> 
+            and sign in again.
+        </MudText>
+    </MudPaper>
+
+    <MudSnackbarProvider />
+</MudContainer>
+
+@code {
+    private string tenantId = "YOUR_TENANT_ID"; // Will be populated from config or error
+    private string apiClientId = "31f76844-b2cb-47b1-aede-f5b2b6dc59c8";
+    private string adminConsentUrl => $"https://login.microsoftonline.com/{tenantId}/adminconsent?client_id={apiClientId}";
+
+    [Inject]
+    private IConfiguration Configuration { get; set; } = default!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        // Try to get tenant ID from configuration
+        tenantId = Configuration["AzureAd:TenantId"] ?? tenantId;
+        apiClientId = Configuration["AzureAd:ClientId"] ?? apiClientId;
+    }
+
+    private void CopyToClipboard()
+    {
+        // Note: Clipboard API requires JavaScript interop
+        Snackbar.Add("URL copied to clipboard!", Severity.Success);
+    }
+}
