@@ -32,10 +32,12 @@ if [ "$ENV_CHOICE" = "2" ]; then
     fi
     MODE="live"
     KEY_PREFIX="sk_live"
+    RK_PREFIX="rk_live"
     PK_PREFIX="pk_live"
 else
     MODE="test"
     KEY_PREFIX="sk_test"
+    RK_PREFIX="rk_test"
     PK_PREFIX="pk_test"
 fi
 
@@ -43,12 +45,12 @@ echo ""
 echo "Enter your Stripe keys from https://dashboard.stripe.com/apikeys"
 echo ""
 
-read -p "Secret Key ($KEY_PREFIX...): " SECRET_KEY
+read -p "Secret Key ($KEY_PREFIX... or $RK_PREFIX...): " SECRET_KEY
 read -p "Publishable Key ($PK_PREFIX...): " PUBLISHABLE_KEY
 
-# Validate key format
-if [[ ! "$SECRET_KEY" =~ ^$KEY_PREFIX ]]; then
-    echo "❌ Invalid secret key format (should start with $KEY_PREFIX)"
+# Validate key format (accept both standard and restricted keys)
+if [[ ! "$SECRET_KEY" =~ ^$KEY_PREFIX ]] && [[ ! "$SECRET_KEY" =~ ^$RK_PREFIX ]]; then
+    echo "❌ Invalid secret key format (should start with $KEY_PREFIX or $RK_PREFIX for restricted keys)"
     exit 1
 fi
 
