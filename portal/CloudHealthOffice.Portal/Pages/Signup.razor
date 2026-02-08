@@ -1,8 +1,10 @@
 @page "/signup"
 @using System.ComponentModel.DataAnnotations
+@using Microsoft.JSInterop
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Sign Up - Cloud Health Office</PageTitle>
 
@@ -106,6 +108,40 @@
                     </div>
                 </div>
 
+                <div class="form-section">
+                    <h2>Payment Information</h2>
+                    <p class="payment-note">💳 Secure payment powered by Stripe. Your card will be charged after the 14-day trial.</p>
+                    
+                    <div class="form-group">
+                        <label for="card-element">Credit Card *</label>
+                        <div id="card-element" class="stripe-element">
+                            <!-- Stripe Element will be inserted here -->
+                        </div>
+                        <div id="card-errors" class="payment-error" role="alert"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="billingName">Billing Name *</label>
+                        <InputText id="billingName" @bind-Value="signupModel.BillingName" class="form-control" placeholder="John Doe" />
+                    </div>
+
+                    <div class="pricing-summary">
+                        <h3>Subscription Summary</h3>
+                        <div class="summary-row">
+                            <span>Tier:</span>
+                            <strong>@GetTierName(signupModel.SubscriptionTier)</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Monthly cost:</span>
+                            <strong>@GetTierPrice(signupModel.SubscriptionTier)</strong>
+                        </div>
+                        <div class="summary-row trial">
+                            <span>First payment:</span>
+                            <strong>@GetTrialEndDate()</strong>
+                        </div>
+                    </div>
+                </div>
+
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
                     <div class="alert alert-danger">@errorMessage</div>
@@ -153,18 +189,62 @@
     </div>
 </div>
 
+<script src="https://js.stripe.com/v3/"></script>
+
 @code {
     private SignupModel signupModel = new();
     private bool isSubmitting = false;
     private bool submitted = false;
     private string? errorMessage;
     private string? createdTenantId;
+    private string? stripePaymentMethodId;
 
     private bool enableClaims = true;
     private bool enableEligibility = true;
     private bool enableAuthorizations = false;
     private bool enableAttachments = false;
     private bool enableEnrollment = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeStripe();
+        }
+    }
+
+    private async Task InitializeStripe()
+    {
+        var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
+        
+        await JSRuntime.InvokeVoidAsync("eval", $@"
+            var stripe = Stripe('{stripePublishableKey}');
+            var elements = stripe.elements();
+            var cardElement = elements.create('card', {{
+                style: {{
+                    base: {{
+                        fontSize: '16px',
+                        color: '#333',
+                        '::placeholder': {{ color: '#aab7c4' }}
+                    }},
+                    invalid: {{ color: '#c00' }}
+                }}
+            }});
+            cardElement.mount('#card-element');
+            
+            cardElement.on('change', function(event) {{
+                var displayError = document.getElementById('card-errors');
+                if (event.error) {{
+                    displayError.textContent = event.error.message;
+                }} else {{
+                    displayError.textContent = '';
+                }}
+            }});
+            
+            window.stripeCardElement = cardElement;
+            window.stripe = stripe;
+        ");
+    }
 
     private async Task HandleSubmit()
     {
@@ -173,6 +253,17 @@
 
         try
         {
+            // Step 1: Create Stripe payment method
+            var paymentMethodResult = await CreateStripePaymentMethod();
+            if (!paymentMethodResult.Success)
+            {
+                errorMessage = paymentMethodResult.Error;
+                isSubmitting = false;
+                return;
+            }
+            stripePaymentMethodId = paymentMethodResult.PaymentMethodId;
+
+            // Step 2: Prepare tenant data
             var enabledModules = new List<string>();
             if (enableClaims) enabledModules.Add("claims");
             if (enableEligibility) enabledModules.Add("eligibility");
@@ -191,7 +282,9 @@
                     email = signupModel.Email,
                     phone = signupModel.Phone
                 },
-                enabledModules = enabledModules
+                enabledModules = enabledModules,
+                paymentMethodId = stripePaymentMethodId,
+                billingName = signupModel.BillingName
             };
 
             var tenantServiceUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
@@ -223,6 +316,71 @@
         }
     }
 
+    private async Task<(bool Success, string? PaymentMethodId, string? Error)> CreateStripePaymentMethod()
+    {
+        try
+        {
+            var result = await JSRuntime.InvokeAsync<string>("eval", $@"
+                (async function() {{
+                    const {{ paymentMethod, error }} = await window.stripe.createPaymentMethod({{
+                        type: 'card',
+                        card: window.stripeCardElement,
+                        billing_details: {{
+                            name: '{signupModel.BillingName}',
+                            email: '{signupModel.Email}'
+                        }}
+                    }});
+                    
+                    if (error) {{
+                        return JSON.stringify({{ success: false, error: error.message }});
+                    }}
+                    
+                    return JSON.stringify({{ success: true, paymentMethodId: paymentMethod.id }});
+                }})()
+            ");
+
+            var jsonResult = System.Text.Json.JsonDocument.Parse(result);
+            var success = jsonResult.RootElement.GetProperty("success").GetBoolean();
+            
+            if (success)
+            {
+                var pmId = jsonResult.RootElement.GetProperty("paymentMethodId").GetString();
+                return (true, pmId, null);
+            }
+            else
+            {
+                var error = jsonResult.RootElement.GetProperty("error").GetString();
+                return (false, null, $"Payment card error: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, null, $"Payment processing error: {ex.Message}");
+        }
+    }
+
+    private string GetTierName(string tier) => tier switch
+    {
+        "starter" => "Starter",
+        "professional" => "Professional",
+        "enterprise" => "Enterprise",
+        _ => "Starter"
+    };
+
+    private string GetTierPrice(string tier) => tier switch
+    {
+        "starter" => "$499/month",
+        "professional" => "$1,499/month",
+        "enterprise" => "Custom pricing",
+        _ => "$499/month"
+    };
+
+    private string GetTrialEndDate()
+    {
+        var trialEnd = DateTime.Now.AddDays(14);
+        return $"{trialEnd:MMMM d, yyyy} (14-day trial)";
+    }
+
     public class SignupModel
     {
         [Required(ErrorMessage = "Organization name is required")]
@@ -244,6 +402,9 @@
         public string? Phone { get; set; }
 
         public string SubscriptionTier { get; set; } = "starter";
+
+        [Required(ErrorMessage = "Billing name is required")]
+        public string BillingName { get; set; } = string.Empty;
     }
 
     private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)
