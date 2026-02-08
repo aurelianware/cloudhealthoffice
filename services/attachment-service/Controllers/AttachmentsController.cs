@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
@@ -7,6 +8,7 @@ using System.Security.Cryptography;
 
 namespace AttachmentService.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class AttachmentsController : ControllerBase
