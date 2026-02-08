@@ -288,3 +288,15 @@ jobs:
           echo "3. Deploy Argo Events: \`kubectl apply -f argo-events/\`" >> $GITHUB_STEP_SUMMARY
           echo "4. Deploy services: \`kubectl apply -f services/*/k8s/\`" >> $GITHUB_STEP_SUMMARY
           echo "5. Test 834 pipeline: Upload test-x12-834-enrollment-sample.edi to SFTP" >> $GITHUB_STEP_SUMMARY
+
+      - name: Build and push trading-partner-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/trading-partner-service
+          file: ./services/trading-partner-service/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cloudhealthoffice-trading-partner-service:latest
+            ghcr.io/${{ github.repository_owner }}/cloudhealthoffice-trading-partner-service:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
