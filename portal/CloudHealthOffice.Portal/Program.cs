@@ -10,11 +10,54 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure forwarded headers for running behind reverse proxy/ingress
+builder.Services.Configure<Microsoft.AspNetCore.HttpOverrides.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+                                Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Azure AD Authentication
 var initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ') ?? Array.Empty<string>();
 
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
+    .AddMicrosoftIdentityWebApp(options =>
+    {
+        builder.Configuration.Bind("AzureAd", options);
+        
+        // Handle authentication failures - detect admin consent required
+        options.Events.OnAuthenticationFailed = context =>
+        {
+            var error = context.Exception.Message;
+            
+            // Check for admin consent required error (AADSTS650052)
+            if (error.Contains("AADSTS650052") || error.Contains("lacks a service principal"))
+            {
+                context.Response.Redirect("/Error/AdminConsentRequired");
+                context.HandleResponse();
+            }
+            
+            return Task.CompletedTask;
+        };
+        
+        // Also handle remote failure (covers more error scenarios)
+        options.Events.OnRemoteFailure = context =>
+        {
+            var error = context.Failure?.Message ?? "";
+            
+            if (error.Contains("AADSTS650052") || 
+                error.Contains("lacks a service principal") ||
+                error.Contains("AADSTS65001")) // User/admin hasn't consented
+            {
+                context.Response.Redirect("/Error/AdminConsentRequired");
+                context.HandleResponse();
+            }
+            
+            return Task.CompletedTask;
+        };
+    })
     .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
     .AddInMemoryTokenCaches();
 
@@ -76,6 +119,9 @@ builder.Services.AddSession(options =>
 });
 
 var app = builder.Build();
+
+// Use forwarded headers FIRST (before any other middleware)
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
