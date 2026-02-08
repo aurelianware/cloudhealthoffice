@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-partner-service
+  namespace: cho-svcs
+  labels:
+    app: trading-partner-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trading-partner-service
+  template:
+    metadata:
+      labels:
+        app: trading-partner-service
+    spec:
+      containers:
+      - name: trading-partner-service
+        image: ghcr.io/aurelianware/cloudhealthoffice-trading-partner-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: COSMOS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-config
+              key: endpoint
+        - name: COSMOS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-config
+              key: key
+        - name: COSMOS_DATABASE
+          value: "CloudHealthOffice"
+        - name: COSMOS_CONTAINER_TRADING_PARTNERS
+          value: "TradingPartners"
+        - name: AzureAd__ClientId
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: ClientId
+        - name: AzureAd__TenantId
+          value: "common"
+        - name: AzureAd__Audience
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: Audience
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-partner-service
+  namespace: cho-svcs
+  labels:
+    app: trading-partner-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: trading-partner-service

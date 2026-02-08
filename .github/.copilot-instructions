@@ -6,7 +6,7 @@ This repository implements a HIPAA-compliant Azure Logic Apps solution for proce
 
 **Trading Partners:**
 - Clearinghouse (Sender ID: {config.clearinghouseId}) - EDI clearinghouse
-- Health Plan Backend (Receiver ID: {config.payerId}) - Parkland Community Health Plan
+- Health Plan Backend (Receiver ID: {config.payerId}) - Sample Health Plan
 
 **Key Infrastructure:**
 - Azure Logic Apps Standard (WS1 SKU) - Stateful workflow orchestration
