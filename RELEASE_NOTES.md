@@ -81,7 +81,7 @@ This is the third major release of Cloud Health Office — the open-source, mult
 | Total Tests | 424 passing |
 | Security Vulnerabilities | 0 |
 | CMS-0057-F Ready | 100% |
-| Vendor References Removed | 1,295 vendor-specific references (Cognizant, QNXT, Facets, Availity) across 185 files |
+| Vendor References Removed | 1,295 vendor-specific references across 185 files |
 | New PRs Merged | 17 since v2.0.0 |
 | Deployment Targets | Azure, AWS (EKS), GCP (GKE) |
 
