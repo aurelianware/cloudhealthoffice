@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 
 namespace AuthorizationService.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
