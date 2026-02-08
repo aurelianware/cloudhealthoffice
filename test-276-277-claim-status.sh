@@ -15,8 +15,31 @@ echo ""
 # Configuration
 SFTP_HOST="sftp-service.cho-sftp.svc.cluster.local"
 SFTP_PORT="22"
-SFTP_USER="logicapp"
-SFTP_PASS="changeme123"
+
+# SECURITY: Read credentials from environment variables
+# Set these before running: export SFTP_USER=... SFTP_PASSWORD=...
+# Or source ~/.sftp-test-env
+SFTP_USER="${SFTP_USER:-}"
+SFTP_PASS="${SFTP_PASSWORD:-}"
+
+if [ -z "$SFTP_USER" ] || [ -z "$SFTP_PASS" ]; then
+  echo "⚠️  SECURITY WARNING: SFTP credentials not set!"
+  echo ""
+  echo "Please set environment variables:"
+  echo "  export SFTP_USER='logicapp'"
+  echo "  export SFTP_PASSWORD='<get-from-kubernetes-secret>'"
+  echo ""
+  echo "Or source credentials file:"
+  echo "  source ~/.sftp-test-env"
+  echo ""
+  echo "To get the password from Kubernetes:"
+  echo "  kubectl -n cho-sftp get secret sftp-users -o jsonpath='{.data.users\.conf}' | base64 -d"
+  echo ""
+  echo "To rotate the password:"
+  echo "  ./scripts/rotate-sftp-password.sh logicapp"
+  echo ""
+  exit 1
+fi
 
 # Generate unique identifiers
 CLAIM_NUMBER="CLM$(date +%s)"
