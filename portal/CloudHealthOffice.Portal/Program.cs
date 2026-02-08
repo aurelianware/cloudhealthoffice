@@ -20,7 +20,13 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = options.DefaultPolicy;
+    // Fallback policy requires authentication, but specific endpoints can opt-out with [AllowAnonymous]
+    var policyBuilder = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser();
+    options.FallbackPolicy = policyBuilder.Build();
+    
+    // Add anonymous policy for health checks
+    options.AddPolicy("Anonymous", policy => policy.RequireAssertion(_ => true));
 });
 
 // Add services to the container
@@ -85,11 +91,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseSession();
 
+// Health endpoint - anonymous access for Kubernetes probes
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+    .WithMetadata(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute());
+
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
 app.MapHub<WorkflowHub>("/hubs/workflows");
-app.MapGet("/health", () => Results.Ok("ok")).AllowAnonymous();
 app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg"));
 app.MapFallbackToPage("/_Host");
 
