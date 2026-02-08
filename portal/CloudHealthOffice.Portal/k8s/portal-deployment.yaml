@@ -95,6 +95,21 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__Prometheus
+        - name: AzureAd__TenantId
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: TenantId
+        - name: AzureAd__ClientId
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: ClientId
+        - name: AzureAd__ClientSecret
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: ClientSecret
         resources:
           requests:
             memory: "256Mi"

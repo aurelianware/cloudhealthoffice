@@ -80,9 +80,13 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
+    options.Cookie.Name = ".CloudHealthOffice.Auth";
+    
+    // Configure for reverse proxy
+    options.ForwardDefaultSelector = true;
 });
 
 builder.Services.AddAuthorization(options =>
@@ -141,7 +145,8 @@ builder.Services.AddSession(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
+    options.Cookie.Name = ".CloudHealthOffice.Session";
 });
 
 var app = builder.Build();
@@ -156,7 +161,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// Don't use HTTPS redirection - ingress handles TLS termination
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
