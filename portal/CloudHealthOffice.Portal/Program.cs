@@ -27,10 +27,6 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     {
         builder.Configuration.Bind("AzureAd", options);
         
-        // Configure cookie for reverse proxy
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.Cookie.SameSite = SameSiteMode.None;
-        
         // Force HTTPS for redirect URIs when behind reverse proxy
         options.Events.OnRedirectToIdentityProvider = context =>
         {
@@ -79,6 +75,15 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     })
     .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
     .AddInMemoryTokenCaches();
+
+// Configure cookies for reverse proxy (HTTPS behind nginx)
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 
 builder.Services.AddAuthorization(options =>
 {
