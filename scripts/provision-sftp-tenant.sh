@@ -95,7 +95,7 @@ echo "✅ Secret updated"
 echo ""
 
 # Create directory structure in SFTP pod
-echo "📁 Creating tenant directory structure..."
+echo "📁 Creating tenant home directory..."
 
 # Get SFTP pod name
 SFTP_POD=$(kubectl -n ${NAMESPACE} get pod -l app=sftp-server -o jsonpath='{.items[0].metadata.name}')
@@ -105,32 +105,25 @@ if [ -z "$SFTP_POD" ]; then
 else
   echo "   Pod: ${SFTP_POD}"
   
-  # Create directories
+  # Create tenant home directory only (trading partners added separately)
   kubectl -n ${NAMESPACE} exec ${SFTP_POD} -- bash -c "
     set -e
     
     # Create base tenant directory
     mkdir -p /home/tenants/${TENANT_ID}
     
-    # Create inbound directories
-    mkdir -p /home/tenants/${TENANT_ID}/inbound/{276,277,278,834,835,837}
-    
-    # Create outbound directories
-    mkdir -p /home/tenants/${TENANT_ID}/outbound/{276,277,278,834,835,837}
-    
     # Set ownership
-    chown -R ${NEXT_UID}:${NEXT_GID} /home/tenants/${TENANT_ID}
+    chown ${NEXT_UID}:${NEXT_GID} /home/tenants/${TENANT_ID}
     
     # Set permissions
     chmod 750 /home/tenants/${TENANT_ID}
-    chmod -R 770 /home/tenants/${TENANT_ID}/inbound
-    chmod -R 550 /home/tenants/${TENANT_ID}/outbound
     
     # List structure
     ls -lah /home/tenants/${TENANT_ID}
   "
   
-  echo "✅ Directory structure created"
+  echo "✅ Tenant home directory created"
+  echo "ℹ️  Trading partner directories will be created via provision-trading-partner.sh"
 fi
 echo ""
 
@@ -156,10 +149,8 @@ METADATA_JSON=$(cat <<EOF
   "sftpUsername": "${TENANT_ID}",
   "sftpUid": ${NEXT_UID},
   "sftpGid": ${NEXT_GID},
-  "sftpDirectories": {
-    "inbound": ["276", "277", "278", "834", "835", "837"],
-    "outbound": ["276", "277", "278", "834", "835", "837"]
-  },
+  "sftpHomeDirectory": "/tenants/${TENANT_ID}",
+  "tradingPartners": [],
   "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "status": "active",
   "keyVaultSecretName": "sftp-${TENANT_ID}-password"
@@ -220,21 +211,20 @@ echo "Connection String:"
 echo "  sftp://${TENANT_ID}:<password>@sftp.cloudhealthoffice.com:22"
 echo ""
 echo "Directory Structure:"
-echo "  /inbound/276/   - Claim status requests"
-echo "  /inbound/278/   - Prior auth requests"
-echo "  /inbound/834/   - Enrollment files"
-echo "  /outbound/277/  - Claim status responses"
-echo "  /outbound/278/  - Prior auth responses"
-echo "  /outbound/837/  - Claims submissions"
+echo "  Home directory created: /tenants/${TENANT_ID}/"
+echo "  Trading partner subdirectories will be created when you add partners"
 echo ""
 echo "Retrieve Password:"
 echo "  az keyvault secret show --vault-name ${KEY_VAULT} --name sftp-${TENANT_ID}-password --query value -o tsv"
 echo ""
 echo "Next Steps:"
-echo "  1. Send credentials to tenant via secure channel (NOT email)"
-echo "  2. Configure trading partner in Azure Integration Account"
-echo "  3. Test file exchange with tenant"
-echo "  4. Monitor /tenants/${TENANT_ID}/ for activity"
+echo "  1. Add trading partners for this tenant:"
+echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} availity 'Availity Clearinghouse' --transactions 276,277,278,837"
+echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} change-healthcare 'Change Healthcare' --transactions 835,837"
+echo "  2. Send credentials to tenant via secure channel (NOT email)"
+echo "  3. Configure trading partner metadata in Trading Partner Service"
+echo "  4. Test file exchange with tenant"
+echo "  5. Monitor /tenants/${TENANT_ID}/<partner>/ for activity"
 echo ""
 echo "Documentation:"
 echo "  - See docs/SFTP-MULTI-TENANT-ARCHITECTURE.md for details"

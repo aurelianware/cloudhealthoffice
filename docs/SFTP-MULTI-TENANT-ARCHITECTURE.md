@@ -17,35 +17,57 @@ The existing SFTP deployment has:
 
 ### Tenant Directory Structure
 
+Each tenant (health plan) exchanges files with **multiple trading partners** (clearinghouses, providers, TPAs). The directory structure reflects this one-to-many relationship:
+
 ```
 /sftp-data/
 ├── tenants/
-│   ├── bcbs-florida/           # Tenant ID: bcbs-florida
-│   │   ├── inbound/
-│   │   │   ├── 276/           # Claim status requests
-│   │   │   ├── 278/           # Prior auth requests
-│   │   │   ├── 834/           # Enrollment
-│   │   │   └── 835/           # ERA
-│   │   └── outbound/
-│   │       ├── 277/           # Claim status responses
-│   │       ├── 278/           # Prior auth responses
-│   │       └── 837/           # Claims
+│   ├── bcbs-florida/                    # Tenant ID: bcbs-florida
+│   │   ├── availity/                   # Trading Partner: Availity Clearinghouse
+│   │   │   ├── inbound/
+│   │   │   │   ├── 276/               # Claim status requests
+│   │   │   │   ├── 278/               # Prior auth requests
+│   │   │   │   └── 834/               # Enrollment
+│   │   │   └── outbound/
+│   │   │       ├── 277/               # Claim status responses
+│   │   │       ├── 278/               # Prior auth responses
+│   │   │       └── 837/               # Claims
+│   │   ├── change-healthcare/          # Trading Partner: Change Healthcare
+│   │   │   ├── inbound/
+│   │   │   │   ├── 276/
+│   │   │   │   └── 835/               # ERA
+│   │   │   └── outbound/
+│   │   │       └── 837/
+│   │   └── quest-diagnostics/          # Trading Partner: Quest Labs
+│   │       ├── inbound/
+│   │       │   └── 275/               # Attachment requests
+│   │       └── outbound/
+│   │           └── 275/               # Attachment responses
 │   ├── aetna/
-│   │   ├── inbound/
-│   │   │   ├── 276/
-│   │   │   ├── 278/
-│   │   │   └── ...
-│   │   └── outbound/
-│   │       └── ...
+│   │   ├── waystar/                   # Different clearinghouse
+│   │   │   ├── inbound/
+│   │   │   └── outbound/
+│   │   └── labcorp/
+│   │       ├── inbound/
+│   │       └── outbound/
 │   ├── cigna/
 │   │   └── ...
 │   └── anthem/
 │       └── ...
-└── archive/                    # Long-term storage
+└── archive/                             # Long-term storage
     ├── bcbs-florida/
+    │   ├── availity/
+    │   ├── change-healthcare/
+    │   └── quest-diagnostics/
     ├── aetna/
     └── ...
 ```
+
+**Benefits:**
+- ✅ Clear file routing per trading partner
+- ✅ Isolated transaction types per partner relationship
+- ✅ Matches Trading Partner Service data model (tenantId + tradingPartnerId)
+- ✅ Supports different transaction sets per partner (not all partners handle all X12 types)
 
 ### User Configuration Format
 
@@ -67,20 +89,33 @@ Each user is locked to their home directory and **cannot traverse** to parent di
 ```bash
 # User bcbs-florida can only see:
 /
-├── inbound/
-│   ├── 276/
-│   ├── 278/
-│   └── 834/
-└── outbound/
-    ├── 277/
-    ├── 278/
-    └── 837/
+├── availity/
+│   ├── inbound/
+│   │   ├── 276/
+│   │   ├── 278/
+│   │   └── 834/
+│   └── outbound/
+│       ├── 277/
+│       ├── 278/
+│       └── 837/
+├── change-healthcare/
+│   ├── inbound/
+│   │   ├── 276/
+│   │   └── 835/
+│   └── outbound/
+│       └── 837/
+└── quest-diagnostics/
+    ├── inbound/
+    │   └── 275/
+    └── outbound/
+        └── 275/
 ```
 
 They **cannot** see:
 - `/tenants/aetna/`
 - `/tenants/cigna/`
 - Parent directory `/tenants/`
+- Other tenant's trading partners
 
 #### 2. Unique UIDs/GIDs
 Each tenant has unique UID/GID (1100+) for filesystem isolation.
@@ -95,8 +130,8 @@ Use SHA-512 hashed passwords (not plaintext).
 #### 5. File Permissions
 
 ```bash
-# Tenant uploads 276 request
-/tenants/bcbs-florida/inbound/276/request-001.edi
+# Tenant uploads 276 request to Availity
+/tenants/bcbs-florida/availity/inbound/276/request-001.edi
   Owner: bcbs-florida (1100)
   Group: cho-workflows (5000)
   Perms: -rw-r----- (640)
@@ -143,13 +178,13 @@ NEXT_UID=$((1100 + $(kubectl -n cho-sftp get secret sftp-tenant-users -o json | 
 kubectl -n cho-sftp patch secret sftp-tenant-users --type='json' \
   -p="[{\"op\":\"add\",\"path\":\"/stringData/users.conf\",\"value\":\"${TENANT_ID}:${PASSWORD}:${NEXT_UID}:${NEXT_UID}:inbound,outbound:/bin/false:/tenants/${TENANT_ID}\\n\"}]"
 
-# Create directory structure
+# Create trading partner directories (provisioned separately via provision-trading-partner.sh)
+# Example: availity, change-healthcare, quest-diagnostics
+# Each trading partner gets their own inbound/outbound structure
 kubectl -n cho-sftp exec deployment/sftp-server -- bash -c "
-  mkdir -p /home/tenants/${TENANT_ID}/{inbound,outbound}/{276,277,278,834,835,837}
-  chown -R ${NEXT_UID}:${NEXT_UID} /home/tenants/${TENANT_ID}
+  mkdir -p /home/tenants/${TENANT_ID}
+  chown ${NEXT_UID}:${NEXT_UID} /home/tenants/${TENANT_ID}
   chmod 750 /home/tenants/${TENANT_ID}
-  chmod 770 /home/tenants/${TENANT_ID}/inbound/*
-  chmod 550 /home/tenants/${TENANT_ID}/outbound/*
 "
 
 # Store credentials in Key Vault
@@ -183,31 +218,24 @@ data:
     mkdir -p /home/tenants
     chmod 755 /home/tenants
     
-    # Parse users.conf and create directories
+    # Parse users.conf and create tenant home directories
     while IFS=: read -r username password uid gid dirs shell chroot; do
       if [ -n "$username" ] && [[ ! "$username" =~ ^# ]]; then
         TENANT_DIR="/home${chroot}"
         
         echo "Provisioning tenant: $username (UID: $uid)"
         
-        # Create home directory
+        # Create tenant home directory (trading partner subdirs created separately)
         mkdir -p "$TENANT_DIR"
         
-        # Create subdirectories
-        IFS=',' read -ra DIR_ARRAY <<< "$dirs"
-        for dir in "${DIR_ARRAY[@]}"; do
-          mkdir -p "$TENANT_DIR/$dir"/{276,277,278,834,835,837}
-        done
-        
         # Set ownership
-        chown -R ${uid}:${gid} "$TENANT_DIR"
+        chown ${uid}:${gid} "$TENANT_DIR"
         
         # Set permissions
         chmod 750 "$TENANT_DIR"
-        chmod -R 770 "$TENANT_DIR/inbound"
-        chmod -R 550 "$TENANT_DIR/outbound"
         
-        echo "  ✅ Directories created for $username"
+        echo "  ✅ Home directory created for $username"
+        echo "  ℹ️  Trading partner directories provisioned via provision-trading-partner.sh"
       fi
     done < /etc/sftp/users.conf
 ---
@@ -253,16 +281,30 @@ spec:
 When a new health plan signs up:
 
 1. **Sales creates tenant** in CRM (Salesforce, HubSpot)
-2. **Platform team provisions**:
+2. **Platform team provisions tenant**:
    ```bash
    ./scripts/provision-sftp-tenant.sh "bcbs-florida" "Blue Cross Blue Shield of Florida"
    ```
-3. **Credentials sent** via secure channel (not email!)
-4. **Test connection**:
+3. **Add trading partners** for the tenant:
+   ```bash
+   # Clearinghouse for claims
+   ./scripts/provision-trading-partner.sh "bcbs-florida" "availity" "Availity Clearinghouse" --transactions "276,277,278,837"
+   
+   # Different clearinghouse for ERA
+   ./scripts/provision-trading-partner.sh "bcbs-florida" "change-healthcare" "Change Healthcare" --transactions "835,837"
+   
+   # Lab for attachments
+   ./scripts/provision-trading-partner.sh "bcbs-florida" "quest-diagnostics" "Quest Diagnostics" --transactions "275"
+   ```
+4. **Credentials sent** via secure channel (not email!)
+5. **Test connection**:
    ```bash
    sftp bcbs-florida@sftp.cloudhealthoffice.com
+   cd availity/inbound/276
+   put test-claim-status-request.edi
    ```
-5. **Configure trading partner** in Azure Integration Account
+6. **Configure trading partner metadata** in Trading Partner Service (CosmosDB)
+7. **Update Argo Workflows** to route files by tenant and trading partner
 6. **Verify isolation** - ensure tenant can't see other directories
 
 ## Monitoring & Compliance
