@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using Microsoft.Identity.Web;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -389,12 +391,14 @@ public class AuthorizationService : IAuthorizationService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthorizationService> _logger;
+    private readonly ITokenAcquisition _tokenAcquisition;
 
-    public AuthorizationService(HttpClient httpClient, IConfiguration configuration, ILogger<AuthorizationService> logger)
+    public AuthorizationService(HttpClient httpClient, IConfiguration configuration, ILogger<AuthorizationService> logger, ITokenAcquisition tokenAcquisition)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
+        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null)
@@ -402,6 +406,7 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
+            await SetBearerTokenAsync();
             var url = string.IsNullOrEmpty(memberId) 
                 ? $"{baseUrl}/authorizations" 
                 : $"{baseUrl}/authorizations?memberId={memberId}";
@@ -420,6 +425,7 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
+            await SetBearerTokenAsync();
             return await _httpClient.GetFromJsonAsync<AuthorizationDetails>($"{baseUrl}/authorizations/{authorizationId}");
         }
         catch (Exception ex)
@@ -434,6 +440,7 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
+            await SetBearerTokenAsync();
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/authorizations", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<SubmitAuthorizationResponse>();
@@ -444,6 +451,13 @@ public class AuthorizationService : IAuthorizationService
             _logger.LogWarning(ex, "Error submitting authorization, returning mock ID");
             return $"AUTH-2026-{new Random().Next(10000, 99999):D5}";
         }
+    }
+
+    private async Task SetBearerTokenAsync()
+    {
+        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Authorization.ReadWrite" };
+        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
 
     private List<AuthorizationSummary> GetMockAuthorizations(string? memberId)
@@ -1841,12 +1855,14 @@ public class AttachmentService : IAttachmentService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AttachmentService> _logger;
+    private readonly ITokenAcquisition _tokenAcquisition;
 
-    public AttachmentService(HttpClient httpClient, IConfiguration configuration, ILogger<AttachmentService> logger)
+    public AttachmentService(HttpClient httpClient, IConfiguration configuration, ILogger<AttachmentService> logger, ITokenAcquisition tokenAcquisition)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
+        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AttachmentInfo>> GetAttachmentsAsync(string authorizationId)
@@ -1854,6 +1870,7 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
+            await SetBearerTokenAsync();
             var attachments = await _httpClient.GetFromJsonAsync<List<AttachmentInfo>>($"{baseUrl}/attachments/authorization/{authorizationId}");
             return attachments ?? new List<AttachmentInfo>();
         }
@@ -1869,6 +1886,7 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
+            await SetBearerTokenAsync();
             using var content = new MultipartFormDataContent();
             var streamContent = new StreamContent(fileStream);
             streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
@@ -1893,6 +1911,7 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
+            await SetBearerTokenAsync();
             var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStreamAsync();
@@ -1917,6 +1936,13 @@ public class AttachmentService : IAttachmentService
             _logger.LogError(ex, "Error deleting attachment {AttachmentId}", attachmentId);
             throw;
         }
+    }
+
+    private async Task SetBearerTokenAsync()
+    {
+        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Attachments.ReadWrite" };
+        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
 
     private List<AttachmentInfo> GetMockAttachments(string authorizationId)
