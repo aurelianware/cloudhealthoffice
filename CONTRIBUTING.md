@@ -1,6 +1,6 @@
 # Contributing to Cloud Health Office
 
-Welcome to the Cloud Health Office platform repository! We’re building a modern integration layer for health plans running QNXT/Facets, helping them achieve CMS-0057-F compliance and reduce dependency on expensive vendor implementations.
+Welcome to the Cloud Health Office platform repository! We’re building a modern integration layer for health plans running legacy systems, helping them achieve CMS-0057-F compliance and reduce dependency on expensive vendor implementations.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Welcome to the Cloud Health Office platform repository! We’re building a moder
 
 ## About the Project
 
-Cloud Health Office is an open-source healthcare integration platform built by former QNXT architects and implementation specialists. We’re solving real problems faced by health plans:
+Cloud Health Office is an open-source healthcare integration platform built by former healthcare payer architects and implementation specialists. We’re solving real problems faced by health plans:
 
 - **CMS-0057-F Compliance**: January 2027 deadline approaching, $2M+ vendor upgrades required
 - **Vendor Lock-in**: Expensive BPaaS dependencies with limited operational control
@@ -29,7 +29,7 @@ This platform serves:
 
 - **Medicaid Managed Care Organizations** (MCOs)
 - **Medicare Advantage Plans**
-- **Commercial Health Plans** running TriZetto QNXT or Facets
+- **Commercial Health Plans** running aging Core Admin platforms
 - **Third-Party Administrators** (TPAs) needing modern EDI infrastructure
 
 ### Core Capabilities
@@ -38,7 +38,7 @@ This platform serves:
 - X12 EDI (270/271, 275, 276/277, 278, 835, 837)
 - Multi-clearinghouse support (Availity, Change Healthcare, Optum, Inovalon)
 - Azure Logic Apps OR Kubernetes multi-cloud deployment
-- QNXT/Facets integration without core system replacement
+- Core system integration without core system replacement
 
 ## Ways to Contribute
 
@@ -49,7 +49,7 @@ Even if you’re not a developer, you can contribute valuable domain expertise:
 - **Document Use Cases**: Share your health plan’s integration challenges
 - **Provide Feedback**: Test features and report what works/doesn’t work
 - **Compliance Review**: Review CMS-0057-F implementation for accuracy
-- **Integration Testing**: Help validate QNXT/Facets connectors with your systems
+- **Integration Testing**: Help validate connectors with your legacy systems
 
 **How to start**: Open a [GitHub Discussion](https://github.com/aurelianware/cloudhealthoffice/discussions) to share your experience.
 
@@ -70,7 +70,7 @@ We welcome code contributions in several areas:
 Help us improve documentation:
 
 - **User Guides**: Deployment guides for different health plan sizes
-- **Integration Guides**: Step-by-step QNXT/Facets connection procedures
+- **Integration Guides**: Step-by-step backend system connection procedures
 - **Compliance Docs**: CMS-0057-F checklists and validation procedures
 - **Troubleshooting**: Common issues and solutions
 

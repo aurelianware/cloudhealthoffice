@@ -1,7 +1,7 @@
 # SFTP Sensor - Triggers workflows on SFTP polling events
 #
 # Listens to: sftp-polling EventSource
-# Triggers: x12-275-ingest, x12-278-ingest WorkflowTemplates
+# Triggers: x12-275-ingest, x12-276-ingest, x12-278-ingest WorkflowTemplates
 
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -28,6 +28,10 @@ spec:
     - name: sftp-275-poll
       eventSourceName: sftp-polling
       eventName: sftp-poll-275
+    
+    - name: sftp-276-poll
+      eventSourceName: sftp-polling
+      eventName: sftp-poll-276
     
     - name: sftp-278-poll
       eventSourceName: sftp-polling
@@ -61,6 +65,43 @@ spec:
           parameters:
             - src:
                 dependencyName: sftp-275-poll
+                dataKey: metadata.transaction-type
+              dest: spec.arguments.parameters.0.value
+      retryStrategy:
+        steps: 3
+        duration: "30s"
+    
+    # Trigger X12 276 Ingest Workflow (Claim Status Inquiry)
+    - template:
+        name: trigger-276-ingest
+        conditions: "sftp-276-poll"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: x12-276-ingest-
+                namespace: cloudhealthoffice
+              spec:
+                workflowTemplateRef:
+                  name: x12-276-ingest
+                arguments:
+                  parameters:
+                    - name: tenant-id
+                      value: "bcbs-florida"
+                    - name: trading-partner-id
+                      value: "availity"
+                    - name: environment
+                      value: "prod"
+                    - name: sftp-inbound-folder
+                      value: "/inbound/276"
+                    - name: file-pattern
+                      value: "*.edi"
+          parameters:
+            - src:
+                dependencyName: sftp-276-poll
                 dataKey: metadata.transaction-type
               dest: spec.arguments.parameters.0.value
       retryStrategy:

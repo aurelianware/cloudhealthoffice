@@ -1,0 +1,443 @@
+# X12 277 Claim Status Response Workflow
+# Generates and sends 277 responses to claim status inquiries (276)
+#
+# HIPAA Transaction: 005010X212 (277) - Health Care Claim Status Notification
+#
+# Workflow Steps:
+#   1. consume-kafka - Listen to 'claim-status-requests' topic (from 276 ingest)
+#   2. query-claims - Fetch claim status from claims service
+#   3. generate-277 - Build X12 277 claim status response
+#   4. sftp-upload - Send to clearinghouse SFTP
+#   5. archive - Store 277 in data lake
+#   6. publish-kafka - Confirm to 'claim-status-responses' topic
+#
+# Trading Partners:
+#   - Sender: Health Plan (Payer)
+#   - Receiver: Clearinghouse or Provider
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-277-claim-status
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-277-claim-status
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 277 claim status response generation - answers 276 inquiries"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: generate-277-claim-status
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+    secondsAfterSuccess: 43200
+    secondsAfterFailure: 604800
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 1200  # 20 minutes
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  arguments:
+    parameters:
+      # Claim status inquiry data (from 276 parse)
+      - name: claim-inquiry
+        value: "{}"
+      # Trading partner configuration
+      - name: tenant-id
+        value: "bcbs-florida"
+      - name: trading-partner-id
+        value: "availity"
+      - name: environment
+        value: "prod"
+      - name: sender-id
+        value: "BCBSFLORIDA"
+      - name: receiver-id
+        value: "CLEARINGHOUSE"
+      # SFTP
+      - name: sftp-outbound-folder
+        value: "/outbound/277"
+      # Blob storage
+      - name: blob-container
+        value: "cho-prod"
+      - name: blob-prefix
+        value: "processed/277"
+      # Services
+      - name: claims-service-endpoint
+        value: "http://claims-service.cho-svcs.svc.cluster.local/api/claims"
+      # Kafka
+      - name: kafka-topic-outbound
+        value: "claim-status-responses"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: clearinghouse-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: azure-storage-credentials
+      secret:
+        secretName: azure-storage-secret
+  
+  templates:
+    # Main orchestration DAG
+    - name: generate-277-claim-status
+      dag:
+        tasks:
+          # Step 1: Parse claim inquiry from Kafka message
+          - name: parse-claim-inquiry
+            template: parse-inquiry-template
+            arguments:
+              parameters:
+                - name: claim-inquiry
+                  value: "{{workflow.parameters.claim-inquiry}}"
+          
+          # Step 2: Query claims service for each claim
+          - name: query-claims
+            dependencies: [parse-claim-inquiry]
+            template: query-claims-template
+            arguments:
+              artifacts:
+                - name: inquiries
+                  from: "{{tasks.parse-claim-inquiry.outputs.artifacts.parsed-inquiries}}"
+              parameters:
+                - name: claims-service-endpoint
+                  value: "{{workflow.parameters.claims-service-endpoint}}"
+          
+          # Step 3: Generate X12 277 EDI
+          - name: generate-277
+            dependencies: [query-claims]
+            template: generate-277-template
+            arguments:
+              artifacts:
+                - name: claim-status-data
+                  from: "{{tasks.query-claims.outputs.artifacts.claim-status}}"
+              parameters:
+                - name: sender-id
+                  value: "{{workflow.parameters.sender-id}}"
+                - name: receiver-id
+                  value: "{{workflow.parameters.receiver-id}}"
+          
+          # Step 4: Upload to SFTP
+          - name: sftp-upload
+            dependencies: [generate-277]
+            template: sftp-upload-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-outbound-folder}}"
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+          
+          # Step 5: Archive to blob storage
+          - name: archive-277
+            dependencies: [generate-277]
+            template: azure-blob-upload-template
+            arguments:
+              artifacts:
+                - name: file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-path
+                  value: "{{workflow.parameters.blob-prefix}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.trading-partner-id}}/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}"
+          
+          # Step 6: Publish confirmation to Kafka
+          - name: publish-confirmation
+            dependencies: [sftp-upload, archive-277]
+            template: kafka-publish-template
+            arguments:
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic-outbound}}"
+                - name: message
+                  value: "{{tasks.query-claims.outputs.parameters.status-summary}}"
+
+    # Parse Claim Inquiry Template
+    - name: parse-inquiry-template
+      inputs:
+        parameters:
+          - name: claim-inquiry
+      outputs:
+        artifacts:
+          - name: parsed-inquiries
+            path: /data/output/inquiries.json
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            
+            inquiry_data = json.loads('''{{inputs.parameters.claim-inquiry}}''')
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            # Extract claim inquiries from parsed 276
+            inquiries = []
+            
+            if 'inquiries' in inquiry_data:
+              for inq in inquiry_data['inquiries']:
+                for claim in inq.get('claims', []):
+                  inquiries.append({
+                    'claim_number': claim.get('claim_number', ''),
+                    'member_id': inq.get('subscriber', {}).get('member_id', ''),
+                    'service_date_from': claim.get('service_date_from', ''),
+                    'service_date_to': claim.get('service_date_to', '')
+                  })
+            
+            with open('/data/output/inquiries.json', 'w') as f:
+              json.dump(inquiries, f, indent=2)
+            
+            print(f"Parsed {len(inquiries)} claim inquiries")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Query Claims Service Template
+    - name: query-claims-template
+      inputs:
+        artifacts:
+          - name: inquiries
+            path: /data/input/inquiries.json
+        parameters:
+          - name: claims-service-endpoint
+      outputs:
+        artifacts:
+          - name: claim-status
+            path: /data/output/claim-status.json
+        parameters:
+          - name: status-summary
+            valueFrom:
+              path: /data/output/summary.json
+      container:
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            CLAIMS_API="{{inputs.parameters.claims-service-endpoint}}"
+            
+            # Read inquiries
+            INQUIRIES=$(cat /data/input/inquiries.json)
+            
+            # Query each claim
+            echo '{"claims": []}' > /data/output/claim-status.json
+            
+            # Loop through inquiries and query claims service
+            # For production, this should call:
+            # curl "$CLAIMS_API?claimNumber=$CLAIM_NUMBER"
+            
+            # Mock response for now
+            cat > /data/output/claim-status.json <<EOF
+            {
+              "claims": [
+                {
+                  "claim_number": "CLM987654321",
+                  "member_id": "MEM123456",
+                  "status": "Approved",
+                  "status_code": "1",
+                  "status_category": "F1",
+                  "service_date": "20260115",
+                  "provider_npi": "1234567890",
+                  "total_charge": "250.00",
+                  "approved_amount": "200.00"
+                }
+              ]
+            }
+            EOF
+            
+            echo '{"total_inquiries": 1, "status": "processed"}' > /data/output/summary.json
+            
+            echo "Claims query complete"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Generate 277 Template
+    - name: generate-277-template
+      inputs:
+        artifacts:
+          - name: claim-status-data
+            path: /data/input/claim-status.json
+        parameters:
+          - name: sender-id
+          - name: receiver-id
+      outputs:
+        artifacts:
+          - name: edi-output
+            path: /data/output
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-x12-encoder:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            echo "Generating 277 claim status response"
+            
+            SENDER_ID="{{inputs.parameters.sender-id}}"
+            RECEIVER_ID="{{inputs.parameters.receiver-id}}"
+            
+            # Generate 277 EDI using Python encoder
+            python /app/generate_277.py \
+              --input /data/input/claim-status.json \
+              --output /data/output/277-status-$(date +%Y%m%d%H%M%S).edi \
+              --sender-id "$SENDER_ID" \
+              --receiver-id "$RECEIVER_ID" \
+              --transaction-type "claim-status"
+            
+            echo "277 generation complete"
+            ls -lh /data/output/
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # SFTP Upload Template
+    - name: sftp-upload-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input
+        parameters:
+          - name: sftp-folder
+          - name: tenant-id
+          - name: trading-partner-id
+      container:
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            apk add --no-cache openssh-client sshpass
+            
+            SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
+            SFTP_USER="${SFTP_USER:-logicapp}"
+            SFTP_PASS="${SFTP_PASSWORD}"
+            
+            echo "Uploading 277 to SFTP: {{inputs.parameters.sftp-folder}}"
+            
+            sshpass -p "$SFTP_PASS" sftp -o StrictHostKeyChecking=no $SFTP_USER@$SFTP_HOST <<EOF
+            cd {{inputs.parameters.sftp-folder}}
+            lcd /data/input
+            mput *.edi
+            bye
+            EOF
+            
+            echo "Upload complete"
+        env:
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Azure Blob Upload Template
+    - name: azure-blob-upload-template
+      inputs:
+        artifacts:
+          - name: file
+            path: /data/input
+        parameters:
+          - name: container
+          - name: blob-path
+      script:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: [sh]
+        source: |
+          set -e
+          
+          CONTAINER="{{inputs.parameters.container}}"
+          BLOB_PATH="{{inputs.parameters.blob-path}}"
+          
+          echo "Uploading to Azure Blob: $CONTAINER/$BLOB_PATH"
+          
+          for file in /data/input/*.edi; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              az storage blob upload \
+                --account-name $AZURE_STORAGE_ACCOUNT \
+                --account-key $AZURE_STORAGE_KEY \
+                --container-name $CONTAINER \
+                --name "$BLOB_PATH/$filename" \
+                --file "$file" \
+                --overwrite
+            fi
+          done
+          
+          echo "Upload complete"
+        env:
+          - name: AZURE_STORAGE_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-name
+          - name: AZURE_STORAGE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-key
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Kafka Publish Template
+    - name: kafka-publish-template
+      inputs:
+        parameters:
+          - name: topic
+          - name: message
+      script:
+        image: ghcr.io/aurelianware/cloudhealthoffice-kafka-publisher:latest
+        command: [sh]
+        source: |
+          set -e
+          
+          TOPIC="{{inputs.parameters.topic}}"
+          MESSAGE='{{inputs.parameters.message}}'
+          
+          echo "Publishing to Kafka topic: $TOPIC"
+          
+          # Publish confirmation
+          echo "$MESSAGE" | kafka-console-producer \
+            --bootstrap-server $KAFKA_BOOTSTRAP_SERVERS \
+            --topic $TOPIC
+          
+          echo "Published to Kafka"
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: bootstrap-servers

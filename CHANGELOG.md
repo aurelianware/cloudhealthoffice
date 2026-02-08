@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dual-Market Healthcare Integration Platform
 
-Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/Facets augmentation) and **healthcare providers** (practice management with direct EDI). This release delivers multi-cloud independence, CMS-0057-F compliance, and commercial launch readiness.
+Cloud Health Office v3.0.0 is production-ready for both **health payers** (legacy system augmentation) and **healthcare providers** (practice management with direct EDI). This release delivers multi-cloud independence, CMS-0057-F compliance, and commercial launch readiness.
 
 ### Added
 
@@ -163,7 +163,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/
 
 | PR | Title | Category |
 |----|-------|----------|
-| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references (Cognizant, QNXT, Facets, Availity) | Platform |
+| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references | Platform |
 | [#115](https://github.com/aurelianware/cloudhealthoffice/pull/115) | Add multi-cloud deployment documentation and HashiCorp Vault integration | Multi-Cloud |
 | [#114](https://github.com/aurelianware/cloudhealthoffice/pull/114) | Fix image tag mismatch in container build workflow | CI/CD |
 | [#113](https://github.com/aurelianware/cloudhealthoffice/pull/113) | Migrate X12 EDI processing to Argo Workflows and Kafka | Multi-Cloud |
