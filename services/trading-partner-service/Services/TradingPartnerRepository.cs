@@ -71,11 +71,11 @@ public class TradingPartnerRepository : ITradingPartnerRepository
     {
         var response = await _container.CreateItemAsync(
             partner,
-            new PartitionKey(partner.PartitionKey));
+            new PartitionKey(partner.TenantId));
 
         _logger.LogInformation(
-            "Created trading partner: {Id} in partition {PartitionKey}",
-            partner.Id, partner.PartitionKey);
+            "Created trading partner: {Id} in partition {TenantId}",
+            partner.Id, partner.TenantId);
 
         return response.Resource;
     }
@@ -85,7 +85,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
         var response = await _container.ReplaceItemAsync(
             partner,
             partner.Id,
-            new PartitionKey(partner.PartitionKey));
+            new PartitionKey(partner.TenantId));
 
         _logger.LogInformation(
             "Updated trading partner: {Id}",
