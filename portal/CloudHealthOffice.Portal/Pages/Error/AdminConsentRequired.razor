@@ -55,7 +55,7 @@
             <MudText Typo="Typo.subtitle2" Class="mb-2">
                 <strong>Admin Consent URL:</strong>
             </MudText>
-            <MudTextField @bind-Value="@adminConsentUrl" 
+            <MudTextField Value="@GetAdminConsentUrl()" 
                          ReadOnly="true" 
                          Variant="Variant.Outlined" 
                          Adornment="Adornment.End"
@@ -67,7 +67,7 @@
         <MudButton Variant="Variant.Filled" 
                    Color="Color.Primary" 
                    StartIcon="@Icons.Material.Filled.OpenInNew"
-                   Href="@adminConsentUrl"
+                   Href="@GetAdminConsentUrl()"
                    Target="_blank"
                    Size="Size.Large"
                    FullWidth="true"
@@ -177,7 +177,8 @@
 @code {
     private string tenantId = "YOUR_TENANT_ID"; // Will be populated from config or error
     private string apiClientId = "31f76844-b2cb-47b1-aede-f5b2b6dc59c8";
-    private string adminConsentUrl => $"https://login.microsoftonline.com/{tenantId}/adminconsent?client_id={apiClientId}";
+    
+    private string GetAdminConsentUrl() => $"https://login.microsoftonline.com/{tenantId}/adminconsent?client_id={apiClientId}";
 
     [Inject]
     private IConfiguration Configuration { get; set; } = default!;
