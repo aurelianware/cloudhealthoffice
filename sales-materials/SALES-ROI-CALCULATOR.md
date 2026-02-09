@@ -46,7 +46,7 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 *Note: Custom development typically experiences 20-40% cost overruns and schedule delays*
 
-#### Enterprise Vendor Path (Change Healthcare/TriZetto/Optum)
+#### Enterprise Vendor Path (Change Healthcare/Major Platforms/Clearinghouses)
 
 | Item | Year 1 | Year 2 | Year 3 | Total |
 |------|--------|--------|--------|-------|
