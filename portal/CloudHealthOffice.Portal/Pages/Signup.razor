@@ -197,8 +197,6 @@
     </div>
 </div>
 
-<script src="https://js.stripe.com/v3/"></script>
-
 @code {
     private SignupModel signupModel = new();
     private bool isSubmitting = false;
@@ -223,35 +221,16 @@
 
     private async Task InitializeStripe()
     {
-        var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
-        
-        await JSRuntime.InvokeVoidAsync("eval", $@"
-            var stripe = Stripe('{stripePublishableKey}');
-            var elements = stripe.elements();
-            var cardElement = elements.create('card', {{
-                style: {{
-                    base: {{
-                        fontSize: '16px',
-                        color: '#333',
-                        '::placeholder': {{ color: '#aab7c4' }}
-                    }},
-                    invalid: {{ color: '#c00' }}
-                }}
-            }});
-            cardElement.mount('#card-element');
-            
-            cardElement.on('change', function(event) {{
-                var displayError = document.getElementById('card-errors');
-                if (event.error) {{
-                    displayError.textContent = event.error.message;
-                }} else {{
-                    displayError.textContent = '';
-                }}
-            }});
-            
-            window.stripeCardElement = cardElement;
-            window.stripe = stripe;
-        ");
+        try
+        {
+            var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
+            await JSRuntime.InvokeVoidAsync("StripeHandler.initialize", stripePublishableKey);
+            Logger.LogInformation("Stripe initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to initialize Stripe");
+        }
     }
 
     private async Task HandleSubmit()
@@ -330,24 +309,11 @@
     {
         try
         {
-            var result = await JSRuntime.InvokeAsync<string>("eval", $@"
-                (async function() {{
-                    const {{ paymentMethod, error }} = await window.stripe.createPaymentMethod({{
-                        type: 'card',
-                        card: window.stripeCardElement,
-                        billing_details: {{
-                            name: '{signupModel.BillingName}',
-                            email: '{signupModel.Email}'
-                        }}
-                    }});
-                    
-                    if (error) {{
-                        return JSON.stringify({{ success: false, error: error.message }});
-                    }}
-                    
-                    return JSON.stringify({{ success: true, paymentMethodId: paymentMethod.id }});
-                }})()
-            ");
+            Logger.LogInformation("Creating Stripe payment method for {Name} ({Email})", signupModel.BillingName, signupModel.Email);
+            
+            var result = await JSRuntime.InvokeAsync<string>("StripeHandler.createPaymentMethod", 
+                signupModel.BillingName, 
+                signupModel.Email);
 
             var jsonResult = System.Text.Json.JsonDocument.Parse(result);
             var success = jsonResult.RootElement.GetProperty("success").GetBoolean();
@@ -355,16 +321,19 @@
             if (success)
             {
                 var pmId = jsonResult.RootElement.GetProperty("paymentMethodId").GetString();
+                Logger.LogInformation("Payment method created successfully: {PaymentMethodId}", pmId);
                 return (true, pmId, null);
             }
             else
             {
                 var error = jsonResult.RootElement.GetProperty("error").GetString();
+                Logger.LogWarning("Payment method creation failed: {Error}", error);
                 return (false, null, $"Payment card error: {error}");
             }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Payment processing error");
             return (false, null, $"Payment processing error: {ex.Message}");
         }
     }
