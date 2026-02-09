@@ -13,6 +13,7 @@
     <PackageReference Include="MudBlazor" Version="6.14.0" />
     <PackageReference Include="Blazored.LocalStorage" Version="4.5.0" />
     <PackageReference Include="System.Net.Http.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.42.0" />
   </ItemGroup>
 
 </Project>
