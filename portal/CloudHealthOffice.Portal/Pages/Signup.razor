@@ -66,7 +66,7 @@
                     <h2>Subscription Tier</h2>
 
                     <div class="tier-options">
-                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"starter\"">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="@(() => SelectTier("starter"))">
                             <h3>Starter</h3>
                             <p class="price">$499/month</p>
                             <ul>
@@ -76,7 +76,7 @@
                             </ul>
                         </div>
 
-                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"professional\"">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="@(() => SelectTier("professional"))">
                             <h3>Professional</h3>
                             <p class="price">$1,499/month</p>
                             <ul>
@@ -87,7 +87,7 @@
                             </ul>
                         </div>
 
-                        <div class="tier-card @(signupModel.SubscriptionTier == "enterprise" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"enterprise\"">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "enterprise" ? "selected" : "")" @onclick="@(() => SelectTier("enterprise"))">
                             <h3>Enterprise</h3>
                             <p class="price">Custom</p>
                             <ul>
@@ -408,6 +408,11 @@
 
         [Required(ErrorMessage = "Billing name is required")]
         public string BillingName { get; set; } = string.Empty;
+    }
+
+    private void SelectTier(string tier)
+    {
+        signupModel.SubscriptionTier = tier;
     }
 
     private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)
