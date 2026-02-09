@@ -176,7 +176,7 @@
     private TradingPartner? editingPartner = null;
     private TradingPartner currentPartner = new();
     private MudForm? form;
-    private IEnumerable<string> selectedTransactionTypes = new HashSet<string>();
+    private ICollection<object> selectedTransactionTypes = new HashSet<object>();
     
     private List<TradingPartner> tradingPartners = new();
     
@@ -250,7 +250,7 @@
     {
         editingPartner = null;
         currentPartner = new TradingPartner { Environment = "prod", IsActive = true };
-        selectedTransactionTypes = new HashSet<string>();
+        selectedTransactionTypes = new HashSet<object>();
         showAddEditDialog = true;
     }
 
@@ -268,7 +268,7 @@
             ReceiverId = partner.ReceiverId,
             IsActive = partner.IsActive
         };
-        selectedTransactionTypes = new HashSet<string>(partner.TransactionTypes);
+        selectedTransactionTypes = new HashSet<object>(partner.TransactionTypes.Cast<object>());
         showAddEditDialog = true;
     }
 
@@ -281,7 +281,7 @@
     private async Task SavePartner()
     {
         // Update transaction types from chip selection
-        currentPartner.TransactionTypes = selectedTransactionTypes.ToList();
+        currentPartner.TransactionTypes = selectedTransactionTypes.Cast<string>().ToList();
         
         try
         {
