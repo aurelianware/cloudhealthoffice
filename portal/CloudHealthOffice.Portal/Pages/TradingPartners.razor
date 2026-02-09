@@ -1,0 +1,361 @@
+@page "/trading-partners"
+@using MudBlazor
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Trading Partners - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Trading Partners</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Manage EDI connections with clearinghouses, labs, and health plans</MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="searchString" 
+                         Placeholder="Search partners..." 
+                         Adornment="Adornment.Start" 
+                         AdornmentIcon="@Icons.Material.Filled.Search" 
+                         IconSize="Size.Medium" 
+                         Class="mt-0"
+                         Style="max-width: 400px;" />
+            
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" @bind-Value="selectedEnvironment" Label="Environment" Variant="Variant.Outlined" Dense="true" Style="min-width: 150px;">
+                    <MudSelectItem Value="@("all")">All Environments</MudSelectItem>
+                    <MudSelectItem Value="@("prod")">Production</MudSelectItem>
+                    <MudSelectItem Value="@("preprod")">Pre-Production (PPMO)</MudSelectItem>
+                    <MudSelectItem Value="@("dev")">Development</MudSelectItem>
+                </MudSelect>
+                
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          StartIcon="@Icons.Material.Filled.Add"
+                          OnClick="OpenAddDialog">
+                    Add Trading Partner
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudTable Items="@FilteredPartners" 
+              Hover="true" 
+              Dense="true" 
+              Loading="@loading"
+              LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Partner Name</MudTh>
+            <MudTh>Environment</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Transaction Types</MudTh>
+            <MudTh>SFTP Path</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Partner Name">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@GetPartnerIcon(context.PartnerType)" Size="Size.Small" />
+                    <MudText>@context.PartnerName</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Environment">
+                <MudChip Size="Size.Small" Color="@GetEnvironmentColor(context.Environment)">
+                    @GetEnvironmentLabel(context.Environment)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Type">@context.PartnerType</MudTd>
+            <MudTd DataLabel="Transaction Types">
+                <MudText Typo="Typo.body2">@string.Join(", ", context.TransactionTypes)</MudText>
+            </MudTd>
+            <MudTd DataLabel="SFTP Path">
+                <MudText Typo="Typo.caption" Style="font-family: monospace;">
+                    @context.SftpPath
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" 
+                        Color="@(context.IsActive ? Color.Success : Color.Default)">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                              Size="Size.Small" 
+                              OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                              Size="Size.Small" 
+                              Color="Color.Error"
+                              OnClick="@(() => DeletePartner(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="py-8">
+                No trading partners found. Click "Add Trading Partner" to get started.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<MudDialog @bind-IsVisible="showAddEditDialog" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(editingPartner == null ? "Add Trading Partner" : "Edit Trading Partner")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" Model="@currentPartner">
+            <MudTextField @bind-Value="currentPartner.PartnerName" 
+                         Label="Partner Name" 
+                         Required="true" 
+                         Variant="Variant.Outlined" 
+                         Margin="Margin.Dense" />
+            
+            <MudSelect @bind-Value="currentPartner.Environment" 
+                      Label="Environment" 
+                      Required="true"
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense">
+                <MudSelectItem Value="@("prod")">Production</MudSelectItem>
+                <MudSelectItem Value="@("preprod")">Pre-Production (PPMO)</MudSelectItem>
+                <MudSelectItem Value="@("dev")">Development</MudSelectItem>
+            </MudSelect>
+            
+            <MudSelect @bind-Value="currentPartner.PartnerType" 
+                      Label="Partner Type" 
+                      Required="true"
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense">
+                <MudSelectItem Value="@("Clearinghouse")">Clearinghouse</MudSelectItem>
+                <MudSelectItem Value="@("HealthPlan")">Health Plan</MudSelectItem>
+                <MudSelectItem Value="@("Laboratory")">Laboratory</MudSelectItem>
+                <MudSelectItem Value="@("Pharmacy")">Pharmacy</MudSelectItem>
+                <MudSelectItem Value="@("Provider")">Provider</MudSelectItem>
+                <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+            </MudSelect>
+            
+            <MudChipSet @bind-SelectedValues="selectedTransactionTypes" 
+                       MultiSelection="true" 
+                       Filter="true">
+                <MudChip Text="275" Value="@("275")" />
+                <MudChip Text="276" Value="@("276")" />
+                <MudChip Text="277" Value="@("277")" />
+                <MudChip Text="278" Value="@("278")" />
+                <MudChip Text="834" Value="@("834")" />
+                <MudChip Text="835" Value="@("835")" />
+                <MudChip Text="837" Value="@("837")" />
+            </MudChipSet>
+            
+            <MudTextField @bind-Value="currentPartner.SenderId" 
+                         Label="Sender ID (ISA06)" 
+                         Variant="Variant.Outlined" 
+                         Margin="Margin.Dense" />
+            
+            <MudTextField @bind-Value="currentPartner.ReceiverId" 
+                         Label="Receiver ID (ISA08)" 
+                         Variant="Variant.Outlined" 
+                         Margin="Margin.Dense" />
+            
+            <MudSwitch @bind-Checked="currentPartner.IsActive" 
+                      Label="Active" 
+                      Color="Color.Primary" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" 
+                  Variant="Variant.Filled" 
+                  OnClick="SavePartner">
+            @(editingPartner == null ? "Add" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool loading = true;
+    private string searchString = "";
+    private string selectedEnvironment = "all";
+    private bool showAddEditDialog = false;
+    private TradingPartner? editingPartner = null;
+    private TradingPartner currentPartner = new();
+    private MudForm? form;
+    private IEnumerable<string> selectedTransactionTypes = new HashSet<string>();
+    
+    private List<TradingPartner> tradingPartners = new();
+    
+    private DialogOptions dialogOptions = new() 
+    { 
+        MaxWidth = MaxWidth.Medium, 
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
+    private IEnumerable<TradingPartner> FilteredPartners =>
+        tradingPartners
+            .Where(p => selectedEnvironment == "all" || p.Environment == selectedEnvironment)
+            .Where(p => string.IsNullOrWhiteSpace(searchString) || 
+                       p.PartnerName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Environment)
+            .ThenBy(p => p.PartnerName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTradingPartners();
+    }
+
+    private async Task LoadTradingPartners()
+    {
+        loading = true;
+        try
+        {
+            // TODO: Replace with actual API call
+            // var response = await Http.GetFromJsonAsync<List<TradingPartner>>("/api/trading-partners");
+            // tradingPartners = response ?? new();
+            
+            // Mock data for now
+            tradingPartners = new List<TradingPartner>
+            {
+                new() { 
+                    PartnerId = "availity-prod", 
+                    PartnerName = "Availity", 
+                    Environment = "prod",
+                    PartnerType = "Clearinghouse",
+                    TransactionTypes = new List<string> { "276", "277", "278", "837" },
+                    SftpPath = "/tenants/demo-tenant/prod/availity/",
+                    IsActive = true,
+                    SenderId = "AVAILITY",
+                    ReceiverId = "DEMO"
+                },
+                new() { 
+                    PartnerId = "availity-preprod", 
+                    PartnerName = "Availity", 
+                    Environment = "preprod",
+                    PartnerType = "Clearinghouse",
+                    TransactionTypes = new List<string> { "276", "277", "278", "837" },
+                    SftpPath = "/tenants/demo-tenant/preprod/availity/",
+                    IsActive = true,
+                    SenderId = "AVAILITY",
+                    ReceiverId = "DEMO"
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading trading partners: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void OpenAddDialog()
+    {
+        editingPartner = null;
+        currentPartner = new TradingPartner { Environment = "prod", IsActive = true };
+        selectedTransactionTypes = new HashSet<string>();
+        showAddEditDialog = true;
+    }
+
+    private void OpenEditDialog(TradingPartner partner)
+    {
+        editingPartner = partner;
+        currentPartner = new TradingPartner
+        {
+            PartnerId = partner.PartnerId,
+            PartnerName = partner.PartnerName,
+            Environment = partner.Environment,
+            PartnerType = partner.PartnerType,
+            TransactionTypes = new List<string>(partner.TransactionTypes),
+            SenderId = partner.SenderId,
+            ReceiverId = partner.ReceiverId,
+            IsActive = partner.IsActive
+        };
+        selectedTransactionTypes = new HashSet<string>(partner.TransactionTypes);
+        showAddEditDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        showAddEditDialog = false;
+        editingPartner = null;
+    }
+
+    private async Task SavePartner()
+    {
+        // Update transaction types from chip selection
+        currentPartner.TransactionTypes = selectedTransactionTypes.ToList();
+        
+        try
+        {
+            if (editingPartner == null)
+            {
+                // TODO: POST to API
+                Snackbar.Add("Trading partner added successfully", Severity.Success);
+            }
+            else
+            {
+                // TODO: PUT to API
+                Snackbar.Add("Trading partner updated successfully", Severity.Success);
+            }
+            
+            await LoadTradingPartners();
+            CloseDialog();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving trading partner: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeletePartner(TradingPartner partner)
+    {
+        // TODO: Add confirmation dialog
+        try
+        {
+            // TODO: DELETE to API
+            Snackbar.Add($"Trading partner '{partner.PartnerName}' deleted", Severity.Success);
+            await LoadTradingPartners();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting trading partner: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string GetPartnerIcon(string partnerType) => partnerType switch
+    {
+        "Clearinghouse" => Icons.Material.Filled.CloudQueue,
+        "HealthPlan" => Icons.Material.Filled.HealthAndSafety,
+        "Laboratory" => Icons.Material.Filled.Science,
+        "Pharmacy" => Icons.Material.Filled.LocalPharmacy,
+        "Provider" => Icons.Material.Filled.LocalHospital,
+        _ => Icons.Material.Filled.Business
+    };
+
+    private Color GetEnvironmentColor(string environment) => environment switch
+    {
+        "prod" => Color.Success,
+        "preprod" => Color.Warning,
+        "dev" => Color.Info,
+        _ => Color.Default
+    };
+
+    private string GetEnvironmentLabel(string environment) => environment switch
+    {
+        "prod" => "PROD",
+        "preprod" => "PPMO",
+        "dev" => "DEV",
+        _ => environment.ToUpper()
+    };
+
+    private class TradingPartner
+    {
+        public string PartnerId { get; set; } = string.Empty;
+        public string PartnerName { get; set; } = string.Empty;
+        public string Environment { get; set; } = "prod";
+        public string PartnerType { get; set; } = "Clearinghouse";
+        public List<string> TransactionTypes { get; set; } = new();
+        public string SftpPath { get; set; } = string.Empty;
+        public bool IsActive { get; set; } = true;
+        public string SenderId { get; set; } = string.Empty;
+        public string ReceiverId { get; set; } = string.Empty;
+    }
+}
