@@ -29,6 +29,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
+// Configure Data Protection for multi-pod deployments
+var dataProtectionConnectionString = Environment.GetEnvironmentVariable("DATA_PROTECTION_STORAGE_CONNECTION");
+if (!string.IsNullOrEmpty(dataProtectionConnectionString))
+{
+    var storageAccount = new Azure.Storage.Blobs.BlobServiceClient(dataProtectionConnectionString);
+    builder.Services.AddDataProtection()
+        .PersistKeysToAzureBlobStorage(storageAccount, "dataprotection", "keys.xml")
+        .SetApplicationName("CloudHealthOffice.Portal");
+}
+else
+{
+    // Fallback for local development - keys stored in file system
+    builder.Services.AddDataProtection()
+        .SetApplicationName("CloudHealthOffice.Portal");
+}
+
 // Azure AD Authentication
 var initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ') ?? Array.Empty<string>();
 
