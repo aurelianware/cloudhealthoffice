@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-dataprotection
+  namespace: cho-svcs
+  labels:
+    app: redis-dataprotection
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app: redis-dataprotection
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-dataprotection
+  namespace: cho-svcs
+  labels:
+    app: redis-dataprotection
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-dataprotection
+  template:
+    metadata:
+      labels:
+        app: redis-dataprotection
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        emptyDir: {}
