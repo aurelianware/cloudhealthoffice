@@ -98,12 +98,10 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    // Fallback policy requires authentication, but specific endpoints can opt-out with [AllowAnonymous]
-    var policyBuilder = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser();
-    options.FallbackPolicy = policyBuilder.Build();
+    // Don't use fallback policy - let pages opt-in to authentication
+    // This allows [AllowAnonymous] pages like /signup and /welcome to work
     
-    // Add anonymous policy for health checks
+    // Add anonymous policy for health checks and public pages
     options.AddPolicy("Anonymous", policy => policy.RequireAssertion(_ => true));
 });
 
