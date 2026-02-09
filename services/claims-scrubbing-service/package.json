@@ -38,7 +38,7 @@
     "@azure/keyvault-secrets": "^4.9.0",
     "@azure/storage-blob": "^12.30.0",
     "kafkajs": "^2.2.4",
-    "uuid": "^11.0.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.0.0",
