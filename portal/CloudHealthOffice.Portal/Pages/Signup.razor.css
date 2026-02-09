@@ -104,6 +104,31 @@
     color: #ffffff;
 }
 
+.tier-card.enterprise-tier {
+    border-color: #ffd700;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    color: #ffffff;
+    position: relative;
+}
+
+.tier-card.enterprise-tier:hover {
+    border-color: #ffd700;
+    box-shadow: 0 8px 20px rgba(255, 215, 0, 0.3);
+}
+
+.tier-card.enterprise-tier::before {
+    content: "POPULAR";
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: #ffd700;
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
 .tier-card h3 {
     font-size: 1.5rem;
     margin-bottom: 0.5rem;
