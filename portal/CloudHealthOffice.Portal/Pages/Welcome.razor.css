@@ -30,6 +30,17 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+}{
+  "id": "my-test-org",
+  "tenantId": "my-test-org",
+  "azureTenantId": "32177734-051b-4fdc-9568-cc35530191b1",
+  "organizationName": "My Organization",
+  "subscriptionStatus": "Active",
+  "tier": "professional",
+  "isDemo": false,
+  "createdAt": "2026-02-08T00:00:00Z",
+  "updatedAt": "2026-02-08T00:00:00Z",
+  "adminEmails": ["YOUR_EMAIL@example.com"]
 }
 
 .hero-tagline {
