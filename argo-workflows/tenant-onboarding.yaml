@@ -27,6 +27,10 @@ spec:
         value: "claims,eligibility" # comma-separated list
       - name: phone
         value: ""
+      - name: payment-method-id
+        value: "" # Stripe payment method ID from signup
+      - name: billing-name
+        value: ""
   
   # Shared volumes
   volumes:
@@ -264,25 +268,93 @@ spec:
             apk add --no-cache curl jq
             
             TENANT_ID="{{workflow.parameters.tenant-id}}"
-            TENANT_NAME="{{workflow.parameters.tenant-name}}"
             ORG_NAME="{{workflow.parameters.organization-name}}"
             EMAIL="{{workflow.parameters.admin-email}}"
+            BILLING_NAME="{{workflow.parameters.billing-name}}"
             TIER="{{workflow.parameters.subscription-tier}}"
-            
-            BILLING_SERVICE="http://tenant-service.cho-svcs/api/v1/billing"
+            PAYMENT_METHOD_ID="{{workflow.parameters.payment-method-id}}"
             
             echo "Creating Stripe subscription for $ORG_NAME ($TIER tier)..."
             
-            curl -X POST "$BILLING_SERVICE/tenants/$TENANT_ID/subscribe?tier=$TIER" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${TENANT_SERVICE_API_KEY}"
+            # Determine price ID based on tier
+            case "$TIER" in
+              starter)
+                PRICE_ID="price_1SyhLMJu0wSGGF9n9zqtS7Kh"
+                ;;
+              professional)
+                PRICE_ID="price_1SyhMmJu0wSGGF9no72J2xY9"
+                ;;
+              enterprise)
+                echo "Enterprise tier requires manual subscription setup"
+                exit 0
+                ;;
+              *)
+                echo "Invalid tier: $TIER"
+                exit 1
+                ;;
+            esac
             
-            echo "Stripe subscription created successfully"
+            # Create Stripe customer
+            echo "Creating Stripe customer..."
+            CUSTOMER_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/customers \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "email=$EMAIL" \
+              -d "name=$BILLING_NAME" \
+              -d "metadata[tenant_id]=$TENANT_ID" \
+              -d "metadata[organization]=$ORG_NAME" \
+              -d "metadata[tier]=$TIER")
+            
+            CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | jq -r '.id')
+            if [ -z "$CUSTOMER_ID" ] || [ "$CUSTOMER_ID" = "null" ]; then
+              echo "Failed to create Stripe customer:"
+              echo "$CUSTOMER_RESPONSE" | jq .
+              exit 1
+            fi
+            
+            echo "Stripe customer created: $CUSTOMER_ID"
+            
+            # Attach payment method to customer
+            echo "Attaching payment method $PAYMENT_METHOD_ID to customer..."
+            curl -s -X POST "https://api.stripe.com/v1/payment_methods/$PAYMENT_METHOD_ID/attach" \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "customer=$CUSTOMER_ID" > /dev/null
+            
+            # Set as default payment method
+            curl -s -X POST "https://api.stripe.com/v1/customers/$CUSTOMER_ID" \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "invoice_settings[default_payment_method]=$PAYMENT_METHOD_ID" > /dev/null
+            
+            # Create subscription with 14-day trial
+            echo "Creating subscription with $PRICE_ID (14-day trial)..."
+            SUBSCRIPTION_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/subscriptions \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "customer=$CUSTOMER_ID" \
+              -d "items[0][price]=$PRICE_ID" \
+              -d "trial_period_days=14" \
+              -d "metadata[tenant_id]=$TENANT_ID" \
+              -d "metadata[tier]=$TIER")
+            
+            SUBSCRIPTION_ID=$(echo "$SUBSCRIPTION_RESPONSE" | jq -r '.id')
+            SUBSCRIPTION_STATUS=$(echo "$SUBSCRIPTION_RESPONSE" | jq -r '.status')
+            
+            if [ -z "$SUBSCRIPTION_ID" ] || [ "$SUBSCRIPTION_ID" = "null" ]; then
+              echo "Failed to create subscription:"
+              echo "$SUBSCRIPTION_RESPONSE" | jq .
+              exit 1
+            fi
+            
+            echo "✅ Subscription created successfully!"
+            echo "  Customer ID: $CUSTOMER_ID"
+            echo "  Subscription ID: $SUBSCRIPTION_ID"
+            echo "  Status: $SUBSCRIPTION_STATUS"
+            echo "  Price: $PRICE_ID"
+            echo "  Trial: 14 days"
         env:
-          - name: TENANT_SERVICE_API_KEY
+          - name: STRIPE_SECRET_KEY
             valueFrom:
               secretKeyRef:
-                name: tenant-service-credentials
+                name: stripe-api-keys
+                key: secret-key
                 key: api-key
     
     # Template: Create Azure AD B2C user
