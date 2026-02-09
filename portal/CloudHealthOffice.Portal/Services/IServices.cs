@@ -90,6 +90,7 @@ public interface ITenantService
     Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId);
     Task<TenantSubscription?> GetDemoTenantAsync();
     Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
+    Task<string> CreateTenantAsync(CreateTenantRequest request);
 }
 
 // DTOs
@@ -619,4 +620,15 @@ public class TenantSubscription
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<string> AdminEmails { get; set; } = new();
+}
+
+public class CreateTenantRequest
+{
+    public string AzureTenantId { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
+    public string TenantDisplayName { get; set; } = string.Empty;
+    public string Tier { get; set; } = string.Empty;
+    public string AdminEmail { get; set; } = string.Empty;
+    public string? StripePaymentMethodId { get; set; }
+    public List<string> EnabledModules { get; set; } = new();
 }
