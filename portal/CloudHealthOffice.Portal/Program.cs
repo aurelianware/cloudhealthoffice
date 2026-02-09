@@ -22,6 +22,10 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY"
     builder.Configuration["Stripe:SecretKey"] = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
 }
 
+// Note: Stripe__Price__Starter and Stripe__Price__Professional environment variables
+// are automatically mapped to Stripe:Price:Starter and Stripe:Price:Professional
+// by ASP.NET Core configuration system (__ -> :)
+
 // Configure forwarded headers for running behind reverse proxy/ingress
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
