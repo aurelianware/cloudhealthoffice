@@ -33,16 +33,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 var dataProtectionConnectionString = Environment.GetEnvironmentVariable("DATA_PROTECTION_STORAGE_CONNECTION");
 if (!string.IsNullOrEmpty(dataProtectionConnectionString))
 {
-    var storageAccount = new Azure.Storage.Blobs.BlobServiceClient(dataProtectionConnectionString);
     builder.Services.AddDataProtection()
-        .PersistKeysToAzureBlobStorage(storageAccount, "dataprotection", "keys.xml")
-        .SetApplicationName("CloudHealthOffice.Portal");
-}
-else
-{
-    // Fallback for local development - keys stored in file system
-    builder.Services.AddDataProtection()
-        .SetApplicationName("CloudHealthOffice.Portal");
+        .PersistKeysToAzureBlobStorage(dataProtectionConnectionString, "dataprotection", "keys.xml");
 }
 
 // Azure AD Authentication
