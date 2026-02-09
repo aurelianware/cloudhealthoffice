@@ -59,7 +59,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 - Pain points grid (6 cards): Upgrade costs, 18-month timelines, vendor lock-in, no multi-payer, manual prior auth, security gaps
 - Value props: FHIR compliance, real-time prior auth, multi-clearinghouse, X12 automation, zero-code deployment, Azure-native
 - Case study: Regional MA plan (250k members) - $85k vs $2.3M quoted, 45 min vs 14 months
-- Technical architecture diagram (QNXT/Facets → Cloud Health Office → Clearinghouses/FHIR API)
+- Technical architecture diagram (Core Admin Systems → Cloud Health Office → Clearinghouses/FHIR API)
 - ROI calculator table: 3-year TCO comparison ($50k-250k vs $3.2M-7.2M)
 
 **Messaging:**

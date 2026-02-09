@@ -7,15 +7,16 @@ Welcome to **Cloud Health Office** – the premier open-source, Azure-native, mu
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start](#quick-start)
-4. [Architecture Overview](#architecture-overview)
-5. [Configuration](#configuration)
-6. [Development Workflow](#development-workflow)
-7. [Testing](#testing)
-8. [Deployment](#deployment)
-9. [HIPAA Logging & Compliance](#hipaa-logging--compliance)
-10. [Support & Resources](#support--resources)
+2. [Self-Service Signup](#self-service-signup)
+3. [Prerequisites (Self-Hosted)](#prerequisites-self-hosted)
+4. [Quick Start](#quick-start)
+5. [Architecture Overview](#architecture-overview)
+6. [Configuration](#configuration)
+7. [Development Workflow](#development-workflow)
+8. [Testing](#testing)
+9. [Deployment](#deployment)
+10. [HIPAA Logging & Compliance](#hipaa-logging--compliance)
+11. [Support & Resources](#support--resources)
 
 ---
 
@@ -23,22 +24,59 @@ Welcome to **Cloud Health Office** – the premier open-source, Azure-native, mu
 
 Cloud Health Office provides a complete EDI integration solution for healthcare payers, supporting:
 
-- **HIPAA X12 Transactions**: 275 (Attachments), 277 (RFAI), 278 (Authorization)
-- **Azure-Native Architecture**: Logic Apps, Service Bus, Data Lake Storage
-- **Multi-Tenant SaaS**: Configuration-driven deployment for multiple payers
-- **Production-Grade Security**: HIPAA-compliant logging, encryption, and audit trails
+- **Self-Service SaaS Platform**: 5-minute signup at portal.cloudhealthoffice.com with Stripe subscriptions and Azure AD authentication
+- **HIPAA X12 Transactions**: 270/271 (Eligibility), 275 (Attachments), 276/277 (Claim Status), 278 (Authorization), 837 (Claims)
+- **Cloud-Native Architecture**: Kubernetes (AKS), Argo Workflows, 9 .NET microservices, Cosmos DB multi-tenancy
+- **Multi-Tenant Isolation**: Cosmos DB tenant partitions with smart routing via Azure AD claims
+- **Production-Grade Security**: HIPAA-compliant logging, encryption, audit trails, and automated vulnerability scanning
 
 ### Key Features
 
-- ✅ **&lt;1 Hour Onboarding**: Rapid deployment with configuration templates
+- ✅ **&lt;5 Minute Onboarding**: Self-service signup with automatic tenant provisioning
+- ✅ **14-Day Free Trial**: Test all features (Starter $499/mo, Professional $1,499/mo, Enterprise custom)
 - ✅ **Zero Custom Code**: Template-driven workflow generation
 - ✅ **Production HIPAA Controls**: Built-in compliance and security
 - ✅ **Automated Testing**: Comprehensive test framework included
 - ✅ **Scalable Architecture**: Azure-native services for enterprise scale
+- ✅ **Contact Sales**: Enterprise inquiry tracking (New → Contacted → Qualified → Closed)
 
 ---
 
-## Prerequisites
+## Self-Service Signup
+
+**Fastest Path**: Visit **[portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)** to get started in 5 minutes.
+
+### Signup Process
+
+1. **Azure AD Login**: Sign in with any Microsoft account
+2. **Select Tier**: Starter ($499/mo, 10K claims) or Professional ($1,499/mo, 50K claims)
+3. **Enter Payment**: Stripe payment (14-day trial, no charge until trial ends)
+4. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
+5. **Start Trial**: Complete signup to begin your 14-day free trial
+
+### What Gets Auto-Provisioned
+
+When you complete signup:
+- ✅ **Cosmos DB Tenant**: Partition created in Tenants container (`/tenantId`)
+- ✅ **Member Account**: Admin user added to Members container
+- ✅ **SFTP Credentials**: Generated for clearinghouse integration
+- ✅ **Azure AD App**: Registered for API access
+- ✅ **Stripe Subscription**: Created with 14-day trial (ends Feb 23, 2026)
+- ✅ **Welcome Email**: Sent with credentials and access URLs
+
+### Access URLs
+
+- **Portal**: https://portal.cloudhealthoffice.com - Manage subscription, view claims
+- **API**: https://api.cloudhealthoffice.com - RESTful endpoints with OpenAPI docs
+- **Docs**: https://docs.cloudhealthoffice.com - Integration guides
+
+### Enterprise
+
+For custom pricing, SLAs, or white-labeling: **[Contact Sales](https://portal.cloudhealthoffice.com/contact-sales)**
+
+---
+
+## Prerequisites (Self-Hosted)
 
 Before getting started, ensure you have:
 

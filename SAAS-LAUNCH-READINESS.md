@@ -269,7 +269,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
   - Identify bottlenecks, optimize
 - [ ] **Documentation**
   - API reference (Swagger/OpenAPI)
-  - Integration guides (QNXT, Facets, Epic)
+  - Integration guides (legacy platforms, Epic, Cerner)
   - Video tutorials
 - [ ] **Marketing push**
   - Launch blog post
@@ -280,7 +280,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 
 #### Week 9-10: Enterprise Features
 - [ ] **Dedicated namespaces** (Enterprise tier)
-- [ ] **Custom integrations** (REST APIs for TriZetto, Epic)
+- [ ] **Custom integrations** (REST APIs for core admin systems, EHR platforms)
 - [ ] **Advanced analytics** (Grafana custom dashboards)
 - [ ] **White-label branding** (Enterprise tier)
 
@@ -434,7 +434,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 
 ### **Why This Will Work**
 - Strong technical foundation (80% there)
-- Clear market need (QNXT/Facets integration pain is real)
+- Clear market need (legacy platform integration pain is real)
 - Proven architecture (multi-tenant design complete)
 - Differentiated offering (open-source + SaaS flexibility)
 - Experienced team (based on code quality)
