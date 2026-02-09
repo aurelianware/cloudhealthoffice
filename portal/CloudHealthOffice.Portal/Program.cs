@@ -29,13 +29,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-// Configure Data Protection for multi-pod deployments
-var dataProtectionConnectionString = Environment.GetEnvironmentVariable("DATA_PROTECTION_STORAGE_CONNECTION");
-if (!string.IsNullOrEmpty(dataProtectionConnectionString))
-{
-    builder.Services.AddDataProtection()
-        .PersistKeysToAzureBlobStorage(dataProtectionConnectionString, "dataprotection", "keys.xml");
-}
+// Configure Data Protection with Redis for multi-pod deployments
+var redisConnection = Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "redis-dataprotection.cho-svcs:6379";
+var redis = StackExchange.Redis.ConnectionMultiplexer.Connect(redisConnection);
+builder.Services.AddDataProtection()
+    .PersistKeysToStackExchangeRedis(redis, "DataProtection-Keys");
 
 // Azure AD Authentication
 var initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ') ?? Array.Empty<string>();
