@@ -2872,6 +2872,8 @@ public class TenantService : ITenantService
                 tier = request.Tier,
                 isDemo = false,
                 stripePaymentMethodId = request.StripePaymentMethodId,
+                stripeCustomerId = request.StripeCustomerId,
+                stripeSubscriptionId = request.StripeSubscriptionId,
                 trialEndsAt = now.AddDays(14),
                 createdAt = now,
                 updatedAt = now,
@@ -2879,8 +2881,8 @@ public class TenantService : ITenantService
                 enabledModules = request.EnabledModules
             };
 
-            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} with Azure Tenant {AzureTenantId}",
-                tenantId, request.OrganizationName, request.AzureTenantId);
+            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} with Azure Tenant {AzureTenantId}, Stripe customer {CustomerId}",
+                tenantId, request.OrganizationName, request.AzureTenantId, request.StripeCustomerId);
 
             await _tenantsContainer.CreateItemAsync(tenant, new PartitionKey(tenantId));
 
