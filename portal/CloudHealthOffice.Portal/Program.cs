@@ -138,6 +138,7 @@ builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
+builder.Services.AddScoped<ITenantService, TenantService>();
 
 // Add SignalR
 builder.Services.AddSignalR();
