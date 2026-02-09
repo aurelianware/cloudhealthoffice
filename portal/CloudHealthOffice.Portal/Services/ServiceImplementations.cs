@@ -2898,3 +2898,157 @@ public class TenantService : ITenantService
     }
 }
 
+public class SalesInquiryService : ISalesInquiryService
+{
+    private readonly CosmosClient _cosmosClient;
+    private readonly Container _inquiriesContainer;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SalesInquiryService> _logger;
+
+    public SalesInquiryService(CosmosClient cosmosClient, IConfiguration configuration, ILogger<SalesInquiryService> logger)
+    {
+        _cosmosClient = cosmosClient;
+        _configuration = configuration;
+        _logger = logger;
+
+        var databaseName = _configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        var containerName = _configuration["CosmosDb:SalesInquiriesContainer"] ?? "SalesInquiries";
+        
+        _inquiriesContainer = _cosmosClient.GetContainer(databaseName, containerName);
+    }
+
+    public async Task<string> CreateInquiryAsync(CreateSalesInquiryRequest request)
+    {
+        try
+        {
+            var inquiryId = $"inquiry-{Guid.NewGuid():N}";
+            var now = DateTime.UtcNow;
+
+            var inquiry = new
+            {
+                id = inquiryId,
+                firstName = request.FirstName,
+                lastName = request.LastName,
+                email = request.Email,
+                phone = request.Phone,
+                companyName = request.CompanyName,
+                jobTitle = request.JobTitle,
+                inquiryType = request.InquiryType,
+                message = request.Message,
+                status = "New",
+                source = request.Source,
+                createdAt = now,
+                contactedAt = (DateTime?)null,
+                notes = (string?)null
+            };
+
+            _logger.LogInformation("Creating sales inquiry {InquiryId} from {Email} at {Company}",
+                inquiryId, request.Email, request.CompanyName);
+
+            await _inquiriesContainer.CreateItemAsync(inquiry, new PartitionKey(inquiryId));
+
+            _logger.LogInformation("Successfully created sales inquiry {InquiryId}", inquiryId);
+            
+            return inquiryId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create sales inquiry from {Email}", request.Email);
+            throw;
+        }
+    }
+
+    public async Task<List<SalesInquiry>> GetInquiriesAsync(string? status = null, int limit = 100)
+    {
+        try
+        {
+            var queryText = status == null
+                ? "SELECT * FROM c ORDER BY c.createdAt DESC"
+                : $"SELECT * FROM c WHERE c.status = @status ORDER BY c.createdAt DESC";
+
+            var queryDefinition = new QueryDefinition(queryText);
+            if (status != null)
+            {
+                queryDefinition = queryDefinition.WithParameter("@status", status);
+            }
+
+            var iterator = _inquiriesContainer.GetItemQueryIterator<SalesInquiry>(queryDefinition);
+            var results = new List<SalesInquiry>();
+
+            while (iterator.HasMoreResults && results.Count < limit)
+            {
+                var response = await iterator.ReadNextAsync();
+                results.AddRange(response);
+            }
+
+            return results.Take(limit).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching sales inquiries");
+            return new List<SalesInquiry>();
+        }
+    }
+
+    public async Task<SalesInquiry?> GetInquiryByIdAsync(string inquiryId)
+    {
+        try
+        {
+            var response = await _inquiriesContainer.ReadItemAsync<SalesInquiry>(
+                inquiryId,
+                new PartitionKey(inquiryId));
+            
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogWarning("Sales inquiry {InquiryId} not found", inquiryId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching sales inquiry {InquiryId}", inquiryId);
+            return null;
+        }
+    }
+
+    public async Task UpdateInquiryStatusAsync(string inquiryId, string status, string? notes = null)
+    {
+        try
+        {
+            var inquiry = await GetInquiryByIdAsync(inquiryId);
+            if (inquiry == null)
+            {
+                throw new InvalidOperationException($"Inquiry {inquiryId} not found");
+            }
+
+            var operations = new List<PatchOperation>
+            {
+                PatchOperation.Set("/status", status)
+            };
+
+            if (notes != null)
+            {
+                operations.Add(PatchOperation.Set("/notes", notes));
+            }
+
+            if (status == "Contacted" && inquiry.ContactedAt == null)
+            {
+                operations.Add(PatchOperation.Set("/contactedAt", DateTime.UtcNow));
+            }
+
+            await _inquiriesContainer.PatchItemAsync<SalesInquiry>(
+                inquiryId,
+                new PartitionKey(inquiryId),
+                operations);
+
+            _logger.LogInformation("Updated sales inquiry {InquiryId} status to {Status}", inquiryId, status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating sales inquiry {InquiryId}", inquiryId);
+            throw;
+        }
+    }
+}
+
