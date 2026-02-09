@@ -93,15 +93,18 @@
                             </ul>
                         </div>
 
-                        <div class="tier-card @(signupModel.SubscriptionTier == "enterprise" ? "selected" : "")" @onclick="@(() => SelectTier("enterprise"))">
+                        <div class="tier-card enterprise-tier">
                             <h3>Enterprise</h3>
-                            <p class="price">Custom</p>
+                            <p class="price">Custom Pricing</p>
                             <ul>
                                 <li>Unlimited claims</li>
                                 <li>Dedicated infrastructure</li>
                                 <li>SLA guarantees</li>
                                 <li>24/7 phone support</li>
                             </ul>
+                            <button type="button" class="btn btn-outline-primary mt-3" @onclick="NavigateToContactSales">
+                                Contact Sales
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -148,6 +151,11 @@
                             <span>First payment:</span>
                             <strong>@GetTrialEndDate()</strong>
                         </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <strong>14-Day Free Trial</strong><br/>
+                        Start using the platform immediately. Your card won't be charged until February 23, 2026.
                     </div>
                 </div>
 
@@ -500,6 +508,11 @@
     private void SelectTier(string tier)
     {
         signupModel.SubscriptionTier = tier;
+    }
+
+    private void NavigateToContactSales()
+    {
+        Navigation.NavigateTo("/contact-sales");
     }
 
     private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)
