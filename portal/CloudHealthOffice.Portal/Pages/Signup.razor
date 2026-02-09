@@ -4,6 +4,7 @@
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Authorization
 @using CloudHealthOffice.Portal.Services
+@using Stripe
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
@@ -204,6 +205,8 @@
     private string? errorMessage;
     private string? createdTenantId;
     private string? stripePaymentMethodId;
+    private string? stripeCustomerId;
+    private string? stripeSubscriptionId;
 
     private bool enableClaims = true;
     private bool enableEligibility = true;
@@ -287,6 +290,8 @@
                 Tier = signupModel.SubscriptionTier,
                 AdminEmail = userEmail,
                 StripePaymentMethodId = stripePaymentMethodId,
+                StripeCustomerId = stripeCustomerId,
+                StripeSubscriptionId = stripeSubscriptionId,
                 EnabledModules = enabledModules
             };
 
@@ -348,22 +353,89 @@
     {
         try
         {
-            // In production, this would call your backend Stripe API
-            // For now, we'll simulate success
-            Logger.LogInformation("Would create Stripe subscription for tier {Tier} with payment method {PM}", 
-                signupModel.SubscriptionTier, paymentMethodId);
+            var stripeSecretKey = Configuration["Stripe:SecretKey"];
+            if (string.IsNullOrEmpty(stripeSecretKey))
+            {
+                Logger.LogError("Stripe secret key not configured");
+                return (false, "Payment system configuration error");
+            }
+
+            StripeConfiguration.ApiKey = stripeSecretKey;
+
+            Logger.LogInformation("Creating Stripe customer for {Email} with payment method {PM}", 
+                signupModel.Email, paymentMethodId);
+
+            // Create Stripe customer
+            var customerService = new CustomerService();
+            var customerOptions = new CustomerCreateOptions
+            {
+                Email = signupModel.Email,
+                Name = signupModel.OrganizationName,
+                PaymentMethod = paymentMethodId,
+                InvoiceSettings = new CustomerInvoiceSettingsOptions
+                {
+                    DefaultPaymentMethod = paymentMethodId
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    { "organization", signupModel.OrganizationName },
+                    { "contact_name", signupModel.ContactName },
+                    { "tier", signupModel.SubscriptionTier }
+                }
+            };
+
+            var customer = await customerService.CreateAsync(customerOptions);
+            Logger.LogInformation("Stripe customer created: {CustomerId}", customer.Id);
+
+            // Get price ID based on tier
+            var priceId = GetStripePriceId(signupModel.SubscriptionTier);
             
-            // TODO: Call backend API to create Stripe customer and subscription
-            // var response = await Http.PostAsJsonAsync("/api/stripe/create-subscription", new { ... });
-            
-            await Task.Delay(500); // Simulate API call
+            // Create subscription with trial
+            var subscriptionService = new SubscriptionService();
+            var subscriptionOptions = new SubscriptionCreateOptions
+            {
+                Customer = customer.Id,
+                Items = new List<SubscriptionItemOptions>
+                {
+                    new SubscriptionItemOptions { Price = priceId }
+                },
+                TrialPeriodDays = 14,
+                Metadata = new Dictionary<string, string>
+                {
+                    { "tier", signupModel.SubscriptionTier },
+                    { "organization", signupModel.OrganizationName }
+                }
+            };
+
+            var subscription = await subscriptionService.CreateAsync(subscriptionOptions);
+            Logger.LogInformation("Stripe subscription created: {SubscriptionId} for customer {CustomerId}", 
+                subscription.Id, customer.Id);
+
+            // Store these IDs - we'll need to update the tenant record
+            stripeCustomerId = customer.Id;
+            stripeSubscriptionId = subscription.Id;
+
             return (true, null);
+        }
+        catch (StripeException ex)
+        {
+            Logger.LogError(ex, "Stripe API error creating subscription");
+            return (false, $"Payment service error: {ex.Message}");
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error creating Stripe subscription");
             return (false, $"Failed to create subscription: {ex.Message}");
         }
     }
+
+    private string GetStripePriceId(string tier) => tier switch
+    {
+        "starter" => Configuration["Stripe:Price:Starter"] ?? "price_starter",
+        "professional" => Configuration["Stripe:Price:Professional"] ?? "price_professional",
+        "enterprise" => Configuration["Stripe:Price:Enterprise"] ?? "price_enterprise",
+        _ => Configuration["Stripe:Price:Starter"] ?? "price_starter"
+    };
 
     private string GetTierName(string tier) => tier switch
     {

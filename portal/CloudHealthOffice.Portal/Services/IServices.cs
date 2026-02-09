@@ -630,5 +630,7 @@ public class CreateTenantRequest
     public string Tier { get; set; } = string.Empty;
     public string AdminEmail { get; set; } = string.Empty;
     public string? StripePaymentMethodId { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
     public List<string> EnabledModules { get; set; } = new();
 }
