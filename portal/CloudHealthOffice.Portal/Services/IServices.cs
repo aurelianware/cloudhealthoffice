@@ -93,6 +93,14 @@ public interface ITenantService
     Task<string> CreateTenantAsync(CreateTenantRequest request);
 }
 
+public interface ISalesInquiryService
+{
+    Task<string> CreateInquiryAsync(CreateSalesInquiryRequest request);
+    Task<List<SalesInquiry>> GetInquiriesAsync(string? status = null, int limit = 100);
+    Task<SalesInquiry?> GetInquiryByIdAsync(string inquiryId);
+    Task UpdateInquiryStatusAsync(string inquiryId, string status, string? notes = null);
+}
+
 // DTOs
 public class ClaimSummary
 {
@@ -633,4 +641,35 @@ public class CreateTenantRequest
     public string? StripeCustomerId { get; set; }
     public string? StripeSubscriptionId { get; set; }
     public List<string> EnabledModules { get; set; } = new();
+}
+
+public class SalesInquiry
+{
+    public string Id { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string? JobTitle { get; set; }
+    public string InquiryType { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Status { get; set; } = "New"; // New, Contacted, Qualified, Closed
+    public string Source { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ContactedAt { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class CreateSalesInquiryRequest
+{
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string? JobTitle { get; set; }
+    public string InquiryType { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Source { get; set; } = "Contact Sales Page";
 }
