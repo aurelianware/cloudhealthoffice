@@ -5,31 +5,98 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1" Dense="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-3">Cloud Health Office</MudText>
+    <MudAppBar Elevation="3" Dense="true" Style="border-bottom: 1px solid rgba(0, 255, 255, 0.3);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Primary" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+        
+        <!-- The Sentinel Logo -->
+        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" 
+             alt="Cloud Health Office - The Sentinel" 
+             style="height: 32px; margin-left: 12px; margin-right: 16px; filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));" />
+        
+        <MudText Typo="Typo.h6" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #ff00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            Cloud Health Office
+        </MudText>
+        
         <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mr-4">Tenant: <strong>Demo Health Plan</strong></MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
-        <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" />
+        
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small" Style="border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);">
+            Demo Health Plan
+        </MudChip>
+        
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Style="margin-left: 12px;" />
+        <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" />
     </MudAppBar>
     
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2">
-        <MudNavMenu>
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt">Claims</MudNavLink>
-            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser">Eligibility</MudNavLink>
-            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Members</MudNavLink>
-            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business">Sponsors</MudNavLink>
-            <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety">Benefit Plans</MudNavLink>
-            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital">Providers</MudNavLink>
-            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Authorizations</MudNavLink>
-            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">Workflows</MudNavLink>
-            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Reports</MudNavLink>
-            <MudDivider Class="my-2" />
-            <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code">Reference Data</MudNavLink>
-            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="3" Style="border-right: 1px solid rgba(0, 255, 255, 0.2);">
+        <div style="padding: 24px 16px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
+            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.1em;">
+                Navigation
+            </MudText>
+        </div>
+        
+        <MudNavMenu Style="padding-top: 8px;">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" 
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Claims
+            </MudNavLink>
+            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Eligibility
+            </MudNavLink>
+            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Members
+            </MudNavLink>
+            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Sponsors
+            </MudNavLink>
+            <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Benefit Plans
+            </MudNavLink>
+            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Providers
+            </MudNavLink>
+            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Authorizations
+            </MudNavLink>
+            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Workflows
+            </MudNavLink>
+            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Reports
+            </MudNavLink>
+            
+            <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
+            
+            <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Reference Data
+            </MudNavLink>
+            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Settings
+            </MudNavLink>
         </MudNavMenu>
+        
+        <!-- Footer branding in drawer -->
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; border-top: 1px solid rgba(0, 255, 255, 0.2); text-align: center;">
+            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.4);">
+                The Sentinel
+            </MudText>
+            <MudText Typo="Typo.caption" Style="color: rgba(0, 255, 255, 0.6); margin-top: 4px;">
+                v3.0 Production
+            </MudText>
+        </div>
     </MudDrawer>
     
     <MudMainContent>
@@ -44,21 +111,97 @@
 
     private MudTheme _theme = new()
     {
+        // The Sentinel Theme - Obsidian & Neon
         Palette = new PaletteLight
         {
-            Primary = "#1976d2",
-            Secondary = "#26a69a",
-            AppbarBackground = "#1976d2",
-            Success = "#4caf50",
-            Error = "#f44336",
-            Warning = "#ff9800",
-            Info = "#2196f3"
+            // Core brand colors
+            Primary = "#00ffff",           // Cyan - primary actions
+            Secondary = "#ff00ff",         // Magenta - secondary elements  
+            Tertiary = "#00ff88",          // Green - success states
+            
+            // Backgrounds - absolute black
+            Background = "#000000",
+            BackgroundGrey = "#0a0a0a",
+            Surface = "#0f0f0f",
+            DrawerBackground = "#000000",
+            AppbarBackground = "#000000",
+            
+            // Text - high contrast white
+            TextPrimary = "#ffffff",
+            TextSecondary = "rgba(255, 255, 255, 0.7)",
+            TextDisabled = "rgba(255, 255, 255, 0.38)",
+            
+            // Semantic colors - neon palette
+            Success = "#00ff88",           // Neon green
+            Error = "#ff0055",             // Neon red/pink
+            Warning = "#ffaa00",           // Neon orange
+            Info = "#00ffff",              // Cyan
+            
+            // Borders and dividers
+            Divider = "rgba(0, 255, 255, 0.2)",
+            DividerLight = "rgba(0, 255, 255, 0.1)",
+            
+            // Actions and overlays
+            ActionDefault = "rgba(0, 255, 255, 0.54)",
+            ActionDisabled = "rgba(255, 255, 255, 0.26)",
+            ActionDisabledBackground = "rgba(255, 255, 255, 0.12)",
+            
+            // Hover effects - neon glow
+            HoverOpacity = 0.15,
+            
+            // Lines
+            LinesDefault = "rgba(0, 255, 255, 0.2)",
+            LinesInputs = "rgba(0, 255, 255, 0.3)"
         },
-        PaletteDark = new PaletteDark
+        
+        Typography = new Typography()
         {
-            Primary = "#90caf9",
-            Secondary = "#80cbc4",
-            AppbarBackground = "#1e1e1e"
+            Default = new Default()
+            {
+                FontFamily = new[] { "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif" },
+                FontWeight = 400,
+                FontSize = "0.875rem",
+                LineHeight = 1.43,
+                LetterSpacing = "0.01071em"
+            },
+            H1 = new H1()
+            {
+                FontFamily = new[] { "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif" },
+                FontWeight = 700,  // Bold - The Sentinel aesthetic
+                FontSize = "3rem",
+                LineHeight = 1.167,
+                LetterSpacing = "-0.01562em"
+            },
+            H2 = new H2()
+            {
+                FontFamily = new[] { "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif" },
+                FontWeight = 700,
+                FontSize = "2.125rem",
+                LineHeight = 1.235,
+                LetterSpacing = "-0.00833em"
+            },
+            H6 = new H6()
+            {
+                FontFamily = new[] { "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif" },
+                FontWeight = 700,
+                FontSize = "1.25rem",
+                LineHeight = 1.6,
+                LetterSpacing = "0.0075em"
+            }
+        },
+        
+        Shadows = new Shadow()
+        {
+            // Neon glow effects instead of standard shadows
+            Elevation = new string[]
+            {
+                "none",
+                "0 0 10px rgba(0, 255, 255, 0.2)",                          // Elevation 1 - subtle cyan glow
+                "0 0 15px rgba(0, 255, 255, 0.3)",                          // Elevation 2
+                "0 0 20px rgba(0, 255, 255, 0.4), 0 0 30px rgba(255, 0, 255, 0.1)",  // Elevation 3 - cyan + magenta
+                "0 0 25px rgba(0, 255, 255, 0.5), 0 0 40px rgba(255, 0, 255, 0.2)",  // Elevation 4
+                "0 0 30px rgba(0, 255, 255, 0.6), 0 0 50px rgba(255, 0, 255, 0.3)"   // Elevation 5 - strong glow
+            }
         }
     };
 
