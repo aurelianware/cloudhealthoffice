@@ -85,6 +85,13 @@ public interface ISponsorService
     Task UpdateSponsorAsync(string sponsorId, UpdateSponsorRequest request);
 }
 
+public interface ITenantService
+{
+    Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId);
+    Task<TenantSubscription?> GetDemoTenantAsync();
+    Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
+}
+
 // DTOs
 public class ClaimSummary
 {
@@ -596,4 +603,20 @@ public class CodeUsageStats
     public int BenefitsCount { get; set; }
     public DateTime? LastUsedDate { get; set; }
     public decimal TotalBilledAmount { get; set; }
+}
+
+public class TenantSubscription
+{
+    public string TenantId { get; set; } = string.Empty;
+    public string AzureTenantId { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
+    public string SubscriptionStatus { get; set; } = string.Empty; // Active, Trial, Expired, Cancelled
+    public string Tier { get; set; } = string.Empty; // starter, professional, enterprise
+    public bool IsDemo { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public DateTime? TrialEndsAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public List<string> AdminEmails { get; set; } = new();
 }

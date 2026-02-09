@@ -2668,3 +2668,62 @@ public class ReferenceDataService : IReferenceDataService
         };
     }
 }
+
+public class TenantService : ITenantService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<TenantService> _logger;
+
+    public TenantService(HttpClient httpClient, IConfiguration configuration, ILogger<TenantService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId)
+    {
+        // TODO: Query Cosmos DB Tenants container by AzureTenantId
+        // For now, return mock data based on tenant ID
+        _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
+
+        // Return null for unknown tenants (will trigger signup flow)
+        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
+        {
+            return null;
+        }
+
+        // Mock data - replace with actual Cosmos DB query
+        return await Task.FromResult<TenantSubscription?>(null);
+    }
+
+    public async Task<TenantSubscription?> GetDemoTenantAsync()
+    {
+        _logger.LogInformation("Fetching demo tenant");
+
+        // Return the demo tenant subscription
+        return await Task.FromResult(new TenantSubscription
+        {
+            TenantId = "demo-tenant",
+            AzureTenantId = "demo",
+            OrganizationName = "Demo Health Plan",
+            SubscriptionStatus = "Active",
+            Tier = "enterprise",
+            IsDemo = true,
+            CreatedAt = DateTime.UtcNow.AddMonths(-6),
+            UpdatedAt = DateTime.UtcNow,
+            AdminEmails = new List<string> { "demo@cloudhealthoffice.com" }
+        });
+    }
+
+    public async Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail)
+    {
+        // TODO: Query Cosmos DB Members container to check if user is member of this tenant
+        _logger.LogInformation("Checking if {Email} is member of tenant {TenantId}", userEmail, azureTenantId);
+
+        // Mock implementation - replace with actual Cosmos DB query
+        return await Task.FromResult(false);
+    }
+}
+
