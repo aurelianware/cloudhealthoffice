@@ -430,7 +430,9 @@
                         new { name = "admin-name", value = model.ContactName },
                         new { name = "subscription-tier", value = model.SubscriptionTier },
                         new { name = "enabled-modules", value = string.Join(",", modules) },
-                        new { name = "phone", value = model.Phone ?? "" }
+                        new { name = "phone", value = model.Phone ?? "" },
+                        new { name = "payment-method-id", value = stripePaymentMethodId ?? "" },
+                        new { name = "billing-name", value = model.BillingName ?? "" }
                     }
                 }
             };
