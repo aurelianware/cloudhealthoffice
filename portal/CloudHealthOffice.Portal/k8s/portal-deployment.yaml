@@ -120,6 +120,26 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: secret-key
+        - name: Stripe__PublishableKey
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: publishable-key
+        - name: Stripe__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: secret-key
+        - name: Stripe__Price__Starter
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: starter-price-id
+        - name: Stripe__Price__Professional
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-keys
+              key: professional-price-id
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
