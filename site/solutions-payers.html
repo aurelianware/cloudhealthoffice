@@ -8,6 +8,7 @@
   <title>For Health Plans - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
   <style>
     body { padding:40px 20px; max-width:1200px; margin:0 auto; }
     .hero { text-align:center; margin-bottom:60px; padding:60px 20px; background:linear-gradient(135deg, #0a0a0a 0%, #001a1a 100%); border-radius:12px; border:2px solid #00ffff; }
@@ -30,6 +31,9 @@
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav style="margin-bottom:40px; text-align:center;">
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
     <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
       <li><a href="index.html" style="color:#888;">Home</a></li>
       <li><a href="solutions-payers.html" style="color:#00ffff;" aria-current="page">Solutions</a></li>
