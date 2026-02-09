@@ -8,6 +8,7 @@ using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -124,6 +125,24 @@ builder.Services.AddHttpClient("default")
 
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
+
+// Cosmos DB client (singleton)
+builder.Services.AddSingleton<CosmosClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var endpoint = configuration["CosmosDb:Endpoint"]
+        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
+    var key = configuration["CosmosDb:Key"]
+        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
+
+    return new CosmosClient(endpoint, key, new CosmosClientOptions
+    {
+        SerializerOptions = new CosmosSerializationOptions
+        {
+            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+        }
+    });
+});
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();

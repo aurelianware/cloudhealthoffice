@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using Microsoft.Identity.Web;
+using Microsoft.Azure.Cosmos;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -2671,59 +2672,186 @@ public class ReferenceDataService : IReferenceDataService
 
 public class TenantService : ITenantService
 {
-    private readonly HttpClient _httpClient;
+    private readonly CosmosClient _cosmosClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TenantService> _logger;
+    private readonly Container _tenantsContainer;
+    private readonly Container _membersContainer;
 
-    public TenantService(HttpClient httpClient, IConfiguration configuration, ILogger<TenantService> logger)
+    public TenantService(CosmosClient cosmosClient, IConfiguration configuration, ILogger<TenantService> logger)
     {
-        _httpClient = httpClient;
+        _cosmosClient = cosmosClient;
         _configuration = configuration;
         _logger = logger;
+
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        var tenantsContainerName = configuration["CosmosDb:TenantsContainer"] ?? "Tenants";
+        var membersContainerName = configuration["CosmosDb:MembersContainer"] ?? "Members";
+
+        _tenantsContainer = cosmosClient.GetContainer(databaseName, tenantsContainerName);
+        _membersContainer = cosmosClient.GetContainer(databaseName, membersContainerName);
     }
 
     public async Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId)
     {
-        // TODO: Query Cosmos DB Tenants container by AzureTenantId
-        // For now, return mock data based on tenant ID
-        _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
-
-        // Return null for unknown tenants (will trigger signup flow)
-        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
+        try
         {
+            _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
+
+            if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
+            {
+                return null;
+            }
+
+            // Query Cosmos DB for tenant by Azure Tenant ID
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.azureTenantId = @azureTenantId")
+                .WithParameter("@azureTenantId", azureTenantId);
+
+            var iterator = _tenantsContainer.GetItemQueryIterator<TenantSubscription>(query);
+            
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                var tenant = response.FirstOrDefault();
+                
+                if (tenant != null)
+                {
+                    _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})", 
+                        azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
+                    return tenant;
+                }
+            }
+
+            _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
             return null;
         }
-
-        // Mock data - replace with actual Cosmos DB query
-        return await Task.FromResult<TenantSubscription?>(null);
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Tenants container not found or no matching tenant for {TenantId}", azureTenantId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error querying Cosmos DB for tenant {TenantId}", azureTenantId);
+            return null;
+        }
     }
 
     public async Task<TenantSubscription?> GetDemoTenantAsync()
     {
-        _logger.LogInformation("Fetching demo tenant");
-
-        // Return the demo tenant subscription
-        return await Task.FromResult(new TenantSubscription
+        try
         {
-            TenantId = "demo-tenant",
-            AzureTenantId = "demo",
-            OrganizationName = "Demo Health Plan",
-            SubscriptionStatus = "Active",
-            Tier = "enterprise",
-            IsDemo = true,
-            CreatedAt = DateTime.UtcNow.AddMonths(-6),
-            UpdatedAt = DateTime.UtcNow,
-            AdminEmails = new List<string> { "demo@cloudhealthoffice.com" }
-        });
+            _logger.LogInformation("Fetching demo tenant");
+
+            // Query for demo tenant
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.isDemo = true");
+            var iterator = _tenantsContainer.GetItemQueryIterator<TenantSubscription>(query);
+            
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                var demoTenant = response.FirstOrDefault();
+                
+                if (demoTenant != null)
+                {
+                    return demoTenant;
+                }
+            }
+
+            // Return default demo tenant if none exists in DB
+            _logger.LogWarning("No demo tenant found in Cosmos DB, returning default");
+            return new TenantSubscription
+            {
+                TenantId = "demo-tenant",
+                AzureTenantId = "demo",
+                OrganizationName = "Demo Health Plan",
+                SubscriptionStatus = "Active",
+                Tier = "enterprise",
+                IsDemo = true,
+                CreatedAt = DateTime.UtcNow.AddMonths(-6),
+                UpdatedAt = DateTime.UtcNow,
+                AdminEmails = new List<string> { "demo@cloudhealthoffice.com" }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching demo tenant from Cosmos DB");
+            
+            // Return default demo tenant on error
+            return new TenantSubscription
+            {
+                TenantId = "demo-tenant",
+                AzureTenantId = "demo",
+                OrganizationName = "Demo Health Plan",
+                SubscriptionStatus = "Active",
+                Tier = "enterprise",
+                IsDemo = true,
+                CreatedAt = DateTime.UtcNow.AddMonths(-6),
+                UpdatedAt = DateTime.UtcNow,
+                AdminEmails = new List<string> { "demo@cloudhealthoffice.com" }
+            };
+        }
     }
 
     public async Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail)
     {
-        // TODO: Query Cosmos DB Members container to check if user is member of this tenant
-        _logger.LogInformation("Checking if {Email} is member of tenant {TenantId}", userEmail, azureTenantId);
+        try
+        {
+            _logger.LogInformation("Checking if {Email} is member of tenant {TenantId}", userEmail, azureTenantId);
 
-        // Mock implementation - replace with actual Cosmos DB query
-        return await Task.FromResult(false);
+            if (string.IsNullOrEmpty(userEmail) || string.IsNullOrEmpty(azureTenantId))
+            {
+                return false;
+            }
+
+            // First, get the tenant to find its internal ID
+            var tenant = await GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+            if (tenant == null)
+            {
+                _logger.LogWarning("Tenant not found for Azure Tenant ID: {TenantId}", azureTenantId);
+                return false;
+            }
+
+            // Check if user is in admin emails (auto-approved)
+            if (tenant.AdminEmails.Contains(userEmail, StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("User {Email} is admin for tenant {TenantId}", userEmail, azureTenantId);
+                return true;
+            }
+
+            // Query Members container for this user in this tenant
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.email = @email")
+                .WithParameter("@tenantId", tenant.TenantId)
+                .WithParameter("@email", userEmail.ToLowerInvariant());
+
+            var iterator = _membersContainer.GetItemQueryIterator<dynamic>(query);
+            
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                var hasMember = response.Any();
+                
+                _logger.LogInformation("User {Email} member status for tenant {TenantId}: {IsMember}", 
+                    userEmail, azureTenantId, hasMember);
+                
+                return hasMember;
+            }
+
+            return false;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Members container not found or no matching member for {Email} in {TenantId}", 
+                userEmail, azureTenantId);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking membership for {Email} in tenant {TenantId}", userEmail, azureTenantId);
+            return false;
+        }
     }
 }
 
