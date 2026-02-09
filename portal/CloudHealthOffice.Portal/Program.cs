@@ -94,9 +94,6 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.Name = ".CloudHealthOffice.Auth";
-    
-    // Configure for reverse proxy
-    options.ForwardDefaultSelector = true;
 });
 
 builder.Services.AddAuthorization(options =>
