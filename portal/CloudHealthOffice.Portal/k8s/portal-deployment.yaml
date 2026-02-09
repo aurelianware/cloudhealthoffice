@@ -120,6 +120,16 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: secret-key
+        - name: CosmosDb__Endpoint
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-secret
+              key: COSMOS_ENDPOINT
+        - name: CosmosDb__Key
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-secret
+              key: COSMOS_KEY
         resources:
           requests:
             memory: "256Mi"
