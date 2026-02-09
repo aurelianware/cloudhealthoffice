@@ -429,13 +429,25 @@
         }
     }
 
-    private string GetStripePriceId(string tier) => tier switch
+    private string GetStripePriceId(string tier)
     {
-        "starter" => Configuration["Stripe:Price:Starter"] ?? "price_starter",
-        "professional" => Configuration["Stripe:Price:Professional"] ?? "price_professional",
-        "enterprise" => Configuration["Stripe:Price:Enterprise"] ?? "price_enterprise",
-        _ => Configuration["Stripe:Price:Starter"] ?? "price_starter"
-    };
+        var priceId = tier switch
+        {
+            "starter" => Configuration["Stripe:Price:Starter"],
+            "professional" => Configuration["Stripe:Price:Professional"],
+            "enterprise" => Configuration["Stripe:Price:Enterprise"],
+            _ => Configuration["Stripe:Price:Starter"]
+        };
+        
+        Logger.LogInformation("GetStripePriceId for tier {Tier}: {PriceId}", tier, priceId ?? "null");
+        
+        if (string.IsNullOrEmpty(priceId))
+        {
+            throw new InvalidOperationException($"Stripe price ID not configured for tier: {tier}");
+        }
+        
+        return priceId;
+    }
 
     private string GetTierName(string tier) => tier switch
     {
