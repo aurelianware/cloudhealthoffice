@@ -30,6 +30,7 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<ITenantService, TenantManagementService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
+builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 
 // Health checks
 builder.Services.AddHealthChecks();
