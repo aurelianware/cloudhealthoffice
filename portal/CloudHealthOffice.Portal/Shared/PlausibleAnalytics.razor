@@ -1,0 +1,29 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+@* Only load Plausible on public marketing pages *@
+@if (ShouldTrack())
+{
+    <script defer data-domain="portal.cloudhealthoffice.com" src="https://plausible.io/js/script.js"></script>
+}
+
+@code {
+    private bool ShouldTrack()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var path = uri.AbsolutePath.ToLowerInvariant();
+        
+        // Only track public marketing pages
+        var publicPages = new[] 
+        { 
+            "/", 
+            "/welcome", 
+            "/signup", 
+            "/contact-sales",
+            "/demo"
+        };
+        
+        return publicPages.Contains(path);
+    }
+}
