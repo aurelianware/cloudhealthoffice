@@ -120,6 +120,11 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: secret-key
+        - name: DATA_PROTECTION_STORAGE_CONNECTION
+          valueFrom:
+            secretKeyRef:
+              name: portal-dataprotection
+              key: storage-connection
         resources:
           requests:
             memory: "256Mi"
