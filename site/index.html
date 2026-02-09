@@ -11,6 +11,7 @@
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
   <style>
     /* Page-specific overrides for homepage layout */
     body { text-align:center; padding:40px; }
@@ -53,37 +54,7 @@
     </ul>
   </nav>
   <script>
-    // Mobile menu toggle
     document.addEventListener('DOMContentLoaded', () => {
-      const menuToggle = document.getElementById('mobileMenuToggle');
-      const mainNav = document.getElementById('mainNav');
-      
-      if (menuToggle && mainNav) {
-        menuToggle.addEventListener('click', () => {
-          const isOpen = mainNav.classList.toggle('mobile-menu-open');
-          menuToggle.setAttribute('aria-expanded', isOpen);
-          menuToggle.textContent = isOpen ? '✕' : '☰';
-        });
-        
-        // Close menu when clicking a link
-        mainNav.querySelectorAll('a').forEach(link => {
-          link.addEventListener('click', () => {
-            mainNav.classList.remove('mobile-menu-open');
-            menuToggle.setAttribute('aria-expanded', 'false');
-            menuToggle.textContent = '☰';
-          });
-        });
-        
-        // Close menu when clicking outside
-        document.addEventListener('click', (e) => {
-          if (!e.target.closest('nav')) {
-            mainNav.classList.remove('mobile-menu-open');
-            menuToggle.setAttribute('aria-expanded', 'false');
-            menuToggle.textContent = '☰';
-          }
-        });
-      }
-      
       // Update navigation with auth status
       updateNavigation('#mainNav');
     });
