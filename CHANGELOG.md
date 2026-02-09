@@ -173,7 +173,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (legac
 | [#109](https://github.com/aurelianware/cloudhealthoffice/pull/109) | Add CMS-0057-F compliance whitepaper for payer executives | Documentation |
 | [#108](https://github.com/aurelianware/cloudhealthoffice/pull/108) | Add 2026 product roadmap with CMS compliance milestones | Roadmap |
 | [#107](https://github.com/aurelianware/cloudhealthoffice/pull/107) | Add community governance files, issue templates, and PR automation | Governance |
-| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Add Blazor migration wizard for QNXT to Cloud Health Office | Tools |
+| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Add Blazor migration wizard for legacy platforms to Cloud Health Office | Tools |
 | [#105](https://github.com/aurelianware/cloudhealthoffice/pull/105) | Add Azure Marketplace offer structure with managed app and SaaS plans | Marketplace |
 | [#104](https://github.com/aurelianware/cloudhealthoffice/pull/104) | Add ClaimRiskScorer Azure Function for 837 fraud/abuse risk scoring | Microservices |
 | [#103](https://github.com/aurelianware/cloudhealthoffice/pull/103) | Add eligibility-service with dual X12 270/271 and FHIR interface | Microservices |
@@ -351,7 +351,7 @@ This is the first production release of Cloud Health Office — the open-source,
 - **Multi-Tenant SaaS Architecture**: Configuration-driven platform supporting unlimited health plans
 - **CLI Onboarding Wizard**: Complete deployment from worksheet to production in <45 minutes
 - **Zero-Code Payer Onboarding**: Add new payers via JSON configuration without custom development
-- **Backend-Agnostic Design**: Works with any claims system (claims adjudication systems such as TriZetto, Epic, Cerner, custom)
+- **Backend-Agnostic Design**: Works with any claims system (core admin systems, custom platforms, modern cloud solutions)
 
 #### EDI Transaction Processing
 - **275 Attachments**: Clinical and administrative attachment processing with file validation

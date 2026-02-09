@@ -77,9 +77,9 @@ Production-grade HIPAA infrastructure:
 | Source Code Access | Proprietary | **Open Source (Apache 2.0)** |
 | Customization | Professional services required | **Zero-code configuration** |
 
-### vs. TriZetto ($12K+/payer/year, 6-12 month implementation)
+### vs. Enterprise Vendors ($12K+/payer/year, 6-12 month implementation)
 
-| Factor | TriZetto | Cloud Health Office |
+| Factor | Enterprise Vendors | Cloud Health Office |
 |--------|----------|---------------------|
 | Cloud-Native | Hybrid/legacy | **Azure-native** |
 | FHIR Support | Add-on module | **Built-in transformation** |
