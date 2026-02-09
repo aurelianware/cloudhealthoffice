@@ -2853,5 +2853,46 @@ public class TenantService : ITenantService
             return false;
         }
     }
+
+    public async Task<string> CreateTenantAsync(CreateTenantRequest request)
+    {
+        try
+        {
+            var tenantId = $"tenant-{Guid.NewGuid():N}";
+            var now = DateTime.UtcNow;
+
+            var tenant = new
+            {
+                id = tenantId,
+                tenantId = tenantId,
+                azureTenantId = request.AzureTenantId,
+                organizationName = request.OrganizationName,
+                displayName = request.TenantDisplayName,
+                subscriptionStatus = "Trial",
+                tier = request.Tier,
+                isDemo = false,
+                stripePaymentMethodId = request.StripePaymentMethodId,
+                trialEndsAt = now.AddDays(14),
+                createdAt = now,
+                updatedAt = now,
+                adminEmails = new[] { request.AdminEmail },
+                enabledModules = request.EnabledModules
+            };
+
+            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} with Azure Tenant {AzureTenantId}",
+                tenantId, request.OrganizationName, request.AzureTenantId);
+
+            await _tenantsContainer.CreateItemAsync(tenant, new PartitionKey(tenantId));
+
+            _logger.LogInformation("Successfully created tenant {TenantId} in Cosmos DB", tenantId);
+            
+            return tenantId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create tenant for organization {OrgName}", request.OrganizationName);
+            throw;
+        }
+    }
 }
 

@@ -272,25 +272,31 @@
             }
 
             // Step 3: Create tenant record in Cosmos DB
-            var tenantId = $"tenant-{Guid.NewGuid():N}";
-            var trialEndDate = DateTime.UtcNow.AddDays(14);
-            
-            // TODO: Save to Cosmos DB via TenantService
-            // For now, simulate success and show completion message
-            createdTenantId = tenantId;
-            
-            Logger.LogInformation("Successfully created tenant {TenantId} for organization {OrgName}", 
-                tenantId, signupModel.OrganizationName);
-            
-            // Step 4: Trigger Argo workflow for automated provisioning
             var enabledModules = new List<string>();
             if (enableClaims) enabledModules.Add("claims");
             if (enableEligibility) enabledModules.Add("eligibility");
             if (enableAuthorizations) enabledModules.Add("authorizations");
             if (enableAttachments) enabledModules.Add("attachments");
             if (enableEnrollment) enabledModules.Add("enrollment");
+
+            var createTenantRequest = new CreateTenantRequest
+            {
+                AzureTenantId = azureTenantId,
+                OrganizationName = signupModel.OrganizationName,
+                TenantDisplayName = signupModel.TenantName,
+                Tier = signupModel.SubscriptionTier,
+                AdminEmail = userEmail,
+                StripePaymentMethodId = stripePaymentMethodId,
+                EnabledModules = enabledModules
+            };
+
+            createdTenantId = await TenantService.CreateTenantAsync(createTenantRequest);
             
-            await TriggerOnboardingWorkflow(tenantId, signupModel, enabledModules);
+            Logger.LogInformation("Successfully created tenant {TenantId} for organization {OrgName}", 
+                createdTenantId, signupModel.OrganizationName);
+            
+            // Step 4: Trigger Argo workflow for automated provisioning
+            await TriggerOnboardingWorkflow(createdTenantId, signupModel, enabledModules);
             
             submitted = true;
         }
