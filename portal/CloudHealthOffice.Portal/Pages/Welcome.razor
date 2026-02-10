@@ -1,5 +1,6 @@
 @page "/welcome"
 @using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
 @inject NavigationManager Navigation
 
 @attribute [AllowAnonymous]
@@ -15,6 +16,7 @@
 <!-- Hero Section -->
 <section class="hero">
     <div class="container">
+        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="hero-logo" />
         <h1 class="display-4">Welcome to Cloud Health Office</h1>
         <p class="lead">Your Complete EDI Transaction Suite for Efficient Health Plan Management</p>
         <a href="#signup" class="btn btn-light btn-lg">Sign Up Now</a>
@@ -44,7 +46,7 @@
             <div class="col-md-4 text-center">
                 <div class="feature-icon">📎</div>
                 <h4>Claim Attachments</h4>
-                <p>275/276/277 unsolicited and solicited attachments, FHIR integration, and automated delivery.</p>
+                <p>275 claim attachments (unsolicited and solicited), FHIR integration, and automated delivery.</p>
             </div>
             <div class="col-md-4 text-center">
                 <div class="feature-icon">👥</div>
@@ -93,15 +95,18 @@
         <h2 class="text-center mb-4">Sign Up and Start Today</h2>
         <p class="text-center mb-5">Secure billing powered by Stripe. Choose your plan and get instant access.</p>
         <EditForm Model="signupModel" OnValidSubmit="HandleSignup">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
             <div class="row justify-content-center">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label for="email" class="form-label">Email Address</label>
-                        <InputText id="email" class="form-control" @bind-Value="signupModel.Email" />
-                    </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <InputText id="password" type="password" class="form-control" @bind-Value="signupModel.Password" />
+                        <InputText id="email"
+                                   type="email"
+                                   autocomplete="email"
+                                   class="form-control"
+                                   @bind-Value="signupModel.Email" />
+                        <ValidationMessage For="@(() => signupModel.Email)" />
                     </div>
                     <div class="mb-3">
                         <label for="plan" class="form-label">Select Plan</label>
@@ -124,16 +129,19 @@
 
     private class SignupModel
     {
+        [Required(ErrorMessage = "Email address is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
         public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "Plan selection is required")]
         public string Plan { get; set; } = "basic";
     }
 
-    private async Task HandleSignup()
+    private Task HandleSignup()
     {
         // TODO: Integrate with Stripe API here
         // For example, use JS Interop to call Stripe.js or server-side creation of Checkout Session
         // This is a placeholder; implement actual signup logic
-        Console.WriteLine($"Signing up with Email: {signupModel.Email}, Plan: {signupModel.Plan}");
+        return Task.CompletedTask;
     }
 }
