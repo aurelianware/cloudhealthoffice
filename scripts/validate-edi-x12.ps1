@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Validates X12 EDI files for HIPAA 275/277/278/834 format compliance.
+    Validates X12 EDI files for HIPAA 275/276/277/278/834 format compliance.
 
 .DESCRIPTION
     This script validates X12 EDI file structure and content:
@@ -9,7 +9,7 @@
     - ST/SE transaction set segments
     - Trading partner identifiers (Clearinghouse/Health Plan)
     - Segment structure and delimiters
-    - Transaction types (275/277/278/834)
+    - Transaction types (275/276/277/278/834)
 
 .PARAMETER Path
     Path to the EDI file to validate. Can be a single file or directory.
@@ -35,8 +35,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Path,
     
-    [Parameter(Mandatory=$false, HelpMessage="Expected transaction type (275/277/278/834)")]
-    [ValidateSet('275', '277', '278', '834', $null)]
+    [Parameter(Mandatory=$false, HelpMessage="Expected transaction type (275/276/277/278/834)")]
+    [ValidateSet('275', '276', '277', '278', '834', $null)]
     [string]$TransactionType = $null,
     
     [Parameter(Mandatory=$false, HelpMessage="Enable strict validation mode")]
@@ -54,6 +54,7 @@ $PAYER_ID = '{config.payerId}'
 # Transaction type identifiers
 $TRANSACTION_TYPES = @{
     '275' = 'Attachment Request'
+    '276' = 'Claim Status Inquiry'
     '277' = 'Status Response'
     '278' = 'Health Care Services Review'
     '834' = 'Benefit Enrollment and Maintenance'
@@ -206,7 +207,7 @@ function Test-STSegment {
     $transactionType = $elements[1]
     
     if (-not $TRANSACTION_TYPES.ContainsKey($transactionType)) {
-        Write-ValidationError "Unknown transaction type '$transactionType' (expected 275, 277, 278, or 834)" $File $Line
+        Write-ValidationError "Unknown transaction type '$transactionType' (expected 275, 276, 277, 278, or 834)" $File $Line
         return $null
     }
     
