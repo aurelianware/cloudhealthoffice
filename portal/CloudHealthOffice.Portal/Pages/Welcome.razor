@@ -1,5 +1,6 @@
 @page "/welcome"
 @using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
 @inject NavigationManager Navigation
 
 @attribute [AllowAnonymous]
@@ -12,150 +13,135 @@
     *@
 </HeadContent>
 
-<div class="welcome-container">
-    <!-- Hero Section -->
-    <section class="hero">
-        <div class="hero-content">
-            <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="hero-logo" />
-            <h1>Cloud Health Office</h1>
-            <p class="hero-tagline">The #1 Open-Source Azure-Native Multi-Payer EDI Platform</p>
-            <p class="hero-description">
-                Process claims, verify eligibility, manage prior authorizations, and handle all X12 EDI transactions
-                in a production-grade, HIPAA-compliant cloud platform.
-            </p>
-            <div class="hero-cta">
-                <a href="/signup" class="btn btn-primary-large">Start Free Trial</a>
-                <a href="/signin-oidc" class="btn btn-secondary-large">Sign In</a>
-            </div>
-            <p class="hero-note">✓ &lt; 1-hour onboarding · ✓ Zero custom code · ✓ Production-grade HIPAA</p>
-        </div>
-    </section>
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
+        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="hero-logo" />
+        <h1 class="display-4">Welcome to Cloud Health Office</h1>
+        <p class="lead">Your Complete EDI Transaction Suite for Efficient Health Plan Management</p>
+        <a href="#signup" class="btn btn-light btn-lg">Sign Up Now</a>
+    </div>
+</section>
 
-    <!-- Features Section -->
-    <section class="features">
-        <div class="features-container">
-            <h2>Complete EDI Transaction Suite</h2>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">📋</div>
-                    <h3>Claims Processing</h3>
-                    <p>837 Professional & Institutional claims submission, 835 ERA processing, real-time adjudication</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">✓</div>
-                    <h3>Eligibility Verification</h3>
-                    <p>270/271 real-time eligibility inquiries, benefit coverage details, plan information</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔐</div>
-                    <h3>Prior Authorization</h3>
-                    <p>278 authorization requests and responses, automated workflow routing, status tracking</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📎</div>
-                    <h3>Claim Attachments</h3>
-                    <p>275/276/277 unsolicited and solicited attachments, FHIR integration, automated delivery</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">👥</div>
-                    <h3>Member Enrollment</h3>
-                    <p>834 enrollment transactions, member demographics, coverage updates, sponsor management</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📊</div>
-                    <h3>Claim Status</h3>
-                    <p>276/277 claim status inquiries and responses, tracking, reporting</p>
-                </div>
+<!-- Features Section -->
+<section class="py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Our Key Features</h2>
+        <div class="row">
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📋</div>
+                <h4>Claims Processing</h4>
+                <p>837 Professional & Institutional claims submission, 835 ERA processing, and real-time adjudication.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">✓</div>
+                <h4>Eligibility Verification</h4>
+                <p>270/271 real-time eligibility inquiries, benefit coverage details, and plan information.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">🔐</div>
+                <h4>Prior Authorization</h4>
+                <p>278 authorization requests and responses, automated workflow routing, and status tracking.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📎</div>
+                <h4>Claim Attachments</h4>
+                <p>275 claim attachments (unsolicited and solicited), FHIR integration, and automated delivery.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">👥</div>
+                <h4>Member Enrollment</h4>
+                <p>834 enrollment transactions, member demographics, coverage updates, and sponsor management.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📊</div>
+                <h4>Claim Status</h4>
+                <p>276/277 claim status inquiries and responses, tracking, and reporting.</p>
             </div>
         </div>
-    </section>
+    </div>
+</section>
 
-    <!-- Pricing Section -->
-    <section class="pricing">
-        <div class="pricing-container">
-            <h2>Simple, Transparent Pricing</h2>
-            <div class="pricing-grid">
-                <div class="pricing-card">
-                    <h3>Starter</h3>
-                    <p class="price">$499<span>/month</span></p>
-                    <ul>
-                        <li>Up to 10,000 claims/month</li>
-                        <li>Core EDI transactions (837, 835)</li>
-                        <li>Email support</li>
-                        <li>Standard SLA</li>
-                    </ul>
-                    <a href="/signup?tier=starter" class="btn btn-outline">Get Started</a>
+<!-- Testimonials Section -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <h2 class="text-center mb-5">Trusted by Leading Health Plans</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Reduced prior authorization turnaround from 12 days to under 2 minutes"</p>
+                    <p><strong>— Regional Health Plan (450K members)</strong></p>
                 </div>
-                <div class="pricing-card featured">
-                    <div class="badge">Most Popular</div>
-                    <h3>Professional</h3>
-                    <p class="price">$1,499<span>/month</span></p>
-                    <ul>
-                        <li>Up to 50,000 claims/month</li>
-                        <li>All EDI transactions</li>
-                        <li>Prior authorization workflows</li>
-                        <li>Priority support</li>
-                        <li>Advanced analytics</li>
-                    </ul>
-                    <a href="/signup?tier=professional" class="btn btn-primary">Get Started</a>
+            </div>
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Processing 2.3M claims/month with 99.97% accuracy"</p>
+                    <p><strong>— Multi-State Medicaid MCO</strong></p>
                 </div>
-                <div class="pricing-card">
-                    <h3>Enterprise</h3>
-                    <p class="price">Custom</p>
-                    <ul>
-                        <li>Unlimited claims</li>
-                        <li>Dedicated infrastructure</li>
-                        <li>99.99% SLA guarantee</li>
-                        <li>24/7 phone support</li>
-                        <li>Custom integrations</li>
-                    </ul>
-                    <a href="/signup?tier=enterprise" class="btn btn-outline">Contact Sales</a>
+            </div>
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Went from contract signed to first claim in 47 minutes"</p>
+                    <p><strong>— Medicare Advantage Plan</strong></p>
                 </div>
             </div>
         </div>
-    </section>
+    </div>
+</section>
 
-    <!-- Case Studies -->
-    <section class="case-studies">
-        <div class="case-studies-container">
-            <h2>Trusted by Leading Health Plans</h2>
-            <div class="case-study-grid">
-                <div class="case-study">
-                    <p class="quote">"Reduced prior authorization turnaround from 12 days to under 2 minutes"</p>
-                    <p class="author">— Regional Health Plan (450K members)</p>
-                </div>
-                <div class="case-study">
-                    <p class="quote">"Processing 2.3M claims/month with 99.97% accuracy"</p>
-                    <p class="author">— Multi-State Medicaid MCO</p>
-                </div>
-                <div class="case-study">
-                    <p class="quote">"Went from contract signed to first claim in 47 minutes"</p>
-                    <p class="author">— Medicare Advantage Plan</p>
+<!-- Signup Section with Stripe -->
+<section id="signup" class="signup-section">
+    <div class="container">
+        <h2 class="text-center mb-4">Sign Up and Start Today</h2>
+        <p class="text-center mb-5">Secure billing powered by Stripe. Choose your plan and get instant access.</p>
+        <EditForm Model="signupModel" OnValidSubmit="HandleSignup">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <InputText id="email"
+                                   type="email"
+                                   autocomplete="email"
+                                   class="form-control"
+                                   @bind-Value="signupModel.Email" />
+                        <ValidationMessage For="@(() => signupModel.Email)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="plan" class="form-label">Select Plan</label>
+                        <InputSelect id="plan" class="form-select" @bind-Value="signupModel.Plan">
+                            <option value="basic">Basic ($29/month)</option>
+                            <option value="pro">Pro ($99/month)</option>
+                            <option value="enterprise">Enterprise (Contact Us)</option>
+                        </InputSelect>
+                    </div>
+                    <!-- Stripe Integration Placeholder -->
+                    <button type="submit" class="btn btn-primary w-100">Sign Up via Stripe</button>
                 </div>
             </div>
-        </div>
-    </section>
+        </EditForm>
+    </div>
+</section>
 
-    <!-- CTA Section -->
-    <section class="cta">
-        <div class="cta-content">
-            <h2>Ready to modernize your EDI processing?</h2>
-            <p>Join the future of payer integration. Start processing claims in under an hour.</p>
-            <a href="/signup" class="btn btn-primary-large">Start Free Trial</a>
-        </div>
-    </section>
+@code {
+    private SignupModel signupModel = new();
 
-    <!-- Footer -->
-    <footer class="welcome-footer">
-        <div class="footer-content">
-            <div class="footer-links">
-                <a href="/terms">Terms of Service</a>
-                <a href="/privacy">Privacy Policy</a>
-                <a href="/security">Security</a>
-                <a href="/docs">Documentation</a>
-                <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a>
-            </div>
-            <p class="copyright">© 2026 Cloud Health Office. Apache 2.0 License.</p>
-        </div>
-    </footer>
-</div>
+    private class SignupModel
+    {
+        [Required(ErrorMessage = "Email address is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
+        public string Email { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "Plan selection is required")]
+        public string Plan { get; set; } = "basic";
+    }
+
+    private Task HandleSignup()
+    {
+        // TODO: Integrate with Stripe API here
+        // For example, use JS Interop to call Stripe.js or server-side creation of Checkout Session
+        // This is a placeholder; implement actual signup logic
+        return Task.CompletedTask;
+    }
+}
