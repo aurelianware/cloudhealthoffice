@@ -1,5 +1,7 @@
+using CloudHealthOffice.Infrastructure.DocumentStore;
 using Microsoft.Azure.Cosmos;
 using MemberService.Middleware;
+using MemberService.Models;
 using MemberService.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,25 +18,10 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
-{
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"] 
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-    var key = configuration["CosmosDb:Key"] 
-        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-    
-    return new CosmosClient(endpoint, key, new CosmosClientOptions
-    {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
-    });
-});
+// Multi-cloud document store (auto-detects Azure Cosmos DB or MongoDB based on CloudProvider env var)
+builder.Services.AddDocumentStore(builder.Configuration);
 
-// Register repositories
+// Register repositories (backward compatible - uses CosmosClient registered by AddDocumentStore)
 builder.Services.AddScoped<IMemberRepository>(sp =>
 {
     var cosmosClient = sp.GetRequiredService<CosmosClient>();

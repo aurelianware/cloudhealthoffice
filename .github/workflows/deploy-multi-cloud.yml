@@ -1,0 +1,282 @@
+name: Deploy Services - Multi-Cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_to_azure:
+        description: 'Deploy to Azure AKS'
+        type: boolean
+        default: true
+        required: true
+      deploy_to_digitalocean:
+        description: 'Deploy to DigitalOcean Kubernetes'
+        type: boolean
+        default: false
+        required: true
+      service:
+        description: 'Service to deploy (leave empty for all)'
+        type: choice
+        options:
+          - 'all'
+          - 'member-service'
+          - 'claims-service'
+          - 'provider-service'
+          - 'authorization-service'
+          - 'eligibility-service'
+          - 'coverage-service'
+          - 'benefit-plan-service'
+        default: 'all'
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - '.github/workflows/deploy-multi-cloud.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: aurelianware/cloudhealthoffice
+
+jobs:
+  # Build container images (shared across both clouds)
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - member-service
+          - claims-service
+          - provider-service
+          - authorization-service
+          - eligibility-service
+          - coverage-service
+          - benefit-plan-service
+          - payment-service
+          - appeals-service
+          - attachment-service
+          - sponsor-service
+          - reference-data-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if service changed
+        id: filter
+        run: |
+          if [ "${{ github.event.inputs.service }}" != "all" ] && \
+             [ "${{ github.event.inputs.service }}" != "${{ matrix.service }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GitHub Container Registry
+        if: steps.filter.outputs.skip == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: steps.filter.outputs.skip == 'false'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          IMAGE_TAG=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}
+          docker build -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+          
+          # Also tag as latest
+          docker tag $IMAGE_TAG ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+
+  # Deploy to Azure AKS
+  deploy-azure:
+    needs: build
+    if: |
+      (github.event_name == 'push') || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_azure == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      name: azure-production
+      url: https://portal.cloudhealthoffice.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }} \
+            --name ${{ vars.AKS_CLUSTER_NAME || 'cho-aks-prod' }} \
+            --overwrite-existing
+
+      - name: Deploy services to Azure
+        run: |
+          SERVICES="${{ github.event.inputs.service || 'all' }}"
+          
+          if [ "$SERVICES" = "all" ]; then
+            SERVICES="member-service claims-service provider-service authorization-service eligibility-service coverage-service benefit-plan-service payment-service appeals-service attachment-service sponsor-service reference-data-service"
+          fi
+          
+          for SERVICE in $SERVICES; do
+            echo "Deploying $SERVICE to Azure..."
+            
+            # Update image
+            kubectl set image deployment/$SERVICE \
+              $SERVICE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-$SERVICE:${{ github.sha }} \
+              -n cho-svcs
+            
+            # Ensure CloudProvider is set to Azure
+            kubectl set env deployment/$SERVICE CloudProvider=Azure -n cho-svcs
+            
+            # Wait for rollout
+            kubectl rollout status deployment/$SERVICE -n cho-svcs --timeout=5m
+          done
+
+      - name: Verify deployment
+        run: |
+          echo "Azure deployment completed:"
+          kubectl get deployments -n cho-svcs
+          kubectl get pods -n cho-svcs
+
+  # Deploy to DigitalOcean Kubernetes
+  deploy-digitalocean:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_digitalocean == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: digitalocean-production
+      url: https://do.cloudhealthoffice.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Get DO Kubernetes credentials
+        run: |
+          doctl kubernetes cluster kubeconfig save ${{ vars.DO_CLUSTER_NAME || 'cho-k8s-prod' }}
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace cho-svcs --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create image pull secret
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --namespace=cho-svcs \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy MongoDB secrets
+        run: |
+          kubectl create secret generic mongodb-secrets \
+            --from-literal=connectionString="${{ secrets.MONGODB_CONNECTION_STRING }}" \
+            --namespace=cho-svcs \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy services to DigitalOcean
+        run: |
+          SERVICES="${{ github.event.inputs.service || 'all' }}"
+          
+          if [ "$SERVICES" = "all" ]; then
+            SERVICES="member-service claims-service provider-service authorization-service eligibility-service coverage-service benefit-plan-service payment-service appeals-service attachment-service sponsor-service reference-data-service"
+          fi
+          
+          for SERVICE in $SERVICES; do
+            echo "Deploying $SERVICE to DigitalOcean..."
+            
+            # Apply deployment manifest (with DigitalOcean-specific config)
+            cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: $SERVICE
+            namespace: cho-svcs
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: $SERVICE
+            template:
+              metadata:
+                labels:
+                  app: $SERVICE
+              spec:
+                imagePullSecrets:
+                  - name: ghcr-secret
+                containers:
+                  - name: $SERVICE
+                    image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-$SERVICE:${{ github.sha }}
+                    ports:
+                      - containerPort: 8080
+                    env:
+                      - name: CloudProvider
+                        value: "DigitalOcean"
+                      - name: MongoDB__ConnectionString
+                        valueFrom:
+                          secretKeyRef:
+                            name: mongodb-secrets
+                            key: connectionString
+                      - name: MongoDB__DatabaseName
+                        value: "CloudHealthOffice"
+                    resources:
+                      requests:
+                        memory: "256Mi"
+                        cpu: "100m"
+                      limits:
+                        memory: "512Mi"
+                        cpu: "500m"
+          EOF
+            
+            # Wait for rollout
+            kubectl rollout status deployment/$SERVICE -n cho-svcs --timeout=5m
+          done
+
+      - name: Verify deployment
+        run: |
+          echo "DigitalOcean deployment completed:"
+          kubectl get deployments -n cho-svcs
+          kubectl get pods -n cho-svcs
+
+  # Summary report
+  summary:
+    needs: [deploy-azure, deploy-digitalocean]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## Multi-Cloud Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Cloud Targets" >> $GITHUB_STEP_SUMMARY
+          echo "- Azure: ${{ (needs.deploy-azure.result == 'success' && '✅ Deployed') || (needs.deploy-azure.result == 'skipped' && '⏭️ Skipped') || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- DigitalOcean: ${{ (needs.deploy-digitalocean.result == 'success' && '✅ Deployed') || (needs.deploy-digitalocean.result == 'skipped' && '⏭️ Skipped') || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Toggle Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "To change deployment targets:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to Actions → Deploy Services - Multi-Cloud" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+          echo "3. Toggle checkboxes for Azure and/or DigitalOcean" >> $GITHUB_STEP_SUMMARY
+          echo "4. Select service (or 'all')" >> $GITHUB_STEP_SUMMARY
+          echo "5. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY

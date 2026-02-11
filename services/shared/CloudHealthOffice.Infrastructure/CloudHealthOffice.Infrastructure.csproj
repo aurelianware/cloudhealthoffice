@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Azure Cosmos DB SDK -->
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.42.0" />
+    
+    <!-- MongoDB Driver -->
+    <PackageReference Include="MongoDB.Driver" Version="2.24.0" />
+    
+    <!-- Microsoft Extensions for Dependency Injection -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
