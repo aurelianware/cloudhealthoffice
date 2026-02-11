@@ -439,7 +439,7 @@ cat tests/E2E-TEST-RESULTS.md
 
 ## **💼 Enterprise**
 
-### **Join 24,000+ Organizations Evaluating Cloud Health Office**
+### **Join 31,000+ Cloners Evaluating Cloud Health Office**
 
 If you're one of the thousands who cloned the repo in the past 2 weeks - **thank you**. Here's how to move forward:
 
