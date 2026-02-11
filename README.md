@@ -9,8 +9,10 @@
 **Production SaaS • Claims adjudication <500ms • Kubernetes + Argo • Integrates with legacy systems**
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./tests/E2E-TEST-RESULTS.md)
-[![E2E Timing](https://img.shields.io/badge/E2E%20timing-124s-blue)](./tests/E2E-TEST-RESULTS.md)
+[![Version](https://img.shields.io/badge/version-v4.0.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0)
+[![Tests](https://img.shields.io/badge/tests-531%20passing-brightgreen)](./portal/CloudHealthOffice.Portal.Tests/)
+[![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
+[![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
@@ -70,8 +72,9 @@ Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expe
 ### **🌐 Self-Service Portal & Signup**
 
 - ✅ **Production portal** - [portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com) with Azure AD authentication and multi-tenant isolation
-- ✅ **Self-service signup** - Stripe-powered subscription management with 14-day free trials (Starter: $499/mo, Professional: $1,499/mo)
+- ✅ **Self-service signup** - Stripe-powered subscription management with 30-day free trials (Starter: $499/mo, Professional: $1,999/mo, Enterprise: $4,999/mo)
 - ✅ **Smart routing** - Automatic tenant detection via Azure AD claims with intelligent access control
+- ✅ **Multi-tenant isolation** - 100% test coverage on tenant context service and HTTP message handlers (24 unit tests)
 - ✅ **Cosmos DB tenant management** - Dedicated containers for Tenants, Members, and SalesInquiries with partition-optimized queries
 - ✅ **Contact Sales integration** - Professional inquiry form for Enterprise customers with status tracking (New → Contacted → Qualified → Closed)
 - ✅ **Demo mode** - Public evaluation environment with sample data and full feature preview
