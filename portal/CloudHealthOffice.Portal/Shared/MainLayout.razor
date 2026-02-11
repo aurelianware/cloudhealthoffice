@@ -1,4 +1,9 @@
 @inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextService TenantContextService
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -19,12 +24,37 @@
         
         <MudSpacer />
         
-        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small" Style="border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);">
-            Demo Health Plan
-        </MudChip>
+        @if (!string.IsNullOrEmpty(_tenantName))
+        {
+            <MudChip T="string" 
+                     Color="@(_isDemo ? Color.Warning : Color.Primary)" 
+                     Variant="Variant.Outlined" 
+                     Size="Size.Small" 
+                     Style="@(_isDemo ? "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);" : "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);")">
+                @_tenantName @(_isDemo ? "(Demo)" : "")
+            </MudChip>
+        }
         
         <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Style="margin-left: 12px;" />
-        <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" />
+        
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudMenuItem>
+                        <div style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5);">Signed in as</MudText>
+                            <MudText Typo="Typo.body2">@context.User.Identity?.Name</MudText>
+                        </div>
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/settings">Settings</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="@Logout">Sign Out</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Login" Color="Color.Primary" Href="/welcome" />
+            </NotAuthorized>
+        </AuthorizeView>
     </MudAppBar>
     
     <MudDrawer @bind-Open="_drawerOpen" Elevation="3" Style="border-right: 1px solid rgba(0, 255, 255, 0.2);">
@@ -112,6 +142,39 @@
 
 @code {
     private bool _drawerOpen = true;
+    private string? _tenantName;
+    private bool _isDemo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load tenant context
+        await LoadTenantContextAsync();
+    }
+
+    private async Task LoadTenantContextAsync()
+    {
+        try
+        {
+            var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            if (tenantContext != null)
+            {
+                _tenantName = tenantContext.TenantName;
+                _isDemo = tenantContext.IsDemo;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't crash the layout
+            Console.Error.WriteLine($"Error loading tenant context: {ex.Message}");
+        }
+    }
+
+    private void Logout()
+    {
+        // Navigate to Microsoft Identity logout endpoint
+        Navigation.NavigateTo("/MicrosoftIdentity/Account/SignOut", forceLoad: true);
+    }
 
     private MudTheme _theme = new()
     {
