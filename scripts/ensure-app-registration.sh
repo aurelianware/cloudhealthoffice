@@ -198,16 +198,14 @@ else
 fi
 
 # Define redirect URIs
-REDIRECT_URIS="[\"$REDIRECT_URI_1\",\"$REDIRECT_URI_2\",\"$REDIRECT_URI_3\"]"
-
 echo "Redirect URIs:"
 echo "  - $REDIRECT_URI_1"
 echo "  - $REDIRECT_URI_2"
 echo "  - $REDIRECT_URI_3"
 
-# Update web redirect URIs
+# Update web redirect URIs (pass each URI as a separate argument)
 az ad app update --id "$APP_ID" \
-    --web-redirect-uris ${REDIRECT_URIS}
+    --web-redirect-uris "$REDIRECT_URI_1" "$REDIRECT_URI_2" "$REDIRECT_URI_3"
 
 echo -e "${GREEN}✅ Redirect URIs configured${NC}"
 
