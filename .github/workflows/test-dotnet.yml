@@ -39,17 +39,18 @@ jobs:
         working-directory: portal/CloudHealthOffice.Portal.Tests
         run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=portal-test-results.trx" --collect:"XPlat Code Coverage"
 
-      - name: Restore dependencies - Infrastructure Tests
-        working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
-        run: dotnet restore
+      # Infrastructure tests disabled - project only exists in feature/multi-cloud-infrastructure branch
+      # - name: Restore dependencies - Infrastructure Tests
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet restore
 
-      - name: Build - Infrastructure Tests
-        working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
-        run: dotnet build --no-restore
+      # - name: Build - Infrastructure Tests
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet build --no-restore
 
-      - name: Test - Infrastructure (Multi-Cloud)
-        working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
-        run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=infrastructure-test-results.trx" --collect:"XPlat Code Coverage"
+      # - name: Test - Infrastructure (Multi-Cloud)
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=infrastructure-test-results.trx" --collect:"XPlat Code Coverage"
 
       - name: Restore dependencies - Member Service Tests
         working-directory: services/member-service/MemberService.Tests
