@@ -74,14 +74,15 @@ jobs:
             **/TestResults/**/*.trx
             **/TestResults/**/coverage.cobertura.xml
 
-      - name: Publish Test Summary
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: .NET Test Results
-          path: '**/TestResults/**/*.trx'
-          reporter: dotnet-trx
-          fail-on-error: true
+      # Disabled due to GitHub permissions issue (Resource not accessible by integration)
+      # - name: Publish Test Summary
+      #   uses: dorny/test-reporter@v1
+      #   if: always()
+      #   with:
+      #     name: .NET Test Results
+      #     path: '**/TestResults/**/*.trx'
+      #     reporter: dotnet-trx
+      #     fail-on-error: true
 
   test-typescript:
     name: TypeScript/Jest Tests
