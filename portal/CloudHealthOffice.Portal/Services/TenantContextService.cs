@@ -81,10 +81,10 @@ public class TenantContextService : ITenantContextService
 
             _cachedContext = new TenantContext
             {
-                TenantId = subscription.Id ?? azureTenantId,
-                TenantName = subscription.TenantName ?? subscription.OrganizationName ?? "Unknown Tenant",
+                TenantId = subscription.TenantId ?? azureTenantId,
+                TenantName = subscription.OrganizationName ?? "Unknown Tenant",
                 AzureTenantId = azureTenantId,
-                SubscriptionTier = subscription.SubscriptionTier ?? "starter",
+                SubscriptionTier = subscription.Tier ?? "starter",
                 SubscriptionStatus = subscription.SubscriptionStatus ?? "Unknown",
                 IsDemo = subscription.IsDemo,
                 UserEmail = userEmail
