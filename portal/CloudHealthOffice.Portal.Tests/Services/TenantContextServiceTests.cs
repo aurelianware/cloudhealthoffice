@@ -203,12 +203,12 @@ public class TenantContextServiceTests
         var principal = new ClaimsPrincipal(identity);
         var authState = new AuthenticationState(principal);
         
-        var subscription = new SubscriptionDto
+        var subscription = new TenantSubscription
         {
             TenantId = "cho-tenant-456",
-            TenantName = "Test Tenant",
+            OrganizationName = "Test Tenant",
             AzureTenantId = azureTenantId,
-            IsActive = true
+            SubscriptionStatus = "Active", Tier = "starter", IsDemo = false
         };
 
         _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
@@ -241,14 +241,14 @@ public class TenantContextServiceTests
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var principal = new ClaimsPrincipal(identity);
         var authState = new AuthenticationState(principal);
-        TenantSubscription
+        var subscription = new TenantSubscription
         {
             TenantId = choTenantId,
             OrganizationName = "Test Tenant",
             AzureTenantId = azureTenantId,
             SubscriptionStatus = "Active",
-            Tier = "professional" azureTenantId,
-            IsActive = true
+            Tier = "professional",
+            IsDemo = false
         };
 
         _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
@@ -299,12 +299,12 @@ public class TenantContextServiceTests
         var principal = new ClaimsPrincipal(identity);
         var authState = new AuthenticationState(principal);
         
-        var subscription = new SubscriptionDto
+        var subscription = new TenantSubscription
         {
             TenantId = "cho-tenant-456",
-            TenantName = "Test Tenant",
+            OrganizationName = "Test Tenant",
             AzureTenantId = azureTenantId,
-            IsActive = true
+            SubscriptionStatus = "Active", Tier = "starter", IsDemo = false
         };
 
         _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
@@ -337,12 +337,14 @@ public class TenantContextServiceTests
         var principal = new ClaimsPrincipal(identity);
         var authState = new AuthenticationState(principal);
         
-        var subscription = new SubscriptionDto
+        var subscription = new TenantSubscription
         {
             TenantId = "cho-tenant-456",
-            TenantName = "Test Tenant",
+            OrganizationName = "Test Tenant",
             AzureTenantId = azureTenantId,
-            IsActive = true
+            SubscriptionStatus = "Active",
+            Tier = "starter",
+            IsDemo = false
         };
 
         _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
