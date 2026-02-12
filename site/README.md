@@ -1,5 +1,7 @@
 # Cloud Health Office - Static Website
 
+**Last Updated:** February 11, 2026 - v4.0.0 Release
+
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
 ## Structure
