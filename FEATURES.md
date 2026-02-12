@@ -15,7 +15,8 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 production controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 62 automated tests | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 531 automated tests (85.93% coverage) | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 
 ## 🌐 Self-Service Portal
 
@@ -32,7 +33,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Feature | Description | Status | Details |
 |---------|-------------|--------|---------|
-| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter $499/mo, Professional $1,499/mo, 14-day trials |
+| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter $499/mo, Professional $1,999/mo, Enterprise $4,999/mo, 30-day trials |
 | **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | ✅ Complete | Tenant-scoped access via claims, automatic user provisioning |
 | **Subscription Management** | Stripe-powered billing and subscriptions | ✅ Complete | Test mode, webhook integration, automatic renewals |
 | **Contact Sales** | Enterprise inquiry tracking | ✅ Complete | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |

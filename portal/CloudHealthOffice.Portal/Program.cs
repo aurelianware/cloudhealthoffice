@@ -117,9 +117,12 @@ builder.Services.AddServerSideBlazor()
     .AddMicrosoftIdentityConsentHandler();
 builder.Services.AddMudServices();
 
-// Add HttpClient for service calls
+// Add HttpClient for service calls with tenant context
+builder.Services.AddScoped<TenantHttpMessageHandler>();
+
 builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddHttpMessageHandler<TenantHttpMessageHandler>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(10),
@@ -147,6 +150,9 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
         }
     });
 });
+
+// Register tenant context service (must be before other services that depend on it)
+builder.Services.AddScoped<ITenantContextService, TenantContextService>();
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();

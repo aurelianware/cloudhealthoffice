@@ -198,18 +198,25 @@ else
 fi
 
 # Define redirect URIs
-REDIRECT_URIS="[\"$REDIRECT_URI_1\",\"$REDIRECT_URI_2\",\"$REDIRECT_URI_3\"]"
-
 echo "Redirect URIs:"
 echo "  - $REDIRECT_URI_1"
 echo "  - $REDIRECT_URI_2"
 echo "  - $REDIRECT_URI_3"
 
-# Update web redirect URIs
-az ad app update --id "$APP_ID" \
-    --web-redirect-uris ${REDIRECT_URIS}
+# Check if redirect URIs are already configured
+EXISTING_URIS=$(az ad app show --id "$APP_ID" --query "web.redirectUris" -o tsv 2>/dev/null || echo "")
 
-echo -e "${GREEN}✅ Redirect URIs configured${NC}"
+if echo "$EXISTING_URIS" | grep -q "$REDIRECT_URI_1" && \
+   echo "$EXISTING_URIS" | grep -q "$REDIRECT_URI_2" && \
+   echo "$EXISTING_URIS" | grep -q "$REDIRECT_URI_3"; then
+    echo -e "${GREEN}✅ Redirect URIs already configured${NC}"
+else
+    # Update web redirect URIs (pass each URI as a separate argument)
+    az ad app update --id "$APP_ID" \
+        --web-redirect-uris "$REDIRECT_URI_1" "$REDIRECT_URI_2" "$REDIRECT_URI_3"
+    
+    echo -e "${GREEN}✅ Redirect URIs configured${NC}"
+fi
 
 # Configure API permissions (Microsoft Graph)
 echo ""
