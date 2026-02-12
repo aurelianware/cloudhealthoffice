@@ -37,15 +37,19 @@ spec:
         app: member-service
         version: v1
     spec:
+      imagePullSecrets:
+      - name: ghcr-secret
       containers:
       - name: member-service
-        image: your-acr.azurecr.io/member-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-member-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: MongoDb__ConnectionString
+          value: "mongodb://admin:securepassword123@mongodb:27017"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
