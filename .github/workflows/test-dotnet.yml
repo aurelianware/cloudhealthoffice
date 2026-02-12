@@ -18,7 +18,7 @@ jobs:
   test-dotnet:
     name: .NET Unit Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -87,7 +87,7 @@ jobs:
   test-typescript:
     name: TypeScript/Jest Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-dotnet, test-typescript]
     if: always()
-    
+
     steps:
       - uses: actions/checkout@v4
 
