@@ -2,7 +2,7 @@
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.png)
 
-# **The #1 Open-Source Cloud-Native Payer Platform**
+# **The #1 Open-Source Cloud-Native Core Administration Processing System (CAPS) and Payer Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
@@ -16,7 +16,7 @@
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-**🚀 24,000+ clones in 2 weeks** • **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
+**🚀 37,000+ clones in the past 2 weeks** by 1500 uniquevvisitirs• **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
 
 [🚀 Start Free Trial (5 min)](https://portal.cloudhealthoffice.com) • [⚡ Architecture](#-architecture) • [📊 Live Demo](#-platform-performance) • [💼 Enterprise](#-enterprise) • [⭐ Star to Support](https://github.com/aurelianware/cloudhealthoffice)
 
@@ -26,15 +26,15 @@
 
 ## **The Future of Payer Integration. Today.**
 
-Cloud Health Office is the **cloud-native payer platform** healthcare CTOs have been asking for. Modern Kubernetes architecture. Argo Workflows orchestration. Sub-500ms claims adjudication. Multi-tenant SaaS with self-service signup. Everything legacy platforms promised but never delivered.
+Cloud Health Office is the **cloud-native core administration processing system (caps) and payer platform** healthcare CTOs have been asking for. Modern Kubernetes architecture. Argo Workflows orchestration. Sub-500ms claims adjudication. Multi-tenant SaaS with self-service signup. Architected to scale horizontally several million member plans. Everything legacy platforms promised for years but never delivered.
 
 **We're disrupting a vendor-controlled market.** One company dominates core admin systems. They charge $500K-2M annually for platforms stuck in 2010s architecture. Health plans are trapped with no alternatives. Until now.
 
 ### **Why This Exists**
 
-Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expensive to upgrade ($2M+). No cloud-native capabilities. No Kubernetes. No modern orchestration. **And the vendors know you're stuck.** Health plans pay **$500K-2M annually** in maintenance fees for platforms that process claims in 7-14 days, with zero negotiating leverage.
+Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expensive to upgrade ($2M+). No cloud-native capabilities. Their current cloud solutions are cost prohibitive and consist primarily of virtual machines and 30 year old architecture. No Kubernetes. No modern orchestration. **And the vendors know you're stuck.** Health plans pay **$500K-3M annually** in maintenance fees for platforms that process claims in 7-14 days, with zero negotiating leverage.
 
-**Cloud Health Office is your low-risk way out.** Start by fixing what's broken today - EDI integration, real-time claims, modern APIs. **While you're doing that, you're building leverage:** production workloads running on a modern platform. Then it's your choice: keep paying vendor ransom, or migrate to the system already running your operations.
+**Cloud Health Office is your low-risk way out.** Start by fixing what's broken today - EDI integration, real-time claims, medical attachments, RFAI, modern APIs. **While you're doing that, you're building leverage:** production workloads running on a modern platform. Then it's your choice: keep paying vendor ransom or migrate to the system already running your operations.
 
 **Worst case?** You have negotiating leverage that didn't exist before. **Best case?** You're running a cloud-native platform at 85% lower cost.
 
@@ -59,7 +59,7 @@ Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expe
 <td width="33%" align="center">
   <h3>🔄 EDI & Integration</h3>
   <p><strong>8 transaction types</strong></p>
-  <p>270/271 Eligibility • 275 Attachments • 276/277 Status • 278 Auth • 837 Claims. Integrates WITH legacy systems.</p>
+  <p>270/271 Eligibility • 275 Medical Attachments • 276/277 Claim Status • 278 Auth  • 834 Eligibility • 834 • 837 Claims. Integrates WITH legacy systems.</p>
 </td>
 <td width="33%" align="center">
   <h3>🔒 HIPAA Native</h3>
@@ -157,7 +157,7 @@ Per-step highlights: get-claim 17s • validate-codes 11s • verify-coverage 13
 
 ### **Already evaluating? You're not alone.**
 
-**24,000+ clones in the past 2 weeks.** CTOs at health plans, consultants, and developers are all looking at Cloud Health Office as their vendor exit strategy.
+**37,000+ clones in the past 2 weeks.** CTOs at health plans, consultants, and developers are all looking at Cloud Health Office as their vendor exit strategy.
 
 **Ready to move from evaluation to production?**
 
@@ -243,7 +243,7 @@ kubectl get svc -n cho-svcs
 - ✅ Cosmos DB for multi-tenant data
 - ✅ Azure Integration Account for X12 EDI
 - ✅ SFTP server for clearinghouse file exchange
-- ✅ 9 microservices (.NET 8)
+- ✅ 17 microservices (.NET 8)
 - ✅ Blazor admin portal
 - ✅ Prometheus + Grafana monitoring
 - ✅ Argo Workflows for claims adjudication
@@ -381,7 +381,7 @@ Cloud Health Office is a **cloud-native SaaS platform** built on Kubernetes with
 | **Orchestration** | Argo Workflows, Kubernetes (AKS) | Cloud-native DAG-based workflow execution, auto-scaling |
 | **Microservices** | ASP.NET Core 8, C# 12 | 9 RESTful APIs with OpenAPI docs |
 | **Data** | Azure Cosmos DB (Tenants/Members/SalesInq), PostgreSQL | Multi-tenant isolation + workflow state |
-| **EDI** | Azure Integration Account, X12 schemas | 270/271/275/276/277/278/837 transaction processing |
+| **EDI** | Azure Integration Account, X12 schemas | 270/271/275/276/277/278/RFAI / 837 transaction processing |
 | **Frontend** | SignalR, Responsive CSS | Real-time updates, mobile-optimized navigation |
 | **File Transfer** | SFTP (OpenSSH), Azure Blob Storage | Clearinghouse integration |
 | **Payments** | Stripe (Test Mode) | Subscription billing, 14-day trials |
@@ -525,7 +525,7 @@ Independent consultants and implementation partners: we need you.
 
 ### **Real Traction, Real Demand**
 
-**24,000+ repository clones in 2 weeks** - not marketing hype, real developers and CTOs evaluating Cloud Health Office as their modernization path.
+**37,000+ repository clones in 2 weeks** - not marketing hype, real developers and CTOs evaluating Cloud Health Office as their modernization path.
 
 Who's evaluating:
 - Health plan CTOs escaping vendor lock-in
