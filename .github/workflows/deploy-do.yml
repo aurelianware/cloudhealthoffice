@@ -1,0 +1,54 @@
+name: Deploy to Digital Ocean
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'site/**'
+      - '.github/workflows/deploy-do.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: aurelianware/cloudhealthoffice-site
+  NAMESPACE: cho-svcs
+
+jobs:
+  deploy-do:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean Kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Create Namespace
+        run: kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Image Pull Secret
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --docker-email=${{ github.actor }}@users.noreply.github.com \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Site Manifests
+        run: |
+          # Apply ClusterIssuer (requires cert-manager installed)
+          kubectl apply -f k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
+          
+          # Deploy Application
+          kubectl apply -f site/k8s/site-deployment.yaml
+          kubectl apply -f k8s/site-ingress.yaml
