@@ -307,6 +307,7 @@ nav ul {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--spacing-md);
+  padding: 0;
 }
 
 nav li {
