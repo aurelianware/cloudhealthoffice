@@ -6,6 +6,8 @@ on:
     branches: ["main"]
     paths:
       - 'site/**'
+      - 'services/**'
+      - 'k8s/**'
       - '.github/workflows/deploy-do.yml'
 
 env:
@@ -50,5 +52,7 @@ jobs:
           kubectl apply -f k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
           
           # Deploy Application
+          kubectl apply -f k8s/mongodb-deployment.yaml
+          kubectl apply -f k8s/member-service-deployment.yaml
           kubectl apply -f site/k8s/site-deployment.yaml
           kubectl apply -f k8s/site-ingress.yaml
