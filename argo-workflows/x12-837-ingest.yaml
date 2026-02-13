@@ -24,7 +24,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: x12-837-ingest
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: x12-837-ingest
     app.kubernetes.io/component: claims-ingestion
@@ -274,7 +274,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
   name: x12-837-ingest-cron
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: x12-837-ingest-cron
     app.kubernetes.io/component: claims-ingestion
