@@ -2,30 +2,25 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: eligibility-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  Services__CoverageService: "http://coverage-service.cho-svcs/api"
-  Services__MemberService: "http://member-service.cho-svcs/api"
-  Services__BenefitPlanService: "http://benefit-plan-service.cho-svcs/api"
-  CosmosDb__DatabaseName: "EligibilityDB"
-  CosmosDb__InquiriesContainer: "Inquiries"
-  CosmosDb__ResponsesContainer: "Responses"
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice/api"
+  Services__MemberService: "http://member-service.cloudhealthoffice/api"
+  Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  CosmosDb__InquiriesContainer: "EligibilityInquiries"
+  CosmosDb__ResponsesContainer: "EligibilityResponses"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: eligibility-service-secret
-  namespace: cho-svcs
-type: Opaque
-stringData:
-  COSMOSDB_CONNECTION_STRING: "AccountEndpoint=https://your-cosmos.documents.azure.com:443/;AccountKey=your-key-here=="
+# Secret is created separately via kubectl with actual Cosmos DB credentials
+# kubectl create secret generic eligibility-service-secret \
+#   --from-literal=CosmosDb__ConnectionString='...'
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: eligibility-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: eligibility-service
     version: v1
@@ -42,13 +37,19 @@ spec:
     spec:
       containers:
       - name: eligibility-service
-        image: cloudhealthoffice/eligibility-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-eligibility-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: eligibility-service-secret
+              key: MongoDb__ConnectionString
+              optional: true
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
@@ -88,7 +89,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: eligibility-service-secret
-              key: COSMOSDB_CONNECTION_STRING
+              key: CosmosDb__ConnectionString
         resources:
           requests:
             memory: "128Mi"
@@ -118,7 +119,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: eligibility-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: eligibility-service
 spec:
@@ -135,7 +136,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: eligibility-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

@@ -307,6 +307,7 @@ nav ul {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--spacing-md);
+  padding: 0;
 }
 
 nav li {
@@ -335,23 +336,23 @@ nav a:focus {
 /* Mobile Menu Toggle Button */
 .mobile-menu-toggle {
   display: none;
-  background: transparent;
+  background: var(--dark-gray);
   border: 2px solid var(--neon-cyan);
   color: var(--neon-cyan);
   font-size: 1.5rem;
-  padding: 8px 12px;
+  padding: 8px 16px;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  position: absolute;
-  top: var(--spacing-sm);
-  right: var(--spacing-md);
-  z-index: 101;
   transition: all 0.3s ease;
+  box-shadow: 0 0 15px var(--cyan-glow);
+  margin: 0 auto var(--spacing-sm) auto;
+  width: fit-content;
 }
 
 .mobile-menu-toggle:hover {
-  background: rgba(0, 255, 255, 0.1);
-  box-shadow: 0 0 10px var(--cyan-glow);
+  background: rgba(0, 255, 255, 0.2);
+  box-shadow: 0 0 20px var(--cyan-glow);
+  transform: scale(1.05);
 }
 
 .mobile-menu-toggle:focus {
@@ -572,32 +573,44 @@ hr {
   
   nav {
     position: relative;
+    margin-bottom: var(--spacing-md);
   }
   
   nav ul {
     display: none;
     flex-direction: column;
     gap: 0;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
     background: var(--dark-gray);
     border: 2px solid var(--neon-cyan);
-    border-top: none;
-    padding: var(--spacing-sm) 0;
-    max-height: 80vh;
+    border-radius: var(--radius-md);
+    padding: 0;
+    margin-top: var(--spacing-sm);
+    box-shadow: 0 0 30px var(--cyan-glow);
+    max-height: 70vh;
     overflow-y: auto;
+    z-index: 100;
   }
   
   nav ul.mobile-menu-open {
     display: flex;
+    animation: slideDown 0.3s ease-out;
+  }
+  
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   
   nav li {
     width: 100%;
     text-align: center;
-    border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(0, 255, 255, 0.2);
   }
   
   nav li:last-child {
@@ -606,8 +619,13 @@ hr {
   
   nav a {
     display: block;
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-md);
     width: 100%;
+    transition: all 0.2s ease;
+  }
+  
+  nav a:hover {
+    background: rgba(0, 255, 255, 0.1);
   }
   
   .container, .container-narrow {

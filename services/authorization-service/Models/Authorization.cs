@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace AuthorizationService.Models;
 
@@ -18,6 +19,7 @@ public class Authorization
     /// <summary>
     /// Unique authorization identifier (Cosmos DB document id)
     /// </summary>
+    [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
@@ -226,6 +228,30 @@ public class Authorization
     /// </summary>
     [StringLength(1000)]
     public string? FollowUpAction { get; set; }
+
+    /// <summary>
+    /// RFAI (Request for Additional Information) reference number
+    /// Generated when authorization is pended (A4 status)
+    /// Links to 275 attachment submissions
+    /// 277 Response: TRN02
+    /// </summary>
+    [StringLength(50)]
+    public string? RFAIReference { get; set; }
+
+    /// <summary>
+    /// Whether RFAI has been issued for this authorization
+    /// </summary>
+    public bool RFAIIssued { get; set; } = false;
+
+    /// <summary>
+    /// Date RFAI was issued (277 sent to provider)
+    /// </summary>
+    public DateTime? RFAIIssuedDate { get; set; }
+
+    /// <summary>
+    /// Date attachments were received in response to RFAI (275 received)
+    /// </summary>
+    public DateTime? RFAIResponseDate { get; set; }
 
     /// <summary>
     /// Reviewer name (medical reviewer who made decision)

@@ -1,0 +1,500 @@
+# X12 276 Claim Status Inquiry Ingest Workflow
+# Kubernetes-native orchestration for processing inbound 276 requests
+#
+# HIPAA Transaction: 005010X212 (276) - Health Care Claim Status Request
+#
+# Workflow Steps:
+#   1. sftp-fetch - Download 276 file from Clearinghouse SFTP
+#   2. parse-x12-276 - Parse EDI to JSON (claim inquiries)
+#   3. query-claims - Query claims service for status
+#   4. generate-277 - Generate 277 claim status response
+#   5. sftp-upload - Upload 277 response to clearinghouse
+#   6. archive - Store 276/277 in data lake
+#   7. publish-kafka - Publish to 'claim-status-requests' topic
+#
+# Trading Partners:
+#   - Sender: Clearinghouse (030240928) or Provider
+#   - Receiver: Health Plan (Payer)
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-276-ingest
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: x12-276-ingest
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 276 claim status inquiry ingestion and 277 response generation"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: ingest-276
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24 hours
+    secondsAfterSuccess: 43200     # 12 hours
+    secondsAfterFailure: 604800    # 7 days
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 1800  # 30 minutes
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  arguments:
+    parameters:
+      # SFTP configuration
+      - name: tenant-id
+        value: "bcbs-florida"
+      - name: trading-partner-id
+        value: "availity"
+      - name: environment
+        value: "prod"
+      - name: sftp-inbound-folder
+        value: "/inbound/276"
+      - name: sftp-outbound-folder
+        value: "/outbound/277"
+      - name: file-pattern
+        value: "*.edi"
+      # Storage configuration
+      - name: blob-container
+        value: "cho-prod"
+      - name: blob-prefix-276
+        value: "raw/276"
+      - name: blob-prefix-277
+        value: "processed/277"
+      # Service endpoints
+      - name: claims-service-endpoint
+        value: "http://claims-service.cloudhealthoffice.svc.cluster.local/api/claims"
+      - name: trading-partner-service-endpoint
+        value: "http://trading-partner-service.cloudhealthoffice.svc.cluster.local/api/TradingPartners"
+      # Kafka
+      - name: kafka-topic
+        value: "claim-status-requests"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: clearinghouse-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: azure-storage-credentials
+      secret:
+        secretName: azure-storage-secret
+  
+  templates:
+    # Main orchestration DAG
+    - name: ingest-276
+      dag:
+        tasks:
+          # Step 1: Fetch 276 files from SFTP
+          - name: sftp-fetch
+            template: sftp-fetch-template
+            arguments:
+              parameters:
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+                - name: environment
+                  value: "{{workflow.parameters.environment}}"
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-inbound-folder}}"
+          
+          # Step 2: Parse X12 276
+          - name: parse-x12-276
+            dependencies: [sftp-fetch]
+            template: parse-276-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+          
+          # Step 3: Query claims service for status
+          - name: query-claims
+            dependencies: [parse-x12-276]
+            template: query-claims-template
+            arguments:
+              artifacts:
+                - name: parsed-276
+                  from: "{{tasks.parse-x12-276.outputs.artifacts.parsed-output}}"
+              parameters:
+                - name: claims-service-endpoint
+                  value: "{{workflow.parameters.claims-service-endpoint}}"
+          
+          # Step 4: Generate 277 response
+          - name: generate-277
+            dependencies: [query-claims]
+            template: generate-277-template
+            arguments:
+              artifacts:
+                - name: claim-status-data
+                  from: "{{tasks.query-claims.outputs.artifacts.claim-status}}"
+              parameters:
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+          
+          # Step 5: Upload 277 to SFTP
+          - name: sftp-upload
+            dependencies: [generate-277]
+            template: sftp-upload-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-outbound-folder}}"
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+          
+          # Step 6: Archive to blob storage
+          - name: archive-276
+            dependencies: [parse-x12-276]
+            template: azure-blob-upload-template
+            arguments:
+              artifacts:
+                - name: file
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+              parameters:
+                - name: container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-path
+                  value: "{{workflow.parameters.blob-prefix-276}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.trading-partner-id}}/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}"
+          
+          - name: archive-277
+            dependencies: [generate-277]
+            template: azure-blob-upload-template
+            arguments:
+              artifacts:
+                - name: file
+                  from: "{{tasks.generate-277.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-path
+                  value: "{{workflow.parameters.blob-prefix-277}}/{{workflow.parameters.tenant-id}}/{{workflow.parameters.trading-partner-id}}/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}"
+          
+          # Step 7: Publish to Kafka
+          - name: publish-kafka
+            dependencies: [sftp-upload, archive-276, archive-277]
+            template: kafka-publish-template
+            arguments:
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic}}"
+                - name: message
+                  value: "{{tasks.parse-x12-276.outputs.parameters.parsed-json}}"
+    
+    # SFTP fetch template
+    - name: sftp-fetch-template
+      inputs:
+        parameters:
+          - name: tenant-id
+          - name: trading-partner-id
+          - name: environment
+          - name: sftp-folder
+      outputs:
+        artifacts:
+          - name: downloaded-files
+            path: /data/output
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-sftp-fetcher:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            # Get trading partner config for SFTP host/credentials
+            TRADING_PARTNER_ENDPOINT="{{workflow.parameters.trading-partner-service-endpoint}}"
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
+            ENV="{{inputs.parameters.environment}}"
+            
+            echo "Fetching trading partner config: $TENANT_ID/$PARTNER_ID/$ENV"
+            
+            # In production, call trading-partner-service API
+            # For now, use default SFTP server
+            SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
+            SFTP_USER="${SFTP_USER:-logicapp}"
+            SFTP_PASS="${SFTP_PASSWORD}"
+            
+            echo "Connecting to SFTP: $SFTP_HOST"
+            echo "Downloading from: {{inputs.parameters.sftp-folder}}"
+            
+            sshpass -p "$SFTP_PASS" sftp -o StrictHostKeyChecking=no $SFTP_USER@$SFTP_HOST <<EOF
+            cd {{inputs.parameters.sftp-folder}}
+            lcd /data/output
+            mget *.edi
+            bye
+            EOF
+            
+            echo "Downloaded files:"
+            ls -lh /data/output/
+        env:
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Parse 276 template
+    - name: parse-276-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input
+      outputs:
+        artifacts:
+          - name: parsed-output
+            path: /data/output
+        parameters:
+          - name: parsed-json
+            valueFrom:
+              path: /data/output/parsed.json
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-x12-276-parser:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            for edi_file in /data/input/*.edi; do
+              if [ -f "$edi_file" ]; then
+                echo "Parsing: $edi_file"
+                python /app/parse-276.py "$edi_file" --output /data/output/parsed.json
+              fi
+            done
+            
+            echo "Parse complete"
+            cat /data/output/parsed.json
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Query claims service template
+    - name: query-claims-template
+      inputs:
+        artifacts:
+          - name: parsed-276
+            path: /data/input/parsed.json
+        parameters:
+          - name: claims-service-endpoint
+      outputs:
+        artifacts:
+          - name: claim-status
+            path: /data/output/claim-status.json
+      script:
+        image: curlimages/curl:latest
+        command: [sh]
+        source: |
+          set -e
+          
+          CLAIMS_API="{{inputs.parameters.claims-service-endpoint}}"
+          
+          # Read parsed 276 JSON
+          PARSED_276=$(cat /data/input/parsed.json)
+          
+          # Extract claim numbers and query claims service
+          # For each claim in the 276 inquiry, query claims service
+          
+          echo '{"claims": []}' > /data/output/claim-status.json
+          
+          # TODO: Implement actual claim lookup logic
+          # This is a placeholder - real implementation would:
+          # 1. Parse claim_number from parsed-276
+          # 2. Call GET $CLAIMS_API?claimNumber=$CLAIM_NUMBER
+          # 3. Aggregate results into claim-status.json
+          
+          echo "Claims query complete"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Generate 277 response template
+    - name: generate-277-template
+      inputs:
+        artifacts:
+          - name: claim-status-data
+            path: /data/input/claim-status.json
+        parameters:
+          - name: tenant-id
+          - name: trading-partner-id
+      outputs:
+        artifacts:
+          - name: edi-output
+            path: /data/output
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-x12-encoder:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            echo "Generating 277 claim status response"
+            
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
+            
+            # Read claim status data
+            CLAIM_DATA=$(cat /data/input/claim-status.json)
+            
+            # Generate 277 EDI using Python encoder
+            python /app/generate_277.py \
+              --input /data/input/claim-status.json \
+              --output /data/output/277-response-$(date +%Y%m%d%H%M%S).edi \
+              --sender-id "BCBSFLORIDA" \
+              --receiver-id "CLEARINGHOUSE"
+            
+            echo "277 generation complete"
+            ls -lh /data/output/
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # SFTP upload template
+    - name: sftp-upload-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input
+        parameters:
+          - name: sftp-folder
+          - name: tenant-id
+          - name: trading-partner-id
+      container:
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            apk add --no-cache openssh-client sshpass
+            
+            SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
+            SFTP_USER="${SFTP_USER:-logicapp}"
+            SFTP_PASS="${SFTP_PASSWORD}"
+            
+            echo "Uploading to SFTP: {{inputs.parameters.sftp-folder}}"
+            
+            sshpass -p "$SFTP_PASS" sftp -o StrictHostKeyChecking=no $SFTP_USER@$SFTP_HOST <<EOF
+            cd {{inputs.parameters.sftp-folder}}
+            lcd /data/input
+            mput *.edi
+            bye
+            EOF
+            
+            echo "Upload complete"
+        env:
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Azure Blob upload template
+    - name: azure-blob-upload-template
+      inputs:
+        artifacts:
+          - name: file
+            path: /data/input
+        parameters:
+          - name: container
+          - name: blob-path
+      script:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: [sh]
+        source: |
+          set -e
+          
+          CONTAINER="{{inputs.parameters.container}}"
+          BLOB_PATH="{{inputs.parameters.blob-path}}"
+          
+          echo "Uploading to Azure Blob: $CONTAINER/$BLOB_PATH"
+          
+          for file in /data/input/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              az storage blob upload \
+                --account-name $AZURE_STORAGE_ACCOUNT \
+                --account-key $AZURE_STORAGE_KEY \
+                --container-name $CONTAINER \
+                --name "$BLOB_PATH/$filename" \
+                --file "$file" \
+                --overwrite
+            fi
+          done
+          
+          echo "Upload complete"
+        env:
+          - name: AZURE_STORAGE_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-name
+          - name: AZURE_STORAGE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-key
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Kafka publish template
+    - name: kafka-publish-template
+      inputs:
+        parameters:
+          - name: topic
+          - name: message
+      script:
+        image: ghcr.io/aurelianware/cloudhealthoffice-kafka-publisher:latest
+        command: [sh]
+        source: |
+          set -e
+          
+          TOPIC="{{inputs.parameters.topic}}"
+          MESSAGE='{{inputs.parameters.message}}'
+          
+          echo "Publishing to Kafka topic: $TOPIC"
+          
+          # Use kafka-console-producer or custom publisher
+          echo "$MESSAGE" | kafka-console-producer \
+            --bootstrap-server $KAFKA_BOOTSTRAP_SERVERS \
+            --topic $TOPIC
+          
+          echo "Published to Kafka"
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: bootstrap-servers

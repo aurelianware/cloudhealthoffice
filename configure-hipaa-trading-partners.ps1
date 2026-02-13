@@ -12,14 +12,14 @@ param(
     [string]$ClearinghouseID = "030240928",
     
     [Parameter(Mandatory=$false)]
-    [string]$PCHPID = "{config.payerId}"
+    [string]$HPID = "{config.payerId}"
 )
 
 Write-Host "🏥 Configuring HIPAA Trading Partners for X12 275/277 Processing" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📋 Configuration Details:" -ForegroundColor White
 Write-Host "  • Sender: Clearinghouse (ID: $ClearinghouseID)" -ForegroundColor Green
-Write-Host "  • Receiver: Health Plan - claims backend (ID: $PCHPID)" -ForegroundColor Green
+Write-Host "  • Receiver: Health Plan - claims backend (ID: $HPID)" -ForegroundColor Green
 Write-Host "  • Message Types: X12 275 (Attachment Request), X12 277 (Response)" -ForegroundColor Blue
 Write-Host ""
 
@@ -94,7 +94,7 @@ catch {
 # 2. Create Health Plan Backend Trading Partner (Receiver)
 Write-Host "  Creating Health Plan Backend partner..." -ForegroundColor White
 
-$pchpPartner = @{
+$payerPartner = @{
     name = "Health Plan Backend"
     properties = @{
         partnerType = "B2B"
@@ -109,7 +109,7 @@ $pchpPartner = @{
                 businessIdentities = @(
                     @{
                         qualifier = "ZZ"  # ZZ = Mutually Defined (X12)
-                        value = $PCHPID
+                        value = $HPID
                     }
                 )
             }
@@ -117,7 +117,7 @@ $pchpPartner = @{
     }
 } | ConvertTo-Json -Depth 10 -Compress
 
-$pchpPartner | Out-File -FilePath "temp-payer-partner.json" -Encoding UTF8
+$payerPartner | Out-File -FilePath "temp-payer-partner.json" -Encoding UTF8
 
 try {
     az logic integration-account partner create `
@@ -126,7 +126,7 @@ try {
         --name "Health Plan Backend" `
         --partner-content "@temp-payer-partner.json" | Out-Null
     
-    Write-Host "    ✅ Health Plan Backend partner created (ID: $PCHPID)" -ForegroundColor Green
+    Write-Host "    ✅ Health Plan Backend partner created (ID: $HID)" -ForegroundColor Green
 }
 catch {
     Write-Host "    ❌ Failed to create Health Plan Backend partner: $_" -ForegroundColor Red

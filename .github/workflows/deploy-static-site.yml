@@ -1,36 +1,31 @@
-name: Deploy Static Site with Custom Domain
+name: Deploy Marketing Website (Azure Static Web Apps)
 
 # =============================================================================
-# Static Site Deployment Workflow
+# Marketing Website Deployment - Azure Static Web Apps
 # =============================================================================
-# Purpose: Deploy Cloud Health Office static website to Azure Static Web Apps
+# Purpose: Deploy Cloud Health Office marketing website (/site folder)
+# Status: ACTIVE - Separate from portal (which deploys to AKS)
 #
-# Secrets Used:
-#   - AZURE_CLIENT_ID: Service Principal for OIDC deployment authentication
+# Architecture:
+#   - Marketing site (/site) → Azure Static Web Apps (this workflow)
+#   - Portal (/portal) → AKS via Docker (docker-build.yml workflow)
+#
+# Required Secrets:
+#   - AZURE_CLIENT_ID: Service Principal for OIDC authentication
 #   - AZURE_TENANT_ID: Azure AD Tenant ID
 #   - AZURE_SUBSCRIPTION_ID: Azure Subscription ID
-#   - GITHUB_TOKEN: Automatically provided by GitHub Actions
-#
-# User Authentication Secrets (NOT in GitHub Secrets):
-#   - User login credentials (Azure AD multi-tenant) should be configured in
-#     Azure Portal → Static Web Apps → [resource name] → Configuration → Application settings,
-#     not in GitHub or workflow secrets.
-#   - See: docs/FEDERATED-CREDENTIALS-SETUP.md for details on deployment vs user auth
-#
-# For more information:
-#   - Deployment secrets: DEPLOYMENT-SECRETS-SETUP.md
-#   - OIDC setup: docs/FEDERATED-CREDENTIALS-SETUP.md
-#   - Secrets inventory: docs/SECRETS-INVENTORY.md
+#   - AZURE_STATIC_WEB_APPS_API_TOKEN_*: Auto-generated deployment token
 # =============================================================================
 
+# Re-enabled for marketing site deployment
 on:
+  workflow_dispatch:  # Manual trigger
   push:
     branches: ["main"]
     paths:
       - 'site/**'
       - '.github/workflows/deploy-static-site.yml'
       - 'infra/main.bicep'
-  workflow_dispatch:
 
 permissions:
   id-token: write

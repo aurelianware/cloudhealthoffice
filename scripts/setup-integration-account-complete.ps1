@@ -23,7 +23,7 @@ az logic integration-account partner create `
     --content $clearinghouseContent
 
 # claims backend (Health Plan)
-$pchpContent = @{
+$payerContent = @{
     b2b = @{
         businessIdentities = @(
             @{ qualifier = "ZZ"; value = "{config.payerId}" }
@@ -36,7 +36,7 @@ az logic integration-account partner create `
     --integration-account $IntegrationAccountName `
     --name "Health Plan Backend" `
     --partner-type "B2B" `
-    --content $pchpContent
+    --content $payerContent
 
 # --- Upload Schemas ---
 $schemas = @(

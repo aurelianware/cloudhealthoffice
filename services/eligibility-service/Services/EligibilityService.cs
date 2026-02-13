@@ -4,17 +4,17 @@ using System.Net.Http.Json;
 
 namespace EligibilityService.Services;
 
-public class EligibilityService : IEligibilityService
+public class EligibilityServiceImpl : IEligibilityService
 {
     private readonly IEligibilityRepository _repository;
     private readonly HttpClient _httpClient;
-    private readonly ILogger<EligibilityService> _logger;
+    private readonly ILogger<EligibilityServiceImpl> _logger;
     private readonly IConfiguration _configuration;
 
-    public EligibilityService(
+    public EligibilityServiceImpl(
         IEligibilityRepository repository,
         HttpClient httpClient,
-        ILogger<EligibilityService> logger,
+        ILogger<EligibilityServiceImpl> logger,
         IConfiguration configuration)
     {
         _repository = repository;
@@ -34,7 +34,7 @@ public class EligibilityService : IEligibilityService
         try
         {
             // 1. Check active coverage
-            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom);
+            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom ?? DateTime.UtcNow);
             
             if (coverage == null || !coverage.IsActive)
             {
@@ -84,13 +84,13 @@ public class EligibilityService : IEligibilityService
             // Store response
             await _repository.CreateResponseAsync(response);
 
-            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", inquiry.Id);
+            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", SanitizeForLog(inquiry.Id));
             
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", inquiry.Id);
+            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
             
             inquiry.Status = EligibilityInquiryStatus.Failed;
             inquiry.CompletedDate = DateTime.UtcNow;
@@ -163,7 +163,7 @@ public class EligibilityService : IEligibilityService
         var benefits = await GetBenefitsAsync(tenantId, coverage.BenefitPlanId, serviceTypeCode);
         var benefit = benefits.FirstOrDefault(b => b.ServiceTypeCode == serviceTypeCode);
 
-        if (benefit?.AuthorizationRequired == true)
+        if (benefit?.AuthorizationRequired == "Y")
         {
             return (true, $"Prior authorization required for {benefit.ServiceTypeName}");
         }
@@ -177,7 +177,7 @@ public class EligibilityService : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cho-svcs/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
             
@@ -200,7 +200,7 @@ public class EligibilityService : IEligibilityService
     {
         try
         {
-            var memberUrl = _configuration["Services:MemberService"] ?? "http://member-service.cho-svcs/api";
+            var memberUrl = _configuration["Services:MemberService"] ?? "http://member-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync($"{memberUrl}/members/{subscriberId}?tenantId={tenantId}");
             
             if (!response.IsSuccessStatusCode)
@@ -222,7 +222,7 @@ public class EligibilityService : IEligibilityService
     {
         try
         {
-            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cho-svcs/api";
+            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
             var url = $"{benefitUrl}/benefit-plans/{benefitPlanId}/benefits?tenantId={tenantId}";
             
             if (!string.IsNullOrEmpty(serviceType))
@@ -251,7 +251,7 @@ public class EligibilityService : IEligibilityService
                 Percentage = b.Percentage,
                 Quantity = b.Quantity,
                 NetworkIndicator = b.NetworkIndicator,
-                AuthorizationRequired = b.AuthorizationRequired,
+                AuthorizationRequired = b.AuthorizationRequired ? "Y" : "N",
                 BenefitBeginDate = b.BenefitBeginDate,
                 BenefitEndDate = b.BenefitEndDate
             }).ToList();
@@ -268,7 +268,7 @@ public class EligibilityService : IEligibilityService
     {
         try
         {
-            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cho-svcs/api";
+            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{benefitUrl}/benefit-plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
             
@@ -293,7 +293,7 @@ public class EligibilityService : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cho-svcs/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
             
@@ -332,6 +332,17 @@ public class EligibilityService : IEligibilityService
             ResponseCode = "N", // No - no active coverage
             StatusCode = "6", // Inactive
             RejectionReason = "No active coverage found for the service date",
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Remove newline characters to prevent log forging via user-controlled data.
+        return value.Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty);
+    }
             IsCovered = false,
             CoverageLevel = string.Empty,
             CreatedDate = DateTime.UtcNow

@@ -1,0 +1,113 @@
+{
+  "tenantId": "test-tenant-001",
+  "claimNumber": "CLM2025010700002",
+  "memberId": "BSCA123456789",
+  "coverageId": "COV-2025-001",
+  "subscriberFirstName": "John",
+  "subscriberLastName": "Smith",
+  "patientFirstName": "John",
+  "patientLastName": "Smith",
+  "patientRelationship": "18",
+  "lineOfBusiness": 1,
+  "billingProviderNPI": "1234567890",
+  "billingProviderName": "City General Hospital",
+  "facilityNPI": "1234567890",
+  "facilityName": "City General Hospital - Main Campus",
+  "placeOfServiceCode": "21",
+  "claimType": 2,
+  "claimFrequencyCode": "1",
+  "totalChargeAmount": 15250.00,
+  "serviceDateFrom": "2025-01-16T08:00:00Z",
+  "serviceDateTo": "2025-01-18T16:00:00Z",
+  "diagnosisCodes": [
+    {
+      "code": "I21.09",
+      "codeQualifier": "ABK",
+      "pointerNumber": 1,
+      "description": "ST elevation myocardial infarction involving other coronary artery"
+    },
+    {
+      "code": "I10",
+      "codeQualifier": "ABF",
+      "pointerNumber": 2,
+      "description": "Essential (primary) hypertension"
+    },
+    {
+      "code": "E11.9",
+      "codeQualifier": "ABF",
+      "pointerNumber": 3,
+      "description": "Type 2 diabetes mellitus without complications"
+    }
+  ],
+  "claimLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "0",
+      "procedureDescription": "Inpatient hospital room and board - ICU",
+      "modifiers": [],
+      "diagnosisPointers": [1, 2, 3],
+      "units": 2,
+      "chargeAmount": 8500.00,
+      "serviceDateFrom": "2025-01-16T08:00:00Z",
+      "serviceDateTo": "2025-01-18T16:00:00Z",
+      "placeOfServiceCode": "21",
+      "revenueCode": "0200"
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "93010",
+      "procedureDescription": "Electrocardiogram (ECG)",
+      "modifiers": [],
+      "diagnosisPointers": [1],
+      "units": 3,
+      "chargeAmount": 450.00,
+      "serviceDateFrom": "2025-01-16T09:00:00Z",
+      "serviceDateTo": "2025-01-16T09:00:00Z",
+      "placeOfServiceCode": "21",
+      "revenueCode": "0730"
+    },
+    {
+      "lineNumber": 3,
+      "procedureCode": "93458",
+      "procedureDescription": "Cardiac catheterization with angiography",
+      "modifiers": ["26"],
+      "diagnosisPointers": [1, 2],
+      "units": 1,
+      "chargeAmount": 4200.00,
+      "serviceDateFrom": "2025-01-16T14:00:00Z",
+      "serviceDateTo": "2025-01-16T16:30:00Z",
+      "placeOfServiceCode": "21",
+      "revenueCode": "0481"
+    },
+    {
+      "lineNumber": 4,
+      "procedureCode": "36415",
+      "procedureDescription": "Laboratory - blood draw",
+      "modifiers": [],
+      "diagnosisPointers": [1, 2, 3],
+      "units": 6,
+      "chargeAmount": 600.00,
+      "serviceDateFrom": "2025-01-16T08:00:00Z",
+      "serviceDateTo": "2025-01-18T08:00:00Z",
+      "placeOfServiceCode": "21",
+      "revenueCode": "0300"
+    },
+    {
+      "lineNumber": 5,
+      "procedureCode": "0",
+      "procedureDescription": "Pharmacy - medications",
+      "modifiers": [],
+      "diagnosisPointers": [1, 2, 3],
+      "units": 1,
+      "chargeAmount": 1500.00,
+      "serviceDateFrom": "2025-01-16T08:00:00Z",
+      "serviceDateTo": "2025-01-18T16:00:00Z",
+      "placeOfServiceCode": "21",
+      "revenueCode": "0250"
+    }
+  ],
+  "status": 1,
+  "priorAuthorizationNumber": null,
+  "claimNotes": "3-day inpatient admission for acute MI. Patient underwent emergency cardiac catheterization with stent placement. Discharged stable on antiplatelet therapy.",
+  "createdBy": "system-test-institutional"
+}

@@ -1,0 +1,779 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: tenant-onboarding-
+  namespace: cho-workflows
+  labels:
+    workflow-type: tenant-onboarding
+spec:
+  entrypoint: onboard-tenant
+  
+  # Workflow arguments
+  arguments:
+    parameters:
+      - name: tenant-id
+        value: ""
+      - name: tenant-name
+        value: ""
+      - name: organization-name
+        value: ""
+      - name: admin-email
+        value: ""
+      - name: admin-name
+        value: ""
+      - name: subscription-tier
+        value: "starter" # starter, professional, enterprise
+      - name: enabled-modules
+        value: "claims,eligibility" # comma-separated list
+      - name: phone
+        value: ""
+      - name: payment-method-id
+        value: "" # Stripe payment method ID from signup
+      - name: billing-name
+        value: ""
+  
+  # Shared volumes
+  volumes:
+    - name: work
+      emptyDir: {}
+    - name: azure-credentials
+      secret:
+        secretName: azure-service-principal
+    - name: cosmos-credentials
+      secret:
+        secretName: cosmos-db-credentials
+    - name: stripe-credentials
+      secret:
+        secretName: stripe-api-keys
+  
+  templates:
+    # Main orchestration workflow
+    - name: onboard-tenant
+      steps:
+        # Step 1: Validate tenant doesn't already exist
+        - - name: validate-tenant
+            template: validate-tenant-exists
+        
+        # Step 2: Provision Cosmos DB containers (parallel)
+        - - name: provision-cosmos-members
+            template: provision-cosmos-container
+            arguments:
+              parameters:
+                - name: container-name
+                  value: "Members"
+                - name: partition-key
+                  value: "/tenantId"
+          
+          - name: provision-cosmos-coverage
+            template: provision-cosmos-container
+            arguments:
+              parameters:
+                - name: container-name
+                  value: "Coverage"
+                - name: partition-key
+                  value: "/tenantId"
+          
+          - name: provision-cosmos-claims
+            template: provision-cosmos-container
+            arguments:
+              parameters:
+                - name: container-name
+                  value: "Claims"
+                - name: partition-key
+                  value: "/tenantId"
+          
+          - name: provision-cosmos-benefitplans
+            template: provision-cosmos-container
+            arguments:
+              parameters:
+                - name: container-name
+                  value: "BenefitPlans"
+                - name: partition-key
+                  value: "/tenantId"
+          
+          - name: provision-cosmos-authorizations
+            template: provision-cosmos-container
+            arguments:
+              parameters:
+                - name: container-name
+                  value: "Authorizations"
+                - name: partition-key
+                  value: "/tenantId"
+        
+        # Step 3: Create SFTP directory structure
+        - - name: create-sftp-folders
+            template: create-sftp-structure
+        
+        # Step 4: Create Stripe customer and subscription
+        - - name: setup-stripe-billing
+            template: create-stripe-subscription
+        
+        # Step 5: Create Azure AD B2C user for admin
+        - - name: create-admin-user
+            template: create-azure-ad-user
+        
+        # Step 6: Generate SFTP credentials
+        - - name: create-sftp-credentials
+            template: generate-sftp-credentials
+        
+        # Step 7: Seed default data (benefit plans, reference data)
+        - - name: seed-default-benefitplans
+            template: seed-benefit-plans
+            when: "{{workflow.parameters.enabled-modules}} contains 'claims'"
+        
+        # Step 8: Create API keys for tenant
+        - - name: generate-api-keys
+            template: create-api-keys
+        
+        # Step 8: Send welcome email
+        - - name: send-welcome-email
+            template: send-welcome-notification
+        
+        # Step 9: Create dedicated namespace for enterprise tier
+        - - name: create-enterprise-namespace
+            template: create-k8s-namespace
+            when: "{{workflow.parameters.subscription-tier}} == 'enterprise'"
+        
+        # Step 10: Activate tenant
+        - - name: activate-tenant
+            template: update-tenant-status
+            arguments:
+              parameters:
+                - name: status
+                  value: "active"
+    
+    # Template: Validate tenant doesn't exist
+    - name: validate-tenant-exists
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
+            
+            echo "Validating tenant $TENANT_ID..."
+            
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$TENANT_SERVICE/$TENANT_ID")
+            
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              echo "ERROR: Tenant $TENANT_ID already exists and is active"
+              exit 0  # Continue anyway, update existing
+            else
+              echo "Tenant $TENANT_ID ready for provisioning"
+            fi
+    
+    # Template: Provision Cosmos DB container
+    - name: provision-cosmos-container
+      inputs:
+        parameters:
+          - name: container-name
+          - name: partition-key
+      container:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: [sh, -c]
+        args:
+          - |
+            CONTAINER_NAME="{{inputs.parameters.container-name}}"
+            PARTITION_KEY="{{inputs.parameters.partition-key}}"
+            COSMOS_ACCOUNT="${COSMOS_ACCOUNT_NAME}"
+            RESOURCE_GROUP="${COSMOS_RESOURCE_GROUP}"
+            DATABASE="CloudHealthOffice"
+            
+            echo "Checking if container $CONTAINER_NAME exists..."
+            
+            az cosmosdb sql container show \
+              --account-name "$COSMOS_ACCOUNT" \
+              --resource-group "$RESOURCE_GROUP" \
+              --database-name "$DATABASE" \
+              --name "$CONTAINER_NAME" >/dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+              echo "Container $CONTAINER_NAME already exists, skipping creation"
+            else
+              echo "Creating container $CONTAINER_NAME with partition key $PARTITION_KEY..."
+              
+              az cosmosdb sql container create \
+                --account-name "$COSMOS_ACCOUNT" \
+                --resource-group "$RESOURCE_GROUP" \
+                --database-name "$DATABASE" \
+                --name "$CONTAINER_NAME" \
+                --partition-key-path "$PARTITION_KEY" \
+                --throughput 400
+              
+              echo "Container $CONTAINER_NAME created successfully"
+            fi
+        env:
+          - name: COSMOS_ACCOUNT_NAME
+            valueFrom:
+              secretKeyRef:
+                name: cosmos-db-credentials
+                key: account-name
+          - name: COSMOS_RESOURCE_GROUP
+            valueFrom:
+              secretKeyRef:
+                name: cosmos-db-credentials
+                key: resource-group
+        volumeMounts:
+          - name: azure-credentials
+            mountPath: /secrets
+    
+    # Template: Create SFTP folder structure
+    - name: create-sftp-structure
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache openssh-client
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            SFTP_HOST="${SFTP_SERVER_HOST}"
+            SFTP_USER="${SFTP_SERVER_USER}"
+            
+            echo "Creating SFTP folder structure for tenant $TENANT_ID..."
+            
+            # Create directory structure
+            # /tenants/{tenant-id}/inbound/{837,835,270,271,276,277,278,275,834}
+            # /tenants/{tenant-id}/outbound/{837,835,270,271,276,277,278,275,834}
+            # /tenants/{tenant-id}/archive/
+            # /tenants/{tenant-id}/errors/
+            
+            TRANSACTIONS="837 835 270 271 276 277 278 275 834"
+            
+            for TXN in $TRANSACTIONS; do
+              echo "Creating /tenants/$TENANT_ID/inbound/$TXN"
+              echo "Creating /tenants/$TENANT_ID/outbound/$TXN"
+            done
+            
+            echo "mkdir -p /tenants/$TENANT_ID/archive" 
+            echo "mkdir -p /tenants/$TENANT_ID/errors"
+            
+            echo "SFTP folder structure created (stub - implement with actual SFTP)"
+        env:
+          - name: SFTP_SERVER_HOST
+            value: "sftp.cloudhealthoffice.com"
+          - name: SFTP_SERVER_USER
+            value: "cho-admin"
+    
+    # Template: Create Stripe subscription
+    - name: create-stripe-subscription
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            ORG_NAME="{{workflow.parameters.organization-name}}"
+            EMAIL="{{workflow.parameters.admin-email}}"
+            BILLING_NAME="{{workflow.parameters.billing-name}}"
+            TIER="{{workflow.parameters.subscription-tier}}"
+            PAYMENT_METHOD_ID="{{workflow.parameters.payment-method-id}}"
+            
+            echo "Creating Stripe subscription for $ORG_NAME ($TIER tier)..."
+            
+            # Determine price ID based on tier
+            case "$TIER" in
+              starter)
+                PRICE_ID="price_1SyhLMJu0wSGGF9n9zqtS7Kh"
+                ;;
+              professional)
+                PRICE_ID="price_1SyhMmJu0wSGGF9no72J2xY9"
+                ;;
+              enterprise)
+                echo "Enterprise tier requires manual subscription setup"
+                exit 0
+                ;;
+              *)
+                echo "Invalid tier: $TIER"
+                exit 1
+                ;;
+            esac
+            
+            # Create Stripe customer
+            echo "Creating Stripe customer..."
+            CUSTOMER_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/customers \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "email=$EMAIL" \
+              -d "name=$BILLING_NAME" \
+              -d "metadata[tenant_id]=$TENANT_ID" \
+              -d "metadata[organization]=$ORG_NAME" \
+              -d "metadata[tier]=$TIER")
+            
+            CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | jq -r '.id')
+            if [ -z "$CUSTOMER_ID" ] || [ "$CUSTOMER_ID" = "null" ]; then
+              echo "Failed to create Stripe customer:"
+              echo "$CUSTOMER_RESPONSE" | jq .
+              exit 1
+            fi
+            
+            echo "Stripe customer created: $CUSTOMER_ID"
+            
+            # Attach payment method to customer
+            echo "Attaching payment method $PAYMENT_METHOD_ID to customer..."
+            curl -s -X POST "https://api.stripe.com/v1/payment_methods/$PAYMENT_METHOD_ID/attach" \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "customer=$CUSTOMER_ID" > /dev/null
+            
+            # Set as default payment method
+            curl -s -X POST "https://api.stripe.com/v1/customers/$CUSTOMER_ID" \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "invoice_settings[default_payment_method]=$PAYMENT_METHOD_ID" > /dev/null
+            
+            # Create subscription with 14-day trial
+            echo "Creating subscription with $PRICE_ID (14-day trial)..."
+            SUBSCRIPTION_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/subscriptions \
+              -u "${STRIPE_SECRET_KEY}:" \
+              -d "customer=$CUSTOMER_ID" \
+              -d "items[0][price]=$PRICE_ID" \
+              -d "trial_period_days=14" \
+              -d "metadata[tenant_id]=$TENANT_ID" \
+              -d "metadata[tier]=$TIER")
+            
+            SUBSCRIPTION_ID=$(echo "$SUBSCRIPTION_RESPONSE" | jq -r '.id')
+            SUBSCRIPTION_STATUS=$(echo "$SUBSCRIPTION_RESPONSE" | jq -r '.status')
+            
+            if [ -z "$SUBSCRIPTION_ID" ] || [ "$SUBSCRIPTION_ID" = "null" ]; then
+              echo "Failed to create subscription:"
+              echo "$SUBSCRIPTION_RESPONSE" | jq .
+              exit 1
+            fi
+            
+            echo "✅ Subscription created successfully!"
+            echo "  Customer ID: $CUSTOMER_ID"
+            echo "  Subscription ID: $SUBSCRIPTION_ID"
+            echo "  Status: $SUBSCRIPTION_STATUS"
+            echo "  Price: $PRICE_ID"
+            echo "  Trial: 14 days"
+        env:
+          - name: STRIPE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: stripe-api-keys
+                key: secret-key
+    
+    # Template: Create Azure AD B2C user
+    - name: create-azure-ad-user
+      container:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: [sh, -c]
+        args:
+          - |
+            EMAIL="{{workflow.parameters.admin-email}}"
+            NAME="{{workflow.parameters.admin-name}}"
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            
+            echo "Creating Azure AD B2C user for $EMAIL..."
+            
+            # Generate random password
+            PASSWORD=$(openssl rand -base64 16)
+            
+            # TODO: Implement actual Azure AD B2C user creation
+            # az ad user create --display-name "$NAME" --user-principal-name "$EMAIL" --password "$PASSWORD"
+            
+            echo "User created: $EMAIL"
+            echo "Temporary password: $PASSWORD (will be sent via email)"
+            
+            # Store password for email step
+            echo "$PASSWORD" > /work/admin-password.txt
+        volumeMounts:
+          - name: work
+            mountPath: /work
+          - name: azure-credentials
+            mountPath: /secrets
+    
+    # Template: Generate SFTP credentials
+    - name: generate-sftp-credentials
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache openssh-keygen
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            
+            echo "Generating SFTP credentials for $TENANT_ID..."
+            
+            # Generate SSH key pair for SFTP access
+            ssh-keygen -t ed25519 -f /work/sftp-key -N "" -C "cho-$TENANT_ID"
+            
+            # Generate password for fallback authentication
+            SFTP_PASSWORD=$(openssl rand -base64 24)
+            echo "$SFTP_PASSWORD" > /work/sftp-password.txt
+            
+            # SFTP connection details
+            cat > /work/sftp-config.txt <<EOF
+            SFTP Host: sftp.cloudhealthoffice.com
+            Port: 22
+            Username: cho-$TENANT_ID
+            
+            Authentication Methods:
+            1. SSH Key (recommended):
+               - Download private key from portal
+               - Use with sftp -i /path/to/key cho-$TENANT_ID@sftp.cloudhealthoffice.com
+            
+            2. Password:
+               Password: $SFTP_PASSWORD
+            
+            Directory Structure:
+            /tenants/$TENANT_ID/
+            ├── inbound/837/   (drop professional claims here)
+            ├── inbound/835/   (ERA files will arrive here)
+            ├── inbound/270/   (drop eligibility inquiries)
+            ├── inbound/834/   (drop enrollment files)
+            ├── outbound/271/  (eligibility responses)
+            ├── outbound/277/  (claim status responses)
+            └── archive/       (processed files after 7 days)
+            
+            File Naming Convention:
+            - {transaction-type}_{payer-id}_{YYYYMMDD}_{sequence}.edi
+            - Example: 837_BCBSCA_20260208_001.edi
+            EOF
+            
+            echo "SFTP credentials generated successfully"
+            
+            # TODO: Store SSH public key in SFTP server authorized_keys
+            # TODO: Create SFTP user account with chroot jail
+            # TODO: Store credentials in Azure Key Vault
+        volumeMounts:
+          - name: work
+            mountPath: /work
+    
+    # Template: Seed benefit plans
+    - name: seed-benefit-plans
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            BENEFIT_PLAN_SERVICE="http://benefit-plan-service.cloudhealthoffice/api/v1/benefitplans"
+            
+            echo "Seeding default benefit plans for $TENANT_ID..."
+            
+            # Create default PPO plan
+            curl -X POST "$BENEFIT_PLAN_SERVICE" \
+              -H "Content-Type: application/json" \
+              -H "X-Tenant-ID: $TENANT_ID" \
+              -d '{
+                "planName": "Default PPO Plan",
+                "planType": "PPO",
+                "coverageType": "medical",
+                "deductibleIndividual": 1500,
+                "deductibleFamily": 3000,
+                "oopMaxIndividual": 5000,
+                "oopMaxFamily": 10000,
+                "copayPrimaryCare": 25,
+                "copaySpecialist": 50,
+                "coinsuranceInNetwork": 0.8,
+                "coinsuranceOutOfNetwork": 0.6
+              }'
+            
+            echo "Default benefit plans seeded"
+    
+    # Template: Create API keys
+    - name: create-api-keys
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            if [ -f /work/sftp-password.txt ]; then
+              SFTP_PASSWORD=$(cat /work/sftp-password.txt)
+            else
+              SFTP_PASSWORD="(see portal)"
+            fi
+            
+            echo "Sending welcome email to $EMAIL..."
+            
+            # TODO: Integrate with SendGrid or Azure Communication Services
+            cat <<EOF
+            To: $EMAIL
+            Subject: Welcome to Cloud Health Office - Your account is ready!
+            
+            Hi $NAME,
+            
+            Welcome to Cloud Health Office! Your account for $ORG_NAME has been successfully provisioned.
+            
+            ═══════════════════════════════════════════════════════════
+            ACCOUNT DETAILS
+            ═══════════════════════════════════════════════════════════
+            Tenant ID: $TENANT_ID
+            Subscription Tier: $TIER
+            Portal: https://portal.cloudhealthoffice.com
+            
+            ═══════════════════════════════════════════════════════════
+            LOGIN CREDENTIALS
+            ═══════════════════════════════════════════════════════════
+            Email: $EMAIL
+            Temporary Password: $PASSWORD
+            
+            ⚠️  IMPORTANT - Azure AD Admin Consent Required:
+            
+            On your first login, Azure AD will prompt you to grant admin consent
+            for the Cloud Health Office application to access your directory.
+            
+            You'll see a screen that says:
+            "Cloud Health Office needs permission to access resources in your organization"
+            
+            Click "Accept" to grant these permissions. This is a one-time setup
+            that allows the application to:
+            - Read your basic profile information
+            - Access APIs on your behalf
+            - Sign you in and read your profile
+            
+            If you see an error about admin consent, contact your Azure AD
+            administrator or follow this guide:
+            https://docs.cloudhealthoffice.com/admin-consent
+            
+            ═══════════════════════════════════════════════════════════
+            API ACCESS
+            ═══════════════════════════════════════════════════════════
+            Production API Key: $PROD_KEY
+            Test API Key: (available in portal)
+            
+            API Endpoint: https://api.cloudhealthoffice.com
+            API Documentation: https://api.cloudhealthoffice.com/swagger
+            
+            Example API call:
+            curl -H "X-API-Key: $PROD_KEY" \\
+                 -H "X-Tenant-ID: $TENANT_ID" \\
+                 https://api.cloudhealthoffice.com/v1/claims
+            
+            ═══════════════════════════════════════════════════════════
+            SFTP ACCESS
+            ═══════════════════════════════════════════════════════════
+            Host: sftp.cloudhealthoffice.com
+            Port: 22
+            Username: cho-$TENANT_ID
+            Password: $SFTP_PASSWORD
+            
+            Connect via SFTP:
+            sftp cho-$TENANT_ID@sftp.cloudhealthoffice.com
+            
+            Or using FileZilla/WinSCP:
+            - Protocol: SFTP
+            - Host: sftp.cloudhealthoffice.com
+            - Port: 22
+            - Username: cho-$TENANT_ID
+            - Password: $SFTP_PASSWORD
+            
+            SSH Key (recommended for automation):
+            Download your private key from the portal under Settings > SFTP Access
+            
+            Your SFTP folders:
+            /tenants/$TENANT_ID/inbound/837/  ← Drop claim files here
+            /tenants/$TENANT_ID/inbound/270/  ← Drop eligibility inquiries
+            /tenants/$TENANT_ID/inbound/834/  ← Drop enrollment files
+            /tenants/$TENANT_ID/outbound/271/ ← Eligibility responses appear here
+            /tenants/$TENANT_ID/outbound/277/ ← Claim status responses
+            
+            File processing: Files are processed within 60 seconds of upload.
+            Responses appear in the corresponding outbound folder.
+            
+            ═══════════════════════════════════════════════════════════
+            NEXT STEPS (Complete in Order)
+            ═══════════════════════════════════════════════════════════
+            
+            1. ✓ Log in to portal (first-time admin consent required)
+               https://portal.cloudhealthoffice.com
+            
+            2. ✓ Change your password
+               Settings > Account > Change Password
+            
+            3. ✓ Review and sign Business Associate Agreement (BAA)
+               Settings > Legal > Sign BAA
+               (Required for HIPAA compliance)
+            
+            4. ✓ Configure clearinghouse settings
+               Settings > Clearinghouse > Add Connection
+               
+               Common clearinghouses we integrate with:
+               - Availity (most common)
+               - Change Healthcare
+               - Waystar
+               - TriZetto
+               
+               You'll need your:
+               - Sender ID
+               - Receiver ID
+               - Interchange Control ID
+               - Application Control ID
+            
+            5. ✓ Set up trading partners
+               Settings > Trading Partners > Add Partner
+               
+               Configure payers you submit to:
+               - Medicare
+               - Medicaid
+               - Commercial payers (BCBS, Aetna, UHC, etc.)
+            
+            6. ✓ Test SFTP connection
+               Upload a sample 270 eligibility inquiry to test the flow
+            
+            7. ✓ Upload first 834 enrollment file
+               This populates your member database
+            
+            8. ✓ Submit first claim
+               Either via portal or SFTP 837 file upload
+            
+            ═══════════════════════════════════════════════════════════
+            GETTING STARTED RESOURCES
+            ═══════════════════════════════════════════════════════════
+            📚 Documentation: https://docs.cloudhealthoffice.com
+            🎥 Video Tutorials: https://docs.cloudhealthoffice.com/videos
+            💬 Community Forum: https://community.cloudhealthoffice.com
+            📧 Support Email: support@cloudhealthoffice.com
+            📞 Support Phone: +1-800-555-HIPAA (during business hours)
+            
+            ═══════════════════════════════════════════════════════════
+            ESTIMATED TIMELINE
+            ═══════════════════════════════════════════════════════════
+            - Account activation: COMPLETE ✓
+            - First login: 5 minutes
+            - BAA signature: 10 minutes
+            - Clearinghouse setup: 30 minutes
+            - First claim submission: < 1 hour
+            
+            Most customers process their first claim within 47 minutes.
+            
+            Questions? We're here to help!
+            Reply to this email or call us at +1-800-555-HIPAA
+            
+            Best regards,
+            Cloud Health Office Team
+            https://cloudhealthoffice.co
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            EMAIL="{{workflow.parameters.admin-email}}"
+            NAME="{{workflow.parameters.admin-name}}"
+            ORG_NAME="{{workflow.parameters.organization-name}}"
+            TIER="{{workflow.parameters.subscription-tier}}"
+            
+            # Read generated credentials
+            if [ -f /work/admin-password.txt ]; then
+              PASSWORD=$(cat /work/admin-password.txt)
+            else
+              PASSWORD="(check your email)"
+            fi
+            
+            if [ -f /work/prod-api-key.txt ]; then
+              PROD_KEY=$(cat /work/prod-api-key.txt)
+            else
+              PROD_KEY="(see portal)"
+            fi
+            
+            echo "Sending welcome email to $EMAIL..."
+            
+            # TODO: Integrate with SendGrid or Azure Communication Services
+            cat <<EOF
+            To: $EMAIL
+            Subject: Welcome to Cloud Health Office - Your account is ready!
+            
+            Hi $NAME,
+            
+            Welcome to Cloud Health Office! Your account for $ORG_NAME has been successfully provisioned.
+            
+            Account Details:
+            - Tenant ID: $TENANT_ID
+            - Subscription Tier: $TIER
+            - Portal URL: https://portal.cloudhealthoffice.com
+            
+            Credentials:
+            - Email: $EMAIL
+            - Temporary Password: $PASSWORD
+            
+            API Keys:
+            - Production: $PROD_KEY
+            - Test: (available in portal)
+            
+            Next Steps:
+            1. Log in to the portal and change your password
+            2. Review and sign the Business Associate Agreement (BAA)
+            3. Configure your clearinghouse settings
+            4. Set up trading partners
+            5. Review the getting started guide: https://docs.cloudhealthoffice.com
+            
+            Need help? Contact support@cloudhealthoffice.com
+            
+            Best regards,
+            Cloud Health Office Team
+            EOF
+            
+            echo "Welcome email sent (stub - implement actual email service)"
+        volumeMounts:
+          - name: work
+            mountPath: /work
+    
+    # Template: Create Kubernetes namespace for enterprise tier
+    - name: create-k8s-namespace
+      resource:
+        action: create
+        manifest: |
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: cho-tenant-{{workflow.parameters.tenant-id}}
+            labels:
+              tenant-id: {{workflow.parameters.tenant-id}}
+              subscription-tier: enterprise
+    
+    # Template: Update tenant status
+    - name: update-tenant-status
+      inputs:
+        parameters:
+          - name: status
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            STATUS="{{inputs.parameters.status}}"
+            TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
+            
+            echo "Updating tenant $TENANT_ID status to $STATUS..."
+            
+            curl -X PUT "$TENANT_SERVICE/$TENANT_ID" \
+              -H "Content-Type: application/json" \
+              -d "{\"status\": \"$STATUS\"}"
+            
+            echo "Tenant status updated to $STATUS"
+  
+  # Cleanup on failure
+  onExit: cleanup-on-failure
+  
+  templates:
+    - name: cleanup-on-failure
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            if [ "{{workflow.status}}" != "Succeeded" ]; then
+              echo "Workflow failed - cleaning up resources..."
+              TENANT_ID="{{workflow.parameters.tenant-id}}"
+              
+              # TODO: Implement cleanup logic
+              # - Delete Cosmos containers
+              # - Delete SFTP folders
+              # - Cancel Stripe subscription
+              # - Delete Azure AD user
+              # - Mark tenant as failed
+              
+              echo "Cleanup completed"
+            else
+              echo "Workflow succeeded - no cleanup needed"
+            fi

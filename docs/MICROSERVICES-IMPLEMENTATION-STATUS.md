@@ -22,7 +22,7 @@
 ### 3. Created Kubernetes Infrastructure
 - ✅ **Namespaces deployed**:
   * `cho-portal` - Frontend + API Gateway
-  * `cho-svcs` - Backend microservices
+  * `cloudhealthoffice` - Backend microservices
   * Resource quotas configured
   * Network policies in place
 
@@ -49,7 +49,7 @@
 6. Create `Dockerfile` (multi-stage build)
 7. Create Kubernetes `Deployment` + `Service` manifests
 8. Build Docker image and push to ACR
-9. Deploy to `cho-svcs` namespace
+9. Deploy to `cloudhealthoffice` namespace
 10. Test endpoints
 
 **Files to Create**:
@@ -164,19 +164,19 @@ kubectl get namespaces | grep cho-
 ### Check Resource Quotas
 ```bash
 kubectl describe quota -n cho-portal
-kubectl describe quota -n cho-svcs
+kubectl describe quota -n cloudhealthoffice
 ```
 
 ### View All Services (Once Deployed)
 ```bash
-kubectl get all -n cho-svcs
+kubectl get all -n cloudhealthoffice
 kubectl get all -n cho-portal
 ```
 
 ### Test Benefit Plan API (Once Deployed)
 ```bash
 # Port-forward to test locally
-kubectl port-forward -n cho-svcs svc/benefit-plan-service 3001:80
+kubectl port-forward -n cloudhealthoffice svc/benefit-plan-service 3001:80
 
 # Test endpoints
 curl http://localhost:3001/api/v1/plans

@@ -1,0 +1,181 @@
+@page "/request-access"
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject ILogger<RequestAccess> Logger
+
+<PageTitle>Request Access - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudPaper Class="pa-6" Elevation="3">
+        <MudText Typo="Typo.h4" GutterBottom="true" Align="Align.Center">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Large" Class="mr-2" />
+            Access Request Required
+        </MudText>
+
+        <MudDivider Class="my-4" />
+
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-4" />
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-4">
+                Your organization (<strong>@_organizationName</strong>) has an active Cloud Health Office subscription, 
+                but your account is not yet authorized to access it.
+            </MudAlert>
+
+            <MudText Typo="Typo.body1" Class="mb-4">
+                To gain access to your organization's payer platform, please contact one of your organization administrators:
+            </MudText>
+
+            @if (_adminEmails.Any())
+            {
+                <MudList Dense="true" Class="mb-4">
+                    @foreach (var adminEmail in _adminEmails)
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.AdminPanelSettings" IconColor="Color.Primary">
+                            <MudLink Href="@($"mailto:{adminEmail}?subject=Cloud Health Office Access Request&body=Hi, I would like to request access to our Cloud Health Office account. My email is {_userEmail}.")" 
+                                     Color="Color.Primary" 
+                                     Target="_blank">
+                                @adminEmail
+                            </MudLink>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">
+                    No administrator contact information is currently available. 
+                    Please contact your IT department or organization leadership.
+                </MudAlert>
+            }
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" GutterBottom="true">What administrators need to do:</MudText>
+            <MudList Dense="true" Class="mb-4">
+                <MudListItem Icon="@Icons.Material.Filled.PersonAdd">
+                    Sign in to Cloud Health Office with their admin account
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Settings">
+                    Navigate to <strong>Settings → Team Members</strong>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Add">
+                    Add your email address (<strong>@_userEmail</strong>) as an authorized user
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.CheckCircle">
+                    You'll receive an email notification once access is granted
+                </MudListItem>
+            </MudList>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
+                Account Details: @_userEmail (@_azureTenantName)
+            </MudText>
+
+            <MudStack Row="true" Spacing="2" Justify="Justify.Center" Class="mt-6">
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="RefreshPage">
+                    Refresh Page
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Secondary" 
+                           StartIcon="@Icons.Material.Filled.Logout"
+                           Href="/MicrosoftIdentity/Account/SignOut">
+                    Sign Out
+                </MudButton>
+            </MudStack>
+
+            <!-- Help Section -->
+            <MudPaper Class="mt-6 pa-4" Elevation="0" Style="background-color: #f5f5f5;">
+                <MudText Typo="Typo.h6" GutterBottom="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Help" Size="Size.Small" Class="mr-1" />
+                    Need Help?
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    If you're unable to contact an administrator or believe this is an error, please reach out to support:
+                </MudText>
+                <MudLink Href="mailto:support@cloudhealthoffice.com?subject=Access Request Issue" 
+                         Color="Color.Primary" 
+                         Target="_blank">
+                    support@cloudhealthoffice.com
+                </MudLink>
+            </MudPaper>
+        }
+    </MudPaper>
+
+    <!-- Alternative: Start Your Own Trial -->
+    <MudPaper Class="mt-6 pa-6" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">Not part of this organization?</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            If you'd like to set up Cloud Health Office for a different organization, 
+            you can start your own 14-day free trial.
+        </MudText>
+        <MudButton Href="/signup" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.RocketLaunch">
+            Start New Trial
+        </MudButton>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private string _userEmail = "";
+    private string _organizationName = "";
+    private string _azureTenantName = "";
+    private List<string> _adminEmails = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+        {
+            Navigation.NavigateTo("/welcome");
+            return;
+        }
+
+        // Extract user information from claims
+        _userEmail = user.FindFirst(ClaimTypes.Email)?.Value
+                  ?? user.FindFirst("preferred_username")?.Value
+                  ?? user.FindFirst("upn")?.Value
+                  ?? "unknown";
+
+        var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                         ?? user.FindFirst("tid")?.Value;
+
+        _azureTenantName = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantdisplayname")?.Value
+                        ?? azureTenantId
+                        ?? "Unknown Organization";
+
+        // TODO: Query TenantService to get actual organization name and admin emails
+        // For now, use placeholder data
+        _organizationName = _azureTenantName;
+        _adminEmails = new List<string>
+        {
+            // TODO: Replace with actual admin emails from Cosmos DB
+            "admin@example.com"
+        };
+
+        Logger.LogInformation("User {Email} from organization {Org} requesting access", 
+            _userEmail, _organizationName);
+
+        _loading = false;
+    }
+
+    private void RefreshPage()
+    {
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

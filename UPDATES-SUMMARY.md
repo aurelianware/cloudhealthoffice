@@ -12,7 +12,7 @@
 - ✅ Added dual-market strategy (Payers + Providers)
 - ✅ Current version: v3.0 (Production) | Coming: v4.0 Q2 2026
 - ✅ Removed "The Sentinel" tagline confusion
-- ✅ Added QNXT/Facets augmentation positioning
+- ✅ Added augmentation positioning
 - ✅ Added provider value props ($99/month starting, direct EDI)
 - ✅ Technical architecture details (480+ tests, multi-tenant SaaS)
 - ✅ Development workflows (build, test, Bicep validation)
@@ -33,7 +33,7 @@
 - ✅ Added transparent pricing tables (both markets)
 - ✅ Specific use cases for payers and providers
 - ✅ Production readiness status table
-- ✅ "Augment QNXT/Facets, don't replace" messaging
+- ✅ "Augment legacy platforms, don't replace" messaging
 - ✅ Updated stats: 480+ tests (was 424)
 - ✅ Community/contributing section
 - ✅ Founding Practices program for providers
@@ -70,7 +70,7 @@
 
 **Required Changes**:
 1. Add dual-market architecture diagram
-2. Payer Solutions section (QNXT/Facets augmentation)
+2. Payer Solutions section (Core admin platform augmentation for payers running Legacy Systems)
 3. Provider Solutions section (Practice management + Direct EDI)
 4. Update navigation to include pricing
 
@@ -125,7 +125,7 @@ All referenced docs already exist:
 **Dual-Market Value Props**:
 
 **Payers**:
-- "Augment QNXT/Facets, don't replace"
+- "Augment legacy systems, don't replace"
 - Deploy <1 hour vs 12-18 months
 - $50k-250k vs $2M+ upgrade
 - CMS-0057-F compliant (18 months early)

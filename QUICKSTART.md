@@ -1,25 +1,117 @@
 # Cloud Health Office - Quick Start Guide
 
-Deploy the #1 open-source Azure-native multi-payer EDI platform in **&lt;5 minutes**.
+Get started with the #1 open-source Azure-native multi-payer EDI platform in **5 minutes**.
 
-## 🚀 One-Click Azure Deployment
+## 🌐 Self-Service Signup (Fastest - 5 minutes)
+
+The easiest way to get started is through our production portal:
+
+### Step 1: Visit the Portal
+
+Navigate to **[portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)**
+
+### Step 2: Sign In with Azure AD
+
+Click **Sign In** and authenticate with any Microsoft account:
+- Personal Microsoft account (Outlook.com, Hotmail.com)
+- Work or school account (Office 365, Azure AD)
+- GitHub account linked to Microsoft
+
+**What happens**: Azure AD multi-tenant authentication validates your identity and extracts tenant information from your account claims.
+
+### Step 3: Select Your Tier
+
+Choose the plan that fits your needs:
+
+| Tier | Price | Claims/Month | Modules | Support | Trial |
+|------|-------|--------------|---------|---------|-------|
+| **Starter** | $499/mo | 10,000 | EDI + Claims Adjudication | Community + Email | 14 days |
+| **Professional** | $1,499/mo | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
+| **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
+
+**Note**: All tiers include a **14-day free trial**. Cancel anytime before Feb 23, 2026 (trial end).
+
+### Step 4: Enter Payment Details
+
+Provide credit card information via **Stripe** (PCI DSS compliant):
+- Credit card (Visa, Mastercard, Amex, Discover)
+- ACH Direct Debit (US customers)
+- SEPA Direct Debit (EU customers)
+
+**Security**: Stripe handles all payment processing. Cloud Health Office never stores your payment information.
+
+### Step 5: Choose Modules
+
+Select the EDI modules you need:
+- ✅ **EDI Transactions** - 270/271 (Eligibility), 275 (Attachments), 276/277 (Claim Status), 278 (Authorization), 837 (Claims)
+- ✅ **Claims Adjudication** - <500ms workflow processing
+- ✅ **Provider Network** - 13 specialties, contracted rates
+- ✅ **FHIR Integration** - X12 → FHIR R4 mapping (Professional+)
+
+### Step 6: Start Free Trial
+
+Click **Start Free Trial** to complete signup.
+
+**What gets auto-provisioned:**
+- ✅ Cosmos DB tenant partition (`tenantId`)
+- ✅ SFTP credentials for clearinghouse integration
+- ✅ Azure AD application for API access
+- ✅ Stripe subscription with 14-day trial
+- ✅ Welcome email with credentials and access URLs
+
+### Step 7: Access Your Tenant
+
+After signup, you can immediately access:
+
+- **Portal**: [https://portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com) - Manage subscription, view claims, configure settings
+- **API**: [https://api.cloudhealthoffice.com](https://api.cloudhealthoffice.com) - RESTful endpoints with OpenAPI docs
+- **Docs**: [https://docs.cloudhealthoffice.com](https://docs.cloudhealthoffice.com) - Integration guides and API reference
+
+**Trial Details:**
+- Starts: Today
+- Ends: Feb 23, 2026 (14 days)
+- No credit card charge until trial ends
+- Cancel anytime via Portal → Subscription → Cancel
+
+### Enterprise Customers
+
+Need custom pricing, SLAs, or white-labeling?
+
+👉 **[Contact Sales](https://portal.cloudhealthoffice.com/contact-sales)** for:
+- Unlimited claims processing
+- Dedicated customer success manager
+- Custom SLA (99.95%+ uptime)
+- White-label portal and branding
+- On-premise or hybrid deployment
+- BAA and compliance support
+
+---
+
+## 🚀 Self-Hosted Deployment (Advanced)
+
+For customers requiring on-premise or Azure-hosted deployment:
+
+### One-Click Azure Deployment
 
 Deploy a complete sandbox environment with a single click:
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
 
-### What Gets Deployed
+#### What Gets Deployed
 
-The Azure Deploy button creates:
+**Note**: For most users, we recommend the **[SaaS platform at portal.cloudhealthoffice.com](#self-service-signup-fastest---5-minutes)** instead of self-hosted deployment.
 
-- ✅ **Logic App Standard** (WS1) - Workflow runtime
+The Azure Deploy button creates a self-hosted environment:
+
+- ✅ **Kubernetes Cluster (AKS)** - Container orchestration
+- ✅ **Argo Workflows** - Cloud-native workflow engine
 - ✅ **Azure Storage Gen2** - HIPAA-compliant data lake
 - ✅ **Service Bus Namespace** - Event-driven messaging
 - ✅ **Integration Account** (Free tier) - X12 EDI processing
+- ✅ **Cosmos DB** - Multi-tenant data isolation
 - ✅ **Application Insights** - Monitoring and telemetry
-- ✅ **Log Analytics Workspace** - Centralized logging
 
-**Estimated cost**: ~$50-100/month for sandbox environment (scales with usage)
+**Estimated cost**: ~$300-500/month for production environment (compare to SaaS: $499/mo Starter, $1,499/mo Professional)
 
 ## 📋 Prerequisites
 
@@ -45,39 +137,31 @@ Click the **Deploy to Azure** button above and configure:
 
 Click **Review + Create** → **Create** (deployment takes ~3-4 minutes)
 
-### Step 2: Clone and Build Workflows (1 minute)
+### Step 2: Clone and Deploy to Kubernetes (3 minutes)
 
 ```bash
 # Clone repository
 git clone https://github.com/aurelianware/cloudhealthoffice.git
 cd cloudhealthoffice
 
-# Install dependencies and build
-npm install
-npm run build
+# Connect to AKS cluster
+az aks get-credentials --resource-group your-rg --name your-aks-cluster
+
+# Deploy Argo Workflows
+kubectl apply -f argo-workflows/
+
+# Deploy microservices
+kubectl apply -f k8s/
+kubectl apply -f services/*/k8s/
+
+# Verify deployment
+kubectl get workflows -n cho-workflows
+kubectl get pods -n cloudhealthoffice
 ```
 
-### Step 3: Deploy Workflows (2 minutes)
+### Step 3: Configure X12 Integration (Optional)
 
-```powershell
-# PowerShell - Deploy Logic App workflows
-./deploy-workflows.ps1 `
-  -ResourceGroup "your-resource-group" `
-  -LogicAppName "your-logic-app-name"
-```
-
-```bash
-# Bash alternative
-az webapp deploy \
-  --resource-group your-resource-group \
-  --name your-logic-app-name \
-  --src-path workflows.zip \
-  --type zip
-```
-
-### Step 4: Configure X12 Integration (Optional)
-
-If using X12 EDI processing:
+If using X12 EDI processing with Azure Integration Account:
 
 ```powershell
 # Upload X12 schemas to Integration Account
@@ -86,14 +170,19 @@ If using X12 EDI processing:
   -IntegrationAccountName "your-ia-name"
 ```
 
-### Step 5: Test Your Deployment (&lt;1 minute)
+**Note**: The SaaS platform includes pre-configured X12 processing.
 
-```powershell
-# Run end-to-end tests
-./scripts/test-e2e.ps1 `
-  -ResourceGroup "your-resource-group" `
-  -LogicAppName "your-logic-app-name" `
-  -ServiceBusNamespace "your-sb-namespace"
+### Step 4: Test Your Deployment (&lt;1 minute)
+
+```bash
+# Run end-to-end tests with Argo Workflows
+kubectl create -f tests/e2e-workflows/test-claim-workflow.yaml -n cho-workflows
+
+# Monitor execution
+kubectl get workflows -n cho-workflows -w
+
+# View results
+cat tests/E2E-TEST-RESULTS.md
 ```
 
 ## ✨ New Capabilities (Post v1.0.0)

@@ -302,7 +302,7 @@
 1. **Time Savings:** 80% reduction in processing time (2 hours → 5 minutes)
 2. **Cost Savings:** $180K+ annually in operational costs
 3. **Compliance:** Built-in HIPAA compliance with Premium Key Vault and audit trails
-4. **Integration:** Works with any claims system (claims adjudication systems such as TriZetto, etc.)
+4. **Integration:** Works with any claims system (core admin platforms, custom solutions, etc.)
 5. **Speed to Value:** 90-day implementation, no custom development required
 
 ### Competitive Differentiators:
