@@ -63,7 +63,7 @@ The button should show "Processing..." while working.
 In a terminal, watch for signup events:
 
 ```bash
-kubectl logs -n cho-svcs -l app=portal -f | grep -i "signup\|payment\|stripe"
+kubectl logs -n cloudhealthoffice -l app=portal -f | grep -i "signup\|payment\|stripe"
 ```
 
 You should see logs like:

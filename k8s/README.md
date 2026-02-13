@@ -60,7 +60,7 @@ k8s/
 ## Namespaces
 
 - **cho-portal**: Frontend applications
-- **cho-svcs**: Backend services, website, portal
+- **cloudhealthoffice**: Backend services, website, portal
 - **cho-workflows**: Argo Workflows
 
 ## Prerequisites for HTTPS Ingress
@@ -126,13 +126,13 @@ k8s/
 
 ### Internal Services (ClusterIP)
 All microservices use ClusterIP and are accessed internally:
-- member-service.cho-svcs:3000
-- coverage-service.cho-svcs:3001
-- claims-service.cho-svcs:3002
-- eligibility-service.cho-svcs:3003
-- authorization-service.cho-svcs:3004
-- provider-service.cho-svcs:3005
-- benefit-plan-service.cho-svcs:3006
+- member-service.cloudhealthoffice:3000
+- coverage-service.cloudhealthoffice:3001
+- claims-service.cloudhealthoffice:3002
+- eligibility-service.cloudhealthoffice:3003
+- authorization-service.cloudhealthoffice:3004
+- provider-service.cloudhealthoffice:3005
+- benefit-plan-service.cloudhealthoffice:3006
 
 ## HIPAA X12 Workflows
 
@@ -147,16 +147,16 @@ EDI transaction processing jobs:
 Check deployment status:
 ```bash
 # All pods
-kubectl get pods -n cho-svcs
+kubectl get pods -n cloudhealthoffice
 
 # Ingress status
-kubectl get ingress -n cho-svcs
+kubectl get ingress -n cloudhealthoffice
 
 # Certificates
-kubectl get certificate -n cho-svcs
+kubectl get certificate -n cloudhealthoffice
 
 # Services
-kubectl get svc -n cho-svcs
+kubectl get svc -n cloudhealthoffice
 ```
 
 ## Troubleshooting
@@ -177,7 +177,7 @@ kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller
 kubectl logs -n cert-manager -l app=cert-manager
 
 # Describe certificate
-kubectl describe certificate <cert-name> -n cho-svcs
+kubectl describe certificate <cert-name> -n cloudhealthoffice
 
 # Test HTTPS
 curl -I https://cloudhealthoffice.com
@@ -210,4 +210,4 @@ For issues or questions:
 1. Check [INGRESS-HTTPS-SETUP.md](./INGRESS-HTTPS-SETUP.md#troubleshooting)
 2. Review logs: `kubectl logs -n <namespace> <pod-name>`
 3. Check pod status: `kubectl describe pod <pod-name> -n <namespace>`
-4. Review ingress events: `kubectl describe ingress <ingress-name> -n cho-svcs`
+4. Review ingress events: `kubectl describe ingress <ingress-name> -n cloudhealthoffice`

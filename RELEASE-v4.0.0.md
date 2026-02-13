@@ -130,7 +130,7 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 4. **deploy-multi-cloud.yml**: 🚧 Feature branch (cloud toggles)
 
 ### Kubernetes Deployments
-- **Namespace:** cho-svcs
+- **Namespace:** cloudhealthoffice
 - **Cluster:** cho-aks-prod (Azure East US)
 - **Registry:** ghcr.io/aurelianware/cloudhealthoffice-*
 - **Replicas:** 2 per service (for HA)

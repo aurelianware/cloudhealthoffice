@@ -284,7 +284,7 @@ az cosmosdb sql container list \
 argo get -n cho-workflows <workflow-name>
 
 # Manually activate tenant
-curl -X PUT http://tenant-service.cho-svcs/api/v1/tenants/<tenant-id> \
+curl -X PUT http://tenant-service.cloudhealthoffice/api/v1/tenants/<tenant-id> \
   -H "Content-Type: application/json" \
   -d '{"status": "active"}'
 ```
@@ -295,7 +295,7 @@ If a workflow fails, clean up partial resources:
 
 ```bash
 # Delete tenant record
-curl -X DELETE http://tenant-service.cho-svcs/api/v1/tenants/<tenant-id>
+curl -X DELETE http://tenant-service.cloudhealthoffice/api/v1/tenants/<tenant-id>
 
 # Delete Cosmos containers (if created)
 az cosmosdb sql container delete \
@@ -306,7 +306,7 @@ az cosmosdb sql container delete \
   --yes
 
 # Cancel Stripe subscription
-curl -X POST http://tenant-service.cho-svcs/api/v1/billing/tenants/<tenant-id>/cancel
+curl -X POST http://tenant-service.cloudhealthoffice/api/v1/billing/tenants/<tenant-id>/cancel
 
 # Delete Azure AD user
 az ad user delete --id admin@tenant.com

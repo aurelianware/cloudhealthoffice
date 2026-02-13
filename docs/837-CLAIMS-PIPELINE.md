@@ -152,7 +152,7 @@ argo watch -n cloudhealthoffice @latest
 argo logs -n cloudhealthoffice @latest
 
 # Verify claim created
-curl http://claims-service.cho-svcs/api/claims?status=Submitted
+curl http://claims-service.cloudhealthoffice/api/claims?status=Submitted
 ```
 
 ### 5. Verify Adjudication Triggered
@@ -171,7 +171,7 @@ argo list -n cloudhealthoffice | grep claims-adjudication
 ### 6. Check Final Claim Status
 ```bash
 # Should be APPROVED or DENIED after adjudication
-curl http://claims-service.cho-svcs/api/claims/{claim-id}
+curl http://claims-service.cloudhealthoffice/api/claims/{claim-id}
 ```
 
 ## Flow Summary
@@ -232,7 +232,7 @@ kubectl exec -it cloudhealthoffice-kafka-0 -n kafka -- \
 
 ### Claims Service Health
 ```bash
-curl http://claims-service.cho-svcs/health
+curl http://claims-service.cloudhealthoffice/health
 ```
 
 ## Troubleshooting
@@ -248,7 +248,7 @@ curl http://claims-service.cho-svcs/health
 - Test with `scripts/utils/generate-837-claims.ts`
 
 ### Claims not created
-- Check Claims Service API: `curl http://claims-service.cho-svcs/health`
+- Check Claims Service API: `curl http://claims-service.cloudhealthoffice/health`
 - Verify tenant ID matches
 - Check HTTP response codes in workflow logs
 

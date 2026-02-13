@@ -79,10 +79,10 @@ echo ""
 
 # Test 6: Check Portal Pods
 echo "✅ Test 6: Portal Deployment Status"
-PORTAL_READY=$(kubectl get pods -n cho-svcs -l app=portal --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+PORTAL_READY=$(kubectl get pods -n cloudhealthoffice -l app=portal --no-headers 2>/dev/null | grep -c "Running" || echo "0")
 if [ "$PORTAL_READY" -gt 0 ]; then
   echo "   ✓ PASSED - $PORTAL_READY portal pod(s) running"
-  kubectl get pods -n cho-svcs -l app=portal --no-headers | awk '{print "   Pod:", $1, "-", $3}'
+  kubectl get pods -n cloudhealthoffice -l app=portal --no-headers | awk '{print "   Pod:", $1, "-", $3}'
 else
   echo "   ✗ FAILED - No portal pods running"
 fi
@@ -90,7 +90,7 @@ echo ""
 
 # Test 7: Check Cosmos Secret
 echo "✅ Test 7: Cosmos DB Kubernetes Secret"
-COSMOS_SECRET=$(kubectl get secret cosmos-secret -n cho-svcs -o jsonpath='{.data.COSMOS_ENDPOINT}' 2>/dev/null | base64 -d)
+COSMOS_SECRET=$(kubectl get secret cosmos-secret -n cloudhealthoffice -o jsonpath='{.data.COSMOS_ENDPOINT}' 2>/dev/null | base64 -d)
 if [ -n "$COSMOS_SECRET" ]; then
   echo "   ✓ PASSED - cosmos-secret exists in Kubernetes"
   echo "   Endpoint: $COSMOS_SECRET"
@@ -101,7 +101,7 @@ echo ""
 
 # Test 8: Check Portal Logs for Cosmos
 echo "✅ Test 8: Portal Cosmos DB Integration Logs"
-COSMOS_LOGS=$(kubectl logs -n cho-svcs -l app=portal --tail=100 2>/dev/null | grep -i "cosmos\|tenant" | head -5 || echo "")
+COSMOS_LOGS=$(kubectl logs -n cloudhealthoffice -l app=portal --tail=100 2>/dev/null | grep -i "cosmos\|tenant" | head -5 || echo "")
 if [ -n "$COSMOS_LOGS" ]; then
   echo "   ✓ PASSED - Found Cosmos/Tenant logs:"
   echo "$COSMOS_LOGS" | sed 's/^/   /'

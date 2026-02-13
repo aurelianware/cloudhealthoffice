@@ -2,12 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: eligibility-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  Services__CoverageService: "http://coverage-service.cho-svcs/api"
-  Services__MemberService: "http://member-service.cho-svcs/api"
-  Services__BenefitPlanService: "http://benefit-plan-service.cho-svcs/api"
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice/api"
+  Services__MemberService: "http://member-service.cloudhealthoffice/api"
+  Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api"
   CosmosDb__DatabaseName: "CloudHealthOffice"
   CosmosDb__InquiriesContainer: "EligibilityInquiries"
   CosmosDb__ResponsesContainer: "EligibilityResponses"
@@ -20,7 +20,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: eligibility-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: eligibility-service
     version: v1
@@ -113,7 +113,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: eligibility-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: eligibility-service
 spec:
@@ -130,7 +130,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: eligibility-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
