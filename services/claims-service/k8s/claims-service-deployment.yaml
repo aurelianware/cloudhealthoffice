@@ -2,27 +2,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: claims-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "ClaimsDB"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
   CosmosDb__ContainerName: "Claims"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: claims-service-secrets
-  namespace: cho-svcs
-type: Opaque
-stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-key-here"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: claims-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: claims-service
     tier: backend
@@ -41,12 +31,18 @@ spec:
     spec:
       containers:
       - name: claims-service
-        image: your-acr.azurecr.io/claims-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-claims-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
         env:
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: claims-service-secret
+              key: MongoDb__ConnectionString
+              optional: true
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
@@ -65,13 +61,13 @@ spec:
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
-              name: claims-service-secrets
-              key: CosmosDb__Endpoint
+              name: cosmos-db-secret
+              key: endpoint
         - name: CosmosDb__Key
           valueFrom:
             secretKeyRef:
-              name: claims-service-secrets
-              key: CosmosDb__Key
+              name: cosmos-db-secret
+              key: key
         resources:
           requests:
             cpu: 200m
@@ -96,7 +92,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: claims-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: claims-service
 spec:
@@ -113,7 +109,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: claims-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

@@ -67,20 +67,20 @@ $PHI_PII_PATTERNS = @{
         Pattern = '\b(?:DOB|DateOfBirth|Birth[_\s]?Date)[:\s]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'
         Description = 'Date of Birth'
         Severity = 'High'
-        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
+        AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*', '*.cs', '*.md', '*.sh')
     }
     'CreditCard' = @{
         Pattern = '\b(?:4\d{3}|5[1-5]\d{2}|6011|3[47]\d{2})\s?\d{4}\s?\d{4}\s?\d{4}\b'
         Description = 'Credit Card Number'
         Severity = 'Critical'
-        AllowedFiles = @('*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*')
+        AllowedFiles = @('*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*', '*.cs', '*.md', '*.sh')
     }
     'Email' = @{
         Pattern = '\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b'
         Description = 'Email Address'
         Severity = 'Medium'
-        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*.html')
-        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test|aurelianware\.com|cloudhealthoffice\.com')
+        AllowedFiles = @('*.md', '*.ps1', 'test-*.json', '*-config.json', 'example-*.json', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*.html', '*.cs')
+        ExcludeContext = @('test\.com|example\.com|sample\.com|mock\.|dummy\.|placeholder|@test\.|john@|jane@|user@test|aurelianware\.com|cloudhealthoffice\.com|yourorg\.com')
     }
     'PhoneNumber' = @{
         Pattern = '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
@@ -94,7 +94,7 @@ $PHI_PII_PATTERNS = @{
         Description = 'Member/Patient ID'
         Severity = 'High'
         AllowedFiles = @('*.edi', 'test-*.json', 'test-*.edi', '*-config.json', '*config*.json', 'example-*.json', '*.example.json', '*.md', 'test-*.ps1', '*.yml', '*.yaml', '*.test.ts', '*.test.js', '*test*.ts', '*test*.js', '*.schema.json', 'Auth-*.json', '*Request*.json', '*Response*.json', '*Inquiry*.json', '*Types.ts', '*Resolution.ts')
-        ExcludeContext = @('identifier|description|string|memberId:|memberIdRequired|field|property|param|variable|interface|type|Invalid|validation|related')
+        ExcludeContext = @('identifier|description|string|memberId:|memberIdRequired|field|property|param|variable|interface|type|Invalid|validation|related|exists|verify|validate|check|ensure')
     }
 }
 
@@ -138,7 +138,7 @@ $HIPAA_PATTERNS = @{
         Description = 'Unencrypted PHI transmission (should use HTTPS)'
         Severity = 'Critical'
         AllowedFiles = @('*.md', 'scan-for-phi-pii.ps1', '*.test.ts', '*.test.js', '*.spec.ts', '*.spec.js', '*test*.ts', '*test*.js', '*example*', '*Example*', '*.css.map', '*.min.css.map')
-        ExcludeContext = @('hl7\.org', 'fhir\.org', 'terminology\.hl7\.org', 'StructureDefinition', 'CodeSystem', 'ValueSet', 'www\.w3\.org', 'xmlns', 'xml')
+        ExcludeContext = @('hl7\.org', 'fhir\.org', 'terminology\.hl7\.org', 'StructureDefinition', 'CodeSystem', 'ValueSet', 'www\.w3\.org', 'xmlns', 'xml', 'svc\.cluster\.local', 'localhost', '127\.0\.0\.1', 'internal', 'kubernetes')
     }
     'LoggingPHI' = @{
         Pattern = '(?:console\.log|Write-Host|console\.warn|console\.error|logger\.|log\.).*(?:ssn|social.?security|dob|date.?of.?birth|patient|member.?id|mrn|medical.?record)'

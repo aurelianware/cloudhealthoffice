@@ -1,0 +1,355 @@
+@using CloudHealthOffice.Portal.Services
+@inject ISponsorService SponsorService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_isEdit && _sponsor == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+            <MudText>Loading sponsor...</MudText>
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                <MudGrid>
+                    <!-- Organization Details Section -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2">Organization Details</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="8">
+                        <MudTextField @bind-Value="_request.Name"
+                                     Label="Organization Name"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Organization name is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.Type"
+                                  Label="Sponsor Type"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("Employer")">Employer</MudSelectItem>
+                            <MudSelectItem Value="@("Union")">Union</MudSelectItem>
+                            <MudSelectItem Value="@("Association")">Association</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_request.TaxId"
+                                     Label="Tax ID (EIN)"
+                                     Variant="Variant.Outlined"
+                                     Placeholder="12-3456789"
+                                     Required="true"
+                                     RequiredError="Tax ID is required" />
+                    </MudItem>
+
+                    @if (_isEdit)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudSelect @bind-Value="_updateRequest!.Status"
+                                      Label="Status"
+                                      Variant="Variant.Outlined"
+                                      T="string">
+                                <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                                <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    }
+
+                    <!-- Address Section -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2 mt-4">Address</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_request.AddressLine1"
+                                     Label="Address Line 1"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Address is required" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_request.AddressLine2"
+                                     Label="Address Line 2"
+                                     Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="5">
+                        <MudTextField @bind-Value="_request.City"
+                                     Label="City"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="City is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.State"
+                                  Label="State"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            @foreach (var state in _usStates)
+                            {
+                                <MudSelectItem Value="@state">@state</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="_request.ZipCode"
+                                     Label="ZIP Code"
+                                     Variant="Variant.Outlined"
+                                     Placeholder="12345"
+                                     Required="true"
+                                     RequiredError="ZIP code is required" />
+                    </MudItem>
+
+                    <!-- Contact Information Section -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2 mt-4">Contact Information</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_request.ContactName"
+                                     Label="Contact Name"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Contact name is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_request.ContactPhone"
+                                     Label="Phone"
+                                     Variant="Variant.Outlined"
+                                     Placeholder="(555) 123-4567"
+                                     Required="true"
+                                     RequiredError="Phone is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_request.ContactEmail"
+                                     Label="Email"
+                                     Variant="Variant.Outlined"
+                                     InputType="InputType.Email"
+                                     Required="true"
+                                     RequiredError="Email is required" />
+                    </MudItem>
+
+                    <!-- Billing & Contract Section -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2 mt-4">Billing & Contract</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.BillingFrequency"
+                                  Label="Billing Frequency"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("Monthly")">Monthly</MudSelectItem>
+                            <MudSelectItem Value="@("Quarterly")">Quarterly</MudSelectItem>
+                            <MudSelectItem Value="@("Annual")">Annual</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.PaymentMethod"
+                                  Label="Payment Method"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("ACH")">ACH</MudSelectItem>
+                            <MudSelectItem Value="@("Check")">Check</MudSelectItem>
+                            <MudSelectItem Value="@("Wire")">Wire Transfer</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudDatePicker @bind-Date="_contractStartDate"
+                                      Label="Contract Start Date"
+                                      Variant="Variant.Outlined"
+                                      Required="true" />
+                    </MudItem>
+
+                    @if (_isEdit)
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudDatePicker @bind-Date="_contractEndDate"
+                                          Label="Contract End Date"
+                                          Variant="Variant.Outlined" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Primary"
+                  Disabled="@(!_formIsValid || _isSaving)"
+                  OnClick="Submit">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@(_isEdit ? "Update" : "Create") Sponsor</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? SponsorId { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isSaving;
+    private bool _isEdit => !string.IsNullOrEmpty(SponsorId);
+
+    private SponsorDetails? _sponsor;
+    private CreateSponsorRequest _request = new();
+    private UpdateSponsorRequest? _updateRequest;
+    private DateTime? _contractStartDate = DateTime.Today;
+    private DateTime? _contractEndDate;
+
+    private readonly string[] _usStates = new[]
+    {
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+        "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+        "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+        "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+        "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            _sponsor = await SponsorService.GetSponsorByIdAsync(SponsorId!);
+            if (_sponsor != null)
+            {
+                _request = new CreateSponsorRequest
+                {
+                    Name = _sponsor.Name,
+                    Type = _sponsor.Type,
+                    TaxId = _sponsor.TaxId,
+                    AddressLine1 = _sponsor.AddressLine1,
+                    AddressLine2 = _sponsor.AddressLine2,
+                    City = _sponsor.City,
+                    State = _sponsor.State,
+                    ZipCode = _sponsor.ZipCode,
+                    ContactName = _sponsor.ContactName,
+                    ContactPhone = _sponsor.ContactPhone,
+                    ContactEmail = _sponsor.ContactEmail,
+                    BillingFrequency = _sponsor.BillingFrequency,
+                    PaymentMethod = _sponsor.PaymentMethod,
+                    ContractStartDate = _sponsor.ContractStartDate
+                };
+
+                _updateRequest = new UpdateSponsorRequest
+                {
+                    Name = _sponsor.Name,
+                    Type = _sponsor.Type,
+                    TaxId = _sponsor.TaxId,
+                    AddressLine1 = _sponsor.AddressLine1,
+                    AddressLine2 = _sponsor.AddressLine2,
+                    City = _sponsor.City,
+                    State = _sponsor.State,
+                    ZipCode = _sponsor.ZipCode,
+                    ContactName = _sponsor.ContactName,
+                    ContactPhone = _sponsor.ContactPhone,
+                    ContactEmail = _sponsor.ContactEmail,
+                    BillingFrequency = _sponsor.BillingFrequency,
+                    PaymentMethod = _sponsor.PaymentMethod,
+                    ContractStartDate = _sponsor.ContractStartDate,
+                    Status = _sponsor.Status,
+                    ContractEndDate = _sponsor.ContractEndDate
+                };
+
+                _contractStartDate = _sponsor.ContractStartDate;
+                _contractEndDate = _sponsor.ContractEndDate;
+            }
+        }
+        else
+        {
+            // Set defaults for new sponsor
+            _request.Type = "Employer";
+            _request.BillingFrequency = "Monthly";
+            _request.PaymentMethod = "ACH";
+            _request.State = "CA";
+        }
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_formIsValid)
+            return;
+
+        _isSaving = true;
+
+        try
+        {
+            if (_contractStartDate.HasValue)
+            {
+                _request.ContractStartDate = _contractStartDate.Value;
+            }
+
+            if (_isEdit && _updateRequest != null)
+            {
+                // Copy values from _request to _updateRequest
+                _updateRequest.Name = _request.Name;
+                _updateRequest.Type = _request.Type;
+                _updateRequest.TaxId = _request.TaxId;
+                _updateRequest.AddressLine1 = _request.AddressLine1;
+                _updateRequest.AddressLine2 = _request.AddressLine2;
+                _updateRequest.City = _request.City;
+                _updateRequest.State = _request.State;
+                _updateRequest.ZipCode = _request.ZipCode;
+                _updateRequest.ContactName = _request.ContactName;
+                _updateRequest.ContactPhone = _request.ContactPhone;
+                _updateRequest.ContactEmail = _request.ContactEmail;
+                _updateRequest.BillingFrequency = _request.BillingFrequency;
+                _updateRequest.PaymentMethod = _request.PaymentMethod;
+                _updateRequest.ContractStartDate = _request.ContractStartDate;
+                _updateRequest.ContractEndDate = _contractEndDate;
+
+                await SponsorService.UpdateSponsorAsync(SponsorId!, _updateRequest);
+            }
+            else
+            {
+                await SponsorService.CreateSponsorAsync(_request);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving sponsor: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

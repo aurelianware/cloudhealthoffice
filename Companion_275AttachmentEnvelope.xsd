@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema
   xmlns:xs="http://www.w3.org/2001/XMLSchema"
-  targetNamespace="urn:companion:pchp:hipaa5010:ts275:envelope:v1"
-  xmlns="urn:companion:pchp:hipaa5010:ts275:envelope:v1"
+  targetNamespace="urn:companion:payer:hipaa5010:ts275:envelope:v1"
+  xmlns="urn:companion:payer:hipaa5010:ts275:envelope:v1"
   elementFormDefault="qualified"
   attributeFormDefault="unqualified">
 

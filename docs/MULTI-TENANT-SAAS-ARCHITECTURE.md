@@ -21,7 +21,7 @@ Cloud Health Office is designed as a **multi-tenant SaaS platform** where health
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Core Services (cho-svcs namespace)                        │ │
+│  │  Core Services (cloudhealthoffice namespace)                        │ │
 │  │  • Eligibility, Benefit, Provider, Reference Data          │ │
 │  │  • Multi-tenant aware (TenantId in all requests)           │ │
 │  │  • Data isolated by partition key                          │ │

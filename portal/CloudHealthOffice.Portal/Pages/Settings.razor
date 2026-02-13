@@ -1,0 +1,255 @@
+@page "/settings"
+@inject HttpClient Http
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Settings - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+        Tenant Settings
+    </MudText>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mt-4">
+        <!-- Billing & Subscription Tab -->
+        <MudTabPanel Text="Billing & Subscription" Icon="@Icons.Material.Filled.CreditCard">
+            <MudPaper Class="pa-4 mt-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">Current Subscription</MudText>
+                
+                @if (isLoadingSubscription)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else if (subscription != null)
+                {
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudCard Outlined="true" Class="mb-4">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.h6">Plan Details</MudText>
+                                    <MudDivider Class="my-2" />
+                                    
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                        <MudText>Current Plan:</MudText>
+                                        <MudChip Color="Color.Primary">@subscription.Tier</MudChip>
+                                    </MudStack>
+                                    
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                        <MudText>Status:</MudText>
+                                        <MudChip Color="@GetStatusColor(subscription.Status)">@subscription.Status</MudChip>
+                                    </MudStack>
+                                    
+                                    @if (subscription.TrialEnd != null && subscription.Status == "trialing")
+                                    {
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                            <MudText>Trial Ends:</MudText>
+                                            <MudText Typo="Typo.body2">@subscription.TrialEnd?.ToString("MMM dd, yyyy")</MudText>
+                                        </MudStack>
+                                    }
+                                    
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                        <MudText>Monthly Cost:</MudText>
+                                        <MudText Typo="Typo.body1"><strong>@GetPriceDisplay(subscription.Tier)</strong></MudText>
+                                    </MudStack>
+                                    
+                                    @if (subscription.CurrentPeriodEnd != null)
+                                    {
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                            <MudText>Next Billing Date:</MudText>
+                                            <MudText Typo="Typo.body2">@subscription.CurrentPeriodEnd?.ToString("MMM dd, yyyy")</MudText>
+                                        </MudStack>
+                                    }
+                                </MudCardContent>
+                                <MudCardActions>
+                                    <MudButton StartIcon="@Icons.Material.Filled.Upgrade" Color="Color.Primary" Variant="Variant.Text" OnClick="ShowUpgradeDialog">
+                                        Change Plan
+                                    </MudButton>
+                                    <MudButton StartIcon="@Icons.Material.Filled.Cancel" Color="Color.Error" Variant="Variant.Text" OnClick="ShowCancelDialog">
+                                        Cancel Subscription
+                                    </MudButton>
+                                </MudCardActions>
+                            </MudCard>
+                        </MudItem>
+                        
+                        <MudItem xs="12" md="6">
+                            <MudCard Outlined="true" Class="mb-4">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.h6">Payment Method</MudText>
+                                    <MudDivider Class="my-2" />
+                                    
+                                    @if (!string.IsNullOrEmpty(subscription.PaymentMethodLast4))
+                                    {
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@Icons.Material.Filled.CreditCard" />
+                                                <MudText>•••• •••• •••• @subscription.PaymentMethodLast4</MudText>
+                                            </MudStack>
+                                            <MudChip Size="Size.Small">@subscription.PaymentMethodBrand</MudChip>
+                                        </MudStack>
+                                    }
+                                    else
+                                    {
+                                        <MudAlert Severity="Severity.Warning">No payment method on file</MudAlert>
+                                    }
+                                </MudCardContent>
+                                <MudCardActions>
+                                    <MudButton StartIcon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Text" OnClick="UpdatePaymentMethod">
+                                        Update Payment Method
+                                    </MudButton>
+                                </MudCardActions>
+                            </MudCard>
+                            
+                            <MudCard Outlined="true">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.h6">Billing History</MudText>
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        View your invoices and payment history
+                                    </MudText>
+                                </MudCardContent>
+                                <MudCardActions>
+                                    <MudButton StartIcon="@Icons.Material.Filled.Receipt" Color="Color.Primary" Variant="Variant.Text" Href="@GetStripeBillingPortalUrl()" Target="_blank">
+                                        View Billing Portal
+                                    </MudButton>
+                                </MudCardActions>
+                            </MudCard>
+                        </MudItem>
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">No active subscription found</MudAlert>
+                }
+            </MudPaper>
+        </MudTabPanel>
+        
+        <!-- General Tab -->
+        <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Business">
+            <MudPaper Class="pa-4 mt-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">Tenant Information</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Organization and contact details (coming soon)
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+        
+        <!-- Users & Permissions Tab -->
+        <MudTabPanel Text="Users & Permissions" Icon="@Icons.Material.Filled.People">
+            <MudPaper Class="pa-4 mt-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">User Management</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Invite users, manage roles and permissions (coming soon)
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+        
+        <!-- Integration Tab -->
+        <MudTabPanel Text="Integrations" Icon="@Icons.Material.Filled.IntegrationInstructions">
+            <MudPaper Class="pa-4 mt-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">API Keys & Integrations</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Manage API keys, webhooks, and external integrations (coming soon)
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private SubscriptionInfo? subscription;
+    private bool isLoadingSubscription = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSubscriptionInfo();
+    }
+
+    private async Task LoadSubscriptionInfo()
+    {
+        isLoadingSubscription = true;
+        
+        try
+        {
+            // TODO: Replace with actual API call to tenant service
+            var tenantServiceUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
+            // var response = await Http.GetAsync($"{tenantServiceUrl}/v1/tenants/current/subscription");
+            
+            // Mock data for now
+            await Task.Delay(500); // Simulate API call
+            subscription = new SubscriptionInfo
+            {
+                Tier = "Professional",
+                Status = "trialing",
+                TrialEnd = DateTime.UtcNow.AddDays(10),
+                CurrentPeriodEnd = DateTime.UtcNow.AddDays(10),
+                PaymentMethodLast4 = "4242",
+                PaymentMethodBrand = "Visa",
+                CustomerId = "cus_test123",
+                SubscriptionId = "sub_test456"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load subscription: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingSubscription = false;
+        }
+    }
+
+    private Color GetStatusColor(string status) => status.ToLower() switch
+    {
+        "active" => Color.Success,
+        "trialing" => Color.Info,
+        "past_due" => Color.Warning,
+        "canceled" => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetPriceDisplay(string tier) => tier.ToLower() switch
+    {
+        "starter" => "$499/month",
+        "professional" => "$1,499/month",
+        "enterprise" => "Custom pricing",
+        _ => "N/A"
+    };
+
+    private string GetStripeBillingPortalUrl()
+    {
+        // TODO: Create billing portal session via API
+        return "https://billing.stripe.com/p/login/test_123";
+    }
+
+    private async Task ShowUpgradeDialog()
+    {
+        // TODO: Implement plan change dialog
+        await JSRuntime.InvokeVoidAsync("alert", "Plan change feature coming soon!");
+    }
+
+    private async Task ShowCancelDialog()
+    {
+        // TODO: Implement cancellation dialog
+        await JSRuntime.InvokeVoidAsync("alert", "Cancellation feature coming soon!");
+    }
+
+    private async Task UpdatePaymentMethod()
+    {
+        // TODO: Implement payment method update via Stripe Elements
+        await JSRuntime.InvokeVoidAsync("alert", "Payment method update coming soon!");
+    }
+
+    private class SubscriptionInfo
+    {
+        public string Tier { get; set; } = "";
+        public string Status { get; set; } = "";
+        public DateTime? TrialEnd { get; set; }
+        public DateTime? CurrentPeriodEnd { get; set; }
+        public string? PaymentMethodLast4 { get; set; }
+        public string? PaymentMethodBrand { get; set; }
+        public string? CustomerId { get; set; }
+        public string? SubscriptionId { get; set; }
+    }
+}
+

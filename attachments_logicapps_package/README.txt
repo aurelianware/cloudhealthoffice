@@ -1,11 +1,11 @@
 # HIPAA Attachments Logic Apps Package This package contains: - workflow.ingest275.json — **Inbound 275 ingestion** workflow (SFTP → Blob → Decode X12 → SB → claims backend) - workflow.rfai277.json — **Outbound 277 RFAI** workflow (SB → Encode X12 → SFTP) - main.bicep — Starter infrastructure template (Storage, Service Bus, App Insights, Logic App Standard plan/app) ## Deploy (starter)
 bash
-az group create -n pchp-attachments-rg -l eastus
-az deployment group create -g pchp-attachments-rg -f main.bicep -p baseName=pchp-attachments
+az group create -n payer-attachments-rg -l eastus
+az deployment group   z  z z z -g payer-attachments-rg -f main.bicep -p baseName=payer-attachments
 > Note: The Bicep template is a **starter**. You will still need to: > - Create **API Connections** for sftp-ssh, azureblob, servicebus, and integrationaccount (or use managed connectors via LA Standard). > - Import the two workflow JSON files into your Logic App (Standard) as separate workflows. > - Configure Integration Account schemas/agreements for 275/277 (set x12_275_messagetype and x12_277_messagetype). > - Set workflow parameters (folders, namespaces, topics, IDs). > - Add Role Assignments for the Logic App’s managed identity to access Storage & Service Bus. ## RFAI Trigger Contract Messages to rfai-requests topic should be JSON:
 json
 {
-  "claimNumber": "PCHP-12345",
+  "claimNumber": "HP-12345",
   "memberId": "DExxxxxx",
   "providerNpi": "<NPI-NUMBER>",
   "serviceFromDate": "2025-01-01",

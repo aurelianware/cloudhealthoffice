@@ -1,0 +1,142 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject ITenantService TenantService
+@inject ILogger<Index> Logger
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+        {
+            // User not authenticated, show welcome page
+            Navigation.NavigateTo("/welcome");
+            return;
+        }
+
+        // User is authenticated via Azure AD
+        // Extract Azure AD Tenant ID from claims
+        var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                         ?? user.FindFirst("tid")?.Value;
+        var userEmail = user.FindFirst(ClaimTypes.Email)?.Value
+                     ?? user.FindFirst("preferred_username")?.Value
+                     ?? user.FindFirst("upn")?.Value;
+
+        Logger.LogInformation("Authenticated user {Email} from Azure Tenant {TenantId}", userEmail, azureTenantId);
+
+        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
+        {
+            Logger.LogWarning("Unable to extract tenant ID from claims, redirecting to signup");
+            Navigation.NavigateTo("/signup");
+            return;
+        }
+
+        // Query for subscription by Azure Tenant ID
+        var subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+
+        if (subscription == null)
+        {
+            // No subscription found - redirect to signup
+            Logger.LogInformation("No subscription found for tenant {TenantId}, redirecting to signup", azureTenantId);
+            Navigation.NavigateTo("/signup");
+            return;
+        }
+
+        if (subscription.IsDemo)
+        {
+            // Demo tenant - redirect to demo page
+            Logger.LogInformation("Demo tenant detected, redirecting to /demo");
+            Navigation.NavigateTo("/demo");
+            return;
+        }
+
+        // Check subscription status
+        if (subscription.SubscriptionStatus == "Expired" || subscription.SubscriptionStatus == "Cancelled")
+        {
+            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to billing", 
+                subscription.SubscriptionStatus, azureTenantId);
+            Navigation.NavigateTo("/billing");
+            return;
+        }
+
+        // Check if user is a member of this tenant
+        var isMember = await TenantService.IsMemberOfTenantAsync(azureTenantId, userEmail ?? "");
+
+        if (!isMember)
+        {
+            // User's organization has subscription but they're not authorized
+            Logger.LogWarning("User {Email} not authorized for tenant {TenantId}, redirecting to request access", 
+                userEmail, azureTenantId);
+            Navigation.NavigateTo("/request-access");
+            return;
+        }
+
+        // All checks passed - redirect to dashboard
+        Logger.LogInformation("User {Email} authorized, redirecting to dashboard", userEmail);
+        Navigation.NavigateTo("/dashboard");
+    }
+}
+
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            var metricsTask = MetricsService.GetDashboardMetricsAsync();
+            var claimsTask = ClaimsService.GetRecentClaimsAsync(10);
+            var allTask = Task.WhenAll(metricsTask, claimsTask);
+            var completed = await Task.WhenAny(allTask, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            if (completed == allTask)
+            {
+                await allTask;
+                _metrics = metricsTask.Result;
+                _recentClaims = claimsTask.Result;
+            }
+        }
+        catch
+        {
+            // Ignore errors and render empty state
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Approved" => Color.Success,
+        "Denied" => Color.Error,
+        "Pending" => Color.Warning,
+        "Processing" => Color.Info,
+        _ => Color.Default
+    };
+
+    private void ViewClaim(string claimId)
+    {
+        Navigation.NavigateTo($"/claims/{claimId}");
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}
+
