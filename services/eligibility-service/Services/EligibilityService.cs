@@ -84,13 +84,13 @@ public class EligibilityServiceImpl : IEligibilityService
             // Store response
             await _repository.CreateResponseAsync(response);
 
-            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", inquiry.Id);
+            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", SanitizeForLog(inquiry.Id));
             
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", inquiry.Id);
+            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
             
             inquiry.Status = EligibilityInquiryStatus.Failed;
             inquiry.CompletedDate = DateTime.UtcNow;
@@ -332,6 +332,17 @@ public class EligibilityServiceImpl : IEligibilityService
             ResponseCode = "N", // No - no active coverage
             StatusCode = "6", // Inactive
             RejectionReason = "No active coverage found for the service date",
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Remove newline characters to prevent log forging via user-controlled data.
+        return value.Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty);
+    }
             IsCovered = false,
             CoverageLevel = string.Empty,
             CreatedDate = DateTime.UtcNow
