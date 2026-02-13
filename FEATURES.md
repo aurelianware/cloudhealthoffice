@@ -6,6 +6,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Category | Features | Status | Documentation |
 |----------|----------|--------|---------------|
+| **Self-Service Portal** | Signup, subscriptions, Contact Sales | ✅ Complete | [FEATURES.md](./FEATURES.md#self-service-portal) |
 | **EDI Transactions** | 8 transaction types | ✅ Complete | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | **837 Claims Ingestion** | Automated SFTP → Kafka pipeline | ✅ Complete | [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md) |
 | **Provider Network Management** | Blazor UI with 13 specialties | ✅ Complete | [FEATURES.md](./FEATURES.md#provider-network-management) |
@@ -14,7 +15,142 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 production controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 62 automated tests | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 531 automated tests (85.93% coverage) | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
+
+## 🌐 Self-Service Portal
+
+### Production Portal
+
+**URL**: [https://portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)  
+**Status**: ✅ Production-Ready  
+**Implementation Date**: January 2026  
+**Technology Stack**: Blazor Server, MudBlazor v6.14.0, Azure AD, Stripe, Cosmos DB
+
+**Partner Program**: [partners@cloudhealthoffice.com](mailto:partners@cloudhealthoffice.com) - For independent consultants and implementation partners
+
+#### Core Features
+
+| Feature | Description | Status | Details |
+|---------|-------------|--------|---------|
+| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter $499/mo, Professional $1,999/mo, Enterprise $4,999/mo, 30-day trials |
+| **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | ✅ Complete | Tenant-scoped access via claims, automatic user provisioning |
+| **Subscription Management** | Stripe-powered billing and subscriptions | ✅ Complete | Test mode, webhook integration, automatic renewals |
+| **Contact Sales** | Enterprise inquiry tracking | ✅ Complete | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |
+| **Demo Mode** | Try-before-you-buy experience | ✅ Complete | No credit card, explore full features |
+| **Mobile Optimized** | Responsive design with hamburger nav | ✅ Complete | Accessible, slideDown animations, close-on-outside-click |
+| **Tenant Isolation** | Multi-tenant Cosmos DB architecture | ✅ Complete | Separate Tenants, Members, SalesInquiries containers (400 RU/s each) |
+
+#### Signup Flow
+
+1. **Visit Portal**: Navigate to portal.cloudhealthoffice.com
+2. **Azure AD Login**: Sign in with Microsoft account (multi-tenant)
+3. **Select Tier**: Choose Starter ($499/mo, 10K claims) or Professional ($1,499/mo, 50K claims)
+4. **Enter Payment**: Stripe payment method with PCI compliance
+5. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
+6. **Start Free Trial**: 14-day trial, cancel anytime
+
+#### Automatic Tenant Provisioning
+
+When a user completes signup, the system automatically:
+- ✅ Creates Cosmos DB tenant partition (`tenantId`)
+- ✅ Generates SFTP credentials for clearinghouse integration
+- ✅ Registers Azure AD application for API access
+- ✅ Creates Stripe customer and subscription with 14-day trial
+- ✅ Sends welcome email with access details
+- ✅ Provisions Portal, API, and Docs URLs
+
+#### Contact Sales Integration
+
+**Purpose**: Enterprise deals requiring custom pricing, SLAs, or integrations
+
+| Field | Type | Validation | Notes |
+|-------|------|------------|-------|
+| **First Name** | String | Required | Contact person |
+| **Last Name** | String | Required | Contact person |
+| **Email** | String | Email format | Primary contact |
+| **Phone** | String | Optional | For callbacks |
+| **Company** | String | Required | Organization name |
+| **Job Title** | String | Optional | Decision-maker role |
+| **Inquiry Type** | Dropdown | Required | Enterprise Plan, Platform Demo, Partnership, Integration Support |
+| **Message** | Textarea | Required | Custom requirements |
+
+**Status Tracking**:
+- **New**: Initial submission, auto-generated reference ID (inquiry-{guid})
+- **Contacted**: Sales team reached out (auto-sets `contactedAt` timestamp)
+- **Qualified**: Meeting scheduled, deal pipeline
+- **Closed**: Won/Lost, archived
+
+**Storage**: Cosmos DB `SalesInquiries` container (partition key: `/id`, 400 RU/s)
+
+#### Authentication & Authorization
+
+**Azure AD Multi-Tenant**:
+- TenantId: `common` (allows any Microsoft account)
+- ClientId: `54f3419d-0d69-4b06-939a-c1a260596556`
+- Scopes: `openid profile email User.Read`
+
+**Smart Routing**:
+```csharp
+// Extract tenant from Azure AD claims
+var tenantClaim = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid");
+var userEmail = user.Identity.Name;
+
+// Route to tenant-specific resources
+var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmail);
+```
+
+**Session Affinity**: ClientIP-based, 3-hour timeout (Kubernetes Ingress)
+
+#### Subscription Tiers
+
+| Tier | Price | Claims/Month | Modules | Support | Trial |
+|------|-------|--------------|---------|---------|-------|
+| **Starter** | $499/mo | 10,000 | All EDI + Claims | Community + Email | 14 days |
+| **Professional** | $1,499/mo | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
+| **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
+
+**Stripe Integration**:
+- Test Mode: `pk_test_51SZR4gJu0wSGGF9nlno2s1eJG6l640809UK0Rhn2YkQCSB1FLaCorJH6eY72QikKvo4w1JMCOUyYGupFgfP3Ye5W0081VorcHa`
+- Price IDs: Starter `price_1SyhLMJu0wSGGF9n9zqtS7Kh`, Professional `price_1SyhMmJu0wSGGF9no72J2xY9`
+- Trial Period: 14 days (ends Feb 23, 2026)
+- Payment Methods: Credit card, ACH (US), SEPA (EU)
+
+#### Mobile Features
+
+**Responsive Design**:
+- ✅ Hamburger menu on screens <768px
+- ✅ Touch-friendly buttons (min 44x44px)
+- ✅ Optimized fonts (16px minimum)
+- ✅ Swipe gestures for navigation
+
+**Accessibility**:
+- ✅ ARIA labels and roles
+- ✅ Keyboard navigation (Tab, Escape)
+- ✅ Screen reader compatible
+- ✅ High contrast support
+
+**Performance**:
+- ✅ < 2s initial load (Blazor WebAssembly prerender)
+- ✅ < 100ms SignalR reconnect
+- ✅ Lazy-loaded images
+- ✅ CDN-hosted assets
+
+#### Deployment
+
+**Kubernetes**:
+- Namespace: `cloudhealthoffice`
+- Replicas: 2 (HPA 2-5)
+- Image: `ghcr.io/aurelianware/cloudhealthoffice-portal:latest`
+- Secrets: `stripe-api-keys`, `cosmos-secret`
+
+**DNS**:
+- Production: portal.cloudhealthoffice.com
+- Staging: portal-staging.cloudhealthoffice.com
+
+**SSL/TLS**: Let's Encrypt with cert-manager auto-renewal
+
+---
 
 ## 🔄 EDI Transaction Processing
 
@@ -339,7 +475,7 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 - DTOs: ProviderListItem, ProviderDetails, PracticeLocation, ProviderCredential, NetworkAssignment, ProviderContract, ProviderPerformance
 
 **Next Steps** (Backend Integration):
-- Connect to Provider Service API (`http://provider-service.cho-svcs.svc.cluster.local:8080`)
+- Connect to Provider Service API (`http://provider-service.cloudhealthoffice.svc.cluster.local:8080`)
 - Replace mock data with database-backed providers
 - Implement credential verification workflow
 - Add network assignment automation

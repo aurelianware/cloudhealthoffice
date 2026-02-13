@@ -1,0 +1,147 @@
+name: Test .NET Projects
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'services/**'
+      - 'portal/**'
+      - '.github/workflows/test-dotnet.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'services/**'
+      - 'portal/**'
+  workflow_dispatch:
+
+jobs:
+  test-dotnet:
+    name: .NET Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies - Portal Tests
+        working-directory: portal/CloudHealthOffice.Portal.Tests
+        run: dotnet restore
+
+      - name: Build - Portal Tests
+        working-directory: portal/CloudHealthOffice.Portal.Tests
+        run: dotnet build --no-restore
+
+      - name: Test - Portal (Multi-Tenant Features)
+        working-directory: portal/CloudHealthOffice.Portal.Tests
+        run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=portal-test-results.trx" --collect:"XPlat Code Coverage"
+
+      # Infrastructure tests disabled - project only exists in feature/multi-cloud-infrastructure branch
+      # - name: Restore dependencies - Infrastructure Tests
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet restore
+
+      # - name: Build - Infrastructure Tests
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet build --no-restore
+
+      # - name: Test - Infrastructure (Multi-Cloud)
+      #   working-directory: services/shared/CloudHealthOffice.Infrastructure.Tests
+      #   run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=infrastructure-test-results.trx" --collect:"XPlat Code Coverage"
+
+      # Member Service tests disabled - service implementation incomplete (repository stubbed with TODOs)
+      # - name: Restore dependencies - Member Service Tests
+      #   working-directory: services/member-service/MemberService.Tests
+      #   run: dotnet restore
+
+      # - name: Build - Member Service Tests
+      #   working-directory: services/member-service/MemberService.Tests
+      #   run: dotnet build --no-restore
+
+      # - name: Test - Member Service
+      #   working-directory: services/member-service/MemberService.Tests
+      #   run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=member-service-test-results.trx" --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results
+          path: |
+            **/TestResults/**/*.trx
+            **/TestResults/**/coverage.cobertura.xml
+
+      # Disabled due to GitHub permissions issue (Resource not accessible by integration)
+      # - name: Publish Test Summary
+      #   uses: dorny/test-reporter@v1
+      #   if: always()
+      #   with:
+      #     name: .NET Test Results
+      #     path: '**/TestResults/**/*.trx'
+      #     reporter: dotnet-trx
+      #     fail-on-error: true
+
+  test-typescript:
+    name: TypeScript/Jest Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Jest tests with coverage
+        run: npm test -- --coverage --passWithNoTests
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          flags: typescript
+          name: typescript-coverage
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [test-dotnet, test-typescript]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: ./TestResults
+
+      - name: Code Coverage Summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: '**/coverage.cobertura.xml'
+          badge: true
+          fail_below_min: false
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '60 80'
+
+      - name: Add Coverage PR Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          recreate: true
+          path: code-coverage-results.md

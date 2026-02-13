@@ -4,7 +4,48 @@ This guide provides step-by-step instructions for deploying the Cloud Health Off
 
 ## 🚀 Quick Start
 
-**New to deployment?** Start here:
+**New users?** Start here:
+
+### Option 1: Self-Service Signup (Recommended - 5 minutes)
+
+The fastest way to get started is through our production portal:
+
+```bash
+# 1. Visit the portal
+open https://portal.cloudhealthoffice.com
+
+# 2. Sign in with Azure AD (any Microsoft account)
+# 3. Select your tier:
+#    - Starter: $499/mo, 10K claims, 14-day trial
+#    - Professional: $1,499/mo, 50K claims, 14-day trial
+#    - Enterprise: Contact Sales for custom pricing
+
+# 4. Enter payment details (Stripe - PCI compliant)
+# 5. Choose modules (EDI, Claims, Provider Network, FHIR)
+# 6. Click "Start Free Trial"
+
+# 7. Access your tenant (auto-provisioned):
+#    - Portal: https://portal.cloudhealthoffice.com
+#    - API: https://api.cloudhealthoffice.com
+#    - Docs: https://docs.cloudhealthoffice.com
+```
+
+**What gets auto-provisioned:**
+- ✅ Cosmos DB tenant partition (`tenantId`)
+- ✅ SFTP credentials for clearinghouse integration
+- ✅ Azure AD application for API access
+- ✅ 14-day trial subscription (Stripe)
+- ✅ Welcome email with credentials
+
+**Enterprise customers:** [Contact Sales](https://portal.cloudhealthoffice.com/contact-sales) for custom SLAs, white-labeling, and dedicated support.
+
+---
+
+### Option 2: Self-Hosted Deployment (Advanced)
+
+For customers requiring on-premise or Azure-hosted deployment:
+
+**New to deployment?** Follow these steps:
 1. **GitHub Actions Setup**: See [GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md) for complete OIDC authentication and secrets configuration
 2. **Secrets & Environment Configuration**: See [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) for detailed secrets setup and validation
 3. **Validate Prerequisites**: Ensure all tools are installed (see [Prerequisites](#prerequisites))
@@ -122,6 +163,198 @@ The deployment identity needs these permissions:
 | User Access Administrator | Resource Group | Assign managed identity roles |
 | Storage Blob Data Contributor | Storage Account | Grant Logic App access |
 | Azure Service Bus Data Sender | Service Bus | Grant Logic App access |
+
+### Portal-Specific Prerequisites (Self-Hosted Only)
+
+If deploying the self-service portal (not needed for SaaS signup):
+
+#### Cosmos DB Setup
+
+Create Cosmos DB account and containers for multi-tenant data:
+
+```bash
+# Set variables
+RESOURCE_GROUP="cloudhealthoffice-prod"
+COSMOS_ACCOUNT="cloudhealthoffice-cosmos"
+DATABASE_NAME="CloudHealthOffice"
+LOCATION="eastus"
+
+# Create Cosmos DB account
+az cosmosdb create \
+  --name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --locations regionName="$LOCATION" failoverPriority=0 isZoneRedundant=False \
+  --default-consistency-level "Session" \
+  --enable-automatic-failover false
+
+# Create database
+az cosmosdb sql database create \
+  --account-name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DATABASE_NAME"
+
+# Create Tenants container (partition key: /tenantId)
+az cosmosdb sql container create \
+  --account-name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name "$DATABASE_NAME" \
+  --name "Tenants" \
+  --partition-key-path "/tenantId" \
+  --throughput 400
+
+# Create Members container (partition key: /id)
+az cosmosdb sql container create \
+  --account-name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name "$DATABASE_NAME" \
+  --name "Members" \
+  --partition-key-path "/id" \
+  --throughput 400
+
+# Create SalesInquiries container (partition key: /id)
+az cosmosdb sql container create \
+  --account-name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name "$DATABASE_NAME" \
+  --name "SalesInquiries" \
+  --partition-key-path "/id" \
+  --throughput 400
+
+# Get connection strings (save for Kubernetes secrets)
+COSMOS_ENDPOINT=$(az cosmosdb show \
+  --name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "documentEndpoint" -o tsv)
+
+COSMOS_KEY=$(az cosmosdb keys list \
+  --name "$COSMOS_ACCOUNT" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "primaryMasterKey" -o tsv)
+
+echo "CosmosDb__Endpoint: $COSMOS_ENDPOINT"
+echo "CosmosDb__Key: $COSMOS_KEY"
+```
+
+**Container Configuration:**
+
+| Container | Partition Key | Throughput | Purpose |
+|-----------|---------------|------------|---------|
+| Tenants | `/tenantId` | 400 RU/s | Multi-tenant isolation, subscription metadata |
+| Members | `/id` | 400 RU/s | User accounts, role assignments |
+| SalesInquiries | `/id` | 400 RU/s | Enterprise contact sales tracking |
+
+#### Stripe Configuration
+
+Set up Stripe for subscription billing:
+
+**1. Create Stripe Account** (if not exists):
+- Sign up at https://stripe.com
+- Complete business verification
+- Enable payment methods (Credit Card, ACH, SEPA)
+
+**2. Create Products and Prices:**
+
+```bash
+# Install Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# Login to Stripe
+stripe login
+
+# Create Starter product
+stripe products create \
+  --name "Cloud Health Office - Starter" \
+  --description "10,000 claims/month, all EDI modules"
+
+# Create Starter price ($499/mo with 14-day trial)
+STARTER_PRICE_ID=$(stripe prices create \
+  --unit-amount 49900 \
+  --currency usd \
+  --recurring[interval]=month \
+  --product=<starter-product-id> \
+  --query id -o tsv)
+
+# Create Professional product
+stripe products create \
+  --name "Cloud Health Office - Professional" \
+  --description "50,000 claims/month, all modules + FHIR + Analytics"
+
+# Create Professional price ($1,499/mo with 14-day trial)
+PROFESSIONAL_PRICE_ID=$(stripe prices create \
+  --unit-amount 149900 \
+  --currency usd \
+  --recurring[interval]=month \
+  --product=<professional-product-id> \
+  --query id -o tsv)
+
+echo "Starter Price ID: $STARTER_PRICE_ID"
+echo "Professional Price ID: $PROFESSIONAL_PRICE_ID"
+```
+
+**3. Get API Keys:**
+
+```bash
+# Test mode (development/staging)
+stripe keys list --test
+
+# Production mode (live environment)
+stripe keys list --live
+```
+
+**4. Configure Kubernetes Secrets:**
+
+```bash
+# Create stripe-api-keys secret
+kubectl create secret generic stripe-api-keys \
+  --namespace cloudhealthoffice \
+  --from-literal=Stripe__PublishableKey="pk_test_..." \
+  --from-literal=Stripe__SecretKey="sk_test_..." \
+  --from-literal=Stripe__Price__Starter="$STARTER_PRICE_ID" \
+  --from-literal=Stripe__Price__Professional="$PROFESSIONAL_PRICE_ID"
+
+# Create cosmos-secret
+kubectl create secret generic cosmos-secret \
+  --namespace cloudhealthoffice \
+  --from-literal=CosmosDb__Endpoint="$COSMOS_ENDPOINT" \
+  --from-literal=CosmosDb__Key="$COSMOS_KEY" \
+  --from-literal=CosmosDb__DatabaseName="CloudHealthOffice" \
+  --from-literal=CosmosDb__TenantsContainer="Tenants" \
+  --from-literal=CosmosDb__MembersContainer="Members" \
+  --from-literal=CosmosDb__SalesInquiriesContainer="SalesInquiries"
+```
+
+**Environment Variables (appsettings.json):**
+
+```json
+{
+  "Stripe": {
+    "PublishableKey": "pk_test_...",
+    "SecretKey": "sk_test_...",
+    "Price": {
+      "Starter": "price_...",
+      "Professional": "price_..."
+    }
+  },
+  "CosmosDb": {
+    "Endpoint": "https://....documents.azure.com:443/",
+    "Key": "...",
+    "DatabaseName": "CloudHealthOffice",
+    "TenantsContainer": "Tenants",
+    "MembersContainer": "Members",
+    "SalesInquiriesContainer": "SalesInquiries"
+  },
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "TenantId": "common",
+    "ClientId": "54f3419d-0d69-4b06-939a-c1a260596556",
+    "CallbackPath": "/signin-oidc"
+  }
+}
+```
+
+**Note**: Use Stripe **test mode** for development/staging, **live mode** for production only.
+
+---
 
 ## GitHub Configuration
 
@@ -593,13 +826,13 @@ kubectl get sensors -n argo-events
 
 ```bash
 # Check portal pods (should use new image)
-kubectl get pods -n cho-svcs -l app=portal
+kubectl get pods -n cloudhealthoffice -l app=portal
 
 # Check service pods
-kubectl get pods -n cho-svcs
+kubectl get pods -n cloudhealthoffice
 
 # Verify image versions
-kubectl get pods -n cho-svcs -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+kubectl get pods -n cloudhealthoffice -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 ```
 
 **For complete 837 claims pipeline documentation**, see [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md).

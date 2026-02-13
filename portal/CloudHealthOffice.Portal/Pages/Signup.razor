@@ -2,19 +2,31 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@using Stripe
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
+@inject ITenantService TenantService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<Signup> Logger
 
 @attribute [AllowAnonymous]
 
 <PageTitle>Sign Up - Cloud Health Office</PageTitle>
 
+<HeadContent>
+    @* Temporarily disabled analytics to debug portal crash
+    <script async src="https://plausible.io/js/pa-DSFLxN3jN3PVX0eGzs8vx.js"></script>
+    *@
+</HeadContent>
+
 <div class="signup-container">
     <div class="signup-card">
         <div class="logo-section">
-            <img src="/images/logo-cloudhealthoffice-sentinel-primary.png" alt="Cloud Health Office" class="signup-logo" />
+            <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="signup-logo" />
             <h1>Cloud Health Office</h1>
             <p class="tagline">Azure-Native Multi-Payer EDI Platform</p>
         </div>
@@ -66,7 +78,7 @@
                     <h2>Subscription Tier</h2>
 
                     <div class="tier-options">
-                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"starter\"">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="@(() => SelectTier("starter"))">
                             <h3>Starter</h3>
                             <p class="price">$499/month</p>
                             <ul>
@@ -76,7 +88,7 @@
                             </ul>
                         </div>
 
-                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"professional\"">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="@(() => SelectTier("professional"))">
                             <h3>Professional</h3>
                             <p class="price">$1,499/month</p>
                             <ul>
@@ -87,15 +99,18 @@
                             </ul>
                         </div>
 
-                        <div class="tier-card @(signupModel.SubscriptionTier == "enterprise" ? "selected" : "")" @onclick="() => signupModel.SubscriptionTier = \"enterprise\"">
+                        <div class="tier-card enterprise-tier">
                             <h3>Enterprise</h3>
-                            <p class="price">Custom</p>
+                            <p class="price">Custom Pricing</p>
                             <ul>
                                 <li>Unlimited claims</li>
                                 <li>Dedicated infrastructure</li>
                                 <li>SLA guarantees</li>
                                 <li>24/7 phone support</li>
                             </ul>
+                            <button type="button" class="btn btn-outline-primary mt-3" @onclick="NavigateToContactSales">
+                                Contact Sales
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -142,6 +157,11 @@
                             <span>First payment:</span>
                             <strong>@GetTrialEndDate()</strong>
                         </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <strong>14-Day Free Trial</strong><br/>
+                        Start using the platform immediately. Your card won't be charged until February 23, 2026.
                     </div>
                 </div>
 
@@ -192,8 +212,6 @@
     </div>
 </div>
 
-<script src="https://js.stripe.com/v3/"></script>
-
 @code {
     private SignupModel signupModel = new();
     private bool isSubmitting = false;
@@ -201,6 +219,8 @@
     private string? errorMessage;
     private string? createdTenantId;
     private string? stripePaymentMethodId;
+    private string? stripeCustomerId;
+    private string? stripeSubscriptionId;
 
     private bool enableClaims = true;
     private bool enableEligibility = true;
@@ -218,35 +238,16 @@
 
     private async Task InitializeStripe()
     {
-        var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
-        
-        await JSRuntime.InvokeVoidAsync("eval", $@"
-            var stripe = Stripe('{stripePublishableKey}');
-            var elements = stripe.elements();
-            var cardElement = elements.create('card', {{
-                style: {{
-                    base: {{
-                        fontSize: '16px',
-                        color: '#333',
-                        '::placeholder': {{ color: '#aab7c4' }}
-                    }},
-                    invalid: {{ color: '#c00' }}
-                }}
-            }});
-            cardElement.mount('#card-element');
-            
-            cardElement.on('change', function(event) {{
-                var displayError = document.getElementById('card-errors');
-                if (event.error) {{
-                    displayError.textContent = event.error.message;
-                }} else {{
-                    displayError.textContent = '';
-                }}
-            }});
-            
-            window.stripeCardElement = cardElement;
-            window.stripe = stripe;
-        ");
+        try
+        {
+            var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
+            await JSRuntime.InvokeVoidAsync("StripeHandler.initialize", stripePublishableKey);
+            Logger.LogInformation("Stripe initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to initialize Stripe");
+        }
     }
 
     private async Task HandleSubmit()
@@ -256,6 +257,18 @@
 
         try
         {
+            // Get authenticated user info
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                             ?? user.FindFirst("tid")?.Value
+                             ?? Guid.NewGuid().ToString(); // Fallback for testing
+            var userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                         ?? user.FindFirst("preferred_username")?.Value
+                         ?? signupModel.Email;
+
+            Logger.LogInformation("Starting signup for user {Email} from Azure Tenant {TenantId}", userEmail, azureTenantId);
+
             // Step 1: Create Stripe payment method
             var paymentMethodResult = await CreateStripePaymentMethod();
             if (!paymentMethodResult.Success)
@@ -266,7 +279,16 @@
             }
             stripePaymentMethodId = paymentMethodResult.PaymentMethodId;
 
-            // Step 2: Prepare tenant data
+            // Step 2: Create Stripe customer and subscription
+            var stripeResult = await CreateStripeSubscription(stripePaymentMethodId!);
+            if (!stripeResult.Success)
+            {
+                errorMessage = stripeResult.Error;
+                isSubmitting = false;
+                return;
+            }
+
+            // Step 3: Create tenant record in Cosmos DB
             var enabledModules = new List<string>();
             if (enableClaims) enabledModules.Add("claims");
             if (enableEligibility) enabledModules.Add("eligibility");
@@ -274,43 +296,32 @@
             if (enableAttachments) enabledModules.Add("attachments");
             if (enableEnrollment) enabledModules.Add("enrollment");
 
-            var request = new
+            var createTenantRequest = new CreateTenantRequest
             {
-                tenantName = signupModel.TenantName,
-                organizationName = signupModel.OrganizationName,
-                subscriptionTier = signupModel.SubscriptionTier,
-                contactInfo = new
-                {
-                    primaryContact = signupModel.ContactName,
-                    email = signupModel.Email,
-                    phone = signupModel.Phone
-                },
-                enabledModules = enabledModules,
-                paymentMethodId = stripePaymentMethodId,
-                billingName = signupModel.BillingName
+                AzureTenantId = azureTenantId,
+                OrganizationName = signupModel.OrganizationName,
+                TenantDisplayName = signupModel.TenantName,
+                Tier = signupModel.SubscriptionTier,
+                AdminEmail = userEmail,
+                StripePaymentMethodId = stripePaymentMethodId,
+                StripeCustomerId = stripeCustomerId,
+                StripeSubscriptionId = stripeSubscriptionId,
+                EnabledModules = enabledModules
             };
 
-            var tenantServiceUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
-            var response = await Http.PostAsJsonAsync($"{tenantServiceUrl}/v1/tenants", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<TenantResponse>();
-                createdTenantId = result?.TenantId;
-                
-                // Trigger Argo workflow for automated provisioning
-                await TriggerOnboardingWorkflow(result?.TenantId, signupModel, enabledModules);
-                
-                submitted = true;
-            }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                errorMessage = $"Failed to create account: {response.StatusCode}. {errorContent}";
-            }
+            createdTenantId = await TenantService.CreateTenantAsync(createTenantRequest);
+            
+            Logger.LogInformation("Successfully created tenant {TenantId} for organization {OrgName}", 
+                createdTenantId, signupModel.OrganizationName);
+            
+            // Step 4: Trigger Argo workflow for automated provisioning
+            await TriggerOnboardingWorkflow(createdTenantId, signupModel, enabledModules);
+            
+            submitted = true;
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Signup error for {Email}", signupModel.Email);
             errorMessage = $"An error occurred: {ex.Message}";
         }
         finally
@@ -323,24 +334,11 @@
     {
         try
         {
-            var result = await JSRuntime.InvokeAsync<string>("eval", $@"
-                (async function() {{
-                    const {{ paymentMethod, error }} = await window.stripe.createPaymentMethod({{
-                        type: 'card',
-                        card: window.stripeCardElement,
-                        billing_details: {{
-                            name: '{signupModel.BillingName}',
-                            email: '{signupModel.Email}'
-                        }}
-                    }});
-                    
-                    if (error) {{
-                        return JSON.stringify({{ success: false, error: error.message }});
-                    }}
-                    
-                    return JSON.stringify({{ success: true, paymentMethodId: paymentMethod.id }});
-                }})()
-            ");
+            Logger.LogInformation("Creating Stripe payment method for {Name} ({Email})", signupModel.BillingName, signupModel.Email);
+            
+            var result = await JSRuntime.InvokeAsync<string>("StripeHandler.createPaymentMethod", 
+                signupModel.BillingName, 
+                signupModel.Email);
 
             var jsonResult = System.Text.Json.JsonDocument.Parse(result);
             var success = jsonResult.RootElement.GetProperty("success").GetBoolean();
@@ -348,18 +346,121 @@
             if (success)
             {
                 var pmId = jsonResult.RootElement.GetProperty("paymentMethodId").GetString();
+                Logger.LogInformation("Payment method created successfully: {PaymentMethodId}", pmId);
                 return (true, pmId, null);
             }
             else
             {
                 var error = jsonResult.RootElement.GetProperty("error").GetString();
+                Logger.LogWarning("Payment method creation failed: {Error}", error);
                 return (false, null, $"Payment card error: {error}");
             }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Payment processing error");
             return (false, null, $"Payment processing error: {ex.Message}");
         }
+    }
+
+    private async Task<(bool Success, string? Error)> CreateStripeSubscription(string paymentMethodId)
+    {
+        try
+        {
+            var stripeSecretKey = Configuration["Stripe:SecretKey"];
+            if (string.IsNullOrEmpty(stripeSecretKey))
+            {
+                Logger.LogError("Stripe secret key not configured");
+                return (false, "Payment system configuration error");
+            }
+
+            StripeConfiguration.ApiKey = stripeSecretKey;
+
+            Logger.LogInformation("Creating Stripe customer for {Email} with payment method {PM}", 
+                signupModel.Email, paymentMethodId);
+
+            // Create Stripe customer
+            var customerService = new CustomerService();
+            var customerOptions = new CustomerCreateOptions
+            {
+                Email = signupModel.Email,
+                Name = signupModel.OrganizationName,
+                PaymentMethod = paymentMethodId,
+                InvoiceSettings = new CustomerInvoiceSettingsOptions
+                {
+                    DefaultPaymentMethod = paymentMethodId
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    { "organization", signupModel.OrganizationName },
+                    { "contact_name", signupModel.ContactName },
+                    { "tier", signupModel.SubscriptionTier }
+                }
+            };
+
+            var customer = await customerService.CreateAsync(customerOptions);
+            Logger.LogInformation("Stripe customer created: {CustomerId}", customer.Id);
+
+            // Get price ID based on tier
+            var priceId = GetStripePriceId(signupModel.SubscriptionTier);
+            
+            // Create subscription with trial
+            var subscriptionService = new SubscriptionService();
+            var subscriptionOptions = new SubscriptionCreateOptions
+            {
+                Customer = customer.Id,
+                Items = new List<SubscriptionItemOptions>
+                {
+                    new SubscriptionItemOptions { Price = priceId }
+                },
+                TrialPeriodDays = 14,
+                Metadata = new Dictionary<string, string>
+                {
+                    { "tier", signupModel.SubscriptionTier },
+                    { "organization", signupModel.OrganizationName }
+                }
+            };
+
+            var subscription = await subscriptionService.CreateAsync(subscriptionOptions);
+            Logger.LogInformation("Stripe subscription created: {SubscriptionId} for customer {CustomerId}", 
+                subscription.Id, customer.Id);
+
+            // Store these IDs - we'll need to update the tenant record
+            stripeCustomerId = customer.Id;
+            stripeSubscriptionId = subscription.Id;
+
+            return (true, null);
+        }
+        catch (StripeException ex)
+        {
+            Logger.LogError(ex, "Stripe API error creating subscription");
+            return (false, $"Payment service error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating Stripe subscription");
+            return (false, $"Failed to create subscription: {ex.Message}");
+        }
+    }
+
+    private string GetStripePriceId(string tier)
+    {
+        var priceId = tier switch
+        {
+            "starter" => Configuration["Stripe:Price:Starter"],
+            "professional" => Configuration["Stripe:Price:Professional"],
+            "enterprise" => Configuration["Stripe:Price:Enterprise"],
+            _ => Configuration["Stripe:Price:Starter"]
+        };
+        
+        Logger.LogInformation("GetStripePriceId for tier {Tier}: {PriceId}", tier, priceId ?? "null");
+        
+        if (string.IsNullOrEmpty(priceId))
+        {
+            throw new InvalidOperationException($"Stripe price ID not configured for tier: {tier}");
+        }
+        
+        return priceId;
     }
 
     private string GetTierName(string tier) => tier switch
@@ -408,6 +509,16 @@
 
         [Required(ErrorMessage = "Billing name is required")]
         public string BillingName { get; set; } = string.Empty;
+    }
+
+    private void SelectTier(string tier)
+    {
+        signupModel.SubscriptionTier = tier;
+    }
+
+    private void NavigateToContactSales()
+    {
+        Navigation.NavigateTo("/contact-sales");
     }
 
     private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)

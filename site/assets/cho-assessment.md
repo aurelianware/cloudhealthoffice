@@ -452,7 +452,7 @@ Organizations that embrace Cloud Health Office will achieve:
 ### Immediate Actions
 
 1. **Schedule Demo**
-   - [Book 30-minute platform walkthrough](https://calendly.com/mark-cloudhealthoffice)
+   - [Contact sales for platform walkthrough](https://portal.cloudhealthoffice.com/contact-sales)
    - Review your specific payer requirements
    - See live deployment demonstration
 

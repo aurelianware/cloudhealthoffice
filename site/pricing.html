@@ -4,10 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Cloud Health Office pricing for health plans running aging systems developed priort to modern regulations. Transparent pricing for FHIR compliance and EDI integration. SaaS or BYOS deployment models." />
-  <meta name="keywords" content="QNXT integration pricing, Facets integration cost, CMS-0057-F compliance cost, FHIR API pricing, health plan EDI costs" />
+  <meta name="keywords" content="payer platform integration pricing, core admin system integration cost, CMS-0057-F compliance cost, FHIR API pricing, health plan EDI costs" />
   <title>Pricing for Health Plans - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
   <style>
     body { padding:40px 20px; max-width:1200px; margin:0 auto; }
     .pricing-hero { text-align:center; margin-bottom:60px; }
@@ -29,7 +30,10 @@
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav style="margin-bottom:40px; text-align:center;">
-    <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
       <li><a href="index.html" style="color:#888;">Home</a></li>
       <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
       <li><a href="pricing.html" style="color:#00ffff;" aria-current="page">Pricing</a></li>
@@ -46,8 +50,71 @@
     <div class="pricing-hero">
       <h1>Pricing for Health Plans</h1>
       <p style="font-size:1.3rem; max-width:800px; margin:20px auto;">
-        Transparent pricing for Core Admin  systen integration and CMS-0057-F compliance.<br>
+        Transparent pricing for Core Admin system integration and CMS-0057-F compliance.<br>
         No hidden fees. Flexible deployment models.
+      </p>
+      <div style="margin-top:30px;">
+        <a href="https://portal.cloudhealthoffice.com" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.1rem; padding:12px 30px;" target="_blank" rel="noopener noreferrer">Start 30-Day Free Trial →</a>
+      </div>
+    </div>
+
+    <!-- Self-Service SaaS Plans (v4.0.0) -->
+    <div style="max-width:1200px; margin:60px auto; padding:40px; background:linear-gradient(135deg, rgba(0,255,255,0.05), rgba(0,255,136,0.05)); border:2px solid #00ffff; border-radius:12px;">
+      <h2 style="text-align:center; margin-bottom:40px; color:#00ffff;">Self-Service SaaS Plans (v4.0.0)</h2>
+      <p style="text-align:center; font-size:1.1rem; margin-bottom:40px;">Live at <a href="https://portal.cloudhealthoffice.com" style="color:#00ff88;" target="_blank" rel="noopener noreferrer">portal.cloudhealthoffice.com</a> • 30-day free trial • Zero vulnerabilities</p>
+      
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:30px;">
+        <!-- Starter -->
+        <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; text-align:center;">
+          <h3 style="color:#00ffff; margin-bottom:20px;">Starter</h3>
+          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">$499<span style="font-size:1rem; opacity:0.7;">/mo</span></div>
+          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
+            <li style="padding:8px 0;">✓ 1-3 payers</li>
+            <li style="padding:8px 0;">✓ 10,000 transactions/mo</li>
+            <li style="padding:8px 0;">✓ 100 GB storage</li>
+            <li style="padding:8px 0;">✓ Email support (4hr SLA)</li>
+            <li style="padding:8px 0;">✓ 99.5% uptime</li>
+            <li style="padding:8px 0;">✓ BAA included</li>
+          </ul>
+          <a href="https://portal.cloudhealthoffice.com" class="button" style="width:100%; margin-top:20px;" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+        </div>
+        
+        <!-- Pro -->
+        <div style="background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; text-align:center; position:relative;">
+          <div style="position:absolute; top:-15px; left:50%; transform:translateX(-50%); background:#00ff88; color:#000; padding:5px 20px; border-radius:20px; font-weight:bold; font-size:0.9rem;">POPULAR</div>
+          <h3 style="color:#00ff88; margin-bottom:20px;">Pro</h3>
+          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">$999<span style="font-size:1rem; opacity:0.7;">/mo</span></div>
+          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
+            <li style="padding:8px 0;">✓ 4-10 payers</li>
+            <li style="padding:8px 0;">✓ 100,000 transactions/mo</li>
+            <li style="padding:8px 0;">✓ 500 GB storage</li>
+            <li style="padding:8px 0;">✓ Email + Slack support (1hr SLA)</li>
+            <li style="padding:8px 0;">✓ 99.9% uptime</li>
+            <li style="padding:8px 0;">✓ Custom workflows (5 max)</li>
+          </ul>
+          <a href="https://portal.cloudhealthoffice.com" class="button" style="width:100%; margin-top:20px; background:#00ff88; border-color:#00ff88;" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+        </div>
+        
+        <!-- Enterprise -->
+        <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; text-align:center;">
+          <h3 style="color:#00ffff; margin-bottom:20px;">Enterprise</h3>
+          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">Custom<span style="font-size:1rem; opacity:0.7; display:block; margin-top:10px;">Contact Sales</span></div>
+          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
+            <li style="padding:8px 0;">✓ Unlimited payers</li>
+            <li style="padding:8px 0;">✓ Unlimited transactions</li>
+            <li style="padding:8px 0;">✓ Unlimited storage</li>
+            <li style="padding:8px 0;">✓ Dedicated CSM (30min SLA)</li>
+            <li style="padding:8px 0;">✓ 99.99% uptime</li>
+            <li style="padding:8px 0;">✓ White-label portal</li>
+            <li style="padding:8px 0;">✓ Custom workflows</li>
+            <li style="padding:8px 0;">✓ On-premise option</li>
+          </ul>
+          <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="width:100%; margin-top:20px;" target="_blank" rel="noopener noreferrer">Contact Sales</a>
+        </div>
+      </div>
+
+      <p style="text-align:center; margin-top:30px; font-size:0.95rem; opacity:0.8;">
+        Overage pricing: $0.05/transaction • $50/TB/month storage • All plans include multi-tenant isolation, zero vulnerabilities, 531 passing tests
       </p>
     </div>
 
@@ -103,7 +170,7 @@
           
           <ul class="tier-features">
             <li>✓ Full implementation services</li>
-            <li>✓ QNXT/Facets integration</li>
+            <li>✓ Core admin system integration</li>
             <li>✓ Team training & enablement</li>
             <li>✓ Documentation & runbooks</li>
             <li>✓ 90-day post-launch support</li>
@@ -166,7 +233,7 @@
     <!-- ROI Comparison -->
     <div class="roi-section">
       <h3 style="color:#00ff88; text-align:center; margin-bottom:20px;">
-        Compare to Traditional QNXT/Facets Upgrade
+        Compare to Traditional Platform Upgrade
       </h3>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:30px; text-align:left;">
         <div>
@@ -210,11 +277,11 @@
 
   <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
     <p>
-      <strong>Cloud Health Office v3.0</strong><br>
+      <strong>Cloud Health Office v4.0.0</strong><br>
       Modern integration platform for health plans running legacy systems developed which were not designed for current regulation.
     </p>
     <p style="opacity:0.8; margin:20px 0;">
-      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
+      Apache 2.0 License • Independent open-source project • Not affiliated with any payer platform or clearinghouse vendors
     </p>
     <p>
       <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •

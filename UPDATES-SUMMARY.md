@@ -33,7 +33,7 @@
 - ✅ Added transparent pricing tables (both markets)
 - ✅ Specific use cases for payers and providers
 - ✅ Production readiness status table
-- ✅ "Augment QNXT/Facets, don't replace" messaging
+- ✅ "Augment legacy platforms, don't replace" messaging
 - ✅ Updated stats: 480+ tests (was 424)
 - ✅ Community/contributing section
 - ✅ Founding Practices program for providers

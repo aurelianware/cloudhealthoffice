@@ -121,7 +121,7 @@ kubectl apply -f portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml
 **Verify services:**
 
 ```bash
-kubectl get svc -n cho-svcs
+kubectl get svc -n cloudhealthoffice
 # site and portal should show TYPE: ClusterIP (not LoadBalancer)
 ```
 
@@ -140,7 +140,7 @@ kubectl apply -f k8s/portal-ingress.yaml
 **Verify ingress:**
 
 ```bash
-kubectl get ingress -n cho-svcs
+kubectl get ingress -n cloudhealthoffice
 # Should show site-ingress and portal-ingress with your domain names
 ```
 
@@ -150,12 +150,12 @@ cert-manager will automatically request TLS certificates from Let's Encrypt:
 
 ```bash
 # Watch certificate requests
-kubectl get certificate -n cho-svcs
-kubectl get certificaterequest -n cho-svcs
+kubectl get certificate -n cloudhealthoffice
+kubectl get certificaterequest -n cloudhealthoffice
 
 # Check certificate details
-kubectl describe certificate site-tls-secret -n cho-svcs
-kubectl describe certificate portal-tls-secret -n cho-svcs
+kubectl describe certificate site-tls-secret -n cloudhealthoffice
+kubectl describe certificate portal-tls-secret -n cloudhealthoffice
 
 # View cert-manager logs
 kubectl logs -n cert-manager -l app=cert-manager -f
@@ -227,7 +227,7 @@ If certificates remain in "Issuing" state for more than 5 minutes:
 
 ```bash
 # Check certificate request details
-kubectl describe certificaterequest -n cho-svcs
+kubectl describe certificaterequest -n cloudhealthoffice
 
 # Check cert-manager logs for errors
 kubectl logs -n cert-manager -l app=cert-manager --tail=100
@@ -255,7 +255,7 @@ cert-manager.io/cluster-issuer: letsencrypt-staging
 
 ```bash
 # Check ingress annotations
-kubectl get ingress site-ingress -n cho-svcs -o yaml
+kubectl get ingress site-ingress -n cloudhealthoffice -o yaml
 
 # Verify these annotations are present:
 # nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -268,16 +268,16 @@ This indicates the backend service is unreachable:
 
 ```bash
 # Check pod status
-kubectl get pods -n cho-svcs -l app=site
-kubectl get pods -n cho-svcs -l app=portal
+kubectl get pods -n cloudhealthoffice -l app=site
+kubectl get pods -n cloudhealthoffice -l app=portal
 
 # Check service endpoints
-kubectl get endpoints -n cho-svcs site
-kubectl get endpoints -n cho-svcs portal
+kubectl get endpoints -n cloudhealthoffice site
+kubectl get endpoints -n cloudhealthoffice portal
 
 # View pod logs
-kubectl logs -n cho-svcs -l app=site
-kubectl logs -n cho-svcs -l app=portal
+kubectl logs -n cloudhealthoffice -l app=site
+kubectl logs -n cloudhealthoffice -l app=portal
 ```
 
 ### Certificate Renewal
@@ -287,12 +287,12 @@ Let's Encrypt certificates are valid for 90 days. cert-manager automatically ren
 **Check renewal status:**
 
 ```bash
-kubectl get certificate -n cho-svcs
+kubectl get certificate -n cloudhealthoffice
 # Check NOT AFTER column for expiration date
 
 # Force renewal (if needed)
-kubectl delete secret site-tls-secret -n cho-svcs
-kubectl delete certificate site-tls-secret -n cho-svcs
+kubectl delete secret site-tls-secret -n cloudhealthoffice
+kubectl delete certificate site-tls-secret -n cloudhealthoffice
 kubectl apply -f k8s/site-ingress.yaml
 ```
 
@@ -377,12 +377,12 @@ kubectl port-forward -n cert-manager svc/cert-manager 9402:9402
 
 **Check ingress status:**
 ```bash
-kubectl get ingress -n cho-svcs
+kubectl get ingress -n cloudhealthoffice
 ```
 
 **Check certificates:**
 ```bash
-kubectl get certificate -n cho-svcs
+kubectl get certificate -n cloudhealthoffice
 ```
 
 **View ingress controller logs:**

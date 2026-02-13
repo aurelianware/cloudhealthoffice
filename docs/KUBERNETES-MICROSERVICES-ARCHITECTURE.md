@@ -90,8 +90,8 @@ All components running in AKS cluster aligned with HIPAA X12 transaction flows:
 │               │                                │                  │   │
 │  ┌────────────▼───────────┐  ┌────────────────▼──────┐  ┌───────▼───────┐
 │  │  Eligibility Service   │  │  Benefit Config      │  │  Provider     │ │
-│  │  Namespace: cho-svcs   │  │  Namespace: cho-svcs │  │  Directory    │ │
-│  │  ────────────────────  │  │  ──────────────────  │  │  cho-svcs     │ │
+│  │  Namespace: cloudhealthoffice   │  │  Namespace: cloudhealthoffice │  │  Directory    │ │
+│  │  ────────────────────  │  │  ──────────────────  │  │  cloudhealthoffice     │ │
 │  │  • X12 270/271         │  │  • Plan management   │  │  ────────────  │ │
 │  │  • FHIR Coverage...    │  │  • Benefit rules     │  │  • NPI lookup │ │
 │  │  • Cosmos DB cache     │  │  • Copay/deductible  │  │  • CAQH sync  │ │
@@ -101,7 +101,7 @@ All components running in AKS cluster aligned with HIPAA X12 transaction flows:
 │                                                                          │
 │  ┌─────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐ │
 │  │  Reference Data     │  │  Claims Scrubbing    │  │  Portal Backend │ │
-│  │  Namespace: cho-svcs│  │  Namespace: cho-svcs │  │  cho-svcs       │ │
+│  │  Namespace: cloudhealthoffice│  │  Namespace: cloudhealthoffice │  │  cloudhealthoffice       │ │
 │  │  ─────────────────  │  │  ──────────────────  │  │  ───────────    │ │
 │  │  • CPT codes        │  │  • NCCI edits        │  │  • User mgmt    │ │
 │  │  • HCPCS codes      │  │  • DRG validation    │  │  • Dashboards   │ │
@@ -171,7 +171,7 @@ All components running in AKS cluster aligned with HIPAA X12 transaction flows:
 
 ```yaml
 cho-portal      # Frontend + API Gateway
-cho-svcs        # Core microservices
+cloudhealthoffice        # Core microservices
 cho-workflows   # EDI batch jobs (existing)
 cho-sftp        # SFTP server (existing)
 cho-monitoring  # Prometheus, Grafana
@@ -482,7 +482,7 @@ PUT    /api/v1/settings                 # Update settings
 ## Deployment Strategy
 
 ### Phase 1: Infrastructure Setup (Week 1)
-- [ ] Create new namespaces (cho-portal, cho-svcs)
+- [ ] Create new namespaces (cho-portal, cloudhealthoffice)
 - [ ] Deploy Dapr runtime
 - [ ] Deploy NGINX Ingress Controller
 - [ ] Configure Azure AD B2C/Entra ID

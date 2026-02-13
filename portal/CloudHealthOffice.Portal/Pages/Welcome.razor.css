@@ -1,383 +1,105 @@
-.welcome-container {
-    min-height: 100vh;
-    background: #000000;
-    color: #ffffff;
-}
-
+/* Hero Section - Sentinel Branding */
 .hero {
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #000000 100%);
-    padding: 6rem 2rem;
+    background: #000000;
+    background-image: 
+        radial-gradient(circle at 20% 50%, rgba(0, 255, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255, 0, 255, 0.03) 0%, transparent 50%);
+    color: white;
+    padding: 5rem 2rem;
     text-align: center;
-    border-bottom: 1px solid #333;
-}
-
-.hero-content {
-    max-width: 900px;
-    margin: 0 auto;
 }
 
 .hero-logo {
     max-width: 250px;
     margin-bottom: 2rem;
-    filter: drop-shadow(0 0 30px rgba(0, 212, 255, 0.5));
+    filter: drop-shadow(0 0 30px rgba(0, 255, 255, 0.5));
 }
 
-.hero h1 {
-    font-size: 4rem;
-    font-weight: 700;
-    margin-bottom: 1rem;
-    background: linear-gradient(135deg, #ffffff 0%, #00d4ff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.hero-tagline {
-    font-size: 1.8rem;
+.hero .display-4 {
+    font-weight: bold;
     margin-bottom: 1.5rem;
-    color: #00d4ff;
-    font-weight: 600;
+    color: #00ffff;
+    text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
 }
 
-.hero-description {
-    font-size: 1.2rem;
-    line-height: 1.8;
-    margin-bottom: 3rem;
-    color: #b0b0b0;
-    max-width: 700px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.hero-cta {
-    display: flex;
-    gap: 1.5rem;
-    justify-content: center;
+.hero .lead {
+    font-size: 1.5rem;
     margin-bottom: 2rem;
-    flex-wrap: wrap;
+    color: #b0b0b0;
 }
 
-.btn {
-    padding: 1rem 2.5rem;
-    border-radius: 8px;
-    font-size: 1.1rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.3s;
-    display: inline-block;
-}
-
-.btn-primary-large {
-    background: linear-gradient(135deg, #00d4ff 0%, #0088cc 100%);
-    color: #ffffff;
-    border: none;
-}
-
-.btn-primary-large:hover {
-    background: linear-gradient(135deg, #00e0ff 0%, #0099dd 100%);
-    transform: translateY(-3px);
-    box-shadow: 0 10px 30px rgba(0, 212, 255, 0.4);
-}
-
-.btn-secondary-large {
-    background: transparent;
-    color: #ffffff;
-    border: 2px solid #ffffff;
-}
-
-.btn-secondary-large:hover {
-    background: #ffffff;
-    color: #000000;
-}
-
-.hero-note {
-    font-size: 0.95rem;
-    color: #00d4ff;
-}
-
-.features {
-    padding: 6rem 2rem;
-    background: #0a0a0a;
-}
-
-.features-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.features h2 {
-    text-align: center;
-    font-size: 2.5rem;
-    margin-bottom: 4rem;
-    color: #ffffff;
-}
-
-.feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-}
-
-.feature-card {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 2.5rem;
-    transition: all 0.3s;
-}
-
-.feature-card:hover {
-    border-color: #00d4ff;
-    transform: translateY(-5px);
-    box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
-}
-
+/* Feature Icons */
 .feature-icon {
     font-size: 3rem;
-    margin-bottom: 1.5rem;
-}
-
-.feature-card h3 {
-    font-size: 1.5rem;
     margin-bottom: 1rem;
-    color: #00d4ff;
 }
 
-.feature-card p {
-    color: #b0b0b0;
-    line-height: 1.6;
-}
-
-.pricing {
-    padding: 6rem 2rem;
-    background: #000000;
-}
-
-.pricing-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.pricing h2 {
-    text-align: center;
-    font-size: 2.5rem;
-    margin-bottom: 4rem;
-    color: #ffffff;
-}
-
-.pricing-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-}
-
-.pricing-card {
-    background: #1a1a1a;
-    border: 2px solid #333;
-    border-radius: 12px;
-    padding: 3rem 2rem;
-    text-align: center;
-    position: relative;
-}
-
-.pricing-card.featured {
-    border-color: #00d4ff;
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-}
-
-.badge {
-    position: absolute;
-    top: -15px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #00d4ff;
-    color: #000000;
-    padding: 0.5rem 1.5rem;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 0.85rem;
-}
-
-.pricing-card h3 {
-    font-size: 1.8rem;
-    margin-bottom: 1rem;
-    color: #ffffff;
-}
-
-.pricing-card .price {
-    font-size: 3rem;
-    font-weight: 700;
-    color: #00d4ff;
-    margin-bottom: 2rem;
-}
-
-.pricing-card .price span {
-    font-size: 1.2rem;
-    color: #b0b0b0;
-}
-
-.pricing-card ul {
-    list-style: none;
-    padding: 0;
-    margin-bottom: 2.5rem;
-    text-align: left;
-}
-
-.pricing-card ul li {
-    padding: 0.75rem 0;
-    color: #b0b0b0;
-    border-bottom: 1px solid #333;
-}
-
-.pricing-card ul li:before {
-    content: "✓ ";
-    color: #00d4ff;
-    font-weight: bold;
-    margin-right: 0.75rem;
-}
-
-.btn-outline {
-    background: transparent;
-    color: #00d4ff;
-    border: 2px solid #00d4ff;
-}
-
-.btn-outline:hover {
-    background: #00d4ff;
-    color: #000000;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #00d4ff 0%, #0088cc 100%);
-    color: #ffffff;
-    border: none;
-}
-
-.btn-primary:hover {
-    background: linear-gradient(135deg, #00e0ff 0%, #0099dd 100%);
-}
-
-.case-studies {
-    padding: 6rem 2rem;
+/* Testimonials - Sentinel Branding */
+.testimonial {
+    padding: 2rem;
     background: #0a0a0a;
-}
-
-.case-studies-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.case-studies h2 {
-    text-align: center;
-    font-size: 2.5rem;
-    margin-bottom: 4rem;
-    color: #ffffff;
-}
-
-.case-study-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2.5rem;
-}
-
-.case-study {
-    background: #1a1a1a;
-    border-left: 4px solid #00d4ff;
-    padding: 2.5rem;
+    border: 1px solid #00ffff;
     border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+    height: 100%;
 }
 
-.case-study .quote {
-    font-size: 1.2rem;
+.testimonial p:first-child {
     font-style: italic;
-    color: #ffffff;
-    margin-bottom: 1.5rem;
-    line-height: 1.7;
+    color: #b0b0b0;
+    margin-bottom: 1rem;
 }
 
-.case-study .author {
-    color: #00d4ff;
+.testimonial strong {
+    color: #00ff88;
+}
+
+/* Signup Section - Sentinel Branding */
+.signup-section {
+    background: #0a0a0a;
+    padding: 4rem 2rem;
+}
+
+.signup-section h2 {
+    color: #00ffff;
+    text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+}
+
+.signup-section p {
+    color: #b0b0b0;
+}
+
+.signup-section .form-label {
     font-weight: 600;
+    color: #b0b0b0;
 }
 
-.cta {
-    padding: 6rem 2rem;
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-    text-align: center;
-}
-
-.cta-content {
-    max-width: 700px;
-    margin: 0 auto;
-}
-
-.cta h2 {
-    font-size: 2.5rem;
-    margin-bottom: 1.5rem;
+.signup-section .form-control,
+.signup-section .form-select {
+    background: #0f0f0f;
+    border: 1px solid #00ffff;
     color: #ffffff;
 }
 
-.cta p {
-    font-size: 1.2rem;
-    color: #b0b0b0;
-    margin-bottom: 3rem;
+.signup-section .form-control:focus,
+.signup-section .form-select:focus {
+    background: #0f0f0f;
+    border-color: #00ff88;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+    color: #ffffff;
 }
 
-.welcome-footer {
-    padding: 3rem 2rem;
-    background: #000000;
-    border-top: 1px solid #333;
-}
-
-.footer-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    text-align: center;
-}
-
-.footer-links {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-}
-
-.footer-links a {
-    color: #b0b0b0;
-    text-decoration: none;
-    transition: color 0.3s;
-}
-
-.footer-links a:hover {
-    color: #00d4ff;
-}
-
-.copyright {
-    color: #666;
-    font-size: 0.9rem;
-}
-
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .hero h1 {
-        font-size: 2.5rem;
+    .hero {
+        padding: 3rem 1rem;
     }
-
-    .hero-tagline {
-        font-size: 1.3rem;
+    
+    .hero .display-4 {
+        font-size: 2rem;
     }
-
-    .hero-description {
-        font-size: 1rem;
-    }
-
-    .hero-cta {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .btn {
-        width: 100%;
-        max-width: 300px;
+    
+    .hero .lead {
+        font-size: 1.2rem;
     }
 }

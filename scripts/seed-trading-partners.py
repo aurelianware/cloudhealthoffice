@@ -230,7 +230,7 @@ def main():
 
     if successful > 0:
         print("Verify with:")
-        print(f"  kubectl -n cho-svcs port-forward svc/trading-partner-service 8080:80")
+        print(f"  kubectl -n cloudhealthoffice port-forward svc/trading-partner-service 8080:80")
         print(f"  curl http://localhost:8080/api/TradingPartners/tenant/bcbs-florida")
         print()
 

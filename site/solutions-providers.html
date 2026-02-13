@@ -8,12 +8,16 @@
   <title>Additional Solutions Coming Soon - Cloud Health Office</title>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
 </head>
 <body style="text-align:center; padding:100px 20px;">
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav style="margin-bottom:40px;">
-    <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
       <li><a href="index.html" style="color:#888;">Home</a></li>
       <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
       <li><a href="pricing.html" style="color:#888;">Pricing</a></li>
@@ -50,7 +54,7 @@
       Modern integration platform for health plans running legacy platforms not designerd current regulations.
     </p>
     <p style="opacity:0.8; margin:20px 0;">
-      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
+      Apache 2.0 License • Independent open-source project • Not affiliated with any payer platform or clearinghouse vendors
     </p>
     <p>
       <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
