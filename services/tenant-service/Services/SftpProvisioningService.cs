@@ -64,6 +64,20 @@ public class SftpProvisioningService : ISftpProvisioningService
                 return result;
             }
 
+            // Validate environment names to prevent command injection
+            // Only allow alphanumeric characters, hyphens, and underscores
+            var validEnvironmentPattern = new System.Text.RegularExpressions.Regex("^[a-zA-Z0-9_-]+$");
+            foreach (var env in environments)
+            {
+                if (!validEnvironmentPattern.IsMatch(env))
+                {
+                    result.Success = false;
+                    result.Error = $"Invalid environment name: {env}. Only alphanumeric characters, hyphens, and underscores are allowed.";
+                    _logger.LogError(result.Error);
+                    return result;
+                }
+            }
+
             // Build arguments
             var keyVault = keyVaultName ?? _configuration["Azure:KeyVault:Name"] ?? "cho-keyvault-prod";
             var environmentsArg = string.Join(",", environments);
@@ -79,7 +93,7 @@ public class SftpProvisioningService : ISftpProvisioningService
             };
 
             // Execute script
-            var processResult = await ExecuteBashScriptAsync(scriptPath, scriptArguments);
+            var processResult = await ExecuteScriptAsync(scriptPath, scriptArguments);
             
             result.Success = processResult.ExitCode == 0;
             result.Output = processResult.Output;
@@ -120,7 +134,7 @@ public class SftpProvisioningService : ISftpProvisioningService
         }
     }
 
-    private async Task<ProcessExecutionResult> ExecuteBashScriptAsync(string scriptPath, IEnumerable<string> arguments)
+    private async Task<ProcessExecutionResult> ExecuteScriptAsync(string scriptPath, IEnumerable<string> arguments)
     {
         var result = new ProcessExecutionResult();
         var outputBuilder = new StringBuilder();
@@ -136,12 +150,12 @@ public class SftpProvisioningService : ISftpProvisioningService
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
+            };
+
             foreach (var arg in arguments)
             {
                 processInfo.ArgumentList.Add(arg);
             }
-
-            };
 
             using var process = new Process { StartInfo = processInfo };
             
@@ -189,7 +203,7 @@ public class SftpProvisioningService : ISftpProvisioningService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute bash script: {ScriptPath}", scriptPath);
+            _logger.LogError(ex, "Failed to execute script: {ScriptPath}", scriptPath);
             result.ExitCode = -1;
             result.Error = ex.Message;
             return result;
