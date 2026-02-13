@@ -20,7 +20,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: managed-csi # Azure AKS default storage class
+  storageClassName: do-block-storage # Digital Ocean storage class
 ---
 apiVersion: v1
 kind: Secret
@@ -191,7 +191,15 @@ spec:
         - /bin/sh
         - -c
         - |
-          apk add --no-cache openssh-keygen
+          # Install deps including kubectl via curl
+          apk add --no-cache openssh-keygen curl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+          # Clean old keys if any
+          rm -f /keys/ssh_host_*
+
+          # Generate new keys
           ssh-keygen -t rsa -b 4096 -f /keys/ssh_host_rsa_key -N ""
           ssh-keygen -t ed25519 -f /keys/ssh_host_ed25519_key -N ""
           

@@ -20,7 +20,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: x12-270-ingest
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: x12-270-ingest
     app.kubernetes.io/component: edi-processing
