@@ -3,14 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Cloud Health Office - Modern integration layer for QNXT/Facets health plans. CMS-0057-F FHIR compliance without $2M+ upgrades. Built by former QNXT architects. Deploy in <1 hour." />
-  <meta name="keywords" content="QNXT integration, Facets integration, CMS-0057-F compliance, FHIR R4 payer API, health plan EDI, Medicaid MCO, Medicare Advantage, clearinghouse integration, Azure Logic Apps" />
+  <meta name="description" content="Cloud Health Office - Your low-risk way out of legacy vendor lock-in. Start with EDI integration, build leverage, then choose your timeline. Kubernetes + Argo + <500ms claims. Freedom you didn't have before." />
+  <meta name="keywords" content="cloud-native payer platform, Kubernetes healthcare, Argo Workflows, claims adjudication platform, modern core admin system, CMS-0057-F compliance, FHIR R4 payer API, Medicaid MCO, Medicare Advantage, multi-tenant SaaS" />
   <title>Cloud Health Office - Integration Platform for Health Plans</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
   <style>
     /* Page-specific overrides for homepage layout */
     body { text-align:center; padding:40px; }
@@ -42,7 +43,7 @@
     <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
       ☰
     </button>
-    <ul style="list-style:none; padding:0; display:flex; justify-content:center; gap:30px; flex-wrap:wrap;" id="mainNav">
+    <ul id="mainNav">
       <li><a href="index.html" style="color:#00ffff;" aria-current="page">Home</a></li>
       <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
       <li><a href="pricing.html" style="color:#888;">Pricing</a></li>
@@ -53,48 +54,22 @@
     </ul>
   </nav>
   <script>
-    // Mobile menu toggle
     document.addEventListener('DOMContentLoaded', () => {
-      const menuToggle = document.getElementById('mobileMenuToggle');
-      const mainNav = document.getElementById('mainNav');
-      
-      if (menuToggle && mainNav) {
-        menuToggle.addEventListener('click', () => {
-          const isOpen = mainNav.classList.toggle('mobile-menu-open');
-          menuToggle.setAttribute('aria-expanded', isOpen);
-          menuToggle.textContent = isOpen ? '✕' : '☰';
-        });
-        
-        // Close menu when clicking a link
-        mainNav.querySelectorAll('a').forEach(link => {
-          link.addEventListener('click', () => {
-            mainNav.classList.remove('mobile-menu-open');
-            menuToggle.setAttribute('aria-expanded', 'false');
-            menuToggle.textContent = '☰';
-          });
-        });
-        
-        // Close menu when clicking outside
-        document.addEventListener('click', (e) => {
-          if (!e.target.closest('nav')) {
-            mainNav.classList.remove('mobile-menu-open');
-            menuToggle.setAttribute('aria-expanded', 'false');
-            menuToggle.textContent = '☰';
-          }
-        });
-      }
-      
       // Update navigation with auth status
       updateNavigation('#mainNav');
     });
   </script>
 
   <main id="main-content">
-  <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:400px;">
+  <img src="/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:400px; height:auto; display:block; margin:20px auto 40px auto;">
   
-  <div class="version-badge">v3.0 Production Ready • v4.0 Coming Q2 2026</div>
+  <div class="version-badge">v4.0.0 Production SaaS • Zero Vulnerabilities • 531 Tests Passing</div>
   
   <h1>Modern Integration Layer for Health Plans</h1>
+  
+  <div style="background: linear-gradient(135deg, rgba(0,255,255,0.1), rgba(255,0,255,0.1)); border: 1px solid rgba(0,255,255,0.3); border-radius: 8px; padding: 16px; margin: 24px auto; max-width:900px; text-align: center;">
+    <strong style="color: #00ffff;">🚀 24,000+ clones in 2 weeks</strong> • <strong style="color: #ff00ff;">⚡ Production SaaS live</strong> • <strong style="color: #00ff00;">🌐 Multi-tenant at scale</strong>
+  </div>
   
   <p style="font-size:1.5rem; max-width:900px; margin:20px auto;">
     Avoid $2M+ upgrades. Achieve CMS-0057-F compliance.<br>
@@ -112,16 +87,16 @@
   </div>
   
   <div style="margin:40px 0;">
-    <a href="#schedule-demo" class="button" style="font-size:1.2rem; padding:15px 40px;">Schedule Technical Demo</a>
+    <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="font-size:1.2rem; padding:15px 40px;">Contact Sales</a>
     <a href="https://portal.cloudhealthoffice.com" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.2rem; padding:15px 40px;" target="_blank" rel="noopener noreferrer">Launch Demo Portal →</a>
     <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.2rem; padding:15px 40px;" target="_blank" rel="noopener noreferrer">View Source Code →</a>
   </div>
   
   <div class="stats-row">
-    <div class="stat"><strong>82%</strong><span>cost reduction vs traditional upgrades</span></div>
+    <div class="stat"><strong>24K+</strong><span>clones in 2 weeks</span></div>
+    <div class="stat"><strong>0</strong><span>security vulnerabilities</span></div>
     <div class="stat"><strong>&lt;1 hour</strong><span>production deployment</span></div>
-    <div class="stat"><strong>480+</strong><span>tests, 100% pass rate</span></div>
-    <div class="stat"><strong>Apache 2.0</strong><span>open source</span></div>
+    <div class="stat"><strong>531</strong><span>tests, 85.93% coverage</span></div>
   </div>
 
   <!-- CMS-0057-F Compliance Announcement -->
@@ -140,7 +115,7 @@
     </div>
     <p>
       Transform X12 EDI (270/837/278/835) to FHIR R4 with zero external dependencies.<br>
-      <strong>480 comprehensive tests. 100% pass rate. Production-ready v3.0.</strong>
+      <strong>531 comprehensive tests. 85.93% coverage. Production-ready v4.0.0.</strong>
     </p>
     <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" class="button" style="background:#00ff88; border-color:#00ff88; margin-top:20px;" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a>
   </div>
@@ -238,7 +213,7 @@
     </p>
   </div>
 
-  <!-- Final CTA with Calendly -->
+  <!-- Final CTA -->
   <div style="background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%); border:2px solid #00ffff; border-radius:12px; padding:50px 30px; margin:60px auto; max-width:900px; text-align:center;" id="schedule-demo">
     <h2 style="color:#00ffff; margin-top:0;">Ready to Modernize Your Integration?</h2>
     <p style="font-size:1.2rem; margin:20px 0;">
@@ -248,22 +223,26 @@
       Medicaid MCOs, Medicare Advantage, and commercial payers with on-premise core systems.
     </p>
     
-    <!-- Calendly inline widget -->
-    <div class="calendly-inline-widget" 
-         data-url="https://calendly.com/mark-cloudhealthoffice?background_color=020202&text_color=00fc54&primary_color=25ff0d" 
-         style="min-width:320px;height:700px;margin:20px auto;"></div>
-    <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
+    <div style="margin-top:30px;">
+      <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="background:#00ffff; color:#000; border-color:#00ffff; font-size:1.3rem; padding:18px 50px; margin:0 10px 10px 10px;">Contact Sales →</a>
+      <a href="https://portal.cloudhealthoffice.com/signup" class="button" style="font-size:1.3rem; padding:18px 50px; margin:0 10px 10px 10px;">Start Free Trial →</a>
+    </div>
+    
+    <p style="margin-top:30px; font-size:0.95rem; opacity:0.8;">
+      Questions? Email us at <a href="mailto:sales@cloudhealthoffice.com" style="color:#00ff88;">sales@cloudhealthoffice.com</a>
+    </p>
   </div>
   
   </main>
 
   <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
     <p>
-      <strong>Cloud Health Office v3.0</strong><br>
+      <strong>Cloud Health Office v4.0.0</strong><br>
       Modern integration platform for payer core administration systems
     </p>
     <p style="opacity:0.8; margin:20px 0;">
-      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
+      Apache 2.0 License • Independent open-source project • Not affiliated with any payer platform or clearinghouse vendors<br/>
+      <a href="mailto:partners@cloudhealthoffice.com">Partner Program</a> • <a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a> • <a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a> • <a href="mailto:investors@cloudhealthoffice.com">Investors</a>
     </p>
     <p>
       <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •

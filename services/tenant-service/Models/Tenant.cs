@@ -137,6 +137,12 @@ public class TenantConfiguration
     [JsonPropertyName("environment")]
     public string Environment { get; set; } = "production"; // dev, uat, production
 
+    [JsonPropertyName("sftpProvisioned")]
+    public bool SftpProvisioned { get; set; } = false;
+
+    [JsonPropertyName("sftpEnvironments")]
+    public List<string> SftpEnvironments { get; set; } = new(); // prod, preprod, dev
+
     [JsonPropertyName("clearinghouseConfig")]
     public ClearinghouseConfig? Clearinghouse { get; set; }
 
@@ -228,6 +234,8 @@ public class CreateTenantRequest
     public ContactInfo ContactInfo { get; set; } = new();
 
     public List<string>? EnabledModules { get; set; }
+
+    public List<string>? Environments { get; set; } // prod, preprod, dev
 
     public ClearinghouseConfig? Clearinghouse { get; set; }
 }

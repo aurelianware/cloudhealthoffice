@@ -8,11 +8,16 @@ public class TenantManagementService : ITenantService
 {
     private readonly ITenantRepository _repository;
     private readonly ILogger<TenantManagementService> _logger;
+    private readonly ISftpProvisioningService _sftpProvisioning;
 
-    public TenantManagementService(ITenantRepository repository, ILogger<TenantManagementService> logger)
+    public TenantManagementService(
+        ITenantRepository repository, 
+        ILogger<TenantManagementService> logger,
+        ISftpProvisioningService sftpProvisioning)
     {
         _repository = repository;
         _logger = logger;
+        _sftpProvisioning = sftpProvisioning;
     }
 
     public async Task<Tenant> CreateTenantAsync(CreateTenantRequest request)
@@ -43,6 +48,44 @@ public class TenantManagementService : ITenantService
 
         var created = await _repository.CreateAsync(tenant);
         _logger.LogInformation("Created tenant {TenantId} for {OrganizationName}", tenantId, request.OrganizationName);
+
+        // Provision SFTP access with multi-environment support
+        var environments = request.Environments ?? new List<string> { "prod" };
+        _logger.LogInformation("Provisioning SFTP for tenant {TenantId} with environments: {Environments}", 
+            tenantId, string.Join(",", environments));
+        
+        try
+        {
+            var provisioningResult = await _sftpProvisioning.ProvisionTenantSftpAsync(
+                tenantId, 
+                request.OrganizationName, 
+                environments);
+
+            if (provisioningResult.Success)
+            {
+                _logger.LogInformation("SFTP provisioned successfully for tenant {TenantId}", tenantId);
+                
+                // Store SFTP metadata in tenant configuration
+                created.Configuration.SftpProvisioned = true;
+                created.Configuration.SftpEnvironments = environments;
+                await _repository.UpdateAsync(created);
+            }
+            else
+            {
+                _logger.LogError("SFTP provisioning failed for tenant {TenantId}: {Error}", 
+                    tenantId, provisioningResult.Error);
+                // Don't fail tenant creation, but log for manual followup
+                created.Status = "pending-sftp";
+                await _repository.UpdateAsync(created);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception during SFTP provisioning for tenant {TenantId}", tenantId);
+            // Don't fail tenant creation, mark for manual provisioning
+            created.Status = "pending-sftp";
+            await _repository.UpdateAsync(created);
+        }
 
         return created;
     }

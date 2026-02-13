@@ -7,11 +7,13 @@ echo ""
 
 # Check arguments
 if [ $# -lt 2 ]; then
-  echo "Usage: $0 <tenant-id> <tenant-name> [key-vault-name]"
+  echo "Usage: $0 <tenant-id> <tenant-name> [key-vault-name] [--environments prod,preprod,dev]"
   echo ""
   echo "Examples:"
   echo "  $0 bcbs-florida 'Blue Cross Blue Shield of Florida'"
   echo "  $0 aetna 'Aetna Health Plans' cho-keyvault-prod"
+  echo "  $0 cigna 'Cigna HealthSpring' cho-keyvault-prod --environments prod,preprod,dev"
+  echo "  $0 humana 'Humana' cho-keyvault-prod --environments prod,preprod"
   echo ""
   exit 1
 fi
@@ -19,8 +21,24 @@ fi
 TENANT_ID="$1"
 TENANT_NAME="$2"
 KEY_VAULT="${3:-cho-keyvault-prod}"
+ENVIRONMENTS="prod"  # Default to production only
 NAMESPACE="cho-sftp"
 SECRET_NAME="sftp-tenant-users"
+
+# Parse optional --environments flag
+shift 2  # Remove first two args
+shift || true  # Remove key vault arg if present
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --environments)
+      ENVIRONMENTS="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 # Validate tenant ID format (lowercase, alphanumeric, hyphens only)
 if [[ ! "$TENANT_ID" =~ ^[a-z0-9-]+$ ]]; then
@@ -34,6 +52,7 @@ echo "Tenant Configuration:"
 echo "  Tenant ID: ${TENANT_ID}"
 echo "  Tenant Name: ${TENANT_NAME}"
 echo "  Key Vault: ${KEY_VAULT}"
+echo "  Environments: ${ENVIRONMENTS}"
 echo ""
 
 # Check if tenant already exists
@@ -105,24 +124,36 @@ if [ -z "$SFTP_POD" ]; then
 else
   echo "   Pod: ${SFTP_POD}"
   
-  # Create tenant home directory only (trading partners added separately)
+  # Create tenant home directory with environment subdirectories
+  IFS=',' read -ra ENV_ARRAY <<< "$ENVIRONMENTS"
+  for ENV in "${ENV_ARRAY[@]}"; do
+    ENV=$(echo "$ENV" | xargs)  # Trim whitespace
+    echo "   Creating environment: ${ENV}"
+    
+    kubectl -n ${NAMESPACE} exec ${SFTP_POD} -- bash -c "
+      set -e
+      
+      # Create environment directory
+      mkdir -p /home/tenants/${TENANT_ID}/${ENV}
+      
+      # Set ownership
+      chown ${NEXT_UID}:${NEXT_GID} /home/tenants/${TENANT_ID}/${ENV}
+      
+      # Set permissions
+      chmod 750 /home/tenants/${TENANT_ID}/${ENV}
+    "
+  done
+  
+  # Create base tenant directory and set ownership
   kubectl -n ${NAMESPACE} exec ${SFTP_POD} -- bash -c "
     set -e
-    
-    # Create base tenant directory
-    mkdir -p /home/tenants/${TENANT_ID}
-    
-    # Set ownership
     chown ${NEXT_UID}:${NEXT_GID} /home/tenants/${TENANT_ID}
-    
-    # Set permissions
     chmod 750 /home/tenants/${TENANT_ID}
-    
-    # List structure
     ls -lah /home/tenants/${TENANT_ID}
   "
   
-  echo "✅ Tenant home directory created"
+  echo "✅ Tenant directory structure created"
+  echo "   Environments: ${ENVIRONMENTS}"
   echo "ℹ️  Trading partner directories will be created via provision-trading-partner.sh"
 fi
 echo ""
@@ -150,6 +181,7 @@ METADATA_JSON=$(cat <<EOF
   "sftpUid": ${NEXT_UID},
   "sftpGid": ${NEXT_GID},
   "sftpHomeDirectory": "/tenants/${TENANT_ID}",
+  "environments": [$(echo "${ENVIRONMENTS}" | sed 's/,/", "/g' | sed 's/^/"/' | sed 's/$/"/')],
   "tradingPartners": [],
   "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "status": "active",
@@ -212,20 +244,26 @@ echo "Connection Command:"
 echo "  sftp ${TENANT_ID}@sftp.cloudhealthoffice.com"
 echo ""
 echo "Directory Structure:"
-echo "  Home directory created: /tenants/${TENANT_ID}/"
+echo "  Home directory: /tenants/${TENANT_ID}/"
+echo "  Environments: ${ENVIRONMENTS}"
+IFS=',' read -ra ENV_ARRAY <<< "$ENVIRONMENTS"
+for ENV in "${ENV_ARRAY[@]}"; do
+  ENV=$(echo "$ENV" | xargs)
+  echo "    - ${ENV}/"
+done
 echo "  Trading partner subdirectories will be created when you add partners"
 echo ""
 echo "Retrieve Password:"
 echo "  az keyvault secret show --vault-name ${KEY_VAULT} --name sftp-${TENANT_ID}-password --query value -o tsv"
 echo ""
 echo "Next Steps:"
-echo "  1. Add trading partners for this tenant:"
-echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} availity 'Availity Clearinghouse' --transactions 276,277,278,837"
-echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} change-healthcare 'Change Healthcare' --transactions 835,837"
+echo "  1. Add trading partners for this tenant (specify environment with --environment flag):"
+echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} availity 'Availity Clearinghouse' --environment prod"
+echo "     ./scripts/provision-trading-partner.sh ${TENANT_ID} change-healthcare 'Change Healthcare' --environment preprod"
 echo "  2. Send credentials to tenant via secure channel (NOT email)"
 echo "  3. Configure trading partner metadata in Trading Partner Service"
 echo "  4. Test file exchange with tenant"
-echo "  5. Monitor /tenants/${TENANT_ID}/<partner>/ for activity"
+echo "  5. Monitor /tenants/${TENANT_ID}/<environment>/<partner>/ for activity"
 echo ""
 echo "Documentation:"
 echo "  - See docs/SFTP-MULTI-TENANT-ARCHITECTURE.md for details"

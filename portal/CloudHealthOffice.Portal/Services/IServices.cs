@@ -85,6 +85,22 @@ public interface ISponsorService
     Task UpdateSponsorAsync(string sponsorId, UpdateSponsorRequest request);
 }
 
+public interface ITenantService
+{
+    Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId);
+    Task<TenantSubscription?> GetDemoTenantAsync();
+    Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
+    Task<string> CreateTenantAsync(CreateTenantRequest request);
+}
+
+public interface ISalesInquiryService
+{
+    Task<string> CreateInquiryAsync(CreateSalesInquiryRequest request);
+    Task<List<SalesInquiry>> GetInquiriesAsync(string? status = null, int limit = 100);
+    Task<SalesInquiry?> GetInquiryByIdAsync(string inquiryId);
+    Task UpdateInquiryStatusAsync(string inquiryId, string status, string? notes = null);
+}
+
 // DTOs
 public class ClaimSummary
 {
@@ -596,4 +612,64 @@ public class CodeUsageStats
     public int BenefitsCount { get; set; }
     public DateTime? LastUsedDate { get; set; }
     public decimal TotalBilledAmount { get; set; }
+}
+
+public class TenantSubscription
+{
+    public string TenantId { get; set; } = string.Empty;
+    public string AzureTenantId { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
+    public string SubscriptionStatus { get; set; } = string.Empty; // Active, Trial, Expired, Cancelled
+    public string Tier { get; set; } = string.Empty; // starter, professional, enterprise
+    public bool IsDemo { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public DateTime? TrialEndsAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public List<string> AdminEmails { get; set; } = new();
+}
+
+public class CreateTenantRequest
+{
+    public string AzureTenantId { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
+    public string TenantDisplayName { get; set; } = string.Empty;
+    public string Tier { get; set; } = string.Empty;
+    public string AdminEmail { get; set; } = string.Empty;
+    public string? StripePaymentMethodId { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public List<string> EnabledModules { get; set; } = new();
+}
+
+public class SalesInquiry
+{
+    public string Id { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string? JobTitle { get; set; }
+    public string InquiryType { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Status { get; set; } = "New"; // New, Contacted, Qualified, Closed
+    public string Source { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ContactedAt { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class CreateSalesInquiryRequest
+{
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string CompanyName { get; set; } = string.Empty;
+    public string? JobTitle { get; set; }
+    public string InquiryType { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Source { get; set; } = "Contact Sales Page";
 }

@@ -83,7 +83,7 @@ Create Cosmos DB secret:
 
 ```bash
 kubectl create secret generic cosmos-db-secret \
-  --namespace cho-svcs \
+  --namespace cloudhealthoffice \
   --from-literal=endpoint="$COSMOS_ENDPOINT" \
   --from-literal=key="$COSMOS_KEY"
 ```
@@ -92,7 +92,7 @@ Create SFTP credentials secret:
 
 ```bash
 kubectl create secret generic sftp-creds \
-  --namespace cho-svcs \
+  --namespace cloudhealthoffice \
   --from-literal=username="<sftp-username>" \
   --from-literal=password="<sftp-password>"
 ```
@@ -147,16 +147,16 @@ Verify deployment:
 
 ```bash
 # Check pods
-kubectl get pods -n cho-svcs -l app=enrollment-import-service
+kubectl get pods -n cloudhealthoffice -l app=enrollment-import-service
 
 # Check service
-kubectl get svc -n cho-svcs enrollment-import-service
+kubectl get svc -n cloudhealthoffice enrollment-import-service
 
 # Check HPA
-kubectl get hpa -n cho-svcs enrollment-import-service-hpa
+kubectl get hpa -n cloudhealthoffice enrollment-import-service-hpa
 
 # View logs
-kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=50 -f
+kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=50 -f
 ```
 
 Expected output:
@@ -178,13 +178,13 @@ Verify CronWorkflow:
 
 ```bash
 # List CronWorkflows
-kubectl get cronworkflows -n cho-svcs
+kubectl get cronworkflows -n cloudhealthoffice
 
 # Describe CronWorkflow
-kubectl describe cronworkflow x12-834-enrollment-import -n cho-svcs
+kubectl describe cronworkflow x12-834-enrollment-import -n cloudhealthoffice
 
 # View workflow template
-argo cron get x12-834-enrollment-import -n cho-svcs
+argo cron get x12-834-enrollment-import -n cloudhealthoffice
 ```
 
 ### Step 4: Configure SFTP Server
@@ -221,16 +221,16 @@ Trigger workflow manually without waiting for cron schedule:
 
 ```bash
 # Submit workflow from CronWorkflow template
-argo submit --from cronwf/x12-834-enrollment-import -n cho-svcs \
+argo submit --from cronwf/x12-834-enrollment-import -n cloudhealthoffice \
   --parameter sftp-host="<sftp-host>" \
   --parameter sftp-path="/inbound/enrollment" \
   --parameter tenant-id="<tenant-id>"
 
 # Watch workflow execution
-argo watch @latest -n cho-svcs
+argo watch @latest -n cloudhealthoffice
 
 # View workflow logs
-argo logs @latest -n cho-svcs
+argo logs @latest -n cloudhealthoffice
 ```
 
 ### Test 2: Upload Sample 834 File
@@ -244,10 +244,10 @@ put test-x12-834-enrollment-sample.edi /inbound/enrollment/test-enrollment-20260
 exit
 
 # Wait for CronWorkflow (runs every 10 minutes) or trigger manually
-argo submit --from cronwf/x12-834-enrollment-import -n cho-svcs
+argo submit --from cronwf/x12-834-enrollment-import -n cloudhealthoffice
 
 # View logs
-argo logs @latest -n cho-svcs
+argo logs @latest -n cloudhealthoffice
 ```
 
 ### Test 3: Verify Data in Cosmos DB
@@ -287,7 +287,7 @@ SELECT * FROM c WHERE c.tenantId = "<tenant-id>"
 Check import statistics in workflow output:
 
 ```bash
-argo logs @latest -n cho-svcs | grep "totalEnrollments"
+argo logs @latest -n cloudhealthoffice | grep "totalEnrollments"
 ```
 
 Expected output:
@@ -309,7 +309,7 @@ Test enrollment-import-service API endpoint:
 
 ```bash
 # Port-forward service
-kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
 
 # In another terminal, send parsed 834 JSON
 curl -X POST http://localhost:8080/api/v1/enrollment/import \
@@ -339,7 +339,7 @@ curl -X POST http://localhost:8080/api/v1/enrollment/import \
 
 ```bash
 # Check enrollment-import-service health
-kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
 curl http://localhost:8080/health
 
 # Expected: HTTP 200 OK
@@ -349,13 +349,13 @@ curl http://localhost:8080/health
 
 ```bash
 # List recent workflow executions
-argo list -n cho-svcs --prefix x12-834-enrollment-import
+argo list -n cloudhealthoffice --prefix x12-834-enrollment-import
 
 # View specific workflow
-argo get <workflow-name> -n cho-svcs
+argo get <workflow-name> -n cloudhealthoffice
 
 # View workflow logs
-argo logs <workflow-name> -n cho-svcs
+argo logs <workflow-name> -n cloudhealthoffice
 ```
 
 ### Monitor Kafka Topic
@@ -375,7 +375,7 @@ kubectl exec -it -n kafka cloudhealthoffice-kafka-0 -- \
 Enrollment-import-service exposes Prometheus metrics at `/metrics`:
 
 ```bash
-kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
 curl http://localhost:8080/metrics
 ```
 
@@ -400,7 +400,7 @@ Error: Failed to connect to SFTP server
 **Solution:**
 1. Verify SFTP credentials secret:
 ```bash
-kubectl get secret sftp-creds -n cho-svcs -o yaml
+kubectl get secret sftp-creds -n cloudhealthoffice -o yaml
 ```
 
 2. Check SFTP host reachability:
@@ -424,7 +424,7 @@ Error: Invalid X12 transaction
 **Solution:**
 1. View parser logs:
 ```bash
-argo logs <workflow-name> -n cho-svcs --container parse-834-files
+argo logs <workflow-name> -n cloudhealthoffice --container parse-834-files
 ```
 
 2. Check .error.json output for parse failures
@@ -443,12 +443,12 @@ Error: 401 Unauthorized (Cosmos DB)
 **Solution:**
 1. Verify Cosmos DB secret:
 ```bash
-kubectl get secret cosmos-db-secret -n cho-svcs -o yaml
+kubectl get secret cosmos-db-secret -n cloudhealthoffice -o yaml
 ```
 
 2. Check enrollment-import-service logs:
 ```bash
-kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=100
+kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=100
 ```
 
 3. Verify Cosmos DB endpoint/key are correct:
@@ -471,7 +471,7 @@ SELECT * FROM c
 
 4. Check import statistics in workflow output:
 ```bash
-argo logs @latest -n cho-svcs | grep "membersCreated"
+argo logs @latest -n cloudhealthoffice | grep "membersCreated"
 ```
 
 ### Issue: HPA not scaling pods
@@ -482,7 +482,7 @@ argo logs @latest -n cho-svcs | grep "membersCreated"
 **Solution:**
 1. Check HPA status:
 ```bash
-kubectl describe hpa enrollment-import-service-hpa -n cho-svcs
+kubectl describe hpa enrollment-import-service-hpa -n cloudhealthoffice
 ```
 
 2. Verify metrics-server is running:
@@ -492,7 +492,7 @@ kubectl get deployment metrics-server -n kube-system
 
 3. Check resource metrics:
 ```bash
-kubectl top pods -n cho-svcs -l app=enrollment-import-service
+kubectl top pods -n cloudhealthoffice -l app=enrollment-import-service
 ```
 
 ---
