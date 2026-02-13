@@ -23,6 +23,9 @@ public class SftpProvisioningResult
 
 public class SftpProvisioningService : ISftpProvisioningService
 {
+    private static readonly System.Text.RegularExpressions.Regex EnvironmentNameValidator = 
+        new System.Text.RegularExpressions.Regex("^[a-zA-Z0-9_-]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    
     private readonly ILogger<SftpProvisioningService> _logger;
     private readonly IConfiguration _configuration;
     private readonly string _scriptsPath;
@@ -66,10 +69,9 @@ public class SftpProvisioningService : ISftpProvisioningService
 
             // Validate environment names to prevent command injection
             // Only allow alphanumeric characters, hyphens, and underscores
-            var validEnvironmentPattern = new System.Text.RegularExpressions.Regex("^[a-zA-Z0-9_-]+$");
             foreach (var env in environments)
             {
-                if (!validEnvironmentPattern.IsMatch(env))
+                if (!EnvironmentNameValidator.IsMatch(env))
                 {
                     result.Success = false;
                     result.Error = $"Invalid environment name: {env}. Only alphanumeric characters, hyphens, and underscores are allowed.";
