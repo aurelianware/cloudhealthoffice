@@ -74,8 +74,10 @@ public class SftpProvisioningService : ISftpProvisioningService
                 if (!EnvironmentNameValidator.IsMatch(env))
                 {
                     result.Success = false;
-                    result.Error = $"Invalid environment name: {env}. Only alphanumeric characters, hyphens, and underscores are allowed.";
-                    _logger.LogError(result.Error);
+                    // Sanitize the environment name in error message to prevent log injection
+                    var sanitizedEnv = System.Text.RegularExpressions.Regex.Replace(env, @"[^\w\-]", "?");
+                    result.Error = $"Invalid environment name: {sanitizedEnv}. Only alphanumeric characters, hyphens, and underscores are allowed.";
+                    _logger.LogError("Invalid environment name provided. Only alphanumeric characters, hyphens, and underscores are allowed.");
                     return result;
                 }
             }
