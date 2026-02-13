@@ -136,12 +136,12 @@ public class SftpProvisioningService : ISftpProvisioningService
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
+            };
+
             foreach (var arg in arguments)
             {
                 processInfo.ArgumentList.Add(arg);
             }
-
-            };
 
             using var process = new Process { StartInfo = processInfo };
             
