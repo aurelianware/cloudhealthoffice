@@ -306,7 +306,7 @@ stripe keys list --live
 ```bash
 # Create stripe-api-keys secret
 kubectl create secret generic stripe-api-keys \
-  --namespace cho-svcs \
+  --namespace cloudhealthoffice \
   --from-literal=Stripe__PublishableKey="pk_test_..." \
   --from-literal=Stripe__SecretKey="sk_test_..." \
   --from-literal=Stripe__Price__Starter="$STARTER_PRICE_ID" \
@@ -314,7 +314,7 @@ kubectl create secret generic stripe-api-keys \
 
 # Create cosmos-secret
 kubectl create secret generic cosmos-secret \
-  --namespace cho-svcs \
+  --namespace cloudhealthoffice \
   --from-literal=CosmosDb__Endpoint="$COSMOS_ENDPOINT" \
   --from-literal=CosmosDb__Key="$COSMOS_KEY" \
   --from-literal=CosmosDb__DatabaseName="CloudHealthOffice" \
@@ -826,13 +826,13 @@ kubectl get sensors -n argo-events
 
 ```bash
 # Check portal pods (should use new image)
-kubectl get pods -n cho-svcs -l app=portal
+kubectl get pods -n cloudhealthoffice -l app=portal
 
 # Check service pods
-kubectl get pods -n cho-svcs
+kubectl get pods -n cloudhealthoffice
 
 # Verify image versions
-kubectl get pods -n cho-svcs -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+kubectl get pods -n cloudhealthoffice -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 ```
 
 **For complete 837 claims pipeline documentation**, see [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md).

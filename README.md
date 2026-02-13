@@ -234,8 +234,8 @@ kubectl apply -f k8s/
 kubectl apply -f services/*/k8s/
 
 # Verify deployment
-kubectl get pods -n cho-svcs
-kubectl get svc -n cho-svcs
+kubectl get pods -n cloudhealthoffice
+kubectl get svc -n cloudhealthoffice
 ```
 
 **What gets deployed:**
@@ -250,7 +250,7 @@ kubectl get svc -n cho-svcs
 
 **Access the portal:**
 ```bash
-kubectl get svc -n cho-svcs portal-service
+kubectl get svc -n cloudhealthoffice portal-service
 # Note the EXTERNAL-IP, visit http://<EXTERNAL-IP>
 ```
 

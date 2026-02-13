@@ -62,10 +62,10 @@ kubectl apply -f services/benefit-plan-service/k8s/
 kubectl apply -f services/reference-data-service/k8s/
 
 # Watch rollout
-kubectl rollout status deployment -n cho-svcs
+kubectl rollout status deployment -n cloudhealthoffice
 
 # Verify pods running
-kubectl get pods -n cho-svcs
+kubectl get pods -n cloudhealthoffice
 ```
 
 ### 3. Re-Run E2E Tests

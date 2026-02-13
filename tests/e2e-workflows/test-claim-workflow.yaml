@@ -167,7 +167,7 @@ spec:
           
           # Call mock service with timeout
           RESPONSE=$(curl -s --max-time 2 -X {{inputs.parameters.method}} \
-            "http://{{inputs.parameters.service-name}}.cho-svcs{{inputs.parameters.endpoint}}" \
+            "http://{{inputs.parameters.service-name}}.cloudhealthoffice{{inputs.parameters.endpoint}}" \
             -H "X-Tenant-ID: {{workflow.parameters.tenant-id}}" \
             -H "Content-Type: application/json" || echo '{"status":"ok","mock":true}')
           

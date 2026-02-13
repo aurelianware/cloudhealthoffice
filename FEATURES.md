@@ -139,7 +139,7 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 #### Deployment
 
 **Kubernetes**:
-- Namespace: `cho-svcs`
+- Namespace: `cloudhealthoffice`
 - Replicas: 2 (HPA 2-5)
 - Image: `ghcr.io/aurelianware/cloudhealthoffice-portal:latest`
 - Secrets: `stripe-api-keys`, `cosmos-secret`
@@ -475,7 +475,7 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 - DTOs: ProviderListItem, ProviderDetails, PracticeLocation, ProviderCredential, NetworkAssignment, ProviderContract, ProviderPerformance
 
 **Next Steps** (Backend Integration):
-- Connect to Provider Service API (`http://provider-service.cho-svcs.svc.cluster.local:8080`)
+- Connect to Provider Service API (`http://provider-service.cloudhealthoffice.svc.cluster.local:8080`)
 - Replace mock data with database-backed providers
 - Implement credential verification workflow
 - Add network assignment automation

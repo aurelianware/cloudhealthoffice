@@ -21,7 +21,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 ### ✅ **Strengths (Production-Ready)**
 
 #### 1.1 Core Platform Architecture
-- **10 microservices** deployed and running on AKS (cho-svcs namespace)
+- **10 microservices** deployed and running on AKS (cloudhealthoffice namespace)
   - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing
   - All services healthy (28h uptime, 1/1 pods ready)
 - **18 container images** built automatically via GitHub Actions

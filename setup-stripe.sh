@@ -135,14 +135,14 @@ kubectl create secret generic stripe-api-keys -n cho-workflows \
 echo "✅ Created secret: stripe-api-keys (cho-workflows namespace)"
 
 # Create Stripe secret for portal
-kubectl create secret generic stripe-api-keys -n cho-svcs \
+kubectl create secret generic stripe-api-keys -n cloudhealthoffice \
     --from-literal=secret-key="$SECRET_KEY" \
     --from-literal=publishable-key="$PUBLISHABLE_KEY" \
     --from-literal=starter-price-id="$STARTER_PRICE" \
     --from-literal=professional-price-id="$PROFESSIONAL_PRICE" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-echo "✅ Created secret: stripe-api-keys (cho-svcs namespace)"
+echo "✅ Created secret: stripe-api-keys (cloudhealthoffice namespace)"
 
 echo ""
 echo "🔗 Setting up webhooks..."
@@ -160,7 +160,7 @@ echo ""
 read -p "Webhook signing secret (whsec_...): " WEBHOOK_SECRET
 
 if [[ "$WEBHOOK_SECRET" =~ ^whsec_ ]]; then
-    kubectl create secret generic stripe-webhook-secret -n cho-svcs \
+    kubectl create secret generic stripe-webhook-secret -n cloudhealthoffice \
         --from-literal=signing-secret="$WEBHOOK_SECRET" \
         --dry-run=client -o yaml | kubectl apply -f -
     
@@ -197,7 +197,7 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "  1. Update appsettings.json with Stripe configuration"
-echo "  2. Deploy portal: kubectl rollout restart deployment/portal -n cho-svcs"
+echo "  2. Deploy portal: kubectl rollout restart deployment/portal -n cloudhealthoffice"
 echo "  3. Test signup at: https://portal.cloudhealthoffice.com/signup"
 echo ""
 echo "Test cards ($MODE mode):"

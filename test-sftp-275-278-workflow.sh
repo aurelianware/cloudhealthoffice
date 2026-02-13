@@ -126,7 +126,7 @@ echo "=========================================="
 echo ""
 
 # Port-forward to authorization service
-kubectl -n cho-svcs port-forward svc/authorization-service 18082:80 > /dev/null 2>&1 &
+kubectl -n cloudhealthoffice port-forward svc/authorization-service 18082:80 > /dev/null 2>&1 &
 AUTH_PF_PID=$!
 sleep 2
 
@@ -219,7 +219,7 @@ echo "=========================================="
 echo ""
 
 # Port-forward to attachment service
-kubectl -n cho-svcs port-forward svc/attachment-service 18083:80 > /dev/null 2>&1 &
+kubectl -n cloudhealthoffice port-forward svc/attachment-service 18083:80 > /dev/null 2>&1 &
 ATT_PF_PID=$!
 sleep 2
 

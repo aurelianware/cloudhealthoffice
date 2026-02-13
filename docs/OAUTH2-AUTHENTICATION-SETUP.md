@@ -127,7 +127,7 @@ public async Task<ActionResult> SubmitAuthorization(...)
 
 **Kubernetes Secret:**
 ```bash
-kubectl -n cho-svcs create secret generic azure-ad-config \
+kubectl -n cloudhealthoffice create secret generic azure-ad-config \
   --from-literal=AzureAd__ClientId='<CLIENT_ID>' \
   --from-literal=AzureAd__TenantId='common' \
   --from-literal=AzureAd__Audience='api://cloudhealthoffice'
