@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: coverage-service
-        image: your-acr.azurecr.io/coverage-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-coverage-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -47,7 +47,11 @@ spec:
           protocol: TCP
         env:
         - name: MongoDb__ConnectionString
-          value: "mongodb://admin:securepassword123@mongodb:27017"
+          valueFrom:
+            secretKeyRef:
+              name: coverage-service-secrets
+              key: MongoDb__ConnectionString
+              optional: true
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

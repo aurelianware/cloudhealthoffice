@@ -897,8 +897,8 @@ When reviewing code, Copilot should verify:
 **Insecure:**
 ```powershell
 # ❌ WRONG
-$apiKey = "abc123-secret-key"
-$connectionString = "DefaultEndpointsProtocol=https;AccountName=storage;AccountKey=key123=="
+$apiKey = "your-api-key-here"
+$connectionString = "DefaultEndpointsProtocol=https;AccountName=storage;AccountKey=your-account-key"
 Write-Host "Processing claim $claimNumber for member $memberId"
 Invoke-RestMethod -Uri $url -Headers @{ "X-API-Key" = $apiKey }
 ```
