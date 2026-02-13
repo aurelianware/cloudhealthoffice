@@ -19,7 +19,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: x12-271-eligibility-response
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: x12-271-eligibility-response
     app.kubernetes.io/component: edi-processing

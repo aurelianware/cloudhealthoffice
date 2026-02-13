@@ -7,7 +7,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: argo-workflow-sa
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-workflow-sa
     app.kubernetes.io/component: rbac
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: argo-events-sa
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-events-sa
     app.kubernetes.io/component: rbac
@@ -31,7 +31,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: argo-workflow-role
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-workflow-role
     app.kubernetes.io/component: rbac
@@ -80,7 +80,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: argo-workflow-rolebinding
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-workflow-rolebinding
     app.kubernetes.io/component: rbac
@@ -88,7 +88,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: argo-workflow-sa
-    namespace: cloudhealthoffice
+    namespace: cho-workflows
 roleRef:
   kind: Role
   name: argo-workflow-role
@@ -100,7 +100,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: argo-events-role
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-events-role
     app.kubernetes.io/component: rbac
@@ -137,7 +137,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: argo-events-rolebinding
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: argo-events-rolebinding
     app.kubernetes.io/component: rbac
@@ -145,7 +145,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: argo-events-sa
-    namespace: cloudhealthoffice
+    namespace: cho-workflows
 roleRef:
   kind: Role
   name: argo-events-role
