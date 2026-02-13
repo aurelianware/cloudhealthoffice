@@ -5,10 +5,17 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__ContainerName: "Attachments"
-  CosmosDb__TradingPartnersContainerName: "TradingPartners"
   BlobStorage__ContainerName: "attachments"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: attachment-service-secret
+  namespace: cloudhealthoffice
+type: Opaque
+stringData:
+  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
+  BlobStorage__ConnectionString: "UseDevelopmentStorage=true"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -16,7 +23,7 @@ metadata:
   name: attachment-service
   namespace: cloudhealthoffice
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: attachment-service
@@ -38,36 +45,16 @@ spec:
             configMapKeyRef:
               name: attachment-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
+        - name: MongoDb__ConnectionString
           valueFrom:
-            configMapKeyRef:
-              name: attachment-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: attachment-service-config
-              key: CosmosDb__ContainerName
-        - name: CosmosDb__TradingPartnersContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: attachment-service-config
-              key: CosmosDb__TradingPartnersContainerName
+            secretKeyRef:
+              name: attachment-service-secret
+              key: MongoDb__ConnectionString
         - name: BlobStorage__ContainerName
           valueFrom:
             configMapKeyRef:
               name: attachment-service-config
               key: BlobStorage__ContainerName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: attachment-service-secret
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: attachment-service-secret
-              key: CosmosDb__Key
         - name: BlobStorage__ConnectionString
           valueFrom:
             secretKeyRef:
