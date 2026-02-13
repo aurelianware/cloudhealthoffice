@@ -490,7 +490,7 @@ az keyvault set-policy \
 ```bash
 # ❌ WRONG - Secret in code
 {
-  "claims_backend_api_key": "abc123-secret-key-456def"
+  "claims_backend_api_key": "your-api-key-here"
 }
 
 # ✅ CORRECT - Reference to Key Vault

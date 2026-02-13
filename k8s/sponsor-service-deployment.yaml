@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: sponsor-service
-        image: your-acr.azurecr.io/sponsor-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-sponsor-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
