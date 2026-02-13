@@ -23,6 +23,9 @@ public class SftpProvisioningResult
 
 public class SftpProvisioningService : ISftpProvisioningService
 {
+    private static readonly System.Text.RegularExpressions.Regex EnvironmentNameValidator = 
+        new System.Text.RegularExpressions.Regex("^[a-zA-Z0-9_-]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    
     private readonly ILogger<SftpProvisioningService> _logger;
     private readonly IConfiguration _configuration;
     private readonly string _scriptsPath;
@@ -64,14 +67,37 @@ public class SftpProvisioningService : ISftpProvisioningService
                 return result;
             }
 
+            // Validate environment names to prevent command injection
+            // Only allow alphanumeric characters, hyphens, and underscores
+            foreach (var env in environments)
+            {
+                if (!EnvironmentNameValidator.IsMatch(env))
+                {
+                    result.Success = false;
+                    // Sanitize the environment name in error message to prevent log injection
+                    var sanitizedEnv = System.Text.RegularExpressions.Regex.Replace(env, @"[^\w\-]", "?");
+                    result.Error = $"Invalid environment name: {sanitizedEnv}. Only alphanumeric characters, hyphens, and underscores are allowed.";
+                    _logger.LogError("Invalid environment name provided. Only alphanumeric characters, hyphens, and underscores are allowed.");
+                    return result;
+                }
+            }
+
             // Build arguments
             var keyVault = keyVaultName ?? _configuration["Azure:KeyVault:Name"] ?? "cho-keyvault-prod";
             var environmentsArg = string.Join(",", environments);
-            
-            var arguments = $"{tenantId} \"{tenantName}\" {keyVault} --environments {environmentsArg}";
+
+            // Build structured argument list to avoid shell parsing of user-controlled values
+            var scriptArguments = new[]
+            {
+                tenantId,
+                tenantName,
+                keyVault,
+                "--environments",
+                environmentsArg
+            };
 
             // Execute script
-            var processResult = await ExecuteBashScriptAsync(scriptPath, arguments);
+            var processResult = await ExecuteScriptAsync(scriptPath, scriptArguments);
             
             result.Success = processResult.ExitCode == 0;
             result.Output = processResult.Output;
@@ -112,7 +138,7 @@ public class SftpProvisioningService : ISftpProvisioningService
         }
     }
 
-    private async Task<ProcessExecutionResult> ExecuteBashScriptAsync(string scriptPath, string arguments)
+    private async Task<ProcessExecutionResult> ExecuteScriptAsync(string scriptPath, IEnumerable<string> arguments)
     {
         var result = new ProcessExecutionResult();
         var outputBuilder = new StringBuilder();
@@ -122,13 +148,18 @@ public class SftpProvisioningService : ISftpProvisioningService
         {
             var processInfo = new ProcessStartInfo
             {
-                FileName = "/bin/bash",
-                Arguments = $"{scriptPath} {arguments}",
+                // Execute the script directly and supply each argument separately to avoid shell interpretation
+                FileName = scriptPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            foreach (var arg in arguments)
+            {
+                processInfo.ArgumentList.Add(arg);
+            }
 
             using var process = new Process { StartInfo = processInfo };
             
@@ -176,7 +207,7 @@ public class SftpProvisioningService : ISftpProvisioningService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute bash script: {ScriptPath}", scriptPath);
+            _logger.LogError(ex, "Failed to execute script: {ScriptPath}", scriptPath);
             result.ExitCode = -1;
             result.Error = ex.Message;
             return result;

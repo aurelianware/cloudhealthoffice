@@ -85,7 +85,7 @@ echo "=========================================="
 echo ""
 
 # Port-forward to claims service
-kubectl -n cho-svcs port-forward svc/claims-service 18081:80 > /dev/null 2>&1 &
+kubectl -n cloudhealthoffice port-forward svc/claims-service 18081:80 > /dev/null 2>&1 &
 CLAIMS_PF_PID=$!
 sleep 2
 

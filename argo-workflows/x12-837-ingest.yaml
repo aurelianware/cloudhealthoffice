@@ -67,7 +67,7 @@ spec:
       - name: file-pattern
         value: "*.edi"
       - name: claims-service-url
-        value: "http://claims-service.cho-svcs.svc.cluster.local:8080"
+        value: "http://claims-service.cloudhealthoffice.svc.cluster.local:8080"
       - name: kafka-bootstrap-servers
         value: "cloudhealthoffice-kafka-bootstrap.kafka:9092"
       - name: kafka-topic

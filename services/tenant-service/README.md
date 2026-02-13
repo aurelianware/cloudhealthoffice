@@ -197,11 +197,11 @@ az cosmosdb sql container create \
 kubectl apply -f k8s/tenant-service-deployment.yaml
 
 # Verify deployment
-kubectl get pods -n cho-svcs -l app=tenant-service
-kubectl get svc -n cho-svcs tenant-service
+kubectl get pods -n cloudhealthoffice -l app=tenant-service
+kubectl get svc -n cloudhealthoffice tenant-service
 
 # Test health endpoint
-kubectl port-forward -n cho-svcs svc/tenant-service 8080:80
+kubectl port-forward -n cloudhealthoffice svc/tenant-service 8080:80
 curl http://localhost:8080/health
 ```
 
@@ -264,7 +264,7 @@ var apiKey = Request.Headers["X-API-Key"];
 
 // Validate with Tenant Service
 var response = await httpClient.PostAsync(
-    "http://tenant-service.cho-svcs/api/v1/auth/validate", 
+    "http://tenant-service.cloudhealthoffice/api/v1/auth/validate", 
     new StringContent(apiKey)
 );
 

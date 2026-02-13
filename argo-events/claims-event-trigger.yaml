@@ -14,7 +14,7 @@ spec:
   # Can also add Kafka event source for high-volume processing
   # kafka:
   #   claims-topic:
-  #     url: kafka-service.cho-svcs:9092
+  #     url: kafka-service.cloudhealthoffice:9092
   #     topic: claims.submitted
   #     partition: "0"
 ---

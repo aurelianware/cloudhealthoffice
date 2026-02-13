@@ -17,4 +17,4 @@ echo "Watching for signup events..."
 echo "==================================================================="
 echo ""
 
-kubectl logs -n cho-svcs -l app=portal -f --tail=0 | grep -iE "signup|payment|stripe|tenant"
+kubectl logs -n cloudhealthoffice -l app=portal -f --tail=0 | grep -iE "signup|payment|stripe|tenant"

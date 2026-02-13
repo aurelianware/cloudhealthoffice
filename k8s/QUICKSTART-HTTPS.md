@@ -60,7 +60,7 @@ kubectl apply -f k8s/portal-ingress.yaml
 
 ```bash
 # Watch certificate issuance
-kubectl get certificate -n cho-svcs -w
+kubectl get certificate -n cloudhealthoffice -w
 
 # Wait until both show READY=True:
 # - site-tls-secret
@@ -106,8 +106,8 @@ kubectl logs -n cert-manager -l app=cert-manager --tail=50
 
 Check backend pods are running:
 ```bash
-kubectl get pods -n cho-svcs -l app=site
-kubectl get pods -n cho-svcs -l app=portal
+kubectl get pods -n cloudhealthoffice -l app=site
+kubectl get pods -n cloudhealthoffice -l app=portal
 ```
 
 **For detailed troubleshooting, see:** [k8s/INGRESS-HTTPS-SETUP.md](./INGRESS-HTTPS-SETUP.md)

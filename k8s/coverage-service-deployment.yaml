@@ -2,32 +2,29 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: coverage-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__CoverageContainerName: "Coverage"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: coverage-service-secrets
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-primary-key-here"
+  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: coverage-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: coverage-service
     version: v1
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: coverage-service
@@ -39,33 +36,23 @@ spec:
     spec:
       containers:
       - name: coverage-service
-        image: your-acr.azurecr.io/coverage-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-coverage-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: coverage-service-secrets
+              key: MongoDb__ConnectionString
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
               name: coverage-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: coverage-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: coverage-service-secrets
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: coverage-service-secrets
-              key: CosmosDb__Key
         resources:
           requests:
             memory: "256Mi"
@@ -90,7 +77,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: coverage-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: coverage-service
 spec:
@@ -107,7 +94,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: coverage-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

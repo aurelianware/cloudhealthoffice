@@ -152,7 +152,7 @@ spec:
             apk add --no-cache curl jq
             
             TENANT_ID="{{workflow.parameters.tenant-id}}"
-            TENANT_SERVICE="http://tenant-service.cho-svcs/api/v1/tenants"
+            TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
             
             echo "Validating tenant $TENANT_ID..."
             
@@ -454,7 +454,7 @@ spec:
             apk add --no-cache curl jq
             
             TENANT_ID="{{workflow.parameters.tenant-id}}"
-            BENEFIT_PLAN_SERVICE="http://benefit-plan-service.cho-svcs/api/v1/benefitplans"
+            BENEFIT_PLAN_SERVICE="http://benefit-plan-service.cloudhealthoffice/api/v1/benefitplans"
             
             echo "Seeding default benefit plans for $TENANT_ID..."
             
@@ -742,7 +742,7 @@ spec:
             
             TENANT_ID="{{workflow.parameters.tenant-id}}"
             STATUS="{{inputs.parameters.status}}"
-            TENANT_SERVICE="http://tenant-service.cho-svcs/api/v1/tenants"
+            TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
             
             echo "Updating tenant $TENANT_ID status to $STATUS..."
             

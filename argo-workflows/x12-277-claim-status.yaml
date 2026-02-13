@@ -76,7 +76,7 @@ spec:
         value: "processed/277"
       # Services
       - name: claims-service-endpoint
-        value: "http://claims-service.cho-svcs.svc.cluster.local/api/claims"
+        value: "http://claims-service.cloudhealthoffice.svc.cluster.local/api/claims"
       # Kafka
       - name: kafka-topic-outbound
         value: "claim-status-responses"

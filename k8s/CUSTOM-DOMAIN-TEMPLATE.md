@@ -184,7 +184,7 @@ kubectl apply -f k8s/site-ingress.yaml
 kubectl apply -f k8s/portal-ingress.yaml
 
 # Wait for certificates
-kubectl get certificate -n cho-svcs -w
+kubectl get certificate -n cloudhealthoffice -w
 
 # Test (will show certificate warning - expected for staging)
 curl -k -I https://yourdomain.com
@@ -199,8 +199,8 @@ annotations:
 
 ```bash
 # Delete staging certificates
-kubectl delete certificate -n cho-svcs --all
-kubectl delete secret -n cho-svcs site-tls-secret portal-tls-secret
+kubectl delete certificate -n cloudhealthoffice --all
+kubectl delete secret -n cloudhealthoffice site-tls-secret portal-tls-secret
 
 # Reapply with production issuer
 kubectl apply -f k8s/site-ingress.yaml
@@ -224,7 +224,7 @@ kubectl apply -f k8s/site-ingress.yaml
 kubectl apply -f k8s/portal-ingress.yaml
 
 # Monitor certificate issuance
-kubectl get certificate -n cho-svcs -w
+kubectl get certificate -n cloudhealthoffice -w
 ```
 
 ## Step 6: Verify HTTPS

@@ -203,7 +203,7 @@ Workflows should query Trading Partner Service for routing metadata:
       - |
         curl -s \
           -H "X-Tenant-ID: {{workflow.parameters.tenant-id}}" \
-          http://trading-partner-service.cho-svcs/api/trading-partners/{{workflow.parameters.trading-partner-id}} \
+          http://trading-partner-service.cloudhealthoffice/api/trading-partners/{{workflow.parameters.trading-partner-id}} \
           > /tmp/partner-config.json
         
         # Extract SFTP paths

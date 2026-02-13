@@ -11,17 +11,17 @@
   - [ ] Cosmos DB primary key retrieved
 
 - [ ] **Kubernetes Secrets**
-  - [ ] `cosmos-db-secret` created in `cho-svcs` namespace
+  - [ ] `cosmos-db-secret` created in `cloudhealthoffice` namespace
     ```bash
     kubectl create secret generic cosmos-db-secret \
-      --namespace cho-svcs \
+      --namespace cloudhealthoffice \
       --from-literal=endpoint="<cosmos-endpoint>" \
       --from-literal=key="<cosmos-key>"
     ```
-  - [ ] `sftp-creds` created in `cho-svcs` namespace
+  - [ ] `sftp-creds` created in `cloudhealthoffice` namespace
     ```bash
     kubectl create secret generic sftp-creds \
-      --namespace cho-svcs \
+      --namespace cloudhealthoffice \
       --from-literal=username="<sftp-username>" \
       --from-literal=password="<sftp-password>"
     ```
@@ -73,31 +73,31 @@
 
 - [ ] **Verify deployment**
   ```bash
-  kubectl get pods -n cho-svcs -l app=enrollment-import-service
+  kubectl get pods -n cloudhealthoffice -l app=enrollment-import-service
   # Expected: 2 pods Running
   ```
 
 - [ ] **Check service**
   ```bash
-  kubectl get svc -n cho-svcs enrollment-import-service
+  kubectl get svc -n cloudhealthoffice enrollment-import-service
   # Expected: ClusterIP service on port 80
   ```
 
 - [ ] **Check HPA**
   ```bash
-  kubectl get hpa -n cho-svcs enrollment-import-service-hpa
+  kubectl get hpa -n cloudhealthoffice enrollment-import-service-hpa
   # Expected: 2/10 replicas, targets: CPU 70%, Memory 80%
   ```
 
 - [ ] **Verify logs**
   ```bash
-  kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=50
+  kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=50
   # Expected: "Application started" message, no errors
   ```
 
 - [ ] **Test health endpoint**
   ```bash
-  kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+  kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
   curl http://localhost:8080/health
   # Expected: HTTP 200 OK
   ```
@@ -111,13 +111,13 @@
 
 - [ ] **Verify CronWorkflow**
   ```bash
-  kubectl get cronworkflows -n cho-svcs x12-834-enrollment-import
+  kubectl get cronworkflows -n cloudhealthoffice x12-834-enrollment-import
   # Expected: SCHEDULE=*/10 * * * *, SUSPEND=false
   ```
 
 - [ ] **Check workflow template**
   ```bash
-  argo cron get x12-834-enrollment-import -n cho-svcs
+  argo cron get x12-834-enrollment-import -n cloudhealthoffice
   # Expected: 4 steps (fetch, parse, import, archive)
   ```
 
@@ -129,7 +129,7 @@
 
 - [ ] **Port-forward enrollment-import-service**
   ```bash
-  kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+  kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
   ```
 
 - [ ] **Send test enrollment (prepare parsed 834 JSON)**
@@ -156,7 +156,7 @@
 
 - [ ] **Trigger workflow manually**
   ```bash
-  argo submit --from cronwf/x12-834-enrollment-import -n cho-svcs \
+  argo submit --from cronwf/x12-834-enrollment-import -n cloudhealthoffice \
     --parameter sftp-host="<sftp-host>" \
     --parameter sftp-path="/inbound/enrollment" \
     --parameter tenant-id="tenant-test"
@@ -164,18 +164,18 @@
 
 - [ ] **Watch workflow execution**
   ```bash
-  argo watch @latest -n cho-svcs
+  argo watch @latest -n cloudhealthoffice
   # Expected: All 4 steps succeed (fetch → parse → import → archive)
   ```
 
 - [ ] **View logs**
   ```bash
-  argo logs @latest -n cho-svcs
+  argo logs @latest -n cloudhealthoffice
   ```
 
 - [ ] **Check workflow output**
   ```bash
-  argo get @latest -n cho-svcs -o yaml | grep -A 10 "outputs:"
+  argo get @latest -n cloudhealthoffice -o yaml | grep -A 10 "outputs:"
   # Expected:
   # - totalFiles: 1
   # - totalEnrollments: 3
@@ -253,7 +253,7 @@
 
 - [ ] **Prometheus metrics available**
   ```bash
-  kubectl port-forward -n cho-svcs svc/enrollment-import-service 8080:80
+  kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8080:80
   curl http://localhost:8080/metrics | grep enrollment
   # Expected:
   # - enrollment_imports_total
@@ -270,7 +270,7 @@
 - [ ] **HPA scaling working**
   ```bash
   # Generate load (upload 100 834 files)
-  kubectl get hpa -n cho-svcs enrollment-import-service-hpa --watch
+  kubectl get hpa -n cloudhealthoffice enrollment-import-service-hpa --watch
   # Expected: Replicas increase as CPU/memory usage increases
   ```
 
@@ -283,7 +283,7 @@
 
 - [ ] **CronWorkflow running on schedule**
   ```bash
-  argo cron get x12-834-enrollment-import -n cho-svcs
+  argo cron get x12-834-enrollment-import -n cloudhealthoffice
   # Expected: LAST RUN and NEXT RUN times shown
   ```
 
@@ -300,7 +300,7 @@
 
 - [ ] **No errors in pod logs**
   ```bash
-  kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=100 | grep -i error
+  kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=100 | grep -i error
   # Expected: No errors
   ```
 
@@ -312,12 +312,12 @@
 
 - [ ] Check image pull secret
   ```bash
-  kubectl get secret ghcr-secret -n cho-svcs
+  kubectl get secret ghcr-secret -n cloudhealthoffice
   ```
 
 - [ ] Check pod events
   ```bash
-  kubectl describe pod -n cho-svcs -l app=enrollment-import-service
+  kubectl describe pod -n cloudhealthoffice -l app=enrollment-import-service
   ```
 
 - [ ] Check image exists
@@ -329,12 +329,12 @@
 
 - [ ] Check Cosmos DB connectivity
   ```bash
-  kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=50 | grep -i cosmos
+  kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=50 | grep -i cosmos
   ```
 
 - [ ] Verify Cosmos DB secret
   ```bash
-  kubectl get secret cosmos-db-secret -n cho-svcs -o yaml
+  kubectl get secret cosmos-db-secret -n cloudhealthoffice -o yaml
   ```
 
 - [ ] Test Cosmos DB endpoint manually
@@ -347,7 +347,7 @@
 
 - [ ] Verify SFTP credentials
   ```bash
-  kubectl get secret sftp-creds -n cho-svcs -o yaml
+  kubectl get secret sftp-creds -n cloudhealthoffice -o yaml
   ```
 
 - [ ] Test SFTP connection manually
@@ -366,7 +366,7 @@
 
 - [ ] View parser logs
   ```bash
-  argo logs <workflow-name> -n cho-svcs --container parse-834-files
+  argo logs <workflow-name> -n cloudhealthoffice --container parse-834-files
   ```
 
 - [ ] Check for .error.json files in workflow output
@@ -377,17 +377,17 @@
 
 - [ ] View import service logs
   ```bash
-  argo logs <workflow-name> -n cho-svcs --container import-to-cosmos
+  argo logs <workflow-name> -n cloudhealthoffice --container import-to-cosmos
   ```
 
 - [ ] Check enrollment-import-service pod logs
   ```bash
-  kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=100
+  kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=100
   ```
 
 - [ ] Verify X-Tenant-ID header passed correctly
   ```bash
-  argo get <workflow-name> -n cho-svcs -o yaml | grep -i tenant
+  argo get <workflow-name> -n cloudhealthoffice -o yaml | grep -i tenant
   ```
 
 ---
@@ -398,13 +398,13 @@ If deployment fails or causes issues:
 
 - [ ] **Stop CronWorkflow**
   ```bash
-  kubectl patch cronworkflow x12-834-enrollment-import -n cho-svcs \
+  kubectl patch cronworkflow x12-834-enrollment-import -n cloudhealthoffice \
     -p '{"spec":{"suspend":true}}'
   ```
 
 - [ ] **Scale down enrollment-import-service**
   ```bash
-  kubectl scale deployment enrollment-import-service -n cho-svcs --replicas=0
+  kubectl scale deployment enrollment-import-service -n cloudhealthoffice --replicas=0
   ```
 
 - [ ] **Investigate issue** (check logs, metrics, Cosmos DB data)
@@ -428,12 +428,12 @@ If deployment fails or causes issues:
 
 Deployment is successful when:
 
-- ✅ **All pods Running**: `kubectl get pods -n cho-svcs -l app=enrollment-import-service`
+- ✅ **All pods Running**: `kubectl get pods -n cloudhealthoffice -l app=enrollment-import-service`
 - ✅ **Health checks passing**: `curl http://localhost:8080/health` → HTTP 200
-- ✅ **CronWorkflow scheduled**: `argo cron get x12-834-enrollment-import -n cho-svcs`
+- ✅ **CronWorkflow scheduled**: `argo cron get x12-834-enrollment-import -n cloudhealthoffice`
 - ✅ **Sample file processed**: 3 enrollments imported, 6 members created, 1 terminated
 - ✅ **Data in Cosmos DB**: Members, Coverage, Sponsors containers populated
-- ✅ **No errors in logs**: `kubectl logs -n cho-svcs -l app=enrollment-import-service`
+- ✅ **No errors in logs**: `kubectl logs -n cloudhealthoffice -l app=enrollment-import-service`
 - ✅ **Prometheus metrics available**: `/metrics` endpoint responding
 - ✅ **HPA scaling working**: Pods scale 2-10 based on load
 

@@ -124,7 +124,7 @@ kubectl apply -f k8s/site-ingress.yaml
 kubectl apply -f k8s/portal-ingress.yaml
 
 # 4. Watch certificate issuance (takes 1-3 minutes)
-kubectl get certificate -n cho-svcs -w
+kubectl get certificate -n cloudhealthoffice -w
 # Wait until both show READY=True
 ```
 
@@ -175,14 +175,14 @@ https://cloudhealthoffice.com
 
 ### Check Ingress Status
 ```bash
-kubectl get ingress -n cho-svcs
+kubectl get ingress -n cloudhealthoffice
 ```
 
 ### Check Certificate Status
 ```bash
-kubectl get certificate -n cho-svcs
-kubectl describe certificate site-tls-secret -n cho-svcs
-kubectl describe certificate portal-tls-secret -n cho-svcs
+kubectl get certificate -n cloudhealthoffice
+kubectl describe certificate site-tls-secret -n cloudhealthoffice
+kubectl describe certificate portal-tls-secret -n cloudhealthoffice
 ```
 
 ### View Ingress Logs
@@ -202,7 +202,7 @@ kubectl logs -n cert-manager -l app=cert-manager -f
 
 **Check:**
 ```bash
-kubectl describe certificate -n cho-svcs
+kubectl describe certificate -n cloudhealthoffice
 kubectl logs -n cert-manager -l app=cert-manager --tail=100
 ```
 
@@ -216,9 +216,9 @@ kubectl logs -n cert-manager -l app=cert-manager --tail=100
 
 **Check:**
 ```bash
-kubectl get pods -n cho-svcs -l app=site
-kubectl get pods -n cho-svcs -l app=portal
-kubectl logs -n cho-svcs -l app=site
+kubectl get pods -n cloudhealthoffice -l app=site
+kubectl get pods -n cloudhealthoffice -l app=portal
+kubectl logs -n cloudhealthoffice -l app=site
 ```
 
 **Common causes:**
@@ -231,7 +231,7 @@ kubectl logs -n cho-svcs -l app=site
 
 **Check ingress annotations:**
 ```bash
-kubectl get ingress site-ingress -n cho-svcs -o yaml | grep ssl-redirect
+kubectl get ingress site-ingress -n cloudhealthoffice -o yaml | grep ssl-redirect
 ```
 
 Should see:
@@ -252,7 +252,7 @@ nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 ### Key Commands
 ```bash
 # Check everything
-kubectl get ingress,certificate,svc -n cho-svcs
+kubectl get ingress,certificate,svc -n cloudhealthoffice
 
 # Validate configuration
 bash k8s/validate-ingress.sh
@@ -297,7 +297,7 @@ echo | openssl s_client -servername cloudhealthoffice.com \
 1. **Deploy Prerequisites** - Install NGINX ingress and cert-manager
 2. **Configure DNS** - Point domains to 4.149.83.133
 3. **Apply Manifests** - Deploy ingress resources
-4. **Wait for Certificates** - Monitor with `kubectl get certificate -n cho-svcs -w`
+4. **Wait for Certificates** - Monitor with `kubectl get certificate -n cloudhealthoffice -w`
 5. **Test Access** - Verify HTTPS at https://cloudhealthoffice.com
 
 ## Support Resources

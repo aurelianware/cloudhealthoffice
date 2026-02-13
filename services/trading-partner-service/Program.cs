@@ -53,7 +53,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "http://localhost:5000",
-                "http://portal.cho-svcs",
+                "http://portal.cloudhealthoffice",
                 "https://portal.cloudhealthoffice.com")
             .AllowAnyMethod()
             .AllowAnyHeader()

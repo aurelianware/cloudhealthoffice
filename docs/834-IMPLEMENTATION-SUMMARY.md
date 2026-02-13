@@ -206,8 +206,8 @@ kubectl apply -f services/enrollment-import-service/k8s/enrollment-import-servic
 kubectl apply -f argo-workflows/x12-834-enrollment-import.yaml
 
 # 4. Verify deployment
-kubectl get pods -n cho-svcs -l app=enrollment-import-service
-kubectl get cronworkflows -n cho-svcs x12-834-enrollment-import
+kubectl get pods -n cloudhealthoffice -l app=enrollment-import-service
+kubectl get cronworkflows -n cloudhealthoffice x12-834-enrollment-import
 ```
 
 ### Test Pipeline
@@ -218,13 +218,13 @@ sftp <username>@<sftp-host>
 put test-x12-834-enrollment-sample.edi /inbound/enrollment/test-enrollment.edi
 
 # 2. Trigger workflow manually (or wait for cron)
-argo submit --from cronwf/x12-834-enrollment-import -n cho-svcs
+argo submit --from cronwf/x12-834-enrollment-import -n cloudhealthoffice
 
 # 3. Watch workflow execution
-argo watch @latest -n cho-svcs
+argo watch @latest -n cloudhealthoffice
 
 # 4. View logs
-argo logs @latest -n cho-svcs
+argo logs @latest -n cloudhealthoffice
 
 # 5. Verify data in Cosmos DB
 az cosmosdb sql query \
@@ -368,16 +368,16 @@ Enrollment-import-service exposes `/metrics`:
 
 ```bash
 # View recent workflow executions
-argo list -n cho-svcs --prefix x12-834-enrollment-import
+argo list -n cloudhealthoffice --prefix x12-834-enrollment-import
 
 # View specific workflow
-argo get x12-834-enrollment-import-<timestamp> -n cho-svcs
+argo get x12-834-enrollment-import-<timestamp> -n cloudhealthoffice
 
 # View logs for each step
-argo logs x12-834-enrollment-import-<timestamp> -n cho-svcs --container fetch-from-sftp
-argo logs x12-834-enrollment-import-<timestamp> -n cho-svcs --container parse-834-files
-argo logs x12-834-enrollment-import-<timestamp> -n cho-svcs --container import-to-cosmos
-argo logs x12-834-enrollment-import-<timestamp> -n cho-svcs --container archive-to-sftp
+argo logs x12-834-enrollment-import-<timestamp> -n cloudhealthoffice --container fetch-from-sftp
+argo logs x12-834-enrollment-import-<timestamp> -n cloudhealthoffice --container parse-834-files
+argo logs x12-834-enrollment-import-<timestamp> -n cloudhealthoffice --container import-to-cosmos
+argo logs x12-834-enrollment-import-<timestamp> -n cloudhealthoffice --container archive-to-sftp
 ```
 
 ---

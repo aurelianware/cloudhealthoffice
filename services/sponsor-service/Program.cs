@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using SponsorService.Middleware;
 using SponsorService.Repositories;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,32 +18,55 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// Database Configuration (Cosmos DB or MongoDB)
+if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"] 
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-    var key = configuration["CosmosDb:Key"] 
-        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-    
-    return new CosmosClient(endpoint, key, new CosmosClientOptions
+    // Use MongoDB
+    builder.Services.AddSingleton<IMongoClient>(sp =>
     {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return new MongoClient(configuration["MongoDb:ConnectionString"]);
     });
-});
 
-// Register repositories
-builder.Services.AddScoped<ISponsorRepository>(sp =>
+    builder.Services.AddScoped<IMongoDatabase>(sp =>
+    {
+        var wrapper = sp.GetRequiredService<IMongoClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
+    });
+
+    builder.Services.AddScoped<ISponsorRepository, SponsorRepositoryMongo>();
+    Console.WriteLine("Using MongoDB repository");
+}
+else
 {
-    var cosmosClient = sp.GetRequiredService<CosmosClient>();
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-    return new SponsorRepository(cosmosClient, databaseName);
-});
+    // Use Cosmos DB (Default)
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var endpoint = configuration["CosmosDb:Endpoint"] 
+            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
+        var key = configuration["CosmosDb:Key"] 
+            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
+        
+        return new CosmosClient(endpoint, key, new CosmosClientOptions
+        {
+            SerializerOptions = new CosmosSerializationOptions
+            {
+                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+            }
+        });
+    });
+
+    builder.Services.AddScoped<ISponsorRepository>(sp =>
+    {
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        return new SponsorRepository(cosmosClient, databaseName);
+    });
+    Console.WriteLine("Using Cosmos DB repository");
+}
 
 // CORS (configure as needed)
 builder.Services.AddCors(options =>
