@@ -5,8 +5,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__SponsorContainerName: "Sponsors"
 ---
 apiVersion: v1
 kind: Secret
@@ -15,9 +13,7 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-primary-key-here"
-  # TODO: Replace with actual Azure Key Vault reference or managed identity
+  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -28,7 +24,7 @@ metadata:
     app: sponsor-service
     version: v1
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: sponsor-service
@@ -52,33 +48,11 @@ spec:
             configMapKeyRef:
               name: sponsor-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: sponsor-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: sponsor-service-secrets
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: sponsor-service-secrets
-              key: CosmosDb__Key
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
               name: sponsor-service-secrets
               key: MongoDb__ConnectionString
-              optional: true
-        - name: MongoDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: sponsor-service-config
-              key: MongoDb__DatabaseName
-              optional: true
         resources:
           requests:
             memory: "256Mi"
