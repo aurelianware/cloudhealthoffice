@@ -8,6 +8,7 @@ using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,10 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY"
 {
     builder.Configuration["Stripe:SecretKey"] = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
 }
+
+// Note: Stripe__Price__Starter and Stripe__Price__Professional environment variables
+// are automatically mapped to Stripe:Price:Starter and Stripe:Price:Professional
+// by ASP.NET Core configuration system (__ -> :)
 
 // Configure forwarded headers for running behind reverse proxy/ingress
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -94,19 +99,14 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.Name = ".CloudHealthOffice.Auth";
-    
-    // Configure for reverse proxy
-    options.ForwardDefaultSelector = true;
 });
 
 builder.Services.AddAuthorization(options =>
 {
-    // Fallback policy requires authentication, but specific endpoints can opt-out with [AllowAnonymous]
-    var policyBuilder = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser();
-    options.FallbackPolicy = policyBuilder.Build();
+    // Don't use fallback policy - let pages opt-in to authentication
+    // This allows [AllowAnonymous] pages like /signup and /welcome to work
     
-    // Add anonymous policy for health checks
+    // Add anonymous policy for health checks and public pages
     options.AddPolicy("Anonymous", policy => policy.RequireAssertion(_ => true));
 });
 
@@ -117,9 +117,12 @@ builder.Services.AddServerSideBlazor()
     .AddMicrosoftIdentityConsentHandler();
 builder.Services.AddMudServices();
 
-// Add HttpClient for service calls
+// Add HttpClient for service calls with tenant context
+builder.Services.AddScoped<TenantHttpMessageHandler>();
+
 builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddHttpMessageHandler<TenantHttpMessageHandler>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(10),
@@ -129,6 +132,27 @@ builder.Services.AddHttpClient("default")
 
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
+
+// Cosmos DB client (singleton)
+builder.Services.AddSingleton<CosmosClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var endpoint = configuration["CosmosDb:Endpoint"]
+        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
+    var key = configuration["CosmosDb:Key"]
+        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
+
+    return new CosmosClient(endpoint, key, new CosmosClientOptions
+    {
+        SerializerOptions = new CosmosSerializationOptions
+        {
+            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+        }
+    });
+});
+
+// Register tenant context service (must be before other services that depend on it)
+builder.Services.AddScoped<ITenantContextService, TenantContextService>();
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();
@@ -143,6 +167,8 @@ builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
+builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 
 // Add SignalR
 builder.Services.AddSignalR();

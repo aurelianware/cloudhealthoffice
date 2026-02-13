@@ -1,35 +1,136 @@
 @inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITenantContextService TenantContextService
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1" Dense="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-3">Cloud Health Office</MudText>
+    <MudAppBar Elevation="3" Dense="true" Style="border-bottom: 1px solid rgba(0, 255, 255, 0.3);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Primary" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+        
+        <!-- The Sentinel Logo -->
+        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" 
+             alt="Cloud Health Office - The Sentinel" 
+             style="height: 32px; margin-left: 12px; margin-right: 16px; filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));" />
+        
+        <MudText Typo="Typo.h6" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #ff00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            Cloud Health Office
+        </MudText>
+        
         <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mr-4">Tenant: <strong>Demo Health Plan</strong></MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
-        <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" />
+        
+        @if (!string.IsNullOrEmpty(_tenantName))
+        {
+            <MudChip T="string" 
+                     Color="@(_isDemo ? Color.Warning : Color.Primary)" 
+                     Variant="Variant.Outlined" 
+                     Size="Size.Small" 
+                     Style="@(_isDemo ? "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);" : "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);")">
+                @_tenantName @(_isDemo ? "(Demo)" : "")
+            </MudChip>
+        }
+        
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Style="margin-left: 12px;" />
+        
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudMenuItem>
+                        <div style="padding: 8px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5);">Signed in as</MudText>
+                            <MudText Typo="Typo.body2">@context.User.Identity?.Name</MudText>
+                        </div>
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/settings">Settings</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="@Logout">Sign Out</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Login" Color="Color.Primary" Href="/welcome" />
+            </NotAuthorized>
+        </AuthorizeView>
     </MudAppBar>
     
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2">
-        <MudNavMenu>
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt">Claims</MudNavLink>
-            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser">Eligibility</MudNavLink>
-            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Members</MudNavLink>
-            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business">Sponsors</MudNavLink>
-            <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety">Benefit Plans</MudNavLink>
-            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital">Providers</MudNavLink>
-            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Authorizations</MudNavLink>
-            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">Workflows</MudNavLink>
-            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">Reports</MudNavLink>
-            <MudDivider Class="my-2" />
-            <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code">Reference Data</MudNavLink>
-            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="3" Style="border-right: 1px solid rgba(0, 255, 255, 0.2);">
+        <div style="padding: 24px 16px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
+            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.1em;">
+                Navigation
+            </MudText>
+        </div>
+        
+        <MudNavMenu Style="padding-top: 8px;">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" 
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Claims
+            </MudNavLink>
+            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Eligibility
+            </MudNavLink>
+            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Members
+            </MudNavLink>
+            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Sponsors
+            </MudNavLink>
+            <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Benefit Plans
+            </MudNavLink>
+            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Providers
+            </MudNavLink>
+            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Authorizations
+            </MudNavLink>
+            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Workflows
+            </MudNavLink>
+            <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Trading Partners
+            </MudNavLink>
+            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Reports
+            </MudNavLink>
+            
+            <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
+            
+            <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Reference Data
+            </MudNavLink>
+            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
+                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                Settings
+            </MudNavLink>
         </MudNavMenu>
+        
+        <!-- Footer branding in drawer -->
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; border-top: 1px solid rgba(0, 255, 255, 0.2); text-align: center;">
+            <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.4);">
+                The Sentinel
+            </MudText>
+            <MudText Typo="Typo.caption" Style="color: rgba(0, 255, 255, 0.6); margin-top: 4px;">
+                v3.0 Production
+            </MudText>
+        </div>
     </MudDrawer>
     
     <MudMainContent>
@@ -41,25 +142,85 @@
 
 @code {
     private bool _drawerOpen = true;
+    private string? _tenantName;
+    private bool _isDemo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load tenant context
+        await LoadTenantContextAsync();
+    }
+
+    private async Task LoadTenantContextAsync()
+    {
+        try
+        {
+            var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            if (tenantContext != null)
+            {
+                _tenantName = tenantContext.TenantName;
+                _isDemo = tenantContext.IsDemo;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't crash the layout
+            Console.Error.WriteLine($"Error loading tenant context: {ex.Message}");
+        }
+    }
+
+    private void Logout()
+    {
+        // Navigate to Microsoft Identity logout endpoint
+        Navigation.NavigateTo("/MicrosoftIdentity/Account/SignOut", forceLoad: true);
+    }
 
     private MudTheme _theme = new()
     {
+        // The Sentinel Theme - Obsidian & Neon (Cyan/Green focus)
         Palette = new PaletteLight
         {
-            Primary = "#1976d2",
-            Secondary = "#26a69a",
-            AppbarBackground = "#1976d2",
-            Success = "#4caf50",
-            Error = "#f44336",
-            Warning = "#ff9800",
-            Info = "#2196f3"
-        },
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#90caf9",
-            Secondary = "#80cbc4",
-            AppbarBackground = "#1e1e1e"
+            // Core brand colors
+            Primary = "#00ffff",           // Cyan - primary actions
+            Secondary = "#00ff88",         // Neon green - secondary elements  
+            Tertiary = "#00ddbb",          // Teal - tertiary accent
+            
+            // Backgrounds - absolute black
+            Background = "#000000",
+            BackgroundGrey = "#0a0a0a",
+            Surface = "#0f0f0f",
+            DrawerBackground = "#000000",
+            AppbarBackground = "#000000",
+            
+            // Text - high contrast white
+            TextPrimary = "#ffffff",
+            TextSecondary = "rgba(255, 255, 255, 0.7)",
+            TextDisabled = "rgba(255, 255, 255, 0.38)",
+            
+            // Semantic colors - neon palette
+            Success = "#00ff88",           // Neon green
+            Error = "#ff0055",             // Neon red/pink
+            Warning = "#ffaa00",           // Neon orange
+            Info = "#00ffff",              // Cyan
+            
+            // Borders and dividers
+            Divider = "rgba(0, 255, 255, 0.2)",
+            DividerLight = "rgba(0, 255, 255, 0.1)",
+            
+            // Actions and overlays
+            ActionDefault = "rgba(0, 255, 255, 0.54)",
+            ActionDisabled = "rgba(255, 255, 255, 0.26)",
+            ActionDisabledBackground = "rgba(255, 255, 255, 0.12)",
+            
+            // Hover effects - neon glow
+            HoverOpacity = 0.15,
+            
+            // Lines
+            LinesDefault = "rgba(0, 255, 255, 0.2)",
+            LinesInputs = "rgba(0, 255, 255, 0.3)"
         }
+        // Using default Typography and Shadows for now - will customize later
     };
 
     void ToggleDrawer()

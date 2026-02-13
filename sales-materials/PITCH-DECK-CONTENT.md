@@ -211,7 +211,7 @@ npm run generate -- interactive --output my-config.json --generate
     Low Cost               │                High Cost
                            │
         [Fragmented        │     Change Healthcare
-         Point Solutions]  │     TriZetto / Optum
+         Point Solutions]  │     Enterprise Vendors
                            │
                            ▼
                     Low Implementation Speed
@@ -219,7 +219,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 ### Feature Comparison
 
-| Capability | Change Healthcare | TriZetto | Optum | Cloud Health Office |
+| Capability | Change Healthcare | Enterprise Vendor A | Enterprise Vendor B | Cloud Health Office |
 |------------|-------------------|----------|-------|---------------------|
 | **CMS-0057-F Ready** | Partial | Partial | Partial | ✅ Complete |
 | **Implementation** | 12-18 months | 6-12 months | 12+ months | **< 5 minutes** |

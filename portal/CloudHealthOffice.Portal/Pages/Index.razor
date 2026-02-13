@@ -1,7 +1,11 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
+@inject ITenantService TenantService
+@inject ILogger<Index> Logger
 
 @code {
     protected override async Task OnInitializedAsync()
@@ -9,200 +13,76 @@
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
-        if (user.Identity?.IsAuthenticated == true)
+        if (!user.Identity?.IsAuthenticated ?? true)
         {
-            // User is authenticated, go to dashboard
-            Navigation.NavigateTo("/dashboard");
-        }
-        else
-        {
-            // User not authenticated, show landing page
+            // User not authenticated, show welcome page
             Navigation.NavigateTo("/welcome");
-        }
-    }
-}
-
-
-<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="mr-2" />
-        Claims Adjudication Dashboard
-    </MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        Real-time monitoring and analytics
-    </MudText>
-
-    @if (_loading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
-    }
-    else
-    {
-        <!-- Key Metrics Row -->
-        <MudGrid Class="mb-4">
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">Total Claims (24h)</MudText>
-                        <MudText Typo="Typo.h3">@_metrics.TotalClaims.ToString("N0")</MudText>
-                        <MudText Typo="Typo.body2" Color="@(_metrics.ClaimsTrend > 0 ? Color.Success : Color.Error)">
-                            <MudIcon Icon="@(_metrics.ClaimsTrend > 0 ? Icons.Material.Filled.TrendingUp : Icons.Material.Filled.TrendingDown)" Size="Size.Small" />
-                            @_metrics.ClaimsTrend.ToString("+0.0%;-0.0%") vs yesterday
-                        </MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">Approval Rate</MudText>
-                        <MudText Typo="Typo.h3">@_metrics.ApprovalRate.ToString("P1")</MudText>
-                        <MudProgressLinear Color="Color.Success" Value="@(_metrics.ApprovalRate * 100)" Class="mt-2" />
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">Avg Processing Time</MudText>
-                        <MudText Typo="Typo.h3">@_metrics.AvgProcessingTimeMs.ToString("N0")ms</MudText>
-                        <MudText Typo="Typo.body2" Color="@(_metrics.AvgProcessingTimeMs < 500 ? Color.Success : Color.Warning)">
-                            <MudIcon Icon="@(_metrics.AvgProcessingTimeMs < 500 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning)" Size="Size.Small" />
-                            Target: &lt;500ms
-                        </MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Color="Color.Secondary">Total Payer Amount</MudText>
-                        <MudText Typo="Typo.h3">@_metrics.TotalPayerAmount.ToString("C0")</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Info">24-hour period</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
-
-        <!-- Charts Row -->
-        <MudGrid Class="mb-4">
-            <MudItem xs="12" md="8">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Claims Volume (Last 24 Hours)</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Info" Class="mb-4">
-                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
-                            Live data refreshes every 30 seconds
-                        </MudText>
-                        <!-- Chart placeholder - integrate with Grafana data -->
-                        <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #f5f5f5; border-radius: 4px;">
-                            <MudText Typo="Typo.body1" Color="Color.Secondary">
-                                Chart: Claims over time (Approved vs Denied)
-                            </MudText>
-                        </div>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            <MudItem xs="12" md="4">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Claims by Status</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        <MudList>
-                            <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">
-                                <MudText>Approved: @_metrics.ApprovedClaims.ToString("N0")</MudText>
-                            </MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Cancel" IconColor="Color.Error">
-                                <MudText>Denied: @_metrics.DeniedClaims.ToString("N0")</MudText>
-                            </MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.HourglassEmpty" IconColor="Color.Warning">
-                                <MudText>Pending: @_metrics.PendingClaims.ToString("N0")</MudText>
-                            </MudListItem>
-                        </MudList>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
-
-        <!-- Recent Claims -->
-        <MudCard Elevation="2">
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Recent Claims</MudText>
-                </CardHeaderContent>
-                <CardHeaderActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" 
-                               OnClick="@(() => NavigationManager.NavigateTo("/claims/submit"))">
-                        Submit New Claim
-                    </MudButton>
-                </CardHeaderActions>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudTable Items="@_recentClaims" Hover="true" Dense="true">
-                    <HeaderContent>
-                        <MudTh>Claim ID</MudTh>
-                        <MudTh>Member</MudTh>
-                        <MudTh>Provider</MudTh>
-                        <MudTh>Amount</MudTh>
-                        <MudTh>Status</MudTh>
-                        <MudTh>Processing Time</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Claim ID">@context.ClaimId</MudTd>
-                        <MudTd DataLabel="Member">@context.MemberName</MudTd>
-                        <MudTd DataLabel="Provider">@context.ProviderName</MudTd>
-                        <MudTd DataLabel="Amount">@context.TotalChargeAmount.ToString("C")</MudTd>
-                        <MudTd DataLabel="Status">
-                            <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                                @context.Status
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Processing Time">@context.ProcessingTimeMs ms</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" 
-                                           OnClick="@(() => ViewClaim(context.ClaimId))" />
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            </MudCardContent>
-        </MudCard>
-    }
-</MudContainer>
-
-@code {
-    private bool _loading = true;
-    private DashboardMetrics _metrics = new();
-    private List<ClaimSummary> _recentClaims = new();
-    private System.Threading.Timer? _refreshTimer;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender)
-        {
             return;
         }
 
-        await LoadDashboardData();
-        StateHasChanged();
+        // User is authenticated via Azure AD
+        // Extract Azure AD Tenant ID from claims
+        var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                         ?? user.FindFirst("tid")?.Value;
+        var userEmail = user.FindFirst(ClaimTypes.Email)?.Value
+                     ?? user.FindFirst("preferred_username")?.Value
+                     ?? user.FindFirst("upn")?.Value;
 
-        // Auto-refresh every 30 seconds
-        _refreshTimer = new System.Threading.Timer(async _ =>
+        Logger.LogInformation("Authenticated user {Email} from Azure Tenant {TenantId}", userEmail, azureTenantId);
+
+        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
         {
-            await InvokeAsync(async () =>
-            {
-                await LoadDashboardData();
+            Logger.LogWarning("Unable to extract tenant ID from claims, redirecting to signup");
+            Navigation.NavigateTo("/signup");
+            return;
+        }
+
+        // Query for subscription by Azure Tenant ID
+        var subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+
+        if (subscription == null)
+        {
+            // No subscription found - redirect to signup
+            Logger.LogInformation("No subscription found for tenant {TenantId}, redirecting to signup", azureTenantId);
+            Navigation.NavigateTo("/signup");
+            return;
+        }
+
+        if (subscription.IsDemo)
+        {
+            // Demo tenant - redirect to demo page
+            Logger.LogInformation("Demo tenant detected, redirecting to /demo");
+            Navigation.NavigateTo("/demo");
+            return;
+        }
+
+        // Check subscription status
+        if (subscription.SubscriptionStatus == "Expired" || subscription.SubscriptionStatus == "Cancelled")
+        {
+            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to billing", 
+                subscription.SubscriptionStatus, azureTenantId);
+            Navigation.NavigateTo("/billing");
+            return;
+        }
+
+        // Check if user is a member of this tenant
+        var isMember = await TenantService.IsMemberOfTenantAsync(azureTenantId, userEmail ?? "");
+
+        if (!isMember)
+        {
+            // User's organization has subscription but they're not authorized
+            Logger.LogWarning("User {Email} not authorized for tenant {TenantId}, redirecting to request access", 
+                userEmail, azureTenantId);
+            Navigation.NavigateTo("/request-access");
+            return;
+        }
+
+        // All checks passed - redirect to dashboard
+        Logger.LogInformation("User {Email} authorized, redirecting to dashboard", userEmail);
+        Navigation.NavigateTo("/dashboard");
+    }
+}
+
                 StateHasChanged();
             });
         }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
@@ -251,7 +131,7 @@
 
     private void ViewClaim(string claimId)
     {
-        NavigationManager.NavigateTo($"/claims/{claimId}");
+        Navigation.NavigateTo($"/claims/{claimId}");
     }
 
     public void Dispose()

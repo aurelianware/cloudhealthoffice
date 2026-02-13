@@ -85,7 +85,7 @@ I'm looking forward to our demo on [Date] at [Time]. I've prepared a customized 
 
 **What to Prepare:**
 - Current attachment processing volume (monthly)
-- Your claims system (claims adjudication systems such as TriZetto, etc.)
+- Your claims system (core admin platform, custom solution, etc.)
 - Any specific compliance requirements
 
 **Meeting Details:**
