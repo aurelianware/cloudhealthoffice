@@ -1,0 +1,16 @@
+{
+  "tenantId": "test-tenant-001",
+  "payerId": "BLUESHIELD001",
+  "payerName": "Blue Shield of California",
+  "providerId": "1234567890",
+  "providerNPI": "1234567890",
+  "subscriberId": "BSCA123456789",
+  "subscriberFirstName": "John",
+  "subscriberLastName": "Doe",
+  "subscriberDOB": "1985-06-15",
+  "subscriberGender": "M",
+  "groupNumber": "GRP0001",
+  "serviceTypeCode": "30",
+  "serviceDateFrom": "2026-02-10",
+  "lineOfBusiness": 1
+}

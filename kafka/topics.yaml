@@ -170,6 +170,72 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
+  name: claims-adjudication
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-adjudication
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-adjudication
+  partitions: 6
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: claims-work-queue
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-work-queue
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-work-queue
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: claims-rejected
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-rejected
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-rejected
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "7776000000"  # 90 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
   name: eligibility-requests
   namespace: kafka
   labels:
@@ -183,6 +249,28 @@ spec:
   replicas: 3
   config:
     retention.ms: "604800000"  # 7 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: enrollment-import
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: enrollment-import
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: enrollment-import
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days (member enrollment audit log)
     cleanup.policy: "delete"
     compression.type: "lz4"
     min.insync.replicas: "2"

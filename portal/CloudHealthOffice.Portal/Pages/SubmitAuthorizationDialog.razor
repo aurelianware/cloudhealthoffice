@@ -1,0 +1,295 @@
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject IAuthorizationService AuthorizationService
+@inject IAttachmentService AttachmentService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Submit a new prior authorization request. Most requests are auto-adjudicated within 2 minutes.
+        </MudText>
+
+        <MudForm @ref="_form" @bind-IsValid="@_formValid">
+            <MudGrid>
+                <!-- Member Selection -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-2">Member Information</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.MemberId" 
+                                 Label="Member ID" 
+                                 Placeholder="MBR-2024-XXX"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Member ID is required" />
+                </MudItem>
+
+                <!-- Provider Selection -->
+                <MudItem xs="12" Class="mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Provider Information</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.ProviderId" 
+                                 Label="Provider ID" 
+                                 Placeholder="PRV-XXX"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Provider ID is required" />
+                </MudItem>
+
+                <!-- Service Details -->
+                <MudItem xs="12" Class="mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Service Details</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_request.ServiceType" 
+                              Label="Service Type" 
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              T="string">
+                        <MudSelectItem Value="@("Surgery")">Surgery</MudSelectItem>
+                        <MudSelectItem Value="@("MRI")">MRI</MudSelectItem>
+                        <MudSelectItem Value="@("CT Scan")">CT Scan</MudSelectItem>
+                        <MudSelectItem Value="@("Physical Therapy")">Physical Therapy</MudSelectItem>
+                        <MudSelectItem Value="@("Specialist Consult")">Specialist Consult</MudSelectItem>
+                        <MudSelectItem Value="@("Durable Medical Equipment")">Durable Medical Equipment</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_request.UnitsRequested" 
+                                    Label="Units Requested" 
+                                    Variant="Variant.Outlined"
+                                    Min="1"
+                                    Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.DiagnosisCode" 
+                                 Label="Diagnosis Code (ICD-10)" 
+                                 Placeholder="M54.5"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Diagnosis code is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_request.ProcedureCode" 
+                                 Label="Procedure Code (CPT)" 
+                                 Placeholder="70553"
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 RequiredError="Procedure code is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_serviceStartDate" 
+                                  Label="Service Start Date" 
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MinDate="DateTime.Today" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_serviceEndDate" 
+                                  Label="Service End Date (Optional)" 
+                                  Variant="Variant.Outlined"
+                                  MinDate="_serviceStartDate ?? DateTime.Today" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_request.ClinicalNotes" 
+                                 Label="Clinical Notes" 
+                                 Placeholder="Provide clinical justification..."
+                                 Variant="Variant.Outlined"
+                                 Lines="4"
+                                 Required="true"
+                                 RequiredError="Clinical notes are required" />
+                </MudItem>
+
+                <!-- Attachments Section -->
+                <MudItem xs="12" Class="mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
+                        Supporting Documentation
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Upload medical records, imaging results, lab reports, or clinical notes (PDF, JPG, PNG). Max 5MB per file.
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudFileUpload T="IBrowserFile" 
+                                  Accept=".pdf,.jpg,.jpeg,.png" 
+                                  OnFilesChanged="OnFilesChanged"
+                                  MaximumFileCount="10"
+                                  Class="mb-2">
+                        <ButtonTemplate>
+                            <MudButton HtmlTag="label"
+                                      Variant="Variant.Outlined"
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.CloudUpload"
+                                      for="@context">
+                                Choose Files
+                            </MudButton>
+                        </ButtonTemplate>
+                    </MudFileUpload>
+                    
+                    @if (_uploadedFiles.Any())
+                    {
+                        <MudList Dense="true" Class="mt-2">
+                            @foreach (var file in _uploadedFiles)
+                            {
+                                <MudListItem>
+                                    <div class="d-flex align-center justify-space-between">
+                                        <div class="d-flex align-center">
+                                            <MudIcon Icon="@GetFileIcon(file.ContentType)" Size="Size.Small" Class="mr-2" />
+                                            <div>
+                                                <MudText Typo="Typo.body2">@file.Name</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @FormatFileSize(file.Size)
+                                                </MudText>
+                                            </div>
+                                        </div>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                      Size="Size.Small" 
+                                                      Color="Color.Error"
+                                                      OnClick="@(() => RemoveFile(file))" />
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                  Color="Color.Primary" 
+                  OnClick="Submit"
+                  Disabled="@(!_formValid || _submitting)">
+            @if (_submitting)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Submitting...</span>
+            }
+            else
+            {
+                <span>Submit Request</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private bool _formValid;
+    private bool _submitting;
+    private SubmitAuthorizationRequest _request = new() 
+    { 
+        ServiceType = "Surgery",
+        UnitsRequested = 1
+    };
+    private DateTime? _serviceStartDate = DateTime.Today.AddDays(7);
+    private DateTime? _serviceEndDate;
+    private List<IBrowserFile> _uploadedFiles = new();
+
+    private async Task OnFilesChanged(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles(10))
+        {
+            // Validate file size (5MB max)
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                Snackbar.Add($"File {file.Name} exceeds 5MB limit", Severity.Warning);
+                continue;
+            }
+
+            // Validate file type
+            var allowedTypes = new[] { "application/pdf", "image/jpeg", "image/jpg", "image/png" };
+            if (!allowedTypes.Contains(file.ContentType))
+            {
+                Snackbar.Add($"File {file.Name} has unsupported type", Severity.Warning);
+                continue;
+            }
+
+            _uploadedFiles.Add(file);
+        }
+        StateHasChanged();
+    }
+
+    private void RemoveFile(IBrowserFile file)
+    {
+        _uploadedFiles.Remove(file);
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_formValid)
+            return;
+
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            // Map dates
+            _request.ServiceStartDate = _serviceStartDate ?? DateTime.Today;
+            _request.ServiceEndDate = _serviceEndDate;
+
+            var authId = await AuthorizationService.SubmitAuthorizationAsync(_request);
+
+            // Upload attachments if any
+            if (_uploadedFiles.Any())
+            {
+                foreach (var file in _uploadedFiles)
+                {
+                    try
+                    {
+                        using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                        await AttachmentService.UploadAttachmentAsync(authId, stream, file.Name, file.ContentType);
+                    }
+                    catch (Exception ex)
+                    {
+                        Snackbar.Add($"Warning: Failed to upload {file.Name}", Severity.Warning);
+                    }
+                }
+            }
+            
+            Snackbar.Add($"Authorization request {authId} submitted successfully with {_uploadedFiles.Count} attachment(s)!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(authId));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Failed to submit authorization request. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetFileIcon(string contentType)
+    {
+        return contentType switch
+        {
+            "application/pdf" => Icons.Material.Filled.PictureAsPdf,
+            "image/jpeg" or "image/jpg" or "image/png" => Icons.Material.Filled.Image,
+            _ => Icons.Material.Filled.AttachFile
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} B";
+        else if (bytes < 1024 * 1024)
+            return $"{bytes / 1024.0:F1} KB";
+        else
+            return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,44 @@
+---
+# Ingress for Cloud Health Office Website (Static Site)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: site-ingress
+  namespace: cloudhealthoffice
+  labels:
+    app: site
+    component: frontend
+  annotations:
+    # NGINX Ingress Controller annotations
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - cloudhealthoffice.com
+    - www.cloudhealthoffice.com
+    secretName: site-tls-secret
+  rules:
+  - host: cloudhealthoffice.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: site
+            port:
+              number: 80
+  - host: www.cloudhealthoffice.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: site
+            port:
+              number: 80

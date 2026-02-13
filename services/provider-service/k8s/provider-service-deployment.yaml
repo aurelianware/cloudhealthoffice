@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: provider-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   CosmosDb__DatabaseName: "ProviderDB"
@@ -12,7 +12,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: provider-service-secrets
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 type: Opaque
 stringData:
   CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
@@ -22,7 +22,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: provider-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: provider-service
     tier: backend
@@ -41,12 +41,14 @@ spec:
     spec:
       containers:
       - name: provider-service
-        image: your-acr.azurecr.io/provider-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-provider-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
         env:
+        - name: MongoDb__ConnectionString
+          value: "mongodb://admin:securepassword123@mongodb:27017"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
@@ -96,7 +98,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: provider-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: provider-service
 spec:
@@ -113,7 +115,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: provider-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

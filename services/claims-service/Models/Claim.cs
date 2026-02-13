@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace ClaimsService.Models;
 
@@ -18,6 +19,7 @@ public class Claim
     /// <summary>
     /// Unique claim identifier (Cosmos DB document id)
     /// </summary>
+    [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>

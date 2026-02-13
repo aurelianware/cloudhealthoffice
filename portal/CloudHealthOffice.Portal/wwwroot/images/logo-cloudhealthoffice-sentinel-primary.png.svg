@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="neonGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ffff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#00ff88;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0088ff;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Absolute black background -->
+  <rect width="800" height="400" fill="#000000"/>
+  
+  <!-- Circuit veins pattern -->
+  <g opacity="0.3" stroke="url(#neonGlow)" stroke-width="1" fill="none" filter="url(#glow)">
+    <path d="M50,200 L150,200 L150,100 L250,100"/>
+    <path d="M150,200 L150,300 L250,300"/>
+    <path d="M250,100 L350,100 L350,150"/>
+    <path d="M250,300 L350,300 L350,250"/>
+    <path d="M350,150 L400,200 L350,250"/>
+    <path d="M550,200 L650,200 L650,100 L750,100"/>
+    <path d="M650,200 L650,300 L750,300"/>
+  </g>
+  
+  <!-- Sentinel icon -->
+  <g transform="translate(80, 100)">
+    <circle cx="100" cy="100" r="80" fill="none" stroke="url(#neonGlow)" stroke-width="3" filter="url(#glow)"/>
+    <circle cx="100" cy="100" r="60" fill="none" stroke="url(#neonGlow)" stroke-width="2" filter="url(#glow)"/>
+    <path d="M100,40 L100,160 M40,100 L160,100" stroke="url(#neonGlow)" stroke-width="4" filter="url(#glow)"/>
+    <circle cx="100" cy="100" r="15" fill="url(#neonGlow)" filter="url(#glow)"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="300" y="180" font-family="Segoe UI, sans-serif" font-size="48" font-weight="bold" fill="url(#neonGlow)" filter="url(#glow)">CLOUD HEALTH OFFICE</text>
+  <text x="300" y="230" font-family="Segoe UI, sans-serif" font-size="24" font-weight="normal" fill="#00ffff" opacity="0.8">SENTINEL</text>
+  <text x="300" y="270" font-family="Segoe UI, sans-serif" font-size="16" font-style="italic" fill="#00ff88" opacity="0.6">Just emerged from the void</text>
+</svg>

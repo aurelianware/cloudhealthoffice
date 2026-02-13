@@ -1,0 +1,569 @@
+@page "/signup"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Authorization
+@using CloudHealthOffice.Portal.Services
+@using Stripe
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
+@inject ITenantService TenantService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<Signup> Logger
+
+@attribute [AllowAnonymous]
+
+<PageTitle>Sign Up - Cloud Health Office</PageTitle>
+
+<HeadContent>
+    @* Temporarily disabled analytics to debug portal crash
+    <script async src="https://plausible.io/js/pa-DSFLxN3jN3PVX0eGzs8vx.js"></script>
+    *@
+</HeadContent>
+
+<div class="signup-container">
+    <div class="signup-card">
+        <div class="logo-section">
+            <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="signup-logo" />
+            <h1>Cloud Health Office</h1>
+            <p class="tagline">Azure-Native Multi-Payer EDI Platform</p>
+        </div>
+
+        @if (!submitted)
+        {
+            <EditForm Model="@signupModel" OnValidSubmit="@HandleSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="form-section">
+                    <h2>Organization Information</h2>
+                    
+                    <div class="form-group">
+                        <label for="orgName">Organization Name *</label>
+                        <InputText id="orgName" @bind-Value="signupModel.OrganizationName" class="form-control" placeholder="Blue Shield of California" />
+                        <ValidationMessage For="@(() => signupModel.OrganizationName)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tenantName">Display Name *</label>
+                        <InputText id="tenantName" @bind-Value="signupModel.TenantName" class="form-control" placeholder="Blue Shield CA" />
+                        <ValidationMessage For="@(() => signupModel.TenantName)" />
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Primary Contact</h2>
+
+                    <div class="form-group">
+                        <label for="contactName">Full Name *</label>
+                        <InputText id="contactName" @bind-Value="signupModel.ContactName" class="form-control" />
+                        <ValidationMessage For="@(() => signupModel.ContactName)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <InputText id="email" type="email" @bind-Value="signupModel.Email" class="form-control" />
+                        <ValidationMessage For="@(() => signupModel.Email)" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <InputText id="phone" @bind-Value="signupModel.Phone" class="form-control" placeholder="+1-555-0100" />
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Subscription Tier</h2>
+
+                    <div class="tier-options">
+                        <div class="tier-card @(signupModel.SubscriptionTier == "starter" ? "selected" : "")" @onclick="@(() => SelectTier("starter"))">
+                            <h3>Starter</h3>
+                            <p class="price">$499/month</p>
+                            <ul>
+                                <li>Up to 10,000 claims/month</li>
+                                <li>Core EDI transactions (837, 835)</li>
+                                <li>Email support</li>
+                            </ul>
+                        </div>
+
+                        <div class="tier-card @(signupModel.SubscriptionTier == "professional" ? "selected" : "")" @onclick="@(() => SelectTier("professional"))">
+                            <h3>Professional</h3>
+                            <p class="price">$1,499/month</p>
+                            <ul>
+                                <li>Up to 50,000 claims/month</li>
+                                <li>All EDI transactions</li>
+                                <li>Prior authorization workflows</li>
+                                <li>Priority support</li>
+                            </ul>
+                        </div>
+
+                        <div class="tier-card enterprise-tier">
+                            <h3>Enterprise</h3>
+                            <p class="price">Custom Pricing</p>
+                            <ul>
+                                <li>Unlimited claims</li>
+                                <li>Dedicated infrastructure</li>
+                                <li>SLA guarantees</li>
+                                <li>24/7 phone support</li>
+                            </ul>
+                            <button type="button" class="btn btn-outline-primary mt-3" @onclick="NavigateToContactSales">
+                                Contact Sales
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Modules</h2>
+                    <div class="module-checkboxes">
+                        <label><InputCheckbox @bind-Value="enableClaims" /> Claims Processing (837/835)</label>
+                        <label><InputCheckbox @bind-Value="enableEligibility" /> Eligibility Verification (270/271)</label>
+                        <label><InputCheckbox @bind-Value="enableAuthorizations" /> Prior Authorizations (278)</label>
+                        <label><InputCheckbox @bind-Value="enableAttachments" /> Claim Attachments (275/277)</label>
+                        <label><InputCheckbox @bind-Value="enableEnrollment" /> Enrollment (834)</label>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Payment Information</h2>
+                    <p class="payment-note">💳 Secure payment powered by Stripe. Your card will be charged after the 14-day trial.</p>
+                    
+                    <div class="form-group">
+                        <label for="card-element">Credit Card *</label>
+                        <div id="card-element" class="stripe-element">
+                            <!-- Stripe Element will be inserted here -->
+                        </div>
+                        <div id="card-errors" class="payment-error" role="alert"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="billingName">Billing Name *</label>
+                        <InputText id="billingName" @bind-Value="signupModel.BillingName" class="form-control" placeholder="John Doe" />
+                    </div>
+
+                    <div class="pricing-summary">
+                        <h3>Subscription Summary</h3>
+                        <div class="summary-row">
+                            <span>Tier:</span>
+                            <strong>@GetTierName(signupModel.SubscriptionTier)</strong>
+                        </div>
+                        <div class="summary-row">
+                            <span>Monthly cost:</span>
+                            <strong>@GetTierPrice(signupModel.SubscriptionTier)</strong>
+                        </div>
+                        <div class="summary-row trial">
+                            <span>First payment:</span>
+                            <strong>@GetTrialEndDate()</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <strong>14-Day Free Trial</strong><br/>
+                        Start using the platform immediately. Your card won't be charged until February 23, 2026.
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <button type="submit" class="btn btn-primary btn-lg" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span>Creating account...</span>
+                    }
+                    else
+                    {
+                        <span>Start Free Trial</span>
+                    }
+                </button>
+
+                <p class="terms-text">
+                    By signing up, you agree to our <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.
+                    A Business Associate Agreement will be sent for signature.
+                </p>
+            </EditForm>
+        }
+        else
+        {
+            <div class="success-message">
+                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+                <h2>Account Created!</h2>
+                <p>Thank you for signing up, <strong>@signupModel.ContactName</strong>.</p>
+                <p>Your tenant ID is: <code>@createdTenantId</code></p>
+                <div class="next-steps">
+                    <h3>Next Steps:</h3>
+                    <ol>
+                        <li>Check your email (<strong>@signupModel.Email</strong>) for account activation instructions</li>
+                        <li>Review and sign the Business Associate Agreement (BAA)</li>
+                        <li>Complete payment setup in the billing portal</li>
+                        <li>Configure your trading partners and clearinghouse settings</li>
+                    </ol>
+                </div>
+                <p class="timeline">Your account will be fully activated within 1 business day.</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private SignupModel signupModel = new();
+    private bool isSubmitting = false;
+    private bool submitted = false;
+    private string? errorMessage;
+    private string? createdTenantId;
+    private string? stripePaymentMethodId;
+    private string? stripeCustomerId;
+    private string? stripeSubscriptionId;
+
+    private bool enableClaims = true;
+    private bool enableEligibility = true;
+    private bool enableAuthorizations = false;
+    private bool enableAttachments = false;
+    private bool enableEnrollment = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeStripe();
+        }
+    }
+
+    private async Task InitializeStripe()
+    {
+        try
+        {
+            var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
+            await JSRuntime.InvokeVoidAsync("StripeHandler.initialize", stripePublishableKey);
+            Logger.LogInformation("Stripe initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to initialize Stripe");
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            // Get authenticated user info
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                             ?? user.FindFirst("tid")?.Value
+                             ?? Guid.NewGuid().ToString(); // Fallback for testing
+            var userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                         ?? user.FindFirst("preferred_username")?.Value
+                         ?? signupModel.Email;
+
+            Logger.LogInformation("Starting signup for user {Email} from Azure Tenant {TenantId}", userEmail, azureTenantId);
+
+            // Step 1: Create Stripe payment method
+            var paymentMethodResult = await CreateStripePaymentMethod();
+            if (!paymentMethodResult.Success)
+            {
+                errorMessage = paymentMethodResult.Error;
+                isSubmitting = false;
+                return;
+            }
+            stripePaymentMethodId = paymentMethodResult.PaymentMethodId;
+
+            // Step 2: Create Stripe customer and subscription
+            var stripeResult = await CreateStripeSubscription(stripePaymentMethodId!);
+            if (!stripeResult.Success)
+            {
+                errorMessage = stripeResult.Error;
+                isSubmitting = false;
+                return;
+            }
+
+            // Step 3: Create tenant record in Cosmos DB
+            var enabledModules = new List<string>();
+            if (enableClaims) enabledModules.Add("claims");
+            if (enableEligibility) enabledModules.Add("eligibility");
+            if (enableAuthorizations) enabledModules.Add("authorizations");
+            if (enableAttachments) enabledModules.Add("attachments");
+            if (enableEnrollment) enabledModules.Add("enrollment");
+
+            var createTenantRequest = new CreateTenantRequest
+            {
+                AzureTenantId = azureTenantId,
+                OrganizationName = signupModel.OrganizationName,
+                TenantDisplayName = signupModel.TenantName,
+                Tier = signupModel.SubscriptionTier,
+                AdminEmail = userEmail,
+                StripePaymentMethodId = stripePaymentMethodId,
+                StripeCustomerId = stripeCustomerId,
+                StripeSubscriptionId = stripeSubscriptionId,
+                EnabledModules = enabledModules
+            };
+
+            createdTenantId = await TenantService.CreateTenantAsync(createTenantRequest);
+            
+            Logger.LogInformation("Successfully created tenant {TenantId} for organization {OrgName}", 
+                createdTenantId, signupModel.OrganizationName);
+            
+            // Step 4: Trigger Argo workflow for automated provisioning
+            await TriggerOnboardingWorkflow(createdTenantId, signupModel, enabledModules);
+            
+            submitted = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Signup error for {Email}", signupModel.Email);
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task<(bool Success, string? PaymentMethodId, string? Error)> CreateStripePaymentMethod()
+    {
+        try
+        {
+            Logger.LogInformation("Creating Stripe payment method for {Name} ({Email})", signupModel.BillingName, signupModel.Email);
+            
+            var result = await JSRuntime.InvokeAsync<string>("StripeHandler.createPaymentMethod", 
+                signupModel.BillingName, 
+                signupModel.Email);
+
+            var jsonResult = System.Text.Json.JsonDocument.Parse(result);
+            var success = jsonResult.RootElement.GetProperty("success").GetBoolean();
+            
+            if (success)
+            {
+                var pmId = jsonResult.RootElement.GetProperty("paymentMethodId").GetString();
+                Logger.LogInformation("Payment method created successfully: {PaymentMethodId}", pmId);
+                return (true, pmId, null);
+            }
+            else
+            {
+                var error = jsonResult.RootElement.GetProperty("error").GetString();
+                Logger.LogWarning("Payment method creation failed: {Error}", error);
+                return (false, null, $"Payment card error: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Payment processing error");
+            return (false, null, $"Payment processing error: {ex.Message}");
+        }
+    }
+
+    private async Task<(bool Success, string? Error)> CreateStripeSubscription(string paymentMethodId)
+    {
+        try
+        {
+            var stripeSecretKey = Configuration["Stripe:SecretKey"];
+            if (string.IsNullOrEmpty(stripeSecretKey))
+            {
+                Logger.LogError("Stripe secret key not configured");
+                return (false, "Payment system configuration error");
+            }
+
+            StripeConfiguration.ApiKey = stripeSecretKey;
+
+            Logger.LogInformation("Creating Stripe customer for {Email} with payment method {PM}", 
+                signupModel.Email, paymentMethodId);
+
+            // Create Stripe customer
+            var customerService = new CustomerService();
+            var customerOptions = new CustomerCreateOptions
+            {
+                Email = signupModel.Email,
+                Name = signupModel.OrganizationName,
+                PaymentMethod = paymentMethodId,
+                InvoiceSettings = new CustomerInvoiceSettingsOptions
+                {
+                    DefaultPaymentMethod = paymentMethodId
+                },
+                Metadata = new Dictionary<string, string>
+                {
+                    { "organization", signupModel.OrganizationName },
+                    { "contact_name", signupModel.ContactName },
+                    { "tier", signupModel.SubscriptionTier }
+                }
+            };
+
+            var customer = await customerService.CreateAsync(customerOptions);
+            Logger.LogInformation("Stripe customer created: {CustomerId}", customer.Id);
+
+            // Get price ID based on tier
+            var priceId = GetStripePriceId(signupModel.SubscriptionTier);
+            
+            // Create subscription with trial
+            var subscriptionService = new SubscriptionService();
+            var subscriptionOptions = new SubscriptionCreateOptions
+            {
+                Customer = customer.Id,
+                Items = new List<SubscriptionItemOptions>
+                {
+                    new SubscriptionItemOptions { Price = priceId }
+                },
+                TrialPeriodDays = 14,
+                Metadata = new Dictionary<string, string>
+                {
+                    { "tier", signupModel.SubscriptionTier },
+                    { "organization", signupModel.OrganizationName }
+                }
+            };
+
+            var subscription = await subscriptionService.CreateAsync(subscriptionOptions);
+            Logger.LogInformation("Stripe subscription created: {SubscriptionId} for customer {CustomerId}", 
+                subscription.Id, customer.Id);
+
+            // Store these IDs - we'll need to update the tenant record
+            stripeCustomerId = customer.Id;
+            stripeSubscriptionId = subscription.Id;
+
+            return (true, null);
+        }
+        catch (StripeException ex)
+        {
+            Logger.LogError(ex, "Stripe API error creating subscription");
+            return (false, $"Payment service error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating Stripe subscription");
+            return (false, $"Failed to create subscription: {ex.Message}");
+        }
+    }
+
+    private string GetStripePriceId(string tier)
+    {
+        var priceId = tier switch
+        {
+            "starter" => Configuration["Stripe:Price:Starter"],
+            "professional" => Configuration["Stripe:Price:Professional"],
+            "enterprise" => Configuration["Stripe:Price:Enterprise"],
+            _ => Configuration["Stripe:Price:Starter"]
+        };
+        
+        Logger.LogInformation("GetStripePriceId for tier {Tier}: {PriceId}", tier, priceId ?? "null");
+        
+        if (string.IsNullOrEmpty(priceId))
+        {
+            throw new InvalidOperationException($"Stripe price ID not configured for tier: {tier}");
+        }
+        
+        return priceId;
+    }
+
+    private string GetTierName(string tier) => tier switch
+    {
+        "starter" => "Starter",
+        "professional" => "Professional",
+        "enterprise" => "Enterprise",
+        _ => "Starter"
+    };
+
+    private string GetTierPrice(string tier) => tier switch
+    {
+        "starter" => "$499/month",
+        "professional" => "$1,499/month",
+        "enterprise" => "Custom pricing",
+        _ => "$499/month"
+    };
+
+    private string GetTrialEndDate()
+    {
+        var trialEnd = DateTime.Now.AddDays(14);
+        return $"{trialEnd:MMMM d, yyyy} (14-day trial)";
+    }
+
+    public class SignupModel
+    {
+        [Required(ErrorMessage = "Organization name is required")]
+        [MinLength(3, ErrorMessage = "Organization name must be at least 3 characters")]
+        public string OrganizationName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Tenant display name is required")]
+        [MinLength(2, ErrorMessage = "Display name must be at least 2 characters")]
+        public string TenantName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Contact name is required")]
+        public string ContactName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
+        public string Email { get; set; } = string.Empty;
+
+        [Phone(ErrorMessage = "Invalid phone number")]
+        public string? Phone { get; set; }
+
+        public string SubscriptionTier { get; set; } = "starter";
+
+        [Required(ErrorMessage = "Billing name is required")]
+        public string BillingName { get; set; } = string.Empty;
+    }
+
+    private void SelectTier(string tier)
+    {
+        signupModel.SubscriptionTier = tier;
+    }
+
+    private void NavigateToContactSales()
+    {
+        Navigation.NavigateTo("/contact-sales");
+    }
+
+    private async Task TriggerOnboardingWorkflow(string? tenantId, SignupModel model, List<string> modules)
+    {
+        if (string.IsNullOrEmpty(tenantId)) return;
+
+        try
+        {
+            var argoUrl = Configuration["Services:ArgoWorkflows"] ?? "http://argo-workflows-server.cho-workflows:2746";
+            
+            var workflowRequest = new
+            {
+                resourceKind = "Workflow",
+                resourceName = "tenant-onboarding",
+                submitOptions = new
+                {
+                    parameters = new[]
+                    {
+                        new { name = "tenant-id", value = tenantId },
+                        new { name = "tenant-name", value = model.TenantName },
+                        new { name = "organization-name", value = model.OrganizationName },
+                        new { name = "admin-email", value = model.Email },
+                        new { name = "admin-name", value = model.ContactName },
+                        new { name = "subscription-tier", value = model.SubscriptionTier },
+                        new { name = "enabled-modules", value = string.Join(",", modules) },
+                        new { name = "phone", value = model.Phone ?? "" },
+                        new { name = "payment-method-id", value = stripePaymentMethodId ?? "" },
+                        new { name = "billing-name", value = model.BillingName ?? "" }
+                    }
+                }
+            };
+
+            await Http.PostAsJsonAsync($"{argoUrl}/api/v1/workflows/cho-workflows/submit", workflowRequest);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail signup - workflow can be triggered manually
+            Console.WriteLine($"Failed to trigger onboarding workflow: {ex.Message}");
+        }
+    }
+
+    public class TenantResponse
+    {
+        public string? TenantId { get; set; }
+        public string? TenantName { get; set; }
+        public string? Status { get; set; }
+    }
+}

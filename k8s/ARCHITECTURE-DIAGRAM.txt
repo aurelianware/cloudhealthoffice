@@ -1,0 +1,253 @@
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          HTTPS Ingress Architecture                          │
+│                       Cloud Health Office - Kubernetes                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+                              Internet Users
+                                    │
+                                    │ HTTPS (443)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+        cloudhealthoffice.com  www.cloudhealth  portal.cloudhealth
+                                office.com        office.com
+                                    │
+                                    │ DNS Resolution
+                                    ▼
+                              4.149.83.133
+                                    │
+┌───────────────────────────────────┼───────────────────────────────────────────┐
+│  Kubernetes Cluster               │                                           │
+│                                   │                                           │
+│   ┌───────────────────────────────▼───────────────────────────────────────┐   │
+│   │            NGINX Ingress Controller (LoadBalancer)                    │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐    │   │
+│   │  │  External IP: 4.149.83.133                                   │    │   │
+│   │  │  Ports: 80 (HTTP) → 443 (HTTPS redirect)                     │    │   │
+│   │  │         443 (HTTPS) → TLS termination                        │    │   │
+│   │  └──────────────────────────────────────────────────────────────┘    │   │
+│   └──────┬────────────────────────────────────┬──────────────────────────┘   │
+│          │                                    │                              │
+│          │ Namespace: ingress-nginx           │                              │
+│          └────────────────────────────────────┘                              │
+│                     │                                                        │
+│                     │ Route based on Host header                             │
+│                     │                                                        │
+│          ┌──────────┴──────────────┐                                         │
+│          │                         │                                         │
+│          ▼                         ▼                                         │
+│  ┌───────────────┐         ┌───────────────┐                                │
+│  │ site-ingress  │         │portal-ingress │                                │
+│  │ (cho-svcs ns) │         │(cho-svcs ns)  │                                │
+│  ├───────────────┤         ├───────────────┤                                │
+│  │ Hosts:        │         │ Host:         │                                │
+│  │ • cloudhealth │         │ • portal.     │                                │
+│  │   office.com  │         │   cloudhealth │                                │
+│  │ • www.cloud   │         │   office.com  │                                │
+│  │   healthoffice│         │               │                                │
+│  │   .com        │         │ TLS:          │                                │
+│  │               │         │ • portal-tls- │                                │
+│  │ TLS:          │         │   secret      │                                │
+│  │ • site-tls-   │         │   (auto)      │                                │
+│  │   secret      │         │               │                                │
+│  │   (auto)      │         │ Backend:      │                                │
+│  │               │         │ • portal:80   │                                │
+│  │ Backend:      │         └───────┬───────┘                                │
+│  │ • site:80     │                 │                                        │
+│  └───────┬───────┘                 │                                        │
+│          │                         │                                        │
+│          │ HTTP (ClusterIP)        │ HTTP (ClusterIP)                       │
+│          │                         │                                        │
+│  ┌───────▼───────┐         ┌───────▼───────┐                                │
+│  │  site Service │         │portal Service │                                │
+│  │  (ClusterIP)  │         │  (ClusterIP)  │                                │
+│  ├───────────────┤         ├───────────────┤                                │
+│  │  Type:        │         │  Type:        │                                │
+│  │  ClusterIP    │         │  ClusterIP    │                                │
+│  │  Port: 80     │         │  Port: 80     │                                │
+│  │  Target: 80   │         │  Target: 8080 │                                │
+│  └───────┬───────┘         └───────┬───────┘                                │
+│          │                         │                                        │
+│          │                         │                                        │
+│  ┌───────▼───────┐         ┌───────▼───────┐                                │
+│  │  site Pods    │         │ portal Pods   │                                │
+│  │  (Replicas:2) │         │ (Replicas:2)  │                                │
+│  ├───────────────┤         ├───────────────┤                                │
+│  │  • NGINX      │         │  • ASP.NET    │                                │
+│  │  • Static     │         │    Core 8.0   │                                │
+│  │    HTML/CSS/JS│         │  • Blazor     │                                │
+│  │  • Port: 80   │         │  • Port: 8080 │                                │
+│  └───────────────┘         └───────────────┘                                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    TLS Certificate Management (cert-manager)                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  cert-manager (Namespace: cert-manager)                            │
+   │  ┌──────────────────────────────────────────────────────────────┐  │
+   │  │  Watches Ingress resources with annotation:                  │  │
+   │  │    cert-manager.io/cluster-issuer: letsencrypt-prod          │  │
+   │  └──────────────────────────────────────────────────────────────┘  │
+   │                              │                                     │
+   │                              │ Detects new/expiring certs          │
+   │                              ▼                                     │
+   │  ┌──────────────────────────────────────────────────────────────┐  │
+   │  │  ClusterIssuer: letsencrypt-prod                             │  │
+   │  │  ┌────────────────────────────────────────────────────────┐  │  │
+   │  │  │  ACME Server: https://acme-v02.api.letsencrypt.org     │  │  │
+   │  │  │  Email: admin@cloudhealthoffice.com                    │  │  │
+   │  │  │  Challenge: HTTP-01 (via NGINX ingress)                │  │  │
+   │  │  └────────────────────────────────────────────────────────┘  │  │
+   │  └──────────────────────┬───────────────────────────────────────┘  │
+   │                         │                                          │
+   │                         │ Requests certificate                     │
+   │                         ▼                                          │
+   │  ┌──────────────────────────────────────────────────────────────┐  │
+   │  │  Let's Encrypt (External)                                    │  │
+   │  │  ┌────────────────────────────────────────────────────────┐  │  │
+   │  │  │  1. Creates challenge: /.well-known/acme-challenge/... │  │  │
+   │  │  │  2. Verifies domain ownership via HTTP-01              │  │  │
+   │  │  │  3. Issues TLS certificate (valid 90 days)             │  │  │
+   │  │  └────────────────────────────────────────────────────────┘  │  │
+   │  └──────────────────────┬───────────────────────────────────────┘  │
+   │                         │                                          │
+   │                         │ Stores certificate                       │
+   │                         ▼                                          │
+   │  ┌──────────────────────────────────────────────────────────────┐  │
+   │  │  Kubernetes Secrets (cho-svcs namespace)                     │  │
+   │  │  ┌────────────────────────────────────────────────────────┐  │  │
+   │  │  │  • site-tls-secret                                     │  │  │
+   │  │  │    - tls.crt (certificate + chain)                     │  │  │
+   │  │  │    - tls.key (private key)                             │  │  │
+   │  │  │                                                         │  │  │
+   │  │  │  • portal-tls-secret                                   │  │  │
+   │  │  │    - tls.crt (certificate + chain)                     │  │  │
+   │  │  │    - tls.key (private key)                             │  │  │
+   │  │  └────────────────────────────────────────────────────────┘  │  │
+   │  └──────────────────────────────────────────────────────────────┘  │
+   │                                                                     │
+   │  ┌──────────────────────────────────────────────────────────────┐  │
+   │  │  Auto-Renewal: 30 days before expiration                     │  │
+   │  └──────────────────────────────────────────────────────────────┘  │
+   └─────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              Traffic Flow                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+HTTP Request (Port 80):
+  https://cloudhealthoffice.com
+       │
+       ▼
+  NGINX Ingress Controller
+       │
+       ▼
+  301 Redirect → https://cloudhealthoffice.com (Force HTTPS)
+
+HTTPS Request (Port 443):
+  https://cloudhealthoffice.com
+       │
+       ▼
+  NGINX Ingress Controller (4.149.83.133:443)
+       │
+       ├─ TLS Termination (using site-tls-secret)
+       │
+       ▼
+  site-ingress (routes based on host header)
+       │
+       ▼
+  site Service (ClusterIP) - 10.x.x.x:80
+       │
+       ▼
+  site Pod (NGINX container) - HTTP on port 80
+       │
+       ▼
+  Response: index.html + assets
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         Security Features                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+✓ TLS 1.2+ encryption (HTTPS only)
+✓ Automatic certificate rotation (every 60 days)
+✓ HTTP → HTTPS redirect (force SSL)
+✓ Security headers:
+  • Strict-Transport-Security: max-age=31536000; includeSubDomains
+  • X-Frame-Options: DENY (site) / SAMEORIGIN (portal)
+  • X-Content-Type-Options: nosniff
+  • X-XSS-Protection: 1; mode=block
+✓ HIPAA-compliant encryption in transit
+✓ ClusterIP services (not exposed externally)
+✓ Ingress-based access control
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         DNS Configuration                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Required DNS A Records:
+┌─────────────────────────────┬──────┬───────────────┐
+│ Domain                      │ Type │ Value         │
+├─────────────────────────────┼──────┼───────────────┤
+│ cloudhealthoffice.com       │  A   │ 4.149.83.133  │
+│ www.cloudhealthoffice.com   │  A   │ 4.149.83.133  │
+│ portal.cloudhealthoffice.com│  A   │ 4.149.83.133  │
+└─────────────────────────────┴──────┴───────────────┘
+
+Alternative: CNAME Records (if using subdomain delegation)
+┌─────────────────────────────┬──────┬───────────────────────────┐
+│ Domain                      │ Type │ Value                     │
+├─────────────────────────────┼──────┼───────────────────────────┤
+│ www.cloudhealthoffice.com   │ CNAME│ cloudhealthoffice.com     │
+│ portal.cloudhealthoffice.com│ CNAME│ cloudhealthoffice.com     │
+└─────────────────────────────┴──────┴───────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    Component Dependencies                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Prerequisites Installation Order:
+
+1. ✓ Kubernetes Cluster (AKS, GKE, EKS, etc.)
+2. ✓ kubectl configured
+3. ✓ Helm 3 installed
+4. → NGINX Ingress Controller (helm install)
+5. → cert-manager (kubectl apply)
+6. → DNS A records configured and propagated
+7. → Cloud Health Office ingress resources deployed
+8. → Wait for TLS certificates to be issued (1-3 minutes)
+9. ✓ Access via https://cloudhealthoffice.com
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         Quick Commands                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+# Check ingress status
+kubectl get ingress -n cho-svcs
+
+# Check certificate status
+kubectl get certificate -n cho-svcs
+
+# View ingress details
+kubectl describe ingress site-ingress -n cho-svcs
+
+# Check cert-manager logs
+kubectl logs -n cert-manager -l app=cert-manager --tail=50
+
+# Test HTTPS
+curl -I https://cloudhealthoffice.com
+
+# View certificate details
+echo | openssl s_client -servername cloudhealthoffice.com \
+  -connect cloudhealthoffice.com:443 2>/dev/null | \
+  openssl x509 -noout -text
+
+───────────────────────────────────────────────────────────────────────────────
+For detailed setup instructions: k8s/INGRESS-HTTPS-SETUP.md
+For quick start: k8s/QUICKSTART-HTTPS.md
+For custom domains: k8s/CUSTOM-DOMAIN-TEMPLATE.md
+```

@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using ClaimsService;
 using ClaimsService.Middleware;
 using ClaimsService.Repositories;
 
@@ -19,23 +20,51 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// Database Configuration
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+
+if (!string.IsNullOrEmpty(mongoConnectionString))
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    var endpoint = config["CosmosDb:Endpoint"];
-    var key = config["CosmosDb:Key"];
-
-    if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+    // MongoDB Registration
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp => 
     {
-        throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-    }
+        return new MongoDB.Driver.MongoClient(mongoConnectionString);
+    });
+    
+    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
+    {
+        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
+        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
+        return client.GetDatabase(databaseName);
+    });
 
-    return new CosmosClient(endpoint, key);
-});
+    builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
+    Console.WriteLine("Using MongoDB database provider");
+}
+else
+{
+    // Cosmos DB client (singleton)
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        var endpoint = config["CosmosDb:Endpoint"];
+        var key = config["CosmosDb:Key"];
 
-// Repositories
-builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
+        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+        {
+            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
+        }
+
+        var options = new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer()
+        };
+        return new CosmosClient(endpoint, key, options);
+    });
+
+    // Repositories
+    builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
+}
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();

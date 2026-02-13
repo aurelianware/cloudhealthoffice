@@ -1,0 +1,147 @@
+@page "/welcome"
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@inject NavigationManager Navigation
+
+@attribute [AllowAnonymous]
+
+<PageTitle>Welcome to Cloud Health Office</PageTitle>
+
+<HeadContent>
+    @* Temporarily disabled analytics to debug portal crash
+    <script async src="https://plausible.io/js/pa-DSFLxN3jN3PVX0eGzs8vx.js"></script>
+    *@
+</HeadContent>
+
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
+        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office" class="hero-logo" />
+        <h1 class="display-4">Welcome to Cloud Health Office</h1>
+        <p class="lead">Your Complete EDI Transaction Suite for Efficient Health Plan Management</p>
+        <a href="#signup" class="btn btn-light btn-lg">Sign Up Now</a>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Our Key Features</h2>
+        <div class="row">
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📋</div>
+                <h4>Claims Processing</h4>
+                <p>837 Professional & Institutional claims submission, 835 ERA processing, and real-time adjudication.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">✓</div>
+                <h4>Eligibility Verification</h4>
+                <p>270/271 real-time eligibility inquiries, benefit coverage details, and plan information.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">🔐</div>
+                <h4>Prior Authorization</h4>
+                <p>278 authorization requests and responses, automated workflow routing, and status tracking.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📎</div>
+                <h4>Claim Attachments</h4>
+                <p>275 claim attachments (unsolicited and solicited), FHIR integration, and automated delivery.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">👥</div>
+                <h4>Member Enrollment</h4>
+                <p>834 enrollment transactions, member demographics, coverage updates, and sponsor management.</p>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="feature-icon">📊</div>
+                <h4>Claim Status</h4>
+                <p>276/277 claim status inquiries and responses, tracking, and reporting.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Testimonials Section -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <h2 class="text-center mb-5">Trusted by Leading Health Plans</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Reduced prior authorization turnaround from 12 days to under 2 minutes"</p>
+                    <p><strong>— Regional Health Plan (450K members)</strong></p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Processing 2.3M claims/month with 99.97% accuracy"</p>
+                    <p><strong>— Multi-State Medicaid MCO</strong></p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="testimonial">
+                    <p>"Went from contract signed to first claim in 47 minutes"</p>
+                    <p><strong>— Medicare Advantage Plan</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Signup Section with Stripe -->
+<section id="signup" class="signup-section">
+    <div class="container">
+        <h2 class="text-center mb-4">Sign Up and Start Today</h2>
+        <p class="text-center mb-5">Secure billing powered by Stripe. Choose your plan and get instant access.</p>
+        <EditForm Model="signupModel" OnValidSubmit="HandleSignup">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <InputText id="email"
+                                   type="email"
+                                   autocomplete="email"
+                                   class="form-control"
+                                   @bind-Value="signupModel.Email" />
+                        <ValidationMessage For="@(() => signupModel.Email)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="plan" class="form-label">Select Plan</label>
+                        <InputSelect id="plan" class="form-select" @bind-Value="signupModel.Plan">
+                            <option value="basic">Basic ($29/month)</option>
+                            <option value="pro">Pro ($99/month)</option>
+                            <option value="enterprise">Enterprise (Contact Us)</option>
+                        </InputSelect>
+                    </div>
+                    <!-- Stripe Integration Placeholder -->
+                    <button type="submit" class="btn btn-primary w-100">Sign Up via Stripe</button>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</section>
+
+@code {
+    private SignupModel signupModel = new();
+
+    private class SignupModel
+    {
+        [Required(ErrorMessage = "Email address is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
+        public string Email { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "Plan selection is required")]
+        public string Plan { get; set; } = "basic";
+    }
+
+    private Task HandleSignup()
+    {
+        // TODO: Integrate with Stripe API here
+        // For example, use JS Interop to call Stripe.js or server-side creation of Checkout Session
+        // This is a placeholder; implement actual signup logic
+        return Task.CompletedTask;
+    }
+}

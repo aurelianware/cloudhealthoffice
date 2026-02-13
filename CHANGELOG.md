@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### v4.0 - Planned Q2 2026
+### v5.0 - Planned Q2 2026
 
 **Enhanced Provider Management & Multi-Market Expansion**
 
@@ -21,11 +21,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.0.0] - February 2026 (Current Production Release)
+## [4.0.0] - February 11, 2026
+
+### 🔒 Zero-Vulnerability Security Hardening
+
+**100% vulnerability elimination** from 86 high-severity issues to absolute zero.
+
+#### Security Fixes
+- **CVE-2024-43485**: Fixed System.Formats.Asn1 RCE (8.0.0 → 8.0.1)
+- **CVE-2024-21907**: Fixed Newtonsoft.Json deserialization attack (10.0.2 → 13.0.3)
+- **Directory.Build.props**: Global transitive dependency enforcement
+- **59 package updates**: Azure.Identity, Azure.Core, Microsoft.Azure.Cosmos, MudBlazor, Stripe.net, Swashbuckle, and 50+ more
+
+#### Multi-Tenant SaaS Isolation
+- **TenantContextService**: Maps Azure AD tenant → CHO tenant via subscription lookup
+- **TenantHttpMessageHandler**: Injects `X-Tenant-ID` header on all backend API calls
+- **Portal Isolation**: Prevents cross-tenant data leakage (CRITICAL security fix)
+- **Dynamic UI**: Shows actual tenant name with demo/production badges
+- **Logout Functionality**: Proper Microsoft Identity sign-out flow
+
+#### Cloud Portability Infrastructure (Feature Branch)
+- **CloudHealthOffice.Infrastructure Package**: Cloud-agnostic `IDocumentStore<T>` interface
+- **Azure Implementation**: `CosmosDocumentStore<T>` (current production)
+- **DigitalOcean Implementation**: `MongoDocumentStore<T>` (65% cost savings)
+- **Reference Implementation**: member-service compiles with multi-cloud support
+- **GitHub Actions Workflow**: 3-click toggles for Azure/DigitalOcean deployment
+- **Status**: Available in `feature/multi-cloud-infrastructure` branch for testing
+
+#### SFTP Trading Partner Integration
+- **New Tenant**: clouddentaloffice (dental claims EDI)
+- **Endpoint**: 20.115.193.245:22 (pending DNS: sftp.cloudhealthoffice.com)
+- **Folder Structure**: /dental-claims/inbound/837/, /outbound/835/, /outbound/277/
+- **Credentials**: Stored in Azure Key Vault
+
+#### Infrastructure Updates
+- **Azure Permissions**: Added Application Administrator & User Access Administrator roles
+- **Deployment Gates**: Pre-approval checks in GitHub Actions
+- **PII/PHI Scanner**: Configured to allow test data patterns
+- **Logic Apps Migration**: Disabled deployment (moved to Argo workflows)
+
+#### Package Highlights
+- Azure.Identity: 1.12.1 → 1.13.1
+- Azure.Core: 1.42.0 → 1.44.1
+- Microsoft.Azure.Cosmos: 3.42.0 → 3.45.0
+- MudBlazor: 7.20.0 → 8.4.0
+- Stripe.net: 46.4.0 → 47.0.0
+- Swashbuckle.AspNetCore: 6.5.0 → 10.1.2
+
+#### Breaking Changes
+- **Logic Apps Deployment**: Disabled in deploy.yml (use Argo workflows)
+- **Multi-Tenant Headers**: Portal now sends `X-Tenant-ID` on all API calls (all services already compliant)
+
+#### Known Issues
+- DNS Configuration: sftp.cloudhealthoffice.com not yet pointed to 20.115.193.245
+- Mock Data Fallback: Portal shows mock data when backend unavailable (configurable via `Portal.UseMockDataFallback`)
+- Stripe.net Warning: NU1603 - Package 46.4.0 not found, resolved to 47.0.0 (non-breaking)
+
+**Production Readiness**: ✅ Multi-Tenant Isolation | ✅ Security Hardening | ✅ HIPAA Controls | ✅ Zero Vulnerabilities
+
+**Documentation**: [RELEASE-v4.0.0.md](RELEASE-v4.0.0.md), [MULTI-CLOUD-SETUP.md](MULTI-CLOUD-SETUP.md), [MULTI-CLOUD-DEPLOYMENT-GUIDE.md](MULTI-CLOUD-DEPLOYMENT-GUIDE.md)
+
+---
+
+## [3.0.0] - February 2026
 
 ### Dual-Market Healthcare Integration Platform
 
-Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/Facets augmentation) and **healthcare providers** (practice management with direct EDI). This release delivers multi-cloud independence, CMS-0057-F compliance, and commercial launch readiness.
+Cloud Health Office v3.0.0 is production-ready for both **health payers** (legacy system augmentation) and **healthcare providers** (practice management with direct EDI). This release delivers multi-cloud independence, CMS-0057-F compliance, and commercial launch readiness.
 
 ### Added
 
@@ -163,7 +225,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/
 
 | PR | Title | Category |
 |----|-------|----------|
-| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references (Cognizant, QNXT, Facets, Availity) | Platform |
+| [#116](https://github.com/aurelianware/cloudhealthoffice/pull/116) | Remove vendor-specific references | Platform |
 | [#115](https://github.com/aurelianware/cloudhealthoffice/pull/115) | Add multi-cloud deployment documentation and HashiCorp Vault integration | Multi-Cloud |
 | [#114](https://github.com/aurelianware/cloudhealthoffice/pull/114) | Fix image tag mismatch in container build workflow | CI/CD |
 | [#113](https://github.com/aurelianware/cloudhealthoffice/pull/113) | Migrate X12 EDI processing to Argo Workflows and Kafka | Multi-Cloud |
@@ -173,7 +235,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (QNXT/
 | [#109](https://github.com/aurelianware/cloudhealthoffice/pull/109) | Add CMS-0057-F compliance whitepaper for payer executives | Documentation |
 | [#108](https://github.com/aurelianware/cloudhealthoffice/pull/108) | Add 2026 product roadmap with CMS compliance milestones | Roadmap |
 | [#107](https://github.com/aurelianware/cloudhealthoffice/pull/107) | Add community governance files, issue templates, and PR automation | Governance |
-| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Add Blazor migration wizard for QNXT to Cloud Health Office | Tools |
+| [#106](https://github.com/aurelianware/cloudhealthoffice/pull/106) | Add Blazor migration wizard for legacy platforms to Cloud Health Office | Tools |
 | [#105](https://github.com/aurelianware/cloudhealthoffice/pull/105) | Add Azure Marketplace offer structure with managed app and SaaS plans | Marketplace |
 | [#104](https://github.com/aurelianware/cloudhealthoffice/pull/104) | Add ClaimRiskScorer Azure Function for 837 fraud/abuse risk scoring | Microservices |
 | [#103](https://github.com/aurelianware/cloudhealthoffice/pull/103) | Add eligibility-service with dual X12 270/271 and FHIR interface | Microservices |
@@ -351,7 +413,7 @@ This is the first production release of Cloud Health Office — the open-source,
 - **Multi-Tenant SaaS Architecture**: Configuration-driven platform supporting unlimited health plans
 - **CLI Onboarding Wizard**: Complete deployment from worksheet to production in <45 minutes
 - **Zero-Code Payer Onboarding**: Add new payers via JSON configuration without custom development
-- **Backend-Agnostic Design**: Works with any claims system (claims adjudication systems such as TriZetto, Epic, Cerner, custom)
+- **Backend-Agnostic Design**: Works with any claims system (core admin systems, custom platforms, modern cloud solutions)
 
 #### EDI Transaction Processing
 - **275 Attachments**: Clinical and administrative attachment processing with file validation

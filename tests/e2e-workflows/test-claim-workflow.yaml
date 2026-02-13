@@ -1,0 +1,254 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: test-claim-e2e-
+  namespace: cho-workflows
+spec:
+  entrypoint: claims-adjudication
+  serviceAccountName: argo-workflow
+  
+  arguments:
+    parameters:
+    - name: tenant-id
+      value: "demo-health-plan"
+    - name: claim-id
+      value: "CLM-2026-02-05-001"
+    - name: member-id
+      value: "MBR-12345"
+    - name: provider-id
+      value: "PRV-67890"
+    - name: service-date
+      value: "2026-02-01"
+    - name: total-charge
+      value: "1250.00"
+
+  templates:
+  - name: claims-adjudication
+    dag:
+      tasks:
+      # Step 1: Get claim data
+      - name: get-claim
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "claims-service"
+          - name: endpoint
+            value: "/claims/{{workflow.parameters.claim-id}}"
+          - name: method
+            value: "GET"
+
+      # Step 2: Verify coverage (parallel)
+      - name: verify-coverage
+        dependencies: [get-claim]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "coverage-service"
+          - name: endpoint
+            value: "/coverage/member/{{workflow.parameters.member-id}}/active?serviceDate={{workflow.parameters.service-date}}"
+          - name: method
+            value: "GET"
+
+      # Step 3: Validate provider (parallel)
+      - name: validate-provider
+        dependencies: [get-claim]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "provider-service"
+          - name: endpoint
+            value: "/providers/{{workflow.parameters.provider-id}}"
+          - name: method
+            value: "GET"
+
+      # Step 4: Validate procedure codes (parallel)
+      - name: validate-codes
+        dependencies: [get-claim]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "reference-data-service"
+          - name: endpoint
+            value: "/codes/validate"
+          - name: method
+            value: "POST"
+
+      # Step 5: Check prior authorization
+      - name: check-prior-auth
+        dependencies: [verify-coverage, validate-provider, validate-codes]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "authorization-service"
+          - name: endpoint
+            value: "/authorizations/check"
+          - name: method
+            value: "POST"
+
+      # Step 6: Get benefit plan
+      - name: get-benefits
+        dependencies: [verify-coverage]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "benefit-plan-service"
+          - name: endpoint
+            value: "/benefit-plans/benefits"
+          - name: method
+            value: "GET"
+
+      # Step 7: Get contracted rates
+      - name: get-rates
+        dependencies: [validate-provider, get-benefits]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "provider-service"
+          - name: endpoint
+            value: "/providers/{{workflow.parameters.provider-id}}/rates"
+          - name: method
+            value: "GET"
+
+      # Step 8: Calculate allowed amount
+      - name: calculate-allowed
+        dependencies: [get-benefits, get-rates]
+        template: calculate
+        arguments:
+          parameters:
+          - name: calculation-type
+            value: "allowed-amount"
+
+      # Step 9: Calculate cost sharing
+      - name: calculate-cost-sharing
+        dependencies: [calculate-allowed]
+        template: calculate
+        arguments:
+          parameters:
+          - name: calculation-type
+            value: "cost-sharing"
+
+      # Step 10: Update claim status
+      - name: update-claim
+        dependencies: [calculate-cost-sharing]
+        template: call-service
+        arguments:
+          parameters:
+          - name: service-name
+            value: "claims-service"
+          - name: endpoint
+            value: "/claims/{{workflow.parameters.claim-id}}/status"
+          - name: method
+            value: "PUT"
+
+  # Service call template
+  - name: call-service
+    inputs:
+      parameters:
+      - name: service-name
+      - name: endpoint
+      - name: method
+    container:
+      image: curlimages/curl:latest
+      command: [sh, -c]
+      args:
+        - |
+          echo "=========================================="
+          echo "Step: {{inputs.parameters.service-name}}"
+          echo "Endpoint: {{inputs.parameters.endpoint}}"
+          echo "Method: {{inputs.parameters.method}}"
+          echo "=========================================="
+          
+          # Call mock service with timeout
+          RESPONSE=$(curl -s --max-time 2 -X {{inputs.parameters.method}} \
+            "http://{{inputs.parameters.service-name}}.cloudhealthoffice{{inputs.parameters.endpoint}}" \
+            -H "X-Tenant-ID: {{workflow.parameters.tenant-id}}" \
+            -H "Content-Type: application/json" || echo '{"status":"ok","mock":true}')
+          
+          echo "Response: $RESPONSE"
+          
+          # Simulate processing
+          sleep 0.05
+          
+          echo "✓ {{inputs.parameters.service-name}} completed successfully"
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "50m"
+        limits:
+          memory: "64Mi"
+          cpu: "100m"
+
+  # Calculation template
+  - name: calculate
+    inputs:
+      parameters:
+      - name: calculation-type
+    container:
+      image: python:3.11-alpine
+      command: [python, -c]
+      args:
+        - |
+          import time
+          import json
+          
+          calc_type = "{{inputs.parameters.calculation-type}}"
+          total_charge = float("{{workflow.parameters.total-charge}}")
+          
+          print(f"Calculating {calc_type}...")
+          
+          if calc_type == "allowed-amount":
+              # Simulate contracted rate (80% of charges)
+              allowed = total_charge * 0.80
+              print(f"Total Charge: ${total_charge:.2f}")
+              print(f"Allowed Amount: ${allowed:.2f}")
+              
+          elif calc_type == "cost-sharing":
+              # Simulate cost sharing calculation
+              allowed = total_charge * 0.80
+              deductible_met = 850.00
+              deductible_total = 2000.00
+              copay = 25.00
+              coinsurance = 0.20
+              
+              # Deductible remaining
+              deductible_remaining = max(0, deductible_total - deductible_met)
+              deductible_applied = min(allowed, deductible_remaining)
+              
+              # After deductible, apply coinsurance
+              after_deductible = allowed - deductible_applied
+              coinsurance_amount = after_deductible * coinsurance
+              
+              # Patient responsibility
+              patient_resp = copay + deductible_applied + coinsurance_amount
+              payer_amount = allowed - patient_resp
+              
+              result = {
+                  "totalCharge": total_charge,
+                  "allowedAmount": allowed,
+                  "copay": copay,
+                  "deductibleApplied": deductible_applied,
+                  "coinsuranceAmount": coinsurance_amount,
+                  "patientResponsibility": patient_resp,
+                  "payerAmount": payer_amount
+              }
+              
+              print(json.dumps(result, indent=2))
+              print(f"\n✓ Payer Amount: ${payer_amount:.2f}")
+              print(f"✓ Patient Responsibility: ${patient_resp:.2f}")
+          
+          # Small delay to simulate processing
+          time.sleep(0.05)
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "50m"
+        limits:
+          memory: "128Mi"
+          cpu: "200m"

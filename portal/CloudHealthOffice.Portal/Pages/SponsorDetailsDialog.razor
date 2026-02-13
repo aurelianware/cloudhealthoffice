@@ -1,0 +1,269 @@
+@using CloudHealthOffice.Portal.Services
+@inject ISponsorService SponsorService
+@inject IDialogService DialogService
+
+<MudDialog>
+    <DialogContent>
+        @if (_sponsor == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+            <MudText>Loading sponsor details...</MudText>
+        }
+        else
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                <!-- Overview Tab -->
+                <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Organization Details</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Sponsor ID:</strong></td>
+                                        <td style="font-family: monospace;">@_sponsor.SponsorId</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Name:</strong></td>
+                                        <td>@_sponsor.Name</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Type:</strong></td>
+                                        <td>
+                                            <MudChip Size="Size.Small" Color="GetTypeColor(_sponsor.Type)">
+                                                @_sponsor.Type
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Tax ID:</strong></td>
+                                        <td style="font-family: monospace;">@_sponsor.TaxId</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Status:</strong></td>
+                                        <td>
+                                            <MudChip Size="Size.Small" Color="GetStatusColor(_sponsor.Status)">
+                                                @_sponsor.Status
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Group Size:</strong></td>
+                                        <td>@_sponsor.GroupSizeTier</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Contact Information</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Address:</strong></td>
+                                        <td>
+                                            @_sponsor.AddressLine1<br />
+                                            @if (!string.IsNullOrEmpty(_sponsor.AddressLine2))
+                                            {
+                                                @_sponsor.AddressLine2<br />
+                                            }
+                                            @_sponsor.City, @_sponsor.State @_sponsor.ZipCode
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Contact Name:</strong></td>
+                                        <td>@_sponsor.ContactName</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Phone:</strong></td>
+                                        <td>@_sponsor.ContactPhone</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Email:</strong></td>
+                                        <td>
+                                            <a href="mailto:@_sponsor.ContactEmail">@_sponsor.ContactEmail</a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Contract Information</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Start Date:</strong></td>
+                                        <td>@_sponsor.ContractStartDate.ToString("MMMM dd, yyyy")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>End Date:</strong></td>
+                                        <td>
+                                            @if (_sponsor.ContractEndDate.HasValue)
+                                            {
+                                                @_sponsor.ContractEndDate.Value.ToString("MMMM dd, yyyy")
+                                            }
+                                            else
+                                            {
+                                                <em>No end date</em>
+                                            }
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Billing Information</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Billing Frequency:</strong></td>
+                                        <td>@_sponsor.BillingFrequency</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Payment Method:</strong></td>
+                                        <td>@_sponsor.PaymentMethod</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Benefit Plans Tab -->
+                <MudTabPanel Text="Benefit Plans" Icon="@Icons.Material.Filled.HealthAndSafety" 
+                            BadgeData="_sponsor.BenefitPlans.Count" 
+                            BadgeColor="Color.Primary">
+                    <MudTable Items="@_sponsor.BenefitPlans" Hover="true" Striped="true" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Plan ID</MudTh>
+                            <MudTh>Plan Name</MudTh>
+                            <MudTh>Product Type</MudTh>
+                            <MudTh>Enrolled Members</MudTh>
+                            <MudTh>Effective Date</MudTh>
+                            <MudTh>Termination Date</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Plan ID" Style="font-family: monospace;">@context.PlanId</MudTd>
+                            <MudTd DataLabel="Plan Name"><strong>@context.PlanName</strong></MudTd>
+                            <MudTd DataLabel="Product Type">
+                                <MudChip Size="Size.Small" Color="GetProductTypeColor(context.ProductType)">
+                                    @context.ProductType
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Enrolled Members">@context.EnrolledMembers.ToString("N0")</MudTd>
+                            <MudTd DataLabel="Effective Date">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+                            <MudTd DataLabel="Termination Date">
+                                @if (context.TerminationDate.HasValue)
+                                {
+                                    @context.TerminationDate.Value.ToString("MM/dd/yyyy")
+                                }
+                                else
+                                {
+                                    <em>-</em>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="pa-4">
+                                No benefit plans configured
+                            </MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    <MudButton Variant="Variant.Filled" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Add"
+                              Class="mt-4">
+                        Add Benefit Plan
+                    </MudButton>
+                </MudTabPanel>
+
+                <!-- Members Tab -->
+                <MudTabPanel Text="Members" Icon="@Icons.Material.Filled.People" 
+                            BadgeData="_sponsor.TotalMembers" 
+                            BadgeColor="Color.Secondary">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Enrolled Members</MudText>
+                    <MudAlert Severity="Severity.Info" Class="mb-4">
+                        This sponsor has <strong>@_sponsor.TotalMembers.ToString("N0")</strong> total members across all benefit plans.
+                    </MudAlert>
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Search"
+                              Href="/members">
+                        View All Members
+                    </MudButton>
+                </MudTabPanel>
+
+                <!-- Activity Tab -->
+                <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.Timeline">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Recent Activity</MudText>
+                    <MudAlert Severity="Severity.Info">
+                        Activity tracking coming soon - will show enrollment changes, claim trends, and authorization requests.
+                    </MudAlert>
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Close</MudButton>
+        @if (_sponsor != null)
+        {
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.Edit"
+                      OnClick="EditSponsor">
+                Edit Sponsor
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string SponsorId { get; set; } = string.Empty;
+
+    private SponsorDetails? _sponsor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sponsor = await SponsorService.GetSponsorByIdAsync(SponsorId);
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void EditSponsor()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+        // In a real implementation, this would open the edit dialog
+    }
+
+    private Color GetTypeColor(string type) => type switch
+    {
+        "Employer" => Color.Primary,
+        "Union" => Color.Secondary,
+        "Association" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Pending" => Color.Warning,
+        "Inactive" => Color.Error,
+        _ => Color.Default
+    };
+
+    private Color GetProductTypeColor(string productType) => productType switch
+    {
+        "PPO" => Color.Primary,
+        "HMO" => Color.Secondary,
+        "EPO" => Color.Info,
+        "HDHP" => Color.Success,
+        _ => Color.Default
+    };
+}

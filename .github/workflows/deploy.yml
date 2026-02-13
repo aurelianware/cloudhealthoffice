@@ -144,7 +144,7 @@ jobs:
   # Manual approval gate before production deployment
   approval-gate:
     needs: pre-approval-checks
-    if: github.event_name != 'pull_request'
+    if: false  # Disabled - not deploying Logic Apps, only infrastructure setup
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -171,7 +171,7 @@ jobs:
 
   deploy:
     needs: [setup-infrastructure, approval-gate]
-    if: github.event_name != 'pull_request'
+    if: false  # Disabled - using Argo workflows instead of Logic Apps
     runs-on: ubuntu-latest
     environment: PROD
     permissions:

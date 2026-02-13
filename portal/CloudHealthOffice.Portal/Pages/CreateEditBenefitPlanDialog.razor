@@ -1,0 +1,326 @@
+@using CloudHealthOffice.Portal.Services
+@inject IBenefitPlanService BenefitPlanService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_isEdit && _plan == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+            <MudText>Loading plan...</MudText>
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                <MudGrid>
+                    <!-- Basic Information -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2">Basic Information</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_request.SponsorId"
+                                  Label="Sponsor"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("SPNSR10001")">Acme Corporation</MudSelectItem>
+                            <MudSelectItem Value="@("SPNSR10002")">TechStart Industries</MudSelectItem>
+                            <MudSelectItem Value="@("SPNSR10003")">United Workers Local 247</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_request.PlanName"
+                                     Label="Plan Name"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Plan name is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.ProductType"
+                                  Label="Product Type"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("PPO")">PPO</MudSelectItem>
+                            <MudSelectItem Value="@("HMO")">HMO</MudSelectItem>
+                            <MudSelectItem Value="@("EPO")">EPO</MudSelectItem>
+                            <MudSelectItem Value="@("HDHP")">HDHP</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="_request.MetalTier"
+                                  Label="Metal Tier"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  T="string">
+                            <MudSelectItem Value="@("Bronze")">Bronze</MudSelectItem>
+                            <MudSelectItem Value="@("Silver")">Silver</MudSelectItem>
+                            <MudSelectItem Value="@("Gold")">Gold</MudSelectItem>
+                            <MudSelectItem Value="@("Platinum")">Platinum</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_request.Network"
+                                     Label="Network"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Network is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_request.PlanYear"
+                                     Label="Plan Year"
+                                     Variant="Variant.Outlined"
+                                     Placeholder="2026"
+                                     Required="true"
+                                     RequiredError="Plan year is required" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudDatePicker @bind-Date="_effectiveDate"
+                                      Label="Effective Date"
+                                      Variant="Variant.Outlined"
+                                      Required="true" />
+                    </MudItem>
+
+                    @if (_isEdit)
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudSelect @bind-Value="_updateRequest!.Status"
+                                      Label="Status"
+                                      Variant="Variant.Outlined"
+                                      T="string">
+                                <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                                <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    }
+
+                    <!-- Financial Structure -->
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mb-2 mt-4">Financial Structure</MudText>
+                        <MudDivider Class="mb-4" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.MonthlyPremium"
+                                        Label="Monthly Premium"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Format="C"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.Coinsurance"
+                                        Label="Coinsurance (%)"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Max="100"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.IndividualDeductible"
+                                        Label="Individual Deductible"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Format="C"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.FamilyDeductible"
+                                        Label="Family Deductible"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Format="C"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.IndividualOOPMax"
+                                        Label="Individual Out-of-Pocket Max"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Format="C"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_request.FamilyOOPMax"
+                                        Label="Family Out-of-Pocket Max"
+                                        Variant="Variant.Outlined"
+                                        Min="0"
+                                        Format="C"
+                                        Required="true"
+                                        T="decimal" />
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Primary"
+                  Disabled="@(!_formIsValid || _isSaving)"
+                  OnClick="Submit">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@(_isEdit ? "Update" : "Create") Plan</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? PlanId { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isSaving;
+    private bool _isEdit => !string.IsNullOrEmpty(PlanId);
+
+    private BenefitPlanDetails? _plan;
+    private CreateBenefitPlanRequest _request = new();
+    private UpdateBenefitPlanRequest? _updateRequest;
+    private DateTime? _effectiveDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            _plan = await BenefitPlanService.GetBenefitPlanByIdAsync(PlanId!);
+            if (_plan != null)
+            {
+                _request = new CreateBenefitPlanRequest
+                {
+                    SponsorId = _plan.SponsorId,
+                    PlanName = _plan.PlanName,
+                    ProductType = _plan.ProductType,
+                    Network = _plan.Network,
+                    MetalTier = _plan.MetalTier,
+                    IndividualDeductible = _plan.IndividualDeductible,
+                    FamilyDeductible = _plan.FamilyDeductible,
+                    IndividualOOPMax = _plan.IndividualOOPMax,
+                    FamilyOOPMax = _plan.FamilyOOPMax,
+                    Coinsurance = _plan.Coinsurance,
+                    MonthlyPremium = _plan.MonthlyPremium,
+                    EffectiveDate = _plan.EffectiveDate,
+                    PlanYear = _plan.PlanYear
+                };
+
+                _updateRequest = new UpdateBenefitPlanRequest
+                {
+                    SponsorId = _plan.SponsorId,
+                    PlanName = _plan.PlanName,
+                    ProductType = _plan.ProductType,
+                    Network = _plan.Network,
+                    MetalTier = _plan.MetalTier,
+                    IndividualDeductible = _plan.IndividualDeductible,
+                    FamilyDeductible = _plan.FamilyDeductible,
+                    IndividualOOPMax = _plan.IndividualOOPMax,
+                    FamilyOOPMax = _plan.FamilyOOPMax,
+                    Coinsurance = _plan.Coinsurance,
+                    MonthlyPremium = _plan.MonthlyPremium,
+                    EffectiveDate = _plan.EffectiveDate,
+                    PlanYear = _plan.PlanYear,
+                    Status = _plan.Status,
+                    TerminationDate = _plan.TerminationDate
+                };
+
+                _effectiveDate = _plan.EffectiveDate;
+            }
+        }
+        else
+        {
+            // Set defaults for new plan
+            _request.ProductType = "PPO";
+            _request.MetalTier = "Silver";
+            _request.Network = "National Premier Network";
+            _request.PlanYear = DateTime.Now.Year.ToString();
+            _request.SponsorId = "SPNSR10001";
+            _request.Coinsurance = 20m;
+            _request.IndividualDeductible = 1500m;
+            _request.FamilyDeductible = 3000m;
+            _request.IndividualOOPMax = 6000m;
+            _request.FamilyOOPMax = 12000m;
+            _request.MonthlyPremium = 450m;
+        }
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_formIsValid)
+            return;
+
+        _isSaving = true;
+
+        try
+        {
+            if (_effectiveDate.HasValue)
+            {
+                _request.EffectiveDate = _effectiveDate.Value;
+            }
+
+            if (_isEdit && _updateRequest != null)
+            {
+                // Copy values from _request to _updateRequest
+                _updateRequest.SponsorId = _request.SponsorId;
+                _updateRequest.PlanName = _request.PlanName;
+                _updateRequest.ProductType = _request.ProductType;
+                _updateRequest.Network = _request.Network;
+                _updateRequest.MetalTier = _request.MetalTier;
+                _updateRequest.IndividualDeductible = _request.IndividualDeductible;
+                _updateRequest.FamilyDeductible = _request.FamilyDeductible;
+                _updateRequest.IndividualOOPMax = _request.IndividualOOPMax;
+                _updateRequest.FamilyOOPMax = _request.FamilyOOPMax;
+                _updateRequest.Coinsurance = _request.Coinsurance;
+                _updateRequest.MonthlyPremium = _request.MonthlyPremium;
+                _updateRequest.EffectiveDate = _request.EffectiveDate;
+                _updateRequest.PlanYear = _request.PlanYear;
+
+                await BenefitPlanService.UpdateBenefitPlanAsync(PlanId!, _updateRequest);
+            }
+            else
+            {
+                await BenefitPlanService.CreateBenefitPlanAsync(_request);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving plan: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

@@ -2,23 +2,47 @@ using Microsoft.Azure.Cosmos;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Cosmos DB
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// Configure Database (Cosmos DB or MongoDB)
+if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"];
-    var key = configuration["CosmosDb:Key"];
-    return new CosmosClient(endpoint, key);
-});
+    // Use MongoDB
+    builder.Services.AddSingleton<IMongoClient>(sp =>
+    {
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return new MongoClient(configuration["MongoDb:ConnectionString"]);
+    });
 
-// Add repositories
-builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
+    builder.Services.AddScoped<IMongoDatabase>(sp =>
+    {
+        var wrapper = sp.GetRequiredService<IMongoClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"]);
+    });
+
+    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
+    Console.WriteLine("Using MongoDB repository");
+}
+else
+{
+    // Use Cosmos DB (Default)
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var endpoint = configuration["CosmosDb:Endpoint"];
+        var key = configuration["CosmosDb:Key"];
+        return new CosmosClient(endpoint, key);
+    });
+
+    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
+    Console.WriteLine("Using Cosmos DB repository");
+}
 
 // Add business logic services
-builder.Services.AddScoped<IBenefitPlanService, Services.BenefitPlanService>();
+builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
 
 // Add controllers
 builder.Services.AddControllers();

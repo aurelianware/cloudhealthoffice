@@ -1,0 +1,329 @@
+@using CloudHealthOffice.Portal.Services
+@inject IBenefitPlanService BenefitPlanService
+@inject IDialogService DialogService
+
+<MudDialog>
+    <DialogContent>
+        @if (_plan == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+            <MudText>Loading plan details...</MudText>
+        }
+        else
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                <!-- Overview Tab -->
+                <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Plan Details</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Plan ID:</strong></td>
+                                        <td style="font-family: monospace;">@_plan.PlanId</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Plan Name:</strong></td>
+                                        <td>@_plan.PlanName</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Sponsor:</strong></td>
+                                        <td>@_plan.SponsorName</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Product Type:</strong></td>
+                                        <td>
+                                            <MudChip Size="Size.Small" Color="GetProductTypeColor(_plan.ProductType)">
+                                                @_plan.ProductType
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Metal Tier:</strong></td>
+                                        <td>
+                                            <MudChip Size="Size.Small" Color="GetMetalTierColor(_plan.MetalTier)">
+                                                @_plan.MetalTier
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Network:</strong></td>
+                                        <td>@_plan.Network</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Plan Year:</strong></td>
+                                        <td>@_plan.PlanYear</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Status:</strong></td>
+                                        <td>
+                                            <MudChip Size="Size.Small" Color="GetStatusColor(_plan.Status)">
+                                                @_plan.Status
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Financial Structure</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Monthly Premium:</strong></td>
+                                        <td>@_plan.MonthlyPremium.ToString("C")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Individual Deductible:</strong></td>
+                                        <td>@_plan.IndividualDeductible.ToString("C")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Family Deductible:</strong></td>
+                                        <td>@_plan.FamilyDeductible.ToString("C")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Individual OOP Max:</strong></td>
+                                        <td>@_plan.IndividualOOPMax.ToString("C")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Family OOP Max:</strong></td>
+                                        <td>@_plan.FamilyOOPMax.ToString("C")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Coinsurance:</strong></td>
+                                        <td>@_plan.Coinsurance%</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Coverage Dates</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Effective Date:</strong></td>
+                                        <td>@_plan.EffectiveDate.ToString("MMMM dd, yyyy")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Termination Date:</strong></td>
+                                        <td>
+                                            @if (_plan.TerminationDate.HasValue)
+                                            {
+                                                @_plan.TerminationDate.Value.ToString("MMMM dd, yyyy")
+                                            }
+                                            else
+                                            {
+                                                <em>No end date</em>
+                                            }
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Enrollment</MudText>
+                            <MudSimpleTable Hover="true" Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Enrolled Members:</strong></td>
+                                        <td>@_plan.EnrolledMembers.ToString("N0")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Assigned Benefits:</strong></td>
+                                        <td>@_plan.AssignedBenefits</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Benefits Tab -->
+                <MudTabPanel Text="Benefits" Icon="@Icons.Material.Filled.LocalHospital" 
+                            BadgeData="_plan.Benefits.Count" 
+                            BadgeColor="Color.Primary">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Covered Services</MudText>
+                    <MudTable Items="@_plan.Benefits" Hover="true" Striped="true" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Service Type</MudTh>
+                            <MudTh>Category</MudTh>
+                            <MudTh>Copay</MudTh>
+                            <MudTh>Coinsurance</MudTh>
+                            <MudTh>Coverage %</MudTh>
+                            <MudTh>Prior Auth</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Service Type"><strong>@context.ServiceType</strong></MudTd>
+                            <MudTd DataLabel="Category">
+                                <MudChip Size="Size.Small" Variant="Variant.Outlined">
+                                    @context.Category
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Copay">
+                                @if (context.Copay.HasValue)
+                                {
+                                    @context.Copay.Value.ToString("C")
+                                }
+                                else
+                                {
+                                    <em>-</em>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Coinsurance">
+                                @if (context.CoinsurancePercent.HasValue)
+                                {
+                                    @($"{context.CoinsurancePercent}%")
+                                }
+                                else
+                                {
+                                    <em>-</em>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Coverage %">
+                                @if (context.CoveragePercent.HasValue)
+                                {
+                                    @($"{context.CoveragePercent}%")
+                                }
+                                else
+                                {
+                                    <em>-</em>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Prior Auth">
+                                @if (context.PriorAuthRequired)
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Success">Not Required</MudChip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="pa-4">
+                                No benefits configured
+                            </MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+
+                    <MudButton Variant="Variant.Filled" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Add"
+                              Class="mt-4"
+                              OnClick="AddBenefits">
+                        Add Benefits
+                    </MudButton>
+                </MudTabPanel>
+
+                <!-- Exclusions Tab -->
+                <MudTabPanel Text="Exclusions" Icon="@Icons.Material.Filled.Block" 
+                            BadgeData="_plan.Exclusions.Count" 
+                            BadgeColor="Color.Error">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Services Not Covered</MudText>
+                    @if (_plan.Exclusions.Any())
+                    {
+                        <MudList>
+                            @foreach (var exclusion in _plan.Exclusions)
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.RemoveCircleOutline" IconColor="Color.Error">
+                                    @exclusion
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">No exclusions defined for this plan.</MudAlert>
+                    }
+                </MudTabPanel>
+
+                <!-- Members Tab -->
+                <MudTabPanel Text="Members" Icon="@Icons.Material.Filled.People" 
+                            BadgeData="_plan.EnrolledMembers" 
+                            BadgeColor="Color.Secondary">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Enrolled Members</MudText>
+                    <MudAlert Severity="Severity.Info" Class="mb-4">
+                        This plan has <strong>@_plan.EnrolledMembers.ToString("N0")</strong> enrolled members.
+                    </MudAlert>
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Primary" 
+                              StartIcon="@Icons.Material.Filled.Search"
+                              Href="/members">
+                        View All Members
+                    </MudButton>
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Close</MudButton>
+        @if (_plan != null)
+        {
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.Edit"
+                      OnClick="EditPlan">
+                Edit Plan
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string PlanId { get; set; } = string.Empty;
+
+    private BenefitPlanDetails? _plan;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _plan = await BenefitPlanService.GetBenefitPlanByIdAsync(PlanId);
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void EditPlan()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void AddBenefits()
+    {
+        // In a real implementation, this would open a dialog to select benefits from library
+        // For now, just placeholder
+    }
+
+    private Color GetProductTypeColor(string productType) => productType switch
+    {
+        "PPO" => Color.Primary,
+        "HMO" => Color.Secondary,
+        "EPO" => Color.Info,
+        "HDHP" => Color.Success,
+        _ => Color.Default
+    };
+
+    private Color GetMetalTierColor(string metalTier) => metalTier switch
+    {
+        "Platinum" => Color.Dark,
+        "Gold" => Color.Warning,
+        "Silver" => Color.Default,
+        "Bronze" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Pending" => Color.Warning,
+        "Inactive" => Color.Error,
+        _ => Color.Default
+    };
+}

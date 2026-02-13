@@ -1,0 +1,377 @@
+.signup-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    padding: 2rem 1rem;
+}
+
+.signup-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 800px;
+    width: 100%;
+    padding: 3rem;
+}
+
+.logo-section {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.signup-logo {
+    max-width: 200px;
+    margin-bottom: 1rem;
+}
+
+.logo-section h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #000000;
+    margin-bottom: 0.5rem;
+}
+
+.tagline {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.form-section {
+    margin-bottom: 2.5rem;
+}
+
+.form-section h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #000000;
+    border-bottom: 2px solid #00d4ff;
+    padding-bottom: 0.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #00d4ff;
+}
+
+.tier-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.tier-card {
+    border: 3px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+}
+
+.tier-card:hover {
+    border-color: #00d4ff;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 212, 255, 0.2);
+}
+
+.tier-card.selected {
+    border-color: #00d4ff;
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    color: #ffffff;
+}
+
+.tier-card.enterprise-tier {
+    border-color: #ffd700;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    color: #ffffff;
+    position: relative;
+}
+
+.tier-card.enterprise-tier:hover {
+    border-color: #ffd700;
+    box-shadow: 0 8px 20px rgba(255, 215, 0, 0.3);
+}
+
+.tier-card.enterprise-tier::before {
+    content: "POPULAR";
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: #ffd700;
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+.tier-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.tier-card .price {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #00d4ff;
+}
+
+.tier-card ul {
+    list-style: none;
+    padding: 0;
+    text-align: left;
+}
+
+.tier-card ul li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tier-card ul li:before {
+    content: "✓ ";
+    color: #00d4ff;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+.module-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.module-checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.module-checkboxes input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #00d4ff 0%, #0088cc 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #00e0ff 0%, #0099dd 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 212, 255, 0.4);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.terms-text {
+    text-align: center;
+    margin-top: 1.5rem;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.terms-text a {
+    color: #00d4ff;
+    text-decoration: none;
+}
+
+.terms-text a:hover {
+    text-decoration: underline;
+}
+
+.alert-danger {
+    background: #fee;
+    border: 2px solid #fcc;
+    color: #c00;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+}
+
+.success-message {
+    text-align: center;
+    padding: 2rem;
+}
+
+.checkmark {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 2rem;
+}
+
+.checkmark-circle {
+    stroke-dasharray: 166;
+    stroke-dashoffset: 166;
+    stroke-width: 2;
+    stroke: #00d4ff;
+    fill: none;
+    animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.checkmark-check {
+    transform-origin: 50% 50%;
+    stroke-dasharray: 48;
+    stroke-dashoffset: 48;
+    stroke: #00d4ff;
+    stroke-width: 3;
+    animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+}
+
+@keyframes stroke {
+    100% {
+        stroke-dashoffset: 0;
+    }
+}
+
+.success-message h2 {
+    font-size: 2rem;
+    color: #000000;
+    margin-bottom: 1rem;
+}
+
+.success-message code {
+    background: #f5f5f5;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    color: #00d4ff;
+    font-weight: 600;
+}
+
+.next-steps {
+    background: #f9f9f9;
+    border-left: 4px solid #00d4ff;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: left;
+}
+
+.next-steps h3 {
+    margin-top: 0;
+    color: #000000;
+}
+
+.next-steps ol {
+    margin-bottom: 0;
+}
+
+.next-steps li {
+    margin-bottom: 0.75rem;
+}
+
+.timeline {
+    font-size: 0.95rem;
+    color: #666;
+    font-style: italic;
+}
+
+.payment-note {
+    background: #f0f8ff;
+    border-left: 4px solid #00d4ff;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    color: #333;
+    font-size: 0.95rem;
+}
+
+.stripe-element {
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 0.75rem;
+    background: #ffffff;
+    transition: border-color 0.3s;
+}
+
+.stripe-element:focus-within {
+    border-color: #00d4ff;
+    outline: none;
+}
+
+.payment-error {
+    color: #c00;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    min-height: 20px;
+}
+
+.pricing-summary {
+    background: #f9f9f9;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.pricing-summary h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    color: #000000;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.summary-row:last-child {
+    border-bottom: none;
+}
+
+.summary-row.trial {
+    background: #f0f8ff;
+    margin: 0 -1.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0 0 6px 6px;
+}
+
+.summary-row span {
+    color: #666;
+}
+
+.summary-row strong {
+    color: #000000;
+    font-weight: 600;
+}
