@@ -30,7 +30,7 @@ spec:
         arguments:
           parameters:
           - name: url
-            value: "http://claims-service.cho-svcs/api/claims/{{workflow.parameters.claim-id}}"
+            value: "http://claims-service.cloudhealthoffice/api/claims/{{workflow.parameters.claim-id}}"
           - name: method
             value: "GET"
           - name: headers
@@ -197,7 +197,7 @@ spec:
         service_date = claim.get('serviceDateFrom')
         
         # Call Coverage Service
-        url = f"http://coverage-service.cho-svcs/api/coverage/member/{member_id}/active?serviceDate={service_date}"
+        url = f"http://coverage-service.cloudhealthoffice/api/coverage/member/{member_id}/active?serviceDate={service_date}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         req.add_header('Content-Type', 'application/json')
@@ -249,7 +249,7 @@ spec:
         billing_npi = claim.get('billingProviderNPI')
         
         # Call Provider Service
-        url = f"http://provider-service.cho-svcs/api/providers/{billing_npi}"
+        url = f"http://provider-service.cloudhealthoffice/api/providers/{billing_npi}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         
@@ -321,7 +321,7 @@ spec:
         
         for dx in diagnosis_codes:
             code = dx.get('code')
-            url = f"http://reference-data-service.cho-svcs/api/referencedata/icd10/{code}/validate"
+            url = f"http://reference-data-service.cloudhealthoffice/api/referencedata/icd10/{code}/validate"
             
             try:
                 with urllib.request.urlopen(url, timeout=3) as response:
@@ -339,7 +339,7 @@ spec:
         
         for line in claim_lines:
             code = line.get('procedureCode')
-            url = f"http://reference-data-service.cho-svcs/api/referencedata/cpt/{code}/validate"
+            url = f"http://reference-data-service.cloudhealthoffice/api/referencedata/cpt/{code}/validate"
             
             try:
                 with urllib.request.urlopen(url, timeout=3) as response:
@@ -411,7 +411,7 @@ spec:
         claim_lines = claim.get('claimLines', [])
         cpt_code = claim_lines[0].get('procedureCode') if claim_lines else ''
         
-        url = f"http://authorization-service.cho-svcs/api/authorizations/{auth_number}/validate?procedureCode={cpt_code}&serviceDate={service_date}"
+        url = f"http://authorization-service.cloudhealthoffice/api/authorizations/{auth_number}/validate?procedureCode={cpt_code}&serviceDate={service_date}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         
@@ -474,7 +474,7 @@ spec:
         else:
             service_category = 'Other'
         
-        url = f"http://benefit-plan-service.cho-svcs/api/benefitplans/{plan_id}/benefits?serviceCategory={service_category}"
+        url = f"http://benefit-plan-service.cloudhealthoffice/api/benefitplans/{plan_id}/benefits?serviceCategory={service_category}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         
@@ -516,7 +516,7 @@ spec:
         plan_id = coverage.get('planId')
         lob = coverage.get('lineOfBusiness')
         
-        url = f"http://provider-service.cho-svcs/api/providers/{npi}/rates?planId={plan_id}&lineOfBusiness={lob}"
+        url = f"http://provider-service.cloudhealthoffice/api/providers/{npi}/rates?planId={plan_id}&lineOfBusiness={lob}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         
@@ -653,7 +653,7 @@ spec:
             adjudication['claimAdjustmentReasons'] = []
             status = "Approved"
         
-        url = f"http://claims-service.cho-svcs/api/claims/{claim_id}/adjudication"
+        url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/adjudication"
         data = json.dumps(adjudication).encode('utf-8')
         
         req = urllib.request.Request(url, data=data, method='PUT')
@@ -664,7 +664,7 @@ spec:
             result = json.loads(response.read().decode())
             
             # Update status
-            status_url = f"http://claims-service.cho-svcs/api/claims/{claim_id}/status"
+            status_url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/status"
             status_data = json.dumps({"status": status}).encode('utf-8')
             
             status_req = urllib.request.Request(status_url, data=status_data, method='PUT')

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: claims-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   CosmosDb__DatabaseName: "CloudHealthOffice"
@@ -12,7 +12,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: claims-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: claims-service
     tier: backend
@@ -86,7 +86,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: claims-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: claims-service
 spec:
@@ -103,7 +103,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: claims-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

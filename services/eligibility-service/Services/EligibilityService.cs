@@ -177,7 +177,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cho-svcs/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
             
@@ -200,7 +200,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var memberUrl = _configuration["Services:MemberService"] ?? "http://member-service.cho-svcs/api";
+            var memberUrl = _configuration["Services:MemberService"] ?? "http://member-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync($"{memberUrl}/members/{subscriberId}?tenantId={tenantId}");
             
             if (!response.IsSuccessStatusCode)
@@ -222,7 +222,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cho-svcs/api";
+            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
             var url = $"{benefitUrl}/benefit-plans/{benefitPlanId}/benefits?tenantId={tenantId}";
             
             if (!string.IsNullOrEmpty(serviceType))
@@ -268,7 +268,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cho-svcs/api";
+            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{benefitUrl}/benefit-plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
             
@@ -293,7 +293,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cho-svcs/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
             

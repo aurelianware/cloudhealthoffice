@@ -2,17 +2,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: portal-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  Services__MemberService: "http://member-service.cho-svcs/api"
-  Services__CoverageService: "http://coverage-service.cho-svcs/api"
-  Services__ClaimsService: "http://claims-service.cho-svcs/api"
-  Services__EligibilityService: "http://eligibility-service.cho-svcs/api"
-  Services__AuthorizationService: "http://authorization-service.cho-svcs/api"
-  Services__ProviderService: "http://provider-service.cho-svcs/api"
-  Services__BenefitPlanService: "http://benefit-plan-service.cho-svcs/api"
-  Services__ArgoWorkflows: "http://argo-workflows-server.cho-workflows:2746"
+  Services__MemberService: "http://member-service.cloudhealthoffice/api"
+  Services__CoverageService: "http://coverage-service.cloudhealthoffice/api"
+  Services__ClaimsService: "http://claims-service.cloudhealthoffice/api"
+  Services__EligibilityService: "http://eligibility-service.cloudhealthoffice/api"
+  Services__AuthorizationService: "http://authorization-service.cloudhealthoffice/api"
+  Services__ProviderService: "http://provider-service.cloudhealthoffice/api"
+  Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api"
+  Services__ArgoWorkflows: "http://argo-workflows-server.cloudhealthoffice:2746"
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
@@ -21,7 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: portal
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: portal
     version: v1
@@ -176,7 +176,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: portal
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: portal
 spec:
@@ -197,7 +197,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: portal-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

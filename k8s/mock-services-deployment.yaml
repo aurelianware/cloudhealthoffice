@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mock-services-responses
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   # Mock responses for testing workflow
   coverage-response.json: |
@@ -97,7 +97,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mock-microservices
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   replicas: 1
   selector:
@@ -129,7 +129,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: coverage-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: mock-microservices
@@ -141,7 +141,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: provider-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: mock-microservices
@@ -153,7 +153,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: claims-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: mock-microservices
@@ -165,7 +165,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: authorization-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: mock-microservices
@@ -177,7 +177,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: benefit-plan-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: mock-microservices
