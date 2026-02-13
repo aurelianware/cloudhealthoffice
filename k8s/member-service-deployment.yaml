@@ -34,8 +34,6 @@ spec:
         app: member-service
         version: v1
     spec:
-      imagePullSecrets:
-      - name: ghcr-secret
       containers:
       - name: member-service
         image: ghcr.io/aurelianware/cloudhealthoffice-member-service:latest
