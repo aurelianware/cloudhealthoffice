@@ -2,33 +2,29 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: sponsor-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__SponsorContainerName: "Sponsors"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: sponsor-service-secrets
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-primary-key-here"
-  # TODO: Replace with actual Azure Key Vault reference or managed identity
+  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sponsor-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: sponsor-service
     version: v1
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: sponsor-service
@@ -40,7 +36,7 @@ spec:
     spec:
       containers:
       - name: sponsor-service
-        image: your-acr.azurecr.io/sponsor-service:latest
+        image: ghcr.io/aurelianware/cloudhealthoffice-sponsor-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -52,21 +48,11 @@ spec:
             configMapKeyRef:
               name: sponsor-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: sponsor-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__Endpoint
+        - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
               name: sponsor-service-secrets
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: sponsor-service-secrets
-              key: CosmosDb__Key
+              key: MongoDb__ConnectionString
         resources:
           requests:
             memory: "256Mi"
@@ -91,7 +77,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: sponsor-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: sponsor-service
 spec:
@@ -108,7 +94,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: sponsor-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

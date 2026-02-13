@@ -76,7 +76,7 @@ spec:
         value: "processed/271"
       # Services
       - name: eligibility-service-endpoint
-        value: "http://eligibility-service.cho-svcs.svc.cluster.local/api/eligibility"
+        value: "http://eligibility-service.cloudhealthoffice.svc.cluster.local/api/eligibility"
       # Kafka
       - name: kafka-topic-outbound
         value: "eligibility-responses"

@@ -93,7 +93,7 @@
 - **A4** - Not found
 
 **Integration Points**:
-- Claims Service: `http://claims-service.cho-svcs.svc.cluster.local/api/claims`
+- Claims Service: `http://claims-service.cloudhealthoffice.svc.cluster.local/api/claims`
 - Trading Partner Service: Dynamic path resolution
 - Kafka: Event publishing for downstream processing
 - Azure Blob Storage: HIPAA-compliant archival

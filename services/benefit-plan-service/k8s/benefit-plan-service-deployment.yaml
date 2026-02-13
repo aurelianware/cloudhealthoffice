@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: benefit-plan-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   ASPNETCORE_URLS: "http://+:8080"
@@ -12,17 +12,18 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: benefit-plan-service-secret
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 type: Opaque
 stringData:
   COSMOS_ENDPOINT: "https://your-cosmos-account.documents.azure.com:443/"
   COSMOS_KEY: "your-cosmos-key-here"
+  MONGODB_CONNECTIONSTRING: "mongodb://mongodb-service:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: benefit-plan-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   replicas: 2
   selector:
@@ -38,11 +39,27 @@ spec:
         image: ghcr.io/aurelianware/cloudhealthoffice-benefit-plan-service:latest
         ports:
         - containerPort: 8080
+        env:
+          - name: CosmosDb__Endpoint
+            valueFrom:
+              secretKeyRef:
+                name: benefit-plan-service-secret
+                key: COSMOS_ENDPOINT
+          - name: CosmosDb__Key
+            valueFrom:
+              secretKeyRef:
+                name: benefit-plan-service-secret
+                key: COSMOS_KEY
+          - name: MongoDb__ConnectionString
+            valueFrom:
+              secretKeyRef:
+                name: benefit-plan-service-secret
+                key: MONGODB_CONNECTIONSTRING
+          - name: MongoDb__DatabaseName
+            value: "CloudHealthOffice"
         envFrom:
         - configMapRef:
             name: benefit-plan-service-config
-        - secretRef:
-            name: benefit-plan-service-secret
         resources:
           requests:
             memory: "256Mi"
@@ -67,7 +84,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: benefit-plan-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: benefit-plan-service
@@ -81,7 +98,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: benefit-plan-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

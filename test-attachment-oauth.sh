@@ -40,7 +40,7 @@ echo "$TOKEN_PAYLOAD" | base64 -d 2>/dev/null | jq '.' || echo "(Could not decod
 # Port-forward to attachment service if not already running
 echo ""
 echo "🔌 Step 2: Setting up connection to attachment-service..."
-kubectl -n cho-svcs port-forward svc/attachment-service 18081:80 > /dev/null 2>&1 &
+kubectl -n cloudhealthoffice port-forward svc/attachment-service 18081:80 > /dev/null 2>&1 &
 PORT_FORWARD_PID=$!
 sleep 2
 echo "✅ Port-forward active (PID: ${PORT_FORWARD_PID})"

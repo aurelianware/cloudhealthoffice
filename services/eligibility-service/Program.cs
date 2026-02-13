@@ -24,24 +24,50 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cosmos DB
-var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"] 
-    ?? throw new InvalidOperationException("Cosmos DB connection string not configured");
+// Database Configuration
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 
-builder.Services.AddSingleton<CosmosClient>(sp =>
+if (!string.IsNullOrEmpty(mongoConnectionString))
 {
-    var jsonOptions = new JsonSerializerOptions
+    // MongoDB Registration
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp => 
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
+        return new MongoDB.Driver.MongoClient(mongoConnectionString);
+    });
     
-    var options = new CosmosClientOptions
+    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
     {
-        Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-    };
-    return new CosmosClient(cosmosConnectionString, options);
-});
+        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
+        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
+        return client.GetDatabase(databaseName);
+    });
+
+    builder.Services.AddScoped<IEligibilityRepository, EligibilityRepositoryMongo>();
+    Console.WriteLine("Using MongoDB database provider");
+}
+else
+{
+    // Cosmos DB
+    var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"] 
+        ?? throw new InvalidOperationException("Cosmos DB connection string not configured");
+
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+        
+        var options = new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
+        };
+        return new CosmosClient(cosmosConnectionString, options);
+    });
+
+    builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
+}
 
 // HTTP Client for service calls
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
@@ -51,8 +77,6 @@ builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
         client.Timeout = TimeSpan.FromSeconds(5);
     });
 
-// Repository and Service
-builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
 builder.Services.AddScoped<IEligibilityService, EligibilityServiceImpl>();
 
 // CORS
