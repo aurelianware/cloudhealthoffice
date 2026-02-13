@@ -46,6 +46,8 @@ spec:
           name: http
           protocol: TCP
         env:
+        - name: MongoDb__ConnectionString
+          value: "mongodb://admin:securepassword123@mongodb:27017"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
