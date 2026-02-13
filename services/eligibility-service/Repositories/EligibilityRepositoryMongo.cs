@@ -118,7 +118,7 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
             await _inquiryCollection.InsertOneAsync(inquiry);
         }
         
-        _logger.LogInformation("Updated eligibility inquiry {InquiryId} (Mongo)", inquiry.Id);
+        _logger.LogInformation("Updated eligibility inquiry {InquiryId} (Mongo)", SanitizeForLog(inquiry.Id));
     }
 
     // Response Methods
@@ -153,6 +153,18 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
         await _responseCollection.InsertOneAsync(response);
         
         _logger.LogInformation("Created eligibility response {ResponseId} for inquiry {InquiryId} (Mongo)", 
-            response.Id, response.InquiryId);
+            SanitizeForLog(response.Id), SanitizeForLog(response.InquiryId));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Remove newline characters to prevent log forging via user-controlled data.
+        return value.Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty);
     }
 }
