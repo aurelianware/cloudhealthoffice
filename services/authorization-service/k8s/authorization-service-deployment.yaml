@@ -67,6 +67,18 @@ spec:
             secretKeyRef:
               name: authorization-service-secret
               key: CosmosDb__Key
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: authorization-service-secret
+              key: MongoDb__ConnectionString
+              optional: true
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: authorization-service-config
+              key: MongoDb__DatabaseName
+              optional: true
         resources:
           requests:
             cpu: 100m

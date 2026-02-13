@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AuthorizationService;
 using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,34 +80,52 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// Database Configuration (Cosmos DB or MongoDB)
+if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    var endpoint = config["CosmosDb:Endpoint"];
-    var key = config["CosmosDb:Key"];
-
-    if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+    // Use MongoDB
+    builder.Services.AddSingleton<IMongoClient>(sp =>
     {
-        throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-    }
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return new MongoClient(configuration["MongoDb:ConnectionString"]);
+    });
 
-    var jsonOptions = new JsonSerializerOptions
+    builder.Services.AddScoped<IMongoDatabase>(sp =>
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
-    
-    var options = new CosmosClientOptions
-    {
-        Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-    };
-    
-    return new CosmosClient(endpoint, key, options);
-});
+        var wrapper = sp.GetRequiredService<IMongoClient>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        return wrapper.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
+    });
 
-// Repositories
-builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
+    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
+    Console.WriteLine("Using MongoDB repository");
+}
+else
+{
+    // Use Cosmos DB (Default)
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var endpoint = configuration["CosmosDb:Endpoint"];
+        var key = configuration["CosmosDb:Key"];
+        
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+        
+        var options = new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
+        };
+        
+        return new CosmosClient(endpoint, key, options);
+    });
+
+    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
+    Console.WriteLine("Using Cosmos DB repository");
+}
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
