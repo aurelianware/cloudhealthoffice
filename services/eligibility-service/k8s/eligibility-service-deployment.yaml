@@ -45,7 +45,11 @@ spec:
           protocol: TCP
         env:
         - name: MongoDb__ConnectionString
-          value: "mongodb://admin:securepassword123@mongodb:27017"
+          valueFrom:
+            secretKeyRef:
+              name: eligibility-service-secret
+              key: MongoDb__ConnectionString
+              optional: true
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
