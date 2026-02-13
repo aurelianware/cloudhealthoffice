@@ -67,11 +67,19 @@ public class SftpProvisioningService : ISftpProvisioningService
             // Build arguments
             var keyVault = keyVaultName ?? _configuration["Azure:KeyVault:Name"] ?? "cho-keyvault-prod";
             var environmentsArg = string.Join(",", environments);
-            
-            var arguments = $"{tenantId} \"{tenantName}\" {keyVault} --environments {environmentsArg}";
+
+            // Build structured argument list to avoid shell parsing of user-controlled values
+            var scriptArguments = new[]
+            {
+                tenantId,
+                tenantName,
+                keyVault,
+                "--environments",
+                environmentsArg
+            };
 
             // Execute script
-            var processResult = await ExecuteBashScriptAsync(scriptPath, arguments);
+            var processResult = await ExecuteBashScriptAsync(scriptPath, scriptArguments);
             
             result.Success = processResult.ExitCode == 0;
             result.Output = processResult.Output;
@@ -112,7 +120,7 @@ public class SftpProvisioningService : ISftpProvisioningService
         }
     }
 
-    private async Task<ProcessExecutionResult> ExecuteBashScriptAsync(string scriptPath, string arguments)
+    private async Task<ProcessExecutionResult> ExecuteBashScriptAsync(string scriptPath, IEnumerable<string> arguments)
     {
         var result = new ProcessExecutionResult();
         var outputBuilder = new StringBuilder();
@@ -122,12 +130,17 @@ public class SftpProvisioningService : ISftpProvisioningService
         {
             var processInfo = new ProcessStartInfo
             {
-                FileName = "/bin/bash",
-                Arguments = $"{scriptPath} {arguments}",
+                // Execute the script directly and supply each argument separately to avoid shell interpretation
+                FileName = scriptPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
+            foreach (var arg in arguments)
+            {
+                processInfo.ArgumentList.Add(arg);
+            }
+
             };
 
             using var process = new Process { StartInfo = processInfo };
