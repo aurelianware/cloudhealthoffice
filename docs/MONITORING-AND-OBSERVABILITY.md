@@ -109,7 +109,7 @@ spec:
             arguments:
               parameters:
                 - name: url
-                  value: "http://eligibility-service.cho-svcs:3000/api/v1/eligibility/{{workflow.parameters.patient-id}}"
+                  value: "http://eligibility-service.cloudhealthoffice:3000/api/v1/eligibility/{{workflow.parameters.patient-id}}"
                 - name: method
                   value: "GET"
           
@@ -120,7 +120,7 @@ spec:
             arguments:
               parameters:
                 - name: url
-                  value: "http://provider-service.cho-svcs:3002/api/v1/providers/{{workflow.parameters.provider-npi}}"
+                  value: "http://provider-service.cloudhealthoffice:3002/api/v1/providers/{{workflow.parameters.provider-npi}}"
                 - name: method
                   value: "GET"
           
@@ -131,7 +131,7 @@ spec:
             arguments:
               parameters:
                 - name: url
-                  value: "http://benefit-service.cho-svcs:3001/api/v1/plans/{{tasks.check-eligibility.outputs.parameters.plan-id}}"
+                  value: "http://benefit-service.cloudhealthoffice:3001/api/v1/plans/{{tasks.check-eligibility.outputs.parameters.plan-id}}"
                 - name: method
                   value: "GET"
           
@@ -141,7 +141,7 @@ spec:
             arguments:
               parameters:
                 - name: url
-                  value: "http://reference-data-service.cho-svcs:3003/api/v1/codes/validate"
+                  value: "http://reference-data-service.cloudhealthoffice:3003/api/v1/codes/validate"
                 - name: method
                   value: "POST"
                 - name: body
@@ -154,7 +154,7 @@ spec:
             arguments:
               parameters:
                 - name: url
-                  value: "http://claims-scrubbing-service.cho-svcs:3004/api/v1/scrub"
+                  value: "http://claims-scrubbing-service.cloudhealthoffice:3004/api/v1/scrub"
                 - name: method
                   value: "POST"
                 - name: body

@@ -30,7 +30,7 @@ Cloud Health Office now uses **Azure Cosmos DB** for persistent storage of enrol
 ### ✅ 834 Enrollment Import Service
 
 **Status**: Deployed and tested  
-**Namespace**: `cho-svcs`  
+**Namespace**: `cloudhealthoffice`  
 **Pods**: 2 replicas (auto-scaling 2-10 based on CPU 70%/Memory 80%)  
 **Image**: `ghcr.io/aurelianware/cloudhealthoffice-enrollment-import-service:latest`
 
@@ -51,7 +51,7 @@ CosmosDb__CoverageContainer: Coverage
 ### ✅ 837 Claims Service
 
 **Status**: Deployed and tested  
-**Namespace**: `cho-svcs`  
+**Namespace**: `cloudhealthoffice`  
 **Pods**: 3 replicas (auto-scaling 3-20 based on CPU 70%/Memory 80%)  
 **Image**: `ghcr.io/aurelianware/cloudhealthoffice-claims-service:latest`
 
@@ -116,13 +116,13 @@ CosmosDb__ContainerName: Claims
 
 ## Kubernetes Secrets
 
-The Cosmos DB credentials are stored in Kubernetes secret `cosmos-db-secret` in the `cho-svcs` namespace:
+The Cosmos DB credentials are stored in Kubernetes secret `cosmos-db-secret` in the `cloudhealthoffice` namespace:
 
 ```bash
 kubectl create secret generic cosmos-db-secret \
   --from-literal=endpoint='https://cloudhealthoffice-cosmos.documents.azure.com:443/' \
   --from-literal=key='<primary-key>' \
-  -n cho-svcs
+  -n cloudhealthoffice
 ```
 
 ## System.Text.Json Serialization
@@ -214,10 +214,10 @@ See `test-claim-institutional-payload.json` for a complete 837I institutional cl
 
 ```bash
 # Enrollment Import Service
-kubectl port-forward -n cho-svcs svc/enrollment-import-service 8081:80
+kubectl port-forward -n cloudhealthoffice svc/enrollment-import-service 8081:80
 
 # Claims Service
-kubectl port-forward -n cho-svcs svc/claims-service 8082:80
+kubectl port-forward -n cloudhealthoffice svc/claims-service 8082:80
 ```
 
 ### Test Commands
@@ -261,15 +261,15 @@ Monitor the following in Azure Portal:
 
 ```bash
 # Check pod status
-kubectl get pods -n cho-svcs -l app=enrollment-import-service
-kubectl get pods -n cho-svcs -l app=claims-service
+kubectl get pods -n cloudhealthoffice -l app=enrollment-import-service
+kubectl get pods -n cloudhealthoffice -l app=claims-service
 
 # Check logs
-kubectl logs -n cho-svcs -l app=enrollment-import-service --tail=100
-kubectl logs -n cho-svcs -l app=claims-service --tail=100
+kubectl logs -n cloudhealthoffice -l app=enrollment-import-service --tail=100
+kubectl logs -n cloudhealthoffice -l app=claims-service --tail=100
 
 # Check HPA scaling
-kubectl get hpa -n cho-svcs
+kubectl get hpa -n cloudhealthoffice
 ```
 
 ## Troubleshooting

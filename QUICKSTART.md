@@ -156,7 +156,7 @@ kubectl apply -f services/*/k8s/
 
 # Verify deployment
 kubectl get workflows -n cho-workflows
-kubectl get pods -n cho-svcs
+kubectl get pods -n cloudhealthoffice
 ```
 
 ### Step 3: Configure X12 Integration (Optional)

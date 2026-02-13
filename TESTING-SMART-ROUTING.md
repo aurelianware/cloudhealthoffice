@@ -32,13 +32,13 @@ open https://portal.cloudhealthoffice.com/signup
 ### 3. Check Portal Logs (Real-time)
 ```bash
 # Watch all portal logs
-kubectl logs -f -n cho-svcs -l app=portal
+kubectl logs -f -n cloudhealthoffice -l app=portal
 
 # Filter for routing decisions
-kubectl logs -n cho-svcs -l app=portal --tail=100 | grep -i "routing\|tenant\|authenticated"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=100 | grep -i "routing\|tenant\|authenticated"
 
 # Check Cosmos DB queries
-kubectl logs -n cho-svcs -l app=portal --tail=100 | grep -i "cosmos\|subscription"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=100 | grep -i "cosmos\|subscription"
 ```
 
 ## Creating Test Data in Cosmos DB
@@ -125,7 +125,7 @@ curl -I https://portal.cloudhealthoffice.com/demo
 **Verify Routing:**
 ```bash
 # Check logs after signing in
-kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "No subscription found"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=50 | grep "No subscription found"
 # Should see: "No subscription found for tenant {id}, redirecting to signup"
 ```
 
@@ -140,7 +140,7 @@ kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "No subscription found"
 
 **Verify Routing:**
 ```bash
-kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "authorized"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=50 | grep "authorized"
 # Should see: "User {email} authorized, redirecting to dashboard"
 ```
 
@@ -155,7 +155,7 @@ kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "authorized"
 
 **Verify Routing:**
 ```bash
-kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "not authorized"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=50 | grep "not authorized"
 # Should see: "User {email} not authorized for tenant {id}, redirecting to request access"
 ```
 
@@ -172,17 +172,17 @@ kubectl logs -n cho-svcs -l app=portal --tail=50 | grep "not authorized"
 ### 1. Check Cosmos DB Connection
 ```bash
 # View Cosmos secret in Kubernetes
-kubectl get secret cosmos-secret -n cho-svcs -o jsonpath='{.data.COSMOS_ENDPOINT}' | base64 -d
-kubectl get secret cosmos-secret -n cho-svcs -o jsonpath='{.data.COSMOS_KEY}' | base64 -d | head -c 20
+kubectl get secret cosmos-secret -n cloudhealthoffice -o jsonpath='{.data.COSMOS_ENDPOINT}' | base64 -d
+kubectl get secret cosmos-secret -n cloudhealthoffice -o jsonpath='{.data.COSMOS_KEY}' | base64 -d | head -c 20
 
 # Check if portal has environment variables
-kubectl exec -n cho-svcs deployment/portal -- env | grep COSMOS
+kubectl exec -n cloudhealthoffice deployment/portal -- env | grep COSMOS
 ```
 
 ### 2. Monitor Real-time Routing
 ```bash
 # Tail logs and watch routing decisions
-kubectl logs -f -n cho-svcs -l app=portal | grep -E "(Looking up subscription|Found subscription|routing|redirecting)"
+kubectl logs -f -n cloudhealthoffice -l app=portal | grep -E "(Looking up subscription|Found subscription|routing|redirecting)"
 ```
 
 ### 3. Check Azure AD Token Claims
@@ -193,7 +193,7 @@ When signed in, check browser console → Network → signin-oidc → Headers to
 ### 4. Verify Cosmos Queries
 ```bash
 # Check for Cosmos query logs
-kubectl logs -n cho-svcs -l app=portal --tail=200 | grep -A 2 "Looking up subscription"
+kubectl logs -n cloudhealthoffice -l app=portal --tail=200 | grep -A 2 "Looking up subscription"
 # Should show: Tenant ID being queried
 ```
 
@@ -208,7 +208,7 @@ az account show --query tenantId -o tsv
 **Issue:** Cosmos DB connection errors
 **Fix:** Check secret exists:
 ```bash
-kubectl get secret cosmos-secret -n cho-svcs
+kubectl get secret cosmos-secret -n cloudhealthoffice
 ```
 
 **Issue:** Not finding members

@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-NAMESPACE="cho-svcs"
+NAMESPACE="cloudhealthoffice"
 INGRESS_NAMESPACE="ingress-nginx"
 CERTMANAGER_NAMESPACE="cert-manager"
 EXPECTED_IP="4.149.83.133"

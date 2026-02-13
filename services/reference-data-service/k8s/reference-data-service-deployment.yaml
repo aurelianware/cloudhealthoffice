@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: reference-data-service-config
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   ASPNETCORE_URLS: "http://+:8080"
@@ -12,7 +12,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: reference-data-service-secret
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 type: Opaque
 stringData:
   POSTGRES_PASSWORD: "CloudHealthOffice2026!"
@@ -22,7 +22,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   ports:
   - port: 5432
@@ -35,7 +35,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   serviceName: postgres-service
   replicas: 1
@@ -88,7 +88,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: reference-data-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   replicas: 2
   selector:
@@ -135,7 +135,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: reference-data-service
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   selector:
     app: reference-data-service
@@ -149,7 +149,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: reference-data-service-hpa
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
