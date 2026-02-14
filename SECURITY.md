@@ -485,19 +485,6 @@ az keyvault set-policy \
 
 ### Secrets in Code
 
-**NEVER commit secrets to git:**
-
-```bash
-# ❌ WRONG - Secret in code
-{
-  "claims_backend_api_key": "your-api-key-here"
-}
-
-# ✅ CORRECT - Reference to Key Vault
-{
-  "claims_backend_api_key": "@keyvault('https://hipaa-keyvault.vault.azure.net/secrets/claims-backend-api-key')"
-}
-```
 
 **Git Secrets Scanning:**
 ```bash
