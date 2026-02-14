@@ -83,7 +83,7 @@ Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expe
 ### **Core Capabilities**
 
 **Start with Integration:**
-- ✅ **EDI Transaction Processing** - 270/271, 275, 276/277, 278, 837 with X12 parsing and FHIR R4 transformation
+- ✅ **EDI Transaction Processing** - 270/271, 275, 276/277,278,834, 835, 837 with X12 parsing and FHIR R4 transformation
 - ✅ **Legacy System Integration** - REST APIs and file exchange - works WITH your existing platforms
 - ✅ **SFTP Automation** - Secure file exchange with clearinghouses (Availity, Change Healthcare, Optum)
 
