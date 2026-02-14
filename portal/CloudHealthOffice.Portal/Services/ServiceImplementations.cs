@@ -393,6 +393,7 @@ public class AuthorizationService : IAuthorizationService
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthorizationService> _logger;
     private readonly ITokenAcquisition _tokenAcquisition;
+    private static readonly List<AuthorizationSummary> _mockSubmittedAuthorizations = new();
 
     public AuthorizationService(HttpClient httpClient, IConfiguration configuration, ILogger<AuthorizationService> logger, ITokenAcquisition tokenAcquisition)
     {
@@ -417,7 +418,11 @@ public class AuthorizationService : IAuthorizationService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error fetching authorizations, returning mock data");
-            return GetMockAuthorizations(memberId);
+            var mockAuths = GetMockAuthorizations(memberId);
+            // Add user-submitted authorizations to the list
+            mockAuths.InsertRange(0, _mockSubmittedAuthorizations.Where(a => 
+                string.IsNullOrEmpty(memberId) || a.MemberName?.Contains(memberId, StringComparison.OrdinalIgnoreCase) == true));
+            return mockAuths;
         }
     }
 
@@ -449,8 +454,23 @@ public class AuthorizationService : IAuthorizationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error submitting authorization, returning mock ID");
-            return $"AUTH-2026-{new Random().Next(10000, 99999):D5}";
+            _logger.LogWarning(ex, "Error submitting authorization, adding to mock data");
+            var authId = $"AUTH-2026-{new Random().Next(10000, 99999):D5}";
+            
+            // Add to mock submitted authorizations so it appears in the list
+            _mockSubmittedAuthorizations.Insert(0, new AuthorizationSummary
+            {
+                AuthorizationId = authId,
+                MemberName = $"Member {request.MemberId}",
+                ProviderName = $"Provider {request.ProviderId}",
+                ServiceType = request.ServiceType,
+                Status = "Pending",
+                RequestDate = DateTime.Now,
+                DecisionDate = null,
+                ProcessingTimeMs = 0
+            });
+            
+            return authId;
         }
     }
 
