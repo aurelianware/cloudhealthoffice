@@ -115,6 +115,11 @@ builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 builder.Services.AddServerSideBlazor()
     .AddMicrosoftIdentityConsentHandler();
+
+// Add authentication state provider for Blazor
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, 
+    Microsoft.AspNetCore.Components.Server.ServerAuthenticationStateProvider>();
+
 builder.Services.AddMudServices();
 
 // Add HttpClient for service calls with tenant context
