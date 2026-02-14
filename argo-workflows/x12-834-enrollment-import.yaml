@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
   name: x12-834-enrollment-import
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
 spec:
   schedule: "*/10 * * * *"  # Every 10 minutes
   timezone: "America/Los_Angeles"
