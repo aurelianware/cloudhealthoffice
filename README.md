@@ -3,7 +3,7 @@
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
 
-# **The #1 Open-Source Cloud-Native and Payer Platform**
+# **The #1 Open-Source Payer Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
