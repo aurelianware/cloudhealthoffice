@@ -1,0 +1,1381 @@
+--- PAGE 1 ---
+X12 278 Healthcare Services 
+Review — Reque st for Review an d 
+Response (005010 X217) 
+Implementation requirements ques tionnaire for 
+real-time web aut horizations and referrals 
+(NEW UI) 
+Organization:  
+Require d return date: 
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 1 of 35  |  Updated 4/03/2025 
+--- PAGE 2 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 2 of 35  |  Updated 4/03/2025  
+Contents  
+Contact information  .......................................................................................................................................  3 
+Key response dates  ...................................................................................................................................... 4  
+Overview  .......................................................................................................................................................  5 
+Background  ............................................................................................................................................... 5  
+Audience  ....................................................................................................................................................  5 
+External documentation  .............................................................................................................................  5 
+X12 implementation guides  ................................................................................................................... 5  
+External code sources  ...........................................................................................................................  5 
+Section 1 (to be completed within first 30 days)  ...........................................................................................  6 
+Payer ID and payer name  .........................................................................................................................  6 
+Implementation states  ............................................................................................................................... 6  
+Testing process  .........................................................................................................................................  7 
+Required connectivity  ................................................................................................................................  8 
+Test connectivity  ........................................................................................................................................ 9  
+Production connectivity ..............................................................................................................................  9 
+Portal workflow and APIs  .......................................................................................................................... 9  
+Required connectivity  ............................................................................................................................ 9  
+Value adds/features  .............................................................................................................................  10 
+Section 2 (to be completed within first 60 days)  .........................................................................................  13 
+Enveloping requirements  .........................................................................................................................  13 
+Payer logo  ............................................................................................................................................... 14 
+Availity standards: Request  .....................................................................................................................  14 
+Availity standards: Response ..................................................................................................................  15 
+Essentials fields for submission  ..............................................................................................................  16 
+Additional submission information  ...........................................................................................................  27 
+Submission response  ..............................................................................................................................  28 
+Appendix : Example transactions  ................................................................................................................  29 
+X217 Outpatient Request  ........................................................................................................................ 29 
+X217 Outpatient Response .....................................................................................................................  29 
+X217 Inpatient Request  ...........................................................................................................................  30 
+X217 Inpatient Response  ........................................................................................................................ 31 
+X217 Referral Request  ............................................................................................................................ 32 
+X217 Referral Response  .........................................................................................................................  33 
+X217 Error Response  ..............................................................................................................................  34 
+Revision history  ...........................................................................................................................................  35 
+--- PAGE 3 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 3 of 35  |  Updated 4/03/2025  
+Contact information  
+Trading partner technical contact (to be 
+completed by trading partner)Availity technical contact (to be completed by Availity)  
+Name:  Name:  
+Phone:  Phone:  
+Email:  Email:  
+Trading partner  account manager  Availity a ccount manager  
+Name:  Name:  
+Phone:  Phone:  
+Email:  Email:  
+Trading partner  escalation contact  Availity  escalation contact  
+Name:  Name:  
+Phone:  Phone:  
+Email:  Email:  
+Additional  trading partner  contact Other Availity  contact  
+Name:  Name:  
+Phone:  Phone:  
+Email:  Email:  
+--- PAGE 4 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 4 of 35  |  Updated 4/03/2025  
+Key response dates 
+First 30 days tasks  Date Returned  
+Payer Name, ID , and implementation states  
+Testing process  
+Required connectivity  
+Test connectivity  
+Production connectivity  
+Portal workflow and APIs  
+First 60 Days tasks  Date Returned  
+Enveloping requirements  
+Payer  logo 
+Availity standards: Request  
+Availity standards: Response  
+Essential s fields for submission  
+Additional  submission information  
+Submission response  
+--- PAGE 5 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 5 of 35  |  Updated 4/03/2025  
+Overview 
+Background 
+The X12 standard 278 transaction, Healthcare Services Review —Request for Review and Response 
+(X217) , allows providers to request authorizations, referrals, and certifications  and allows payers to 
+respon d to these requests . This transaction differs from  Healthcare Services Review —Inquiry and 
+Response (X215), for which you must complete a similar  questionnaire if you are also implementing that  
+transaction.  
+Availity has approved the specifications outlined in this document to ensure a timely and successful 
+implementation with all clients. If your system is unable to support these  specifications, please speak with 
+your assigned Availity implementation contacts regarding additional options.  
+For some Utilization Management (UM) systems, Availity has developed APIs to support the authorization 
+process . Direct connection between Availity and the payer’s UM system is an option. If your current EDI 
+gateway or UM tool does not support the X12 278 standards, please discuss  options with the 
+implementation team . Note that Availity does not support direct integration with multiple UM systems for a 
+single payer. While Availity does support standard integration, deviating from the standard results in 
+additional Statements of Work and expanded timeline . Please discuss any deviations from our standard 
+implementation  with the implementation team .  
+Audience 
+Due to the wide range of questions asked, this questionnaire should be completed by various members of 
+your implementation team, including project management , business owners  and technical architects.  
+External documentation 
+X12 implementation guides  
+The X12 Implementation Guides contains  rules for format, content, and data element values for this 
+transaction. These are listed in the ASC X12 Technical Report Type 3 (TR3): Health Care Services 
+Review — Request for Review and Response (278) ; version/release/industry identifier code: 
+005010X21 7. 
+This document is not a companion guide for the 278 transaction and does not  convey information that 
+exceeds the requirements or usages of data expressed in the TR3.  
+The TR3, also known as X12N Implementation Guide (IG), adopted under HIPAA, will be referred to as the IG or TR3  in this document . 
+For more information, please refer to the appropriate X12 TR3 for any transaction you are submitting. For 
+a cost, you can obtain a TR3 from the publisher, X12 (https://x12.org/products/glass ). X
+12 offers 
+implementation guides for each transaction type in a regular version and a combined version, which contains the addenda.  
+External code sources  
+For information on external code s ets referenced in this document , refer to  x12.org/codes  and Appendix A 
+in the 005010X217 TR3. 
+--- PAGE 6 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 6 of 35  |  Updated 4/03/2025  
+Section 1 (t o be completed within first 30 days ) 
+Please complete Section 1 and return to Availity. Availity can begin configuration based on the 
+information in Section 1. Delays in returning a completed section could delay the implementation timeline . 
+Payer ID and payer name  
+1.Please list the payer ID for your organization. This payer ID will display on Availity Essentials . If you
+require different payer IDs for different lines of business, please provide these payer IDs in a separat e
+at
+tachment.
+Payer ID:
+2.A vaility’s standard deployment process is to publish your payer ID in the Availity Health Plan Partners
+document on our website. Do you give permission for this?            Yes  No 
+3.If No, is this a controlled deployment to a select group of providers?  Yes  No 
+4.P lease indicate the payer and/or plan name to be displayed in the Availity Essentials  drop-down for
+users to select. This name is also sent in the 2010A NM103 segment (UI Number/NM109 = { payer
+name} )
+Payer name:
+Implementation states  
+In Availity Essentials, providers select payers by first selecting their state in a drop- down  list. Is your 
+implementation nationwide (i.e., available in every state in the drop- down list )?  Yes  No 
+If N o , please specify the states for which your payer ID should be made available:  
+--- PAGE 7 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 7 of 35  |  Updated 4/03/2025  
+Testing p rocess 
+Availity can provide basic test case scenarios; however, we recommend that payers test all possible 
+business scenarios  end to end to identify any issues before moving to production. Testing s cenarios 
+should be included for each API and the 278 transactions with specific test cases for modifications from 
+the X12 278 standard. PHI should not be included for testing, and the payer will be required to create test 
+members for all use cases and share the information with Availity so Availity may complete testing . If PHI 
+is required for testing, Availity requires security waiver and approval prior to testing. Users will be 
+provi ded access to Availity’s QA environment to complete end to end testing. If connectivity to a payer 
+QA/Test environment is unavailable in your test environment, speak with your Availity technical contact regarding additional testing options.  
+1.Please describe your production approval process:
+2.After production approval is granted, will your test environment continue to be available? It is strongly
+encouraged to keep the test environment available for releases and new features.   Yes  No
+3.Does your organization have specific testing requirements?  Yes  No 
+If Ye s , please specify: 
+4.Do you have any testing exclusions ? Yes  No 
+If Ye s , please specify:  
+5. Do test cases require valid provider data?    Yes  No 
+If Ye s , please validate providers as part of the specific test cases.  
+6. Do test files require valid membership records?    Yes  No 
+If Ye s , see note above regarding removing PHI from membership records.  
+7.Do you have a designated payer ID you would like Availity to use in testing?  Yes  No 
+If Ye s , please specify (please include a separate attachment if you require different IDs for different lines 
+of business):  
+--- PAGE 8 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 8 of 35  |  Updated 4/03/2025  
+8.Do you have a minimum or maximum number of test transactions you will accept?  Yes  No 
+If Yes,  please specify: 
+9.When will you be prepared to receive test transactions ? Please specify a date or date range:
+Required connectivity 
+Note : Availity’s standard timeout is 30 seconds.  
+1.Please provide your utilization management vendor(s) and tools :
+2.Does your current EDI gateway or utilization management system  support X12 278 transactions ?
+Yes     No
+If Ye s , please provide your X12 278 companion guide, if available.
+If No, please provide your EDI gateway vendor (s):
+Not
+e: there may be additional implementation time and cost for integration with UM systems. 
+3.Availity can support an XML envelope structure f or the X12 278. Do you require an XML wrapper?
+ Yes    No  
+If Ye s , please define your XML envelope requirements in a separate attachment.  
+If No, please provide additional information about your requirements:  
+4. Availity  can support an HTTPS c onnection. Do you have differing connectivity
+requirements and specifications for each region/state?  Yes    No
+If Ye s , please list the requirements in a separate attachment.
+--- PAGE 9 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 9 of 35  |  Updated 4/03/2025  
+Test connectivity 
+Please provide your Test 278 URL and user ID information (password should be submitted separately 
+and kept on file). If you have different requirements for each region/state, please provide this information 
+for each: 
+1.Please provide URLs for each API endpoint , including the 278 endpoint :
+2.P
+lease provide t est user ID(s):
+Production connectivity 
+Please provide your Prod 278 URL and user ID information (password should be submitted separately 
+and kept on file). Production connections are required four (4) weeks prior to go- live. If you have different 
+requirements for each region/state, please provide this information for each:  
+1.Please provide Production URLs for each API endpoint , including the 278 endpoint :
+2.P
+lease provide Production user ID(s):
+3.W
+hat are your system’s hours of availability?
+4.H
+ow many continuous threads can you support?
+Portal workflow and APIs  
+Required connectivity  
+1.Eligibility:  The authorization and referral workflow uses  the eligibility and benefits inquiry an d
+r
+esponse transaction (X12 270/271) to ensure a member is active with the health plan before the user
+proceeds.
+Do you support real -time 270/271 transactions ?      Yes  No
+--- PAGE 10 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 10 of 35  |  Updated 4/03/2025  
+2.Electronic Provider Access (EPA) API: Utilization of EPA is a requirement from the Blue Cross
+Association (BCA) . It provides a positive user experience by allowing any provider to begin an
+authorization for an out -of-state member in the local portal and be automatically routed to the correct
+Blue Cross Organization portal if necessary.
+Are you a part of the Blue Cross Association and will be required to implement the EPA API?
+ Yes  No 
+See the Electronic Provider Access (EPA) C ontrol Document  for standard API, configuration 
+options, and screen examples.  
+Value adds/features  
+1.Revisions and cancellation : In the UM02 Certification Type Code field, we allow for Cancel [3] and
+Revision [ S] in addition to others . Do you support Certification Type Codes in authorizations  via X12
+278?      Yes  No
+2.Do y ou allow Revisions or Cancellation at any point  on an auth or only in Pended status? Explain:
+3.Is Auth Required API:  The authorization and referral workflow uses an Is Auth Required (IAR) API to
+notify the provider in cases where an authorization is not required. For the Is Auth Required API, the
+payer is required to build an API endpoint based on the spec in the Availity Is Auth Required ICD .
+Availity then connects to that API and displays the results to the provider . For the Is Auth Required
+API, the payer or a third party hosts the payer rules and Availity connects to the exposed rules to
+inform t he provider .
+Have you centralized your IAR rules ?  Yes  No 
+Does that system support real-time API transactions?    Yes  No 
+Refer to  the I s Auth Required Interface Control Document  (ICD) for standard API, configuration 
+options, and screen examples.  
+4.Provider Search API: The authorization and referral workflow uses a Provider Search API to match
+the 
+providers loaded into your UM system . For the Provider Search API, the payer is required to build
+an API endpoint based on the spec s in the Availity Provider Search ICD.
+Does your UM or Provider Data Management system support real -time API transactions?
+ Yes  No 
+Does your U M management system have a unique ID required to match to a provider  and/or facility ? 
+ Yes  No 
+Does your provider data management system include facilities?  Yes  No 
+--- PAGE 11 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 11 of 35  |  Updated 4/03/2025
+Refer to the Provider Seach Interface Control Document  (ICD) for standard API, configuration 
+options, and screen examples.  
+5.Third- pa rty benefit manager routing : Many payers utilize  third-party  benefit managers for some of
+their services (Carelon, EviCore, Cohere, etc.). For our standard integration, Availity routes B2B or
+Portal authorizations to third party and expects the third party to return responses to Availity  via API .
+This can also include single sign -on to a third-party  portal . This workflow reduces dual  entry of
+authorizations and allows the provider to have a single location for their authorizations.  Do you  use
+third party benefit managers for authorizations?      Yes  No
+Which third -par ty benefit managers do you use?
+Pl
+ease communicate with your third-party  benef it managers about this project and the requirement for 
+integration.  
+6.Authorization Attachments: T he authorization and referral workflow uses  the X12 attachment
+transaction (X12 275).  For the standard integration, the authorization is submitted to the payer and
+then the attachment is triggered so the attachment has your Authorization Reference number .
+Do you supp ort real -time 275 transactions  for attachments  or plan to in the future?      Yes  No
+Do you require aut horization attachments at the time of auth request submission? Or are attachments
+optional at the time of submission? Explain:
+Do 
+you allow for unsolicited attachments post -submission for auth requests in Pended status? 
+(additional custom work required to map post attachment back to auth request)  Explain:  
+7.Medical Necessity Questionnaire vendor integration: Many payers utilize third parties for Medical
+Necessity Questionnaires (MCG, InterQual). Do you want to require the provider to complete a
+medical necessity questionnaire from a third-party  vendor ?      Yes  No
+Which Medical Necessity Questionnaire ven dor do you use?
+--- PAGE 12 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 12 of 35  |  Updated 4/03/2025  
+Please communicate with your vendor about this project and the requirement for integration. 
+8.Ep ic Payer Platfo rm: Availity supports integration with Epic Payer Platform for routing of t he
+aut
+horization transactions (278) and attachments (275) . Please let us know if you would like to
+discuss Epic Payer Platform integration. Do you require integration with Epic Payer Platform for
+authorizations?      Yes  No
+If Ye s , this use case should be part of the health plan testing.
+--- PAGE 13 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 13 of 35  |  Updated 4/03/2025  
+Section 2 (t o be completed within first 60 days ) 
+Enveloping requirements 
+In the  following  table, p lease indicate the values for the fields  designated by an asterisk. Fields  without an 
+asterisk cannot be modified.  
+Field  Field description  Length  278 Request  278 Response  
+ISA01  2 00 00 
+ISA02  10 Blank  Blank  
+ISA03  2 00 00 
+ISA04  10 Blank  Blank  
+ISA05  Sender ID 
+Qualifier  2 01 ZZ 
+ISA06*  Sender ID  15 Define value:  Define value:  
+ISA07  Receiver ID 
+Qualifier  2 ZZ ZZ 
+ISA08*  Receiver ID  15 Define value:  Define value: 
+ISA09  6 Date (yymmdd)  Date (yymmdd)  
+ISA10  4 Time (hhmm)  Time (hhmm)  
+ISA11  Repetition 
+Separator  1 { { 
+ISA12  5 00501  00501  
+ISA13  9 Control number  Control number  
+ISA14  1 0 0 
+ISA15  1 T / P  T / P  
+ISA16  1 *:~ *:~ 
+GS01  2 HI HI 
+--- PAGE 14 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 14 of 35  |  Updated 4/03/2025  
+Field  Field description  Length  278 Request  278 Response  
+GS02*  Application Sender 
+Code 2/15 Define value:  Define value:  
+GS03*  Application 
+Receiver Code 2/15 Define value:  Define value: 
+GS04  8 Date (ccyymmdd)  Date (ccyymmdd)  
+GS05  4/8 Time (hhmm)  Time (hhmm)  
+GS06  1/9 Group control 
+number  Group control number  
+GS07  1/2 X X 
+GS08  1/12 005010X217  005010X217  
+2010A  NM101  X3 X3 
+2010A * NM103  Define value:  Define value:  
+2010A * NM109  Define value:  Define value:  
+If available, please provide a formatted sample of enveloping with ISA and GS control segments. 
+Example:  
+ISA*00*   *00* *14*0499441430000  *01*030240928 *221121*0019
+*^*00501*748709889*0*P*:~  
+GS*HI*0499441430000*R030240928*20221121*0019*1*X*005010X217~  
+Re
+fer to  Appendix : Example transaction s for s ample  x217 Requests  and Responses . 
+Payer logo 
+Please provide your organization’s logo as a GIF, PNG, or JPG  file in a separate attachment. This logo 
+will display on Availity Essentials . 
+Availity standards: Request  
+1.Availity’s standard is to send uppercase characters. Is this acceptable?  Yes  No 
+--- PAGE 15 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 15 of 35  |  Updated 4/03/2025  
+2.Availity’s standard is to allow a  space is part of the X12 basic character set. Some payers do not
+allow spaces in the member ID. Does your system accept spaces ?   Yes  No
+3.Availity’s standard is to accept characters from the X12 extended character set .  Is this acceptabl e?
+ Yes  No 
+Availity standards: Response 
+Availity’s standard is to return 278 responses to the Availity customer as they are received from the payer. 
+Notes :  
+•All X12 transactions sent to Availity are subjected to SNIP levels 4.
+•Availity sends transactions in all uppercase characters.
+•Availity only sends X12 versions 5010 and higher to the receiver.
+•Availity supports the full ANSI extended character set.
+•All responses are validated against the Availity HIPAA validator tool Edifecs. If the response fails
+validation, a response is not returned to the Availity customer.
+--- PAGE 16 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 16 of 35  |  Updated 4/03/2025  
+Essentials fields  for s ubmission 
+The following tables present the fields displayed  in Availity Essentials  and their  corresponding loops and 
+segment IDs . Tables  for fields  that display for all authorizations and referrals are marked “All transaction 
+types”; those tables and fields specific to inpatient authorizations,  outpatient authorizations, or referrals 
+are marked accordingly.  Please provide any  payer -specific information for each field as needed.  
+Field  Description/specifications  
+Transaction 
+Type •Inpatient authorization:  A value of "AR" is the static value passed in the X 12
+transaction.
+•Outpatient authorization:  A value of "HS" is the static value passed in the X 12
+transaction.
+•Referral: A value of "SC" is the static value passed in the X12 transaction.
+Patient/Subscriber ( Member Information) : All transaction types  
+Field  Description/ 
+specifications Subscriber / 
+Dependent  Loop  HIPAA 
+segment 
+ID Requirements  
+Member ID  Field length: 80  Subscriber  2010C  NM109  Required  
+Patient 
+Relationship 
+to Subscriber Drop -down defaults 
+to Self. Options:  
+•18: Self
+•01: Spouse
+•19: Child
+•G8: OtherrelationshipBoth 2010C/ 
+2010D  INS02  Required  
+Patient First 
+Name Field length: 25  Both 2010C/ 
+2010D  NM104  Situational 
+(required if 
+patient is not 
+self) 
+Patient Last 
+Name Field length: 35  Both 2010C/ 
+2010D  NM103  Situational 
+(required if patient is not self) 
+Patient Date 
+of Birth  Field length: 08  Both 2010C/ 
+2010D  DMG02  Required  
+Patient 
+Gender Drop -down options: 
+Female, Male  Both 2010C/ 
+2010D  DMG03  Optional  
+--- PAGE 17 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 17 of 35  |  Updated 4/03/2025  
+Requesting Provider  or Facility : All transaction types  
+Field  Description/ 
+specifications Loop  HIPAA segment ID  Requirements  
+Provider 
+Type Drop -down 
+options:  
+NM101 
+•1P (Provider)
+•FA (Facility)
+NM102
+•1 (Person) if
+1P is chosen
+•2 (Non-
+Person Entity)
+if FA is
+chosen2010B  NM101 through NM102  Required  
+NM101 
+1P (Provider) 
+NM102 
+1 (Person) 
+Provider 
+Last Name 
+or Facility  Field length: 35  2010B  NM103  Required  
+Provider 
+First Name  Required when 
+NM102=1 and 
+NM103 is present 
+(i.e., for a 
+provider)  
+Field length: 35  2010B  NM104  Situational  
+NPI Field length: 1/30  2010B XX  NM108 through NM109  Required  
+Payer 
+Assigned 
+Provider/ 
+Facility ID  Field length: 50  2010B  REF01 and REF02  Situational if 
+required by payer  
+Specialty/ 
+Taxonomy PRV02 – PXC 
+Taxonomy in PRV03  
+Field Length 50  2010B  PRV01 through PRV03  Optional  
+Address 1  Field length: 55  2010B  NM301  Required  
+Address 2  Field length: 55  2010B  NM302  Optional  
+--- PAGE 18 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 18 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA segment ID  Requirements  
+Edit: 
+Alphanumeric  
+City Field length: 
+02/30  
+Edit: Alpha and " -" 
+only 2010B  NM401  Required  
+State  Drop -down list 
+default: Select 
+One 2010B  NM402  Required  
+ZIP Code  Field length: 09  2010B  NM403  Required  
+Contact 
+Name Field length: 60  2010B  
+IC PER02  Required (pre -
+populated if possible)  
+Contact 
+Phone Field length: 256  2010B  
+TE PER03 through PER04  Required (pre -
+populated if 
+possible)  
+Contact 
+Fax Field length: 256  2010B  
+FX PER0 5 through PER0 6 Optional (pre -
+populated if possible)  
+R
+equest information ( patient event level) : All transaction types  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Type of 
+Request  Options:  
+•Inpatient
+authorization
+•Outpatient
+authorizatio n
+•Referral2000E  
+AR UM01  Required 
+(not seen 
+by user)  Do you support all 
+types of requests ? 
+ Yes  No 
+If No, please provide 
+a list of codes you 
+support  as a 
+separate attachment.  
+Certification 
+Type Code  I = Initial  2000E  UM02  Required 
+(not seen by user)  N/A 
+--- PAGE 19 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 19 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Service Type  Refer to X12 Service 
+Type Code List  2000E  UM03  Required  
+(Situational 
+for 
+referrals)  Do you accept all 
+service type codes  
+from the IG for 
+inpatient and 
+outpatient  
+authorizations?  
+ Yes  No 
+If No, please provide 
+a list of codes  (for 
+both IP and OP)  you 
+support and required 
+mapping between 
+Type of Request 
+(IP/OP), Service 
+Type and Place of 
+Service Type as a 
+separate attachment.  
+Place of 
+Service/ 
+Facility Type  Refer to X12 Place of 
+Service Code List  2000F  
+B (place 
+of 
+service) UM04 -1 
+through UM04 -2 Required  Do you accept all 
+place of service / facility type codes  
+from the IG for 
+inpatient and outpatient 
+authorizations?  
+ Yes  No 
+If No, please provide a list of codes  (for 
+both IP and OP)  you 
+support and required 
+mapping between 
+Type of Request 
+(IP/OP), Service 
+Type and Place of Service Type as a separate attachment.  
+Service 
+Quantity/ 
+Type Service Quantity  
+Field length: 15  
+Leading zeroes are 
+not allowed  
+Service Type  
+Required if Service 
+Quantity is 
+completed. Drop -
+down options:  
+•Day(s) DY2000E  Quantity : 
+HSD02  
+Type : 
+HSD01  Quantity : 
+Situational  
+Type : 
+Required if 
+Quantity is 
+entered Do you accept all 
+service quantit ies / 
+service  types? 
+ Yes  No 
+If No, please provide 
+a list of types  you 
+support as a 
+separate attachment.  
+--- PAGE 20 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 20 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+•Hour(s) HS
+•Month(s) MN
+•Unit(s) FL
+•Visit(s) VS
+From —To 
+Date 
+(outpatient authorization only)  Format: CCYYMMDD  
+S
+pecify your 
+allowable service 
+date range, including 
+whether and how the range may change 
+based on service type.   2000E  DTP*AA
+H RD8—
+date range  Required  
+when Type of Request = 
+outpatient 
+authorization Do you support any 
+date range for Outpatient Authorizations ? 
+ Yes  No 
+If No, please define 
+your service From —
+To date range 
+requirements . 
+Admission 
+Date 
+(inpatient 
+authorization 
+only)  Format: CCYYMMDD  
+Specify your 
+allowable admission 
+date range, including 
+whether and how the 
+range may change 
+based on service 
+type.  2000E  DTP*435  
+D8—
+single 
+date Required 
+when Type 
+of Request 
+= inpatient 
+authorizatio
+n Do you support any 
+date for Admissions ? 
+ Yes  No 
+If No, please define 
+your Admission Date 
+requirements . 
+Discharge 
+Date 
+(inpatient 
+authorization only)  Format: CCYYMMDD  
+S
+pecify your 
+allowable discharge date range, including 
+whether and how the 
+range may change based on service type.  2000E  DTP*096  
+D8—
+single date Optional 
+(enter only 
+when Type 
+of Request = inpatient 
+authorizatio
+n and date is known)  Do you support any 
+date for Discharge? 
+ Yes  No 
+If No, please define 
+your Admission Date 
+requirements . 
+Admission 
+Type 
+(inpatient 
+authorization 
+only)  Refer to X12 
+Admission Type Code 
+Set 2000E  CL101  Required 
+when 
+requesting 
+admission 
+to a facility  Do you support all 
+Admission Type 
+Codes ? 
+ Yes  No 
+If No, please define 
+your Admission Type 
+requirements . 
+--- PAGE 21 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 21 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Admission 
+Source 
+(inpatient 
+authorization 
+only)  Refer to X12 
+Admission Source Code Set  2000E  CL102  Optional  Do you support all 
+Admission Source Codes ? 
+ Yes  No 
+If No, please define 
+your Admission 
+Source requirements.  
+Diagnosis codes ( patient event level) : All transaction types  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Type  Diagnosis Code required 
+on requests for 
+certification of home 
+healthcare information  2000E  HI01 -1 
+through  
+HI12 -1 Required  
+(at least 
+one; up to 
+12 allowed)  ABK if Diagnosis 
+Code for ICD -10 
+Primary 
+Diagnosis (first 
+listed); ABF for 
+ICD-10 
+Secondary 
+Diagnosis  
+Code  Field length: 06  
+Type Code: Use ABK if Diagnosis Code for ICD -
+10 Primary Diagnosis 
+(first listed); use ABF for 
+ICD-10 Secondary 
+Diagnosis  2000E  HI01 -2 
+through  
+HI12 -2 Required  N/A 
+Date  Format: CCYYMMDD  
+Date cannot be prior to 
+01/01/2002 nor more 
+than 18 months in 
+advance.  2000E  HI01 -4 
+through  
+HI12 -4 Optional  Do you support 
+Diagnosis date? 
+ Yes  No 
+--- PAGE 22 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 22 of 35  |  Updated 4/03/2025  
+Message: All transaction types  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+MSG  Messages from provider 
+to payer, or later from 
+provider to provider.  
+Field length: 264  2000E  MSG01  Optional  N/A 
+Procedure codes ( service-l evel) : Authorizations only  
+Field  Description/ 
+specifications  Loop  HIPAA 
+segment ID  Require -
+ments  Payer -specific 
+information  
+Type  CPT/HCPC s/Rev 
+Codes  only 2000F  Inpatient : 
+SV202 -1 
+Outpatient : 
+SV101 -1 Situational 
+(up to 16 
+allowed) 
+In what 
+situations 
+are codes 
+required?  All CPT and 
+HCPCs codes 
+are supported.  
+Do you support 
+Rev Codes ? 
+ Yes  No 
+If Yes , please 
+list where 
+Procedure 
+Codes and Rev 
+Codes are 
+required or 
+optional for both 
+IP and OP as a 
+separate 
+attachment.  
+Code  Field length: 48  2000F  Inpatient : 
+SV202 -2 
+Outpatient : 
+SV101 -2 Required  N/A 
+From/To 
+Date Range of dates for 
+the procedure. 
+Format: 
+CCYYMMDD  2000F  Inpatient : 
+DTP*472 
+Outpatient : 
+DTP*472—
+RD8 (range)  Optional  
+(required 
+only if date 
+is different 
+from date in 
+2000E)  N/A: See date 
+restrictions 
+above  
+Quantity 
+Type Options:  
+Days (DA)  
+International Unit 
+(F2) 
+Units (UN) 2000F  Inpatient : RD8 
+(range)  
+Outpatient : 
+SV103 Optional  
+(required 
+only if 
+Quantity is entered) N/A: See 
+Quantity restrictions above  
+--- PAGE 23 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 23 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications  Loop  HIPAA 
+segment ID  Require -
+ments  Payer -specific 
+information  
+Minutes (MJ)  through 
+SV104  
+Quantity  Field length: 15  2000F  Inpatient : 
+SV203  
+Outpatient : 
+SV105  Optional  
+S
+ervice Provider —Rendering Provider  (patient event provider): Authorizations only  
+Field  Description/ 
+specifications Loop  HIPAA 
+segmen
+t ID Require -
+ments  Payer -specific 
+information  
+Entity Type  Default: Physician, or 
+Group Practice 2000EA  NM102  Required if 
+NM102 = 1 
+(not seen by 
+user)  N/A 
+Provider 
+Role  Refer to the X12 TR3 for 
+options.  2000EA  NM101  Required  Do you support 
+all Provider 
+Roles ? 
+ Yes  No 
+If No, please 
+define your 
+Provider Roles  in 
+a separate document.  
+Provider 
+Last Name  Field length: 35  2010EA  NM103  Required  N/A 
+Provider 
+First Name  Field length: 35  2010EA  NM104  Required if 
+NM102 = 1 
+and NM103 
+is present —
+i.e., Entity
+Type =
+Physician)N/A 
+NPI Field length: 1/30  2000EA  
+XX NM108 
+through 
+NM109 Required  N/A 
+Payer 
+Assigned Field length: 50  2010B  REF01 
+and REF02  Situational if 
+required by payer  N/A 
+--- PAGE 24 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 24 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segmen
+t ID Require -
+ments  Payer -specific 
+information  
+Provider/ 
+Facility ID  
+Specialty/ 
+Taxonomy PRV02 – PXC 
+Taxonomy in PRV03 
+Field length: 50  2010EA  PRV01 
+through 
+PRV03  Optional  
+Address 1  Field length: 55  2010EA  N301  Required  N/A 
+Address 2  Field length: 55  2010EA  N302  Optional  
+City Field Length: 02/30  
+Edit: Alpha and " -" only  2010EA  N401  Required  N/A 
+State  Drop -down list default:  
+Select One  2010EA  N402  Required  N/A 
+ZIP Code  Field length: 09  2010EA  N403  Required  N/A 
+Contact 
+Phone Field length: 256  2010 EA 
+TE PER03 
+through 
+PER04  Optional  
+(pre-
+populated if 
+possible)  
+Contact 
+Fax Field length: 256  2010 EA 
+FX PER0 5 
+through 
+PER0 6 Optional 
+(pre-
+populated if possible)  
+Service Provider —Rendering Facility  (Patient Event Provider): Authorizations only  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Entity 
+Type Default: Physician, 
+Facility or Group 
+Practice  2000EA  NM101  Required if 
+NM102 = 2 
+(not seen by 
+user)  N/A 
+Provider 
+Role  Refer to the X12 
+TR3 for options.  2000EA  PRV01  Required  Do you support all 
+Provider Roles ? 
+ Yes  No 
+If No, please define 
+your Provider Roles 
+in a separate document.  
+--- PAGE 25 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 25 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Provider 
+Last Name 
+or Facility 
+Name Field length: 35  2010EA  NM103  Required  N/A 
+NPI Field length: 1/30  2000EA  
+XX NM108 
+through 
+NM109 Required  N/A 
+Payer 
+Assigned 
+Provider/ 
+Facility ID  Field length: 50  2010B  REF01 
+and 
+REF02  Situational if 
+required by 
+payer  N/A 
+Electronic 
+Transmitte
+r 
+Identification Number (ETIN)  Field length: 1/30  2000EA  
+46 NM108 
+through NM109 Optional for 
+facilities  
+Specialty/ 
+Taxonomy PRV02 – PXC 
+Taxonomy in 
+PRV03 
+Field length: 50  2010EA  PRV01 
+through 
+PRV03  Optional  
+Address 1  Field length: 55  2010EA  N301  Required  N/A 
+Address 2  Field length: 55  2010EA  N302  Optional  
+City Field Length: 02/30  
+Edit: Alpha and " -" 
+only 2010EA  N401  Required  N/A 
+State  Drop -down list 
+default: Select One 2010EA  N402  Required  N/A 
+ZIP Code  Field length: 09  2010EA  N403  Required  N/A 
+Contact 
+Phone Field length: 256  2010EA  
+TE PER03 
+through 
+PER04  Optional  (pre-
+populated if 
+possible)  
+Contact 
+Fax Field length: 256  2010EA  
+FX PER05 
+through PER06  Optional (pre -
+populated if possible)  
+--- PAGE 26 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 26 of 35  |  Updated 4/03/2025  
+Referred-To Provider  (patient event provider) : Referral s only 
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Entity Type  Default: Physician, Clinic , 
+facility,  or Group Practice  2000EA  NM102  Required if 
+NM102 = 1 
+(not seen by 
+user)  N/A 
+Provider 
+Role  Refer to the X12 TR3 for 
+options.  2000EA  NM101  Required  Do you support 
+all Provider 
+Roles ? 
+ Yes  No 
+If No, please 
+define your 
+Provider Roles in a separate 
+document.  
+Provider 
+Last Name 
+or Facility  
+Name Field length: 35  2010EA  NM103  Required  N/A 
+Provider 
+First Name  Field length: 35  2010EA  NM104  Required if 
+NM102 = 1 and NM103 
+is present —
+i.e., Entity
+Type =PhysicianN/A 
+NPI Field length: 1/30  2000EA  
+XX NM108 
+through 
+NM109 Required  N/A 
+Payer 
+Assigned Provider/ Facility ID  Field length: 50  2010B  REF01 
+and REF02  Situational if 
+required by payer  N/A 
+Specialty/ 
+Taxonomy PRV02 – PXC 
+Taxonomy in PRV03 
+Field length: 50  2010EA  PRV01 
+through 
+PRV03  Optional  
+Address 1  Field length: 55  2010EA  N301  Required  N/A 
+Address 2  Field length: 55  2010EA  N302  Optional  
+City Field Length: 02/30  2010EA  N401  Required  N/A 
+--- PAGE 27 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 27 of 35  |  Updated 4/03/2025  
+Field  Description/ 
+specifications Loop  HIPAA 
+segment 
+ID Require -
+ments  Payer -specific 
+information  
+Edit: Alpha and " -" only  
+State  Drop -down list default:  
+Select One  2010EA  N402  Required  N/A 
+ZIP Code  Field length: 09  2010EA  N403  Required  N/A 
+Contact 
+Phone Field length: 256  2010EA  
+TE PER03 
+through 
+PER04  Optional 
+(pre-
+populated if 
+possible)  
+Contact Fax  Field length: 256  2010EA  
+FX PER05 
+through 
+PER06  Optional 
+(pre-
+populated if possible)  
+Service date/event date (patient event level): Referral s only 
+Field  Description/ 
+specifications  Loop  HIPAA 
+segment ID  Requirements  
+Date qualifier Field length: 3  2000E  
+AAH DTP01  N/A 
+Date format  Field length: 3  2000E  
+D8—single date 
+RD8—date range DTP02  N/A 
+From  Format: CCYYMMDD  2000E  DTP03  N/A 
+To Format: CCYYMMDD  2000E  DTP03  N/A 
+Additional s ubmission information 
+1.Banner Messages: Many payers have information that they would like to give to providers during t he
+aut
+horization process . This can include notices of lines of business, services, or regions not yet liv e
+on 
+Essentials Authorizations,  other methods or third parties where providers may work with fo r
+aut
+horization submission and any requirements about submission.
+Do you require specific banner messages or notices to providers?        Yes  No
+I
+f Yes, provide the banner message, including the part of the workflow where  message should be
+di
+splayed, as a separate attachment.
+--- PAGE 28 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 28 of 35  |  Updated 4/03/2025  
+2.Attestations: Some  payers require that provider s attest to specific information . Availity can block
+s
+ubmission unless the provider attests  to the specific item . An example of an attestation is below :
+Do you require specific attestations for providers?  Yes  No 
+If Ye s , provide the attestation, including the part of the workflow where the message should be 
+displayed, as a separate attachment . 
+Submission response 
+1.Display of Error Messages (AAA): Availity displays the Reject Reason code (AAA03 ) value t o
+pr
+oviders when errors are returned . However, because the  error code of AAA03=33 Input Error c an
+be 
+too generic for providers to know which  information to update, we recommend  that the Reject
+Reason codes are as specific as possible to inform providers of the error .
+Do you require specific error messages or notices to providers ?        Yes  No
+If Ye s , provide a document with the error message and mapping as a separate attachment.
+
+--- PAGE 29 ---
+Appendix : Example transactions  
+X217 Outpatient Request 
+ISA*00*          *00*          *01*030240928      *ZZ*G00123         *200117*1104*{*00501*041440454*0*T*:~
+GS*HI*R123124253*G00123*20200117*110436*1*X*005010X217~ ST*278*1001*005010X217~  
+BHT*0007*13*12954549*20200117*1104~  
+HL*1**20*1~  
+NM1*X3*2*PAYERNAME*****PI*G00123~  
+HL*2*1*21*1~  NM1*1P*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*FOREST PARK*IL*60130~  
+PRV*RF*PXC*2084P0800X~  
+HL*3*2*22*1~  NM1*IL*1*LASTNAME*FIRSTNAME****MI*ABC123456789~  
+DMG*D8*19990101*F~  
+HL*4*3*EV*1~  
+TRN*1*12954549*123456789~  
+UM*HS*I*MH*22:B**E~  
+DTP*AAH*RD8*20200117 -20200123~  
+HI*ABK:F4310:D8:20200117~  
+HSD*VS*6~  
+CRC*77*Y*MC~  
+NM1*71*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*CHICAGO*IL*60130~  
+PRV*AT*PXC*2084P0800X~  
+NM1*SJ*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*CHICAGO*IL*60130~  
+PRV*PE*PXC*2084P0800X~  
+HL*5*4*SS*0~  
+SV1*HC:S9480**UN*6~  
+SE*30*1001~  
+GE*1*1~  IEA*1*041440454~  
+X217 Outpatient Response 
+ISA*00*          *00*          *ZZ*G00123         *ZZ*123456789      *200117*0000*{*00501*000000028*0*T*:~
+GS*HI*G00123*R123456789*20200117*10044256*1*X*005010X217~ 
+ST*278*0001*005010X217~  
+BHT*0007*11*12954549*20200117*1104*18~  
+HL*1**20*1~  
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 29 of 35  |  Updated 4/03/2025  
+--- PAGE 30 ---
+NM1*X3*2*PAYERNAME*****PI*G00123~  
+HL*2*1*21*1~  
+NM1*1P*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+PRV*RF*PXC*2084P0800X~  
+HL*3*2*22*1~  
+NM1*IL*1*LASTNAME*FIRSTNAME****MI*ABC123456789~  
+REF*EJ*47622770~  
+DMG*D8*1990101*F~  
+HL*4*3*EV*1~  
+TRN*1*37303*9G00123   ~  
+TRN*2*12954549*123456789~  
+UM*HS*I*MH*22:B**E~  
+HCR*A4**0V~  
+REF*NT*U11111AAAA~  
+DTP*AAH*RD8*20200117 -20200123~  
+HI*ABK:F4310:D8:20200117~  
+HSD*VS*6~  
+MSG*If you have not already attached Clinical documentation, please edit and attach supporting documentation for review to complete. Exception - Referrals.~  
+NM1*71*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*CHICAGO*IL*60130~  
+PRV*AT*PXC*2084P0800X~  
+NM1*SJ*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*CHICAGO*IL*60130~  
+PRV*PE*PXC*2084P0800X~  
+HL*5*4*SS*0~  HCR*A4**0V~  
+SV1*HC:S9480**UN*6~  
+SE*33*0001~  
+GE*1*1~  IEA*1*000000028~  
+X217 Inpatient Request 
+ISA*00*          *00*          *01*TEST PAYER*14*TEST*240229*1104*^*00501*071627600*0*T*:~
+GS*HI*R030240928*0499441430000*20240229*110419*1*X*005010X217~ 
+ST*278*1001*005010X217~ 
+BHT*0007*13*28592692*20240229*1104~ 
+HL*1**20*1~ 
+NM1*X3*2*EXAMPL E PAYER*****PI*123456~ 
+HL*2*1*21*1~ 
+NM1*1P*1*TEST*PROVIDER****XX*174123456~ 
+REF*EI*650253859~ 
+N3*123ABC ST*ST E 115~ 
+N4*L AKE WORTH*FL*33462~ 
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 30 of 35  |  Updated 4/03/2025  
+--- PAGE 31 ---
+PER*IC*TEST CONTACT*TE*12345678914*FX*1234567894~  
+PRV*RF*PXC*282NC2000X~  
+HL*3*2*22*1~ 
+NM1*IL*1*TEST*PATIENT****MI*H123456789~ 
+REF*6P*Y6222001~  
+DMG*D8*19700101*M~  
+HL*4*3*EV*1~ TRN*1*28592692*3030240928~  
+UM*AR*I*MH*21:B~  
+DTP*435*D8*20240229~  
+HI*ABK:G912:D8:20240229~  
+CRC*77*Y*DP~ CL1*3*9~  
+NM1*AAJ*2*TEST*****XX*123456789~ REF*EI*650253859~  
+N3*123 ABC ST*STE 115~  
+N4*ANYWHERE*FL*33462~  
+PER*IC**TE*5619689003*FX*5619683334~  
+PRV*AD*PXC*282NC2000X~  
+NM1*FA*2*TEST HOSPITAL*****XX*1234567894~  
+REF*EI*1234567891~  
+N3*TEST ADDRESS~  
+N4*BOCA RATON*FL*33486~  
+PER*IC**TE*1234567894*FX*123456789~  
+HL*5*4*SS*0~ 
+DTP*472*D8*20240229~  
+SV2**HC:G9773**UN*4~  
+SE*37*1001~  
+GE*1*1~ 
+IEA*1*071627600~  
+X217 Inpatient Response  
+ISA*00*          *00*          *14*TEST  *01*TEST     *12345*1104*^*00501*071627600*0*T*:~
+GS*HI*0499441430000*R030240928*20240229*1104*1*X*005010X217~ 
+ST*278*1001*005010X217~ 
+BHT*0007*11*28592692*20240229*1104*19~ 
+HL*1**20*1~ 
+NM1*X3*2*TES T PAYER*****PI*12345~ 
+HL*2*1*21*1~ 
+NM1*1P*1*TEST*TEST****XX*12345679~ 
+PRV*RF*PXC*282NC2000X~ 
+HL*3*2*22*1~ 
+NM1*IL*1*TEST*PATIENT*X***MI*H123456789~ 
+REF*6P*Y6222001~ 
+DMG*D8*19700101*M~ 
+HL*4*3*EV*1~ 
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 31 of 35  |  Updated 4/03/2025  
+--- PAGE 32 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 32 of 35  |  Updated 4/03/2025  
+TRN*2*28592692*3030240928~  
+UM*AR*I*MH*21:B~  
+HCR*A4**0W~  
+REF*NT*100667747~  
+DTP*435*D8*20240229~  
+HI*ABK:G912:D8 :20240229~  
+CL1*3*9~  
+MSG*This case requires further review . You will be contacted if additional information is needed.~  
+NM1*AAJ*2*TEST*****XX*123456789~ 
+N3*123 ABC ST*STE 115~  
+N4*LAKE WORTH*FL*33462~  
+PER*IC**TE*123456789*FX*123456789~  
+PRV*AD*PXC*282NC2000X~  
+NM1*FA*2*TEST HOSPITAL*****XX*123456789~  
+N3*800 MEADOWS RD~  
+N4*BOCA RATON*FL*33486~  
+PER*IC**TE*123456789*FX*123456789~  
+HL*5*4*SS*0~ 
+DTP*472*D8*20240229~  
+SV2**HC:G9773**UN*4~  
+SE*33*1001~  
+GE*1*1~ 
+IEA*1*071627600~  
+X217 Referral Request  
+ISA*00*           *00*          *01*030240928       *ZZ*G12345          *200117*1014*{*00501*041440424*0*T*:~
+GS*HI*r123456789*G12345*20200117*101452*1*X*005010X217~  
+ST*278*1001*005010X217~   
+BHT*0007*13*12954377*20200117*1014~   
+HL*1**20*1~   
+NM1*X3*2*PAYERNAME*****PI*12345~   
+HL*2*1*21*1~  NM1*1P*1*LASTNAME*FIRSTNAME****XX*1234567890~   
+N3*123 MAIN ST~   
+N4*GALVESTON*TX*77555~   
+PRV*RF*PXC*207R00000X~   
+HL*3*2*22*1~  NM1*IL*1*LASTNAME*FIRSTNAME****MI*ABC123456789~   
+DMG*D8*19990101*M~   
+HL*4*3*EV*1~  
+TRN*1*12954377*1234567890~  
+UM*SC*I*3*11:B~   
+DTP*AAH*RD8*20200125 -20200127~   
+HI*ABK:M549:D8:20200117~   
+HSD*VS*2~   
+--- PAGE 33 ---
+MSG*TEST~   
+NM1*SJ*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~   
+N4*KINGWOOD,*TX*77339~   
+HL*5*4*SS*0~  
+SV1*HC:99241~   
+SE*25*1001~   
+GE*1*1~  
+IEA*1*041440424~   
+X217 Referral Response  
+ISA*00*           *00*          *ZZ*G12345         *ZZ*123456789      *200117*0000*{*00501*000000022*0*T*:~
+GS*HI*G12345*R123456789*20200117*09145854*1*X*005010X217~ 
+ST*278*0001*005010X217~  
+BHT*0007*11*12954377*20200117*1014*18~  
+HL*1**20*1~  
+NM1*X3*2*PAYERNAME*****PI*G12345~  
+HL*2*1*21*1~  
+NM1*1P*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+PRV*RF*PXC*207R00000X~  
+HL*3*2*22*1~  
+NM1*IL*1*LASTNAME*FIRSTNAME****MI*ABC123456789~  
+REF*EJ*47266161~  
+DMG*D8*19990101*M~  
+HL*4*3*EV*1~  
+TRN*1*37284*9G123   ~  
+TRN*2*12954377*1234567890~  
+UM*SC*I*3*11:B~  
+HCR*A1*U11111AAAA~  
+REF*NT*U11111AAAA~  
+DTP*AAH*RD8*20200125 -20200127~  
+HI*ABK:M549:D8:20200117~  
+HSD*VS*2~  
+NM1*SJ*1*LASTNAME*FIRSTNAME****XX*1234567890~  
+N3*123 MAIN ST~  
+N4*KINGWOOD,*TX*77339~  
+HL*5*4*SS*0~  
+HCR*A1*U11111AAAA~  
+SV1*HC:99241~  
+SE*27*0001~  
+GE*1*1~  
+IEA*1*000000022~  
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 33 of 35  |  Updated 4/03/2025  
+--- PAGE 34 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 34 of 35  |  Updated 4/03/2025  
+X217 Error Response  
+ISA*00*          *00*          *ZZ*PAYER TST     *ZZ*EPIC PAYER 
+PROX*231207*1401*^*00501*000000001*0*T*:~  
+GS*FA*PAYERTEST TST* PAYER PROX*20231207*1401*1*X*005010X231~  
+ST*999*1001*005010X231~  
+AK1*HI*23896*005010X217~  
+AK2*278*23896*005010X217~  
+IK5*A~AK9*A*1*1*1~  
+SE*6*1001~  
+GE*1*1~ IEA*1*000000001~  
+--- PAGE 35 ---
+© Availity, LLC, all rights reserved. |  Confidential and proprietary. 
+Page 35 of 35  |  Updated 4/03/2025  
+Revision history  
+Date  Description of Change  Author  
+02/11/2019 Initial Version  Heather Holman  
+04/22/2019  Multi -payer Updates  Heather Holman  
+12/5/2022  Revised formatting and content for standardization , 
+consistency,  and clarity  Katie Augustus  
+3/24/2023  Added payer -specific information column  Katie Augustus  
+6/9/2023  Added additional questions in tables  Katie Augustus  
+4/25/2024  Updated color  and style to meet 508 and accessibility 
+standards  Michelle Palermo  
+7/2/2024  Added transaction examples, reformat, added APIs , and 
+other changes  Mark Fleming  
+11/1/2024  Revised formatting and content for consistency and clarity  Katie Augustus  
+4/03/2025  Removed references to "VPN"       Andrew Pacetti  
