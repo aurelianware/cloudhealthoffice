@@ -3,7 +3,7 @@
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
 
-# **The #1 Open-Source Cloud-Native Core Administration Processing System (CAPS) and Payer Platform**
+# **The #1 Open-Source Cloud-Native and Payer Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
@@ -17,7 +17,7 @@
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-**🚀 37,000+ clones in the past 2 weeks** by 1500 uniquevvisitirs• **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
+**🚀 42,000+ clones in the past 2 weeks** • **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
 
 [🚀 Start Free Trial (5 min)](https://portal.cloudhealthoffice.com) • [⚡ Architecture](#-architecture) • [📊 Live Demo](#-platform-performance) • [💼 Enterprise](#-enterprise) • [⭐ Star to Support](https://github.com/aurelianware/cloudhealthoffice)
 
