@@ -27,7 +27,7 @@
 
 ## **The Future of Payer Integration. Today.**
 
-Cloud Health Office is the **cloud-native core administration processing system (caps) and payer platform** healthcare CTOs have been asking for. Modern Kubernetes architecture. Argo Workflows orchestration. Sub-500ms claims adjudication. Multi-tenant SaaS with self-service signup. Architected to scale horizontally several million member plans. Everything legacy platforms promised for years but never delivered.
+Cloud Health Office is the **cloud-native payer platform** healthcare CTOs have been asking for. Modern Kubernetes architecture. Argo Workflows orchestration. Sub-500ms claims adjudication. Multi-tenant SaaS with self-service signup. Architected to scale horizontally several million member plans. Everything legacy platforms promised for years but never delivered.
 
 **We're disrupting a vendor-controlled market.** One company dominates core admin systems. They charge $500K-2M annually for platforms stuck in 2010s architecture. Health plans are trapped with no alternatives. Until now.
 
