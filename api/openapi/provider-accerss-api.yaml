@@ -1,0 +1,456 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Provider Access API
+  version: 4.0.0
+  description: |
+    FHIR R4 Provider Access API for CMS-0057-F compliance.
+
+    Enables healthcare providers to access patient clinical and claims data held
+    by the health plan, with SMART on FHIR authentication, patient consent
+    enforcement, PHI encryption, and HIPAA audit logging.
+
+    **CMS-0057-F requires** payers to make clinical and claims data available to
+    in-network providers with an active treatment relationship, beginning January 1, 2027.
+
+    **Supported Resources:** Patient, Claim, ExplanationOfBenefit, Encounter,
+    Condition, Observation — all mapped from the plan's internal systems and
+    X12 EDI transactions to FHIR R4 with US Core profiles.
+
+    **References:**
+    - CMS-0057-F Final Rule
+    - Da Vinci PDex Implementation Guide
+    - US Core IG v3.1.1+
+    - SMART on FHIR App Launch v2.0
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/fhir/r4
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/fhir/r4
+    description: Sandbox (synthetic data)
+  - url: http://localhost:3000/fhir/r4
+    description: Local development
+
+security:
+  - smart_on_fhir: [user/*.read, openid, fhirUser]
+
+tags:
+  - name: Search
+    description: Search across FHIR resource types for provider-attributed patients
+  - name: Read
+    description: Read individual FHIR resources by ID
+  - name: Consent
+    description: Patient consent verification for provider data access
+  - name: Bulk
+    description: Bulk data operations for provider rosters
+
+paths:
+
+  # ── Multi-Resource Search ────────────────────────────────
+
+  /{resourceType}:
+    get:
+      operationId: searchResources
+      summary: Search FHIR resources
+      description: |
+        Search for resources of a given type for provider-attributed patients.
+        Patient consent is validated automatically when `patient` parameter is present.
+
+        Supported resource types: Patient, Claim, ExplanationOfBenefit,
+        Encounter, Condition, Observation.
+
+        Results are returned as a FHIR Bundle (searchset) with pagination.
+      tags: [Search]
+      parameters:
+        - name: resourceType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [Patient, Claim, ExplanationOfBenefit, Encounter, Condition, Observation]
+          description: FHIR resource type to search
+        - name: patient
+          in: query
+          schema:
+            type: string
+          description: Patient reference filter (e.g., `Patient/pat-12345`)
+          example: "Patient/pat-12345"
+        - name: date
+          in: query
+          schema:
+            type: string
+          description: Date range (FHIR date parameter, e.g., `ge2025-01-01`)
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Resource status filter
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Category filter (for Condition and Observation)
+        - name: _count
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: _offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Bundle of matching resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+              examples:
+                patients:
+                  summary: Patient search results
+                  value:
+                    resourceType: Bundle
+                    type: searchset
+                    total: 2
+                    entry:
+                      - resource:
+                          resourceType: Patient
+                          id: "pat-12345"
+                          meta:
+                            profile: ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+                          name: [{ family: "Smith", given: ["Jane"] }]
+                          gender: female
+                          birthDate: "1985-03-15"
+                conditions:
+                  summary: Condition search results
+                  value:
+                    resourceType: Bundle
+                    type: searchset
+                    total: 1
+                    entry:
+                      - resource:
+                          resourceType: Condition
+                          id: "cond-001"
+                          clinicalStatus:
+                            coding: [{ system: "http://terminology.hl7.org/CodeSystem/condition-clinical", code: "active" }]
+                          code:
+                            coding: [{ system: "http://hl7.org/fhir/sid/icd-10-cm", code: "E11.9", display: "Type 2 diabetes mellitus without complications" }]
+                          subject:
+                            reference: "Patient/pat-12345"
+                          onsetDateTime: "2020-06-15"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ConsentDenied'
+
+  # ── Read Single Resource ─────────────────────────────────
+
+  /{resourceType}/{resourceId}:
+    get:
+      operationId: readResource
+      summary: Read a single FHIR resource
+      description: |
+        Read a single resource by type and ID. Patient consent is validated
+        if the resource is patient-specific.
+      tags: [Read]
+      parameters:
+        - name: resourceType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [Patient, Claim, ExplanationOfBenefit, Encounter, Condition, Observation]
+        - name: resourceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The requested resource
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+              example:
+                resourceType: Observation
+                id: "obs-bp-001"
+                status: final
+                category:
+                  - coding:
+                      - system: "http://terminology.hl7.org/CodeSystem/observation-category"
+                        code: vital-signs
+                code:
+                  coding:
+                    - system: "http://loinc.org"
+                      code: "85354-9"
+                      display: "Blood pressure panel"
+                subject:
+                  reference: "Patient/pat-12345"
+                effectiveDateTime: "2025-11-15T10:30:00Z"
+                component:
+                  - code:
+                      coding: [{ system: "http://loinc.org", code: "8480-6", display: "Systolic blood pressure" }]
+                    valueQuantity: { value: 128, unit: "mmHg", system: "http://unitsofmeasure.org", code: "mm[Hg]" }
+                  - code:
+                      coding: [{ system: "http://loinc.org", code: "8462-4", display: "Diastolic blood pressure" }]
+                    valueQuantity: { value: 82, unit: "mmHg", system: "http://unitsofmeasure.org", code: "mm[Hg]" }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ConsentDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Consent Check ────────────────────────────────────────
+
+  /Consent/{patientId}:
+    get:
+      operationId: checkProviderConsent
+      summary: Check provider's consent to access patient data
+      description: |
+        Verify whether the authenticated provider has patient consent
+        to access data. Consent is checked automatically on all resource
+        endpoints; this endpoint allows explicit pre-flight verification.
+
+        Consent requires both an active treatment relationship and
+        explicit patient authorization per the provider's NPI.
+      tags: [Consent]
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consent status
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+                properties:
+                  patientId:
+                    type: string
+                  providerId:
+                    type: string
+                  consentGranted:
+                    type: boolean
+                  authorizedResourceTypes:
+                    type: array
+                    items:
+                      type: string
+                  consentScope:
+                    type: string
+                    enum: [treatment, payment, operations]
+              example:
+                patientId: "pat-12345"
+                providerId: "prov-npi-1234567890"
+                consentGranted: true
+                authorizedResourceTypes: ["Patient", "Claim", "ExplanationOfBenefit", "Encounter", "Condition", "Observation"]
+                consentScope: "treatment"
+
+  # ── Bulk Member Match ────────────────────────────────────
+
+  /Patient/$member-match:
+    post:
+      operationId: bulkMemberMatch
+      summary: Match a member across plan systems
+      description: |
+        FHIR $member-match operation. Accepts member demographics and
+        coverage information and returns the matched Patient resource
+        with the plan's internal identifiers.
+
+        Used by providers to discover patient IDs before querying
+        clinical data, and by payers for Payer-to-Payer data exchange.
+      tags: [Bulk]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              type: object
+              properties:
+                resourceType:
+                  type: string
+                  const: Parameters
+                parameter:
+                  type: array
+                  items:
+                    type: object
+            example:
+              resourceType: Parameters
+              parameter:
+                - name: MemberPatient
+                  resource:
+                    resourceType: Patient
+                    name: [{ family: "Smith", given: ["Jane"] }]
+                    gender: female
+                    birthDate: "1985-03-15"
+                - name: CoverageToMatch
+                  resource:
+                    resourceType: Coverage
+                    subscriberId: "MBR-2024-001"
+                    payor: [{ reference: "Organization/payer-001" }]
+                - name: Consent
+                  resource:
+                    resourceType: Consent
+                    status: active
+                    scope:
+                      coding: [{ code: "patient-privacy" }]
+      responses:
+        '200':
+          description: Matched patient
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+              example:
+                resourceType: Parameters
+                parameter:
+                  - name: MemberIdentifier
+                    valueIdentifier:
+                      system: "https://cloudhealthoffice.com/member-id"
+                      value: "pat-12345"
+        '422':
+          description: No match found
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/OperationOutcome'
+
+  # ── SMART Configuration ──────────────────────────────────
+
+  /metadata:
+    get:
+      operationId: getCapabilityStatement
+      summary: FHIR capability statement
+      tags: [Search]
+      security: []
+      responses:
+        '200':
+          description: CapabilityStatement
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+
+  /.well-known/smart-configuration:
+    get:
+      operationId: getSmartConfig
+      summary: SMART on FHIR configuration
+      tags: [Search]
+      security: []
+      responses:
+        '200':
+          description: SMART configuration
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                authorization_endpoint: "https://login.cloudhealthoffice.com/oauth2/authorize"
+                token_endpoint: "https://login.cloudhealthoffice.com/oauth2/token"
+                scopes_supported: ["user/*.read", "openid", "fhirUser", "launch/practitioner"]
+                capabilities: ["launch-standalone", "client-confidential-symmetric", "sso-openid-connect", "permission-user"]
+
+components:
+  schemas:
+    Bundle:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: Bundle
+        type:
+          type: string
+          const: searchset
+        total:
+          type: integer
+        entry:
+          type: array
+          items:
+            type: object
+            properties:
+              fullUrl:
+                type: string
+                format: uri
+              resource:
+                type: object
+
+    OperationOutcome:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: OperationOutcome
+        issue:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+                enum: [fatal, error, warning, information]
+              code:
+                type: string
+              diagnostics:
+                type: string
+
+  responses:
+    Unauthorized:
+      description: Invalid or expired SMART on FHIR token
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+          example:
+            resourceType: OperationOutcome
+            issue: [{ severity: error, code: login, diagnostics: "SMART on FHIR token is invalid or expired" }]
+
+    ConsentDenied:
+      description: Patient has not granted consent for this provider
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+          example:
+            resourceType: OperationOutcome
+            issue: [{ severity: error, code: forbidden, diagnostics: "Patient consent not granted for provider NPI 1234567890" }]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+
+  securitySchemes:
+    smart_on_fhir:
+      type: oauth2
+      description: |
+        SMART on FHIR (EHR Launch or Standalone Launch).
+        Providers authenticate via their EHR system or directly
+        using their NPI-linked credentials.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.cloudhealthoffice.com/oauth2/authorize
+          tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
+          scopes:
+            user/*.read: Read all resources for attributed patients
+            user/Patient.read: Read patient demographics
+            user/Claim.read: Read claims data
+            user/ExplanationOfBenefit.read: Read EOBs
+            user/Encounter.read: Read encounters
+            user/Condition.read: Read conditions/diagnoses
+            user/Observation.read: Read observations/vitals
+            openid: OpenID Connect authentication
+            fhirUser: FHIR user identity claim
