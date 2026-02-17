@@ -1,0 +1,488 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Patient Access API
+  version: 4.0.0
+  description: |
+    **FHIR R4 Patient Access API for CMS-9115-F & CMS-0057-F Compliance**
+
+    Empowers patients to access their complete health data electronically, including:
+    - Claims history (837 → FHIR Claim)
+    - Explanation of Benefits (835 → FHIR ExplanationOfBenefit)
+    - Clinical data (Encounters, Conditions, Observations)
+    - Coverage and eligibility information
+    
+    **CMS-9115-F requires** health plans to make patient data available via FHIR API
+    with OAuth 2.0 patient authentication, effective January 1, 2026.
+
+    **Key Features:**
+    - OAuth 2.0 patient consent flow via Azure AD
+    - X12 EDI → FHIR R4 transformation
+    - US Core 3.1.1+ compliance
+    - Da Vinci PDex Implementation Guide conformance
+    - PHI encryption and HIPAA audit logging
+    - Real-time data access (no batching delays)
+    
+    **Use Cases:**
+    - Patient health apps accessing member data
+    - Patient portals retrieving claims history
+    - Third-party apps with patient consent
+    - Personal health records (PHR) integration
+    
+    **Standards Compliance:**
+    - CMS-9115-F Patient Access Final Rule
+    - CMS-0057-F Interoperability Final Rule
+    - HL7 FHIR R4.0.1
+    - US Core IG v3.1.1+
+    - Da Vinci Payer Data Exchange (PDex) IG
+    - SMART on FHIR App Launch Framework
+
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+    email: api@cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/fhir/r4
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/fhir/r4
+    description: Sandbox (synthetic data for testing)
+  - url: http://localhost:3000/fhir/r4
+    description: Local development
+
+security:
+  - oauth2_patient: [patient/*.read, openid, fhirUser]
+
+tags:
+  - name: Patient
+    description: Patient demographic and contact information
+  - name: Coverage
+    description: Insurance coverage and eligibility
+  - name: Claim
+    description: Submitted claims (from X12 837 transactions)
+  - name: ExplanationOfBenefit
+    description: Claims adjudication and payment (from X12 835 transactions)
+  - name: Encounter
+    description: Healthcare encounters and visits
+  - name: Bulk
+    description: Bulk data export for complete patient records
+
+paths:
+  /Patient/{id}:
+    get:
+      summary: Read Patient by ID
+      description: |
+        Retrieve a single Patient resource by its ID. Returns demographic information,
+        contact details, and identifiers for the authenticated patient.
+        
+        **Authorization:** Patient must be authenticated and can only access their own record.
+      operationId: readPatient
+      tags:
+        - Patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Patient resource ID
+          schema:
+            type: string
+          example: "PAT001"
+      responses:
+        '200':
+          description: Patient resource found
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+              example:
+                resourceType: "Patient"
+                id: "PAT001"
+                meta:
+                  versionId: "1"
+                  lastUpdated: "2026-02-16T10:00:00Z"
+                  profile:
+                    - "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                identifier:
+                  - system: "http://hl7.org/fhir/sid/us-medicare"
+                    value: "1234567890A"
+                  - system: "http://hospital.smarthealthit.org"
+                    value: "MRN-98765"
+                active: true
+                name:
+                  - use: "official"
+                    family: "Smith"
+                    given: ["John", "Robert"]
+                telecom:
+                  - system: "phone"
+                    value: "555-123-4567"
+                    use: "home"
+                  - system: "email"
+                    value: "john.smith@email.com"
+                gender: "male"
+                birthDate: "1975-03-15"
+                address:
+                  - use: "home"
+                    line: ["123 Main Street"]
+                    city: "Springfield"
+                    state: "IL"
+                    postalCode: "62701"
+                    country: "US"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /Claim:
+    get:
+      summary: Search Claims
+      description: |
+        Search for Claim resources for the authenticated patient. Claims represent
+        requests for payment submitted to the health plan (mapped from X12 837 transactions).
+        
+        Supports filtering by date range, status, and provider.
+      operationId: searchClaims
+      tags:
+        - Claim
+      parameters:
+        - name: patient
+          in: query
+          required: true
+          description: Patient ID (automatically set from OAuth token)
+          schema:
+            type: string
+          example: "PAT001"
+        - name: date
+          in: query
+          description: Filter by service date (ge/le format supported)
+          schema:
+            type: string
+          example: "ge2025-01-01"
+        - name: status
+          in: query
+          description: Filter by claim status
+          schema:
+            type: string
+            enum: [active, cancelled, draft, entered-in-error]
+          example: "active"
+        - name: _count
+          in: query
+          description: Number of results per page
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          example: 50
+      responses:
+        '200':
+          description: Bundle of Claim resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ExplanationOfBenefit:
+    get:
+      summary: Search Explanation of Benefits (EOBs)
+      description: |
+        Search for ExplanationOfBenefit resources for the authenticated patient. EOBs
+        contain detailed claim adjudication results, payment information, and patient
+        cost-sharing (mapped from X12 835 remittance transactions).
+        
+        **Key Data Included:**
+        - Total billed amount
+        - Insurance paid amount
+        - Patient responsibility (copay, deductible, coinsurance)
+        - Denial reasons (if applicable)
+        - Line-item details with procedure codes
+      operationId: searchEOBs
+      tags:
+        - ExplanationOfBenefit
+      parameters:
+        - name: patient
+          in: query
+          required: true
+          description: Patient ID
+          schema:
+            type: string
+        - name: date
+          in: query
+          description: Filter by adjudication date
+          schema:
+            type: string
+          example: "ge2025-01-01"
+        - name: status
+          in: query
+          description: Filter by EOB status
+          schema:
+            type: string
+            enum: [active, cancelled, draft, entered-in-error]
+        - name: _count
+          in: query
+          description: Number of results per page
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Bundle of EOB resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /CoverageEligibilityResponse:
+    get:
+      summary: Search Coverage Eligibility
+      description: |
+        Retrieve coverage eligibility responses for the authenticated patient.
+        Shows current insurance coverage, benefits, and cost-sharing details
+        (mapped from X12 271 eligibility responses).
+      operationId: searchCoverageEligibility
+      tags:
+        - Coverage
+      parameters:
+        - name: patient
+          in: query
+          required: true
+          description: Patient ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bundle of CoverageEligibilityResponse resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /Encounter:
+    get:
+      summary: Search Encounters
+      description: |
+        Search for Encounter resources representing healthcare visits and services
+        for the authenticated patient.
+      operationId: searchEncounters
+      tags:
+        - Encounter
+      parameters:
+        - name: patient
+          in: query
+          required: true
+          description: Patient ID
+          schema:
+            type: string
+        - name: date
+          in: query
+          description: Filter by encounter date
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bundle of Encounter resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /Patient/$everything:
+    get:
+      summary: Get Complete Patient Record
+      description: |
+        Retrieve all available resources for the authenticated patient in a single request.
+        Returns a Bundle containing Patient, Claims, EOBs, Encounters, Coverage, and related resources.
+        
+        **Use Case:** Initial data download for patient health apps or PHR systems.
+      operationId: patientEverything
+      tags:
+        - Bulk
+        - Patient
+      parameters:
+        - name: _count
+          in: query
+          description: Number of resources per page
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Bundle containing all patient resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /.well-known/smart-configuration:
+    get:
+      summary: SMART on FHIR Configuration
+      description: |
+        Returns SMART on FHIR capability statement with OAuth 2.0 endpoints
+        and supported scopes.
+      operationId: smartConfiguration
+      security: []
+      responses:
+        '200':
+          description: SMART configuration document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_endpoint:
+                    type: string
+                    example: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
+                  token_endpoint:
+                    type: string
+                    example: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+                  token_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                      type: string
+                    example: ["client_secret_basic", "client_secret_post"]
+                  scopes_supported:
+                    type: array
+                    items:
+                      type: string
+                    example: ["patient/*.read", "openid", "fhirUser"]
+                  capabilities:
+                    type: array
+                    items:
+                      type: string
+                    example: ["launch-standalone", "client-public", "sso-openid-connect"]
+
+components:
+  securitySchemes:
+    oauth2_patient:
+      type: oauth2
+      description: |
+        OAuth 2.0 patient authentication via Azure AD.
+        Patients authenticate via their health plan credentials and grant consent.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+          scopes:
+            patient/*.read: Read access to all patient resources
+            patient/Patient.read: Read access to Patient resources
+            patient/Claim.read: Read access to Claim resources
+            patient/ExplanationOfBenefit.read: Read access to EOB resources
+            openid: OpenID Connect authentication
+            fhirUser: FHIR user context
+
+  schemas:
+    Patient:
+      type: object
+      description: FHIR R4 Patient resource (US Core compliant)
+      required: [resourceType, id]
+      properties:
+        resourceType:
+          type: string
+          enum: [Patient]
+        id:
+          type: string
+        meta:
+          type: object
+        identifier:
+          type: array
+          items:
+            type: object
+        name:
+          type: array
+          items:
+            type: object
+        gender:
+          type: string
+          enum: [male, female, other, unknown]
+        birthDate:
+          type: string
+          format: date
+
+    Bundle:
+      type: object
+      description: FHIR R4 Bundle resource containing search results
+      required: [resourceType, type]
+      properties:
+        resourceType:
+          type: string
+          enum: [Bundle]
+        type:
+          type: string
+          enum: [searchset, collection, transaction]
+        total:
+          type: integer
+        link:
+          type: array
+          items:
+            type: object
+        entry:
+          type: array
+          items:
+            type: object
+            properties:
+              fullUrl:
+                type: string
+              resource:
+                type: object
+
+    OperationOutcome:
+      type: object
+      description: FHIR R4 OperationOutcome for errors
+      required: [resourceType, issue]
+      properties:
+        resourceType:
+          type: string
+          enum: [OperationOutcome]
+        issue:
+          type: array
+          items:
+            type: object
+            required: [severity, code]
+            properties:
+              severity:
+                type: string
+                enum: [fatal, error, warning, information]
+              code:
+                type: string
+              diagnostics:
+                type: string
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing access token
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+          example:
+            resourceType: "OperationOutcome"
+            issue:
+              - severity: "error"
+                code: "security"
+                diagnostics: "Invalid or missing OAuth 2.0 access token"
+
+    Forbidden:
+      description: Forbidden - Patient attempting to access another patient's data
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'

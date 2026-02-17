@@ -21,6 +21,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - February 16, 2026
+
+### 📚 FHIR API Prominence & Developer Experience
+
+**Commercial positioning and developer discoverability improvements**
+
+Based on comprehensive repository assessment, this release transforms FHIR APIs from buried technical features into prominently featured commercial products.
+
+#### OpenAPI Specifications
+- **Patient Access API**: Full OpenAPI 3.1 spec for CMS-9115-F Patient Access API (FHIR R4, US Core 3.1.1+, CARIN BB)
+- **Claims Scrubbing API**: Commercial pre-validation API with ROI metrics (95%+ first-pass rates)
+- **Provider Access API**: Fixed filename typo (provider-accerss-api.yaml → provider-access-api.yaml)
+- **Interactive Documentation**: Swagger UI embedded viewers for all APIs
+
+#### Quickstart Guides (3 new guides)
+- **CMS-0057-F Compliance** (15 min): Deploy → Test → Verify compliance before Jan 1, 2027 deadline
+- **Patient Access API** (30 min): OAuth setup → Authentication → Build member portal (JS/Python/C# examples)
+- **Claims Scrubbing API** (20 min): EHR integration patterns, batch validation, ROI calculator
+
+#### Portal Redesign
+- **Homepage**: CMS-0057-F deadline banner (Jan 1, 2027 urgency messaging)
+- **Featured Section**: FHIR APIs now 2x grid space in prime dashboard position
+- **New Page**: Dedicated API documentation hub (`api-docs.html`) with interactive viewers
+- **Navigation**: Added "FHIR APIs" to main menu
+- **Commercial Card**: Claims Scrubbing positioned alongside core compliance APIs
+
+#### Impact
+- **Before**: No OpenAPI specs, no quickstarts, APIs buried in src/fhir/
+- **After**: 3 OpenAPI specs, 3 quickstart guides, prominent portal presence, 15-min onboarding
+- **Files Changed**: 16 files, 2,895 insertions
+- **Time to First API Call**: Reduced from hours to < 30 minutes
+
+#### Documentation
+- [Full Release Notes](docs/releases/v4.1.0-FHIR-API-PROMINENCE.md)
+- [OpenAPI Specifications](api/openapi/)
+- [Quickstart Guides](api/quickstarts/)
+
+---
+
 ## [4.0.0] - February 11, 2026
 
 ### 🔒 Zero-Vulnerability Security Hardening
