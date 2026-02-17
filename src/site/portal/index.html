@@ -73,25 +73,85 @@
           Welcome, <strong id="userName" style="color: var(--neon-cyan);">User</strong>
         </p>
 
-        <div style="max-width: 800px; margin: 60px auto; text-align: left;">
+        <div style="max-width: 1200px; margin: 60px auto; text-align: left;">
           <h2>Your Portal Dashboard</h2>
           
+          <!-- CMS Compliance Deadline Banner -->
+          <div style="background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(0, 255, 170, 0.1)); border: 2px solid var(--neon-cyan); border-radius: 12px; padding: 20px; margin-bottom: 40px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--neon-cyan); margin-bottom: 8px;">⚠️ CMS-0057-F DEADLINE</div>
+            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">January 1, 2027 - FHIR APIs Required</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">Patient Access, Provider Access, and Payer-to-Payer APIs must be live</div>
+            <div style="margin-top: 15px;">
+              <a href="api-docs.html" class="button-primary">View Your FHIR APIs →</a>
+            </div>
+          </div>
+          
           <div class="features-grid">
+            <!-- FHIR APIs - PROMINENT -->
+            <div class="card" style="grid-column: span 2; border: 3px solid var(--neon-cyan); background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(0, 255, 170, 0.05));">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                <h3 style="font-size: 1.5rem; margin: 0;">🔥 FHIR R4 APIs</h3>
+                <span style="background: var(--neon-cyan); color: var(--dark-bg); padding: 6px 14px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">PRODUCTION READY</span>
+              </div>
+              
+              <p style="font-size: 1.1rem; margin-bottom: 20px;">
+                CMS-0057-F compliant FHIR R4 endpoints for Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization
+              </p>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 25px 0;">
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--neon-cyan);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Patient Access</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">OAuth 2.0 + US Core</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--neon-green);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Provider Access</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">SMART on FHIR</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--accent-purple);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Payer-to-Payer</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">$member-match</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--accent-orange);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Prior Auth</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Da Vinci PAS</div>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 25px;">
+                <a href="api-docs.html" class="button-primary">📖 API Documentation</a>
+                <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">🧪 Try Sandbox</a>
+                <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/patient-access-api.yaml" 
+                   class="button-secondary" target="_blank">OpenAPI Specs</a>
+              </div>
+
+              <div style="margin-top: 20px; padding: 15px; background: var(--dark-bg); border-radius: 8px; font-size: 0.85rem;">
+                <strong>✅ Ready to deploy:</strong> 480 tests passing • Production-grade security • Full X12 ↔ FHIR conversion
+              </div>
+            </div>
+
+            <!-- Claims Scrubbing - COMMERCIAL FEATURE -->
+            <div class="card" style="border: 2px solid var(--neon-green);">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                <h3>Claims Scrubbing</h3>
+                <span style="background: var(--neon-green); color: var(--dark-bg); padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold;">NEW</span>
+              </div>
+              <p>Pre-validate claims before payer submission. Boost first-pass rates from 85% to 95%+</p>
+              <div style="margin: 15px 0; padding: 12px; background: var(--dark-gray); border-radius: 6px; font-size: 0.85rem;">
+                <strong>ROI:</strong> Save $30-117 per prevented denial
+              </div>
+              <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/claims-scrubbing-quickstart.md" 
+                 class="button-secondary" target="_blank" style="margin-top: 15px;">Learn More →</a>
+            </div>
+
             <div class="card">
               <h3>EDI Integrations</h3>
-              <p>Manage your clearinghouse connections and X12 transaction flows.</p>
+              <p>Manage clearinghouse connections and X12 transaction flows (837, 835, 270, 271, 278).</p>
               <a href="#" class="button-secondary" style="margin-top: 20px;">View Integrations</a>
             </div>
 
             <div class="card">
-              <h3>FHIR APIs</h3>
-              <p>CMS-0057-F compliant FHIR R4 endpoints for payer data exchange.</p>
-              <a href="#" class="button-secondary" style="margin-top: 20px;">API Documentation</a>
-            </div>
-
-            <div class="card">
               <h3>Deployment Status</h3>
-              <p>Monitor your Cloud Health Office deployment and health checks.</p>
+              <p>Monitor your Cloud Health Office deployment health, uptime, and API performance metrics.</p>
               <a href="#" class="button-secondary" style="margin-top: 20px;">View Status</a>
             </div>
           </div>
@@ -99,6 +159,21 @@
           <div style="margin-top: 60px; padding: 40px; background: var(--dark-gray); border: 2px solid var(--neon-cyan); border-radius: 12px;">
             <h3>Quick Links</h3>
             <ul style="list-style: none; padding: 0;">
+              <li style="margin: 15px 0;">
+                <a href="api-docs.html" style="font-size: 1.1rem;">
+                  🚀 <strong>FHIR API Documentation</strong> - OpenAPI specs & quickstarts
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/cms-0057f-compliance-quickstart.md" target="_blank" rel="noopener noreferrer">
+                  ✅ CMS-0057-F Compliance Quickstart (15 minutes)
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="https://sandbox.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">
+                  🧪 Try Sandbox Environment
+                </a>
+              </li>
               <li style="margin: 15px 0;">
                 <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">
                   📖 Documentation on GitHub

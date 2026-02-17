@@ -9,7 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { CapabilityStatement, CapabilityStatementRestResource } from 'fhir/r4';
-import { ProviderAccessApi } from '../src/fhir/provider-access-api';
+import { ProviderAccessApi } from '../../src/fhir/provider-access-api';
 
 const OUTPUT_DIR = path.join(process.cwd(), 'generated', 'infra', 'patient-access-api');
 

@@ -1,0 +1,616 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Claims Scrubbing API
+  version: 4.0.0
+  description: |
+    **Pre-Adjudication Claims Validation & Scrubbing API**
+
+    Validate and scrub healthcare claims BEFORE submission to payers, dramatically
+    improving first-pass acceptance rates and reducing denials.
+
+    **The Problem:** Claims submitted to payers are often denied due to:
+    - Missing or invalid data (patient demographics, provider NPI, diagnosis codes)
+    - Incorrect procedure codes or modifiers
+    - Logic errors (dates, units, amounts)
+    - Payer-specific formatting requirements
+    
+    Average first-pass claim acceptance rate: **85-90%**  
+    With Cloud Health Office scrubbing: **95-98%**
+
+    **How It Works:**
+    1. Provider/EHR submits claim via API (FHIR or X12 format)
+    2. Claims scrubbing engine validates against 30+ standard rules
+    3. Applies payer-specific custom rules and edits
+    4. Returns detailed validation report with actionable fix suggestions
+    5. Provider corrects issues at point-of-care (not after 30-day denial)
+    6. Clean claim submits to payer with high confidence
+
+    **Key Features:**
+    - Real-time validation (< 100ms per claim)
+    - 30+ standard validation rules (data completeness, code validation, logic checks)
+    - Payer-specific custom rule engine
+    - FHIR Claim and X12 837 support
+    - Pre-adjudication scoring (confidence prediction)
+    - First-pass rate analytics and trending
+    - White-label embeddable validation
+    
+    **Use Cases:**
+    - **EHR/PMS Integration:** Validate claims before clearinghouse submission
+    - **Provider Pre-Edit:** Show providers edit suggestions during encounter
+    - **Clearinghouse Enhancement:** Add validation layer before routing
+    - **RCM Services:** Improve clean claim rates for clients
+    - **Denial Prevention:** Catch issues early in workflow
+    
+    **Pricing Model:**
+    - Per-claim validation (pennies per claim)
+    - Volume discounts for high-volume providers
+    - Free tier: 100 claims/month for testing
+
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+    email: api@cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/scrubbing/v1
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/scrubbing/v1
+    description: Sandbox (synthetic test data)
+  - url: http://localhost:3000/scrubbing/v1
+    description: Local development
+
+security:
+  - apiKey: []
+  - oauth2_system: [system/Claim.write]
+
+tags:
+  - name: Validation
+    description: Single and batch claim validation
+  - name: Rules
+    description: Validation rule management
+  - name: Analytics
+    description: First-pass rates and denial analytics
+  - name: Configuration
+    description: Payer-specific configuration
+
+paths:
+  /claims/validate:
+    post:
+      summary: Validate Single Claim
+      description: |
+        Validate a single claim against all active validation rules. Returns detailed
+        validation report with pass/fail status and actionable recommendations.
+        
+        **Accepts:** FHIR Claim resource or X12 837 transaction  
+        **Returns:** Validation report with confidence score
+      operationId: validateClaim
+      tags:
+        - Validation
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: '#/components/schemas/FHIRClaim'
+            example:
+              resourceType: "Claim"
+              id: "CLM001"
+              status: "active"
+              type:
+                coding:
+                  - system: "http://terminology.hl7.org/CodeSystem/claim-type"
+                    code: "professional"
+              patient:
+                reference: "Patient/PAT001"
+              provider:
+                reference: "Practitioner/DR001"
+              item:
+                - sequence: 1
+                  productOrService:
+                    coding:
+                      - system: "http://www.ama-assn.org/go/cpt"
+                        code: "99213"
+                  servicedDate: "2026-02-15"
+                  quantity:
+                    value: 1
+                  unitPrice:
+                    value: 150.00
+                    currency: "USD"
+          
+          application/x12+text:
+            schema:
+              type: string
+              description: X12 837 EDI transaction
+            example: |
+              ISA*00*          *00*          *ZZ*PROVIDERID     *ZZ*PAYERID        *260216*1200*^*00501*000000001*0*P*:~
+              GS*HC*PROVIDERID*PAYERID*20260216*1200*1*X*005010X222A1~
+              ST*837*0001*005010X222A1~
+              BHT*0019*00*CLM001*20260216*1200*CH~
+              
+      responses:
+        '200':
+          description: Validation complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+              example:
+                claimId: "CLM001"
+                overallStatus: "warning"
+                confidenceScore: 0.82
+                firstPassProbability: 0.92
+                errors: []
+                warnings:
+                  - ruleId: "DIAG-001"
+                    severity: "warning"
+                    field: "diagnosis.code"
+                    message: "Diagnosis code Z79.4 requires supporting documentation"
+                    recommendation: "Attach medication list or prescription documentation"
+                    impact: "May delay processing if not included"
+                info:
+                  - ruleId: "INFO-001"
+                    message: "Claim meets UB-04 formatting requirements"
+                summary:
+                  totalRulesEvaluated: 47
+                  passed: 45
+                  warnings: 1
+                  errors: 0
+                  validationTimeMs: 78
+                  estimatedCleanClaimProbability: 0.92
+                recommendations:
+                  - priority: "high"
+                    action: "Add supporting documentation for long-term medication use"
+                  - priority: "low"
+                    action: "Consider adding secondary diagnosis for completeness"
+        
+        '400':
+          description: Invalid claim format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /claims/batch-validate:
+    post:
+      summary: Validate Multiple Claims (Batch)
+      description: |
+        Validate up to 100 claims in a single API call. Returns validation results
+        for each claim with aggregated metrics.
+        
+        **Use Case:** Batch validation before daily clearinghouse submission.
+      operationId: batchValidateClaims
+      tags:
+        - Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claims]
+              properties:
+                claims:
+                  type: array
+                  maxItems: 100
+                  items:
+                    $ref: '#/components/schemas/FHIRClaim'
+                payerId:
+                  type: string
+                  description: Optional payer ID for payer-specific rules
+      responses:
+        '200':
+          description: Batch validation complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId:
+                    type: string
+                  totalClaims:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationResult'
+                  summary:
+                    type: object
+                    properties:
+                      cleanClaims:
+                        type: integer
+                      claimsWithWarnings:
+                        type: integer
+                      claimsWithErrors:
+                        type: integer
+                      averageConfidenceScore:
+                        type: number
+                      estimatedFirstPassRate:
+                        type: number
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rules:
+    get:
+      summary: List Active Validation Rules
+      description: |
+        Retrieve all active validation rules being applied to claims.
+        Includes standard rules and payer-specific custom rules.
+      operationId: listRules
+      tags:
+        - Rules
+      parameters:
+        - name: category
+          in: query
+          description: Filter by rule category
+          schema:
+            type: string
+            enum: [data-completeness, code-validation, logic-checks, payer-specific]
+        - name: payerId
+          in: query
+          description: Filter by payer ID for payer-specific rules
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of validation rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationRule'
+              example:
+                rules:
+                  - id: "DATA-001"
+                    name: "Patient Demographics Required"
+                    category: "data-completeness"
+                    severity: "error"
+                    description: "Patient name, DOB, and insurance ID must be present"
+                    applies_to: ["professional", "institutional"]
+                  - id: "CODE-001"
+                    name: "Valid CPT Code"
+                    category: "code-validation"
+                    severity: "error"
+                    description: "Procedure code must be valid CPT code from current code set"
+                  - id: "LOGIC-001"
+                    name: "Service Date Logic"
+                    category: "logic-checks"
+                    severity: "error"
+                    description: "Service date cannot be in the future"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /rules/custom:
+    post:
+      summary: Add Custom Validation Rule
+      description: |
+        Create a custom validation rule for specific payer requirements or
+        organizational policies.
+        
+        **Requires:** Admin API key
+      operationId: addCustomRule
+      tags:
+        - Rules
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationRule'
+      responses:
+        '201':
+          description: Custom rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Forbidden - Admin access required
+
+  /analytics/first-pass-rate:
+    get:
+      summary: Get First-Pass Rate Analytics
+      description: |
+        Retrieve first-pass claim acceptance rate trends and denial analytics.
+        
+        **Metrics Included:**
+        - First-pass acceptance rate (before vs after scrubbing)
+        - Top denial reasons
+        - Validation rule effectiveness
+        - Provider/payer trends
+      operationId: getFirstPassRate
+      tags:
+        - Analytics
+      parameters:
+        - name: start_date
+          in: query
+          description: Start date for analytics period
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: End date for analytics period
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: provider_id
+          in: query
+          description: Filter by provider
+          schema:
+            type: string
+        - name: payer_id
+          in: query
+          description: Filter by payer
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: object
+                    properties:
+                      start_date:
+                        type: string
+                      end_date:
+                        type: string
+                  metrics:
+                    type: object
+                    properties:
+                      total_claims_validated:
+                        type: integer
+                      first_pass_rate_before_scrubbing:
+                        type: number
+                        description: Historical baseline
+                      first_pass_rate_after_scrubbing:
+                        type: number
+                        description: With validation applied
+                      improvement:
+                        type: number
+                        description: Percentage point improvement
+                      average_confidence_score:
+                        type: number
+                      claims_prevented_from_errors:
+                        type: integer
+                  top_issues_caught:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        issue:
+                          type: string
+                        count:
+                          type: integer
+                        percentage:
+                          type: number
+              example:
+                period:
+                  start_date: "2026-01-01"
+                  end_date: "2026-02-16"
+                metrics:
+                  total_claims_validated: 15420
+                  first_pass_rate_before_scrubbing: 0.87
+                  first_pass_rate_after_scrubbing: 0.96
+                  improvement: 0.09
+                  average_confidence_score: 0.93
+                  claims_prevented_from_errors: 1387
+                top_issues_caught:
+                  - issue: "Missing diagnosis code"
+                    count: 312
+                    percentage: 0.22
+                  - issue: "Invalid modifier combination"
+                    count: 245
+                    percentage: 0.18
+                  - issue: "Service date logic error"
+                    count: 198
+                    percentage: 0.14
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /config/payers/{payerId}:
+    get:
+      summary: Get Payer Configuration
+      description: |
+        Retrieve payer-specific validation configuration including custom rules,
+        formatting requirements, and submission preferences.
+      operationId: getPayerConfig
+      tags:
+        - Configuration
+      parameters:
+        - name: payerId
+          in: path
+          required: true
+          description: Payer identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payer configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payerId:
+                    type: string
+                  payerName:
+                    type: string
+                  custom_rules:
+                    type: array
+                    items:
+                      type: string
+                  formatting_requirements:
+                    type: object
+                  supported_claim_types:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: Payer configuration not found
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+    
+    oauth2_system:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+          scopes:
+            system/Claim.write: Submit and validate claims
+
+  schemas:
+    FHIRClaim:
+      type: object
+      description: FHIR R4 Claim resource
+      required: [resourceType, status, type, patient, provider]
+      properties:
+        resourceType:
+          type: string
+          enum: [Claim]
+        id:
+          type: string
+        status:
+          type: string
+          enum: [active, cancelled, draft]
+        type:
+          type: object
+        patient:
+          type: object
+        provider:
+          type: object
+        item:
+          type: array
+          items:
+            type: object
+
+    ValidationResult:
+      type: object
+      required: [claimId, overallStatus, confidenceScore]
+      properties:
+        claimId:
+          type: string
+        overallStatus:
+          type: string
+          enum: [pass, warning, error]
+        confidenceScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence score (0-1) for clean claim
+        firstPassProbability:
+          type: number
+          description: Estimated probability of first-pass acceptance
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        info:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        summary:
+          type: object
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              priority:
+                type: string
+                enum: [high, medium, low]
+              action:
+                type: string
+
+    ValidationIssue:
+      type: object
+      required: [ruleId, severity, message]
+      properties:
+        ruleId:
+          type: string
+        severity:
+          type: string
+          enum: [error, warning, info]
+        field:
+          type: string
+        message:
+          type: string
+        recommendation:
+          type: string
+        impact:
+          type: string
+
+    ValidationRule:
+      type: object
+      required: [id, name, category, severity]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [data-completeness, code-validation, logic-checks, payer-specific]
+        severity:
+          type: string
+          enum: [error, warning, info]
+        description:
+          type: string
+        applies_to:
+          type: array
+          items:
+            type: string
+        payer_id:
+          type: string
+          description: Specific payer this rule applies to (if payer-specific)
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Invalid or missing X-API-Key header"

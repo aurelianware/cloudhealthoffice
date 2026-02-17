@@ -7,7 +7,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PayerDeploymentGenerator } from '../generate-payer-deployment';
+import { PayerDeploymentGenerator } from '../setup/generate-payer-deployment';
 import { PayerConfig } from '../../core/types/payer-config';
 import { DeploymentValidator } from '../../core/validation/config-validator';
 import { InteractiveWizard } from './interactive-wizard';
