@@ -77,7 +77,8 @@ gmv FHIR-IMPLEMENTATION-SUMMARY.md docs/compliance/
 gmv VALIDATION-TOOLS.md docs/compliance/
 # Onboarding
 for f in QUICKSTART.md ONBOARDING.md ONBOARDING-ENHANCEMENTS.md \
-QUICK-UPDATE-GUIDE.md TROUBLESHOOTING.md TROUBLESHOOTING-FAQ.md MIGRATION.md; gmv "$f" docs/onboarding/
+QUICK-UPDATE-GUIDE.md TROUBLESHOOTING.md TROUBLESHOOTING-FAQ.md MIGRATION.md; 
+gmv "$f" docs/onboarding/
 do
 done
 # Roadmap / Releases
