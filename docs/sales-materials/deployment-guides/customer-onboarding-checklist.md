@@ -1,433 +1,300 @@
-# Customer Onboarding Checklist
-## Cloud Health Office Platform - Phase 1
+# Customer Onboarding Checklist - SaaS Model
+## Cloud Health Office Platform - Beta Launch v4.0
 
-Use this checklist to track progress through the customer onboarding process from contract signature to go-live.
+**Target Timeline**: 7 days from contract signature to production go-live  
+**Model**: Multi-tenant SaaS (Cloud Health Office manages all infrastructure)  
+**Version**: 2.0 (SaaS-optimized)
+
+Use this streamlined checklist to track progress through the customer onboarding process from contract signature to go-live.
 
 ---
 
 ## Pre-Sales (Before Contract)
 
 ### Discovery & Qualification
-- [ ] Initial discovery call completed
-- [ ] Current process documented (hours per attachment, volume, pain points)
-- [ ] Claims system identified and validated (API availability confirmed)
-- [ ] Clearinghouse SFTP access confirmed
-- [ ] Decision makers identified
+- [ ] Initial discovery call completed (30 minutes)
+- [ ] Current pain points documented (manual processes, compliance gaps, cost)
+- [ ] Transaction volume estimated (by type: 837, 275, 270/271, 278)
+- [ ] Claims system identified and API availability confirmed
+- [ ] Clearinghouse(s) identified and SFTP access confirmed
+- [ ] Decision makers identified (technical lead, compliance officer, exec sponsor)
 - [ ] Budget and timeline confirmed
-- [ ] Compliance requirements documented
+- [ ] Compliance requirements documented (HIPAA, state-specific)
 
 ### Demo & Proposal
-- [ ] Product demo completed
-- [ ] ROI analysis prepared and reviewed
-- [ ] Technical architecture review completed
+- [ ] Product demo completed (live platform walkthrough)
+- [ ] ROI analysis prepared using sales calculator
 - [ ] Security and compliance discussion held
-- [ ] References provided and contacted
-- [ ] Formal proposal submitted
+- [ ] Subscription tier recommended: ☐ Starter  ☐ Professional  ☐ Enterprise
+- [ ] Beta program benefits explained (if applicable)
+- [ ] Formal proposal submitted via Order Form
 - [ ] Proposal questions answered
 
 ### Contract & Legal
-- [ ] Master Services Agreement executed
+- [ ] Order Form executed
 - [ ] Business Associate Agreement (BAA) signed
-- [ ] Statement of Work signed
-- [ ] Security and compliance exhibits reviewed
-- [ ] Payment terms agreed upon
-- [ ] Initial payment received (50% implementation fee)
+- [ ] Terms of Service acceptance confirmed
+- [ ] Payment method configured in Stripe
+- [ ] Initial payment received (first month/year subscription)
+- [ ] Welcome email sent with credentials (automated)
 
 ---
 
-## Week 1-2: Discovery & Planning
+## Day 1-2: Tenant Provisioning & Configuration (Cloud Health Office)
 
-### Project Initiation
-- [ ] Kickoff meeting scheduled and completed
-- [ ] Project team members assigned (both sides)
-- [ ] RACI matrix created
-- [ ] Communication plan established
-- [ ] Weekly status call scheduled
-- [ ] Shared workspace created (SharePoint/Teams)
-- [ ] Project charter signed off
+**Owner**: Cloud Health Office Implementation Team  
+**Customer Action**: Minimal (provide configuration details)
 
-### Technical Discovery
-- [ ] Clearinghouse SFTP credentials received
-  - Host: ___________________________
-  - Username: ________________________
-  - Inbound folder: __________________
-- [ ] SFTP connectivity tested successfully
-- [ ] Sample 275 files obtained (minimum 3)
-- [ ] File naming conventions documented
-
-### Claims System Discovery
-- [ ] Claims system vendor and version confirmed
-  - Vendor: __________________________
-  - Version: _________________________
-  - Environment: _____________________
-- [ ] API documentation received and reviewed
-- [ ] API credentials received
-  - Endpoint: ________________________
-  - Auth method: _____________________
-- [ ] Test API connectivity successful
-- [ ] Required API endpoints identified:
-  - [ ] Claim lookup/validation endpoint
-  - [ ] Attachment link endpoint
-  - [ ] Status update endpoint (if applicable)
-- [ ] API rate limits documented
-- [ ] Test claim IDs provided for testing
-
-### Business Rules
-- [ ] Valid claim statuses for attachment processing defined
-- [ ] Required data fields identified (claim number, member ID, provider NPI, etc.)
-- [ ] Error handling requirements documented
-- [ ] Retry policies agreed upon
-- [ ] Notification preferences defined (alerts, reports)
-
-### Configuration
-- [ ] Customer configuration file created (`config/customers/[customer-name].json`)
-- [ ] Payer ID for X12 transactions confirmed: __________________
-- [ ] X12 qualifier confirmed: __________________
-- [ ] Field mappings documented (X12 → Claims System)
-- [ ] Configuration reviewed and approved by customer
-
-### Infrastructure Planning
-- [ ] Azure subscription determined (customer's or shared)
-- [ ] Azure region selected: __________________
-- [ ] Resource naming convention agreed upon
-- [ ] Estimated monthly Azure costs reviewed: $__________
-- [ ] Cost tracking and billing arranged
-
-### Security & Compliance
-- [ ] Security requirements documented
-- [ ] Compliance certifications reviewed (SOC 2, HIPAA)
-- [ ] PHI masking requirements defined
-- [ ] Key Vault secrets structure planned
-- [ ] Private endpoint requirements identified
-- [ ] Network access requirements documented (firewall rules, VPN, etc.)
-
-### Deliverables
-- [ ] Technical specification document approved
-- [ ] API integration design approved
-- [ ] Field mapping spreadsheet approved
-- [ ] Error handling flowchart approved
-- [ ] Security implementation plan approved
-- [ ] Project timeline agreed upon
-
----
-
-## Week 3-4: Environment Setup
-
-### DEV Environment - Azure Infrastructure
-- [ ] Resource group created: __________________________
-- [ ] Logic App Standard deployed: __________________
-- [ ] Storage Account (Data Lake Gen2) deployed: __________________
-- [ ] Service Bus Namespace deployed: __________________
-- [ ] Service Bus Topics created:
-  - [ ] `attachments-in`
-  - [ ] `rfai-requests`
-  - [ ] `edi-278`
-- [ ] Application Insights deployed: __________________
-- [ ] Key Vault deployed: __________________
-- [ ] All resources tagged appropriately
-
-### Key Vault Configuration
-- [ ] SFTP credentials stored:
-  - [ ] `AvilitySftpUsername`
-  - [ ] `AvilitySftpPassword`
-- [ ] Claims system credentials stored:
-  - [ ] API key/token secret name: __________________
-  - [ ] OAuth credentials (if applicable)
-- [ ] Other secrets stored (document names):
-  - [ ] __________________________
-  - [ ] __________________________
-- [ ] Logic App granted Key Vault access (managed identity)
-
-### API Connections
-- [ ] SFTP-SSH connection created and authenticated
-- [ ] Azure Blob connection created (managed identity)
-- [ ] Service Bus connection created (managed identity)
-- [ ] Integration Account connection created
-
-### Integration Account
-- [ ] Integration Account created: __________________
-- [ ] X12 schemas uploaded:
-  - [ ] X12_005010X210_275
-  - [ ] X12_005010X212_277
-  - [ ] X12_005010X217_278
-- [ ] Trading partners configured:
-  - [ ] Clearinghouse (030240928)
-  - [ ] Customer Payer ([payer-id])
-- [ ] X12 agreements created:
-  - [ ] Clearinghouse-to-Customer (receive 275)
-  - [ ] Customer-to-Clearinghouse (send 277)
-
-### Monitoring Setup
+### Tenant Provisioning (Automated)
+- [ ] SaaS tenant created in Cloud Health Office platform
+- [ ] Unique tenant ID assigned: __________________
+- [ ] SFTP account provisioned
+  - Username: [tenant-shortname]
+  - Password: [auto-generated, sent via encrypted PDF]
+  - Host: sftp.cloudhealthoffice.com
+- [ ] Portal access configured (Azure AD SSO)
+- [ ] API keys generated and delivered
+- [ ] Data Lake storage allocated (1TB included)
+- [ ] Service Bus topics created (attachments-in, rfai-requests, edi-278)
 - [ ] Application Insights workspace configured
-- [ ] Log Analytics workspace configured
-- [ ] PHI masking rules configured
-- [ ] Custom dashboards created
-- [ ] Alert rules configured:
-  - [ ] Workflow failures
-  - [ ] High error rate
-  - [ ] SFTP connection failures
-  - [ ] Claims system API failures
-- [ ] Notification actions configured (email, SMS)
+- [ ] Monitoring dashboard created
+
+### Customer Information Collected
+- [ ] Organization legal name: __________________
+- [ ] Payer ID (X12): __________________
+- [ ] X12 Qualifier: __________________
+- [ ] Primary contact: __________ | Email: __________ | Phone: __________
+- [ ] Technical contact: __________ | Email: __________ | Phone: __________
+- [ ] Billing contact: __________ | Email: __________ | Phone: __________
+- [ ] Subscription tier confirmed: __________________
+- [ ] Billing frequency: ☐ Monthly  ☐ Annual
+
+### Claims System Integration Details
+- [ ] Claims system vendor: __________________
+- [ ] Claims system version: __________________
+- [ ] API endpoint URL: __________________
+- [ ] Authentication method: ☐ OAuth 2.0  ☐ API Key  ☐ Basic Auth
+- [ ] Test API credentials provided by customer
+- [ ] Test claim IDs provided (minimum 5 for testing)
+- [ ] Required data fields documented (claim number format, member ID format, etc.)
+
+### Clearinghouse/Trading Partner Details
+- [ ] Primary clearinghouse: __________________
+- [ ] Clearinghouse SFTP host: __________________
+- [ ] Clearinghouse SFTP credentials provided by customer
+- [ ] Clearinghouse folder paths documented:
+  - Inbound: __________________
+  - Outbound: __________________
+- [ ] X12 file naming convention documented
+- [ ] Transaction types to process: ☐ 275  ☐ 277  ☐ 278  ☐ 837  ☐ 270/271
 
 ---
 
-## Week 5-7: Integration Development
+## Day 2-3: Configuration & Integration Setup
 
-### Backend Integration
-- [ ] Custom claims system connector developed
-- [ ] Claim validation logic implemented
-- [ ] Attachment linking logic implemented
-- [ ] Field mappings implemented per specification
-- [ ] Error handling implemented
-- [ ] Retry logic configured
+**Owner**: Cloud Health Office Implementation Team (with customer collaboration)  
+**Location**: Customer portal (https://portal.cloudhealthoffice.com)
 
-### Logic App Workflows
-- [ ] `ingest275` workflow configured:
-  - [ ] SFTP trigger configured
-  - [ ] Data Lake archival action
-  - [ ] X12 decode action
-  - [ ] Claims system integration actions
-  - [ ] Service Bus publish action
-  - [ ] Error handling
-- [ ] `rfai277` workflow configured (if applicable)
-- [ ] `ingest278` workflow configured (if applicable)
-- [ ] `replay278` workflow configured (if applicable)
+### Portal Configuration Wizard (Customer Self-Service)
+- [ ] Customer logs into portal successfully
+- [ ] Organization profile completed (name, address, contacts)
+- [ ] Payer IDs and X12 qualifiers configured
+- [ ] Claims system integration configured:
+  - [ ] API endpoint entered
+  - [ ] Authentication credentials entered (stored in Key Vault)
+  - [ ] Field mappings configured (X12 fields → Claims system fields)
+  - [ ] Test connection successful (green checkmark)
+- [ ] Clearinghouse SFTP configured:
+  - [ ] SFTP host, username, password entered
+  - [ ] Folder paths entered
+  - [ ] Test SFTP connection successful (green checkmark)
+- [ ] Transaction types enabled (275, 277, 278, etc.)
+- [ ] Notification preferences configured (email alerts, Slack webhooks)
 
-### Workflow Deployment
-- [ ] Workflows packaged (workflows.zip)
-- [ ] Workflows deployed to DEV Logic App
-- [ ] Logic App restarted
-- [ ] Workflow runs verified in Azure Portal
+### Backend Integration (Cloud Health Office)
+- [ ] Logic App workflows configured for customer tenant
+- [ ] API connection to customer claims system tested successfully
+- [ ] SFTP connection to clearinghouse tested successfully
+- [ ] Integration Account configured with customer's X12 trading partner IDs
+- [ ] Field mapping logic implemented and tested
+- [ ] Error handling and retry policies configured
+- [ ] Monitoring alerts configured (failure notifications)
 
-### Configuration Updates
-- [ ] Workflow parameters configured
-- [ ] Connection references validated
-- [ ] Managed identity permissions verified
-- [ ] Logic App app settings configured
-
-### Code Review & Documentation
-- [ ] Code reviewed by senior engineer
-- [ ] Configuration reviewed for security
-- [ ] Technical documentation updated
-- [ ] Operations runbook drafted
+### Security Configuration
+- [ ] Customer credentials stored securely in Azure Key Vault
+- [ ] Managed identity permissions configured
+- [ ] Network security validated (HTTPS only, TLS 1.3)
+- [ ] PHI masking validated in logs
+- [ ] Audit logging enabled (7-year retention)
 
 ---
 
-## Week 8-10: Testing & Validation
+## Day 3-5: Testing & Validation
 
-### Unit Testing
-- [ ] Test 1: Happy path (valid 275 file) - PASS/FAIL: ____
-- [ ] Test 2: Invalid claim number - PASS/FAIL: ____
-- [ ] Test 3: Malformed EDI file - PASS/FAIL: ____
-- [ ] Test 4: Claims system API down - PASS/FAIL: ____
-- [ ] Test 5: Duplicate file processing - PASS/FAIL: ____
-- [ ] Test 6: Large file (>5MB) - PASS/FAIL: ____
-- [ ] All unit tests passed or issues resolved
+**Owner**: Both (Cloud Health Office supports, customer validates)
 
-### Integration Testing
-- [ ] End-to-end workflow tested with 10+ files
-- [ ] Data Lake archival verified
-- [ ] X12 decode accuracy validated
-- [ ] Claims system integration verified
-- [ ] Service Bus event publishing validated
-- [ ] Error handling and retry tested
-- [ ] All integration tests passed
+### Unit Testing (Cloud Health Office)
+- [ ] Test 1: Valid 275 file processing - PASS/FAIL: ____
+- [ ] Test 2: Invalid claim number handling - PASS/FAIL: ____
+- [ ] Test 3: Malformed EDI file handling - PASS/FAIL: ____
+- [ ] Test 4: Claims system API timeout handling - PASS/FAIL: ____
+- [ ] Test 5: Duplicate file detection - PASS/FAIL: ____
+- [ ] Test 6: Large file processing (>5MB) - PASS/FAIL: ____
+- [ ] All unit tests passed
 
-### User Acceptance Testing (UAT)
-- [ ] UAT environment prepared
-- [ ] UAT test plan provided to customer
-- [ ] Customer UAT team trained
-- [ ] 10+ real 275 files processed successfully
-- [ ] Data accuracy verified in claims system
-- [ ] Error handling validated
-- [ ] PHI masking verified in logs
-- [ ] Monitoring dashboard reviewed
-- [ ] UAT sign-off received from customer
+### Customer Acceptance Testing (Customer-Led)
+- [ ] Customer UAT plan provided (test scripts, expected outcomes)
+- [ ] Customer processes 5+ test transactions end-to-end
+- [ ] Test transactions archived correctly in Data Lake
+- [ ] Data appears correctly in customer claims system
+- [ ] No PHI visible in Application Insights logs
+- [ ] Error handling validated (customer tests error scenarios)
+- [ ] Monitoring dashboard reviewed and understood by customer
+- [ ] Customer UAT sign-off received
 
-**UAT Results:**
-- Total test cases: ______
+**UAT Results**:
+- Total test cases executed: ______
 - Passed: ______
 - Failed: ______
 - Success rate: ______%
 
-### Performance Testing
-- [ ] Load test: 100 files processed (Duration: ____ minutes)
-- [ ] Stress test: 500 files over 8 hours (Success rate: ____%)
-- [ ] Average processing time per file: ____ minutes
-- [ ] 95th percentile processing time: ____ minutes
-- [ ] Performance SLA met (< 5 minutes per file)
-
-### Security Testing
-- [ ] Vulnerability scan completed (No critical/high issues)
-- [ ] PHI masking validated (No PHI in Application Insights)
-- [ ] Key Vault access audit completed
-- [ ] Network security verified (private endpoints, NSGs)
-- [ ] Penetration test completed (if required)
-- [ ] Security assessment report delivered
-
-### Bug Tracking
-- [ ] All critical bugs resolved
-- [ ] All high-priority bugs resolved
-- [ ] Medium/low bugs documented and prioritized
-- [ ] Bug fix log maintained
+### Performance Validation
+- [ ] Average transaction processing time: ____ seconds (target: < 30 seconds)
+- [ ] 95th percentile processing time: ____ seconds (target: < 60 seconds)
+- [ ] SFTP polling frequency verified (every 5 minutes)
+- [ ] No performance issues identified
 
 ---
 
-## Week 11: Production Deployment
+## Day 5-6: Training & Documentation
 
-### Production Environment Setup
-- [ ] Production resource group created: __________________________
-- [ ] All Azure resources deployed to production
-- [ ] Production SKU upgraded (WS1 for Logic Apps)
-- [ ] Geo-redundant storage enabled
-- [ ] Production Key Vault secrets configured
-- [ ] Production API connections authenticated
-- [ ] Production Integration Account configured
+**Owner**: Cloud Health Office Customer Success
 
-### Production Configuration
-- [ ] Private endpoints configured for all PHI resources
-- [ ] VNet integration enabled for Logic Apps
-- [ ] Azure Backup configured
-- [ ] Log retention set to 365 days
-- [ ] Production monitoring and alerting configured
-- [ ] Production dashboards created
+### Training Sessions
+- [ ] Session 1: Platform Overview & Portal Navigation (1 hour)
+  - Date/Time: ______________
+  - Attendees: ______________
+  - Recording link: ______________
+- [ ] Session 2: Monitoring & Troubleshooting (1 hour)
+  - Date/Time: ______________
+  - Attendees: ______________
+  - Recording link: ______________
 
-### Production Deployment
-- [ ] Workflows deployed to production
-- [ ] Production smoke test completed successfully
-- [ ] Production credentials validated
-- [ ] Production connectivity verified (SFTP, claims system)
+### Documentation Delivered
+- [ ] Quickstart guide shared
+- [ ] Portal user guide shared
+- [ ] Monitoring dashboard guide shared
+- [ ] Troubleshooting guide shared
+- [ ] Escalation procedures shared
+- [ ] API documentation shared (if using APIs)
+- [ ] Security and compliance documentation shared
+- [ ] SLA documentation shared
 
-### Pre-Go-Live Checklist
-- [ ] All production resources deployed and verified
-- [ ] Production workflows running successfully
-- [ ] Operations runbook finalized and reviewed
-- [ ] Support escalation paths defined
-- [ ] Backup and DR procedures documented
-- [ ] Customer training completed
-- [ ] Go-live communication sent to all stakeholders
-- [ ] Rollback plan documented and reviewed
-- [ ] Go-live support coverage confirmed
+### Knowledge Transfer
+- [ ] Customer operations team trained on portal
+- [ ] Customer technical team trained on monitoring
+- [ ] Customer support contacts saved in portal
+- [ ] Cloud Health Office support contacts saved by customer
+- [ ] Escalation path documented and understood
 
 ---
 
-## Week 12: Training & Go-Live
+## Day 7: Production Go-Live
 
-### Training
-- [ ] Session 1: Operations Training (2 hours)
-  - Date: ______________
-  - Attendees: ________________________
-  - Materials distributed
-  - Feedback collected
-- [ ] Session 2: Technical Training (2 hours)
-  - Date: ______________
-  - Attendees: ________________________
-  - Materials distributed
-  - Feedback collected
+**Owner**: Both (with Cloud Health Office on standby)
 
-### Training Materials Delivered
-- [ ] Operations runbook
-- [ ] Monitoring dashboard guide
-- [ ] Error handling flowchart
-- [ ] Escalation procedures
-- [ ] Technical architecture document
-- [ ] Troubleshooting guide
-- [ ] Security documentation
-- [ ] DR procedures
-
-### Go-Live Preparation
-- [ ] Final production smoke test completed (Day before go-live)
-- [ ] All training sessions completed
-- [ ] Operations runbook distributed to all operators
-- [ ] Support contacts shared with customer
-- [ ] Implementation team availability confirmed for go-live day
+### Pre-Go-Live Checklist (Morning)
+- [ ] Go-live kickoff call completed (8:00 AM)
+- [ ] All systems status verified (portal, SFTP, claims system)
+- [ ] Cloud Health Office support team on standby
 - [ ] Customer operations team ready
-- [ ] Go-live kickoff call scheduled
+- [ ] Rollback plan reviewed (if needed)
 
-### Go-Live Day Checklist
-
-**Pre-Go-Live (8:00 AM):**
-- [ ] Go-live kickoff call completed
-- [ ] All systems status verified (green)
-- [ ] Support team on standby
-
-**Morning (8:30 AM - 12:00 PM):**
+### Go-Live Execution (Throughout Day)
+- [ ] Production SFTP credentials activated (if different from test)
 - [ ] First production file processed successfully
 - [ ] First 10 files processed successfully
-- [ ] No errors in Application Insights
-- [ ] Claims system data validated
-- [ ] Midday status call completed
+- [ ] No errors in monitoring dashboard
+- [ ] Claims system data validated by customer
+- [ ] Midday status call completed (12:00 PM)
 
-**Afternoon (12:00 PM - 5:00 PM):**
-- [ ] Continued processing throughout day
-- [ ] Real-time monitoring by implementation team
-- [ ] Any issues immediately addressed
-- [ ] End-of-day review call completed
-- [ ] Day 1 summary email sent
-
-**Go-Live Metrics (Day 1):**
-- Files processed: ______
-- Success rate: ______%
-- Average processing time: ____ minutes
-- Errors: ______
-- Customer satisfaction: ______/5
+### End-of-Day Review (Evening)
+- [ ] Day 1 metrics reviewed:
+  - Files processed: ______
+  - Success rate: ______%
+  - Average processing time: ____ seconds
+  - Errors: ______
+- [ ] Any issues addressed and resolved
+- [ ] End-of-day review call completed (5:00 PM)
+- [ ] Day 1 summary email sent to customer
 
 ---
 
-## Week 13-16: Post-Go-Live Support
+## Day 8-14: Post-Go-Live Support
 
-### Week 13-14: Intensive Support
-- [ ] Daily status calls held
-- [ ] Daily monitoring by implementation team
-- [ ] Daily metrics reports sent to customer
-- [ ] All issues addressed within SLA
-- [ ] Performance tuning completed based on actual volume
+**Owner**: Cloud Health Office Customer Success
+
+### Daily Check-Ins (Days 8-10)
+- [ ] Day 8 status call - Issues: __________________
+- [ ] Day 9 status call - Issues: __________________
+- [ ] Day 10 status call - Issues: __________________
+
+### Weekly Check-In (Days 11-14)
+- [ ] Week 1 review call completed
+- [ ] Metrics reviewed (success rate, processing time, errors)
+- [ ] Customer feedback collected
+- [ ] Any optimization recommendations provided
+
+---
+
+## Week 2-4: Transition to Steady State
+
+### Week 2: Stabilization
+- [ ] Daily monitoring by customer operations team
+- [ ] Cloud Health Office support available (email, portal tickets)
+- [ ] No critical issues reported
+- [ ] Performance meets SLA commitments
+
+### Week 3: Optimization
+- [ ] Weekly status call with customer
+- [ ] Performance tuning recommendations provided (if applicable)
+- [ ] Customer operations team fully self-sufficient
 - [ ] Documentation updated based on learnings
 
-### Week 15-16: Transition to Steady State
-- [ ] Reduced status calls to weekly
-- [ ] Monitoring transitioned to customer operations team
-- [ ] Remaining issues/enhancements addressed
-- [ ] Customer feedback collected and documented
-- [ ] Optimization recommendations provided
-
-### 30-Day Metrics Review
-- [ ] 30-day performance report generated
-- [ ] ROI tracking established
+### Week 4: 30-Day Review
+- [ ] 30-day review call scheduled and completed
+- [ ] 30-day metrics report generated:
+  - Total files processed: ______
+  - Success rate: ______%
+  - Average processing time: ____ seconds
+  - Uptime: ______%
+  - Support tickets: ______
 - [ ] Customer satisfaction survey completed
-- [ ] Lessons learned document created
+- [ ] ROI tracking established
 - [ ] Success story documented (if applicable)
-
-**30-Day Metrics:**
-- Total files processed: ______
-- Success rate: ______%
-- Average processing time: ____ minutes
-- Uptime: ______%
-- Customer satisfaction: ______/5
-- ROI achieved: ______x
+- [ ] Customer willing to provide testimonial: ☐ Yes  ☐ No  ☐ Later
 
 ---
 
-## Ongoing Support & Success
+## Ongoing Success (Monthly/Quarterly)
 
 ### Monthly Activities
-- [ ] Monthly metrics review scheduled
-- [ ] Monthly status call with customer
-- [ ] Performance optimization recommendations
+- [ ] Monthly metrics review (automated email report)
+- [ ] Monthly check-in call (optional, if customer requests)
 - [ ] Platform updates communicated
-- [ ] Customer satisfaction check-in
+- [ ] Customer feedback collected
 
 ### Quarterly Activities
-- [ ] Quarterly business review (QBR) held
+- [ ] Quarterly Business Review (QBR) held
 - [ ] ROI analysis updated
-- [ ] Roadmap and future enhancements discussed
-- [ ] Training refresher offered
+- [ ] Roadmap and future features discussed
+- [ ] Training refresher offered (if needed)
 - [ ] Contract renewal discussion (if approaching)
 
 ### Annual Activities
 - [ ] Annual health check completed
 - [ ] Security assessment refreshed
-- [ ] Disaster recovery test conducted
+- [ ] Disaster recovery test conducted (if Enterprise tier)
 - [ ] Contract renewal processed
 - [ ] Year-in-review report delivered
 
@@ -436,25 +303,44 @@ Use this checklist to track progress through the customer onboarding process fro
 ## Success Criteria
 
 ### Technical Success
-- [ ] 95%+ success rate in production
-- [ ] < 5 minutes average processing time
-- [ ] 99.9%+ uptime achieved
+- [ ] 95%+ transaction success rate in production
+- [ ] < 30 seconds average processing time (meets SLA)
+- [ ] Uptime meets tier commitment (99.5% / 99.9% / 99.95%)
 - [ ] Zero security incidents
 - [ ] Zero data loss incidents
 
 ### Business Success
-- [ ] Customer achieving expected ROI
-- [ ] 80%+ reduction in processing time
+- [ ] Customer achieving expected ROI (tracked monthly)
+- [ ] Reduction in manual processing time (80%+ target)
 - [ ] Customer satisfaction ≥ 4/5
 - [ ] Customer willing to provide reference
-- [ ] Renewal commitment secured
+- [ ] Renewal commitment secured (if approaching end of term)
 
 ### Operational Success
-- [ ] Customer operations team self-sufficient
-- [ ] Support ticket volume declining
-- [ ] Proactive monitoring in place
+- [ ] Customer operations team self-sufficient (no daily support needed)
+- [ ] Support ticket volume declining over time
+- [ ] Proactive monitoring alerts working correctly
 - [ ] Documentation complete and up-to-date
 - [ ] Knowledge transfer complete
+
+---
+
+## Key Differences: SaaS vs. Self-Hosted
+
+**SaaS Model (This Checklist)**:
+- ✅ No Azure subscription required (Cloud Health Office manages infrastructure)
+- ✅ No resource provisioning needed (automated by Cloud Health Office)
+- ✅ No infrastructure deployment (Logic Apps, Storage, Service Bus pre-configured)
+- ✅ No Azure cost management needed (included in subscription)
+- ✅ Faster onboarding (7 days vs. 12 weeks for self-hosted)
+- ✅ Lower complexity (customer focuses on configuration, not infrastructure)
+
+**Self-Hosted Model** (Not covered in this checklist):
+- Customer provides Azure subscription
+- Customer deploys Bicep templates
+- Customer manages Azure costs directly
+- Customer responsible for infrastructure patching/updates
+- Longer onboarding timeline (12 weeks typical)
 
 ---
 
@@ -462,20 +348,20 @@ Use this checklist to track progress through the customer onboarding process fro
 
 ### Customer Approval
 
-**I certify that the Cloud Health Office Platform has been successfully deployed and meets all acceptance criteria outlined in the Statement of Work.**
+**I certify that the Cloud Health Office Platform has been successfully deployed and meets all acceptance criteria.**
 
-Customer Name: ______________________________
-Title: ______________________________________
-Signature: __________________________________
+Customer Name: ______________________________  
+Title: ______________________________________  
+Signature: __________________________________  
 Date: _______________________________________
 
-### Provider Confirmation
+### Cloud Health Office Confirmation
 
-**I certify that all deliverables have been completed and the customer has been successfully onboarded to the Cloud Health Office Platform.**
+**I certify that all deliverables have been completed and the customer has been successfully onboarded.**
 
-Provider Name: ______________________________
-Title: ______________________________________
-Signature: __________________________________
+Implementation Engineer: _____________________  
+Customer Success Manager: ___________________  
+Signature: __________________________________  
 Date: _______________________________________
 
 ---
@@ -488,21 +374,28 @@ Date: _______________________________________
 - **Technical Lead:** ___________________ | _________________ | _________________
 - **Operations Lead:** __________________ | _________________ | _________________
 
-### Provider Contacts
-- **Project Manager:** __________________ | _________________ | _________________
-- **Technical Lead:** ___________________ | _________________ | _________________
-- **Customer Success:** _________________ | _________________ | _________________
-- **Technical Support:** support@hipaa-attachments.com | 1-888-555-HIPAA (4472)
+### Cloud Health Office Contacts
+- **Implementation Engineer:** __________________ | _________________ | _________________
+- **Customer Success Manager:** _________________ | _________________ | _________________
+- **Technical Support:** support@cloudhealthoffice.com | 1-888-CLOUD-55
+- **Sales Representative:** __________________ | _________________ | _________________
 
 ---
 
 ## Document Control
 
-- **Version:** 1.0
-- **Created:** [Date]
-- **Last Updated:** [Date]
-- **Next Review:** [Date]
-- **Owner:** [Name]
+- **Version:** 2.0 (SaaS-optimized)
+- **Created:** February 17, 2026
+- **Last Updated:** February 17, 2026
+- **Next Review:** May 17, 2026
+- **Owner:** Customer Success Team
+
+---
+
+**Cloud Health Office** – The Inevitable Evolution of Healthcare EDI  
+**Open Source | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready**
+
+© 2026 Aurelianware. All rights reserved.
 
 ---
 
