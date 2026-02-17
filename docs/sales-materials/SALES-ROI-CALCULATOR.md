@@ -62,11 +62,13 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | Item | Year 1 | Year 2 | Year 3 | Total |
 |------|--------|--------|--------|-------|
 | Implementation (Self-Service) | $5,000 | — | — | $5,000 |
-| Professional Subscription | $36,000 | $36,000 | $36,000 | $108,000 |
+| Professional Subscription | $23,988 | $23,988 | $23,988 | $71,964 |
 | Professional Services (Optional) | $10,000 | $5,000 | $5,000 | $20,000 |
 | Support (Included) | $0 | $0 | $0 | $0 |
 | Azure Infrastructure | $12,000 | $12,000 | $12,000 | $36,000 |
-| **Annual Total** | **$63,000** | **$53,000** | **$53,000** | **$169,000** |
+| **Annual Total** | **$50,988** | **$40,988** | **$40,988** | **$132,964** |
+
+*Note: Professional tier subscription is $1,999/month ($23,988/year). Annual billing saves 10%: $21,589/year. The table above uses monthly billing for conservative estimation.*
 
 ---
 
@@ -76,10 +78,10 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 | Organization Size | Custom Dev | Enterprise Vendor | Cloud Health Office | Savings |
 |-------------------|------------|-------------------|---------------------|-------------|
-| **Small (50K members)** | $1,500,000 | $500,000 | $36,000 | 93-98% |
-| **Medium (200K members)** | $2,630,000 | $1,065,000 | $108,000 | 90-96% |
-| **Large (500K members)** | $4,500,000 | $2,000,000 | $288,000 | 86-94% |
-| **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $576,000 | 86-93% |
+| **Small (50K members)** | $1,500,000 | $500,000 | $19,000 (Starter) | 96-99% |
+| **Medium (200K members)** | $2,630,000 | $1,065,000 | $72,000 (Professional) | 93-97% |
+| **Large (500K members)** | $4,500,000 | $2,000,000 | $180,000 (Enterprise) | 91-96% |
+| **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $216,000 (Enterprise) | 95-97% |
 
 ### Hidden Costs Avoided
 
@@ -153,8 +155,8 @@ Every month of delayed CMS-0057-F compliance carries risk:
 
 | Comparison | 3-Year Savings | 3-Year Investment | ROI |
 |------------|----------------|-------------------|-----|
-| vs. Custom Development | $2,461,000 | $169,000 | **1,456%** |
-| vs. Enterprise Vendor | $896,000 | $169,000 | **530%** |
+| vs. Custom Development | $3,047,036 | $132,964 | **2,292%** |
+| vs. Enterprise Vendor | $932,036 | $132,964 | **701%** |
 
 ---
 
@@ -340,13 +342,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $63,000 |
+| Platform Savings | $69,000 |
 | Labor Efficiency | $560,000 |
 | Call Center Reduction | $80,000 |
 | Risk Mitigation | $500,000 |
-| **Total Benefit** | **$1,203,000** |
-| **Cloud Health Office Investment** | **$12,000** (Starter) |
-| **ROI** | **10,025%** |
+| **Total Benefit** | **$1,209,000** |
+| **Cloud Health Office Investment** | **$5,988** (Starter: $499/month) |
+| **ROI** | **20,185%** |
 
 #### Scenario B: Mid-Market TPA (300,000 members managed)
 
@@ -359,13 +361,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $164,000 |
+| Platform Savings | $176,000 |
 | Labor Efficiency | $2,520,000 |
 | Call Center Reduction | $360,000 |
 | Risk Mitigation | $1,500,000 |
-| **Total Benefit** | **$4,544,000** |
-| **Cloud Health Office Investment** | **$36,000** (Professional) |
-| **ROI** | **12,622%** |
+| **Total Benefit** | **$4,556,000** |
+| **Cloud Health Office Investment** | **$23,988** (Professional: $1,999/month) |
+| **ROI** | **18,994%** |
 
 #### Scenario C: Large Medicaid MCO (800,000 members)
 
@@ -378,13 +380,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $404,000 |
+| Platform Savings | $440,000 |
 | Labor Efficiency | $7,000,000 |
 | Call Center Reduction | $1,000,000 |
 | Risk Mitigation | $3,000,000 |
-| **Total Benefit** | **$11,404,000** |
-| **Cloud Health Office Investment** | **$96,000** (Enterprise) |
-| **ROI** | **11,879%** |
+| **Total Benefit** | **$11,440,000** |
+| **Cloud Health Office Investment** | **$59,988** (Enterprise: $4,999/month) |
+| **ROI** | **19,074%** |
 
 ---
 
@@ -405,9 +407,14 @@ Example:
 
 For organizations seeking CMS-0057-F compliance with minimal investment and maximum ROI:
 
-1. **Start with Starter tier** ($999/month) for evaluation
-2. **Upgrade to Professional** ($2,999/month) for production
-3. **Consider Enterprise** ($7,999/month) for high-volume or dedicated requirements
+1. **Start with Starter tier** ($499/month or $5,389/year) for evaluation and small payers (1-3 payers, 10K transactions/month)
+2. **Upgrade to Professional** ($1,999/month or $21,589/year) for production and mid-market (4-10 payers, 100K transactions/month)
+3. **Consider Enterprise** ($4,999/month or $53,989/year) for high-volume, unlimited payers/transactions, or dedicated requirements
+
+**Beta Launch Special**: 50% discount for 90 days for first 10 customers
+- Starter: $249/month
+- Professional: $999/month
+- Enterprise: $2,499/month
 
 **Payback Period**: Less than 1 month for most organizations
 
