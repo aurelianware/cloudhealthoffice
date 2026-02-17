@@ -1,8 +1,8 @@
 # Cloud Health Office Privacy Policy
 
-**Effective Date**: December 1, 2024  
-**Last Updated**: December 1, 2024  
-**Version**: 1.0
+**Effective Date**: March 1, 2026  
+**Last Updated**: February 17, 2026  
+**Version**: 2.0
 
 ---
 
@@ -176,24 +176,32 @@ PHI is retained in accordance with:
 - Customer data retention policies
 - Applicable BAA requirements
 - HIPAA minimum 6-year retention for compliance documentation
-- 7-year retention for EDI transaction archives (configurable)
+- **7-year retention for claims data and EDI transaction archives** (configurable from 1 to 10 years)
 
 ### 6.2 Account Information
 
 Customer account information is retained:
 
 - During active subscription
-- For 7 years after termination (for compliance records)
+- For 7 years after termination (for compliance and audit records)
 - As required by applicable law
 
-### 6.3 Data Deletion
+### 6.3 Application and Audit Logs
+
+System logs are retained as follows:
+
+- **Application logs**: 365 days (includes performance metrics, error logs, and operational data)
+- **Audit logs**: 7 years (includes access logs, PHI disclosure tracking, and security events)
+- **PHI is automatically masked** in all logs using sanitization functions to prevent log forging attacks
+
+### 6.4 Data Deletion
 
 Upon termination of services:
 
-- PHI is securely deleted within 90 days (or returned per BAA)
-- Backups are purged according to retention schedules
-- Audit logs are retained for compliance purposes
-- De-identified data may be retained for analytics
+- PHI is securely deleted within **90 days** (or returned per BAA within 60 days if requested)
+- Backups are purged according to retention schedules (maximum 90 days)
+- Audit logs are retained for 7 years for compliance purposes
+- De-identified, aggregated data may be retained indefinitely for analytics and service improvement
 
 ## 7. Data Security
 
@@ -250,44 +258,113 @@ As a customer, you have the right to:
 - Close your account (subject to retention requirements)
 - Opt out of marketing communications
 
-### 8.3 California Privacy Rights (CCPA)
+### 8.3 California Privacy Rights (CCPA/CPRA)
 
-California residents have additional rights under CCPA:
+California residents have additional rights under the California Consumer Privacy Act (CCPA) and California Privacy Rights Act (CPRA):
 
-- Right to know what personal information is collected
-- Right to delete personal information (subject to exceptions)
-- Right to opt out of sale of personal information (we do not sell)
-- Right to non-discrimination
+- **Right to Know**: Right to know what personal information is collected, used, shared, and sold
+- **Right to Delete**: Right to delete personal information (subject to legal and contractual exceptions)
+- **Right to Opt-Out**: Right to opt out of sale or sharing of personal information (**we do not sell or share personal information**)
+- **Right to Correct**: Right to correct inaccurate personal information
+- **Right to Limit Use**: Right to limit use and disclosure of sensitive personal information (including PHI)
+- **Right to Non-Discrimination**: Right not to receive discriminatory treatment for exercising CCPA/CPRA rights
+
+**How to Exercise Rights**: Email privacy@cloudhealthoffice.com with subject "CCPA/CPRA Request"
+
+**Response Time**: We respond to verified requests within 45 days (may be extended by 45 days if necessary)
 
 ## 9. Children's Privacy
 
 Our Services are not directed to individuals under 18 years of age. We do not knowingly collect personal information from children. PHI of minors is processed solely as directed by Covered Entities in accordance with applicable law.
 
-## 10. International Data Transfers
+## 10. International Data Transfers and GDPR
 
 ### 10.1 Data Location
 
 By default, customer data is processed and stored in the Azure region selected during deployment (United States regions). Data does not leave the selected geographic region unless explicitly configured by the customer.
 
-### 10.2 Cross-Border Transfers
+### 10.2 European Union and GDPR
+
+If Customer operates in the European Union or processes data of EU residents:
+
+**Legal Basis for Processing**:
+- **Contractual necessity**: Processing necessary to perform our contractual obligations
+- **Legitimate interests**: Processing necessary for our legitimate business interests (e.g., fraud prevention, security)
+- **Legal compliance**: Processing necessary to comply with legal obligations (e.g., HIPAA, tax laws)
+- **Consent**: Where explicitly obtained for specific purposes (e.g., marketing communications)
+
+**EU Resident Rights** (in addition to HIPAA rights):
+- Right of access to personal data
+- Right to rectification of inaccurate data
+- Right to erasure ("right to be forgotten") - subject to legal exceptions
+- Right to restriction of processing
+- Right to data portability
+- Right to object to processing
+- Right not to be subject to automated decision-making (including profiling)
+
+**Data Protection Officer**: For GDPR inquiries, contact dpo@cloudhealthoffice.com
+
+### 10.3 Cross-Border Transfers
 
 If data transfer outside the United States is necessary:
 
-- We utilize appropriate transfer mechanisms (Standard Contractual Clauses)
-- We ensure receiving parties provide adequate protection
+- We utilize **Standard Contractual Clauses (SCCs)** approved by the European Commission
+- We implement additional safeguards as required by the Schrems II decision
+- We ensure receiving parties provide adequate protection under GDPR standards
 - We comply with applicable data localization requirements
 
-## 11. Changes to This Policy
+### 10.4 UK GDPR
+
+For UK-based customers, we comply with the UK General Data Protection Regulation (UK GDPR) and Data Protection Act 2018. The same rights and protections apply as described in Section 10.2.
+
+## 11. Cookies and Tracking Technologies
+
+### 11.1 Use of Cookies
+
+The Cloud Health Office website and portal use cookies and similar tracking technologies for the following purposes:
+
+**Essential Cookies** (always active):
+- Authentication and session management
+- Security and fraud prevention
+- Load balancing and performance optimization
+
+**Analytics Cookies** (opt-in):
+- Website usage analytics (Google Analytics)
+- Feature usage tracking (Application Insights)
+- Performance monitoring
+
+**Marketing Cookies** (opt-in):
+- LinkedIn Insight Tag (for ad targeting)
+- Campaign attribution
+
+### 11.2 Cookie Management
+
+You can control cookie preferences through:
+- Browser settings (most browsers allow blocking cookies)
+- Our cookie consent banner (first-time visitors)
+- Cookie preference center: https://cloudhealthoffice.com/cookie-settings
+
+**Note**: Disabling essential cookies may impair functionality of the Services.
+
+### 11.3 Do Not Track (DNT)
+
+We honor Do Not Track (DNT) browser signals for analytics and marketing cookies, but essential cookies remain active to ensure service functionality.
+
+---
+
+## 12. Changes to This Policy
 
 We may update this Privacy Policy from time to time. Changes will be:
 
-- Posted on our website with the effective date
-- Communicated to customers via email for material changes
+- Posted on our website at https://cloudhealthoffice.com/legal/privacy-policy with the updated effective date
+- Communicated to customers via email for **material changes** at least 30 days before the effective date
 - Effective 30 days after posting (or as otherwise specified)
 
-Your continued use of the Services after changes become effective constitutes acceptance of the updated Policy.
+**Material changes** include changes to data retention periods, new uses of PHI, or changes to your rights.
 
-## 12. Contact Information
+Your continued use of the Services after changes become effective constitutes acceptance of the updated Policy. If you do not agree to the updated Policy, you may terminate your subscription as provided in the Terms of Service.
+
+## 13. Contact Information
 
 ### Privacy Inquiries
 
@@ -324,13 +401,17 @@ Website: https://support.cloudhealthoffice.com
 | Claim Data | Claim #, Status | EDI processing | 7 years |
 | Attachments | Medical records | 275 processing | 7 years |
 
-## Appendix B: Third-Party Service Providers
+## Appendix B: Third-Party Service Providers (Subprocessors)
 
-| Provider | Service | BAA | Certification |
-|----------|---------|-----|---------------|
-| Microsoft Azure | Cloud Infrastructure | Yes | SOC 2, ISO 27001, HIPAA |
-| Application Insights | Monitoring | Yes | SOC 2 (via Azure) |
-| Service Bus | Messaging | Yes | SOC 2 (via Azure) |
+| Provider | Service | BAA | Certification | Data Location |
+|----------|---------|-----|---------------|---------------|
+| Microsoft Azure | Cloud Infrastructure | Yes | SOC 2, ISO 27001, HIPAA | United States |
+| Application Insights | Monitoring | Yes | SOC 2 (via Azure) | United States |
+| Service Bus | Messaging | Yes | SOC 2 (via Azure) | United States |
+| Stripe, Inc. | Payment Processing | No | PCI DSS Level 1 | United States |
+| SendGrid (Twilio) | Transactional Email | Yes | SOC 2 Type II | United States |
+
+**Subprocessor Updates**: We will notify customers of any additions or changes to subprocessors with at least **30 days' advance notice**. Customers may object to new subprocessors within 15 days by contacting privacy@cloudhealthoffice.com.
 
 ---
 
