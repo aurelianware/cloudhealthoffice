@@ -6,9 +6,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as Handlebars from 'handlebars';
-import { PayerConfig } from '../core/types/payer-config';
-import { DeploymentValidator } from '../core/validation/config-validator';
-import { registerHelpers } from './utils/template-helpers';
+import { PayerConfig } from '../../core/types/payer-config';
+import { DeploymentValidator } from '../../core/validation/config-validator';
+import { registerHelpers } from '../utils/template-helpers';
 
 export class PayerDeploymentGenerator {
   private validator: DeploymentValidator;
@@ -17,7 +17,7 @@ export class PayerDeploymentGenerator {
 
   constructor(templatesDir?: string, outputBaseDir?: string) {
     this.validator = new DeploymentValidator();
-    this.templatesDir = templatesDir || path.join(__dirname, 'templates');
+    this.templatesDir = templatesDir || path.join(__dirname, '../templates');
     this.outputBaseDir = outputBaseDir || path.join(process.cwd(), 'generated');
     
     // Register Handlebars helpers
