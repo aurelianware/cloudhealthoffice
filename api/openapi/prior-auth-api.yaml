@@ -1,0 +1,766 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Prior Authorization API
+  version: 4.0.0
+  description: |
+    FHIR R4 Prior Authorization API with CDS Hooks for CMS-0057-F compliance.
+
+    Implements electronic prior authorization aligned with the Da Vinci Prior
+    Authorization Support (PAS) Implementation Guide and Coverage Requirements
+    Discovery (CRD) / Documentation Templates and Rules (DTR) for PARDD.
+
+    **CMS-0057-F requires** payers to support electronic prior auth submission,
+    status inquiry, and real-time coverage requirements discovery by January 1, 2027.
+
+    **Key Capabilities:**
+    - FHIR Claim-based prior auth submission (replaces X12 278)
+    - Real-time auth status inquiry via ClaimResponse
+    - CDS Hooks for coverage requirements discovery (CRD)
+    - Bidirectional X12 278 ↔ FHIR mapping
+    - SLA tracking (urgent: 24h, standard: 7 days per CMS timelines)
+    - Clinical attachment support (DocumentReference, Binary)
+    - Clearinghouse packaging for hybrid X12/FHIR workflows
+    - Decision timeline audit trail
+
+    **References:**
+    - CMS-0057-F Final Rule (Prior Authorization Requirements)
+    - Da Vinci PAS (Prior Authorization Support) IG
+    - Da Vinci CRD (Coverage Requirements Discovery) IG
+    - Da Vinci DTR (Documentation Templates and Rules) IG
+    - CDS Hooks Specification v2.0
+    - X12 278 Health Care Services Review
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/fhir/r4
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/fhir/r4
+    description: Sandbox
+  - url: http://localhost:3000/fhir/r4
+    description: Local development
+
+security:
+  - smart_on_fhir: [user/Claim.write, user/ClaimResponse.read]
+
+tags:
+  - name: Prior Authorization
+    description: Submit and check prior authorization requests
+  - name: CDS Hooks
+    description: Real-time coverage requirements discovery (CRD/DTR)
+  - name: Attachments
+    description: Clinical documentation attachments
+  - name: X12 Mapping
+    description: Bidirectional X12 278 ↔ FHIR conversion
+  - name: SLA
+    description: Authorization decision SLA tracking
+
+paths:
+
+  # ── Submit Prior Auth ────────────────────────────────────
+
+  /Claim/$submit:
+    post:
+      operationId: submitPriorAuth
+      summary: Submit a prior authorization request
+      description: |
+        Submit a FHIR Claim resource with `use: preauthorization` to request
+        prior authorization. Replaces the X12 278 request workflow.
+
+        The payer processes the request and returns a ClaimResponse with the
+        authorization decision (approved, denied, pended for review).
+
+        If the request is pended, the response includes an `authorizationId`
+        for status polling and any requests for additional information (RFAI).
+      tags: [Prior Authorization]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: '#/components/schemas/PriorAuthRequest'
+            example:
+              resourceType: Claim
+              status: active
+              type:
+                coding:
+                  - system: "http://terminology.hl7.org/CodeSystem/claim-type"
+                    code: institutional
+              use: preauthorization
+              patient:
+                reference: "Patient/pat-12345"
+              created: "2026-02-16"
+              provider:
+                reference: "Practitioner/prov-npi-1234567890"
+              priority:
+                coding:
+                  - system: "http://terminology.hl7.org/CodeSystem/processpriority"
+                    code: normal
+              insurance:
+                - sequence: 1
+                  focal: true
+                  coverage:
+                    reference: "Coverage/cov-001"
+              diagnosis:
+                - sequence: 1
+                  diagnosisCodeableConcept:
+                    coding:
+                      - system: "http://hl7.org/fhir/sid/icd-10-cm"
+                        code: "M17.11"
+                        display: "Primary osteoarthritis, right knee"
+              item:
+                - sequence: 1
+                  productOrService:
+                    coding:
+                      - system: "http://www.ama-assn.org/go/cpt"
+                        code: "27447"
+                        display: "Total knee replacement"
+                  servicedDate: "2026-03-15"
+                  locationCodeableConcept:
+                    coding:
+                      - system: "https://www.cms.gov/Medicare/Coding/place-of-service-codes"
+                        code: "21"
+                        display: "Inpatient Hospital"
+                  quantity:
+                    value: 1
+              supportingInfo:
+                - sequence: 1
+                  category:
+                    coding:
+                      - code: "info"
+                  valueString: "Patient has failed conservative treatment including 6 months PT and NSAIDs"
+      responses:
+        '200':
+          description: Authorization decision
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/PriorAuthResponse'
+              examples:
+                approved:
+                  summary: Approved
+                  value:
+                    resourceType: ClaimResponse
+                    id: "auth-resp-001"
+                    status: active
+                    type:
+                      coding: [{ system: "http://terminology.hl7.org/CodeSystem/claim-type", code: institutional }]
+                    use: preauthorization
+                    patient:
+                      reference: "Patient/pat-12345"
+                    created: "2026-02-16T10:30:00Z"
+                    insurer:
+                      reference: "Organization/payer-001"
+                    outcome: complete
+                    disposition: "Authorized"
+                    preAuthRef: "AUTH-2026-00456"
+                    preAuthPeriod:
+                      start: "2026-03-01"
+                      end: "2026-06-01"
+                    item:
+                      - itemSequence: 1
+                        adjudication:
+                          - category:
+                              coding: [{ code: "submitted" }]
+                            reason:
+                              coding: [{ code: "approved", display: "Approved" }]
+                pended:
+                  summary: Pended for review
+                  value:
+                    resourceType: ClaimResponse
+                    id: "auth-resp-002"
+                    status: active
+                    use: preauthorization
+                    outcome: queued
+                    disposition: "Pended — additional clinical documentation required"
+                    preAuthRef: "AUTH-2026-00457"
+                    extension:
+                      - url: "https://cloudhealthoffice.com/fhir/ext/rfai"
+                        valueString: "Please provide operative report and PT notes"
+        '400':
+          description: Invalid request
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/OperationOutcome'
+
+  # ── Check Auth Status ────────────────────────────────────
+
+  /ClaimResponse/{authorizationId}:
+    get:
+      operationId: getAuthorizationStatus
+      summary: Check prior authorization status
+      description: |
+        Poll for the status of a pending authorization request.
+        Returns the current ClaimResponse with decision status,
+        any RFAI (request for additional information), and SLA timeline.
+      tags: [Prior Authorization]
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "AUTH-2026-00457"
+      responses:
+        '200':
+          description: Current authorization status
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/PriorAuthResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Search Authorizations ────────────────────────────────
+
+  /ClaimResponse:
+    get:
+      operationId: searchAuthorizations
+      summary: Search prior authorizations
+      description: |
+        Search for prior authorizations by patient, provider, status, or date.
+        CMS-0057-F requires payers to make authorization status available
+        to both providers and patients.
+      tags: [Prior Authorization]
+      parameters:
+        - name: patient
+          in: query
+          schema:
+            type: string
+          example: "Patient/pat-12345"
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          schema:
+            type: string
+            enum: [complete, queued, partial, error]
+        - name: created
+          in: query
+          schema:
+            type: string
+          description: Date range filter
+        - name: _count
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Bundle of ClaimResponse resources
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/Bundle'
+
+  # ── CDS Hooks — Coverage Requirements Discovery ──────────
+
+  /cds-services:
+    get:
+      operationId: getCDSServices
+      summary: CDS Hooks service discovery
+      description: |
+        Returns the list of available CDS Hooks services.
+        Used by EHR systems to discover what decision support
+        is available during the ordering workflow.
+      tags: [CDS Hooks]
+      security: []
+      responses:
+        '200':
+          description: CDS service catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      type: object
+              example:
+                services:
+                  - id: "prior-auth-crd"
+                    hook: "order-sign"
+                    title: "Coverage Requirements Discovery"
+                    description: "Check if prior authorization is required for the ordered service"
+                    prefetch:
+                      patient: "Patient/{{context.patientId}}"
+                      coverage: "Coverage?patient={{context.patientId}}&status=active"
+                  - id: "prior-auth-check"
+                    hook: "appointment-book"
+                    title: "Prior Auth Pre-Check"
+                    description: "Verify prior authorization before scheduling"
+
+  /cds-services/prior-auth-crd:
+    post:
+      operationId: coverageRequirementsDiscovery
+      summary: Check if prior auth is required (CRD)
+      description: |
+        CDS Hooks endpoint for Coverage Requirements Discovery.
+        Called by the EHR during the `order-sign` hook to determine
+        if the ordered service requires prior authorization.
+
+        Returns CDS Cards with:
+        - Whether prior auth is required
+        - What documentation is needed (DTR link)
+        - Estimated approval timeline
+        - Alternative services that don't require auth
+      tags: [CDS Hooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CDSHookRequest'
+            example:
+              hook: "order-sign"
+              hookInstance: "d1577c69-dfbe-44ad-ba6d-3e05e953b2ea"
+              context:
+                userId: "Practitioner/prov-npi-1234567890"
+                patientId: "pat-12345"
+                draftOrders:
+                  resourceType: Bundle
+                  entry:
+                    - resource:
+                        resourceType: ServiceRequest
+                        code:
+                          coding:
+                            - system: "http://www.ama-assn.org/go/cpt"
+                              code: "27447"
+                              display: "Total knee replacement"
+                        subject:
+                          reference: "Patient/pat-12345"
+              prefetch:
+                patient:
+                  resourceType: Patient
+                  id: "pat-12345"
+                coverage:
+                  resourceType: Bundle
+                  entry:
+                    - resource:
+                        resourceType: Coverage
+                        id: "cov-001"
+                        subscriberId: "MBR-2024-001"
+      responses:
+        '200':
+          description: CDS Hook response with cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CDSHookResponse'
+              example:
+                cards:
+                  - uuid: "card-pa-001"
+                    summary: "Prior authorization required for CPT 27447"
+                    detail: "Total knee replacement requires prior authorization under this plan. Estimated review time: 5 business days."
+                    indicator: warning
+                    source:
+                      label: "Cloud Health Office"
+                      url: "https://cloudhealthoffice.com"
+                    suggestions:
+                      - label: "Submit prior authorization"
+                        actions:
+                          - type: create
+                            description: "Create prior auth request"
+                            resource:
+                              resourceType: Task
+                              intent: proposal
+                              code:
+                                coding:
+                                  - code: "prior-auth"
+                    links:
+                      - label: "Complete DTR questionnaire"
+                        url: "https://portal.cloudhealthoffice.com/dtr/questionnaire/knee-replacement"
+                        type: smart
+                      - label: "View coverage policy"
+                        url: "https://portal.cloudhealthoffice.com/policies/joint-replacement"
+                        type: absolute
+
+  # ── Attachments ──────────────────────────────────────────
+
+  /DocumentReference:
+    post:
+      operationId: submitAttachment
+      summary: Submit clinical documentation for prior auth
+      description: |
+        Submit supporting clinical documentation (operative reports,
+        PT notes, imaging, lab results) as a FHIR DocumentReference
+        linked to an existing prior authorization request.
+      tags: [Attachments]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              type: object
+            example:
+              resourceType: DocumentReference
+              status: current
+              type:
+                coding:
+                  - system: "http://loinc.org"
+                    code: "11506-3"
+                    display: "Progress note"
+              subject:
+                reference: "Patient/pat-12345"
+              context:
+                related:
+                  - reference: "ClaimResponse/AUTH-2026-00457"
+              content:
+                - attachment:
+                    contentType: "application/pdf"
+                    url: "Binary/att-001"
+                    title: "Physical Therapy Progress Notes"
+                    creation: "2026-02-10"
+      responses:
+        '201':
+          description: Attachment stored and linked to authorization
+
+  # ── X12 278 Mapping ──────────────────────────────────────
+
+  /x12/278/to-fhir:
+    post:
+      operationId: mapX12ToFhir
+      summary: Convert X12 278 to FHIR prior auth
+      description: |
+        Converts an inbound X12 278 Health Care Services Review
+        request to a FHIR Claim resource. Used for clearinghouse
+        integration and hybrid X12/FHIR workflows.
+      tags: [X12 Mapping]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/X12_278_Request'
+            example:
+              transactionSetId: "278"
+              controlNumber: "123456789"
+              submitterName: "ABC Medical Group"
+              submitterIdentifier: "1234567890"
+              receiverName: "Cloud Health Office"
+              receiverIdentifier: "9876543210"
+              subscriberId: "MBR-2024-001"
+              patientLastName: "Smith"
+              patientFirstName: "Jane"
+              patientDob: "1985-03-15"
+              serviceType: "surgical"
+              procedureCode: "27447"
+              procedureCodeQualifier: "HC"
+              diagnosisCode: "M17.11"
+              facilityCode: "21"
+              requestDate: "2026-02-16"
+              serviceFromDate: "2026-03-15"
+              serviceToDate: "2026-03-15"
+              quantity: 1
+              certificationAction: "AR"
+      responses:
+        '200':
+          description: Mapped FHIR Claim resource
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/PriorAuthRequest'
+
+  /x12/278/from-fhir:
+    post:
+      operationId: mapFhirToX12
+      summary: Convert FHIR prior auth response to X12 278
+      description: |
+        Converts a FHIR ClaimResponse back to X12 278 format
+        for clearinghouse transmission. Used for outbound responses
+        to providers who submit via X12.
+      tags: [X12 Mapping]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: '#/components/schemas/PriorAuthResponse'
+      responses:
+        '200':
+          description: X12 278 response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/X12_278_Response'
+
+  # ── SLA Tracking ─────────────────────────────────────────
+
+  /prior-auth-sla/{authorizationId}:
+    get:
+      operationId: getSlaStatus
+      summary: Get authorization decision SLA status
+      description: |
+        Returns the SLA timeline for an authorization request.
+        CMS-0057-F mandates: urgent requests within 24 hours,
+        standard requests within 7 calendar days.
+      tags: [SLA]
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SLA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriorAuthSLA'
+              example:
+                authorizationId: "AUTH-2026-00457"
+                priority: "standard"
+                submittedAt: "2026-02-16T10:00:00Z"
+                slaDeadline: "2026-02-23T10:00:00Z"
+                hoursRemaining: 168
+                hoursElapsed: 0.5
+                isCompliant: true
+                status: "pending_review"
+
+components:
+  schemas:
+    PriorAuthRequest:
+      type: object
+      description: FHIR Claim with use=preauthorization
+      properties:
+        resourceType:
+          type: string
+          const: Claim
+        status:
+          type: string
+        type:
+          type: object
+        use:
+          type: string
+          const: preauthorization
+        patient:
+          type: object
+        created:
+          type: string
+        provider:
+          type: object
+        priority:
+          type: object
+        insurance:
+          type: array
+        diagnosis:
+          type: array
+        item:
+          type: array
+        supportingInfo:
+          type: array
+
+    PriorAuthResponse:
+      type: object
+      description: FHIR ClaimResponse with authorization decision
+      properties:
+        resourceType:
+          type: string
+          const: ClaimResponse
+        id:
+          type: string
+        status:
+          type: string
+        use:
+          type: string
+          const: preauthorization
+        patient:
+          type: object
+        created:
+          type: string
+        insurer:
+          type: object
+        outcome:
+          type: string
+          enum: [complete, queued, partial, error]
+        disposition:
+          type: string
+        preAuthRef:
+          type: string
+          description: Authorization number
+        preAuthPeriod:
+          type: object
+          properties:
+            start:
+              type: string
+            end:
+              type: string
+
+    CDSHookRequest:
+      type: object
+      properties:
+        hook:
+          type: string
+          enum: [order-sign, order-select, appointment-book]
+        hookInstance:
+          type: string
+          format: uuid
+        context:
+          type: object
+          properties:
+            userId:
+              type: string
+            patientId:
+              type: string
+            draftOrders:
+              type: object
+            appointments:
+              type: object
+        prefetch:
+          type: object
+
+    CDSHookResponse:
+      type: object
+      properties:
+        cards:
+          type: array
+          items:
+            type: object
+            properties:
+              uuid:
+                type: string
+              summary:
+                type: string
+              detail:
+                type: string
+              indicator:
+                type: string
+                enum: [info, warning, critical]
+              source:
+                type: object
+              suggestions:
+                type: array
+              links:
+                type: array
+
+    X12_278_Request:
+      type: object
+      properties:
+        transactionSetId:
+          type: string
+        controlNumber:
+          type: string
+        submitterName:
+          type: string
+        submitterIdentifier:
+          type: string
+        subscriberId:
+          type: string
+        patientLastName:
+          type: string
+        patientFirstName:
+          type: string
+        patientDob:
+          type: string
+        procedureCode:
+          type: string
+        diagnosisCode:
+          type: string
+        facilityCode:
+          type: string
+        requestDate:
+          type: string
+        serviceFromDate:
+          type: string
+        certificationAction:
+          type: string
+
+    X12_278_Response:
+      type: object
+      properties:
+        transactionSetId:
+          type: string
+        controlNumber:
+          type: string
+        certificationAction:
+          type: string
+          enum: [A1, A2, A3, A4, A6, CT]
+          description: "A1=Approved, A2=Approved with mods, A3=Denied, A4=Pended, A6=Modified, CT=Contact payer"
+        authorizationNumber:
+          type: string
+        effectiveDateRange:
+          type: object
+        reviewDecisionReason:
+          type: string
+
+    PriorAuthSLA:
+      type: object
+      properties:
+        authorizationId:
+          type: string
+        priority:
+          type: string
+          enum: [urgent, standard]
+        submittedAt:
+          type: string
+          format: date-time
+        slaDeadline:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        hoursRemaining:
+          type: number
+        hoursElapsed:
+          type: number
+        isCompliant:
+          type: boolean
+        status:
+          type: string
+          enum: [pending_review, approved, denied, pended_rfai, expired]
+
+    Bundle:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: Bundle
+        type:
+          type: string
+        total:
+          type: integer
+        entry:
+          type: array
+
+    OperationOutcome:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: OperationOutcome
+        issue:
+          type: array
+
+  responses:
+    NotFound:
+      description: Authorization not found
+      content:
+        application/fhir+json:
+          schema:
+            $ref: '#/components/schemas/OperationOutcome'
+
+  securitySchemes:
+    smart_on_fhir:
+      type: oauth2
+      description: SMART on FHIR for provider EHR integration
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.cloudhealthoffice.com/oauth2/authorize
+          tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
+          scopes:
+            user/Claim.write: Submit prior authorization requests
+            user/Claim.read: Read authorization requests
+            user/ClaimResponse.read: Read authorization decisions
+            user/DocumentReference.write: Submit clinical attachments
+            openid: OpenID Connect
+            fhirUser: FHIR user identity
