@@ -35,7 +35,7 @@ This platform serves:
 ### Core Capabilities
 
 - FHIR R4 APIs (Patient Access, Provider Access, Prior Authorization, Payer-to-Payer)
-- X12 EDI (270/271, 275, 276/277, 278, 835, 837)
+- X12 EDI (270/271, 275, 276/277, 278, 834, 835, 837)
 - Multi-clearinghouse support (Availity, Change Healthcare, Optum, Inovalon)
 - Azure Logic Apps OR Kubernetes multi-cloud deployment
 - Core system integration without core system replacement
