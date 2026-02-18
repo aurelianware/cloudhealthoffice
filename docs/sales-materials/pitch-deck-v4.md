@@ -778,8 +778,8 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 ### Documentation
 - **Quickstart Guide**: https://docs.cloudhealthoffice.com/quickstart
 - **API Documentation**: https://docs.cloudhealthoffice.com/api
-- **Architecture Overview**: [ARCHITECTURE.md](../ARCHITECTURE.md)
-- **Roadmap**: [ROADMAP-2026.md](../ROADMAP-2026.md)
+- **Architecture Overview**: [ARCHITECTURE.md](../../ARCHITECTURE.md)
+- **Roadmap**: [ROADMAP-2026.md](../features/ROADMAP-2026.md)
 
 ### Legal Documents
 - **Terms of Service**: https://cloudhealthoffice.com/legal/terms-of-service
