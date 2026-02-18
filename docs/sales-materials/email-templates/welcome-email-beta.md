@@ -25,29 +25,44 @@ As a Beta customer, you're part of an exclusive group pioneering the future of h
 🚀 YOUR ONBOARDING PLAN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Step 1: Access Your Credentials (ATTACHED)
+Step 1: Activate Your Secure Access
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Please see the attached PDF for your secure credentials:
+Your Cloud Health Office tenant has been provisioned. For security, credentials are never sent via email.
 
-📁 SFTP Credentials:
+📁 SFTP Access:
    • Host: sftp.cloudhealthoffice.com
    • Port: 22
-   • Username: [tenant-shortname]
-   • Password: [secure-password]
    • Inbound folder: /inbound/
    • Outbound folder: /outbound/
 
+**To set up SFTP credentials:**
+   1. Sign in to the portal: https://portal.cloudhealthoffice.com
+   2. Authenticate with your Azure AD account
+   3. Navigate to: Admin → Connectivity → SFTP
+   4. Generate your SFTP username and password (one-time secure view in portal)
+   5. Store credentials in your organization's secure vault (Azure Key Vault, 1Password, etc.)
+
 🌐 Portal Access:
    • URL: https://portal.cloudhealthoffice.com
-   • Login: Use your Azure AD credentials
+   • Login: Use your Azure AD credentials (SSO)
    • Tenant ID: [tenant-id]
 
-🔑 API Keys (for developers):
+🔑 API Access (for developers):
    • Base URL: https://api.cloudhealthoffice.com/v1
-   • API Key: [api-key]
    • Documentation: https://docs.cloudhealthoffice.com/api
 
-⚠️ Security Note: Store these credentials securely (e.g., Azure Key Vault, 1Password). Change the SFTP password within 7 days.
+**To obtain API credentials:**
+   1. In the portal, go to: Admin → Developers → API Access
+   2. Register your application and assign appropriate scopes
+   3. Generate API keys (displayed once in portal, never via email)
+   4. Store API keys securely in your vault
+
+⚠️ Security Best Practices:
+   • All credentials are generated and viewed only in the secure portal
+   • Enable MFA for all administrative users
+   • Rotate SFTP passwords every 90 days
+   • Use short-lived API tokens where possible
+   • Never share credentials via email or unencrypted channels
 
 
 Step 2: Run Your First Transaction Test (< 10 minutes)

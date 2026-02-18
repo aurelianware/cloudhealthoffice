@@ -70,6 +70,12 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 *Note: Professional tier subscription is $1,999/month ($23,988/year). Annual billing saves 10%: $21,589/year. The table above uses monthly billing for conservative estimation.*
 
+**Assumptions for this TCO model:**
+- **SaaS Model**: Cloud Health Office manages all EDI infrastructure; customer pays subscription only
+- **Azure Infrastructure**: Represents customer's own claims system/backend hosting costs (not Cloud Health Office costs)
+- **Implementation**: One-time self-service setup assistance ($5K)
+- **Professional Services**: Optional custom integration work (not required for standard onboarding)
+
 ---
 
 ## Total Cost of Ownership Analysis (3-Year)
@@ -82,6 +88,13 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | **Medium (200K members)** | $2,630,000 | $1,065,000 | $72,000 (Professional) | 93-97% |
 | **Large (500K members)** | $4,500,000 | $2,000,000 | $180,000 (Enterprise) | 91-96% |
 | **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $216,000 (Enterprise) | 95-97% |
+
+**Cloud Health Office Cost Calculation (3-Year):**
+- **Small (Starter)**: $5,389/year × 3 years + $5K implementation = $21,167 ≈ $19K (rounded, minimal additional costs)
+- **Medium (Professional)**: $21,589/year × 3 years + $5K implementation + optional services = $69,767 ≈ $72K
+- **Large/Enterprise**: $53,989/year × 3 years + $10K implementation + premium services = $171,967 ≈ $180K (Large), $216K (1M+ with higher transaction volume/services)
+
+These figures represent subscription fees plus typical implementation and optional professional services. Customer's own Azure infrastructure costs for claims systems are separate and not included (similar across all EDI platform options).
 
 ### Hidden Costs Avoided
 

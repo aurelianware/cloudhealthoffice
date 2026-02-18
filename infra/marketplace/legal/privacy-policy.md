@@ -192,7 +192,7 @@ System logs are retained as follows:
 
 - **Application logs**: 365 days (includes performance metrics, error logs, and operational data)
 - **Audit logs**: 7 years (includes access logs, PHI disclosure tracking, and security events)
-- **PHI is automatically masked** in all logs using sanitization functions to prevent log forging attacks
+- **Log sanitization**: Control characters (CR/LF) are stripped from log entries to mitigate log forging attacks; PHI redaction is applied within designated PHI-aware logging components
 
 ### 6.4 Data Deletion
 

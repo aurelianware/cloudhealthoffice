@@ -48,13 +48,12 @@ Use this streamlined checklist to track progress through the customer onboarding
 ### Tenant Provisioning (Automated)
 - [ ] SaaS tenant created in Cloud Health Office platform
 - [ ] Unique tenant ID assigned: __________________
-- [ ] SFTP account provisioned
-  - Username: [tenant-shortname]
-  - Password: [auto-generated, sent via encrypted PDF]
+- [ ] SFTP account provisioned (credentials generated via portal, not sent via email)
   - Host: sftp.cloudhealthoffice.com
+  - Credentials: Customer generates via secure portal
 - [ ] Portal access configured (Azure AD SSO)
-- [ ] API keys generated and delivered
-- [ ] Data Lake storage allocated (1TB included)
+- [ ] API key generation enabled in portal (customer-controlled)
+- [ ] Data Lake storage allocated (1TB included per tier; $50/TB/month overage applies to all tiers)
 - [ ] Service Bus topics created (attachments-in, rfai-requests, edi-278)
 - [ ] Application Insights workspace configured
 - [ ] Monitoring dashboard created
