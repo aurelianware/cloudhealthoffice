@@ -61,9 +61,9 @@ Phone: ___________________________________________________________________
 
 | Tier | Monthly Fee | Annual Fee (10% discount) | Payers Included | Transactions/Month |
 |------|-------------|---------------------------|-----------------|---------------------|
-| **Starter** | $499 | $5,389 | 1-3 | 10,000 |
-| **Professional** | $1,999 | $21,589 | 4-10 | 100,000 |
-| **Enterprise** | $4,999 | $53,989 | Unlimited | Unlimited |
+| **Starter** | $899 | $9,709 | 1-3 | 10,000 |
+| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 |
+| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited |
 | **Custom** | Custom Quote | Custom Quote | Unlimited | Unlimited |
 
 **Selected Tier**: ___________________  

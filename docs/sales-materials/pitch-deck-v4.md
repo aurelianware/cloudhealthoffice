@@ -172,15 +172,15 @@ npm run generate -- interactive --output my-config.json --generate
 
 | Tier | Monthly | Annual (10% off) | Payers | Transactions/Month | Best For |
 |------|---------|------------------|--------|---------------------|----------|
-| **Starter** | $499 | $5,389 | 1-3 | 10,000 | Small payers, pilots, evaluation |
-| **Professional** | $1,999 | $21,589 | 4-10 | 100,000 | Regional plans, production |
-| **Enterprise** | $4,999 | $53,989 | Unlimited | Unlimited | National plans, high volume |
+| **Starter** | $899 | $9,709 | 1-3 | 10,000 | Small payers, pilots, evaluation |
+| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 | Regional plans, production |
+| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited | National plans, high volume |
 | **Custom** | Quote | Quote | Unlimited | Unlimited | White-label, dedicated SLA |
 
 **Beta Launch Offer**: 50% discount for 90 days
-- Starter: $249/month
-- Professional: $999/month
-- Enterprise: $2,499/month
+- Starter: $449/month
+- Professional: $1,499/month
+- Enterprise: $3,249/month
 
 ### Overage Pricing
 
@@ -200,22 +200,24 @@ npm run generate -- interactive --output my-config.json --generate
 ✅ HIPAA Business Associate Agreement (BAA)  
 ✅ X12 EDI processing (837, 270/271, 275, 276/277, 278, 835, 834)  
 ✅ FHIR R4 APIs (Patient, Provider, Prior Auth, Payer-to-Payer)  
-✅ Azure-native infrastructure (Logic Apps, Service Bus, Storage)  
+✅ **All Azure infrastructure costs** (Logic Apps, Service Bus, Storage, Key Vault)  
 ✅ 7-year EDI archive retention  
 ✅ Application Insights monitoring  
 ✅ Managed security updates  
 ✅ Email support (response SLA varies by tier)
 
+**No hidden costs**: Subscription includes complete infrastructure - you pay one predictable price
+
 ### Cost Comparison (Annual TCO)
 
 | Vendor | Year 1 Cost | 3-Year TCO | vs. Cloud Health Office |
 |--------|-------------|------------|-------------------------|
-| **Cloud Health Office (Professional)** | **$21,589** | **$64,767** | — |
-| Custom Development | $1,560,000 | $3,180,000 | **49x more** |
-| Change Healthcare / Major Vendor | $505,000 | $1,065,000 | **16x more** |
-| Regional EDI Vendor | $180,000 | $540,000 | **8x more** |
+| **Cloud Health Office (Professional)** | **$32,389** | **$97,167** | — |
+| Custom Development | $1,560,000 | $3,180,000 | **33x more** |
+| Change Healthcare / Major Vendor | $505,000 | $1,065,000 | **11x more** |
+| Regional EDI Vendor | $180,000 | $540,000 | **6x more** |
 
-**Savings**: 85-94% cost reduction vs. alternatives
+**Savings**: 83-97% cost reduction vs. alternatives
 
 ---
 

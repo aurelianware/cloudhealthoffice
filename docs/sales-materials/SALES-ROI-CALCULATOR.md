@@ -62,19 +62,18 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 | Item | Year 1 | Year 2 | Year 3 | Total |
 |------|--------|--------|--------|-------|
 | Implementation (Self-Service) | $5,000 | — | — | $5,000 |
-| Professional Subscription | $23,988 | $23,988 | $23,988 | $71,964 |
+| Professional Subscription | $35,988 | $35,988 | $35,988 | $107,964 |
 | Professional Services (Optional) | $10,000 | $5,000 | $5,000 | $20,000 |
 | Support (Included) | $0 | $0 | $0 | $0 |
-| Azure Infrastructure | $12,000 | $12,000 | $12,000 | $36,000 |
 | **Annual Total** | **$50,988** | **$40,988** | **$40,988** | **$132,964** |
 
-*Note: Professional tier subscription is $1,999/month ($23,988/year). Annual billing saves 10%: $21,589/year. The table above uses monthly billing for conservative estimation.*
+*Note: Professional tier subscription is $2,999/month ($35,988/year). Annual billing saves 10%: $32,389/year. The table above uses monthly billing for conservative estimation. Subscription price includes all Azure infrastructure costs for Cloud Health Office EDI processing.*
 
-**Assumptions for this TCO model:**
-- **SaaS Model**: Cloud Health Office manages all EDI infrastructure; customer pays subscription only
-- **Azure Infrastructure**: Represents customer's own claims system/backend hosting costs (not Cloud Health Office costs)
+**Pricing Model:**
+- **SaaS Model**: Subscription includes ALL infrastructure costs (Azure compute, storage, Service Bus, Application Insights)
 - **Implementation**: One-time self-service setup assistance ($5K)
 - **Professional Services**: Optional custom integration work (not required for standard onboarding)
+- **Customer Azure Costs**: Only for customer's own claims system/backend (not included in Cloud Health Office subscription)
 
 ---
 
@@ -84,17 +83,18 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 | Organization Size | Custom Dev | Enterprise Vendor | Cloud Health Office | Savings |
 |-------------------|------------|-------------------|---------------------|-------------|
-| **Small (50K members)** | $1,500,000 | $500,000 | $19,000 (Starter) | 96-99% |
-| **Medium (200K members)** | $2,630,000 | $1,065,000 | $72,000 (Professional) | 93-97% |
-| **Large (500K members)** | $4,500,000 | $2,000,000 | $180,000 (Enterprise) | 91-96% |
-| **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $216,000 (Enterprise) | 95-97% |
+| **Small (50K members)** | $1,500,000 | $500,000 | $34,000 (Starter) | 93-98% |
+| **Medium (200K members)** | $2,630,000 | $1,065,000 | $107,000 (Professional) | 90-96% |
+| **Large (500K members)** | $4,500,000 | $2,000,000 | $221,000 (Enterprise) | 89-95% |
+| **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $265,000 (Enterprise) | 93-97% |
 
 **Cloud Health Office Cost Calculation (3-Year):**
-- **Small (Starter)**: $5,389/year × 3 years + $5K implementation = $21,167 ≈ $19K (rounded, minimal additional costs)
-- **Medium (Professional)**: $21,589/year × 3 years + $5K implementation + optional services = $69,767 ≈ $72K
-- **Large/Enterprise**: $53,989/year × 3 years + $10K implementation + premium services = $171,967 ≈ $180K (Large), $216K (1M+ with higher transaction volume/services)
+- **Small (Starter)**: $9,709/year × 3 years + $5K implementation = $34,127 ≈ $34K
+- **Medium (Professional)**: $32,389/year × 3 years + $5K implementation + optional services = $102,167 ≈ $107K (with some professional services)
+- **Large (Enterprise)**: $70,189/year × 3 years + $10K implementation + premium services = $220,567 ≈ $221K
+- **Enterprise (1M+)**: $70,189/year × 3 years + $15K implementation + extensive services = $265,567 ≈ $265K
 
-These figures represent subscription fees plus typical implementation and optional professional services. Customer's own Azure infrastructure costs for claims systems are separate and not included (similar across all EDI platform options).
+These figures represent ALL-IN subscription fees including Azure infrastructure costs, plus typical implementation and optional professional services. Customer's own Azure infrastructure costs for claims systems are separate and similar across all EDI platform options.
 
 ### Hidden Costs Avoided
 
@@ -290,15 +290,15 @@ Every month of delayed CMS-0057-F compliance carries risk:
 
 ### ROI Calculation Formulas
 
-**1. Platform Cost Savings**
+**2. Platform Cost Savings**
 
 ```
 Annual Platform Savings = Current EDI Spend - Cloud Health Office Subscription
 
 Example:
-  Current: $150,000/year
-  Cloud Health Office Professional: $36,000/year
-  Savings: $114,000/year
+  Current: $200,000/year
+  Cloud Health Office Professional: $35,988/year
+  Savings: $164,012/year
 ```
 
 **2. Labor Efficiency Savings**
@@ -355,13 +355,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $69,000 |
+| Platform Savings | $64,000 |
 | Labor Efficiency | $560,000 |
 | Call Center Reduction | $80,000 |
 | Risk Mitigation | $500,000 |
-| **Total Benefit** | **$1,209,000** |
-| **Cloud Health Office Investment** | **$5,988** (Starter: $499/month) |
-| **ROI** | **20,185%** |
+| **Total Benefit** | **$1,204,000** |
+| **Cloud Health Office Investment** | **$10,788** (Starter: $899/month) |
+| **ROI** | **11,162%** |
 
 #### Scenario B: Mid-Market TPA (300,000 members managed)
 
@@ -374,13 +374,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $176,000 |
+| Platform Savings | $164,000 |
 | Labor Efficiency | $2,520,000 |
 | Call Center Reduction | $360,000 |
 | Risk Mitigation | $1,500,000 |
-| **Total Benefit** | **$4,556,000** |
-| **Cloud Health Office Investment** | **$23,988** (Professional: $1,999/month) |
-| **ROI** | **18,994%** |
+| **Total Benefit** | **$4,544,000** |
+| **Cloud Health Office Investment** | **$35,988** (Professional: $2,999/month) |
+| **ROI** | **12,627%** |
 
 #### Scenario C: Large Medicaid MCO (800,000 members)
 
@@ -393,13 +393,13 @@ Example:
 
 | Benefit Category | Annual Value |
 |------------------|--------------|
-| Platform Savings | $440,000 |
+| Platform Savings | $422,000 |
 | Labor Efficiency | $7,000,000 |
 | Call Center Reduction | $1,000,000 |
 | Risk Mitigation | $3,000,000 |
-| **Total Benefit** | **$11,440,000** |
-| **Cloud Health Office Investment** | **$59,988** (Enterprise: $4,999/month) |
-| **ROI** | **19,074%** |
+| **Total Benefit** | **$11,422,000** |
+| **Cloud Health Office Investment** | **$77,988** (Enterprise: $6,499/month) |
+| **ROI** | **14,648%** |
 
 ---
 
@@ -420,14 +420,16 @@ Example:
 
 For organizations seeking CMS-0057-F compliance with minimal investment and maximum ROI:
 
-1. **Start with Starter tier** ($499/month or $5,389/year) for evaluation and small payers (1-3 payers, 10K transactions/month)
-2. **Upgrade to Professional** ($1,999/month or $21,589/year) for production and mid-market (4-10 payers, 100K transactions/month)
-3. **Consider Enterprise** ($4,999/month or $53,989/year) for high-volume, unlimited payers/transactions, or dedicated requirements
+1. **Start with Starter tier** ($899/month or $9,709/year) for evaluation and small payers (1-3 payers, 10K transactions/month)
+2. **Upgrade to Professional** ($2,999/month or $32,389/year) for production and mid-market (4-10 payers, 100K transactions/month)
+3. **Consider Enterprise** ($6,499/month or $70,189/year) for high-volume, unlimited payers/transactions, or dedicated requirements
 
 **Beta Launch Special**: 50% discount for 90 days for first 10 customers
-- Starter: $249/month
-- Professional: $999/month
-- Enterprise: $2,499/month
+- Starter: $449/month
+- Professional: $1,499/month
+- Enterprise: $3,249/month
+
+**All subscription tiers include Azure infrastructure costs** - no separate cloud charges
 
 **Payback Period**: Less than 1 month for most organizations
 
