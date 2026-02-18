@@ -144,9 +144,9 @@ Customer shall pay Provider the subscription fees based on the selected tier:
 
 | Tier | Monthly Price | Annual Price (10% discount) | Included Payers | Included Transactions/Month |
 |------|---------------|------------------------------|-----------------|------------------------------|
-| **Starter** | $499 | $5,389 | 1-3 | 10,000 |
-| **Professional** | $1,999 | $21,589 | 4-10 | 100,000 |
-| **Enterprise** | $4,999 | $53,989 | Unlimited | Unlimited |
+| **Starter** | $899 | $9,709 | 1-3 | 10,000 |
+| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 |
+| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited |
 | **Custom** | Contact Sales | Contact Sales | Unlimited | Unlimited |
 
 Prices are exclusive of taxes. All amounts in USD.
