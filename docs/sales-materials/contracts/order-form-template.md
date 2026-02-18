@@ -70,14 +70,14 @@ Phone: ___________________________________________________________________
 **Billing Frequency**: ☐ Monthly  ☐ Annual  
 **Subscription Fee**: $____________ per [month/year]
 
-### Overage Charges (Starter & Professional Tiers Only)
+### Overage Charges
 
 | Overage Type | Rate | Billing |
 |--------------|------|---------|
 | Transaction Overage | $0.05 per transaction | Monthly in arrears |
 | Storage Overage | $50 per TB/month | Monthly in arrears |
 
-**Note**: Enterprise tier includes unlimited transactions and 5TB storage (no overage charges).
+**Note**: Enterprise tier includes unlimited transactions (no transaction overages). Storage overages of $50/TB/month apply to all tiers (including Enterprise) for storage beyond the included 1TB.
 
 ### Optional Add-Ons
 
@@ -315,7 +315,7 @@ Date: ___________________________________________________________________
 **Created Date**: February 17, 2026  
 **Last Updated**: February 17, 2026  
 **Approved By**: Legal Department  
-**File Location**: sales-materials/contracts/order-form-template.md
+**File Location**: docs/sales-materials/contracts/order-form-template.md
 
 ---
 

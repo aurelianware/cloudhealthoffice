@@ -8,9 +8,13 @@
 
 ## 1. Definitions
 
+**"Provider"** means Aurelianware and its Cloud Health Office platform, the entity providing the Services under this Agreement.
+
 **"Service"** means the Cloud Health Office SaaS platform, including all EDI transaction processing, FHIR R4 APIs, Logic Apps workflows, Azure infrastructure, monitoring, and support services provided by Provider.
 
 **"Customer"** means the healthcare organization, health plan, third-party administrator, or other entity that has entered into a subscription agreement with Provider to use the Services.
+
+**"Party"** means either Provider or Customer individually. **"Parties"** means Provider and Customer collectively.
 
 **"PHI"** has the meaning set forth in the Health Insurance Portability and Accountability Act of 1996 and its implementing regulations at 45 CFR §160.103 (collectively, "HIPAA").
 
@@ -156,7 +160,7 @@ Prices are exclusive of taxes. All amounts in USD.
 
 **Storage Overages:**
 - Each tier includes 1TB of Data Lake storage
-- Additional storage is billed at $50/TB/month (prorated daily)
+- Additional storage beyond 1TB is billed at $50/TB/month (prorated daily) for all tiers
 - Storage is calculated as average daily usage over the billing period
 
 ### 4.3 Payment Terms
@@ -348,7 +352,7 @@ Each Party agrees to maintain the confidentiality of the other Party's Confident
 - Customer Data (including PHI)
 - Business strategies, financial information, and patient/member statistics
 - Configuration details, integration specifications, and trading partner information
-- Terms of these Terms (except as required by law)
+- The terms of this Agreement (except as required by law)
 
 ### 9.2 Exceptions
 

@@ -190,10 +190,9 @@ npm run generate -- interactive --output my-config.json --generate
 
 **Storage** (all tiers):
 - 1TB included per tier
-- $50/TB/month for additional storage
-- Enterprise includes 5TB
+- $50/TB/month for additional storage beyond 1TB (applies to all tiers including Enterprise)
 
-**No Overages on Enterprise**: Unlimited transactions, 5TB storage included
+**No Transaction Overages on Enterprise**: Unlimited transactions included
 
 ### What's Included (All Tiers)
 
@@ -783,7 +782,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 ### Legal Documents
 - **Terms of Service**: https://cloudhealthoffice.com/legal/terms-of-service
 - **Privacy Policy**: https://cloudhealthoffice.com/legal/privacy-policy
-- **BAA Template**: [master-services-agreement-template.md](../docs/sales-materials/contracts/master-services-agreement-template.md)
+- **BAA Template**: [master-services-agreement-template.md](./contracts/master-services-agreement-template.md)
 - **SLA**: https://cloudhealthoffice.com/legal/sla
 
 ### Sales Materials
