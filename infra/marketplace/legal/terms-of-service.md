@@ -8,7 +8,7 @@
 
 ## 1. Definitions
 
-**"Provider"** means Aurelianware and its Cloud Health Office platform, the entity providing the Services under this Agreement.
+**"Provider"** means Aurelianware, Inc and its Cloud Health Office platform, the entity providing the Services under this Agreement.
 
 **"Service"** means the Cloud Health Office SaaS platform, including all EDI transaction processing, FHIR R4 APIs, Logic Apps workflows, Azure infrastructure, monitoring, and support services provided by Provider.
 
