@@ -95,7 +95,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
@@ -160,7 +160,7 @@ jobs:
 
     steps:
       - name: Run Snyk container scan
-        uses: snyk/actions/docker@master
+        uses: snyk/actions/docker@0.4.0
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
