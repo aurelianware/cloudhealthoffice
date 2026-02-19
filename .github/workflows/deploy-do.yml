@@ -46,13 +46,19 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy Site Manifests
+      - name: Deploy Portal Manifests
         run: |
           # Apply ClusterIssuer (requires cert-manager installed)
-          kubectl apply -f k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
-          
-          # Deploy Application
-          kubectl apply -f k8s/mongodb-deployment.yaml
-          kubectl apply -f k8s/member-service-deployment.yaml
-          kubectl apply -f site/k8s/site-deployment.yaml
-          kubectl apply -f k8s/site-ingress.yaml
+          kubectl apply -f infra/k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
+
+          # Core infrastructure
+          kubectl apply -f infra/k8s/namespaces.yaml
+          kubectl apply -f infra/k8s/mongodb-deployment.yaml
+          kubectl apply -f infra/k8s/member-service-deployment.yaml
+
+          # Portal application (Blazor Server – replaces static site)
+          kubectl apply -f src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml
+
+          # Ingress – main domain + portal subdomain both route to portal service
+          kubectl apply -f infra/k8s/site-ingress.yaml
+          kubectl apply -f infra/k8s/portal-ingress.yaml

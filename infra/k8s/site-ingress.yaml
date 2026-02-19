@@ -1,19 +1,31 @@
 ---
-# Ingress for Cloud Health Office Website (Static Site)
+# Ingress for Cloud Health Office – main domain routed to Blazor portal
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: site-ingress
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
-    app: site
+    app: portal
     component: frontend
   annotations:
-    # NGINX Ingress Controller annotations
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Blazor Server – SignalR WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "portal"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # Sticky sessions required for Blazor Server circuit affinity
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "portal-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-samesite: "Lax"
 spec:
   ingressClassName: nginx
   tls:
@@ -29,7 +41,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: site
+            name: portal
             port:
               number: 80
   - host: www.cloudhealthoffice.com
@@ -39,6 +51,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: site
+            name: portal
             port:
               number: 80
