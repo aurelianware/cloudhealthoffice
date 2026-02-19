@@ -36,13 +36,18 @@ jobs:
       - name: Run npm audit
         run: |
           echo "## NPM Security Audit" >> $GITHUB_STEP_SUMMARY
-          npm audit --production --audit-level=moderate || true
-          npm audit --json > npm-audit.json || true
+          npm audit --production --audit-level=moderate
+          npm audit --json > npm-audit.json
 
       - name: Check claims-scrubbing-service
         run: |
-          cd services/claims-scrubbing-service
-          npm audit --production --audit-level=moderate || true
+          if [ -d "services/claims-scrubbing-service" ]; then
+            cd services/claims-scrubbing-service
+            npm ci
+            npm audit --production --audit-level=moderate
+          else
+            echo "⚠️  claims-scrubbing-service not found, skipping"
+          fi
 
       - name: Upload audit results
         uses: actions/upload-artifact@v4
@@ -108,20 +113,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy vulnerability scanner in fs mode
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+          
+      - name: Generate Trivy report
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
 
   secret-scan:
     name: Secret Scanning
