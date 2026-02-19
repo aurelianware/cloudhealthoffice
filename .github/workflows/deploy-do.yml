@@ -59,6 +59,9 @@ jobs:
           # Portal application (Blazor Server – replaces static site)
           kubectl apply -f src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml
 
+          # Remove old static site ingress from cho-svcs namespace (conflicts with new portal ingress)
+          kubectl delete ingress site-ingress -n cho-svcs --ignore-not-found=true
+
           # Ingress – main domain + portal subdomain both route to portal service
           kubectl apply -f infra/k8s/site-ingress.yaml
           kubectl apply -f infra/k8s/portal-ingress.yaml
