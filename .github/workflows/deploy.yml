@@ -204,28 +204,93 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Retrieve Secrets from Key Vault (with fallback to GitHub Secrets)
+      - name: Retrieve Secrets from Vault (HashiCorp or Azure Key Vault)
         id: get-secrets
         shell: bash
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_ROLE_ID: ${{ vars.VAULT_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
         run: |
-          # Exit codes: 0 = success (using Key Vault or GitHub Secrets)
-
-          # Deployment Key Vault naming pattern: {baseName}-deploy-kv
-          KV_NAME="${{ env.BASE_NAME }}-deploy-kv"
+          # Exit codes: 0 = success (using HashiCorp Vault, Azure Key Vault, or GitHub Secrets)
 
           echo "================================================"
           echo "Secret Retrieval Strategy"
           echo "================================================"
-          echo "Priority 1: Azure Key Vault ($KV_NAME)"
-          echo "Priority 2: GitHub Secrets"
-          echo "Priority 3: Secure defaults (non-production use only)"
+          echo "Priority 1: HashiCorp Vault (multi-cloud)"
+          echo "Priority 2: Azure Key Vault (Azure-only)"
+          echo "Priority 3: GitHub Secrets"
+          echo "Priority 4: Secure defaults (non-production use only)"
           echo ""
+
+          # Try HashiCorp Vault first (if configured)
+          if [[ -n "$VAULT_ADDR" && -n "$VAULT_ROLE_ID" && -n "$VAULT_SECRET_ID" ]]; then
+            echo "🔐 HashiCorp Vault configured - attempting retrieval..."
+            
+            # Install Vault CLI
+            if ! command -v vault &> /dev/null; then
+              echo "Installing Vault CLI..."
+              wget -q https://releases.hashicorp.com/vault/1.15.4/vault_1.15.4_linux_amd64.zip
+              unzip -q vault_1.15.4_linux_amd64.zip
+              sudo mv vault /usr/local/bin/
+              rm vault_1.15.4_linux_amd64.zip
+            fi
+            
+            # Login to Vault using AppRole
+            echo "Authenticating with HashiCorp Vault..."
+            VAULT_TOKEN=$(vault write -field=token auth/approle/login \
+              role_id="$VAULT_ROLE_ID" \
+              secret_id="$VAULT_SECRET_ID" 2>/dev/null || echo "")
+            
+            if [ -n "$VAULT_TOKEN" ]; then
+              export VAULT_TOKEN
+              
+              # Retrieve secrets from Vault
+              SFTP_HOST=$(vault kv get -field=host secret/cloudhealthoffice/sftp/default 2>/dev/null || echo "")
+              SFTP_USERNAME=$(vault kv get -field=username secret/cloudhealthoffice/sftp/default 2>/dev/null || echo "")
+              SFTP_PASSWORD=$(vault kv get -field=password secret/cloudhealthoffice/sftp/default 2>/dev/null || echo "")
+              
+              if [[ -n "$SFTP_HOST" && -n "$SFTP_USERNAME" && -n "$SFTP_PASSWORD" ]]; then
+                echo "✓ Secrets retrieved from HashiCorp Vault"
+                echo "USING_VAULT=hashicorp" >> "$GITHUB_ENV"
+                
+                # Mask and export
+                echo "::add-mask::$SFTP_HOST"
+                echo "::add-mask::$SFTP_USERNAME"
+                echo "::add-mask::$SFTP_PASSWORD"
+                
+                {
+                  echo "SFTP_HOST=$SFTP_HOST"
+                  echo "SFTP_USERNAME=$SFTP_USERNAME"
+                  echo "SFTP_PASSWORD=$SFTP_PASSWORD"
+                } >> "$GITHUB_ENV"
+                
+                echo "✅ Using HashiCorp Vault for secret management"
+                exit 0
+              else
+                echo "⚠️  Vault authentication succeeded but secrets not found"
+                echo "   Falling back to Azure Key Vault or GitHub Secrets"
+              fi
+            else
+              echo "⚠️  Failed to authenticate with HashiCorp Vault"
+              echo "   Falling back to Azure Key Vault or GitHub Secrets"
+            fi
+          else
+            echo "ℹ️  HashiCorp Vault not configured (missing VAULT_ADDR, VAULT_ROLE_ID, or VAULT_SECRET_ID)"
+          fi
+
+          # Try Azure Key Vault (Azure-only fallback)
+          # Deployment Key Vault naming pattern: {baseName}-deploy-kv
+          KV_NAME="${{ env.BASE_NAME }}-deploy-kv"
+          
+          echo ""
+          echo "🔑 Checking Azure Key Vault: $KV_NAME"
 
           # Check if Key Vault exists
           if ! az keyvault show --name "$KV_NAME" &>/dev/null; then
-            echo "⚠️  Key Vault '$KV_NAME' not found"
+            echo "⚠️  Azure Key Vault '$KV_NAME' not found"
             echo "   Using GitHub Secrets or secure defaults"
-            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            echo "USING_VAULT=none" >> "$GITHUB_ENV"
 
             # Use GitHub Secrets if available, otherwise defaults
             SFTP_HOST="${{ secrets.SFTP_HOST }}"
@@ -262,11 +327,11 @@ jobs:
             exit 0
           fi
 
-          echo "✓ Key Vault found: $KV_NAME"
+          echo "✓ Azure Key Vault found: $KV_NAME"
           echo ""
 
-          # Retrieve SFTP secrets from Key Vault
-          echo "Retrieving SFTP credentials from Key Vault..."
+          # Retrieve SFTP secrets from Azure Key Vault
+          echo "Retrieving SFTP credentials from Azure Key Vault..."
 
           # Try to retrieve all secrets
           SFTP_HOST=$(az keyvault secret show --vault-name "$KV_NAME" --name sftp-host --query value -o tsv 2>/dev/null || echo "")
@@ -275,8 +340,8 @@ jobs:
 
           # Check if all secrets were retrieved
           if [[ -z "$SFTP_HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
-            echo "⚠️  Not all secrets found in Key Vault - using GitHub Secrets fallback"
-            echo "USING_KEY_VAULT=false" >> "$GITHUB_ENV"
+            echo "⚠️  Not all secrets found in Azure Key Vault - using GitHub Secrets fallback"
+            echo "USING_VAULT=none" >> "$GITHUB_ENV"
 
             # Fallback to GitHub Secrets
             SFTP_HOST="${{ secrets.SFTP_HOST }}"
@@ -288,7 +353,7 @@ jobs:
             SFTP_USERNAME="${SFTP_USERNAME:-logicapp}"
             SFTP_PASSWORD="${SFTP_PASSWORD:-changeme-replace-with-real-password}"
           else
-            echo "USING_KEY_VAULT=true" >> "$GITHUB_ENV"
+            echo "USING_VAULT=azure" >> "$GITHUB_ENV"
           fi
 
           # Mask secrets in logs

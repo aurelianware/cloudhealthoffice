@@ -48,9 +48,24 @@ param backendBaseUrl string = 'https://claims-backend-api.example.com'
 @secure()
 param backendApiToken string = ''
 
-// Deployment Key Vault parameters
-param enableDeploymentKeyVault bool = true
+// Secret Management Configuration
+@description('Secret management provider: azurekeyvault or hashicorpvault')
+@allowed([
+  'azurekeyvault'
+  'hashicorpvault'
+  'none'
+])
+param secretProvider string = 'azurekeyvault'
+
+// Azure Key Vault parameters (when secretProvider = azurekeyvault)
+param enableDeploymentKeyVault bool = (secretProvider == 'azurekeyvault')
 param deploymentKeyVaultName string = '${baseName}-deploy-kv'
+
+// HashiCorp Vault parameters (when secretProvider = hashicorpvault)
+param enableHashiCorpVault bool = (secretProvider == 'hashicorpvault')
+param vaultContainerName string = 'vault-${baseName}'
+param vaultDnsLabel string = 'cho-vault-${uniqueString(resourceGroup().id)}'
+param vaultVersion string = '1.15.4'
 
 // =========================
  // Variables
@@ -62,7 +77,7 @@ var effectiveBlobAccountKey  = empty(blobAccountKey)  ? stg.listKeys().keys[0].v
 var effectiveIaName = useExistingIa ? iaExisting.name : iaNew.name
 
 // =========================
-// Deployment Key Vault (for storing deployment secrets)
+// Secret Management - Azure Key Vault (for Azure-only deployments)
 // =========================
 module deploymentKeyVault 'modules/deployment-keyvault.bicep' = if (enableDeploymentKeyVault) {
   name: 'deployment-keyvault'
@@ -79,6 +94,27 @@ module deploymentKeyVault 'modules/deployment-keyvault.bicep' = if (enableDeploy
     networkAclsDefaultAction: 'Allow'
     logAnalyticsWorkspaceId: ''  // Will be configured post-deployment if needed
   }
+}
+
+// =========================
+// Secret Management - HashiCorp Vault (for multi-cloud deployments)
+// =========================
+module hashicorpVault 'modules/vault-aci.bicep' = if (enableHashiCorpVault) {
+  name: 'hashicorp-vault'
+  params: {
+    vaultName: vaultContainerName
+    location: location
+    vaultVersion: vaultVersion
+    dnsNameLabel: vaultDnsLabel
+    storageAccountName: storageAccountName
+    fileShareName: 'vault-data'
+    environment: 'PROD'
+    cpuCores: 1
+    memoryInGb: 2
+  }
+  dependsOn: [
+    stg
+  ]
 }
 
 

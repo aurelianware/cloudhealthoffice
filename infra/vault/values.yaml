@@ -1,0 +1,192 @@
+# HashiCorp Vault Helm Values for Cloud Health Office
+# Deploy with: helm install vault hashicorp/vault --namespace vault --values values.yaml
+
+global:
+  enabled: true
+  tlsDisable: false  # Always use TLS in production
+
+server:
+  enabled: true
+  
+  image:
+    repository: hashicorp/vault
+    tag: "1.15.4"
+    pullPolicy: IfNotPresent
+
+  # High Availability with Raft storage
+  ha:
+    enabled: true
+    replicas: 3
+
+    raft:
+      enabled: true
+      setNodeId: true
+      
+      config: |
+        ui = true
+        
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-tls/tls.key"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          
+          retry_join {
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+          }
+        }
+
+        service_registration "kubernetes" {}
+        
+        # Telemetry for monitoring
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname = true
+        }
+
+  # Resource limits for production
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  # Persistent storage for Raft data
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: managed-premium  # Azure: managed-premium, AWS: gp3, GCP: pd-ssd
+    accessMode: ReadWriteOnce
+
+  # Audit log storage
+  auditStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: managed-premium
+    accessMode: ReadWriteOnce
+
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 5
+
+  readinessProbe:
+    enabled: true
+    path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+  # Annotations for pod security
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8200"
+    prometheus.io/path: "/v1/sys/metrics"
+
+  # Service account for Vault
+  serviceAccount:
+    create: true
+    name: vault
+
+  # Extra environment variables
+  extraEnvironmentVars:
+    VAULT_LOG_LEVEL: info
+    VAULT_LOG_FORMAT: json
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 1000
+    fsGroup: 1000
+
+# Vault UI configuration
+ui:
+  enabled: true
+  serviceType: LoadBalancer  # Change to ClusterIP for ingress
+  serviceNodePort: null
+  externalPort: 8200
+
+  # Annotations for Load Balancer
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"  # Public LB for access
+    # For AWS: service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # For GCP: cloud.google.com/load-balancer-type: "External"
+
+# Vault Agent Injector (for sidecar injection)
+injector:
+  enabled: true
+  
+  replicas: 2
+  
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 125m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+  # Webhook configuration
+  webhookAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+  # Metrics for monitoring
+  metrics:
+    enabled: true
+
+# Service mesh integration (optional)
+global:
+  openshift: false
+
+# Additional settings for production
+server:
+  # Pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1
+
+  # Update strategy
+  updateStrategyType: RollingUpdate
+
+  # Affinity for spreading pods across nodes
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: server
+          topologyKey: kubernetes.io/hostname
+
+  # Tolerations for dedicated nodes (optional)
+  tolerations: []
+  
+  # Node selector (optional)
+  nodeSelector: {}
+
+# CSI provider for Vault secrets (optional - advanced use case)
+csi:
+  enabled: false

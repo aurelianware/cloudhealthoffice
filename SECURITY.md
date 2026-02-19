@@ -436,7 +436,48 @@ az network nsg rule create \
 
 ## Secrets Management
 
-### Azure Key Vault Integration
+Cloud Health Office supports **two secret management solutions** for production deployments:
+
+### 🔐 HashiCorp Vault (Recommended for Multi-Cloud)
+
+HashiCorp Vault provides enterprise-grade secret management for multi-cloud deployments.
+
+**Features:**
+- **Multi-cloud support**: Deploy to Azure, AWS, GCP, or on-premises
+- **Dynamic secrets**: Automatic credential rotation and generation
+- **Encryption as a Service**: Built-in PHI encryption with Transit engine
+- **Fine-grained access control**: Policy-based permissions per service
+- **Comprehensive audit logging**: Complete trail for HIPAA compliance
+- **Active-Active HA**: Enterprise-grade availability with Raft or Consul storage
+
+**Setup:**
+```bash
+# Deploy Vault on Kubernetes
+helm install vault hashicorp/vault \
+  --namespace vault \
+  --values infra/vault/values.yaml
+
+# Initialize and configure
+./scripts/setup-vault.sh
+```
+
+**Configuration for microservices:**
+```yaml
+# Kubernetes deployment with Vault integration
+env:
+- name: VAULT_ADDR
+  value: "https://vault.vault.svc.cluster.local:8200"
+- name: Vault__Role
+  value: "cho-microservices"
+- name: Vault__AuthMethod
+  value: "kubernetes"
+```
+
+See [HashiCorp Vault Integration Guide](docs/security/HASHICORP-VAULT-INTEGRATION.md) for complete documentation.
+
+### 🔑 Azure Key Vault (Azure-Only Deployments)
+
+Azure Key Vault is recommended for Azure-only deployments requiring simplicity.
 
 **Store all secrets in Key Vault:**
 
