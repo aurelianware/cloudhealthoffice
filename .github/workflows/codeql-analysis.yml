@@ -1,0 +1,118 @@
+name: CodeQL Analysis
+
+on:
+  push:
+    branches: [main, develop, 'release/*']
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run CodeQL analysis every day at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript', 'typescript', 'csharp']
+        # CodeQL supports: 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby', 'swift'
+        # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # If you wish to specify custom queries, you can do so here or in a config file.
+          # By default, queries listed here will override any specified in a config file.
+          # Prefix the list with "+" to use these queries in addition to those specified in the config file.
+          
+          # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
+          queries: +security-and-quality
+          
+      - name: Setup .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore .NET dependencies
+        if: matrix.language == 'csharp'
+        run: |
+          # Find and restore all .NET projects
+          for project in $(find services -name "*.csproj" -o -name "*.sln" 2>/dev/null); do
+            echo "Restoring $project..."
+            dotnet restore "$project" || echo "Warning: Failed to restore $project"
+          done
+
+      - name: Setup Node.js
+        if: matrix.language == 'javascript' || matrix.language == 'typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node.js dependencies
+        if: matrix.language == 'javascript' || matrix.language == 'typescript'
+        run: |
+          npm ci
+          # Install dependencies for microservices
+          for pkg in $(find . -name "package.json" -not -path "*/node_modules/*" 2>/dev/null); do
+            dir=$(dirname "$pkg")
+            if [ "$dir" != "." ]; then
+              echo "Installing dependencies in $dir..."
+              (cd "$dir" && npm ci --ignore-scripts) || echo "Warning: Failed to install in $dir"
+            fi
+          done
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: sarif-results
+          upload: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: sarif-results/${{ matrix.language }}.sarif
+          category: "/language:${{ matrix.language }}"
+
+  results-summary:
+    name: CodeQL Results Summary
+    runs-on: ubuntu-latest
+    needs: [analyze]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# 🔍 CodeQL Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Analysis Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Language | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| JavaScript | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| C# | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review security alerts in the [Security tab](../../security/code-scanning)" >> $GITHUB_STEP_SUMMARY
