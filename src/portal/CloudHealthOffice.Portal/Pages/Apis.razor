@@ -1,0 +1,348 @@
+@page "/apis"
+
+<PageTitle>FHIR APIs - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" Class="mb-2" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        🔌 FHIR R4 APIs
+    </MudText>
+    <MudText Typo="Typo.body1" Class="mb-6" Style="color: rgba(255, 255, 255, 0.7);">
+        Production-ready FHIR R4 APIs for CMS-compliant healthcare integration. OAuth 2.0 authentication, OpenAPI documentation, and real-time X12 EDI ↔ FHIR transformation.
+    </MudText>
+
+    <!-- API Endpoints -->
+    <MudPaper Class="mb-6 pa-4" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+        <MudText Typo="Typo.h6" Class="mb-3">🌐 API Endpoints</MudText>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudChip Color="Color.Success" Variant="Variant.Outlined">Production</MudChip>
+                <MudText Typo="Typo.body2" Class="mt-2" Style="font-family: 'Courier New', monospace;">
+                    https://api.cloudhealthoffice.com/fhir/r4
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudChip Color="Color.Warning" Variant="Variant.Outlined">Sandbox</MudChip>
+                <MudText Typo="Typo.body2" Class="mt-2" Style="font-family: 'Courier New', monospace;">
+                    https://sandbox.cloudhealthoffice.com/fhir/r4
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudChip Color="Color.Info" Variant="Variant.Outlined">Local Dev</MudChip>
+                <MudText Typo="Typo.body2" Class="mt-2" Style="font-family: 'Courier New', monospace;">
+                    http://localhost:3000/fhir/r4
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Available APIs -->
+    <MudText Typo="Typo.h5" Class="mb-4" Style="font-weight: 600;">
+        Available APIs
+    </MudText>
+
+    <MudGrid>
+        <!-- Patient Access API -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Patient Access API</MudText>
+                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                       Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/patient-access-api.yaml" 
+                                       Target="_blank" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Empowers patients to access their complete health data electronically: claims history (837 → FHIR Claim), 
+                        EOB (835 → ExplanationOfBenefit), coverage, and clinical data.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
+                    <MudChipSet>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Patient/{id}</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Claim</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /ExplanationOfBenefit</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Coverage</MudChip>
+                    </MudChipSet>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/patient-access-api.yaml" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View OpenAPI Spec
+                    </MudButton>
+                    <MudButton Href="/demo" 
+                               Variant="Variant.Text" 
+                               Color="Color.Secondary">
+                        Try in Demo
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Prior Authorization API -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Prior Authorization API</MudText>
+                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-0057-F Compliant</MudChip>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                       Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/prior-auth-api.yaml" 
+                                       Target="_blank" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Electronic prior authorization with CDS Hooks for real-time coverage requirements discovery. 
+                        Replaces X12 278 workflows with FHIR Claim-based submission.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
+                    <MudChipSet>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /Claim/$submit</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /ClaimResponse</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /cds-services/coverage-requirements</MudChip>
+                    </MudChipSet>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/prior-auth-api.yaml" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View OpenAPI Spec
+                    </MudButton>
+                    <MudButton Href="/authorizations" 
+                               Variant="Variant.Text" 
+                               Color="Color.Secondary">
+                        Manage Authorizations
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Provider Directory API -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Provider Directory API</MudText>
+                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                       Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/provider-access-api.yaml" 
+                                       Target="_blank" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Provider network search and lookup API. 13 specialties with NPI validation, network status, 
+                        and contracted rates.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
+                    <MudChipSet>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Practitioner</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Organization</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /PractitionerRole</MudChip>
+                    </MudChipSet>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/provider-access-api.yaml" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View OpenAPI Spec
+                    </MudButton>
+                    <MudButton Href="/providers" 
+                               Variant="Variant.Text" 
+                               Color="Color.Secondary">
+                        Browse Providers
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Payer-to-Payer API -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Payer-to-Payer API</MudText>
+                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                       Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/payer-to-payer-api.yaml" 
+                                       Target="_blank" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Member data exchange between payers when members switch health plans. Automates 
+                        continuity of care data transfer.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
+                    <MudChipSet>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /$member-match</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /Patient/$everything</MudChip>
+                    </MudChipSet>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/payer-to-payer-api.yaml" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View OpenAPI Spec
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Claims Scrubbing API -->
+        <MudItem xs="12">
+            <MudCard Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Claims Scrubbing API</MudText>
+                        <MudChip Size="Size.Small" Color="Color.Info" Style="margin-top: 8px;">Industry Standard</MudChip>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
+                                       Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/claims-scrubbing-api.yaml" 
+                                       Target="_blank" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Pre-submission validation and scrubbing for X12 837 claims. Reduces rejections by validating 
+                        codes, checking eligibility, and enforcing payer-specific rules.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
+                    <MudChipSet>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /Claim/$validate</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /Claim/$scrub</MudChip>
+                    </MudChipSet>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/openapi/claims-scrubbing-api.yaml" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View OpenAPI Spec
+                    </MudButton>
+                    <MudButton Href="/claims/submit" 
+                               Variant="Variant.Text" 
+                               Color="Color.Secondary">
+                        Submit Claim
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Developer Resources -->
+    <MudText Typo="Typo.h5" Class="mt-8 mb-4" Style="font-weight: 600;">
+        🛠️ Developer Resources
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">📖 OpenAPI Specs</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Machine-readable API definitions in OpenAPI 3.1 format. Generate client SDKs in any language.
+                    </MudText>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/openapi" 
+                               Target="_blank" 
+                               Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               FullWidth="true">
+                        Browse Specs
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">📮 Postman Collections</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Pre-configured API requests with authentication, sample data, and test scripts.
+                    </MudText>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/postman" 
+                               Target="_blank" 
+                               Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               FullWidth="true">
+                        Download Collections
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">🚀 Quickstart Guides</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        Step-by-step integration tutorials with code samples in Python, C#, JavaScript, and curl.
+                    </MudText>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/quickstarts" 
+                               Target="_blank" 
+                               Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               FullWidth="true">
+                        View Tutorials
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Authentication Example -->
+    <MudPaper Class="mt-8 pa-4" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 15, 15, 0.5);">
+        <MudText Typo="Typo.h6" Class="mb-3">🔐 Quick Example: OAuth 2.0 Authentication</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255, 255, 255, 0.7);">
+            Get an access token and query patient claims:
+        </MudText>
+        <pre style="background: #000; padding: 16px; border-radius: 4px; overflow-x: auto; border: 1px solid rgba(0, 255, 255, 0.3);"><code style="color: #00ffff; font-family: 'Courier New', monospace; font-size: 13px;"># Get access token
+curl -X POST https://api.cloudhealthoffice.com/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId": "demo", "clientId": "your-client-id", "clientSecret": "your-secret"}'
+
+# Search for patient claims
+curl https://api.cloudhealthoffice.com/fhir/r4/Claim?patient=12345 \
+  -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
+    </MudPaper>
+
+    <!-- Call to Action -->
+    <MudPaper Class="mt-8 pa-6" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.3); background: rgba(0, 255, 255, 0.05); text-align: center;">
+        <MudText Typo="Typo.h5" Class="mb-3" Style="font-weight: 700;">
+            Start Building with FHIR APIs
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(255, 255, 255, 0.7);">
+            Get API credentials and start integrating in minutes. 14-day free trial includes full API access.
+        </MudText>
+        <MudButton Href="/signup" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   Size="Size.Large"
+                   Style="margin-right: 16px;">
+            Get API Access
+        </MudButton>
+        <MudButton Href="/demo" 
+                   Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   Size="Size.Large">
+            Try Demo APIs
+        </MudButton>
+    </MudPaper>
+</MudContainer>
