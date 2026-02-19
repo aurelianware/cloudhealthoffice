@@ -1,0 +1,276 @@
+@page "/docs"
+@using Microsoft.AspNetCore.Components.Authorization
+
+<PageTitle>Documentation - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" Class="mb-4" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        📖 Documentation
+    </MudText>
+
+    <MudGrid>
+        <!-- Quick Start -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">🚀 Quick Start</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Get started with Cloud Health Office in 5 minutes. Sign up, configure, and start processing claims.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Self-service signup</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Azure deployment guide</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Configuration reference</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/QUICKSTART.md" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Quickstart →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Architecture -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">⚡ Architecture</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Understand the cloud-native architecture: Kubernetes, Argo Workflows, microservices, and FHIR integration.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">System design</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Technology decisions (ADRs)</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Deployment architecture</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/ARCHITECTURE.md" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Architecture →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- API Integration -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">🔌 API Integration</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Integrate with FHIR R4 APIs, X12 EDI processing, and OAuth 2.0 authentication.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">FHIR R4 endpoints</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">OpenAPI specifications</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Authentication guide</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/apis" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View APIs →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- EDI Transactions -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">📄 EDI Transactions</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Process X12 EDI transactions: 270/271, 275, 276/277, 278, 834, 835, 837 with FHIR mapping.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">X12 transaction guides</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">FHIR mapping reference</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Sample files</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/docs/examples" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Examples →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Deployment -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">☁️ Deployment</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Deploy to Azure AKS, AWS EKS, or any Kubernetes cluster. Self-hosted or SaaS options.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Azure deployment</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Kubernetes manifests</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Configuration management</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/docs/deployment" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Deployment →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Testing -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">🧪 Testing</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Test claims workflows, E2E scenarios, and API integrations. 525 tests with 88% coverage.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">E2E test results</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Sample test data</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Testing strategies</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/tree/main/docs/testing" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Testing →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Security & Compliance -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">🔒 Security & Compliance</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>HIPAA compliance, security scanning, audit logging, and BAA documentation.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Security policy</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">HIPAA compliance</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Vulnerability management</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/SECURITY.md" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Security →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Contributing -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">👥 Contributing</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Join the community! Contribute code, documentation, or bug reports. Apache 2.0 licensed.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Contribution guidelines</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Code of conduct</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Governance model</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CONTRIBUTING.md" 
+                               Target="_blank" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Contributing →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Legal -->
+        <MudItem xs="12" md="6" lg="4">
+            <MudCard Elevation="3" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.2);">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">📜 Legal</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText>Terms of service, privacy policy, SLA guarantees, and support terms.</MudText>
+                    <MudList Class="mt-3" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Terms of service</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">Privacy policy</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check">SLA & support terms</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/legal" 
+                               Variant="Variant.Text" 
+                               Color="Color.Primary">
+                        View Legal →
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Call to Action -->
+    <MudPaper Class="mt-8 pa-6" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.3); background: rgba(0, 255, 255, 0.05); text-align: center;">
+        <MudText Typo="Typo.h5" Class="mb-3" Style="font-weight: 700;">
+            Ready to Get Started?
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(255, 255, 255, 0.7);">
+            Sign up for a 14-day free trial and start processing claims in minutes.
+        </MudText>
+        <MudButton Href="/signup" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   Size="Size.Large"
+                   Style="margin-right: 16px;">
+            Start Free Trial
+        </MudButton>
+        <MudButton Href="/demo" 
+                   Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   Size="Size.Large">
+            View Demo
+        </MudButton>
+    </MudPaper>
+</MudContainer>
