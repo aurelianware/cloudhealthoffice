@@ -78,6 +78,7 @@
     "lodash.isstring": "^4.0.1",
     "lodash.once": "^4.1.1",
     "ajv": "^8.18.0",
-    "minimatch": "^10.2.1"
+    "minimatch": "^10.2.1",
+    "test-exclude": "^7.0.1"
   }
 }
