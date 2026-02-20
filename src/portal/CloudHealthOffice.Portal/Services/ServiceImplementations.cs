@@ -1,7 +1,8 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using Microsoft.Identity.Web;
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
+using MongoDB.Bson;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -2692,24 +2693,19 @@ public class ReferenceDataService : IReferenceDataService
 
 public class TenantService : ITenantService
 {
-    private readonly CosmosClient _cosmosClient;
-    private readonly IConfiguration _configuration;
+    private readonly IMongoCollection<TenantSubscription> _tenantsCollection;
+    private readonly IMongoCollection<BsonDocument> _membersCollection;
     private readonly ILogger<TenantService> _logger;
-    private readonly Container _tenantsContainer;
-    private readonly Container _membersContainer;
 
-    public TenantService(CosmosClient cosmosClient, IConfiguration configuration, ILogger<TenantService> logger)
+    public TenantService(IMongoClient mongoClient, IConfiguration configuration, ILogger<TenantService> logger)
     {
-        _cosmosClient = cosmosClient;
-        _configuration = configuration;
         _logger = logger;
-
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var tenantsContainerName = configuration["CosmosDb:TenantsContainer"] ?? "Tenants";
-        var membersContainerName = configuration["CosmosDb:MembersContainer"] ?? "Members";
-
-        _tenantsContainer = cosmosClient.GetContainer(databaseName, tenantsContainerName);
-        _membersContainer = cosmosClient.GetContainer(databaseName, membersContainerName);
+        var databaseName = configuration["MongoDB:DatabaseName"] ?? "CloudHealthOffice";
+        var db = mongoClient.GetDatabase(databaseName);
+        _tenantsCollection = db.GetCollection<TenantSubscription>(
+            configuration["MongoDB:TenantsCollection"] ?? "Tenants");
+        _membersCollection = db.GetCollection<BsonDocument>(
+            configuration["MongoDB:MembersCollection"] ?? "Members");
     }
 
     public async Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId)
@@ -2719,41 +2715,22 @@ public class TenantService : ITenantService
             _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
 
             if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
-            {
                 return null;
-            }
 
-            // Query Cosmos DB for tenant by Azure Tenant ID
-            var query = new QueryDefinition(
-                "SELECT * FROM c WHERE c.azureTenantId = @azureTenantId")
-                .WithParameter("@azureTenantId", azureTenantId);
+            var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+            var tenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
 
-            var iterator = _tenantsContainer.GetItemQueryIterator<TenantSubscription>(query);
-            
-            if (iterator.HasMoreResults)
-            {
-                var response = await iterator.ReadNextAsync();
-                var tenant = response.FirstOrDefault();
-                
-                if (tenant != null)
-                {
-                    _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})", 
-                        azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
-                    return tenant;
-                }
-            }
+            if (tenant != null)
+                _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})",
+                    azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
+            else
+                _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
 
-            _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
-            return null;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogInformation("Tenants container not found or no matching tenant for {TenantId}", azureTenantId);
-            return null;
+            return tenant;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error querying Cosmos DB for tenant {TenantId}", azureTenantId);
+            _logger.LogError(ex, "Error querying MongoDB for tenant {TenantId}", azureTenantId);
             return null;
         }
     }
@@ -2764,23 +2741,13 @@ public class TenantService : ITenantService
         {
             _logger.LogInformation("Fetching demo tenant");
 
-            // Query for demo tenant
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.isDemo = true");
-            var iterator = _tenantsContainer.GetItemQueryIterator<TenantSubscription>(query);
-            
-            if (iterator.HasMoreResults)
-            {
-                var response = await iterator.ReadNextAsync();
-                var demoTenant = response.FirstOrDefault();
-                
-                if (demoTenant != null)
-                {
-                    return demoTenant;
-                }
-            }
+            var filter = Builders<TenantSubscription>.Filter.Eq(t => t.IsDemo, true);
+            var demoTenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
 
-            // Return default demo tenant if none exists in DB
-            _logger.LogWarning("No demo tenant found in Cosmos DB, returning default");
+            if (demoTenant != null)
+                return demoTenant;
+
+            _logger.LogWarning("No demo tenant found in MongoDB, returning default");
             return new TenantSubscription
             {
                 TenantId = "demo-tenant",
@@ -2796,9 +2763,7 @@ public class TenantService : ITenantService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching demo tenant from Cosmos DB");
-            
-            // Return default demo tenant on error
+            _logger.LogError(ex, "Error fetching demo tenant from MongoDB");
             return new TenantSubscription
             {
                 TenantId = "demo-tenant",
@@ -2821,11 +2786,8 @@ public class TenantService : ITenantService
             _logger.LogInformation("Checking if {Email} is member of tenant {TenantId}", userEmail, azureTenantId);
 
             if (string.IsNullOrEmpty(userEmail) || string.IsNullOrEmpty(azureTenantId))
-            {
                 return false;
-            }
 
-            // First, get the tenant to find its internal ID
             var tenant = await GetSubscriptionByAzureTenantIdAsync(azureTenantId);
             if (tenant == null)
             {
@@ -2833,39 +2795,21 @@ public class TenantService : ITenantService
                 return false;
             }
 
-            // Check if user is in admin emails (auto-approved)
             if (tenant.AdminEmails.Contains(userEmail, StringComparer.OrdinalIgnoreCase))
             {
                 _logger.LogInformation("User {Email} is admin for tenant {TenantId}", userEmail, azureTenantId);
                 return true;
             }
 
-            // Query Members container for this user in this tenant
-            var query = new QueryDefinition(
-                "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.email = @email")
-                .WithParameter("@tenantId", tenant.TenantId)
-                .WithParameter("@email", userEmail.ToLowerInvariant());
+            var filter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", tenant.TenantId),
+                Builders<BsonDocument>.Filter.Eq("email", userEmail.ToLowerInvariant()));
+            var count = await _membersCollection.CountDocumentsAsync(filter);
+            var hasMember = count > 0;
 
-            var iterator = _membersContainer.GetItemQueryIterator<dynamic>(query);
-            
-            if (iterator.HasMoreResults)
-            {
-                var response = await iterator.ReadNextAsync();
-                var hasMember = response.Any();
-                
-                _logger.LogInformation("User {Email} member status for tenant {TenantId}: {IsMember}", 
-                    userEmail, azureTenantId, hasMember);
-                
-                return hasMember;
-            }
-
-            return false;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogInformation("Members container not found or no matching member for {Email} in {TenantId}", 
-                userEmail, azureTenantId);
-            return false;
+            _logger.LogInformation("User {Email} member status for tenant {TenantId}: {IsMember}",
+                userEmail, azureTenantId, hasMember);
+            return hasMember;
         }
         catch (Exception ex)
         {
@@ -2881,33 +2825,28 @@ public class TenantService : ITenantService
             var tenantId = $"tenant-{Guid.NewGuid():N}";
             var now = DateTime.UtcNow;
 
-            var tenant = new
+            var tenant = new TenantSubscription
             {
-                id = tenantId,
-                tenantId = tenantId,
-                azureTenantId = request.AzureTenantId,
-                organizationName = request.OrganizationName,
-                displayName = request.TenantDisplayName,
-                subscriptionStatus = "Trial",
-                tier = request.Tier,
-                isDemo = false,
-                stripePaymentMethodId = request.StripePaymentMethodId,
-                stripeCustomerId = request.StripeCustomerId,
-                stripeSubscriptionId = request.StripeSubscriptionId,
-                trialEndsAt = now.AddDays(14),
-                createdAt = now,
-                updatedAt = now,
-                adminEmails = new[] { request.AdminEmail },
-                enabledModules = request.EnabledModules
+                TenantId = tenantId,
+                AzureTenantId = request.AzureTenantId,
+                OrganizationName = request.OrganizationName,
+                SubscriptionStatus = "Trial",
+                Tier = request.Tier,
+                IsDemo = false,
+                StripeCustomerId = request.StripeCustomerId,
+                StripeSubscriptionId = request.StripeSubscriptionId,
+                TrialEndsAt = now.AddDays(14),
+                CreatedAt = now,
+                UpdatedAt = now,
+                AdminEmails = new List<string> { request.AdminEmail }
             };
 
-            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} with Azure Tenant {AzureTenantId}, Stripe customer {CustomerId}",
-                tenantId, request.OrganizationName, request.AzureTenantId, request.StripeCustomerId);
+            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} (Azure: {AzureTenantId})",
+                tenantId, request.OrganizationName, request.AzureTenantId);
 
-            await _tenantsContainer.CreateItemAsync(tenant, new PartitionKey(tenantId));
+            await _tenantsCollection.InsertOneAsync(tenant);
 
-            _logger.LogInformation("Successfully created tenant {TenantId} in Cosmos DB", tenantId);
-            
+            _logger.LogInformation("Successfully created tenant {TenantId} in MongoDB", tenantId);
             return tenantId;
         }
         catch (Exception ex)
@@ -2920,21 +2859,16 @@ public class TenantService : ITenantService
 
 public class SalesInquiryService : ISalesInquiryService
 {
-    private readonly CosmosClient _cosmosClient;
-    private readonly Container _inquiriesContainer;
-    private readonly IConfiguration _configuration;
+    private readonly IMongoCollection<SalesInquiry> _inquiriesCollection;
     private readonly ILogger<SalesInquiryService> _logger;
 
-    public SalesInquiryService(CosmosClient cosmosClient, IConfiguration configuration, ILogger<SalesInquiryService> logger)
+    public SalesInquiryService(IMongoClient mongoClient, IConfiguration configuration, ILogger<SalesInquiryService> logger)
     {
-        _cosmosClient = cosmosClient;
-        _configuration = configuration;
         _logger = logger;
-
-        var databaseName = _configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var containerName = _configuration["CosmosDb:SalesInquiriesContainer"] ?? "SalesInquiries";
-        
-        _inquiriesContainer = _cosmosClient.GetContainer(databaseName, containerName);
+        var databaseName = configuration["MongoDB:DatabaseName"] ?? "CloudHealthOffice";
+        var db = mongoClient.GetDatabase(databaseName);
+        _inquiriesCollection = db.GetCollection<SalesInquiry>(
+            configuration["MongoDB:SalesInquiriesCollection"] ?? "SalesInquiries");
     }
 
     public async Task<string> CreateInquiryAsync(CreateSalesInquiryRequest request)
@@ -2944,31 +2878,30 @@ public class SalesInquiryService : ISalesInquiryService
             var inquiryId = $"inquiry-{Guid.NewGuid():N}";
             var now = DateTime.UtcNow;
 
-            var inquiry = new
+            var inquiry = new SalesInquiry
             {
-                id = inquiryId,
-                firstName = request.FirstName,
-                lastName = request.LastName,
-                email = request.Email,
-                phone = request.Phone,
-                companyName = request.CompanyName,
-                jobTitle = request.JobTitle,
-                inquiryType = request.InquiryType,
-                message = request.Message,
-                status = "New",
-                source = request.Source,
-                createdAt = now,
-                contactedAt = (DateTime?)null,
-                notes = (string?)null
+                Id = inquiryId,
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                Email = request.Email,
+                Phone = request.Phone,
+                CompanyName = request.CompanyName,
+                JobTitle = request.JobTitle,
+                InquiryType = request.InquiryType,
+                Message = request.Message,
+                Status = "New",
+                Source = request.Source,
+                CreatedAt = now,
+                ContactedAt = null,
+                Notes = null
             };
 
             _logger.LogInformation("Creating sales inquiry {InquiryId} from {Email} at {Company}",
                 inquiryId, request.Email, request.CompanyName);
 
-            await _inquiriesContainer.CreateItemAsync(inquiry, new PartitionKey(inquiryId));
+            await _inquiriesCollection.InsertOneAsync(inquiry);
 
             _logger.LogInformation("Successfully created sales inquiry {InquiryId}", inquiryId);
-            
             return inquiryId;
         }
         catch (Exception ex)
@@ -2982,26 +2915,17 @@ public class SalesInquiryService : ISalesInquiryService
     {
         try
         {
-            var queryText = status == null
-                ? "SELECT * FROM c ORDER BY c.createdAt DESC"
-                : $"SELECT * FROM c WHERE c.status = @status ORDER BY c.createdAt DESC";
+            FilterDefinition<SalesInquiry> filter = status == null
+                ? Builders<SalesInquiry>.Filter.Empty
+                : Builders<SalesInquiry>.Filter.Eq(i => i.Status, status);
 
-            var queryDefinition = new QueryDefinition(queryText);
-            if (status != null)
-            {
-                queryDefinition = queryDefinition.WithParameter("@status", status);
-            }
+            var results = await _inquiriesCollection
+                .Find(filter)
+                .SortByDescending(i => i.CreatedAt)
+                .Limit(limit)
+                .ToListAsync();
 
-            var iterator = _inquiriesContainer.GetItemQueryIterator<SalesInquiry>(queryDefinition);
-            var results = new List<SalesInquiry>();
-
-            while (iterator.HasMoreResults && results.Count < limit)
-            {
-                var response = await iterator.ReadNextAsync();
-                results.AddRange(response);
-            }
-
-            return results.Take(limit).ToList();
+            return results;
         }
         catch (Exception ex)
         {
@@ -3014,16 +2938,8 @@ public class SalesInquiryService : ISalesInquiryService
     {
         try
         {
-            var response = await _inquiriesContainer.ReadItemAsync<SalesInquiry>(
-                inquiryId,
-                new PartitionKey(inquiryId));
-            
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogWarning("Sales inquiry {InquiryId} not found", inquiryId);
-            return null;
+            var filter = Builders<SalesInquiry>.Filter.Eq(i => i.Id, inquiryId);
+            return await _inquiriesCollection.Find(filter).FirstOrDefaultAsync();
         }
         catch (Exception ex)
         {
@@ -3036,31 +2952,25 @@ public class SalesInquiryService : ISalesInquiryService
     {
         try
         {
-            var inquiry = await GetInquiryByIdAsync(inquiryId);
-            if (inquiry == null)
-            {
-                throw new InvalidOperationException($"Inquiry {inquiryId} not found");
-            }
+            var filter = Builders<SalesInquiry>.Filter.Eq(i => i.Id, inquiryId);
+            var inquiry = await _inquiriesCollection.Find(filter).FirstOrDefaultAsync();
 
-            var operations = new List<PatchOperation>
+            if (inquiry == null)
+                throw new InvalidOperationException($"Inquiry {inquiryId} not found");
+
+            var updates = new List<UpdateDefinition<SalesInquiry>>
             {
-                PatchOperation.Set("/status", status)
+                Builders<SalesInquiry>.Update.Set(i => i.Status, status)
             };
 
             if (notes != null)
-            {
-                operations.Add(PatchOperation.Set("/notes", notes));
-            }
+                updates.Add(Builders<SalesInquiry>.Update.Set(i => i.Notes, notes));
 
             if (status == "Contacted" && inquiry.ContactedAt == null)
-            {
-                operations.Add(PatchOperation.Set("/contactedAt", DateTime.UtcNow));
-            }
+                updates.Add(Builders<SalesInquiry>.Update.Set(i => i.ContactedAt, DateTime.UtcNow));
 
-            await _inquiriesContainer.PatchItemAsync<SalesInquiry>(
-                inquiryId,
-                new PartitionKey(inquiryId),
-                operations);
+            var combinedUpdate = Builders<SalesInquiry>.Update.Combine(updates);
+            await _inquiriesCollection.UpdateOneAsync(filter, combinedUpdate);
 
             _logger.LogInformation("Updated sales inquiry {InquiryId} status to {Status}", inquiryId, status);
         }
@@ -3071,4 +2981,3 @@ public class SalesInquiryService : ISalesInquiryService
         }
     }
 }
-

@@ -16,6 +16,7 @@ data:
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
+  MongoDB__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -95,6 +96,11 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__Prometheus
+        - name: MongoDB__ConnectionString
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: MongoDB__ConnectionString
         - name: AzureAd__TenantId
           valueFrom:
             secretKeyRef:
@@ -140,16 +146,6 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: professional-price-id
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-secret
-              key: COSMOS_ENDPOINT
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-secret
-              key: COSMOS_KEY
         resources:
           requests:
             memory: "256Mi"

@@ -8,6 +8,7 @@ on:
       - 'site/**'
       - 'services/**'
       - 'k8s/**'
+      - 'src/portal/**/k8s/**'
       - '.github/workflows/deploy-do.yml'
 
 env:

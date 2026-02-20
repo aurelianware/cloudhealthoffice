@@ -8,7 +8,8 @@ using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
+using MongoDB.Bson.Serialization.Conventions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -138,22 +139,16 @@ builder.Services.AddHttpClient("default")
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// MongoDB client (singleton) — uses camelCase BSON convention to match stored field names
+var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
+ConventionRegistry.Register("CamelCase", camelCasePack, _ => true);
+
+builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"]
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-    var key = configuration["CosmosDb:Key"]
-        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-    return new CosmosClient(endpoint, key, new CosmosClientOptions
-    {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
-    });
+    var connectionString = configuration["MongoDB:ConnectionString"]
+        ?? "mongodb://admin:securepassword123@mongodb:27017";
+    return new MongoClient(connectionString);
 });
 
 // Register tenant context service (must be before other services that depend on it)
