@@ -16,7 +16,6 @@ data:
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
-  MongoDB__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,6 +38,7 @@ spec:
     spec:
       containers:
       - name: portal
+        # Image is replaced with ACR reference during deploy-azure-aks.yml CI/CD
         image: ghcr.io/aurelianware/cloudhealthoffice-portal:latest
         imagePullPolicy: Always
         ports:
@@ -98,9 +98,9 @@ spec:
               key: Services__Prometheus
         - name: MongoDB__ConnectionString
           valueFrom:
-            configMapKeyRef:
-              name: portal-config
-              key: MongoDB__ConnectionString
+            secretKeyRef:
+              name: cosmosdb-secret
+              key: connectionString
         - name: AzureAd__TenantId
           valueFrom:
             secretKeyRef:

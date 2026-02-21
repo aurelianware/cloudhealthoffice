@@ -1,4 +1,7 @@
 ---
+# NOTE: cloudhealthoffice.com is now served by Azure Container Apps (see infra/azure/aks-main.bicep).
+# This ingress is NOT applied by deploy-azure-aks.yml.
+# It is kept for reference / rollback to an in-cluster static site if needed.
 # Ingress for Cloud Health Office – main domain routed to Blazor portal
 apiVersion: networking.k8s.io/v1
 kind: Ingress
