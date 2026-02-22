@@ -1,6 +1,6 @@
 <div align="center">
 
-![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.png)
+![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
 # **The #1 Open-Source Cloud-Native Core Administration Processing System (CAPS) and Payer Platform**
 
