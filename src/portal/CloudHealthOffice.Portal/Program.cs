@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor.Services;
+using CloudHealthOffice.Portal.Infrastructure;
 using CloudHealthOffice.Portal.Services;
 using CloudHealthOffice.Portal.Hubs;
 using System.Net.Http;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -150,6 +153,14 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
         ?? "mongodb://admin:securepassword123@mongodb:27017";
     return new MongoClient(connectionString);
 });
+
+// DataProtection — persist keys to MongoDB so all replicas share the same key ring.
+// Without this each pod generates ephemeral keys and cannot decrypt cookies / Blazor
+// circuit tokens produced by a different replica.
+builder.Services.AddDataProtection()
+    .SetApplicationName("CloudHealthOffice.Portal");
+builder.Services.AddSingleton<IXmlRepository>(sp =>
+    new MongoDbXmlRepository(sp.GetRequiredService<IMongoClient>()));
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
