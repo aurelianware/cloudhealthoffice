@@ -277,7 +277,7 @@ put dev-claim.edi
 
 ## Environment Promotion Workflow
 
-Typical workflow for QNXT/Facets customers:
+Typical workflow for healthcare payer customers:
 
 1. **Dev**: Test integration with sandbox clearinghouse
 2. **PPMO**: Test with real clearinghouse test environment, validate config changes
