@@ -22,23 +22,23 @@ spec:
         echo "Testing mock microservices..."
         
         echo "1. Coverage Service:"
-        curl -s http://coverage-service.cho-svcs/
+        curl -s http://coverage-service.cloudhealthoffice/
         echo ""
         
         echo "2. Provider Service:"
-        curl -s http://provider-service.cho-svcs/
+        curl -s http://provider-service.cloudhealthoffice/
         echo ""
         
         echo "3. Claims Service:"
-        curl -s http://claims-service.cho-svcs/
+        curl -s http://claims-service.cloudhealthoffice/
         echo ""
         
         echo "4. Authorization Service:"
-        curl -s http://authorization-service.cho-svcs/
+        curl -s http://authorization-service.cloudhealthoffice/
         echo ""
         
         echo "5. Benefit Plan Service:"
-        curl -s http://benefit-plan-service.cho-svcs/
+        curl -s http://benefit-plan-service.cloudhealthoffice/
         echo ""
         
         echo "All services responding!"

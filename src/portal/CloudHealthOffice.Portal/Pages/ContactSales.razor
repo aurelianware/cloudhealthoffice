@@ -1,0 +1,258 @@
+@page "/contact-sales"
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@using CloudHealthOffice.Portal.Services
+@inject ISalesInquiryService SalesInquiryService
+@inject NavigationManager Navigation
+@inject ILogger<ContactSales> Logger
+
+<PageTitle>Contact Sales - Cloud Health Office</PageTitle>
+
+<HeadContent>
+    @* Temporarily disabled analytics to debug portal crash
+    <script async src="https://plausible.io/js/pa-DSFLxN3jN3PVX0eGzs8vx.js"></script>
+    *@
+</HeadContent>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="my-8">
+    <MudPaper Elevation="2" Class="pa-8">
+        <div class="text-center mb-6">
+            <MudIcon Icon="@Icons.Material.Filled.Handshake" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+            <MudText Typo="Typo.h4" GutterBottom="true">Contact Sales</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Let's discuss how Cloud Health Office can transform your payer operations
+            </MudText>
+        </div>
+
+        @if (submissionSuccess)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="my-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Thank you for your interest!</MudText>
+                <MudText>Our sales team will reach out within 1 business day.</MudText>
+                <MudText Class="mt-2">
+                    <strong>Reference ID:</strong> @inquiryId
+                </MudText>
+            </MudAlert>
+            
+            <div class="text-center mt-6">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
+                    Return to Home
+                </MudButton>
+            </div>
+        }
+        else
+        {
+            <EditForm Model="@model" OnValidSubmit="HandleSubmit">
+                <DataAnnotationsValidator />
+                
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.FirstName" 
+                                    Label="First Name" 
+                                    Variant="Variant.Outlined" 
+                                    Required="true"
+                                    For="@(() => model.FirstName)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.LastName" 
+                                    Label="Last Name" 
+                                    Variant="Variant.Outlined" 
+                                    Required="true"
+                                    For="@(() => model.LastName)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.Email" 
+                                    Label="Business Email" 
+                                    Variant="Variant.Outlined" 
+                                    Required="true"
+                                    InputType="InputType.Email"
+                                    For="@(() => model.Email)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.Phone" 
+                                    Label="Phone Number" 
+                                    Variant="Variant.Outlined"
+                                    For="@(() => model.Phone)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.CompanyName" 
+                                    Label="Company Name" 
+                                    Variant="Variant.Outlined" 
+                                    Required="true"
+                                    For="@(() => model.CompanyName)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.JobTitle" 
+                                    Label="Job Title" 
+                                    Variant="Variant.Outlined"
+                                    For="@(() => model.JobTitle)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudSelect @bind-Value="model.InquiryType" 
+                                 Label="What are you interested in?" 
+                                 Variant="Variant.Outlined"
+                                 Required="true"
+                                 For="@(() => model.InquiryType)">
+                            <MudSelectItem Value="@("Enterprise Plan")">Enterprise Plan (Custom Pricing)</MudSelectItem>
+                            <MudSelectItem Value="@("Platform Demo")">Schedule a Platform Demo</MudSelectItem>
+                            <MudSelectItem Value="@("Partnership")">Partnership Opportunities</MudSelectItem>
+                            <MudSelectItem Value="@("Integration Support")">Integration & Implementation Support</MudSelectItem>
+                            <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="model.Message" 
+                                    Label="Tell us about your needs" 
+                                    Variant="Variant.Outlined" 
+                                    Lines="5"
+                                    Required="true"
+                                    For="@(() => model.Message)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                            By submitting this form, you agree to our Terms of Service and Privacy Policy.
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-4">@errorMessage</MudAlert>
+                }
+
+                <div class="d-flex justify-space-between mt-6">
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Href="/">
+                        Cancel
+                    </MudButton>
+                    <MudButton ButtonType="ButtonType.Submit" 
+                             Variant="Variant.Filled" 
+                             Color="Color.Primary"
+                             Size="Size.Large"
+                             Disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                            <span>Sending...</span>
+                        }
+                        else
+                        {
+                            <span>Submit Inquiry</span>
+                        }
+                    </MudButton>
+                </div>
+            </EditForm>
+        }
+    </MudPaper>
+    
+    <MudPaper Elevation="1" Class="pa-6 mt-6">
+        <MudText Typo="Typo.h6" GutterBottom="true">Why Cloud Health Office?</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <div class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Class="fw-bold">Go Live in &lt;1 Hour</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Zero custom code deployment
+                    </MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <div class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Class="fw-bold">HIPAA Compliant</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Production-grade security controls
+                    </MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <div class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Class="fw-bold">Azure Native</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Multi-payer EDI platform
+                    </MudText>
+                </div>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private ContactSalesModel model = new();
+    private bool isSubmitting = false;
+    private bool submissionSuccess = false;
+    private string errorMessage = "";
+    private string inquiryId = "";
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        errorMessage = "";
+
+        try
+        {
+            var inquiry = new CreateSalesInquiryRequest
+            {
+                FirstName = model.FirstName,
+                LastName = model.LastName,
+                Email = model.Email,
+                Phone = model.Phone,
+                CompanyName = model.CompanyName,
+                JobTitle = model.JobTitle,
+                InquiryType = model.InquiryType,
+                Message = model.Message,
+                Source = "Contact Sales Page"
+            };
+
+            inquiryId = await SalesInquiryService.CreateInquiryAsync(inquiry);
+            
+            Logger.LogInformation("Sales inquiry created: {InquiryId} from {Email}", inquiryId, model.Email);
+            
+            submissionSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error submitting sales inquiry");
+            errorMessage = "Failed to submit inquiry. Please try again or email us directly at sales@cloudhealthoffice.com";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    public class ContactSalesModel
+    {
+        [Required]
+        public string FirstName { get; set; } = "";
+        
+        [Required]
+        public string LastName { get; set; } = "";
+        
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+        
+        public string Phone { get; set; } = "";
+        
+        [Required]
+        public string CompanyName { get; set; } = "";
+        
+        public string JobTitle { get; set; } = "";
+        
+        [Required]
+        public string InquiryType { get; set; } = "Enterprise Plan";
+        
+        [Required]
+        public string Message { get; set; } = "";
+    }
+}

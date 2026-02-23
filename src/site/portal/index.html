@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal - Cloud Health Office</title>
+  <link rel="stylesheet" href="../css/sentinel.css" />
+  <script src="../js/auth.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../solutions-payers.html">Solutions</a></li>
+      <li><a href="../pricing.html">Pricing</a></li>
+      <li><a href="../platform.html">Platform</a></li>
+      <li><a href="../release-notes.html">Versions</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <script>
+    // Mobile menu toggle
+    document.addEventListener('DOMContentLoaded', () => {
+      const menuToggle = document.getElementById('mobileMenuToggle');
+      const mainNav = document.getElementById('mainNav');
+      
+      if (menuToggle && mainNav) {
+        menuToggle.addEventListener('click', () => {
+          const isOpen = mainNav.classList.toggle('mobile-menu-open');
+          menuToggle.setAttribute('aria-expanded', isOpen);
+          menuToggle.textContent = isOpen ? '✕' : '☰';
+        });
+        
+        mainNav.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          });
+        });
+        
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('nav')) {
+            mainNav.classList.remove('mobile-menu-open');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.textContent = '☰';
+          }
+        });
+      }
+      
+      updateNavigation('#mainNav');
+    });
+  </script>
+
+  <main id="main-content" class="container">
+    <div style="text-align: center; padding: 60px 20px;">
+      <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:300px; margin-bottom:40px;">
+      
+      <h1>Cloud Health Office Portal</h1>
+      
+      <div id="loadingMessage" style="display: block; color: var(--neon-cyan); margin: 40px 0;">
+        <p>Loading your account...</p>
+      </div>
+
+      <div id="portalContent" style="display: none;">
+        <p style="font-size: 1.2rem; margin: 20px 0;">
+          Welcome, <strong id="userName" style="color: var(--neon-cyan);">User</strong>
+        </p>
+
+        <div style="max-width: 1200px; margin: 60px auto; text-align: left;">
+          <h2>Your Portal Dashboard</h2>
+          
+          <!-- CMS Compliance Deadline Banner -->
+          <div style="background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(0, 255, 170, 0.1)); border: 2px solid var(--neon-cyan); border-radius: 12px; padding: 20px; margin-bottom: 40px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--neon-cyan); margin-bottom: 8px;">⚠️ CMS-0057-F DEADLINE</div>
+            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">January 1, 2027 - FHIR APIs Required</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">Patient Access, Provider Access, and Payer-to-Payer APIs must be live</div>
+            <div style="margin-top: 15px;">
+              <a href="api-docs.html" class="button-primary">View Your FHIR APIs →</a>
+            </div>
+          </div>
+          
+          <div class="features-grid">
+            <!-- FHIR APIs - PROMINENT -->
+            <div class="card" style="grid-column: span 2; border: 3px solid var(--neon-cyan); background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(0, 255, 170, 0.05));">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                <h3 style="font-size: 1.5rem; margin: 0;">🔥 FHIR R4 APIs</h3>
+                <span style="background: var(--neon-cyan); color: var(--dark-bg); padding: 6px 14px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">PRODUCTION READY</span>
+              </div>
+              
+              <p style="font-size: 1.1rem; margin-bottom: 20px;">
+                CMS-0057-F compliant FHIR R4 endpoints for Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization
+              </p>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 25px 0;">
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--neon-cyan);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Patient Access</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">OAuth 2.0 + US Core</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--neon-green);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Provider Access</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">SMART on FHIR</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--accent-purple);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Payer-to-Payer</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">$member-match</div>
+                </div>
+                <div style="padding: 15px; background: var(--dark-gray); border-radius: 8px; border-left: 3px solid var(--accent-orange);">
+                  <div style="font-weight: bold; margin-bottom: 5px;">Prior Auth</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Da Vinci PAS</div>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 25px;">
+                <a href="api-docs.html" class="button-primary">📖 API Documentation</a>
+                <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">🧪 Try Sandbox</a>
+                <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/patient-access-api.yaml" 
+                   class="button-secondary" target="_blank">OpenAPI Specs</a>
+              </div>
+
+              <div style="margin-top: 20px; padding: 15px; background: var(--dark-bg); border-radius: 8px; font-size: 0.85rem;">
+                <strong>✅ Ready to deploy:</strong> 480 tests passing • Production-grade security • Full X12 ↔ FHIR conversion
+              </div>
+            </div>
+
+            <!-- Claims Scrubbing - COMMERCIAL FEATURE -->
+            <div class="card" style="border: 2px solid var(--neon-green);">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                <h3>Claims Scrubbing</h3>
+                <span style="background: var(--neon-green); color: var(--dark-bg); padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold;">NEW</span>
+              </div>
+              <p>Pre-validate claims before payer submission. Boost first-pass rates from 85% to 95%+</p>
+              <div style="margin: 15px 0; padding: 12px; background: var(--dark-gray); border-radius: 6px; font-size: 0.85rem;">
+                <strong>ROI:</strong> Save $30-117 per prevented denial
+              </div>
+              <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/claims-scrubbing-quickstart.md" 
+                 class="button-secondary" target="_blank" style="margin-top: 15px;">Learn More →</a>
+            </div>
+
+            <div class="card">
+              <h3>EDI Integrations</h3>
+              <p>Manage clearinghouse connections and X12 transaction flows (837, 835, 270, 271, 278).</p>
+              <a href="#" class="button-secondary" style="margin-top: 20px;">View Integrations</a>
+            </div>
+
+            <div class="card">
+              <h3>Deployment Status</h3>
+              <p>Monitor your Cloud Health Office deployment health, uptime, and API performance metrics.</p>
+              <a href="#" class="button-secondary" style="margin-top: 20px;">View Status</a>
+            </div>
+          </div>
+
+          <div style="margin-top: 60px; padding: 40px; background: var(--dark-gray); border: 2px solid var(--neon-cyan); border-radius: 12px;">
+            <h3>Quick Links</h3>
+            <ul style="list-style: none; padding: 0;">
+              <li style="margin: 15px 0;">
+                <a href="api-docs.html" style="font-size: 1.1rem;">
+                  🚀 <strong>FHIR API Documentation</strong> - OpenAPI specs & quickstarts
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/cms-0057f-compliance-quickstart.md" target="_blank" rel="noopener noreferrer">
+                  ✅ CMS-0057-F Compliance Quickstart (15 minutes)
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="https://sandbox.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">
+                  🧪 Try Sandbox Environment
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">
+                  📖 Documentation on GitHub
+                </a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="../platform.html">🔧 Platform Overview</a>
+              </li>
+              <li style="margin: 15px 0;">
+                <a href="../pricing.html">💰 Pricing Information</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="text-align: center; margin-top: 80px; padding: 40px 20px; border-top: 1px solid #333;">
+    <p>
+      <strong>Cloud Health Office v3.0</strong><br>
+      Modern integration platform for payer core administration systems
+    </p>
+    <p style="opacity: 0.8; margin: 20px 0;">
+      Apache 2.0 License • Not affiliated with TriZetto, Cognizant, or clearinghouse vendors
+    </p>
+    <p>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
+      <a href="../pricing.html">Pricing</a>
+    </p>
+  </footer>
+
+  <script>
+    // Require authentication for portal
+    (async function() {
+      const loadingMessage = document.getElementById('loadingMessage');
+      const portalContent = document.getElementById('portalContent');
+      const userNameElement = document.getElementById('userName');
+
+      try {
+        // Check authentication
+        await requireAuth('/portal/');
+        
+        // Load user profile
+        const user = await loadUserProfile();
+        if (user) {
+          const userName = user.userDetails || user.userId || 'User';
+          userNameElement.textContent = userName;
+          
+          loadingMessage.style.display = 'none';
+          portalContent.style.display = 'block';
+        } else {
+          // Redirect to login if no user profile
+          window.location.href = '/login.html';
+        }
+      } catch (error) {
+        console.error('Portal error:', error);
+        loadingMessage.innerHTML = '<p style="color: var(--neon-green);">Error loading portal. Redirecting to login...</p>';
+        setTimeout(() => {
+          window.location.href = '/login.html';
+        }, 2000);
+      }
+    })();
+  </script>
+</body>
+</html>

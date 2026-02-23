@@ -1,0 +1,107 @@
+# Argo Events EventSource for 837 Claims Kafka Topic
+# Listens to claims-adjudication Kafka topic and triggers adjudication workflow
+
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: claims-kafka-source
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: claims-kafka-source
+    app.kubernetes.io/component: eventsource
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  kafka:
+    claims-adjudication:
+      # Kafka connection
+      url: cloudhealthoffice-kafka-bootstrap.kafka:9092
+      topic: claims-adjudication
+      partition: "0-5"  # All 6 partitions
+      
+      # Consumer group
+      consumerGroup:
+        groupName: argo-claims-adjudication
+        oldest: false
+        rebalanceStrategy: range
+      
+      # SASL authentication
+      sasl:
+        mechanism: SCRAM-SHA-512
+        userSecret:
+          name: kafka-sasl-secret
+          key: username
+        passwordSecret:
+          name: kafka-sasl-secret
+          key: password
+      
+      # TLS configuration
+      tls:
+        insecureSkipVerify: false
+        caCertSecret:
+          name: kafka-ca-cert
+          key: ca.crt
+      
+      # Message format
+      jsonBody: true
+      
+      # Metadata
+      metadata:
+        claimId: claim.claimId
+        tenantId: claim.tenantId
+        submittedDate: claim.submittedDate
+
+---
+# Argo Events Sensor to trigger workflow
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: claims-adjudication-trigger
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: claims-adjudication-trigger
+    app.kubernetes.io/component: sensor
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  template:
+    serviceAccountName: argo-events-sa
+  
+  dependencies:
+    - name: claims-ready
+      eventSourceName: claims-kafka-source
+      eventName: claims-adjudication
+  
+  triggers:
+    - template:
+        name: trigger-adjudication-workflow
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: claims-adjudication-
+                namespace: cloudhealthoffice
+              spec:
+                workflowTemplateRef:
+                  name: claims-adjudication-template
+                arguments:
+                  parameters:
+                    - name: claim-id
+                      value: ""
+                    - name: tenant-id
+                      value: ""
+          parameters:
+            - src:
+                dependencyName: claims-ready
+                dataKey: body.claimId
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: claims-ready
+                dataKey: body.tenantId
+              dest: spec.arguments.parameters.1.value
+        
+        # Retry policy
+        retryStrategy:
+          steps: 3
+          duration: "30s"

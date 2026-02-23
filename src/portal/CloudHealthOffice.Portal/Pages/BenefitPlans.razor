@@ -1,0 +1,292 @@
+@page "/benefit-plans"
+@using CloudHealthOffice.Portal.Services
+@inject IBenefitPlanService BenefitPlanService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Benefit Plans - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
+        Benefit Plans
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Design and manage benefit plan offerings for sponsors
+    </MudText>
+
+    <!-- Filters & Actions Bar -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_searchTerm" 
+                             Label="Search plans" 
+                             Placeholder="Plan name, ID..."
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.End" 
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_sponsorFilter" 
+                          Label="Sponsor" 
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter"
+                          @bind-Value:after="ApplyFilters">
+                    <MudSelectItem Value="@("")">All Sponsors</MudSelectItem>
+                    <MudSelectItem Value="@("SPNSR10001")">Acme Corporation</MudSelectItem>
+                    <MudSelectItem Value="@("SPNSR10002")">TechStart Industries</MudSelectItem>
+                    <MudSelectItem Value="@("SPNSR10003")">United Workers Local 247</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_productTypeFilter" 
+                          Label="Product Type" 
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter"
+                          @bind-Value:after="ApplyFilters">
+                    <MudSelectItem Value="@("All")">All Types</MudSelectItem>
+                    <MudSelectItem Value="@("PPO")">PPO</MudSelectItem>
+                    <MudSelectItem Value="@("HMO")">HMO</MudSelectItem>
+                    <MudSelectItem Value="@("EPO")">EPO</MudSelectItem>
+                    <MudSelectItem Value="@("HDHP")">HDHP</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          FullWidth="true"
+                          OnClick="OpenCreateDialog">
+                    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+                    New Plan
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Stats Cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Plans</MudText>
+                    <MudText Typo="Typo.h4">@_filteredPlans.Count</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Members</MudText>
+                    <MudText Typo="Typo.h4">@_filteredPlans.Sum(p => p.EnrolledMembers).ToString("N0")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Premium</MudText>
+                    <MudText Typo="Typo.h4">$475</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Benefits Configured</MudText>
+                    <MudText Typo="Typo.h4">@_filteredPlans.Sum(p => p.AssignedBenefits)</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Plans Table -->
+    <MudTable Items="@_filteredPlans" 
+              Hover="true" 
+              Striped="true" 
+              Loading="@_isLoading"
+              LoadingProgressColor="Color.Primary"
+              Elevation="2">
+        <HeaderContent>
+            <MudTh>Plan ID</MudTh>
+            <MudTh>Plan Name</MudTh>
+            <MudTh>Sponsor</MudTh>
+            <MudTh>Product Type</MudTh>
+            <MudTh>Network</MudTh>
+            <MudTh>Members</MudTh>
+            <MudTh>Benefits</MudTh>
+            <MudTh>Effective Date</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Plan ID">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.PlanId</MudText>
+            </MudTd>
+            <MudTd DataLabel="Plan Name">
+                <MudText Typo="Typo.body2"><strong>@context.PlanName</strong></MudText>
+            </MudTd>
+            <MudTd DataLabel="Sponsor">
+                <MudText Typo="Typo.body2">@context.SponsorName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Product Type">
+                <MudChip Size="Size.Small" Color="GetProductTypeColor(context.ProductType)">
+                    @context.ProductType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Network">@context.Network</MudTd>
+            <MudTd DataLabel="Members">@context.EnrolledMembers.ToString("N0")</MudTd>
+            <MudTd DataLabel="Benefits">
+                <MudChip Size="Size.Small" Variant="Variant.Outlined">
+                    @context.AssignedBenefits
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Effective Date">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" Color="GetStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                              Size="Size.Small" 
+                              Color="Color.Primary"
+                              OnClick="@(() => OpenDetailsDialog(context.PlanId))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                              Size="Size.Small" 
+                              Color="Color.Default"
+                              OnClick="@(() => OpenEditDialog(context.PlanId))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-4">
+                No benefit plans found
+            </MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText Typo="Typo.body1" Align="Align.Center">Loading benefit plans...</MudText>
+        </LoadingContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<BenefitPlanListItem> _allPlans = new();
+    private List<BenefitPlanListItem> _filteredPlans = new();
+    private bool _isLoading = true;
+
+    private string _searchTerm = string.Empty;
+    private string _sponsorFilter = string.Empty;
+    private string _productTypeFilter = "All";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlans();
+    }
+
+    private async Task LoadPlans()
+    {
+        _isLoading = true;
+        _allPlans = await BenefitPlanService.SearchBenefitPlansAsync();
+        ApplyFilters();
+        _isLoading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredPlans = _allPlans;
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _filteredPlans = _filteredPlans.Where(p =>
+                p.PlanName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                p.PlanId.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                p.SponsorName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
+
+        if (!string.IsNullOrEmpty(_sponsorFilter))
+        {
+            _filteredPlans = _filteredPlans.Where(p => p.SponsorId == _sponsorFilter).ToList();
+        }
+
+        if (_productTypeFilter != "All")
+        {
+            _filteredPlans = _filteredPlans.Where(p => p.ProductType == _productTypeFilter).ToList();
+        }
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+        }
+    }
+
+    private async Task OpenDetailsDialog(string planId)
+    {
+        var parameters = new DialogParameters<BenefitPlanDetailsDialog>
+        {
+            { x => x.PlanId, planId }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<BenefitPlanDetailsDialog>("Benefit Plan Details", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadPlans();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateEditBenefitPlanDialog>("Create New Benefit Plan", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Benefit plan created successfully", Severity.Success);
+            await LoadPlans();
+        }
+    }
+
+    private async Task OpenEditDialog(string planId)
+    {
+        var parameters = new DialogParameters<CreateEditBenefitPlanDialog>
+        {
+            { x => x.PlanId, planId }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateEditBenefitPlanDialog>("Edit Benefit Plan", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Benefit plan updated successfully", Severity.Success);
+            await LoadPlans();
+        }
+    }
+
+    private Color GetProductTypeColor(string productType) => productType switch
+    {
+        "PPO" => Color.Primary,
+        "HMO" => Color.Secondary,
+        "EPO" => Color.Info,
+        "HDHP" => Color.Success,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Pending" => Color.Warning,
+        "Inactive" => Color.Error,
+        _ => Color.Default
+    };
+}

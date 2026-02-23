@@ -16,7 +16,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: sftp-test-workflow
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: sftp-test-workflow
     app.kubernetes.io/component: integration-test
@@ -345,7 +345,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
   name: sftp-test-schedule
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
 spec:
   schedule: "0 2 * * *" # Daily at 2 AM
   timezone: "America/Los_Angeles"

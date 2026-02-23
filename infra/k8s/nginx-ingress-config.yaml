@@ -1,0 +1,29 @@
+---
+# NGINX Ingress Controller ConfigMap for WebSocket support (Blazor Server)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ingress-controller
+  namespace: ingress-nginx
+data:
+  # Enable WebSocket support
+  use-forwarded-headers: "true"
+  compute-full-forwarded-for: "true"
+  # WebSocket upgrade configuration
+  map-hash-bucket-size: "128"
+  # Add upgrade header mapping
+  http-snippet: |
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+  # Increase buffer sizes for SignalR
+  proxy-buffer-size: "16k"
+  proxy-buffers-number: "4"
+  # Increase max body size for file uploads
+  proxy-body-size: "100m"
+  # Enable real IP forwarding
+  use-proxy-protocol: "false"
+  enable-real-ip: "true"
+  # Logging
+  log-format-upstream: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id'

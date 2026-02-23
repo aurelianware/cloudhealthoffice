@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-services-responses
+  namespace: cloudhealthoffice
+data:
+  # Mock responses for testing workflow
+  coverage-response.json: |
+    {
+      "id": "cov-12345",
+      "memberId": "M123456",
+      "planId": "PLAN-001",
+      "groupNumber": "GRP-ABC",
+      "coverageLevel": "FAM",
+      "lineOfBusiness": "Commercial",
+      "effectiveDate": "2026-01-01",
+      "coverageStatus": "Active"
+    }
+  
+  provider-response.json: |
+    {
+      "npi": "1234567890",
+      "organizationName": "Test Hospital",
+      "primarySpecialty": "Internal Medicine",
+      "credentialingStatus": "Approved",
+      "providerStatus": "Active",
+      "networkParticipations": [{
+        "planId": "PLAN-001",
+        "lineOfBusiness": "Commercial",
+        "networkTier": "Tier1",
+        "contractedRates": {
+          "feeScheduleName": "Commercial Rate",
+          "percentOfMedicare": 125.0
+        }
+      }]
+    }
+  
+  cpt-validation.json: |
+    {
+      "isValid": true,
+      "code": "99213",
+      "description": "Office Visit Level 3",
+      "status": "Active",
+      "requiresPriorAuth": false
+    }
+  
+  icd10-validation.json: |
+    {
+      "isValid": true,
+      "code": "E11.9",
+      "description": "Type 2 diabetes without complications",
+      "status": "Active",
+      "isBillable": true
+    }
+  
+  auth-validation.json: |
+    {
+      "isValid": true,
+      "authorizationNumber": "AUTH-12345",
+      "approvedUnits": 1,
+      "approvedServiceDateFrom": "2026-02-01",
+      "approvedServiceDateTo": "2026-02-28",
+      "expirationDate": "2026-03-31",
+      "message": "Authorization valid"
+    }
+  
+  benefit-response.json: |
+    {
+      "serviceCategory": "Office Visit",
+      "copayAmount": 25.00,
+      "coinsurancePercentage": 0,
+      "deductibleApplies": false,
+      "requiresPriorAuth": false
+    }
+  
+  claim-response.json: |
+    {
+      "id": "claim-12345",
+      "claimNumber": "CLM-2026-001",
+      "memberId": "M123456",
+      "billingProviderNPI": "1234567890",
+      "serviceDateFrom": "2026-02-05",
+      "serviceDateTo": "2026-02-05",
+      "placeOfServiceCode": "11",
+      "totalChargeAmount": 150.00,
+      "claimStatus": "Submitted",
+      "diagnosisCodes": [{"code": "E11.9", "qualifier": "ABK"}],
+      "claimLines": [{
+        "lineNumber": 1,
+        "procedureCode": "99213",
+        "units": 1,
+        "chargeAmount": 150.00
+      }]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-microservices
+  namespace: cloudhealthoffice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-microservices
+  template:
+    metadata:
+      labels:
+        app: mock-microservices
+    spec:
+      containers:
+      - name: mock-server
+        image: hashicorp/http-echo:latest
+        ports:
+        - containerPort: 8080
+        args:
+        - "-text={\"status\":\"ok\",\"message\":\"Mock service running\"}"
+        - "-listen=:8080"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+# Services for each microservice
+apiVersion: v1
+kind: Service
+metadata:
+  name: coverage-service
+  namespace: cloudhealthoffice
+spec:
+  selector:
+    app: mock-microservices
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provider-service
+  namespace: cloudhealthoffice
+spec:
+  selector:
+    app: mock-microservices
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claims-service
+  namespace: cloudhealthoffice
+spec:
+  selector:
+    app: mock-microservices
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorization-service
+  namespace: cloudhealthoffice
+spec:
+  selector:
+    app: mock-microservices
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: benefit-plan-service
+  namespace: cloudhealthoffice
+spec:
+  selector:
+    app: mock-microservices
+  ports:
+  - port: 80
+    targetPort: 8080

@@ -1,0 +1,334 @@
+@inject IProviderService ProviderService
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <MudForm @ref="_form">
+                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+                    <!-- Basic Information -->
+                    <MudTabPanel Text="Basic Information" Icon="@Icons.Material.Filled.Person">
+                        <MudGrid Class="mt-2">
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_model.NPI"
+                                              Label="NPI"
+                                              Required="true"
+                                              MaxLength="10"
+                                              Immediate="true"
+                                              Counter="10"
+                                              RequiredError="NPI is required" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudSelect @bind-Value="_model.PracticeType"
+                                           Label="Practice Type"
+                                           Required="true"
+                                           T="string">
+                                    <MudSelectItem Value="@("Individual")">Individual</MudSelectItem>
+                                    <MudSelectItem Value="@("Group")">Group</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_model.Name"
+                                              Label="Provider Name"
+                                              Required="true"
+                                              RequiredError="Provider name is required" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudSelect @bind-Value="_model.Specialty"
+                                           Label="Specialty"
+                                           Required="true"
+                                           T="string">
+                                    <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
+                                    <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
+                                    <MudSelectItem Value="@("Pediatrics")">Pediatrics</MudSelectItem>
+                                    <MudSelectItem Value="@("Obstetrics and Gynecology")">OB/GYN</MudSelectItem>
+                                    <MudSelectItem Value="@("Cardiology")">Cardiology</MudSelectItem>
+                                    <MudSelectItem Value="@("Orthopedic Surgery")">Orthopedic Surgery</MudSelectItem>
+                                    <MudSelectItem Value="@("Radiology")">Radiology</MudSelectItem>
+                                    <MudSelectItem Value="@("Dermatology")">Dermatology</MudSelectItem>
+                                    <MudSelectItem Value="@("Psychiatry")">Psychiatry</MudSelectItem>
+                                    <MudSelectItem Value="@("Oncology")">Oncology</MudSelectItem>
+                                    <MudSelectItem Value="@("Emergency Medicine")">Emergency Medicine</MudSelectItem>
+                                    <MudSelectItem Value="@("Endocrinology")">Endocrinology</MudSelectItem>
+                                    <MudSelectItem Value="@("Physical Medicine and Rehabilitation")">Physical Medicine & Rehab</MudSelectItem>
+                                    <MudSelectItem Value="@("Neurology")">Neurology</MudSelectItem>
+                                    <MudSelectItem Value="@("Gastroenterology")">Gastroenterology</MudSelectItem>
+                                    <MudSelectItem Value="@("Pulmonology")">Pulmonology</MudSelectItem>
+                                    <MudSelectItem Value="@("Nephrology")">Nephrology</MudSelectItem>
+                                    <MudSelectItem Value="@("Urology")">Urology</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_model.TaxonomyCode"
+                                              Label="Taxonomy Code"
+                                              Placeholder="e.g., 207Q00000X" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_model.PracticeName"
+                                              Label="Practice/Organization Name"
+                                              Required="true"
+                                              RequiredError="Practice name is required" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+
+                    <!-- Contact & Location -->
+                    <MudTabPanel Text="Contact & Location" Icon="@Icons.Material.Filled.LocationOn">
+                        <MudGrid Class="mt-2">
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_model.AddressLine1"
+                                              Label="Address Line 1"
+                                              Required="true"
+                                              RequiredError="Address is required" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_model.AddressLine2"
+                                              Label="Address Line 2"
+                                              Placeholder="Suite, Unit, Building, Floor, etc." />
+                            </MudItem>
+                            <MudItem xs="12" md="5">
+                                <MudTextField @bind-Value="_model.City"
+                                              Label="City"
+                                              Required="true"
+                                              RequiredError="City is required" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudSelect @bind-Value="_model.State"
+                                           Label="State"
+                                           Required="true"
+                                           T="string">
+                                    <MudSelectItem Value="@("AL")">Alabama</MudSelectItem>
+                                    <MudSelectItem Value="@("AK")">Alaska</MudSelectItem>
+                                    <MudSelectItem Value="@("AZ")">Arizona</MudSelectItem>
+                                    <MudSelectItem Value="@("AR")">Arkansas</MudSelectItem>
+                                    <MudSelectItem Value="@("CA")">California</MudSelectItem>
+                                    <MudSelectItem Value="@("CO")">Colorado</MudSelectItem>
+                                    <MudSelectItem Value="@("CT")">Connecticut</MudSelectItem>
+                                    <MudSelectItem Value="@("DE")">Delaware</MudSelectItem>
+                                    <MudSelectItem Value="@("FL")">Florida</MudSelectItem>
+                                    <MudSelectItem Value="@("GA")">Georgia</MudSelectItem>
+                                    <MudSelectItem Value="@("HI")">Hawaii</MudSelectItem>
+                                    <MudSelectItem Value="@("ID")">Idaho</MudSelectItem>
+                                    <MudSelectItem Value="@("IL")">Illinois</MudSelectItem>
+                                    <MudSelectItem Value="@("IN")">Indiana</MudSelectItem>
+                                    <MudSelectItem Value="@("IA")">Iowa</MudSelectItem>
+                                    <MudSelectItem Value="@("KS")">Kansas</MudSelectItem>
+                                    <MudSelectItem Value="@("KY")">Kentucky</MudSelectItem>
+                                    <MudSelectItem Value="@("LA")">Louisiana</MudSelectItem>
+                                    <MudSelectItem Value="@("ME")">Maine</MudSelectItem>
+                                    <MudSelectItem Value="@("MD")">Maryland</MudSelectItem>
+                                    <MudSelectItem Value="@("MA")">Massachusetts</MudSelectItem>
+                                    <MudSelectItem Value="@("MI")">Michigan</MudSelectItem>
+                                    <MudSelectItem Value="@("MN")">Minnesota</MudSelectItem>
+                                    <MudSelectItem Value="@("MS")">Mississippi</MudSelectItem>
+                                    <MudSelectItem Value="@("MO")">Missouri</MudSelectItem>
+                                    <MudSelectItem Value="@("MT")">Montana</MudSelectItem>
+                                    <MudSelectItem Value="@("NE")">Nebraska</MudSelectItem>
+                                    <MudSelectItem Value="@("NV")">Nevada</MudSelectItem>
+                                    <MudSelectItem Value="@("NH")">New Hampshire</MudSelectItem>
+                                    <MudSelectItem Value="@("NJ")">New Jersey</MudSelectItem>
+                                    <MudSelectItem Value="@("NM")">New Mexico</MudSelectItem>
+                                    <MudSelectItem Value="@("NY")">New York</MudSelectItem>
+                                    <MudSelectItem Value="@("NC")">North Carolina</MudSelectItem>
+                                    <MudSelectItem Value="@("ND")">North Dakota</MudSelectItem>
+                                    <MudSelectItem Value="@("OH")">Ohio</MudSelectItem>
+                                    <MudSelectItem Value="@("OK")">Oklahoma</MudSelectItem>
+                                    <MudSelectItem Value="@("OR")">Oregon</MudSelectItem>
+                                    <MudSelectItem Value="@("PA")">Pennsylvania</MudSelectItem>
+                                    <MudSelectItem Value="@("RI")">Rhode Island</MudSelectItem>
+                                    <MudSelectItem Value="@("SC")">South Carolina</MudSelectItem>
+                                    <MudSelectItem Value="@("SD")">South Dakota</MudSelectItem>
+                                    <MudSelectItem Value="@("TN")">Tennessee</MudSelectItem>
+                                    <MudSelectItem Value="@("TX")">Texas</MudSelectItem>
+                                    <MudSelectItem Value="@("UT")">Utah</MudSelectItem>
+                                    <MudSelectItem Value="@("VT")">Vermont</MudSelectItem>
+                                    <MudSelectItem Value="@("VA")">Virginia</MudSelectItem>
+                                    <MudSelectItem Value="@("WA")">Washington</MudSelectItem>
+                                    <MudSelectItem Value="@("WV")">West Virginia</MudSelectItem>
+                                    <MudSelectItem Value="@("WI")">Wisconsin</MudSelectItem>
+                                    <MudSelectItem Value="@("WY")">Wyoming</MudSelectItem>
+                                    <MudSelectItem Value="@("DC")">District of Columbia</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudTextField @bind-Value="_model.ZipCode"
+                                              Label="ZIP Code"
+                                              Required="true"
+                                              MaxLength="10"
+                                              RequiredError="ZIP code is required" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_model.Phone"
+                                              Label="Phone"
+                                              Required="true"
+                                              Placeholder="(555) 123-4567"
+                                              RequiredError="Phone is required" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_model.Fax"
+                                              Label="Fax"
+                                              Placeholder="(555) 123-4567" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_model.Email"
+                                              Label="Email"
+                                              InputType="InputType.Email"
+                                              Placeholder="provider@practice.com" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+
+                    <!-- Status (Edit Only) -->
+                    @if (_isEditMode)
+                    {
+                        <MudTabPanel Text="Status" Icon="@Icons.Material.Filled.Check">
+                            <MudGrid Class="mt-2">
+                                <MudItem xs="12" md="6">
+                                    <MudSelect @bind-Value="_updateModel!.CredentialingStatus"
+                                               Label="Credentialing Status"
+                                               Required="true"
+                                               T="string">
+                                        <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                                        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                                        <MudSelectItem Value="@("Expired")">Expired</MudSelectItem>
+                                        <MudSelectItem Value="@("Suspended")">Suspended</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudSelect @bind-Value="_updateModel!.NetworkStatus"
+                                               Label="Network Status"
+                                               Required="true"
+                                               T="string">
+                                        <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                                        <MudSelectItem Value="@("In-Network")">In-Network</MudSelectItem>
+                                        <MudSelectItem Value="@("Out-of-Network")">Out-of-Network</MudSelectItem>
+                                        <MudSelectItem Value="@("Terminated")">Terminated</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                            </MudGrid>
+                        </MudTabPanel>
+                    }
+                </MudTabs>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="SaveAsync"
+                   Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            }
+            else
+            {
+                @(_isEditMode ? "Update" : "Create") @:Provider
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+    [Parameter] public EventCallback OnProviderSaved { get; set; }
+
+    private MudForm? _form;
+    private bool _loading = false;
+    private bool _saving = false;
+    private bool _isEditMode = false;
+    private string? _providerId;
+
+    private CreateProviderRequest _model = new();
+    private UpdateProviderRequest? _updateModel;
+
+    public async Task OpenAsync(string? providerId)
+    {
+        _loading = true;
+        _providerId = providerId;
+        _isEditMode = !string.IsNullOrEmpty(providerId);
+
+        if (_isEditMode)
+        {
+            var provider = await ProviderService.GetProviderByIdAsync(providerId!);
+            if (provider != null)
+            {
+                _updateModel = new UpdateProviderRequest
+                {
+                    NPI = provider.NPI,
+                    Name = provider.Name,
+                    PracticeType = provider.PracticeType,
+                    Specialty = provider.Specialty,
+                    PracticeName = provider.PracticeName,
+                    TaxonomyCode = provider.TaxonomyCode,
+                    AddressLine1 = provider.Locations.FirstOrDefault()?.AddressLine1 ?? "",
+                    AddressLine2 = provider.Locations.FirstOrDefault()?.AddressLine2,
+                    City = provider.City,
+                    State = provider.State,
+                    ZipCode = provider.Locations.FirstOrDefault()?.ZipCode ?? "",
+                    Phone = provider.Locations.FirstOrDefault()?.Phone ?? "",
+                    Fax = provider.Locations.FirstOrDefault()?.Fax,
+                    Email = null,
+                    CredentialingStatus = provider.CredentialingStatus,
+                    NetworkStatus = provider.NetworkStatus
+                };
+                _model = _updateModel;
+            }
+        }
+        else
+        {
+            _model = new CreateProviderRequest
+            {
+                PracticeType = "Individual",
+                State = "TX"
+            };
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_form.IsValid)
+                return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEditMode && _updateModel != null)
+            {
+                await ProviderService.UpdateProviderAsync(_providerId!, _updateModel);
+            }
+            else
+            {
+                await ProviderService.CreateProviderAsync(_model);
+            }
+
+            await OnProviderSaved.InvokeAsync();
+            Close();
+        }
+        catch (Exception)
+        {
+            // Handle error (could show snackbar)
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close();
+    }
+}

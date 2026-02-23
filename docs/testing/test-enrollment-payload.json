@@ -1,0 +1,66 @@
+{
+  "tenantId": "test-tenant-001",
+  "transactionSetControlNumber": "0001",
+  "transactionType": "00",
+  "sponsorId": "123456789",
+  "sponsorName": "Acme Corporation",
+  "effectiveDate": "2026-02-01",
+  "enrollments": [
+    {
+      "maintenanceType": "021",
+      "maintenanceReasonCode": "25",
+      "benefitStatusCode": "A",
+      "employmentStatusCode": "FT",
+      "subscriberId": "BSCA999888777",
+      "groupNumber": "GRP0002",
+      "employeeId": "EMP999999",
+      "effectiveDate": "2026-02-01",
+      "demographics": {
+        "firstName": "John",
+        "middleName": "A",
+        "lastName": "Smith",
+        "dateOfBirth": "1985-03-15",
+        "gender": "M",
+        "idQualifier": "34",
+        "id": "123456789",
+        "address1": "123 MAIN STREET",
+        "city": "SAN FRANCISCO",
+        "state": "CA",
+        "zip": "94102"
+      },
+      "coverage": [
+        {
+          "coverageLevel": "EMP",
+          "insuranceLineCode": "HLT",
+          "planNumber": "Blue Shield PPO"
+        },
+        {
+          "coverageLevel": "EMP",
+          "insuranceLineCode": "DEN",
+          "planNumber": "Dental Basic"
+        }
+      ],
+      "dependents": [
+        {
+          "relationship": "01",
+          "demographics": {
+            "firstName": "Jane",
+            "middleName": "M",
+            "lastName": "Smith",
+            "dateOfBirth": "1987-05-20",
+            "gender": "F",
+            "idQualifier": "34",
+            "id": "234567890"
+          },
+          "coverage": [
+            {
+              "coverageLevel": "DEP",
+              "insuranceLineCode": "HLT",
+              "planNumber": "Blue Shield PPO"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

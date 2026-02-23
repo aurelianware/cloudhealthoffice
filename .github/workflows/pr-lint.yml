@@ -212,7 +212,7 @@ jobs:
 
       # ---------- Security scanning ----------
       - name: Scan for secrets and credentials
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.89.2
         continue-on-error: true
         with:
           path: ./

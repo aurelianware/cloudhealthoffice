@@ -1,0 +1,175 @@
+@page "/members"
+@using CloudHealthOffice.Portal.Services
+@inject IMemberService MemberService
+@inject ICoverageService CoverageService
+@inject IDialogService DialogService
+
+<PageTitle>Members - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" />
+        Members
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Search and manage member information
+    </MudText>
+
+    <!-- Search Bar -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="_searchTerm" 
+                             Label="Search members" 
+                             Placeholder="Enter member ID, name, or DOB..."
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.End" 
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             OnAdornmentClick="SearchMembers"
+                             OnKeyUp="OnSearchKeyUp"
+                             Immediate="false" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          FullWidth="true"
+                          OnClick="SearchMembers"
+                          Disabled="_loading">
+                    <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_members.Any())
+    {
+        <!-- Results Table -->
+        <MudPaper Elevation="2">
+            <MudTable Items="_members" 
+                     Hover="true" 
+                     Breakpoint="Breakpoint.Sm"
+                     Dense="true"
+                     Striped="true">
+                <HeaderContent>
+                    <MudTh>Member ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Date of Birth</MudTh>
+                    <MudTh>Coverage Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Member ID">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.MemberId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Name">
+                        <MudText Typo="Typo.body2">@context.FirstName @context.LastName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Date of Birth">
+                        <MudText Typo="Typo.body2">@context.DateOfBirth.ToString("MM/dd/yyyy")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Coverage Status">
+                        <MudChip Size="Size.Small" 
+                                Color="@GetStatusColor(context.CoverageStatus)">
+                            @context.CoverageStatus
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudButton Variant="Variant.Text" 
+                                  Color="Color.Primary" 
+                                  Size="Size.Small"
+                                  OnClick="@(() => ViewMemberDetails(context.MemberId))">
+                            View Details
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+            Showing @_members.Count member(s)
+        </MudText>
+    }
+    else if (_searched)
+    {
+        <MudPaper Class="pa-8 text-center" Elevation="2">
+            <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No members found</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your search criteria</MudText>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private string _searchTerm = string.Empty;
+    private List<MemberSummary> _members = new();
+    private bool _loading = false;
+    private bool _searched = false;
+
+    private async Task SearchMembers()
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+            return;
+
+        _loading = true;
+        _searched = false;
+        StateHasChanged();
+
+        try
+        {
+            _members = await MemberService.SearchMembersAsync(_searchTerm);
+            _searched = true;
+        }
+        catch (Exception ex)
+        {
+            // Log error - could add ILogger here
+            _members = new();
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchMembers();
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status.ToLowerInvariant() switch
+        {
+            "active" => Color.Success,
+            "pending" => Color.Warning,
+            "inactive" => Color.Error,
+            "terminated" => Color.Default,
+            _ => Color.Info
+        };
+    }
+
+    private async Task ViewMemberDetails(string memberId)
+    {
+        var parameters = new DialogParameters
+        {
+            { "MemberId", memberId }
+        };
+
+        var options = new DialogOptions 
+        { 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true,
+            CloseButton = true 
+        };
+
+        await DialogService.ShowAsync<MemberDetailsDialog>("Member Details", parameters, options);
+    }
+}

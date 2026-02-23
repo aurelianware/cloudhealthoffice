@@ -1,0 +1,49 @@
+---
+# Let's Encrypt ClusterIssuer for automatic TLS certificate management
+# This uses the ACME protocol with HTTP-01 challenge
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production Let's Encrypt server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email for certificate expiration notifications
+    email: admin@cloudhealthoffice.com
+    # Secret to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    # HTTP-01 challenge solver using NGINX ingress
+    # ingressTemplate disables ssl-redirect so Let's Encrypt can reach /.well-known/acme-challenge/ over HTTP
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+          ingressTemplate:
+            metadata:
+              annotations:
+                nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+---
+# Let's Encrypt Staging Issuer (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Staging Let's Encrypt server (use for testing)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@cloudhealthoffice.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+          ingressTemplate:
+            metadata:
+              annotations:
+                nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                nginx.ingress.kubernetes.io/force-ssl-redirect: "false"

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cloud Health Office - Your low-risk way out of legacy vendor lock-in. Start with EDI integration, build leverage, then choose your timeline. Kubernetes + Argo + <500ms claims. Freedom you didn't have before." />
+  <meta name="keywords" content="cloud-native payer platform, Kubernetes healthcare, Argo Workflows, claims adjudication platform, modern core admin system, CMS-0057-F compliance, FHIR R4 payer API, Medicaid MCO, Medicare Advantage, multi-tenant SaaS" />
+  <title>Cloud Health Office - Integration Platform for Health Plans</title>
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
+  <link rel="stylesheet" href="css/sentinel.css" />
+  <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
+  <style>
+    /* Page-specific overrides for homepage layout */
+    body { text-align:center; padding:40px; }
+    .cta-box { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:40px; margin:60px auto; max-width:800px; box-shadow:0 0 30px rgba(0,255,255,0.2); }
+    .cta-box h2 { color:#00ffff; text-shadow:0 0 20px rgba(0,255,255,0.8); font-size:2.5rem; margin-bottom:20px; }
+    .cta-box p { font-size:1.2rem; margin:20px 0; }
+    .version-badge { background:linear-gradient(135deg, #00ffff 0%, #00ff88 100%); color:#000; padding:12px 24px; border-radius:8px; display:inline-block; margin:20px 0; font-weight:bold; font-size:1rem; }
+    .hero-split { display:grid; grid-template-columns:1fr 1fr; gap:40px; max-width:1200px; margin:40px auto; text-align:left; }
+    .hero-left, .hero-right { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; }
+    .hero-right { border-color:#00ff88; }
+    .hero-split h2 { color:#00ffff; font-size:1.8rem; margin-bottom:15px; }
+    .hero-right h2 { color:#00ff88; }
+    .benefit-list { list-style:none; padding:0; margin:20px 0; }
+    .benefit-list li { padding:8px 0; padding-left:25px; position:relative; }
+    .benefit-list li:before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; }
+    .stats-row { display:flex; justify-content:center; gap:40px; flex-wrap:wrap; margin:40px 0; }
+    .stat { text-align:center; }
+    .stat strong { display:block; color:#00ffff; font-size:2rem; margin-bottom:5px; }
+    @media (max-width: 768px) { .hero-split { grid-template-columns:1fr; } }
+    .fhir-announcement { background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; margin:40px auto; max-width:900px; }
+    .fhir-announcement h2 { color:#00ff88; margin-top:0; }
+    .compliance-badge { display:inline-block; background:rgba(0,255,136,0.2); color:#00ff88; border:1px solid #00ff88; padding:6px 16px; border-radius:16px; font-size:0.9rem; margin:5px; }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav style="margin-bottom:20px;">
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
+      <li><a href="index.html" style="color:#00ffff;" aria-current="page">Home</a></li>
+      <li><a href="solutions-payers.html" style="color:#888;">Solutions</a></li>
+      <li><a href="pricing.html" style="color:#888;">Pricing</a></li>
+      <li><a href="platform.html" style="color:#888;">Platform</a></li>
+      <li><a href="release-notes.html" style="color:#888;">Versions</a></li>
+      <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#888;">GitHub</a></li>
+    </ul>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update navigation with auth status
+      updateNavigation('#mainNav');
+    });
+  </script>
+
+  <main id="main-content">
+  <img src="/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Logo" style="max-width:400px; height:auto; display:block; margin:20px auto 40px auto;">
+  <img src="logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Sentinel logo: obsidian monolith shield with all-seeing digital eye and holographic circuit veins on absolute black background. Text reads Cloud Health Office in Segoe UI Bold white. Authoritative, futuristic design representing the future of healthcare payer integration." style="max-width:400px; height:auto; display:block; margin:20px auto 40px auto;">
+  <div class="version-badge">v4.0.0 Production SaaS • Zero Vulnerabilities • 531 Tests Passing</div>
+  
+  <h1>Modern Integration Layer for Health Plans</h1>
+  
+  <div style="background: linear-gradient(135deg, rgba(0,255,255,0.1), rgba(255,0,255,0.1)); border: 1px solid rgba(0,255,255,0.3); border-radius: 8px; padding: 16px; margin: 24px auto; max-width:900px; text-align: center;">
+    <strong style="color: #00ffff;">🚀 24,000+ clones in 2 weeks</strong> • <strong style="color: #ff00ff;">⚡ Production SaaS live</strong> • <strong style="color: #00ff00;">🌐 Multi-tenant at scale</strong>
+  </div>
+  
+  <p style="font-size:1.5rem; max-width:900px; margin:20px auto;">
+    Avoid $2M+ upgrades. Achieve CMS-0057-F compliance.<br>
+    <strong>Built by engineers who've shipped 50+ payer platform implementations.</strong>
+  </p>
+  
+  <div style="max-width:800px; margin:40px auto; text-align:left;">
+    <ul class="benefit-list" style="font-size:1.1rem;">
+      <li><strong>Extend your core claims platform</strong> without replatforming</li>
+      <li><strong>CMS-0057-F compliant</strong> — 18 months ahead of January 2027 deadline</li>
+      <li><strong>Multi-clearinghouse</strong> — Availity, Change Healthcare, Optum, Inovalon</li>
+      <li><strong>Flexible deployment</strong> — Azure Logic Apps or Kubernetes multi-cloud</li>
+      <li><strong>Open source</strong> — Apache 2.0 license with enterprise support</li>
+    </ul>
+  </div>
+  
+  <div style="margin:40px 0;">
+    <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="font-size:1.2rem; padding:15px 40px;">Contact Sales</a>
+    <a href="https://portal.cloudhealthoffice.com" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.2rem; padding:15px 40px;" target="_blank" rel="noopener noreferrer">Launch Demo Portal →</a>
+    <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.2rem; padding:15px 40px;" target="_blank" rel="noopener noreferrer">View Source Code →</a>
+  </div>
+  
+  <div class="stats-row">
+    <div class="stat"><strong>24K+</strong><span>clones in 2 weeks</span></div>
+    <div class="stat"><strong>0</strong><span>security vulnerabilities</span></div>
+    <div class="stat"><strong>&lt;1 hour</strong><span>production deployment</span></div>
+    <div class="stat"><strong>531</strong><span>tests, 85.93% coverage</span></div>
+  </div>
+
+  <!-- CMS-0057-F Compliance Announcement -->
+  <div class="fhir-announcement">
+    <h2>✅ CMS-0057-F Compliant — 18 Months Early</h2>
+    <p style="font-size:1.2rem;">
+      Complete <strong>CMS-0057-F compliance</strong> ahead of the January 1, 2027 deadline.
+    </p>
+    <div style="margin:20px 0;">
+      <span class="compliance-badge">✅ Patient Access API</span>
+      <span class="compliance-badge">✅ Provider Access API</span>
+      <span class="compliance-badge">✅ Prior Authorization API</span>
+      <span class="compliance-badge">✅ Payer-to-Payer API</span>
+      <span class="compliance-badge">✅ Da Vinci IGs</span>
+      <span class="compliance-badge">✅ USCDI v1/v2</span>
+    </div>
+    <p>
+      Transform X12 EDI (270/837/278/835) to FHIR R4 with zero external dependencies.<br>
+      <strong>531 comprehensive tests. 85.93% coverage. Production-ready v4.0.0.</strong>
+    </p>
+    <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" class="button" style="background:#00ff88; border-color:#00ff88; margin-top:20px;" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a>
+  </div>
+
+  <!-- Use Cases for Health Plans -->
+  <div style="max-width:1000px; margin:60px auto; padding:0 20px;">
+    <h2 style="text-align:center; margin-bottom:40px;">Common Use Cases</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:30px;">
+      <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
+        <h3 style="color:#00ffff;">CMS Compliance</h3>
+        <p>Mid-sized Medicaid MCO needs CMS-0057-F compliance without 18-month core platform upgrade.</p>
+        <ul class="benefit-list" style="font-size:0.95rem;">
+          <li>Deploy FHIR APIs in test environment</li>
+          <li>Validate compliance requirements</li>
+          <li>Go live 18 months before deadline</li>
+          <li>Avoid costly core system upgrade</li>
+        </ul>
+      </div>
+      
+      <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
+        <h3 style="color:#00ffff;">Multi-Clearinghouse</h3>
+        <p>Regional health plan dependent on single clearinghouse seeks business continuity.</p>
+        <ul class="benefit-list" style="font-size:0.95rem;">
+          <li>Add secondary clearinghouse connections</li>
+          <li>Failover capability during outages</li>
+          <li>Reduce vendor lock-in risk</li>
+          <li>Zero impact to existing operational workflows</li>
+        </ul>
+      </div>
+      
+      <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
+        <h3 style="color:#00ffff;">Operational Control</h3>
+        <p>Health plan exiting BPaaS vendor wants internal operational control.</p>
+        <ul class="benefit-list" style="font-size:0.95rem;">
+          <li>Deploy to plan's Azure subscription</li>
+          <li>Internal team maintains platform</li>
+          <li>Reduce external dependencies</li>
+          <li>Predictable infrastructure costs</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Built By Section (Anonymous) -->
+  <div style="background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:50px 30px; margin:60px auto; max-width:900px;">
+    <h2 style="text-align:center; margin-bottom:20px;">Built by Healthcare Payer System Experts</h2>
+    <p style="text-align:center; font-size:1.1rem; opacity:0.9; max-width:700px; margin:0 auto 30px;">
+      Cloud Health Office was created by a team with 25+ years of combined
+      experience building and implementing core administration platforms:
+    </p>
+    <ul style="max-width:600px; margin:30px auto; font-size:1.05rem; text-align:left;">
+      <li>Core Admin Health Plan implementations</li>
+      <li>Integrates with any Claims Platform</li>
+      <li>Major health plan integrations</li>
+      <li>Clearinghouse EDI protocols</li>
+    </ul>
+    <p style="text-align:center; opacity:0.8; max-width:700px; margin:30px auto 0;">
+      We've worked on implementations at Medicaid MCOs, Medicare Advantage plans,
+      and commercial payers across the country. We built Cloud Health Office because
+      we've watched health plans spend $2M+ and wait 18 months for integrations that
+      should take weeks.
+    </p>
+    <p style="text-align:center; margin-top:30px; font-weight:bold; color:#00ffff;">
+      Now available for select health plans in 2026.
+    </p>
+  </div>
+
+  <!-- Deployment Options -->
+  <div style="max-width:1000px; margin:60px auto; padding:0 20px;">
+    <h2 style="text-align:center; margin-bottom:40px;">Flexible Deployment Options</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px;">
+      <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
+        <h3 style="color:#00ffff;">Azure Logic Apps</h3>
+        <p><strong>Best for:</strong> Rapid deployment, Azure-first organizations</p>
+        <ul class="benefit-list">
+          <li>Fastest time to production</li>
+          <li>Microsoft-managed infrastructure</li>
+          <li>Built-in HIPAA compliance</li>
+          <li>Lower operational overhead</li>
+        </ul>
+      </div>
+      <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px;">
+        <h3 style="color:#00ffff;">Kubernetes Multi-Cloud</h3>
+        <p><strong>Best for:</strong> Enterprise control, cloud independence</p>
+        <ul class="benefit-list">
+          <li>Deploy on Azure, AWS, or GCP</li>
+          <li>No vendor lock-in</li>
+          <li>Full infrastructure control</li>
+          <li>Hybrid cloud capable</li>
+        </ul>
+      </div>
+    </div>
+    <p style="text-align:center; margin-top:30px; opacity:0.8;">
+      Both deployment options provide identical healthcare integration capabilities.
+    </p>
+  </div>
+
+  <!-- Final CTA -->
+  <div style="background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%); border:2px solid #00ffff; border-radius:12px; padding:50px 30px; margin:60px auto; max-width:900px; text-align:center;" id="schedule-demo">
+    <h2 style="color:#00ffff; margin-top:0;">Ready to Modernize Your Integration?</h2>
+    <p style="font-size:1.2rem; margin:20px 0;">
+      Currently accepting pilot deployments for select health plans in 2026.
+    </p>
+    <p style="opacity:0.9; margin-bottom:30px;">
+      Medicaid MCOs, Medicare Advantage, and commercial payers with on-premise core systems.
+    </p>
+    
+    <div style="margin-top:30px;">
+      <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="background:#00ffff; color:#000; border-color:#00ffff; font-size:1.3rem; padding:18px 50px; margin:0 10px 10px 10px;">Contact Sales →</a>
+      <a href="https://portal.cloudhealthoffice.com/signup" class="button" style="font-size:1.3rem; padding:18px 50px; margin:0 10px 10px 10px;">Start Free Trial →</a>
+    </div>
+    
+    <p style="margin-top:30px; font-size:0.95rem; opacity:0.8;">
+      Questions? Email us at <a href="mailto:sales@cloudhealthoffice.com" style="color:#00ff88;">sales@cloudhealthoffice.com</a>
+    </p>
+  </div>
+  
+  </main>
+
+  <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
+    <p>
+      <strong>Cloud Health Office v4.0.0</strong><br>
+      Modern integration platform for payer core administration systems
+    </p>
+    <p style="opacity:0.8; margin:20px 0;">
+      Apache 2.0 License • Independent open-source project • Not affiliated with any payer platform or clearinghouse vendors<br/>
+      <a href="mailto:partners@cloudhealthoffice.com">Partner Program</a> • <a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a> • <a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a> • <a href="mailto:investors@cloudhealthoffice.com">Investors</a>
+    </p>
+    <p>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
+      <a href="pricing.html">Pricing</a>
+    </p>
+    <p style="opacity:0.6; font-size:0.9rem; margin-top:20px;">
+      © 2026 Cloud Health Office • Built by healthcare payer system experts
+    </p>
+  </footer>
+</body>
+</html>
