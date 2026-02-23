@@ -1,0 +1,236 @@
+@using CloudHealthOffice.Portal.Services
+@inject IReferenceDataService ReferenceDataService
+
+<MudDialog>
+    <DialogContent>
+        @if (_codeDetails == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+            <MudText>Loading code details...</MudText>
+        }
+        else
+        {
+            <MudGrid>
+                <!-- Code Information -->
+                <MudItem xs="12">
+                    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                        <MudGrid>
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Code System</MudText>
+                                <MudChip Size="Size.Medium" Color="GetCodeSystemColor(_codeDetails.CodeSystem)">
+                                    @_codeDetails.CodeSystem
+                                </MudChip>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Code</MudText>
+                                <MudText Typo="Typo.h5" Style="font-family: monospace;">@_codeDetails.Code</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Description -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" GutterBottom="true">Description</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-2"><strong>@_codeDetails.ShortDescription</strong></MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@_codeDetails.LongDescription</MudText>
+                </MudItem>
+
+                <!-- Metadata -->
+                <MudItem xs="12" md="6">
+                    <MudSimpleTable Hover="true" Dense="true" Class="mt-4">
+                        <tbody>
+                            <tr>
+                                <td><strong>Category:</strong></td>
+                                <td>
+                                    <MudChip Size="Size.Small" Variant="Variant.Outlined">
+                                        @_codeDetails.Category
+                                    </MudChip>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status:</strong></td>
+                                <td>
+                                    <MudChip Size="Size.Small" Color="GetStatusColor(_codeDetails.Status)">
+                                        @_codeDetails.Status
+                                    </MudChip>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Effective Date:</strong></td>
+                                <td>@_codeDetails.EffectiveDate.ToString("MMMM dd, yyyy")</td>
+                            </tr>
+                            @if (_codeDetails.EndDate.HasValue)
+                            {
+                                <tr>
+                                    <td><strong>End Date:</strong></td>
+                                    <td>@_codeDetails.EndDate.Value.ToString("MMMM dd, yyyy")</td>
+                                </tr>
+                            }
+                            <tr>
+                                <td><strong>Prior Auth:</strong></td>
+                                <td>
+                                    @if (_codeDetails.RequiresPriorAuth)
+                                    {
+                                        <MudChip Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip Size="Size.Small" Color="Color.Success">Not Required</MudChip>
+                                    }
+                                </td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudItem>
+
+                <!-- Usage Stats -->
+                <MudItem xs="12" md="6">
+                    @if (_usageStats != null)
+                    {
+                        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Usage Statistics</MudText>
+                        <MudSimpleTable Hover="true" Dense="true">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Claims:</strong></td>
+                                    <td>@_usageStats.ClaimsCount.ToString("N0")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Authorizations:</strong></td>
+                                    <td>@_usageStats.AuthorizationsCount.ToString("N0")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Benefit Plans:</strong></td>
+                                    <td>@_usageStats.BenefitsCount</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Used:</strong></td>
+                                    <td>@(_usageStats.LastUsedDate?.ToString("MM/dd/yyyy") ?? "Never")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Billed:</strong></td>
+                                    <td>@_usageStats.TotalBilledAmount.ToString("C")</td>
+                                </tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </MudItem>
+
+                <!-- Keywords -->
+                @if (_codeDetails.Keywords.Any())
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Keywords</MudText>
+                        <MudChipSet>
+                            @foreach (var keyword in _codeDetails.Keywords)
+                            {
+                                <MudChip Size="Size.Small" Variant="Variant.Outlined">@keyword</MudChip>
+                            }
+                        </MudChipSet>
+                    </MudItem>
+                }
+
+                <!-- Related Codes -->
+                @if (_codeDetails.RelatedCodes.Any())
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Related Codes</MudText>
+                        <MudTable Items="@_codeDetails.RelatedCodes" Hover="true" Dense="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Code System</MudTh>
+                                <MudTh>Code</MudTh>
+                                <MudTh>Description</MudTh>
+                                <MudTh>Relation</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Code System">
+                                    <MudChip Size="Size.Small" Color="GetCodeSystemColor(context.CodeSystem)">
+                                        @context.CodeSystem
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Code" Style="font-family: monospace; font-weight: bold;">@context.Code</MudTd>
+                                <MudTd DataLabel="Description">@context.Description</MudTd>
+                                <MudTd DataLabel="Relation">
+                                    <MudChip Size="Size.Small" Variant="Variant.Outlined">@context.RelationType</MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudItem>
+                }
+
+                <!-- Hierarchy -->
+                @if (!string.IsNullOrEmpty(_codeDetails.ParentCode) || _codeDetails.ChildCodes.Any())
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Code Hierarchy</MudText>
+                        @if (!string.IsNullOrEmpty(_codeDetails.ParentCode))
+                        {
+                            <MudText Typo="Typo.body2">
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" /> 
+                                Parent: <code>@_codeDetails.ParentCode</code>
+                            </MudText>
+                        }
+                        @if (_codeDetails.ChildCodes.Any())
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" /> 
+                                Children: @string.Join(", ", _codeDetails.ChildCodes.Select(c => $"<code>{c}</code>"))
+                            </MudText>
+                        }
+                    </MudItem>
+                }
+
+                <!-- Clinical Notes -->
+                @if (!string.IsNullOrEmpty(_codeDetails.ClinicalNotes))
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Class="mt-4">
+                            <MudText Typo="Typo.body2"><strong>Clinical Notes:</strong> @_codeDetails.ClinicalNotes</MudText>
+                        </MudAlert>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string CodeSystem { get; set; } = string.Empty;
+    [Parameter] public string Code { get; set; } = string.Empty;
+
+    private MedicalCodeDetails? _codeDetails;
+    private CodeUsageStats? _usageStats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _codeDetails = await ReferenceDataService.GetCodeDetailsAsync(CodeSystem, Code);
+        _usageStats = await ReferenceDataService.GetCodeUsageStatsAsync(CodeSystem, Code);
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private Color GetCodeSystemColor(string codeSystem) => codeSystem switch
+    {
+        "CPT" => Color.Primary,
+        "ICD-10-CM" => Color.Secondary,
+        "HCPCS" => Color.Info,
+        "Revenue Code" => Color.Success,
+        "Place of Service" => Color.Warning,
+        "DRG" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Deprecated" => Color.Warning,
+        _ => Color.Default
+    };
+}

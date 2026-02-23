@@ -1,0 +1,78 @@
+{
+  "tenantId": "test-tenant-001",
+  "claimNumber": "CLM2025010700001",
+  "memberId": "BSCA123456789",
+  "coverageId": "COV-2025-001",
+  "subscriberFirstName": "John",
+  "subscriberLastName": "Smith",
+  "patientFirstName": "John",
+  "patientLastName": "Smith",
+  "patientRelationship": "18",
+  "lineOfBusiness": 1,
+  "billingProviderNPI": "1234567893",
+  "billingProviderName": "Smith Family Medicine",
+  "renderingProviderNPI": "1234567893",
+  "renderingProviderName": "Dr. John Smith, MD",
+  "placeOfServiceCode": "11",
+  "claimType": 1,
+  "claimFrequencyCode": "1",
+  "totalChargeAmount": 350.00,
+  "serviceDateFrom": "2025-01-15T10:00:00Z",
+  "serviceDateTo": "2025-01-15T10:30:00Z",
+  "diagnosisCodes": [
+    {
+      "code": "E11.9",
+      "codeQualifier": "ABK",
+      "pointerNumber": 1,
+      "description": "Type 2 diabetes mellitus without complications"
+    },
+    {
+      "code": "I10",
+      "codeQualifier": "ABF",
+      "pointerNumber": 2,
+      "description": "Essential (primary) hypertension"
+    }
+  ],
+  "claimLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99213",
+      "procedureDescription": "Office visit, established patient, moderate complexity",
+      "modifiers": [],
+      "diagnosisPointers": [1, 2],
+      "units": 1,
+      "chargeAmount": 150.00,
+      "serviceDateFrom": "2025-01-15T10:00:00Z",
+      "serviceDateTo": "2025-01-15T10:30:00Z",
+      "placeOfServiceCode": "11"
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "80053",
+      "procedureDescription": "Comprehensive metabolic panel",
+      "modifiers": [],
+      "diagnosisPointers": [1],
+      "units": 1,
+      "chargeAmount": 75.00,
+      "serviceDateFrom": "2025-01-15T10:00:00Z",
+      "serviceDateTo": "2025-01-15T10:00:00Z",
+      "placeOfServiceCode": "11"
+    },
+    {
+      "lineNumber": 3,
+      "procedureCode": "83036",
+      "procedureDescription": "Hemoglobin A1C",
+      "modifiers": [],
+      "diagnosisPointers": [1],
+      "units": 1,
+      "chargeAmount": 125.00,
+      "serviceDateFrom": "2025-01-15T10:00:00Z",
+      "serviceDateTo": "2025-01-15T10:00:00Z",
+      "placeOfServiceCode": "11"
+    }
+  ],
+  "status": 1,
+  "priorAuthorizationNumber": "AUTH-2025-001234",
+  "claimNotes": "Follow-up visit for diabetes management. Patient stable on metformin 1000mg BID.",
+  "createdBy": "system-test"
+}

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FHIR R4 APIs - Cloud Health Office</title>
+  <meta name="description" content="CMS-0057-F compliant FHIR R4 APIs for Patient Access, Provider Access, Payer-to-Payer Exchange, and Prior Authorization" />
+  <link rel="stylesheet" href="../css/sentinel.css" />
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">
+      ☰
+    </button>
+    <ul id="mainNav">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../solutions-payers.html">Solutions</a></li>
+      <li><a href="../pricing.html">Pricing</a></li>
+      <li><a href="api-docs.html" class="active">FHIR APIs</a></li>
+      <li><a href="../platform.html">Platform</a></li>
+      <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const menuToggle = document.getElementById('mobileMenuToggle');
+      const mainNav = document.getElementById('mainNav');
+      
+      if (menuToggle && mainNav) {
+        menuToggle.addEventListener('click', () => {
+          const isOpen = mainNav.classList.toggle('mobile-menu-open');
+          menuToggle.setAttribute('aria-expanded', isOpen);
+          menuToggle.textContent = isOpen ? '✕' : '☰';
+        });
+      }
+    });
+  </script>
+
+  <main id="main-content" class="container">
+    <!-- Hero Section -->
+    <section style="text-align: center; padding: 60px 20px 40px;">
+      <div style="display: inline-block; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-green)); padding: 8px 20px; border-radius: 20px; margin-bottom: 20px;">
+        <span style="font-weight: bold; font-size: 0.9rem;">CMS-0057-F COMPLIANT</span>
+      </div>
+      
+      <h1 style="font-size: 2.5rem; margin: 20px 0;">FHIR R4 APIs</h1>
+      <p style="font-size: 1.3rem; color: var(--text-secondary); max-width: 800px; margin: 0 auto 40px;">
+        Production-ready FHIR APIs for Patient Access, Provider Access, Payer-to-Payer Exchange, and Prior Authorization
+      </p>
+
+      <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px;">
+        <a href="#quickstart" class="button-primary">Get Started in 15 Minutes</a>
+        <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">Try Sandbox</a>
+      </div>
+
+      <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-secondary);">
+        <div>✅ <strong>480 Tests Passing</strong></div>
+        <div>✅ <strong>Open Source</strong></div>
+        <div>✅ <strong>Production Ready</strong></div>
+        <div>✅ <strong>Deadline: Jan 1, 2027</strong></div>
+      </div>
+    </section>
+
+    <!-- API Cards Grid -->
+    <section style="padding: 40px 20px;">
+      <div class="features-grid">
+        <!-- Patient Access API -->
+        <div class="card" style="border: 2px solid var(--neon-cyan);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Patient Access API</h3>
+            <span style="background: var(--neon-cyan); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-9115-F</span>
+          </div>
+          
+          <p>Patients access their health data via FHIR R4 with OAuth 2.0 consent.</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
+            <strong>Resources:</strong> Patient, Claim, ExplanationOfBenefit, Coverage, Encounter
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+            <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/patient-access-api.yaml" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              📖 OpenAPI Spec
+            </a>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/patient-access-quickstart.md" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              🚀 Quickstart
+            </a>
+          </div>
+
+          <details style="margin-top: 20px; font-size: 0.9rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: var(--neon-cyan);">View Endpoints ↓</summary>
+            <pre style="margin-top: 10px; padding: 10px; background: var(--dark-gray); border-radius: 4px; overflow-x: auto;"><code>GET  /fhir/r4/Patient/{id}
+GET  /fhir/r4/Claim?patient={id}
+GET  /fhir/r4/ExplanationOfBenefit?patient={id}
+GET  /fhir/r4/Coverage?patient={id}
+GET  /fhir/r4/Encounter?patient={id}
+GET  /fhir/r4/Patient/{id}/$everything</code></pre>
+          </details>
+        </div>
+
+        <!-- Provider Access API -->
+        <div class="card" style="border: 2px solid var(--neon-green);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Provider Access API</h3>
+            <span style="background: var(--neon-green); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-0057-F</span>
+          </div>
+          
+          <p>Healthcare providers access member data with SMART on FHIR authentication.</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
+            <strong>Resources:</strong> Patient roster, Claims, EOBs, Bulk member match
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+            <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/provider-access-api.yaml" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              📖 OpenAPI Spec
+            </a>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/provider-access-quickstart.md" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              🚀 Quickstart
+            </a>
+          </div>
+
+          <details style="margin-top: 20px; font-size: 0.9rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: var(--neon-green);">View Endpoints ↓</summary>
+            <pre style="margin-top: 10px; padding: 10px; background: var(--dark-gray); border-radius: 4px; overflow-x: auto;"><code>GET  /fhir/r4/Patient
+GET  /fhir/r4/ExplanationOfBenefit
+GET  /fhir/r4/Condition
+GET  /fhir/r4/Procedure
+POST /fhir/$bulk-member-match</code></pre>
+          </details>
+        </div>
+
+        <!-- Payer-to-Payer API -->
+        <div class="card" style="border: 2px solid var(--accent-purple);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Payer-to-Payer API</h3>
+            <span style="background: var(--accent-purple); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-0057-F</span>
+          </div>
+          
+          <p>Exchange member data when patients switch health plans with $member-match.</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
+            <strong>Features:</strong> Member matching, Bulk export, Consent validation
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+            <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/payer-to-payer-api.yaml" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              📖 OpenAPI Spec
+            </a>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/payer-to-payer-quickstart.md" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              🚀 Quickstart
+            </a>
+          </div>
+
+          <details style="margin-top: 20px; font-size: 0.9rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: var(--accent-purple);">View Endpoints ↓</summary>
+            <pre style="margin-top: 10px; padding: 10px; background: var(--dark-gray); border-radius: 4px; overflow-x: auto;"><code>POST /fhir/$member-match
+POST /fhir/$everything
+GET  /fhir/Bundle
+GET  /fhir/Consent</code></pre>
+          </details>
+        </div>
+
+        <!-- Prior Authorization API -->
+        <div class="card" style="border: 2px solid var(--accent-orange);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Prior Authorization API</h3>
+            <span style="background: var(--accent-orange); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-0057-F</span>
+          </div>
+          
+          <p>X12 278 ↔ FHIR bidirectional prior authorization with Da Vinci PAS.</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
+            <strong>Features:</strong> Real-time decisions, CDS Hooks, 72-hour SLA tracking
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+            <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/prior-auth-api.yaml" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              📖 OpenAPI Spec
+            </a>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/prior-auth-quickstart.md" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              🚀 Quickstart
+            </a>
+          </div>
+
+          <details style="margin-top: 20px; font-size: 0.9rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: var(--accent-orange);">View Endpoints ↓</summary>
+            <pre style="margin-top: 10px; padding: 10px; background: var(--dark-gray); border-radius: 4px; overflow-x: auto;"><code>POST /fhir/Claim
+GET  /fhir/ClaimResponse/{id}
+POST /cds-services/prior-auth
+GET  /fhir/ServiceRequest</code></pre>
+          </details>
+        </div>
+
+        <!-- Claims Scrubbing API -->
+        <div class="card" style="border: 2px solid var(--neon-cyan);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Claims Scrubbing API</h3>
+            <span style="background: var(--neon-cyan); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">COMMERCIAL</span>
+          </div>
+          
+          <p>Pre-validate claims before payer submission. Improve first-pass rates from 85% to 95%+.</p>
+          
+          <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
+            <strong>Features:</strong> 30+ validation rules, Real-time (< 100ms), Analytics
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
+            <a href="https://petstore.swagger.io/?url=https://raw.githubusercontent.com/aurelianware/cloudhealthoffice/main/api/openapi/claims-scrubbing-api.yaml" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              📖 OpenAPI Spec
+            </a>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/claims-scrubbing-quickstart.md" 
+               class="button-secondary" target="_blank" style="font-size: 0.9rem;">
+              🚀 Quickstart
+            </a>
+          </div>
+
+          <details style="margin-top: 20px; font-size: 0.9rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: var(--neon-cyan);">View Endpoints ↓</summary>
+            <pre style="margin-top: 10px; padding: 10px; background: var(--dark-gray); border-radius: 4px; overflow-x: auto;"><code>POST /scrubbing/v1/claims/validate
+POST /scrubbing/v1/claims/batch-validate
+GET  /scrubbing/v1/rules
+GET  /scrubbing/v1/analytics/first-pass-rate</code></pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quickstart Section -->
+    <section id="quickstart" style="padding: 60px 20px; background: var(--dark-gray); margin: 40px 0; border-radius: 12px;">
+      <h2 style="text-align: center; margin-bottom: 40px;">Get Started in 15 Minutes</h2>
+      
+      <div style="max-width: 800px; margin: 0 auto;">
+        <div style="background: var(--dark-bg); padding: 30px; border-radius: 8px; border-left: 4px solid var(--neon-cyan);">
+          <h3 style="margin-top: 0;">Quick Test with Sandbox</h3>
+          
+          <pre style="background: #000; padding: 20px; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);"># Test Patient Access API
+curl -H "Authorization: Bearer test-token" \
+  https://sandbox.cloudhealthoffice.com/fhir/r4/Patient/PAT001
+
+# Test Payer-to-Payer $member-match
+curl -X POST https://sandbox.cloudhealthoffice.com/fhir/$member-match \
+  -H "Authorization: Bearer test-token" \
+  -H "Content-Type: application/fhir+json" \
+  -d @member-match-request.json
+
+# Test Claims Scrubbing
+curl -X POST https://sandbox.cloudhealthoffice.com/scrubbing/v1/claims/validate \
+  -H "X-API-Key: test_key" \
+  -H "Content-Type: application/fhir+json" \
+  -d @claim.json</code></pre>
+
+          <div style="margin-top: 20px;">
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/cms-0057f-compliance-quickstart.md" 
+               class="button-primary" target="_blank">
+              📘 Full Quickstart Guide
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Standards Compliance -->
+    <section style="padding: 40px 20px;">
+      <h2 style="text-align: center; margin-bottom: 40px;">Standards & Compliance</h2>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto;">
+        <div class="card">
+          <h3 style="color: var(--neon-cyan);">✅ HL7 FHIR R4</h3>
+          <p>Full FHIR R4.0.1 specification compliance with US Core 3.1.1+ profiles</p>
+        </div>
+        
+        <div class="card">
+          <h3 style="color: var(--neon-green);">✅ CMS Rules</h3>
+          <p>CMS-9115-F (Patient Access) and CMS-0057-F (Interoperability)</p>
+        </div>
+        
+        <div class="card">
+          <h3 style="color: var(--accent-purple);">✅ Da Vinci IGs</h3>
+          <p>PDex, PAS, CRD, and DTR Implementation Guides</p>
+        </div>
+        
+        <div class="card">
+          <h3 style="color: var(--accent-orange);">✅ SMART on FHIR</h3>
+          <p>App Launch v2.0 with OAuth 2.0 security</p>
+        </div>
+
+        <div class="card">
+          <h3 style="color: var(--neon-cyan);">✅ X12 EDI</h3>
+          <p>Bidirectional conversion: 837, 835, 270, 271, 278 transactions</p>
+        </div>
+        
+        <div class="card">
+          <h3 style="color: var(--neon-green);">✅ HIPAA</h3>
+          <p>PHI encryption, audit logging, and access controls</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Integration Examples -->
+    <section style="padding: 40px 20px; background: var(--dark-gray); border-radius: 12px;">
+      <h2 style="text-align: center; margin-bottom: 40px;">Integration Examples</h2>
+      
+      <div style="max-width: 900px; margin: 0 auto;">
+        <details style="margin-bottom: 20px;">
+          <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 15px; background: var(--dark-bg); border-radius: 8px;">
+            JavaScript / TypeScript
+          </summary>
+          <pre style="margin-top: 15px; padding: 20px; background: #000; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);">// Fetch patient data
+const response = await fetch(
+  'https://api.cloudhealthoffice.com/fhir/r4/Patient/PAT001',
+  { headers: { 'Authorization': `Bearer ${accessToken}` } }
+);
+const patient = await response.json();
+console.log(patient.name[0].given); // ["John"]</code></pre>
+        </details>
+
+        <details style="margin-bottom: 20px;">
+          <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 15px; background: var(--dark-bg); border-radius: 8px;">
+            Python
+          </summary>
+          <pre style="margin-top: 15px; padding: 20px; background: #000; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);">import requests
+
+response = requests.get(
+    'https://api.cloudhealthoffice.com/fhir/r4/Patient/PAT001',
+    headers={'Authorization': f'Bearer {access_token}'}
+)
+patient = response.json()
+print(patient['name'][0]['given'])</code></pre>
+        </details>
+
+        <details style="margin-bottom: 20px;">
+          <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 15px; background: var(--dark-bg); border-radius: 8px;">
+            C# / .NET
+          </summary>
+          <pre style="margin-top: 15px; padding: 20px; background: #000; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);">using Hl7.Fhir.Rest;
+using Hl7.Fhir.Model;
+
+var client = new FhirClient(
+    "https://api.cloudhealthoffice.com/fhir/r4");
+client.OnBeforeRequest += (sender, e) => {
+    e.RawRequest.Headers.Add("Authorization", 
+        $"Bearer {accessToken}");
+};
+
+var patient = client.Read<Patient>("Patient/PAT001");
+Console.WriteLine(patient.Name[0].Given.First());</code></pre>
+        </details>
+      </div>
+    </section>
+
+    <!-- Support & Resources -->
+    <section style="padding: 60px 20px; text-align: center;">
+      <h2 style="margin-bottom: 30px;">Resources & Support</h2>
+      
+      <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px;">
+        <a href="https://github.com/aurelianware/cloudhealthoffice" class="button-secondary" target="_blank">
+          📖 Documentation
+        </a>
+        <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">
+          🧪 Try Sandbox
+        </a>
+        <a href="https://github.com/aurelianware/cloudhealthoffice/issues" class="button-secondary" target="_blank">
+          🐛 Report Issues
+        </a>
+ <a href="mailto:api@cloudhealthoffice.com" class="button-secondary">
+          📧 Contact Support
+        </a>
+      </div>
+
+      <div style="padding: 40px 20px; background: var(--dark-gray); border-radius: 12px; max-width: 800px; margin: 0 auto;">
+        <h3>🚀 Ready to Get CMS-0057-F Compliant?</h3>
+        <p style="font-size: 1.1rem; margin: 20px 0;">
+          Deploy production-ready FHIR APIs in days, not months
+        </p>
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; margin-top: 30px;">
+          <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/cms-0057f-compliance-quickstart.md" 
+             class="button-primary" target="_blank">
+            Start 15-Minute Quickstart
+          </a>
+          <a href="../pricing.html" class="button-secondary">
+            View Pricing
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer style="text-align: center; margin-top: 80px; padding: 40px 20px; border-top: 1px solid #333;">
+    <p>
+      <strong>Cloud Health Office v4.0</strong><br>
+      CMS-0057-F Compliant FHIR R4 Platform
+    </p>
+    <p style="opacity: 0.8; margin: 20px 0;">
+      Apache 2.0 License • Open Source • 480 Tests Passing
+    </p>
+    <p>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="mailto:api@cloudhealthoffice.com">Contact</a> •
+      <a href="../pricing.html">Pricing</a>
+    </p>
+  </footer>
+</body>
+</html>
