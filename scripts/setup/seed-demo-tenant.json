@@ -1,0 +1,18 @@
+{
+  "id": "demo-tenant-001",
+  "tenantId": "demo-tenant-001",
+  "azureTenantId": "demo",
+  "organizationName": "Demo Health Plan",
+  "subscriptionStatus": "Active",
+  "tier": "enterprise",
+  "isDemo": true,
+  "stripeCustomerId": null,
+  "stripeSubscriptionId": null,
+  "trialEndsAt": null,
+  "createdAt": "2025-08-01T00:00:00Z",
+  "updatedAt": "2026-02-08T00:00:00Z",
+  "adminEmails": [
+    "demo@cloudhealthoffice.com",
+    "admin@example.com"
+  ]
+}

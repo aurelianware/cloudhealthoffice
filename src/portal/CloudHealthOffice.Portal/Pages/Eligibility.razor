@@ -1,0 +1,262 @@
+@page "/eligibility"
+@using CloudHealthOffice.Portal.Services
+@inject IEligibilityService EligibilityService
+@inject IMemberService MemberService
+
+<PageTitle>Eligibility Verification - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
+        Real-Time Eligibility Verification
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        270/271 EDI Transaction - Check member coverage and benefits
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Member Information</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudForm @ref="_form">
+                        <MudTextField @bind-Value="_request.SubscriberId" Label="Member ID" Required="true" 
+                                      Immediate="true" Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudTextField @bind-Value="_request.FirstName" Label="First Name" 
+                                      Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudTextField @bind-Value="_request.LastName" Label="Last Name" 
+                                      Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudDatePicker @bind-Date="_serviceDate" Label="Service Date" 
+                                       Variant="Variant.Outlined" Class="mb-3" />
+                        
+                        <MudSelect @bind-Value="_request.ServiceType" Label="Service Type" 
+                                   Variant="Variant.Outlined" Class="mb-3">
+                            <MudSelectItem Value="@("30")">Health Benefit Coverage</MudSelectItem>
+                            <MudSelectItem Value="@("33")">Chiropractic</MudSelectItem>
+                            <MudSelectItem Value="@("35")">Dental Care</MudSelectItem>
+                            <MudSelectItem Value="@("47")">Diagnostic Services</MudSelectItem>
+                            <MudSelectItem Value="@("86")">Emergency Services</MudSelectItem>
+                            <MudSelectItem Value="@("88")">Pharmacy</MudSelectItem>
+                        </MudSelect>
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                   DisableElevation="true" FullWidth="true"
+                                   OnClick="CheckEligibility" Disabled="@_checking">
+                            @if (_checking)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Checking...</span>
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                                <span>Verify Eligibility</span>
+                            }
+                        </MudButton>
+                    </MudForm>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            @if (_response != null)
+            {
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Eligibility Response (271)</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <!-- Coverage Status -->
+                        <MudAlert Severity="@(_response.IsCovered ? Severity.Success : Severity.Error)" Class="mb-4">
+                            <MudText Typo="Typo.h6">
+                                @if (_response.IsCovered)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                                    <span>ACTIVE COVERAGE</span>
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Class="mr-2" />
+                                    <span>NO ACTIVE COVERAGE</span>
+                                }
+                            </MudText>
+                            @if (!string.IsNullOrEmpty(_response.RejectionReason))
+                            {
+                                <MudText Typo="Typo.body2">@_response.RejectionReason</MudText>
+                            }
+                        </MudAlert>
+
+                        @if (_response.IsCovered)
+                        {
+                            <!-- Plan Information -->
+                            <MudText Typo="Typo.h6" Class="mb-2">Plan Information</MudText>
+                            <MudSimpleTable Dense="true" Class="mb-4">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Plan Name:</strong></td>
+                                        <td>@_response.InsurancePlanName</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Group Number:</strong></td>
+                                        <td>@_response.GroupNumber</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Coverage Level:</strong></td>
+                                        <td>@_response.CoverageLevel</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Effective Date:</strong></td>
+                                        <td>@_response.CoverageBeginDate?.ToString("MM/dd/yyyy")</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+
+                            <!-- Deductible & OOP -->
+                            @if (_response.Deductible != null)
+                            {
+                                <MudText Typo="Typo.h6" Class="mb-2">Deductible</MudText>
+                                <MudGrid Class="mb-4">
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Individual</MudText>
+                                        <MudProgressLinear Color="Color.Primary" 
+                                                           Value="@((double)_response.Deductible.IndividualMet / (double)_response.Deductible.IndividualAmount * 100)" 
+                                                           Class="mb-1" />
+                                        <MudText Typo="Typo.caption">
+                                            @_response.Deductible.IndividualMet.ToString("C") / @_response.Deductible.IndividualAmount.ToString("C")
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Family</MudText>
+                                        <MudProgressLinear Color="Color.Primary" 
+                                                           Value="@((double)_response.Deductible.FamilyMet / (double)_response.Deductible.FamilyAmount * 100)" 
+                                                           Class="mb-1" />
+                                        <MudText Typo="Typo.caption">
+                                            @_response.Deductible.FamilyMet.ToString("C") / @_response.Deductible.FamilyAmount.ToString("C")
+                                        </MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            }
+
+                            @if (_response.OutOfPocket != null)
+                            {
+                                <MudText Typo="Typo.h6" Class="mb-2">Out-of-Pocket Maximum</MudText>
+                                <MudGrid Class="mb-4">
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Individual</MudText>
+                                        <MudProgressLinear Color="Color.Success" 
+                                                           Value="@((double)_response.OutOfPocket.IndividualMet / (double)_response.OutOfPocket.IndividualAmount * 100)" 
+                                                           Class="mb-1" />
+                                        <MudText Typo="Typo.caption">
+                                            @_response.OutOfPocket.IndividualMet.ToString("C") / @_response.OutOfPocket.IndividualAmount.ToString("C")
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Family</MudText>
+                                        <MudProgressLinear Color="Color.Success" 
+                                                           Value="@((double)_response.OutOfPocket.FamilyMet / (double)_response.OutOfPocket.FamilyAmount * 100)" 
+                                                           Class="mb-1" />
+                                        <MudText Typo="Typo.caption">
+                                            @_response.OutOfPocket.FamilyMet.ToString("C") / @_response.OutOfPocket.FamilyAmount.ToString("C")
+                                        </MudText>
+                                    </MudItem>
+                                </MudGrid>
+                            }
+
+                            <!-- Benefits -->
+                            @if (_response.Benefits?.Any() == true)
+                            {
+                                <MudText Typo="Typo.h6" Class="mb-2">Benefits</MudText>
+                                <MudTable Items="@_response.Benefits" Dense="true" Hover="true">
+                                    <HeaderContent>
+                                        <MudTh>Service</MudTh>
+                                        <MudTh>Copay</MudTh>
+                                        <MudTh>Coinsurance</MudTh>
+                                        <MudTh>Auth Required</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Service">@context.ServiceTypeName</MudTd>
+                                        <MudTd DataLabel="Copay">@context.MonetaryAmount?.ToString("C")</MudTd>
+                                        <MudTd DataLabel="Coinsurance">@context.Percentage?.ToString("P0")</MudTd>
+                                        <MudTd DataLabel="Auth Required">
+                                            @if (context.AuthorizationRequired)
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip Size="Size.Small" Color="Color.Success">Not Required</MudChip>
+                                            }
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+            else if (!_checking)
+            {
+                <MudPaper Elevation="0" Class="d-flex align-center justify-center" Style="height: 400px;">
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">
+                        Enter member information to check eligibility
+                    </MudText>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _checking = false;
+    private DateTime? _serviceDate = DateTime.Today;
+    private EligibilityRequest _request = new();
+    private EligibilityResponse? _response;
+
+    private async Task CheckEligibility()
+    {
+        await _form!.Validate();
+        if (!_form.IsValid) return;
+
+        _checking = true;
+        _response = null;
+
+        try
+        {
+            _response = await EligibilityService.CheckEligibilityAsync(new
+            {
+                subscriberId = _request.SubscriberId,
+                firstName = _request.FirstName,
+                lastName = _request.LastName,
+                serviceDate = _serviceDate,
+                serviceType = _request.ServiceType
+            });
+        }
+        catch (Exception ex)
+        {
+            // Show error snackbar
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    public class EligibilityRequest
+    {
+        public string SubscriberId { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string ServiceType { get; set; } = "30";
+    }
+}
+

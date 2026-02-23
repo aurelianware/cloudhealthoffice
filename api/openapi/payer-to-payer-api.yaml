@@ -1,0 +1,579 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Payer-to-Payer Data Exchange API
+  version: 4.0.0
+  description: |
+    FHIR R4 Payer-to-Payer Data Exchange API for CMS-0057-F compliance.
+
+    When a member switches health plans, CMS-0057-F requires the new plan to
+    request clinical and claims data from the previous plan — and the previous
+    plan must provide it. This API implements both sides of that exchange.
+
+    **Workflow:**
+    1. New payer calls `$member-match` to identify the member in the old payer's system
+    2. New payer verifies member consent via the Consent endpoint
+    3. New payer calls `$everything` or bulk export to retrieve all member data
+    4. Old payer packages FHIR resources (Patient, Claims, EOBs, Conditions, etc.)
+       as NDJSON and uploads to Azure Data Lake / Blob Storage
+    5. New payer imports and reconciles (deduplication, conflict resolution)
+
+    **Key Features:**
+    - FHIR $member-match operation for cross-payer member identification
+    - Bulk FHIR export/import with NDJSON format
+    - Member consent validation (active, scoped, time-limited)
+    - Azure Service Bus for async workflow orchestration
+    - Azure Data Lake for bulk data staging
+    - Deduplication and conflict resolution on import
+    - US Core profile validation
+
+    **References:**
+    - CMS-0057-F Payer-to-Payer Data Exchange requirements
+    - Da Vinci PDex Implementation Guide
+    - FHIR Bulk Data Access IG (Flat FHIR)
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/fhir/r4
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/fhir/r4
+    description: Sandbox
+  - url: http://localhost:3000/fhir/r4
+    description: Local development
+
+security:
+  - oauth2_system: [system/*.read, system/Patient.read]
+
+tags:
+  - name: Member Match
+    description: Cross-payer member identification
+  - name: Consent
+    description: Member consent for payer-to-payer data sharing
+  - name: Export
+    description: Bulk data export (responding to data requests)
+  - name: Import
+    description: Bulk data import (receiving transferred data)
+
+paths:
+
+  # ── Member Match ─────────────────────────────────────────
+
+  /Patient/$member-match:
+    post:
+      operationId: memberMatch
+      summary: Match a member across payer systems
+      description: |
+        The requesting (new) payer submits member demographics, coverage info,
+        and consent to the responding (old) payer. The old payer returns the
+        matched Patient resource with internal identifiers.
+
+        This is the first step in any payer-to-payer exchange — you must
+        identify the member before requesting their data.
+      tags: [Member Match]
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: '#/components/schemas/MemberMatchParameters'
+            example:
+              resourceType: Parameters
+              parameter:
+                - name: MemberPatient
+                  resource:
+                    resourceType: Patient
+                    identifier:
+                      - system: "http://hl7.org/fhir/sid/us-medicare"
+                        value: "1EG4-TE5-MK72"
+                    name:
+                      - family: "Smith"
+                        given: ["Jane", "Marie"]
+                    gender: female
+                    birthDate: "1985-03-15"
+                - name: CoverageToMatch
+                  resource:
+                    resourceType: Coverage
+                    identifier:
+                      - system: "https://old-payer.com/coverage-id"
+                        value: "COV-OLD-12345"
+                    subscriberId: "MBR-OLD-001"
+                    payor:
+                      - reference: "Organization/old-payer"
+                    period:
+                      start: "2023-01-01"
+                      end: "2025-12-31"
+                - name: CoverageToLink
+                  resource:
+                    resourceType: Coverage
+                    subscriberId: "MBR-NEW-001"
+                    payor:
+                      - reference: "Organization/new-payer"
+                    period:
+                      start: "2026-01-01"
+                - name: Consent
+                  resource:
+                    resourceType: Consent
+                    status: active
+                    scope:
+                      coding:
+                        - system: "http://terminology.hl7.org/CodeSystem/consentscope"
+                          code: "patient-privacy"
+                    patient:
+                      reference: "Patient/jane-smith"
+      responses:
+        '200':
+          description: Member matched successfully
+          content:
+            application/fhir+json:
+              schema:
+                type: object
+              example:
+                resourceType: Parameters
+                parameter:
+                  - name: MemberIdentifier
+                    valueIdentifier:
+                      system: "https://cloudhealthoffice.com/member-id"
+                      value: "pat-12345"
+                  - name: MemberPatient
+                    resource:
+                      resourceType: Patient
+                      id: "pat-12345"
+                      identifier:
+                        - system: "https://cloudhealthoffice.com/member-id"
+                          value: "pat-12345"
+                      name:
+                        - family: "Smith"
+                          given: ["Jane", "Marie"]
+        '422':
+          description: No match found or ambiguous match
+          content:
+            application/fhir+json:
+              schema:
+                $ref: '#/components/schemas/OperationOutcome'
+              example:
+                resourceType: OperationOutcome
+                issue:
+                  - severity: error
+                    code: not-found
+                    diagnostics: "No unique member match found for the provided demographics and coverage"
+
+  # ── Consent Registration ─────────────────────────────────
+
+  /Consent:
+    post:
+      operationId: registerConsent
+      summary: Register member consent for payer-to-payer exchange
+      description: |
+        The requesting payer registers member consent before initiating
+        a data export. Consent must be active, scoped to specific resource
+        types, and may have an expiration date.
+
+        Consent is validated on every export request.
+      tags: [Consent]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberConsent'
+            example:
+              patientId: "pat-12345"
+              sourcePayerId: "payer-current"
+              targetPayerId: "payer-new"
+              status: "active"
+              authorizedResourceTypes:
+                - Patient
+                - Claim
+                - ExplanationOfBenefit
+                - Encounter
+                - Condition
+                - Observation
+                - Coverage
+              consentDate: "2026-02-16T00:00:00Z"
+              expirationDate: "2026-08-16T00:00:00Z"
+      responses:
+        '201':
+          description: Consent registered
+        '400':
+          description: Invalid consent record
+
+  /Consent/{patientId}/{targetPayerId}:
+    get:
+      operationId: checkConsent
+      summary: Verify consent for a specific payer exchange
+      tags: [Consent]
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: targetPayerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consent status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasConsent:
+                    type: boolean
+                  authorizedResourceTypes:
+                    type: array
+                    items:
+                      type: string
+                  expirationDate:
+                    type: string
+                    format: date-time
+
+  # ── Bulk Export (Responding Payer) ────────────────────────
+
+  /Group/{groupId}/$export:
+    post:
+      operationId: initiateBulkExport
+      summary: Initiate bulk data export for member transfer
+      description: |
+        The responding (old) payer packages member data as NDJSON files
+        and stages them for download. Consent is validated for every
+        member in the request before export begins.
+
+        This is an async operation — the response includes a polling URL
+        to check export status.
+      tags: [Export]
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Group identifier (or use `all` for single-member export)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkExportRequest'
+            example:
+              sourcePayerId: "payer-current"
+              targetPayerId: "payer-new"
+              memberIds:
+                - "pat-12345"
+                - "pat-67890"
+              resourceTypes:
+                - Patient
+                - Claim
+                - ExplanationOfBenefit
+                - Encounter
+                - Condition
+              since: "2020-01-01T00:00:00Z"
+      responses:
+        '202':
+          description: Export accepted — poll for status
+          headers:
+            Content-Location:
+              description: URL to poll for export status
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkExportResult'
+              example:
+                exportId: "exp-20260216-001"
+                status: "queued"
+                requestedAt: "2026-02-16T10:00:00Z"
+                patientsRequested: 2
+                patientsWithConsent: 2
+                patientsWithoutConsent: 0
+                message: "Export queued. Poll Content-Location for status."
+        '400':
+          description: Invalid request
+        '403':
+          description: No members have valid consent
+
+  /export-status/{exportId}:
+    get:
+      operationId: getExportStatus
+      summary: Check bulk export status
+      tags: [Export]
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export complete — download links available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkExportResult'
+              example:
+                exportId: "exp-20260216-001"
+                status: "completed"
+                completedAt: "2026-02-16T10:02:30Z"
+                resourcesExported: 47
+                outputFiles:
+                  - type: Patient
+                    url: "https://storage.cloudhealthoffice.com/exports/exp-001/Patient.ndjson"
+                    count: 2
+                  - type: Claim
+                    url: "https://storage.cloudhealthoffice.com/exports/exp-001/Claim.ndjson"
+                    count: 18
+                  - type: ExplanationOfBenefit
+                    url: "https://storage.cloudhealthoffice.com/exports/exp-001/ExplanationOfBenefit.ndjson"
+                    count: 15
+                  - type: Condition
+                    url: "https://storage.cloudhealthoffice.com/exports/exp-001/Condition.ndjson"
+                    count: 12
+        '202':
+          description: Export still in progress
+
+  # ── Bulk Import (Requesting Payer) ───────────────────────
+
+  /import:
+    post:
+      operationId: initiateBulkImport
+      summary: Import member data from another payer
+      description: |
+        The requesting (new) payer imports NDJSON files received from
+        the responding payer. Handles deduplication, conflict resolution,
+        and US Core profile validation.
+
+        Duplicate detection uses resource type + identifier system + value.
+      tags: [Import]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkImportRequest'
+            example:
+              sourcePayerId: "payer-old"
+              blobUrls:
+                - "https://storage.cloudhealthoffice.com/exports/exp-001/Patient.ndjson"
+                - "https://storage.cloudhealthoffice.com/exports/exp-001/Claim.ndjson"
+                - "https://storage.cloudhealthoffice.com/exports/exp-001/ExplanationOfBenefit.ndjson"
+                - "https://storage.cloudhealthoffice.com/exports/exp-001/Condition.ndjson"
+      responses:
+        '202':
+          description: Import accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkImportResult'
+              example:
+                importId: "imp-20260216-001"
+                status: "processing"
+                totalResources: 47
+                imported: 0
+                duplicatesSkipped: 0
+                errors: 0
+        '400':
+          description: Invalid request
+
+  /import-status/{importId}:
+    get:
+      operationId: getImportStatus
+      summary: Check bulk import status
+      tags: [Import]
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkImportResult'
+              example:
+                importId: "imp-20260216-001"
+                status: "completed"
+                completedAt: "2026-02-16T10:05:00Z"
+                totalResources: 47
+                imported: 42
+                duplicatesSkipped: 5
+                errors: 0
+
+components:
+  schemas:
+    MemberMatchParameters:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: Parameters
+        parameter:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                enum: [MemberPatient, CoverageToMatch, CoverageToLink, Consent]
+              resource:
+                type: object
+
+    MemberConsent:
+      type: object
+      required: [patientId, sourcePayerId, targetPayerId, status, authorizedResourceTypes]
+      properties:
+        patientId:
+          type: string
+        sourcePayerId:
+          type: string
+        targetPayerId:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, revoked]
+        authorizedResourceTypes:
+          type: array
+          items:
+            type: string
+        consentDate:
+          type: string
+          format: date-time
+        expirationDate:
+          type: string
+          format: date-time
+
+    BulkExportRequest:
+      type: object
+      required: [sourcePayerId, targetPayerId, memberIds]
+      properties:
+        sourcePayerId:
+          type: string
+        targetPayerId:
+          type: string
+        memberIds:
+          type: array
+          items:
+            type: string
+        resourceTypes:
+          type: array
+          items:
+            type: string
+          default: [Patient, Claim, ExplanationOfBenefit, Encounter, Condition, Coverage]
+        since:
+          type: string
+          format: date-time
+          description: Only export resources updated after this date
+
+    BulkExportResult:
+      type: object
+      properties:
+        exportId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        requestedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        patientsRequested:
+          type: integer
+        patientsWithConsent:
+          type: integer
+        patientsWithoutConsent:
+          type: integer
+        resourcesExported:
+          type: integer
+        outputFiles:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              url:
+                type: string
+                format: uri
+              count:
+                type: integer
+        message:
+          type: string
+
+    BulkImportRequest:
+      type: object
+      required: [sourcePayerId, blobUrls]
+      properties:
+        sourcePayerId:
+          type: string
+        blobUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+
+    BulkImportResult:
+      type: object
+      properties:
+        importId:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        completedAt:
+          type: string
+          format: date-time
+        totalResources:
+          type: integer
+        imported:
+          type: integer
+        duplicatesSkipped:
+          type: integer
+        errors:
+          type: integer
+
+    OperationOutcome:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          const: OperationOutcome
+        issue:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+              code:
+                type: string
+              diagnostics:
+                type: string
+
+  securitySchemes:
+    oauth2_system:
+      type: oauth2
+      description: |
+        System-level OAuth 2.0 (Backend Services / Client Credentials).
+        Payer-to-payer exchange uses system-level tokens, not user tokens.
+        The requesting payer authenticates with its client credentials.
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
+          scopes:
+            system/*.read: Read all resources (system-level)
+            system/Patient.read: Read patient demographics
+            system/Claim.read: Read claims
+            system/ExplanationOfBenefit.read: Read EOBs

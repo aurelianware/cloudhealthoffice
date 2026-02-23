@@ -1,0 +1,98 @@
+@page "/dashboard"
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="mr-2" />
+        Dashboard
+    </MudText>
+
+    <MudGrid Class="mt-4">
+        <!-- Quick Actions -->
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Claims</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Process 837/835 claims</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/claims" StartIcon="@Icons.Material.Filled.Description" Color="Color.Primary">View Claims</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Eligibility</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">270/271 verification</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/eligibility" StartIcon="@Icons.Material.Filled.VerifiedUser" Color="Color.Primary">Check Eligibility</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Members</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Enrollment & demographics</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/members" StartIcon="@Icons.Material.Filled.People" Color="Color.Primary">View Members</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Workflows</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">View automation status</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Href="/workflows" StartIcon="@Icons.Material.Filled.AccountTree" Color="Color.Primary">View Workflows</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Test Section - Remove after testing -->
+    <MudAlert Severity="Severity.Info" Class="mt-6">
+        <MudText Typo="Typo.h6">Testing Stripe Integration</MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            To test the new self-service signup with Stripe payment integration:
+        </MudText>
+        <MudButton Href="/signup" StartIcon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Variant="Variant.Filled" Class="mt-3">
+            Test Signup Flow
+        </MudButton>
+    </MudAlert>
+
+    <!-- Recent Activity -->
+    <MudPaper Class="mt-6 pa-4">
+        <MudText Typo="Typo.h5" GutterBottom="true">Recent Activity</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            No recent activity
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string? userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            userName = user.Identity.Name;
+        }
+    }
+}

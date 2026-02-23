@@ -22,7 +22,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: x12-837-claims-scrubbing
-  namespace: cloudhealthoffice
+  namespace: cho-workflows
   labels:
     app.kubernetes.io/name: x12-837-claims-scrubbing
     app.kubernetes.io/component: claims-validation

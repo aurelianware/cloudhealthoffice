@@ -1,0 +1,152 @@
+# RBAC for Argo Workflows
+# ServiceAccounts, Roles, and RoleBindings for X12 EDI processing workflows
+
+---
+# ServiceAccount for Argo Workflows
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow-sa
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-workflow-sa
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+
+---
+# ServiceAccount for Argo Events
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-events-sa
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-events-sa
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+
+---
+# Role for Argo Workflows (namespace-scoped)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-workflow-role
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-workflow-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+rules:
+  # Workflow execution permissions
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  
+  # ConfigMaps and Secrets access
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  
+  # PersistentVolumeClaims for workflow artifacts
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  
+  # Events for workflow status
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  
+  # Argo Workflow resources
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# RoleBinding for Argo Workflows
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflow-rolebinding
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-workflow-rolebinding
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+subjects:
+  - kind: ServiceAccount
+    name: argo-workflow-sa
+    namespace: cho-workflows
+roleRef:
+  kind: Role
+  name: argo-workflow-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role for Argo Events
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-events-role
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-events-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+rules:
+  # Event sources and sensors
+  - apiGroups: ["argoproj.io"]
+    resources: ["eventsources", "sensors", "eventbus"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Workflow triggers
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["get", "list", "watch", "create"]
+  
+  # ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  
+  # Pods for event processing
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  
+  # Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# RoleBinding for Argo Events
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-events-rolebinding
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: argo-events-rolebinding
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+subjects:
+  - kind: ServiceAccount
+    name: argo-events-sa
+    namespace: cho-workflows
+roleRef:
+  kind: Role
+  name: argo-events-role
+  apiGroup: rbac.authorization.k8s.io

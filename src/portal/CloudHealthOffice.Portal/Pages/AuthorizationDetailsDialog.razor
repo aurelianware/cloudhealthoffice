@@ -1,0 +1,344 @@
+@using CloudHealthOffice.Portal.Services
+@inject IAuthorizationService AuthorizationService
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <div class="d-flex justify-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (_authorization != null)
+        {
+            <!-- Status Header -->
+            <MudAlert Severity="@GetSeverity(_authorization.Status)" Class="mb-4">
+                <MudText Typo="Typo.h6">
+                    Status: @_authorization.Status
+                    @if (_authorization.DecisionDate.HasValue)
+                    {
+                        <span> • Decision made @_authorization.DecisionDate.Value.ToString("MM/dd/yyyy hh:mm tt")</span>
+                    }
+                </MudText>
+                @if (_authorization.ProcessingTimeMs > 0)
+                {
+                    <MudText Typo="Typo.body2">
+                        Processing time: @FormatProcessingTime(_authorization.ProcessingTimeMs)
+                    </MudText>
+                }
+            </MudAlert>
+
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+                <!-- General Info Tab -->
+                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid Class="mt-4">
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Authorization ID" 
+                                        Value="_authorization.AuthorizationId" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Service Type" 
+                                        Value="_authorization.ServiceType" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Request Date" 
+                                        Value="@_authorization.RequestDate.ToString("MM/dd/yyyy hh:mm tt")" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Decision Date" 
+                                        Value="@(_authorization.DecisionDate?.ToString("MM/dd/yyyy hh:mm tt") ?? "Pending")" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Member Info Tab -->
+                <MudTabPanel Text="Member" Icon="@Icons.Material.Filled.Person">
+                    <MudGrid Class="mt-4">
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Member ID" 
+                                        Value="_authorization.MemberId" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Member Name" 
+                                        Value="_authorization.MemberName" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Provider Info Tab -->
+                <MudTabPanel Text="Provider" Icon="@Icons.Material.Filled.LocalHospital">
+                    <MudGrid Class="mt-4">
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Provider ID" 
+                                        Value="_authorization.ProviderId" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Provider Name" 
+                                        Value="_authorization.ProviderName" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Service Details Tab -->
+                <MudTabPanel Text="Service Details" Icon="@Icons.Material.Filled.MedicalServices">
+                    <MudGrid Class="mt-4">
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Diagnosis Code" 
+                                        Value="_authorization.DiagnosisCode" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Diagnosis Description" 
+                                        Value="_authorization.DiagnosisDescription" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Procedure Code" 
+                                        Value="_authorization.ProcedureCode" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Procedure Description" 
+                                        Value="_authorization.ProcedureDescription" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField Label="Units Requested" 
+                                        Value="_authorization.UnitsRequested.ToString()" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField Label="Units Approved" 
+                                        Value="@(_authorization.UnitsApproved?.ToString() ?? "N/A")" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField Label="Approval Rate" 
+                                        Value="@GetApprovalRate()" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Service Start Date" 
+                                        Value="@_authorization.ServiceStartDate.ToString("MM/dd/yyyy")" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Service End Date" 
+                                        Value="@(_authorization.ServiceEndDate?.ToString("MM/dd/yyyy") ?? "N/A")" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Review Notes Tab -->
+                <MudTabPanel Text="Review" Icon="@Icons.Material.Filled.Assignment">
+                    <div class="mt-4">
+                        @if (!string.IsNullOrWhiteSpace(_authorization.ReviewerNotes))
+                        {
+                            <MudTextField Label="Reviewer Notes" 
+                                        Value="_authorization.ReviewerNotes" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined"
+                                        Lines="5" />
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No reviewer notes available</MudAlert>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(_authorization.DenialReason))
+                        {
+                            <MudTextField Label="Denial Reason" 
+                                        Value="_authorization.DenialReason" 
+                                        ReadOnly="true" 
+                                        Variant="Variant.Outlined"
+                                        Lines="3"
+                                        Class="mt-4" />
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- Attachments Tab -->
+                <MudTabPanel Text="Attachments" Icon="@Icons.Material.Filled.AttachFile" BadgeData="@_authorization.Attachments.Count" BadgeDot="@(_authorization.Attachments.Count > 0)">
+                    <div class="mt-4">
+                        @if (_authorization.Attachments.Any())
+                        {
+                            <MudTable Items="_authorization.Attachments" 
+                                     Hover="true" 
+                                     Dense="true"
+                                     Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>File Name</MudTh>
+                                    <MudTh>Type</MudTh>
+                                    <MudTh>Size</MudTh>
+                                    <MudTh>Uploaded</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="File Name">
+                                        <MudIcon Icon="@GetFileIcon(context.ContentType)" Size="Size.Small" Class="mr-2" />
+                                        <MudText Typo="Typo.body2">@context.FileName</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Type">
+                                        <MudChip Size="Size.Small" Color="Color.Info">@context.AttachmentType</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Size">
+                                        <MudText Typo="Typo.body2">@FormatFileSize(context.FileSizeBytes)</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Uploaded">
+                                        <MudText Typo="Typo.body2">@context.UploadedDate.ToString("MM/dd/yyyy")</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">by @context.UploadedBy</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Download" 
+                                                      Color="Color.Primary" 
+                                                      Size="Size.Small"
+                                                      Title="Download" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                                                      Color="Color.Info" 
+                                                      Size="Size.Small"
+                                                      Title="Preview" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
+                                No attachments uploaded for this authorization
+                            </MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error">Failed to load authorization details</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+        @if (_authorization != null && _authorization.Status == "Approved")
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print">
+                Print Approval
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string AuthorizationId { get; set; } = string.Empty;
+
+    private AuthorizationDetails? _authorization;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuthorizationDetails();
+    }
+
+    private async Task LoadAuthorizationDetails()
+    {
+        _loading = true;
+
+        try
+        {
+            _authorization = await AuthorizationService.GetAuthorizationByIdAsync(AuthorizationId);
+        }
+        catch (Exception ex)
+        {
+            _authorization = null;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Severity GetSeverity(string status)
+    {
+        return status switch
+        {
+            "Approved" => Severity.Success,
+            "Denied" => Severity.Error,
+            "Pending" => Severity.Warning,
+            "Review Required" => Severity.Info,
+            _ => Severity.Normal
+        };
+    }
+
+    private string FormatProcessingTime(int ms)
+    {
+        if (ms < 1000)
+            return $"{ms}ms";
+        else if (ms < 60000)
+            return $"{ms / 1000.0:F1}s";
+        else
+            return $"{ms / 60000.0:F1}m";
+    }
+
+    private string GetApprovalRate()
+    {
+        if (_authorization?.UnitsApproved == null || _authorization.UnitsRequested == 0)
+            return "N/A";
+
+        var rate = (_authorization.UnitsApproved.Value / (double)_authorization.UnitsRequested) * 100;
+        return $"{rate:F0}%";
+    }
+
+    private string GetFileIcon(string contentType)
+    {
+        return contentType switch
+        {
+            "application/pdf" => Icons.Material.Filled.PictureAsPdf,
+            "image/jpeg" or "image/jpg" or "image/png" => Icons.Material.Filled.Image,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Icons.Material.Filled.Description,
+            _ => Icons.Material.Filled.AttachFile
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024)
+            return $"{bytes} B";
+        else if (bytes < 1024 * 1024)
+            return $"{bytes / 1024.0:F1} KB";
+        else
+            return $"{bytes / (1024.0 * 1024):F1} MB";
+    }
+
+    private void Close() => MudDialog.Close();
+}

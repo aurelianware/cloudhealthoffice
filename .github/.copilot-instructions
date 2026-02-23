@@ -6,7 +6,7 @@ This repository implements a HIPAA-compliant Azure Logic Apps solution for proce
 
 **Trading Partners:**
 - Clearinghouse (Sender ID: {config.clearinghouseId}) - EDI clearinghouse
-- Health Plan Backend (Receiver ID: {config.payerId}) - Parkland Community Health Plan
+- Health Plan Backend (Receiver ID: {config.payerId}) - Sample Health Plan
 
 **Key Infrastructure:**
 - Azure Logic Apps Standard (WS1 SKU) - Stateful workflow orchestration
@@ -362,7 +362,7 @@ auto  auto  manual + approval
 
 - **Trigger:** Manual or push to `main`
 - **Workflow:** `deploy-dev.yml`
-- **Resource Group:** `pchp-attachments-dev-rg`
+- **Resource Group:** `payer-attachments-dev-rg`
 - **Auto-approval:** Yes
 - **Purpose:** Development and testing
 
@@ -370,7 +370,7 @@ auto  auto  manual + approval
 
 - **Trigger:** Push to `release/*` branches (automatic)
 - **Workflow:** `deploy-uat.yml`
-- **Resource Group:** `pchp-attachments-uat-rg`
+- **Resource Group:** `payer-attachments-uat-rg`
 - **Auto-approval:** Yes
 - **Purpose:** User acceptance testing, pre-production validation
 
@@ -378,7 +378,7 @@ auto  auto  manual + approval
 
 - **Trigger:** Manual workflow dispatch only
 - **Workflow:** `deploy.yml`
-- **Resource Group:** `pchp-attachments-prod-rg`
+- **Resource Group:** `payer-attachments-prod-rg`
 - **Approval Required:** Yes (designated approvers)
 - **Purpose:** Production system
 
@@ -720,7 +720,7 @@ az servicebus topic subscription dead-letter list \
 
 ```powershell
 # Test 275 ingestion
-pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'pchp-attachments-uat-rg' -LogicAppName 'hipaa-attachments-uat-la'"
+pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'payer-attachments-uat-rg' -LogicAppName 'hipaa-attachments-uat-la'"
 
 # Test 278 replay
 curl -X POST "https://hipaa-attachments-uat-la.azurewebsites.net/api/replay278/..." \
@@ -897,8 +897,8 @@ When reviewing code, Copilot should verify:
 **Insecure:**
 ```powershell
 # ❌ WRONG
-$apiKey = "abc123-secret-key"
-$connectionString = "DefaultEndpointsProtocol=https;AccountName=storage;AccountKey=key123=="
+$apiKey = "your-api-key-here"
+$connectionString = "DefaultEndpointsProtocol=https;AccountName=storage;AccountKey=your-account-key"
 Write-Host "Processing claim $claimNumber for member $memberId"
 Invoke-RestMethod -Uri $url -Headers @{ "X-API-Key" = $apiKey }
 ```
@@ -998,7 +998,7 @@ When asking Copilot for help, include:
 **Agreements:**
 1. Clearinghouse-to-HealthPlan-275-Receive (Inbound 275)
 2. HealthPlan-to-Clearinghouse-277-Send (Outbound 277)
-3. PCHP-278-Processing (Internal 278)
+3. payer-278-Processing (Internal 278)
 
 ### Data Lake Structure
 

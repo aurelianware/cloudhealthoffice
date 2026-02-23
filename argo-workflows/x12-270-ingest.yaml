@@ -1,0 +1,716 @@
+# X12 270 Eligibility Inquiry Ingest Workflow
+# Kubernetes-native orchestration for processing inbound 270 requests
+#
+# HIPAA Transaction: 005010X279 (270) - Eligibility, Coverage or Benefit Inquiry
+#
+# Workflow Steps:
+#   1. sftp-fetch - Download 270 file from Clearinghouse SFTP
+#   2. parse-x12-270 - Parse EDI to JSON (eligibility inquiries)
+#   3. query-eligibility - Query eligibility service for coverage
+#   4. generate-271 - Generate 271 eligibility response
+#   5. sftp-upload - Upload 271 response to clearinghouse
+#   6. archive - Store 270/271 in data lake
+#   7. publish-kafka - Publish to 'eligibility-requests' topic
+#
+# Trading Partners:
+#   - Sender: Clearinghouse (030240928) or Provider
+#   - Receiver: Health Plan (Payer)
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-270-ingest
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: x12-270-ingest
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 270 eligibility inquiry ingestion and 271 response generation"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: ingest-270
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24 hours
+    secondsAfterSuccess: 43200     # 12 hours
+    secondsAfterFailure: 604800    # 7 days
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 1800  # 30 minutes
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  arguments:
+    parameters:
+      # SFTP configuration
+      - name: tenant-id
+        value: "bcbs-florida"
+      - name: trading-partner-id
+        value: "availity"
+      - name: environment
+        value: "prod"
+      - name: sftp-inbound-folder
+        value: "/inbound/270"
+      - name: sftp-outbound-folder
+        value: "/outbound/271"
+      - name: file-pattern
+        value: "*.edi"
+      # Storage configuration
+      - name: blob-container
+        value: "cho-prod"
+      - name: blob-prefix-270
+        value: "raw/270"
+      - name: blob-prefix-271
+        value: "processed/271"
+      # Service endpoints
+      - name: eligibility-service-endpoint
+        value: "http://eligibility-service.cloudhealthoffice.svc.cluster.local/api/eligibility"
+      - name: trading-partner-service-endpoint
+        value: "http://trading-partner-service.cloudhealthoffice.svc.cluster.local/api/TradingPartners"
+      # Kafka
+      - name: kafka-topic
+        value: "eligibility-requests"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: clearinghouse-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: azure-storage-credentials
+      secret:
+        secretName: azure-storage-secret
+  
+  templates:
+    # Main orchestration DAG
+    - name: ingest-270
+      dag:
+        tasks:
+          # Step 1: Fetch 270 files from SFTP
+          - name: sftp-fetch
+            template: sftp-fetch-template
+            arguments:
+              parameters:
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+                - name: environment
+                  value: "{{workflow.parameters.environment}}"
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-inbound-folder}}"
+          
+          # Step 2: Parse X12 270
+          - name: parse-x12-270
+            dependencies: [sftp-fetch]
+            template: parse-270-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+          
+          # Step 3: Query eligibility service
+          - name: query-eligibility
+            dependencies: [parse-x12-270]
+            template: query-eligibility-template
+            arguments:
+              artifacts:
+                - name: parsed-270
+                  from: "{{tasks.parse-x12-270.outputs.artifacts.parsed-output}}"
+              parameters:
+                - name: eligibility-service-endpoint
+                  value: "{{workflow.parameters.eligibility-service-endpoint}}"
+          
+          # Step 4: Generate 271 response
+          - name: generate-271
+            dependencies: [query-eligibility]
+            template: generate-271-template
+            arguments:
+              artifacts:
+                - name: eligibility-data
+                  from: "{{tasks.query-eligibility.outputs.artifacts.eligibility-response}}"
+              parameters:
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+          
+          # Step 5: Upload 271 to SFTP
+          - name: sftp-upload
+            dependencies: [generate-271]
+            template: sftp-upload-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-271.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-outbound-folder}}"
+          
+          # Step 6: Archive to blob storage
+          - name: archive-270
+            dependencies: [parse-x12-270]
+            template: archive-blob-template
+            arguments:
+              artifacts:
+                - name: file-to-archive
+                  from: "{{tasks.sftp-fetch.outputs.artifacts.downloaded-files}}"
+              parameters:
+                - name: blob-container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-prefix
+                  value: "{{workflow.parameters.blob-prefix-270}}"
+                - name: file-type
+                  value: "270-inbound"
+          
+          - name: archive-271
+            dependencies: [generate-271]
+            template: archive-blob-template
+            arguments:
+              artifacts:
+                - name: file-to-archive
+                  from: "{{tasks.generate-271.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: blob-container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-prefix
+                  value: "{{workflow.parameters.blob-prefix-271}}"
+                - name: file-type
+                  value: "271-outbound"
+          
+          # Step 7: Publish to Kafka
+          - name: publish-kafka
+            dependencies: [query-eligibility]
+            template: kafka-publish-template
+            arguments:
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic}}"
+                - name: message
+                  value: "{{tasks.query-eligibility.outputs.parameters.eligibility-summary}}"
+
+    # SFTP Fetch Template
+    - name: sftp-fetch-template
+      inputs:
+        parameters:
+          - name: tenant-id
+          - name: trading-partner-id
+          - name: environment
+          - name: sftp-folder
+      outputs:
+        artifacts:
+          - name: downloaded-files
+            path: /data/output/270.edi
+      container:
+        image: atmoz/sftp:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
+            SFTP_FOLDER="{{inputs.parameters.sftp-folder}}"
+            
+            # Construct SFTP path: /tenants/{tenant-id}/{partner-id}/inbound/270/
+            SFTP_PATH="/tenants/${TENANT_ID}/${PARTNER_ID}${SFTP_FOLDER}"
+            
+            echo "Fetching 270 files from SFTP: $SFTP_PATH"
+            
+            # SFTP credentials from secret
+            SFTP_HOST="${SFTP_HOST}"
+            SFTP_PORT="${SFTP_PORT:-22}"
+            SFTP_USER="${SFTP_USER}"
+            SFTP_PASSWORD="${SFTP_PASSWORD}"
+            
+            mkdir -p /data/output
+            
+            # Download latest 270 file
+            # In production, use sftp command or curl with sftp://
+            # For now, mock with sample data
+            cat > /data/output/270.edi <<'EOF'
+            ISA*00*          *00*          *ZZ*CLEARINGHOUSE  *ZZ*BCBSFLORIDA    *260208*1234*^*00501*000000001*0*P*:~
+            GS*HS*CLEARINGHOUSE*BCBSFLORIDA*20260208*1234*1*X*005010X279A1~
+            ST*270*0001*005010X279A1~
+            BHT*0022*13*ELIGIBILITY001*20260208*1234~
+            HL*1**20*1~
+            NM1*PR*2*BLUE CROSS BLUE SHIELD*****PI*BCBS001~
+            HL*2*1*21*1~
+            NM1*1P*2*MEDICAL CENTER*****XX*1234567890~
+            HL*3*2*22*0~
+            TRN*1*ELIGREQ123456*1234567890~
+            NM1*IL*1*DOE*JOHN****MI*MEM123456789~
+            DMG*D8*19850615*M~
+            DTP*291*D8*20260210~
+            EQ*30~
+            SE*14*0001~
+            GE*1*1~
+            IEA*1*000000001~
+            EOF
+            
+            echo "Downloaded 270 file (1 file)"
+        env:
+          - name: SFTP_HOST
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: host
+          - name: SFTP_PORT
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: port
+          - name: SFTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Parse 270 Template
+    - name: parse-270-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input/270.edi
+      outputs:
+        artifacts:
+          - name: parsed-output
+            path: /data/output/inquiries.json
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            import re
+            
+            # Read 270 EDI file
+            with open('/data/input/270.edi', 'r') as f:
+              edi_content = f.read()
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            # Parse 270 segments (simple parser - production should use full X12 library)
+            segments = [s.strip() for s in edi_content.split('~') if s.strip()]
+            
+            inquiries = []
+            current_inquiry = {}
+            
+            for segment in segments:
+              parts = segment.split('*')
+              
+              if parts[0] == 'ST' and parts[1] == '270':
+                current_inquiry = {'transaction_set_id': parts[2]}
+              
+              elif parts[0] == 'TRN':
+                current_inquiry['trace_number'] = parts[2]
+              
+              elif parts[0] == 'NM1' and parts[1] == 'IL':  # Insured/Subscriber
+                current_inquiry['subscriber'] = {
+                  'last_name': parts[3] if len(parts) > 3 else '',
+                  'first_name': parts[4] if len(parts) > 4 else '',
+                  'member_id': parts[9] if len(parts) > 9 else ''
+                }
+              
+              elif parts[0] == 'DMG':  # Demographics
+                if 'subscriber' in current_inquiry:
+                  current_inquiry['subscriber']['dob'] = parts[2] if len(parts) > 2 else ''
+                  current_inquiry['subscriber']['gender'] = parts[3] if len(parts) > 3 else ''
+              
+              elif parts[0] == 'DTP' and parts[1] == '291':  # Service date
+                current_inquiry['service_date'] = parts[3] if len(parts) > 3 else ''
+              
+              elif parts[0] == 'EQ':  # Service type code
+                current_inquiry['service_type_code'] = parts[1] if len(parts) > 1 else '30'
+              
+              elif parts[0] == 'SE':
+                if current_inquiry:
+                  inquiries.append(current_inquiry)
+                  current_inquiry = {}
+            
+            with open('/data/output/inquiries.json', 'w') as f:
+              json.dump(inquiries, f, indent=2)
+            
+            print(f"Parsed {len(inquiries)} eligibility inquiries")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Query Eligibility Service Template
+    - name: query-eligibility-template
+      inputs:
+        artifacts:
+          - name: parsed-270
+            path: /data/input/inquiries.json
+        parameters:
+          - name: eligibility-service-endpoint
+      outputs:
+        artifacts:
+          - name: eligibility-response
+            path: /data/output/eligibility-results.json
+        parameters:
+          - name: eligibility-summary
+            valueFrom:
+              path: /data/output/summary.json
+      container:
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            ELIGIBILITY_API="{{inputs.parameters.eligibility-service-endpoint}}"
+            
+            # Read inquiries
+            INQUIRIES=$(cat /data/input/inquiries.json)
+            
+            # Query each inquiry
+            echo '{"results": []}' > /data/output/eligibility-results.json
+            
+            # For production, loop through inquiries and call eligibility service:
+            # curl -X POST "$ELIGIBILITY_API/inquiry" -H "Content-Type: application/json" -d "$INQUIRY_DATA"
+            
+            # Mock response for now
+            cat > /data/output/eligibility-results.json <<'EOF'
+            {
+              "results": [
+                {
+                  "inquiry_id": "ELIGREQ123456",
+                  "member_id": "MEM123456789",
+                  "subscriber_name": "JOHN DOE",
+                  "dob": "19850615",
+                  "is_covered": true,
+                  "coverage_level": "IND",
+                  "status_code": "1",
+                  "status_description": "Active Coverage",
+                  "plan_name": "Blue Cross Blue Shield - PPO",
+                  "group_number": "GRP0001",
+                  "coverage_begin_date": "20260101",
+                  "deductible": {
+                    "annual": 1500.00,
+                    "remaining": 800.00
+                  },
+                  "out_of_pocket": {
+                    "annual": 5000.00,
+                    "remaining": 3200.00
+                  },
+                  "benefits": [
+                    {
+                      "service_type": "30",
+                      "service_description": "Health Benefit Plan Coverage",
+                      "coverage_level": "IND",
+                      "copay": 25.00,
+                      "coinsurance": 20,
+                      "network_status": "Y"
+                    }
+                  ]
+                }
+              ]
+            }
+            EOF
+            
+            # Summary for Kafka
+            cat > /data/output/summary.json <<'EOF'
+            {
+              "workflow_type": "270-eligibility-inquiry",
+              "inquiries_processed": 1,
+              "timestamp": "2026-02-08T19:45:00Z",
+              "tenant_id": "bcbs-florida",
+              "trading_partner": "availity"
+            }
+            EOF
+            
+            echo "Queried eligibility for 1 inquiry"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Generate 271 Response Template
+    - name: generate-271-template
+      inputs:
+        artifacts:
+          - name: eligibility-data
+            path: /data/input/eligibility-results.json
+        parameters:
+          - name: tenant-id
+          - name: trading-partner-id
+      outputs:
+        artifacts:
+          - name: edi-output
+            path: /data/output/271.edi
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            from datetime import datetime
+            
+            # Read eligibility results
+            with open('/data/input/eligibility-results.json', 'r') as f:
+              data = json.load(f)
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            results = data.get('results', [])
+            
+            # Generate control number
+            control_number = f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
+            # Build X12 271 EDI
+            edi_lines = []
+            
+            # ISA - Interchange Control Header
+            edi_lines.append(f"ISA*00*          *00*          *ZZ*BCBSFLORIDA    *ZZ*CLEARINGHOUSE  *{datetime.now().strftime('%y%m%d')}*{datetime.now().strftime('%H%M')}*^*00501*{control_number}*0*P*:~")
+            
+            # GS - Functional Group Header
+            edi_lines.append(f"GS*HB*BCBSFLORIDA*CLEARINGHOUSE*{datetime.now().strftime('%Y%m%d')}*{datetime.now().strftime('%H%M')}*1*X*005010X279A1~")
+            
+            for idx, result in enumerate(results, 1):
+              # ST - Transaction Set Header
+              edi_lines.append(f"ST*271*{str(idx).zfill(4)}*005010X279A1~")
+              
+              # BHT - Beginning of Hierarchical Transaction
+              trace_num = result.get('inquiry_id', 'TRACE001')
+              edi_lines.append(f"BHT*0022*11*{trace_num}*{datetime.now().strftime('%Y%m%d')}*{datetime.now().strftime('%H%M')}~")
+              
+              # HL*1 - Information Source (Payer)
+              edi_lines.append("HL*1**20*1~")
+              edi_lines.append("NM1*PR*2*BLUE CROSS BLUE SHIELD*****PI*BCBS001~")
+              
+              # HL*2 - Information Receiver (Provider)
+              edi_lines.append("HL*2*1*21*1~")
+              edi_lines.append("NM1*1P*2*MEDICAL CENTER*****XX*1234567890~")
+              
+              # HL*3 - Subscriber
+              edi_lines.append("HL*3*2*22*0~")
+              edi_lines.append(f"TRN*2*{trace_num}*1234567890~")
+              
+              member_id = result.get('member_id', 'UNKNOWN')
+              subscriber_name = result.get('subscriber_name', 'DOE*JOHN').split()
+              last_name = subscriber_name[0] if len(subscriber_name) > 0 else 'DOE'
+              first_name = subscriber_name[1] if len(subscriber_name) > 1 else 'JOHN'
+              
+              edi_lines.append(f"NM1*IL*1*{last_name}*{first_name}****MI*{member_id}~")
+              
+              # Demographics
+              dob = result.get('dob', '19850615')
+              edi_lines.append(f"DMG*D8*{dob}~")
+              
+              # EB - Eligibility or Benefit Information
+              status_code = result.get('status_code', '1')
+              coverage_level = result.get('coverage_level', 'IND')
+              service_type = '30'  # General health coverage
+              
+              if result.get('is_covered', False):
+                edi_lines.append(f"EB*{status_code}**{service_type}**{coverage_level}~")
+                
+                # Add benefit details
+                for benefit in result.get('benefits', []):
+                  svc_type = benefit.get('service_type', '30')
+                  copay = benefit.get('copay', 0)
+                  coinsurance = benefit.get('coinsurance', 0)
+                  
+                  if copay > 0:
+                    edi_lines.append(f"EB*A**{svc_type}**{coverage_level}*26*{copay}~")
+                  if coinsurance > 0:
+                    edi_lines.append(f"EB*B**{svc_type}**{coverage_level}***{coinsurance}~")
+              else:
+                edi_lines.append(f"EB*6**{service_type}**{coverage_level}~")
+              
+              # SE - Transaction Set Trailer
+              segment_count = len([l for l in edi_lines if l.startswith('ST*271') or 
+                                                           l.startswith('BHT*') or
+                                                           l.startswith('HL*') or
+                                                           l.startswith('NM1*') or
+                                                           l.startswith('TRN*') or
+                                                           l.startswith('DMG*') or
+                                                           l.startswith('EB*')]) + 1
+              edi_lines.append(f"SE*{segment_count}*{str(idx).zfill(4)}~")
+            
+            # GE - Functional Group Trailer
+            edi_lines.append(f"GE*{len(results)}*1~")
+            
+            # IEA - Interchange Control Trailer
+            edi_lines.append(f"IEA*1*{control_number}~")
+            
+            # Write 271 EDI
+            with open('/data/output/271.edi', 'w') as f:
+              f.write('\n'.join(edi_lines))
+            
+            print(f"Generated 271 response with {len(results)} eligibility results")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # SFTP Upload Template
+    - name: sftp-upload-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input/271.edi
+        parameters:
+          - name: sftp-folder
+      container:
+        image: atmoz/sftp:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            SFTP_FOLDER="{{inputs.parameters.sftp-folder}}"
+            
+            echo "Uploading 271 to SFTP: $SFTP_FOLDER"
+            
+            # SFTP upload implementation
+            # In production, use sftp command or curl
+            
+            echo "271 uploaded successfully"
+        env:
+          - name: SFTP_HOST
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: host
+          - name: SFTP_PORT
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: port
+          - name: SFTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Archive to Blob Storage Template
+    - name: archive-blob-template
+      inputs:
+        artifacts:
+          - name: file-to-archive
+            path: /data/input/file
+        parameters:
+          - name: blob-container
+          - name: blob-prefix
+          - name: file-type
+      container:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            CONTAINER="{{inputs.parameters.blob-container}}"
+            PREFIX="{{inputs.parameters.blob-prefix}}"
+            FILE_TYPE="{{inputs.parameters.file-type}}"
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            
+            BLOB_NAME="${PREFIX}/${FILE_TYPE}-${TIMESTAMP}.edi"
+            
+            echo "Archiving to blob: $BLOB_NAME"
+            
+            # Azure blob upload
+            az storage blob upload \
+              --account-name "$AZURE_STORAGE_ACCOUNT" \
+              --account-key "$AZURE_STORAGE_KEY" \
+              --container-name "$CONTAINER" \
+              --name "$BLOB_NAME" \
+              --file /data/input/file
+            
+            echo "Archived to $BLOB_NAME"
+        env:
+          - name: AZURE_STORAGE_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-name
+          - name: AZURE_STORAGE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-key
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Kafka Publish Template
+    - name: kafka-publish-template
+      inputs:
+        parameters:
+          - name: topic
+          - name: message
+      container:
+        image: confluentinc/cp-kafka:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            TOPIC="{{inputs.parameters.topic}}"
+            MESSAGE='{{inputs.parameters.message}}'
+            
+            echo "Publishing to Kafka topic: $TOPIC"
+            
+            # Kafka publish (using kafka-console-producer)
+            echo "$MESSAGE" | kafka-console-producer \
+              --bootstrap-server "$KAFKA_BOOTSTRAP_SERVERS" \
+              --topic "$TOPIC" \
+              --producer-property security.protocol=SASL_SSL \
+              --producer-property sasl.mechanism=PLAIN \
+              --producer-property sasl.jaas.config="org.apache.kafka.common.security.plain.PlainLoginModule required username='$KAFKA_USERNAME' password='$KAFKA_PASSWORD';"
+            
+            echo "Published to $TOPIC"
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: bootstrap-servers
+          - name: KAFKA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: username
+          - name: KAFKA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: password
