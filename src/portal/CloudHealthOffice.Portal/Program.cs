@@ -1,14 +1,18 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor.Services;
+using CloudHealthOffice.Portal.Infrastructure;
 using CloudHealthOffice.Portal.Services;
 using CloudHealthOffice.Portal.Hubs;
 using System.Net.Http;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
+using MongoDB.Bson.Serialization.Conventions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -138,23 +142,25 @@ builder.Services.AddHttpClient("default")
 builder.Services.AddScoped(sp =>
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// MongoDB client (singleton) — uses camelCase BSON convention to match stored field names
+var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
+ConventionRegistry.Register("CamelCase", camelCasePack, _ => true);
+
+builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"]
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-    var key = configuration["CosmosDb:Key"]
-        ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-    return new CosmosClient(endpoint, key, new CosmosClientOptions
-    {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
-    });
+    var connectionString = configuration["MongoDB:ConnectionString"]
+        ?? "mongodb://admin:securepassword123@mongodb:27017";
+    return new MongoClient(connectionString);
 });
+
+// DataProtection — persist keys to MongoDB so all replicas share the same key ring.
+// Without this each pod generates ephemeral keys and cannot decrypt cookies / Blazor
+// circuit tokens produced by a different replica.
+builder.Services.AddDataProtection()
+    .SetApplicationName("CloudHealthOffice.Portal");
+builder.Services.AddSingleton<IXmlRepository>(sp =>
+    new MongoDbXmlRepository(sp.GetRequiredService<IMongoClient>()));
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
