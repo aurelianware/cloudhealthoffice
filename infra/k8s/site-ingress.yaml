@@ -1,15 +1,14 @@
 ---
-# Ingress for Cloud Health Office Website (Static Site)
+# Marketing site ingress – serves cloudhealthoffice.com and www from the static site container
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: site-ingress
-  namespace: cho-svcs
+  namespace: cloudhealthoffice
   labels:
     app: site
-    component: frontend
+    component: marketing
   annotations:
-    # NGINX Ingress Controller annotations
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"

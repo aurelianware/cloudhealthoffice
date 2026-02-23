@@ -20,7 +20,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: do-block-storage # Digital Ocean storage class
+  storageClassName: managed-csi # Azure managed disk (was: do-block-storage)
 ---
 apiVersion: v1
 kind: Secret
