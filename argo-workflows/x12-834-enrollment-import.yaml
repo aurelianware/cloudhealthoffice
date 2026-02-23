@@ -1,0 +1,136 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: x12-834-enrollment-import
+  namespace: cho-workflows
+spec:
+  schedule: "*/10 * * * *"  # Every 10 minutes
+  timezone: "America/Los_Angeles"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  workflowSpec:
+    entrypoint: enrollment-import-pipeline
+    arguments:
+      parameters:
+      - name: sftp-host
+        value: "sftp.employer.com"
+      - name: sftp-path
+        value: "/outbound/834"
+      - name: tenant-id
+        value: "blueshield-ca-12345"
+      - name: kafka-topic
+        value: "enrollment-import"
+    
+    templates:
+    - name: enrollment-import-pipeline
+      steps:
+      - - name: fetch-from-sftp
+          template: sftp-fetch
+      - - name: parse-834-files
+          template: parse-834
+      - - name: import-enrollments
+          template: import-to-cosmos
+      - - name: archive-to-sftp
+          template: sftp-archive
+    
+    - name: sftp-fetch
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-sftp-fetcher:latest
+        env:
+        - name: SFTP_HOST
+          value: "{{workflow.parameters.sftp-host}}"
+        - name: SFTP_PATH
+          value: "{{workflow.parameters.sftp-path}}"
+        - name: SFTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: sftp-creds
+              key: username
+        - name: SFTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sftp-creds
+              key: password
+        - name: OUTPUT_DIR
+          value: "/work/input"
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+    
+    - name: parse-834
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-x12-834-parser:latest
+        env:
+        - name: INPUT_DIR
+          value: "/work/input"
+        - name: OUTPUT_DIR
+          value: "/work/parsed"
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+    
+    - name: import-to-cosmos
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+            
+            for file in /work/parsed/*.json; do
+              echo "Importing $(basename $file)..."
+              
+              curl -X POST http://enrollment-import-service.cloudhealthoffice/api/v1/enrollment/import \
+                -H "Content-Type: application/json" \
+                -H "X-Tenant-ID: {{workflow.parameters.tenant-id}}" \
+                --data-binary "@$file" \
+                -o /work/results/$(basename $file .json).result.json
+              
+              if [ $? -eq 0 ]; then
+                echo "✓ Imported $(basename $file)"
+              else
+                echo "✗ Failed to import $(basename $file)"
+              fi
+            done
+            
+            echo "Import complete. Results:"
+            cat /work/results/*.result.json | jq -s '
+              {
+                totalFiles: length,
+                totalEnrollments: map(.successCount) | add,
+                totalErrors: map(.failedCount) | add,
+                membersCreated: map(.membersCreated) | add,
+                membersUpdated: map(.membersUpdated) | add,
+                membersTerminated: map(.membersTerminated) | add
+              }'
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+    
+    - name: sftp-archive
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-sftp-publisher:latest
+        env:
+        - name: SFTP_HOST
+          value: "{{workflow.parameters.sftp-host}}"
+        - name: SFTP_PATH
+          value: "/archive/834"
+        - name: SFTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: sftp-creds
+              key: username
+        - name: SFTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sftp-creds
+              key: password
+        - name: INPUT_DIR
+          value: "/work/input"
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+    
+    volumes:
+    - name: workdir
+      emptyDir: {}

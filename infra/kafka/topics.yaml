@@ -1,0 +1,299 @@
+# Kafka Topics Configuration for Cloud Health Office EDI Processing
+#
+# This file defines all Kafka topics required for the X12 EDI processing pipeline.
+# Deploy using Strimzi Kafka Operator or apply manually.
+#
+# Topics:
+#   - edi-raw-files: Raw EDI file events
+#   - attachments-in: Processed 275 attachments
+#   - edi-278: Processed 278 authorizations
+#   - rfai-requests: 277 generation requests
+#   - edi-277-outbound: Generated 277 responses
+#   - edi-278-replay-requests: 278 replay requests
+#   - edi-278-replays: Completed replay audit log
+#   - dead-letter-queue: Failed messages
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: edi-raw-files
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: edi-raw-files
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: edi-raw-files
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "604800000"  # 7 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"  # 1 GB
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: attachments-in
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: attachments-in
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: attachments-in
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: edi-278
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: edi-278
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: edi-278
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: rfai-requests
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: rfai-requests
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: rfai-requests
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "604800000"  # 7 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"  # 512 MB
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: edi-277-outbound
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: edi-277-outbound
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: edi-277-outbound
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: edi-278-replay-requests
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: edi-278-replay-requests
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: edi-278-replay-requests
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "604800000"  # 7 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: edi-278-replays
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: edi-278-replays
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: edi-278-replays
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "7776000000"  # 90 days (audit log)
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: claims-adjudication
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-adjudication
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-adjudication
+  partitions: 6
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: claims-work-queue
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-work-queue
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-work-queue
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: claims-rejected
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: claims-rejected
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: claims-rejected
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "7776000000"  # 90 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: eligibility-requests
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: eligibility-requests
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: eligibility-requests
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "604800000"  # 7 days
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: enrollment-import
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: enrollment-import
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: enrollment-import
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "2592000000"  # 30 days (member enrollment audit log)
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "536870912"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: dead-letter-queue
+  namespace: kafka
+  labels:
+    app.kubernetes.io/name: dead-letter-queue
+    app.kubernetes.io/component: kafka-topic
+    app.kubernetes.io/part-of: cloudhealthoffice
+    strimzi.io/cluster: cloudhealthoffice-kafka
+spec:
+  topicName: dead-letter-queue
+  partitions: 3
+  replicas: 3
+  config:
+    retention.ms: "7776000000"  # 90 days (longer retention for failed messages)
+    cleanup.policy: "delete"
+    compression.type: "lz4"
+    min.insync.replicas: "2"
+    segment.bytes: "1073741824"
