@@ -8,6 +8,7 @@ on:
       - 'site/**'
       - 'services/**'
       - 'k8s/**'
+      - 'src/portal/**/k8s/**'
       - '.github/workflows/deploy-do.yml'
 
 env:
@@ -65,3 +66,7 @@ jobs:
           # Ingress – main domain + portal subdomain both route to portal service
           kubectl apply -f infra/k8s/site-ingress.yaml
           kubectl apply -f infra/k8s/portal-ingress.yaml
+
+          # Restart portal pods so they pick up new image and configmap changes
+          kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=120s
