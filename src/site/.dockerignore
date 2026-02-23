@@ -1,0 +1,9 @@
+.git
+.gitignore
+.k8s/
+**/.DS_Store
+**/*.md
+BUILD-PROCESS.md
+DEPLOYMENT.md
+IMPLEMENTATION-SUMMARY.md
+README.md

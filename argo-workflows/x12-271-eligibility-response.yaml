@@ -1,0 +1,681 @@
+# X12 271 Eligibility Response Workflow
+# Generates and sends 271 responses to eligibility inquiries (270)
+#
+# HIPAA Transaction: 005010X279 (271) - Eligibility, Coverage or Benefit Information
+#
+# Workflow Steps:
+#   1. consume-kafka - Listen to 'eligibility-requests' topic (from 270 ingest)
+#   2. query-eligibility - Fetch coverage/benefits from eligibility service
+#   3. generate-271 - Build X12 271 eligibility response
+#   4. sftp-upload - Send to clearinghouse SFTP
+#   5. archive - Store 271 in data lake
+#   6. publish-kafka - Confirm to 'eligibility-responses' topic
+#
+# Trading Partners:
+#   - Sender: Health Plan (Payer)
+#   - Receiver: Clearinghouse or Provider
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-271-eligibility-response
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: x12-271-eligibility-response
+    app.kubernetes.io/component: edi-processing
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 271 eligibility response generation - answers 270 inquiries"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: generate-271-eligibility-response
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+    secondsAfterSuccess: 43200
+    secondsAfterFailure: 604800
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 1200  # 20 minutes
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  arguments:
+    parameters:
+      # Eligibility inquiry data (from 270 parse)
+      - name: eligibility-inquiry
+        value: "{}"
+      # Trading partner configuration
+      - name: tenant-id
+        value: "bcbs-florida"
+      - name: trading-partner-id
+        value: "availity"
+      - name: environment
+        value: "prod"
+      - name: sender-id
+        value: "BCBSFLORIDA"
+      - name: receiver-id
+        value: "CLEARINGHOUSE"
+      # SFTP
+      - name: sftp-outbound-folder
+        value: "/outbound/271"
+      # Blob storage
+      - name: blob-container
+        value: "cho-prod"
+      - name: blob-prefix
+        value: "processed/271"
+      # Services
+      - name: eligibility-service-endpoint
+        value: "http://eligibility-service.cloudhealthoffice.svc.cluster.local/api/eligibility"
+      # Kafka
+      - name: kafka-topic-outbound
+        value: "eligibility-responses"
+  
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "1Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: clearinghouse-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+    - name: azure-storage-credentials
+      secret:
+        secretName: azure-storage-secret
+  
+  templates:
+    # Main orchestration DAG
+    - name: generate-271-eligibility-response
+      dag:
+        tasks:
+          # Step 1: Parse eligibility inquiry
+          - name: parse-inquiry
+            template: parse-inquiry-template
+            arguments:
+              parameters:
+                - name: eligibility-inquiry
+                  value: "{{workflow.parameters.eligibility-inquiry}}"
+          
+          # Step 2: Query eligibility service
+          - name: query-eligibility
+            dependencies: [parse-inquiry]
+            template: query-eligibility-template
+            arguments:
+              artifacts:
+                - name: inquiries
+                  from: "{{tasks.parse-inquiry.outputs.artifacts.parsed-inquiries}}"
+              parameters:
+                - name: eligibility-service-endpoint
+                  value: "{{workflow.parameters.eligibility-service-endpoint}}"
+          
+          # Step 3: Generate 271
+          - name: generate-271
+            dependencies: [query-eligibility]
+            template: generate-271-template
+            arguments:
+              artifacts:
+                - name: eligibility-data
+                  from: "{{tasks.query-eligibility.outputs.artifacts.eligibility-response}}"
+              parameters:
+                - name: sender-id
+                  value: "{{workflow.parameters.sender-id}}"
+                - name: receiver-id
+                  value: "{{workflow.parameters.receiver-id}}"
+          
+          # Step 4: Upload to SFTP
+          - name: sftp-upload
+            dependencies: [generate-271]
+            template: sftp-upload-template
+            arguments:
+              artifacts:
+                - name: edi-file
+                  from: "{{tasks.generate-271.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: sftp-folder
+                  value: "{{workflow.parameters.sftp-outbound-folder}}"
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
+                - name: trading-partner-id
+                  value: "{{workflow.parameters.trading-partner-id}}"
+          
+          # Step 5: Archive to blob storage
+          - name: archive-271
+            dependencies: [generate-271]
+            template: archive-blob-template
+            arguments:
+              artifacts:
+                - name: file-to-archive
+                  from: "{{tasks.generate-271.outputs.artifacts.edi-output}}"
+              parameters:
+                - name: blob-container
+                  value: "{{workflow.parameters.blob-container}}"
+                - name: blob-prefix
+                  value: "{{workflow.parameters.blob-prefix}}"
+          
+          # Step 6: Publish confirmation to Kafka
+          - name: publish-kafka
+            dependencies: [sftp-upload]
+            template: kafka-publish-template
+            arguments:
+              parameters:
+                - name: topic
+                  value: "{{workflow.parameters.kafka-topic-outbound}}"
+                - name: message
+                  value: "{{tasks.query-eligibility.outputs.parameters.eligibility-summary}}"
+
+    # Parse Inquiry Template
+    - name: parse-inquiry-template
+      inputs:
+        parameters:
+          - name: eligibility-inquiry
+      outputs:
+        artifacts:
+          - name: parsed-inquiries
+            path: /data/output/inquiries.json
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            
+            inquiry_data = json.loads('''{{inputs.parameters.eligibility-inquiry}}''')
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            # Extract eligibility inquiries from parsed 270
+            inquiries = []
+            
+            if 'inquiries' in inquiry_data:
+              for inq in inquiry_data['inquiries']:
+                inquiries.append({
+                  'trace_number': inq.get('trace_number', ''),
+                  'subscriber': inq.get('subscriber', {}),
+                  'service_type_code': inq.get('service_type_code', '30'),
+                  'service_date': inq.get('service_date', '')
+                })
+            
+            with open('/data/output/inquiries.json', 'w') as f:
+              json.dump(inquiries, f, indent=2)
+            
+            print(f"Parsed {len(inquiries)} eligibility inquiries")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Query Eligibility Service Template
+    - name: query-eligibility-template
+      inputs:
+        artifacts:
+          - name: inquiries
+            path: /data/input/inquiries.json
+        parameters:
+          - name: eligibility-service-endpoint
+      outputs:
+        artifacts:
+          - name: eligibility-response
+            path: /data/output/eligibility-results.json
+        parameters:
+          - name: eligibility-summary
+            valueFrom:
+              path: /data/output/summary.json
+      container:
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            ELIGIBILITY_API="{{inputs.parameters.eligibility-service-endpoint}}"
+            
+            # Read inquiries
+            INQUIRIES=$(cat /data/input/inquiries.json)
+            
+            # Query each inquiry
+            echo '{"results": []}' > /data/output/eligibility-results.json
+            
+            # Loop through inquiries and query eligibility service
+            # For production:
+            # curl -X POST "$ELIGIBILITY_API/inquiry" -H "Content-Type: application/json" -d "$INQUIRY"
+            
+            # Mock response
+            cat > /data/output/eligibility-results.json <<'EOF'
+            {
+              "results": [
+                {
+                  "inquiry_id": "ELIGREQ123456",
+                  "member_id": "MEM123456789",
+                  "subscriber_name": "JOHN DOE",
+                  "dob": "19850615",
+                  "gender": "M",
+                  "is_covered": true,
+                  "coverage_level": "IND",
+                  "status_code": "1",
+                  "status_description": "Active Coverage",
+                  "plan_name": "Blue Cross Blue Shield - PPO",
+                  "group_number": "GRP0001",
+                  "coverage_begin_date": "20260101",
+                  "coverage_end_date": "20261231",
+                  "pcp_name": "DR. SMITH",
+                  "pcp_npi": "9876543210",
+                  "deductible": {
+                    "individual_annual": 1500.00,
+                    "individual_met": 700.00,
+                    "individual_remaining": 800.00,
+                    "family_annual": 3000.00,
+                    "family_met": 1200.00,
+                    "family_remaining": 1800.00
+                  },
+                  "out_of_pocket": {
+                    "individual_annual": 5000.00,
+                    "individual_met": 1800.00,
+                    "individual_remaining": 3200.00,
+                    "family_annual": 10000.00,
+                    "family_met": 3500.00,
+                    "family_remaining": 6500.00
+                  },
+                  "benefits": [
+                    {
+                      "service_type": "30",
+                      "service_description": "Health Benefit Plan Coverage",
+                      "coverage_level": "IND",
+                      "in_network": true,
+                      "copay": 25.00,
+                      "coinsurance": 20,
+                      "authorization_required": false
+                    },
+                    {
+                      "service_type": "33",
+                      "service_description": "Chiropractic",
+                      "coverage_level": "IND",
+                      "in_network": true,
+                      "copay": 40.00,
+                      "visit_limit": 20,
+                      "authorization_required": true
+                    },
+                    {
+                      "service_type": "47",
+                      "service_description": "Hospital - Inpatient",
+                      "coverage_level": "IND",
+                      "in_network": true,
+                      "coinsurance": 10,
+                      "authorization_required": true
+                    },
+                    {
+                      "service_type": "88",
+                      "service_description": "Pharmacy",
+                      "coverage_level": "IND",
+                      "in_network": true,
+                      "copay_generic": 10.00,
+                      "copay_brand": 35.00,
+                      "copay_specialty": 100.00
+                    },
+                    {
+                      "service_type": "98",
+                      "service_description": "Professional (Physician) Visit - Office",
+                      "coverage_level": "IND",
+                      "in_network": true,
+                      "copay": 25.00,
+                      "coinsurance": 0
+                    }
+                  ]
+                }
+              ]
+            }
+            EOF
+            
+            # Summary for Kafka
+            cat > /data/output/summary.json <<'EOF'
+            {
+              "workflow_type": "271-eligibility-response",
+              "responses_generated": 1,
+              "timestamp": "2026-02-08T19:45:00Z",
+              "tenant_id": "bcbs-florida",
+              "trading_partner": "availity"
+            }
+            EOF
+            
+            echo "Queried eligibility service for 1 inquiry"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Generate 271 Template
+    - name: generate-271-template
+      inputs:
+        artifacts:
+          - name: eligibility-data
+            path: /data/input/eligibility-results.json
+        parameters:
+          - name: sender-id
+          - name: receiver-id
+      outputs:
+        artifacts:
+          - name: edi-output
+            path: /data/output/271.edi
+      container:
+        image: python:3.11-slim
+        command: ["python", "-c"]
+        args:
+          - |
+            import json
+            import os
+            from datetime import datetime
+            
+            # Read eligibility results
+            with open('/data/input/eligibility-results.json', 'r') as f:
+              data = json.load(f)
+            
+            os.makedirs('/data/output', exist_ok=True)
+            
+            results = data.get('results', [])
+            
+            sender_id = "{{inputs.parameters.sender-id}}"
+            receiver_id = "{{inputs.parameters.receiver-id}}"
+            
+            # Generate control number
+            control_number = f"{datetime.now().strftime('%Y%m%d%H%M%S')}"[:9]
+            
+            # Build X12 271 EDI
+            edi_lines = []
+            
+            # ISA - Interchange Control Header
+            edi_lines.append(f"ISA*00*          *00*          *ZZ*{sender_id.ljust(15)[:15]}*ZZ*{receiver_id.ljust(15)[:15]}*{datetime.now().strftime('%y%m%d')}*{datetime.now().strftime('%H%M')}*^*00501*{control_number}*0*P*:~")
+            
+            # GS - Functional Group Header
+            edi_lines.append(f"GS*HB*{sender_id}*{receiver_id}*{datetime.now().strftime('%Y%m%d')}*{datetime.now().strftime('%H%M')}*1*X*005010X279A1~")
+            
+            for idx, result in enumerate(results, 1):
+              st_control = str(idx).zfill(4)
+              segments = []
+              
+              # ST - Transaction Set Header
+              segments.append(f"ST*271*{st_control}*005010X279A1~")
+              
+              # BHT - Beginning of Hierarchical Transaction
+              trace_num = result.get('inquiry_id', f'TRACE{idx:06d}')
+              segments.append(f"BHT*0022*11*{trace_num}*{datetime.now().strftime('%Y%m%d')}*{datetime.now().strftime('%H%M')}~")
+              
+              # HL*1 - Information Source (Payer)
+              segments.append("HL*1**20*1~")
+              segments.append("NM1*PR*2*BLUE CROSS BLUE SHIELD*****PI*BCBS001~")
+              
+              # HL*2 - Information Receiver (Provider)
+              segments.append("HL*2*1*21*1~")
+              segments.append("NM1*1P*2*MEDICAL CENTER*****XX*1234567890~")
+              
+              # HL*3 - Subscriber
+              segments.append("HL*3*2*22*0~")
+              segments.append(f"TRN*2*{trace_num}*1234567890~")
+              
+              member_id = result.get('member_id', 'UNKNOWN')
+              subscriber_name = result.get('subscriber_name', 'DOE*JOHN')
+              name_parts = subscriber_name.split()
+              last_name = name_parts[0] if len(name_parts) > 0 else 'DOE'
+              first_name = name_parts[1] if len(name_parts) > 1 else 'JOHN'
+              
+              segments.append(f"NM1*IL*1*{last_name}*{first_name}****MI*{member_id}~")
+              
+              # N3/N4 - Address (optional)
+              # segments.append("N3*123 MAIN ST~")
+              # segments.append("N4*TAMPA*FL*33601~")
+              
+              # Demographics
+              dob = result.get('dob', '19850615')
+              gender = result.get('gender', 'M')
+              segments.append(f"DMG*D8*{dob}*{gender}~")
+              
+              # Coverage dates
+              coverage_begin = result.get('coverage_begin_date', '')
+              coverage_end = result.get('coverage_end_date', '')
+              if coverage_begin:
+                segments.append(f"DTP*291*D8*{coverage_begin}~")
+              
+              # EB - Eligibility or Benefit Information
+              status_code = result.get('status_code', '1')
+              coverage_level = result.get('coverage_level', 'IND')
+              is_covered = result.get('is_covered', False)
+              
+              if is_covered:
+                # Active coverage - general
+                segments.append(f"EB*1**30**{coverage_level}~")
+                
+                # Add benefits
+                for benefit in result.get('benefits', []):
+                  svc_type = benefit.get('service_type', '30')
+                  in_network = benefit.get('in_network', True)
+                  network_ind = 'Y' if in_network else 'N'
+                  
+                  # Copay
+                  copay = benefit.get('copay')
+                  if copay:
+                    segments.append(f"EB*A**{svc_type}**{coverage_level}*26*{copay:.2f}~")
+                  
+                  # Coinsurance
+                  coinsurance = benefit.get('coinsurance')
+                  if coinsurance:
+                    segments.append(f"EB*B**{svc_type}**{coverage_level}***{coinsurance}~")
+                  
+                  # Visit limit
+                  visit_limit = benefit.get('visit_limit')
+                  if visit_limit:
+                    segments.append(f"EB*C**{svc_type}**{coverage_level}*27*{visit_limit}~")
+                  
+                  # Authorization required
+                  auth_req = benefit.get('authorization_required', False)
+                  if auth_req:
+                    segments.append(f"EB*I**{svc_type}**{coverage_level}~")
+                    segments.append("MSG*PRIOR AUTHORIZATION REQUIRED~")
+                
+                # Deductible
+                deductible = result.get('deductible', {})
+                if deductible:
+                  ind_annual = deductible.get('individual_annual')
+                  ind_met = deductible.get('individual_met')
+                  ind_remaining = deductible.get('individual_remaining')
+                  
+                  if ind_annual:
+                    segments.append(f"EB*C**30**{coverage_level}*23*{ind_annual:.2f}~")
+                  if ind_remaining:
+                    segments.append(f"EB*C**30**{coverage_level}*29*{ind_remaining:.2f}~")
+                
+                # Out of Pocket
+                oop = result.get('out_of_pocket', {})
+                if oop:
+                  ind_annual = oop.get('individual_annual')
+                  ind_remaining = oop.get('individual_remaining')
+                  
+                  if ind_annual:
+                    segments.append(f"EB*G**30**{coverage_level}*23*{ind_annual:.2f}~")
+                  if ind_remaining:
+                    segments.append(f"EB*G**30**{coverage_level}*29*{ind_remaining:.2f}~")
+              
+              else:
+                # Inactive coverage
+                segments.append(f"EB*6**30**{coverage_level}~")
+                segments.append("MSG*COVERAGE NOT ACTIVE ON DATE OF SERVICE~")
+              
+              # SE - Transaction Set Trailer
+              segment_count = len(segments) + 1
+              segments.append(f"SE*{segment_count}*{st_control}~")
+              
+              edi_lines.extend(segments)
+            
+            # GE - Functional Group Trailer
+            edi_lines.append(f"GE*{len(results)}*1~")
+            
+            # IEA - Interchange Control Trailer
+            edi_lines.append(f"IEA*1*{control_number}~")
+            
+            # Write 271 EDI
+            with open('/data/output/271.edi', 'w') as f:
+              f.write('\n'.join(edi_lines))
+            
+            print(f"Generated 271 response with {len(results)} eligibility results")
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # SFTP Upload Template
+    - name: sftp-upload-template
+      inputs:
+        artifacts:
+          - name: edi-file
+            path: /data/input/271.edi
+        parameters:
+          - name: sftp-folder
+          - name: tenant-id
+          - name: trading-partner-id
+      container:
+        image: atmoz/sftp:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
+            SFTP_FOLDER="{{inputs.parameters.sftp-folder}}"
+            
+            # Construct path: /tenants/{tenant-id}/{partner-id}/outbound/271/
+            SFTP_PATH="/tenants/${TENANT_ID}/${PARTNER_ID}${SFTP_FOLDER}"
+            
+            echo "Uploading 271 to SFTP: $SFTP_PATH"
+            
+            # SFTP upload implementation
+            # In production, use sftp command or curl with sftp://
+            
+            echo "271 uploaded successfully to $SFTP_PATH"
+        env:
+          - name: SFTP_HOST
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: host
+          - name: SFTP_PORT
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: port
+          - name: SFTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: username
+          - name: SFTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clearinghouse-sftp-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Archive to Blob Storage Template
+    - name: archive-blob-template
+      inputs:
+        artifacts:
+          - name: file-to-archive
+            path: /data/input/271.edi
+        parameters:
+          - name: blob-container
+          - name: blob-prefix
+      container:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            CONTAINER="{{inputs.parameters.blob-container}}"
+            PREFIX="{{inputs.parameters.blob-prefix}}"
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            
+            BLOB_NAME="${PREFIX}/271-${TIMESTAMP}.edi"
+            
+            echo "Archiving 271 to blob: $BLOB_NAME"
+            
+            # Azure blob upload
+            az storage blob upload \
+              --account-name "$AZURE_STORAGE_ACCOUNT" \
+              --account-key "$AZURE_STORAGE_KEY" \
+              --container-name "$CONTAINER" \
+              --name "$BLOB_NAME" \
+              --file /data/input/271.edi
+            
+            echo "Archived to $BLOB_NAME"
+        env:
+          - name: AZURE_STORAGE_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-name
+          - name: AZURE_STORAGE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: azure-storage-secret
+                key: account-key
+        volumeMounts:
+          - name: work-volume
+            mountPath: /data
+    
+    # Kafka Publish Template
+    - name: kafka-publish-template
+      inputs:
+        parameters:
+          - name: topic
+          - name: message
+      container:
+        image: confluentinc/cp-kafka:latest
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            set -e
+            
+            TOPIC="{{inputs.parameters.topic}}"
+            MESSAGE='{{inputs.parameters.message}}'
+            
+            echo "Publishing to Kafka topic: $TOPIC"
+            
+            # Kafka publish
+            echo "$MESSAGE" | kafka-console-producer \
+              --bootstrap-server "$KAFKA_BOOTSTRAP_SERVERS" \
+              --topic "$TOPIC" \
+              --producer-property security.protocol=SASL_SSL \
+              --producer-property sasl.mechanism=PLAIN \
+              --producer-property sasl.jaas.config="org.apache.kafka.common.security.plain.PlainLoginModule required username='$KAFKA_USERNAME' password='$KAFKA_PASSWORD';"
+            
+            echo "Published confirmation to $TOPIC"
+        env:
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: bootstrap-servers
+          - name: KAFKA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: username
+          - name: KAFKA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: password

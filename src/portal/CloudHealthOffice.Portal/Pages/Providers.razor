@@ -1,0 +1,260 @@
+@page "/providers"
+@inject IProviderService ProviderService
+
+<PageTitle>Providers - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Provider Network</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Manage provider network, credentials, and performance
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <!-- Stats Cards -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Providers</MudText>
+                        <MudText Typo="Typo.h4">@_providers.Count</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">In-Network</MudText>
+                        <MudText Typo="Typo.h4">@_providers.Count(p => p.NetworkStatus == "In-Network")</MudText>
+                        <MudText Typo="Typo.caption">@((_providers.Count > 0 ? (_providers.Count(p => p.NetworkStatus == "In-Network") * 100.0 / _providers.Count).ToString("F1") : "0"))% of total</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Specialties</MudText>
+                        <MudText Typo="Typo.h4">@_providers.Select(p => p.Specialty).Distinct().Count()</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Active Claims</MudText>
+                        <MudText Typo="Typo.h4">@_providers.Count(p => p.LastClaimDate.HasValue && p.LastClaimDate.Value > DateTime.Now.AddDays(-30))</MudText>
+                        <MudText Typo="Typo.caption">Last 30 days</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Filters and Search -->
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_searchTerm"
+                                      Label="Search providers"
+                                      Placeholder="Name, NPI, or practice name..."
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Immediate="true"
+                                      OnDebounceIntervalElapsed="LoadProvidersAsync"
+                                      DebounceInterval="300" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect @bind-Value="_selectedSpecialty"
+                                   Label="Specialty"
+                                   Clearable="true"
+                                   T="string"
+                                   OnClearButtonClick="@(() => { _selectedSpecialty = null; InvokeAsync(LoadProvidersAsync); })">
+                            <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
+                            <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
+                            <MudSelectItem Value="@("Pediatrics")">Pediatrics</MudSelectItem>
+                            <MudSelectItem Value="@("Cardiology")">Cardiology</MudSelectItem>
+                            <MudSelectItem Value="@("Orthopedic Surgery")">Orthopedic Surgery</MudSelectItem>
+                            <MudSelectItem Value="@("Radiology")">Radiology</MudSelectItem>
+                            <MudSelectItem Value="@("Dermatology")">Dermatology</MudSelectItem>
+                            <MudSelectItem Value="@("Psychiatry")">Psychiatry</MudSelectItem>
+                            <MudSelectItem Value="@("Obstetrics and Gynecology")">OB/GYN</MudSelectItem>
+                            <MudSelectItem Value="@("Emergency Medicine")">Emergency Medicine</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect @bind-Value="_selectedNetworkStatus"
+                                   Label="Network Status"
+                                   Clearable="true"
+                                   T="string"
+                                   OnClearButtonClick="@(() => { _selectedNetworkStatus = null; InvokeAsync(LoadProvidersAsync); })">
+                            <MudSelectItem Value="@("In-Network")">In-Network</MudSelectItem>
+                            <MudSelectItem Value="@("Out-of-Network")">Out-of-Network</MudSelectItem>
+                            <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   FullWidth="true"
+                                   OnClick="@(() => OpenCreateDialog())">
+                            Add Provider
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+
+        <!-- Providers Table -->
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudTable Items="@_filteredProviders"
+                          Hover="true"
+                          Striped="true"
+                          Dense="true">
+                    <HeaderContent>
+                        <MudTh>NPI</MudTh>
+                        <MudTh>Provider Name</MudTh>
+                        <MudTh>Practice Type</MudTh>
+                        <MudTh>Specialty</MudTh>
+                        <MudTh>Practice Name</MudTh>
+                        <MudTh>Location</MudTh>
+                        <MudTh>Network Status</MudTh>
+                        <MudTh>Credentials</MudTh>
+                        <MudTh>Networks</MudTh>
+                        <MudTh>Last Claim</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="NPI">@context.NPI</MudTd>
+                        <MudTd DataLabel="Provider Name">
+                            <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Practice Type">
+                            <MudChip Size="Size.Small"
+                                     Color="@(context.PracticeType == "Individual" ? Color.Info : Color.Secondary)">
+                                @context.PracticeType
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Specialty">@context.Specialty</MudTd>
+                        <MudTd DataLabel="Practice Name">@context.PracticeName</MudTd>
+                        <MudTd DataLabel="Location">@context.City, @context.State</MudTd>
+                        <MudTd DataLabel="Network Status">
+                            <MudChip Size="Size.Small"
+                                     Color="@GetNetworkStatusColor(context.NetworkStatus)">
+                                @context.NetworkStatus
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Credentials">
+                            <MudChip Size="Size.Small"
+                                     Color="@GetCredentialStatusColor(context.CredentialingStatus)">
+                                @context.CredentialingStatus
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Networks">
+                            <MudChip Size="Size.Small" Color="Color.Default">@context.NetworkCount</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Last Claim">
+                            @if (context.LastClaimDate.HasValue)
+                            {
+                                <MudText Typo="Typo.caption">@context.LastClaimDate.Value.ToString("MMM d, yyyy")</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="@(() => OpenDetailsDialog(context.ProviderId))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="Color.Secondary"
+                                           OnClick="@(() => OpenEditDialog(context.ProviderId))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>
+
+<ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="LoadProvidersAsync" />
+<CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="LoadProvidersAsync" />
+
+@code {
+    private bool _loading = true;
+    private List<ProviderListItem> _providers = new();
+    private IEnumerable<ProviderListItem> _filteredProviders => FilterProviders();
+
+    private string? _searchTerm;
+    private string? _selectedSpecialty;
+    private string? _selectedNetworkStatus;
+
+    private ProviderDetailsDialog? _detailsDialog;
+    private CreateEditProviderDialog? _createEditDialog;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProvidersAsync();
+    }
+
+    private async Task LoadProvidersAsync()
+    {
+        _loading = true;
+        _providers = await ProviderService.SearchProvidersAsync(_selectedSpecialty, _selectedNetworkStatus, _searchTerm);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private IEnumerable<ProviderListItem> FilterProviders()
+    {
+        return _providers;
+    }
+
+    private async Task OpenDetailsDialog(string providerId)
+    {
+        if (_detailsDialog != null)
+            await _detailsDialog.OpenAsync(providerId);
+    }
+
+    private async Task OpenEditDialog(string providerId)
+    {
+        if (_createEditDialog != null)
+            await _createEditDialog.OpenAsync(providerId);
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        if (_createEditDialog != null)
+            await _createEditDialog.OpenAsync(null);
+    }
+
+    private Color GetNetworkStatusColor(string status)
+    {
+        return status switch
+        {
+            "In-Network" => Color.Success,
+            "Out-of-Network" => Color.Warning,
+            "Pending" => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetCredentialStatusColor(string status)
+    {
+        return status switch
+        {
+            "Active" => Color.Success,
+            "Pending" => Color.Warning,
+            "Expired" => Color.Error,
+            _ => Color.Default
+        };
+    }
+}
