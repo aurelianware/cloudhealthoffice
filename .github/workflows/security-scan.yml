@@ -129,7 +129,7 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-          
+
       - name: Generate Trivy report
         if: always()
         uses: aquasecurity/trivy-action@0.30.0
