@@ -1,0 +1,255 @@
+@page "/claims/{ClaimId}"
+@using CloudHealthOffice.Portal.Services
+@inject IClaimsService ClaimsService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Claim Details - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <!-- Breadcrumb -->
+    <MudBreadcrumbs Items="_breadcrumbItems" Class="mb-4"></MudBreadcrumbs>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center pa-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    else if (_claim != null)
+    {
+        <!-- Header with Status -->
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="8">
+                    <MudText Typo="Typo.h4" GutterBottom="true">
+                        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+                        Claim @_claim.ClaimId
+                    </MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">
+                        Submitted: @_claim.SubmittedDate.ToString("MM/dd/yyyy hh:mm tt")
+                    </MudText>
+                    @if (_claim.ProcessedDate.HasValue)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Processed: @_claim.ProcessedDate.Value.ToString("MM/dd/yyyy hh:mm tt")
+                        </MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12" md="4" Class="d-flex align-end justify-end flex-column">
+                    <MudChip Size="Size.Large" 
+                            Color="@GetStatusColor(_claim.Status)">
+                        @_claim.Status
+                    </MudChip>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                        Processed in @_claim.ProcessingTimeMs ms
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Financial Summary Cards -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Charges</MudText>
+                        <MudText Typo="Typo.h4">@_claim.TotalChargeAmount.ToString("C")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Payer Amount</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_claim.PayerAmount.ToString("C")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Patient Responsibility</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_claim.PatientResponsibility.ToString("C")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Service Date</MudText>
+                        <MudText Typo="Typo.h5">@_claim.ServiceDate.ToString("MM/dd/yyyy")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Member & Provider Information -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" GutterBottom="true">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+                        Member Information
+                    </MudText>
+                    <MudDivider Class="mb-3" />
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Member ID</MudText>
+                            <MudText Typo="Typo.body1" Style="font-family: monospace;">@_claim.MemberId</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Name</MudText>
+                            <MudText Typo="Typo.body1">@_claim.MemberName</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" GutterBottom="true">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Class="mr-2" />
+                        Provider Information
+                    </MudText>
+                    <MudDivider Class="mb-3" />
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Provider ID</MudText>
+                            <MudText Typo="Typo.body1" Style="font-family: monospace;">@_claim.ProviderId</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Name</MudText>
+                            <MudText Typo="Typo.body1">@_claim.ProviderName</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Service Lines Table -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.ListAlt" Class="mr-2" />
+                Service Lines
+            </MudText>
+            <MudDivider Class="mb-3" />
+            <MudTable Items="_claim.ServiceLines" 
+                     Hover="true" 
+                     Breakpoint="Breakpoint.Sm"
+                     Dense="true"
+                     Elevation="0">
+                <HeaderContent>
+                    <MudTh>Procedure Code</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Charge Amount</MudTh>
+                    <MudTh>Allowed Amount</MudTh>
+                    <MudTh>Payer Amount</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Procedure Code">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ProcedureCode</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Description">
+                        <MudText Typo="Typo.body2">@context.Description</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Charge Amount">
+                        <MudText Typo="Typo.body2">@context.ChargeAmount.ToString("C")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Allowed Amount">
+                        <MudText Typo="Typo.body2">@context.AllowedAmount.ToString("C")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Payer Amount">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.PayerAmount.ToString("C")</MudText>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <!-- Action Buttons -->
+        <MudPaper Class="pa-4 mt-4 d-flex justify-space-between" Elevation="2">
+            <MudButton Variant="Variant.Outlined" 
+                      Color="Color.Default"
+                      StartIcon="@Icons.Material.Filled.ArrowBack"
+                      OnClick="@(() => NavigationManager.NavigateTo("/claims"))">
+                Back to Claims
+            </MudButton>
+            <div>
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Print"
+                          Class="mr-2">
+                    Print
+                </MudButton>
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Secondary"
+                          StartIcon="@Icons.Material.Filled.Download">
+                    Export
+                </MudButton>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">
+            Claim not found or failed to load.
+        </MudAlert>
+        <MudButton Variant="Variant.Outlined" 
+                  Color="Color.Default"
+                  StartIcon="@Icons.Material.Filled.ArrowBack"
+                  OnClick="@(() => NavigationManager.NavigateTo("/claims"))"
+                  Class="mt-4">
+            Back to Claims
+        </MudButton>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public string ClaimId { get; set; } = string.Empty;
+
+    private Services.ClaimDetails? _claim;
+    private bool _loading = true;
+    private List<BreadcrumbItem> _breadcrumbItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _breadcrumbItems = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Home", href: "/"),
+            new BreadcrumbItem("Claims", href: "/claims"),
+            new BreadcrumbItem($"Claim {ClaimId}", href: null, disabled: true)
+        };
+
+        await LoadClaimDetails();
+    }
+
+    private async Task LoadClaimDetails()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _claim = await ClaimsService.GetClaimByIdAsync(ClaimId);
+        }
+        catch (Exception ex)
+        {
+            _claim = null;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "Approved" => Color.Success,
+            "Denied" => Color.Error,
+            "Pending" => Color.Warning,
+            _ => Color.Info
+        };
+    }
+}

@@ -1,0 +1,82 @@
+{
+  "tenantId": "demo-health-plan",
+  "claimId": "CLM-2026-02-05-001",
+  "memberId": "MBR-12345",
+  "memberName": "John Doe",
+  "dateOfBirth": "1985-03-15",
+  "providerId": "PRV-67890",
+  "providerNPI": "1234567890",
+  "providerName": "City Medical Center",
+  "serviceDate": "2026-02-01",
+  "submittedDate": "2026-02-05T10:00:00Z",
+  "totalChargeAmount": 1250.00,
+  "serviceLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99213",
+      "description": "Office Visit - Level 3",
+      "chargeAmount": 150.00,
+      "units": 1,
+      "diagnosisCodes": ["Z00.00"]
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "80053",
+      "description": "Comprehensive Metabolic Panel",
+      "chargeAmount": 85.00,
+      "units": 1,
+      "diagnosisCodes": ["Z00.00"]
+    },
+    {
+      "lineNumber": 3,
+      "procedureCode": "85025",
+      "description": "Complete Blood Count",
+      "chargeAmount": 65.00,
+      "units": 1,
+      "diagnosisCodes": ["Z00.00"]
+    },
+    {
+      "lineNumber": 4,
+      "procedureCode": "93000",
+      "description": "Electrocardiogram",
+      "chargeAmount": 125.00,
+      "units": 1,
+      "diagnosisCodes": ["I10"]
+    },
+    {
+      "lineNumber": 5,
+      "procedureCode": "J0690",
+      "description": "Cefazolin Injection",
+      "chargeAmount": 45.00,
+      "units": 2,
+      "diagnosisCodes": ["A49.9"]
+    },
+    {
+      "lineNumber": 6,
+      "procedureCode": "96372",
+      "description": "Therapeutic Injection",
+      "chargeAmount": 35.00,
+      "units": 1,
+      "diagnosisCodes": ["A49.9"]
+    }
+  ],
+  "expectedResults": {
+    "coverageActive": true,
+    "providerInNetwork": true,
+    "proceduresValid": true,
+    "priorAuthRequired": false,
+    "expectedStatus": "Approved",
+    "expectedProcessingTime": "<500ms"
+  },
+  "memberCoverage": {
+    "groupNumber": "GRP-2024-001",
+    "planName": "Premium PPO",
+    "effectiveDate": "2024-01-01",
+    "deductible": 2000.00,
+    "deductibleMet": 850.00,
+    "outOfPocketMax": 6000.00,
+    "outOfPocketMet": 1200.00,
+    "copay": 25.00,
+    "coinsurance": 0.20
+  }
+}

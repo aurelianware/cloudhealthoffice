@@ -2,7 +2,7 @@
 # Calendar-based trigger to poll Clearinghouse SFTP for new EDI files
 #
 # Polling interval: Every 15 minutes
-# Emits events for new 275/278 files
+# Emits events for new 275/276/278 files
 
 apiVersion: argoproj.io/v1alpha1
 kind: EventSource
@@ -25,6 +25,16 @@ spec:
         sftp-folder: "/inbound/attachments"
         file-pattern: "*.edi"
         workflow: "x12-275-ingest"
+    
+    sftp-poll-276:
+      # Every 15 minutes, offset by 3 minutes from 275
+      schedule: "3,18,33,48 * * * *"
+      timezone: "UTC"
+      metadata:
+        transaction-type: "276"
+        sftp-folder: "/inbound/276"
+        file-pattern: "*.edi"
+        workflow: "x12-276-ingest"
     
     sftp-poll-278:
       # Every 15 minutes, offset by 5 minutes from 275

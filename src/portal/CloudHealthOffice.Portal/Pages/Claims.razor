@@ -1,0 +1,240 @@
+@page "/claims"
+@using CloudHealthOffice.Portal.Services
+@inject IClaimsService ClaimsService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Claims - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+        Claims Management
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Search, filter, and manage healthcare claims
+    </MudText>
+
+    <!-- Filters & Search Bar -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_searchTerm" 
+                             Label="Search claims" 
+                             Placeholder="Claim ID, Member, Provider..."
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.End" 
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             OnAdornmentClick="LoadClaims"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_statusFilter" 
+                          Label="Status" 
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@("All")">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
+                    <MudSelectItem Value="@("Denied")">Denied</MudSelectItem>
+                    <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDateRangePicker @bind-DateRange="_dateRange" 
+                                   Label="Date Range"
+                                   Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          FullWidth="true"
+                          OnClick="LoadClaims"
+                          Disabled="_loading">
+                    <MudIcon Icon="@Icons.Material.Filled.FilterList" Class="mr-2" />
+                    Filter
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Stats Cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Claims</MudText>
+                    <MudText Typo="Typo.h4">@_filteredClaims.Count</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Success">@_filteredClaims.Count(c => c.Status == "Approved")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Denied</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Error">@_filteredClaims.Count(c => c.Status == "Denied")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Amount</MudText>
+                    <MudText Typo="Typo.h4">@_filteredClaims.Sum(c => c.TotalChargeAmount).ToString("C0")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else
+    {
+        <!-- Claims Table -->
+        <MudPaper Elevation="2">
+            <MudTable Items="_filteredClaims" 
+                     Hover="true" 
+                     Breakpoint="Breakpoint.Sm"
+                     Dense="true"
+                     Striped="true"
+                     @bind-SelectedItem="_selectedClaim"
+                     OnRowClick="@((TableRowClickEventArgs<ClaimSummary> args) => ViewClaimDetails(args.Item.ClaimId))">
+                <HeaderContent>
+                    <MudTh>Claim ID</MudTh>
+                    <MudTh>Member</MudTh>
+                    <MudTh>Provider</MudTh>
+                    <MudTh>Amount</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Processing Time</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Claim ID">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ClaimId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Member">
+                        <MudText Typo="Typo.body2">@context.MemberName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Provider">
+                        <MudText Typo="Typo.body2">@context.ProviderName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Amount">
+                        <MudText Typo="Typo.body2">@context.TotalChargeAmount.ToString("C")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip Size="Size.Small" 
+                                Color="@GetStatusColor(context.Status)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Processing Time">
+                        <MudText Typo="Typo.body2">@context.ProcessingTimeMs ms</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
+                                      Color="Color.Primary" 
+                                      Size="Size.Small"
+                                      OnClick="@(() => ViewClaimDetails(context.ClaimId))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+            Showing @_filteredClaims.Count of @_allClaims.Count claim(s)
+        </MudText>
+    }
+</MudContainer>
+
+@code {
+    private List<ClaimSummary> _allClaims = new();
+    private List<ClaimSummary> _filteredClaims = new();
+    private ClaimSummary? _selectedClaim;
+    private bool _loading = true;
+    private string _searchTerm = string.Empty;
+    private string _statusFilter = "All";
+    private DateRange? _dateRange = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClaims();
+    }
+
+    private async Task LoadClaims()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _allClaims = await ClaimsService.GetRecentClaimsAsync(100);
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            _allClaims = new();
+            _filteredClaims = new();
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredClaims = _allClaims.ToList();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var search = _searchTerm.ToLowerInvariant();
+            _filteredClaims = _filteredClaims.Where(c =>
+                c.ClaimId.ToLowerInvariant().Contains(search) ||
+                c.MemberName.ToLowerInvariant().Contains(search) ||
+                c.ProviderName.ToLowerInvariant().Contains(search)
+            ).ToList();
+        }
+
+        // Apply status filter
+        if (_statusFilter != "All")
+        {
+            _filteredClaims = _filteredClaims.Where(c => c.Status == _statusFilter).ToList();
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+            StateHasChanged();
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "Approved" => Color.Success,
+            "Denied" => Color.Error,
+            "Pending" => Color.Warning,
+            _ => Color.Info
+        };
+    }
+
+    private void ViewClaimDetails(string claimId)
+    {
+        NavigationManager.NavigateTo($"/claims/{claimId}");
+    }
+}

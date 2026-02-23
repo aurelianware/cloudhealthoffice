@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import SwaggerParser from '@apidevtools/swagger-parser';
-import { generatePatientAccessSpecs } from '../../../scripts/generate-patient-access-specs';
+import { generatePatientAccessSpecs } from '../../../scripts/setup/generate-patient-access-specs';
 import { AzureFHIRValidator } from '../../fhir/azure-fhir-validator';
 import { ProviderAccessApi } from '../../fhir/provider-access-api';
 import {

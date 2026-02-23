@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site
+  namespace: cloudhealthoffice
+  labels:
+    app: site
+    component: marketing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: site
+  template:
+    metadata:
+      labels:
+        app: site
+        component: marketing
+    spec:
+      containers:
+      - name: site
+        image: REGISTRY_PLACEHOLDER/cloudhealthoffice-site:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: site
+  namespace: cloudhealthoffice
+  labels:
+    app: site
+    component: marketing
+spec:
+  selector:
+    app: site
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP

@@ -1,0 +1,290 @@
+# X12 837 Claims Ingestion Workflow
+# End-to-end 837 EDI file processing pipeline
+#
+# HIPAA Transactions:
+#   - 837P (005010X222A1) - Professional Claims
+#   - 837I (005010X223A2) - Institutional Claims
+#   - 837D (005010X224A2) - Dental Claims
+#
+# Workflow Steps:
+#   1. fetch-claims - Fetch 837 files from SFTP
+#   2. parse-837-edi - Parse EDI to JSON
+#   3. create-claims - POST to Claims Service API
+#   4. publish-to-kafka - Publish to claims-adjudication topic
+#
+# Flow:
+#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka → Adjudication Workflow
+#
+# Trigger:
+#   - Manual: argo submit -n cloudhealthoffice --from workflowtemplate/x12-837-ingest
+#   - Event-driven: Argo Events watching SFTP folder
+#   - Cron: Every 5 minutes
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: x12-837-ingest
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: x12-837-ingest
+    app.kubernetes.io/component: claims-ingestion
+    app.kubernetes.io/part-of: cloudhealthoffice
+    hipaa.compliance: "required"
+  annotations:
+    description: "X12 837 claims ingestion - SFTP to Claims Service to Adjudication"
+    workflows.argoproj.io/version: ">= 3.0"
+spec:
+  entrypoint: ingest-837-claims
+  serviceAccountName: argo-workflow-sa
+  
+  # Workflow-level TTL
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # 24 hours
+    secondsAfterSuccess: 43200     # 12 hours
+    secondsAfterFailure: 604800    # 7 days
+  
+  archiveLogs: true
+  activeDeadlineSeconds: 3600  # 1 hour
+  
+  # Retry strategy
+  retryStrategy:
+    limit: 3
+    retryPolicy: OnFailure
+    backoff:
+      duration: "30s"
+      factor: 2
+      maxDuration: "5m"
+  
+  # Arguments
+  arguments:
+    parameters:
+      - name: sftp-host
+        value: "sftp-server.cloudhealthoffice.svc.cluster.local"
+      - name: sftp-port
+        value: "22"
+      - name: sftp-folder
+        value: "/inbound/claims"
+      - name: file-pattern
+        value: "*.edi"
+      - name: claims-service-url
+        value: "http://claims-service.cloudhealthoffice.svc.cluster.local:8080"
+      - name: kafka-bootstrap-servers
+        value: "cloudhealthoffice-kafka-bootstrap.kafka:9092"
+      - name: kafka-topic
+        value: "claims-adjudication"
+      - name: tenant-id
+        value: "default-payer"
+      - name: archive-folder
+        value: "/archive/claims"
+  
+  # Volumes
+  volumes:
+    - name: work-volume
+      emptyDir:
+        sizeLimit: "5Gi"
+    - name: sftp-credentials
+      secret:
+        secretName: claims-sftp-secret
+    - name: kafka-credentials
+      secret:
+        secretName: kafka-sasl-secret
+  
+  templates:
+    # Main entrypoint
+    - name: ingest-837-claims
+      steps:
+        - - name: fetch-claims
+            template: fetch-from-sftp
+        - - name: parse-claims
+            template: parse-837-files
+            arguments:
+              artifacts:
+                - name: edi-files
+                  from: "{{steps.fetch-claims.outputs.artifacts.edi-files}}"
+        - - name: create-and-publish
+            template: create-claims-batch
+            arguments:
+              artifacts:
+                - name: parsed-claims
+                  from: "{{steps.parse-claims.outputs.artifacts.parsed-claims}}"
+        - - name: archive-files
+            template: archive-to-sftp
+            arguments:
+              artifacts:
+                - name: edi-files
+                  from: "{{steps.fetch-claims.outputs.artifacts.edi-files}}"
+    
+    # Step 1: Fetch 837 files from SFTP
+    - name: fetch-from-sftp
+      container:
+        image: cloudhealthoffice/sftp-client:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            echo "Fetching 837 files from SFTP..."
+            
+            # Setup SSH key
+            mkdir -p ~/.ssh
+            cp /secrets/sftp-key ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            
+            # Fetch files
+            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
+              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
+            cd {{workflow.parameters.sftp-folder}}
+            lcd /work
+            mget {{workflow.parameters.file-pattern}}
+            bye
+            EOF
+            
+            # Count files
+            FILE_COUNT=$(ls -1 /work/*.edi 2>/dev/null | wc -l)
+            echo "Fetched $FILE_COUNT files"
+            echo "$FILE_COUNT" > /work/file-count.txt
+            
+            if [ "$FILE_COUNT" -eq 0 ]; then
+              echo "No files to process"
+              exit 0
+            fi
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+          - name: sftp-credentials
+            mountPath: /secrets
+            readOnly: true
+      outputs:
+        artifacts:
+          - name: edi-files
+            path: /work
+            archive:
+              none: {}
+    
+    # Step 2: Parse 837 EDI to JSON
+    - name: parse-837-files
+      inputs:
+        artifacts:
+          - name: edi-files
+            path: /work/input
+      container:
+        image: cloudhealthoffice/x12-parser:latest
+        command: ["/app/parse-837.sh"]
+        env:
+          - name: INPUT_DIR
+            value: "/work/input"
+          - name: OUTPUT_DIR
+            value: "/work/output"
+          - name: CLAIM_TYPES
+            value: "837P,837I,837D"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+      outputs:
+        artifacts:
+          - name: parsed-claims
+            path: /work/output
+            archive:
+              none: {}
+    
+    # Step 3: Create claims in Claims Service and publish to Kafka
+    - name: create-claims-batch
+      inputs:
+        artifacts:
+          - name: parsed-claims
+            path: /work/claims
+      container:
+        image: cloudhealthoffice/claims-publisher:latest
+        command: ["/app/publish-claims.sh"]
+        env:
+          - name: CLAIMS_DIR
+            value: "/work/claims"
+          - name: CLAIMS_SERVICE_URL
+            value: "{{workflow.parameters.claims-service-url}}"
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            value: "{{workflow.parameters.kafka-bootstrap-servers}}"
+          - name: KAFKA_TOPIC
+            value: "{{workflow.parameters.kafka-topic}}"
+          - name: TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
+          - name: KAFKA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: username
+          - name: KAFKA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: kafka-sasl-secret
+                key: password
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+      outputs:
+        parameters:
+          - name: claims-created
+            valueFrom:
+              path: /work/claims-created.txt
+          - name: kafka-published
+            valueFrom:
+              path: /work/kafka-published.txt
+    
+    # Step 4: Archive processed files to SFTP
+    - name: archive-to-sftp
+      inputs:
+        artifacts:
+          - name: edi-files
+            path: /work/files
+      container:
+        image: cloudhealthoffice/sftp-client:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            echo "Archiving processed files to SFTP..."
+            
+            # Setup SSH key
+            mkdir -p ~/.ssh
+            cp /secrets/sftp-key ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            
+            # Create archive folder with timestamp
+            ARCHIVE_FOLDER="{{workflow.parameters.archive-folder}}/$(date +%Y-%m-%d)"
+            
+            # Move files to archive
+            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
+              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
+            mkdir -p $ARCHIVE_FOLDER
+            cd $ARCHIVE_FOLDER
+            lcd /work/files
+            mput *.edi
+            bye
+            EOF
+            
+            echo "Files archived successfully"
+        volumeMounts:
+          - name: work-volume
+            mountPath: /work
+          - name: sftp-credentials
+            mountPath: /secrets
+            readOnly: true
+
+---
+# CronWorkflow to run every 5 minutes
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: x12-837-ingest-cron
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: x12-837-ingest-cron
+    app.kubernetes.io/component: claims-ingestion
+    app.kubernetes.io/part-of: cloudhealthoffice
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  timezone: "America/Chicago"
+  concurrencyPolicy: "Forbid"  # Don't run concurrent instances
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  workflowSpec:
+    workflowTemplateRef:
+      name: x12-837-ingest

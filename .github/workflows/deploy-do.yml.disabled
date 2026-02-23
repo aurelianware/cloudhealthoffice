@@ -1,0 +1,72 @@
+name: Deploy to Digital Ocean
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'site/**'
+      - 'services/**'
+      - 'k8s/**'
+      - 'src/portal/**/k8s/**'
+      - '.github/workflows/deploy-do.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: aurelianware/cloudhealthoffice-site
+  NAMESPACE: cloudhealthoffice
+
+jobs:
+  deploy-do:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean Kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Create Namespace
+        run: kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Image Pull Secret
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --docker-email=${{ github.actor }}@users.noreply.github.com \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Portal Manifests
+        run: |
+          # Apply ClusterIssuer (requires cert-manager installed)
+          kubectl apply -f infra/k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
+
+          # Core infrastructure
+          kubectl apply -f infra/k8s/namespaces.yaml
+          kubectl apply -f infra/k8s/mongodb-deployment.yaml
+          kubectl apply -f infra/k8s/member-service-deployment.yaml
+
+          # Portal application (Blazor Server – replaces static site)
+          kubectl apply -f src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml
+
+          # Remove old static site ingress from cho-svcs namespace (conflicts with new portal ingress)
+          kubectl delete ingress site-ingress -n cho-svcs --ignore-not-found=true
+
+          # Ingress – main domain + portal subdomain both route to portal service
+          kubectl apply -f infra/k8s/site-ingress.yaml
+          kubectl apply -f infra/k8s/portal-ingress.yaml
+
+          # Restart portal pods so they pick up new image and configmap changes
+          kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=120s

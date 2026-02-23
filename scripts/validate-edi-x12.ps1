@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Validates X12 EDI files for HIPAA 275/277/278 format compliance.
+    Validates X12 EDI files for HIPAA 275/276/277/278/834 format compliance.
 
 .DESCRIPTION
     This script validates X12 EDI file structure and content:
@@ -9,13 +9,13 @@
     - ST/SE transaction set segments
     - Trading partner identifiers (Clearinghouse/Health Plan)
     - Segment structure and delimiters
-    - Transaction types (275/277/278)
+    - Transaction types (275/276/277/278/834)
 
 .PARAMETER Path
     Path to the EDI file to validate. Can be a single file or directory.
 
 .PARAMETER TransactionType
-    Expected transaction type (275, 277, or 278). If not specified, will detect from file.
+    Expected transaction type (275, 277, 278, or 834). If not specified, will detect from file.
 
 .PARAMETER Strict
     Enable strict validation mode with additional checks.
@@ -35,8 +35,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Path,
     
-    [Parameter(Mandatory=$false, HelpMessage="Expected transaction type (275/277/278)")]
-    [ValidateSet('275', '277', '278', $null)]
+    [Parameter(Mandatory=$false, HelpMessage="Expected transaction type (275/276/277/278/834)")]
+    [ValidateSet('275', '276', '277', '278', '834', $null)]
     [string]$TransactionType = $null,
     
     [Parameter(Mandatory=$false, HelpMessage="Enable strict validation mode")]
@@ -54,8 +54,10 @@ $PAYER_ID = '{config.payerId}'
 # Transaction type identifiers
 $TRANSACTION_TYPES = @{
     '275' = 'Attachment Request'
+    '276' = 'Claim Status Inquiry'
     '277' = 'Status Response'
     '278' = 'Health Care Services Review'
+    '834' = 'Benefit Enrollment and Maintenance'
 }
 
 # Validation results
@@ -178,10 +180,10 @@ function Test-GSSegment {
         return $false
     }
     
-    # GS01 - Functional Identifier Code (should be 'HI' for HIPAA)
+    # GS01 - Functional Identifier Code (should be 'HI' for HIPAA claims, 'BE' for enrollment)
     $funcId = $elements[1]
-    if ($funcId -ne 'HI') {
-        Write-ValidationWarning "GS functional identifier is '$funcId' (expected 'HI' for HIPAA)" $File $Line
+    if ($funcId -ne 'HI' -and $funcId -ne 'BE') {
+        Write-ValidationWarning "GS functional identifier is '$funcId' (expected 'HI' for HIPAA claims or 'BE' for enrollment)" $File $Line
     }
     
     return $true
@@ -205,7 +207,7 @@ function Test-STSegment {
     $transactionType = $elements[1]
     
     if (-not $TRANSACTION_TYPES.ContainsKey($transactionType)) {
-        Write-ValidationError "Unknown transaction type '$transactionType' (expected 275, 277, or 278)" $File $Line
+        Write-ValidationError "Unknown transaction type '$transactionType' (expected 275, 276, 277, 278, or 834)" $File $Line
         return $null
     }
     

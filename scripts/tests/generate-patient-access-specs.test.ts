@@ -14,7 +14,7 @@ describe('generatePatientAccessSpecs', () => {
     process.chdir(tempDir);
     jest.resetModules();
     // Import after setting cwd so OUTPUT_DIR resolves into temp directory
-    const { generatePatientAccessSpecs, branchCoverageSignals } = require('../generate-patient-access-specs');
+    const { generatePatientAccessSpecs, branchCoverageSignals } = require('../setup/generate-patient-access-specs');
 
     generatePatientAccessSpecs();
 
@@ -49,7 +49,7 @@ describe('generatePatientAccessSpecs', () => {
     const capabilityPath = path.join(tempDir, 'generated', 'infra', 'patient-access-api', 'capabilitystatement.json');
 
     jest.resetModules();
-    const { generatePatientAccessSpecs, branchCoverageSignals } = require('../generate-patient-access-specs');
+    const { generatePatientAccessSpecs, branchCoverageSignals } = require('../setup/generate-patient-access-specs');
 
     generatePatientAccessSpecs();
     const firstTimestamp = JSON.parse(fs.readFileSync(capabilityPath, 'utf-8')).date;
@@ -73,7 +73,7 @@ describe('generatePatientAccessSpecs', () => {
     process.env.GENERATE_PATIENT_ACCESS_SPECS_FORCE_CLI = 'true';
 
     jest.resetModules();
-    const { branchCoverageSignals } = require('../generate-patient-access-specs');
+    const { branchCoverageSignals } = require('../setup/generate-patient-access-specs');
 
     const capabilityPath = path.join(tempDir, 'generated', 'infra', 'patient-access-api', 'capabilitystatement.json');
 
