@@ -50,6 +50,10 @@ jobs:
           - tenant-service
           - enrollment-import-service
           - trading-partner-service
+        include:
+          # tenant-service needs repo root as context so it can reach scripts/setup/
+          - service: tenant-service
+            build_context: '.'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -78,7 +82,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./src/services/${{ matrix.service }}
+          context: ${{ matrix.build_context || format('./src/services/{0}', matrix.service) }}
           file: ./src/services/${{ matrix.service }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
