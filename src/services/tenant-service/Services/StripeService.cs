@@ -159,28 +159,30 @@ public class StripeService : IStripeService
         try
         {
             var stripeEvent = EventUtility.ConstructEvent(json, stripeSignature, webhookSecret);
-
+            
             _logger.LogInformation("Processing Stripe webhook event: {EventType}", stripeEvent.Type);
 
             switch (stripeEvent.Type)
             {
-                case Events.CustomerSubscriptionCreated:
+                
+                case EventTypes.CustomerSubscriptionCreated:
+
                     await HandleSubscriptionCreatedAsync(stripeEvent);
                     break;
 
-                case Events.CustomerSubscriptionUpdated:
+                case EventTypes.CustomerSubscriptionUpdated:
                     await HandleSubscriptionUpdatedAsync(stripeEvent);
                     break;
 
-                case Events.CustomerSubscriptionDeleted:
+                case EventTypes.CustomerSubscriptionDeleted:
                     await HandleSubscriptionDeletedAsync(stripeEvent);
                     break;
 
-                case Events.InvoicePaymentSucceeded:
+                case EventTypes.InvoicePaymentSucceeded:
                     await HandlePaymentSucceededAsync(stripeEvent);
                     break;
 
-                case Events.InvoicePaymentFailed:
+                case EventTypes.InvoicePaymentFailed:
                     await HandlePaymentFailedAsync(stripeEvent);
                     break;
 
