@@ -2,7 +2,7 @@
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
-# **The #1 Open-Source Cloud-Native Core Administration Processing System (CAPS) and Payer Platform**
+# **A Open-Source Cloud-Native Core Administration and Claims Adjudication Processing System and Integration Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
