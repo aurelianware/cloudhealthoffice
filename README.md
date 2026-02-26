@@ -2,7 +2,7 @@
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
-# **Cloud-Native Core Administration and Claims Processing and Payer Integration Platform**
+# **Cloud-Native Claims Processing and Payer Integration Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
