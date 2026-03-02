@@ -52,22 +52,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore .NET dependencies
+      - name: Restore .NET (solution)
         if: matrix.language == 'csharp'
         run: |
-          # Find and restore all .NET projects under src/
-          for project in $(find src -name "*.csproj" -o -name "*.sln" 2>/dev/null); do
-            echo "Restoring $project..."
-            dotnet restore "$project" || echo "Warning: Failed to restore $project"
-          done
+          dotnet restore ./cloudhealthoffice-main.sln
 
-      - name: Build .NET projects
+      - name: Build .NET (solution)
         if: matrix.language == 'csharp'
         run: |
-          for project in $(find src -name "*.sln" 2>/dev/null); do
-            echo "Building $project..."
-            dotnet build "$project" --configuration Release --no-restore
-          done
+          dotnet build ./cloudhealthoffice-main.sln --configuration Release --no-restore
 
       - name: Setup Node.js
         if: matrix.language == 'javascript' || matrix.language == 'typescript'
