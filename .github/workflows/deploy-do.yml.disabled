@@ -8,6 +8,7 @@ on:
       - 'site/**'
       - 'services/**'
       - 'k8s/**'
+      - 'src/portal/**/k8s/**'
       - '.github/workflows/deploy-do.yml'
 
 env:
@@ -46,13 +47,26 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy Site Manifests
+      - name: Deploy Portal Manifests
         run: |
           # Apply ClusterIssuer (requires cert-manager installed)
-          kubectl apply -f k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
-          
-          # Deploy Application
-          kubectl apply -f k8s/mongodb-deployment.yaml
-          kubectl apply -f k8s/member-service-deployment.yaml
-          kubectl apply -f site/k8s/site-deployment.yaml
-          kubectl apply -f k8s/site-ingress.yaml
+          kubectl apply -f infra/k8s/cert-manager-issuer.yaml || echo "Warning: Failed to apply ClusterIssuer. Ensure cert-manager is installed or ignore if already exists."
+
+          # Core infrastructure
+          kubectl apply -f infra/k8s/namespaces.yaml
+          kubectl apply -f infra/k8s/mongodb-deployment.yaml
+          kubectl apply -f infra/k8s/member-service-deployment.yaml
+
+          # Portal application (Blazor Server – replaces static site)
+          kubectl apply -f src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml
+
+          # Remove old static site ingress from cho-svcs namespace (conflicts with new portal ingress)
+          kubectl delete ingress site-ingress -n cho-svcs --ignore-not-found=true
+
+          # Ingress – main domain + portal subdomain both route to portal service
+          kubectl apply -f infra/k8s/site-ingress.yaml
+          kubectl apply -f infra/k8s/portal-ingress.yaml
+
+          # Restart portal pods so they pick up new image and configmap changes
+          kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=120s

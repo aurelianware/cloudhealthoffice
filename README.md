@@ -1,8 +1,8 @@
 <div align="center">
 
-![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.png)
+![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
-# **The #1 Open-Source Cloud-Native Core Administration Processing System (CAPS) and Payer Platform**
+# **Cloud-Native Claims Processing and Payer Integration Platform**
 
 ### Modern architecture healthcare CTOs want. Deploy in 5 minutes.
 
@@ -16,9 +16,9 @@
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-**🚀 42,000+ clones in the past 2 weeks** by 1500 uniquevvisitirs• **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
+**🚀 42,000+ clones in the past 2 weeks** • **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
 
-[🚀 Start Free Trial (5 min)](https://portal.cloudhealthoffice.com) • [⚡ Architecture](#-architecture) • [📊 Live Demo](#-platform-performance) • [💼 Enterprise](#-enterprise) • [⭐ Star to Support](https://github.com/aurelianware/cloudhealthoffice)
+[🚀 Start Free Trial (5 min)](https://portal.cloudhealthoffice.com) • [📖 Quickstart](./QUICKSTART.md) • [🔌 FHIR APIs](#-fhir-apis--integration) • [⚡ Architecture](#-architecture) • [💼 Enterprise](#-enterprise)
 
 </div>
 
@@ -72,10 +72,10 @@ Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expe
 ### **🌐 Self-Service Portal & Signup**
 
 - ✅ **Production portal** - [portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com) with Azure AD authentication and multi-tenant isolation
-- ✅ **Self-service signup** - Stripe-powered subscription management with 30-day free trials (Starter: $499/mo, Professional: $1,999/mo, Enterprise: $4,999/mo)
+- ✅ **Self-service signup** - Stripe-powered subscription management with 14-day free trials (Starter: $499/mo, Professional: $1,499/mo, Enterprise: Custom pricing)
 - ✅ **Smart routing** - Automatic tenant detection via Azure AD claims with intelligent access control
 - ✅ **Multi-tenant isolation** - 100% test coverage on tenant context service and HTTP message handlers (24 unit tests)
-- ✅ **Cosmos DB tenant management** - Dedicated containers for Tenants, Members, and SalesInquiries with partition-optimized queries
+- ✅ **MongoDB tenant management** - Dedicated collections for Tenants, Members, and SalesInquiries with partition-optimized queries
 - ✅ **Contact Sales integration** - Professional inquiry form for Enterprise customers with status tracking (New → Contacted → Qualified → Closed)
 - ✅ **Demo mode** - Public evaluation environment with sample data and full feature preview
 - ✅ **Mobile-optimized** - Responsive navigation with hamburger menu, touch-friendly interface, and progressive web app capabilities
@@ -93,7 +93,7 @@ Legacy payer platforms are trapped in 2010s architecture. Monolithic. Slow. Expe
 - ✅ **Member & Provider Management** - Complete lifecycle management with 13 provider specialties
 - ✅ **Benefit Plan Engine** - Cost-sharing calculations, prior auth workflows, eligibility verification
 - ✅ **Production SaaS** - portal.cloudhealthoffice.com with self-service signup, Stripe subscriptions, 14-day trials
-- ✅ **Multi-Tenant Architecture** - Cosmos DB isolation with Azure AD smart routing (production-proven)
+- ✅ **Multi-Tenant Architecture** - MongoDB isolation with Azure AD smart routing (production-proven)
 - ✅ **Argo Workflows Orchestration** - DAG-based workflows for complex claim processing and automation
 - ✅ **9 Cloud-Native Microservices** - Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Workflow
 - ✅ **Kubernetes Deployment** - Azure AKS with HPA auto-scaling, Service Bus messaging, production observability
@@ -153,61 +153,76 @@ Per-step highlights: get-claim 17s • validate-codes 11s • verify-coverage 13
 
 ---
 
-## **🚀 Quick Start**
+## **� FHIR APIs & Integration**
 
-### **Already evaluating? You're not alone.**
+### **Production-Ready FHIR R4 APIs**
 
-**42,000+ clones in the past 2 weeks.** CTOs at health plans, consultants, and developers are all looking at Cloud Health Office as their vendor exit strategy.
+Cloud Health Office provides **CMS-compliant FHIR R4 APIs** for seamless integration with EHRs, patient apps, and third-party systems.
 
-**Ready to move from evaluation to production?**
+**🌐 API Endpoints:**
+- **Production**: `https://api.cloudhealthoffice.com/fhir/r4`
+- **Sandbox**: `https://sandbox.cloudhealthoffice.com/fhir/r4` (synthetic data for testing)
+- **Demo Portal**: [portal.cloudhealthoffice.com/demo](https://portal.cloudhealthoffice.com/demo)
+
+**📋 Available APIs:**
+
+| API | Compliance | OpenAPI Spec | Description |
+|-----|------------|--------------|-------------|
+| **Patient Access API** | CMS-9115-F | [View Spec](./api/openapi/patient-access-api.yaml) | Patient health data access (Claims, EOB, Coverage) |
+| **Prior Authorization API** | CMS-0057-F | [View Spec](./api/openapi/prior-auth-api.yaml) | Electronic prior auth with CDS Hooks |
+| **Provider Directory API** | CMS-9115-F | [View Spec](./api/openapi/provider-access-api.yaml) | Provider network search and lookup |
+| **Payer-to-Payer API** | CMS-9115-F | [View Spec](./api/openapi/payer-to-payer-api.yaml) | Member data exchange between payers |
+| **Claims Scrubbing API** | Industry | [View Spec](./api/openapi/claims-scrubbing-api.yaml) | Pre-submission validation and scrubbing |
+
+**🔐 Authentication:**
+- OAuth 2.0 with Azure AD
+- SMART on FHIR for patient/provider apps
+- API keys for system-to-system integration
+- Supports patient consent flows per CMS-9115-F
+
+**📚 Developer Resources:**
+- [OpenAPI Specs](./api/openapi/) - Machine-readable API definitions
+- [Postman Collections](./api/postman/) - Pre-configured API testing
+- [Quickstart Guides](./api/quickstarts/) - Step-by-step integration tutorials
+- [FHIR Mapping Docs](./docs/api/) - X12 ↔ FHIR conversion reference
+
+**🧪 Try It Now:**
+```bash
+# Get access token (demo tenant)
+curl -X POST https://api.cloudhealthoffice.com/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId": "demo", "clientId": "your-client-id"}'
+
+# Search for patient claims
+curl https://api.cloudhealthoffice.com/fhir/r4/Claim?patient=12345 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**🎯 Common Integration Patterns:**
+- **EHR Integration**: Receive real-time eligibility responses (270/271 → FHIR Coverage)
+- **Patient Portal**: Display claims history and EOBs (835 → FHIR ExplanationOfBenefit)
+- **Prior Auth**: Submit authorization requests (278 → FHIR Claim with `use: preauthorization`)
+- **Clearinghouse**: Batch X12 file processing with FHIR callback webhooks
+
+[📖 Full API Documentation](./docs/api/) • [🚀 Start Free Trial](https://portal.cloudhealthoffice.com)
+
+---
+
+## **�🚀 Quick Start**
 
 ### **Option 1: Production SaaS (Fastest - 5 minutes)**
 
-```bash
-# 1. Visit the production portal
-open https://portal.cloudhealthoffice.com
+**[→ Get started now](https://portal.cloudhealthoffice.com)**
 
-# 2. Sign in with Azure AD (any Microsoft account)
-# 3. Select tier: Starter ($499/mo) or Professional ($1,499/mo)
-# 4. Enter payment (14-day free trial, Stripe secure)
-# 5. Start processing claims in <500ms
+1. **Visit**: [portal.cloudhealthoffice.com](https://portal.cloudhealthoffice.com)
+2. **Sign in** with Azure AD (any Microsoft account)
+3. **Select tier**: Starter ($499/mo), Professional ($1,499/mo), or Enterprise (custom)
+4. **Start trial**: 14 days free, secure Stripe payment
+5. **Begin processing**: Claims adjudication in <500ms
 
-# Auto-provisioned:
-# ✅ Cosmos DB tenant partition
-# ✅ SFTP credentials
-# ✅ Azure AD app for API access
-# ✅ Portal/API/Docs access
-```
+**Auto-provisioned**: MongoDB tenant database, SFTP credentials, API access, full portal access.
 
-**[🚀 Start Free Trial Now](https://portal.cloudhealthoffice.com)** • **[📞 Contact Sales for Enterprise](https://portal.cloudhealthoffice.com/contact-sales)**
-
-### **Option 2: Azure Deployment (Self-Hosted - 15 minutes)**
-
-```bash
-# 1. Visit the signup page
-open https://portal.cloudhealthoffice.com/signup
-
-# 2. Sign in with your Azure AD work account
-# 3. Select subscription tier (Starter or Professional)
-# 4. Enter payment details (14-day free trial, no charge until trial ends)
-# 5. Choose enabled modules (Claims, Eligibility, Prior Auth, Attachments, Enrollment)
-# 6. Click "Start Free Trial"
-
-# Your tenant is created automatically with:
-# - Dedicated Cosmos DB partition
-# - SFTP credentials for clearinghouse integration
-# - Azure AD app registration for API access
-# - 14-day trial period (February 23, 2026)
-```
-
-**Access your tenant:**
-- Portal: https://portal.cloudhealthoffice.com/dashboard
-- API: `https://api.cloudhealthoffice.com/tenants/{your-tenant-id}`
-- Docs: Available in the portal after signup
-
-**Enterprise customers:** [Contact Sales](https://portal.cloudhealthoffice.com/contact-sales) for custom pricing, dedicated infrastructure, and SLA guarantees.
-
----
+**[🚀 Start Free Trial](https://portal.cloudhealthoffice.com)** • **[📖 Documentation](https://portal.cloudhealthoffice.com/docs)** • **[🔌 View APIs](https://portal.cloudhealthoffice.com/apis)**
 
 ### **Option 2: Azure Deployment (Self-Hosted - 15 minutes)**
 
@@ -240,7 +255,7 @@ kubectl get svc -n cloudhealthoffice
 
 **What gets deployed:**
 - ✅ AKS cluster with 3-node auto-scaling pool
-- ✅ Cosmos DB for multi-tenant data
+- ✅ MongoDB for multi-tenant data
 - ✅ Azure Integration Account for X12 EDI
 - ✅ SFTP server for clearinghouse file exchange
 - ✅ 17 microservices (.NET 8)
@@ -295,7 +310,7 @@ kubectl create -f tests/e2e-workflows/test-claim-workflow.yaml -n cho-workflows
 cat tests/E2E-TEST-RESULTS.md
 ```
 
-[📖 Full deployment guide](./DEPLOYMENT.md) • [🔧 Configuration guide](./docs/CONFIGURATION.md) • [🧪 Testing guide](./tests/E2E-TEST-RESULTS.md)
+📖 [Full deployment guide](./QUICKSTART.md) • [Configuration reference](./docs/deployment/) • [Testing guide](./docs/testing/)
 
 ---
 
@@ -354,7 +369,7 @@ Cloud Health Office is a **cloud-native SaaS platform** built on Kubernetes with
 │  ┌──────────────────┴───────────────────────────────────┐           │
 │  │              DATA & MESSAGING LAYER                   │           │
 │  │  ┌────────────────┐  ┌──────────┐  ┌──────────┐     │           │
-│  │  │   Cosmos DB    │  │PostgreSQL│  │Integration│     │           │
+│  │  │    MongoDB     │  │PostgreSQL│  │Integration│     │           │
 │  │  │  ┌─Tenants     │  │(Workflow)│  │ Account   │     │           │
 │  │  │  ├─Members     │  └──────────┘  └──────────┘     │           │
 │  │  │  └─SalesInq    │                                  │           │
@@ -380,7 +395,7 @@ Cloud Health Office is a **cloud-native SaaS platform** built on Kubernetes with
 | **Portal** | Blazor Server, MudBlazor v6, Azure AD, Stripe | Multi-tenant auth, subscription billing, Contact Sales |
 | **Orchestration** | Argo Workflows, Kubernetes (AKS) | Cloud-native DAG-based workflow execution, auto-scaling |
 | **Microservices** | ASP.NET Core 8, C# 12 | 9 RESTful APIs with OpenAPI docs |
-| **Data** | Azure Cosmos DB (Tenants/Members/SalesInq), PostgreSQL | Multi-tenant isolation + workflow state |
+| **Data** | MongoDB (Tenants/Members/SalesInq), PostgreSQL | Multi-tenant isolation + workflow state |
 | **EDI** | Azure Integration Account, X12 schemas | 270/271/275/276/277/278/RFAI / 837 transaction processing |
 | **Frontend** | SignalR, Responsive CSS | Real-time updates, mobile-optimized navigation |
 | **File Transfer** | SFTP (OpenSSH), Azure Blob Storage | Clearinghouse integration |
@@ -388,7 +403,7 @@ Cloud Health Office is a **cloud-native SaaS platform** built on Kubernetes with
 | **Monitoring** | Prometheus, Grafana, Azure Monitor | Metrics, dashboards, alerting |
 | **Security** | Azure Key Vault, Managed Identity, Azure AD | Secrets management, HIPAA compliance, authentication |
 
-[📖 Detailed architecture docs](./ARCHITECTURE.md) • [🔧 Technology decisions](./docs/ADR.md)
+📖 [Detailed architecture docs](./ARCHITECTURE.md) • [Architecture decisions](./docs/adr/)
 
 ---
 
@@ -409,13 +424,12 @@ kubectl get workflows -n cho-workflows -w
 cat tests/E2E-TEST-RESULTS.md
 ```
 
-**Sample Claim:**
-- **Member:** John Doe (MBR-12345)
-- **Provider:** City Medical Center (NPI 1234567890)
-- **Services:** Office visit + labs (CMP, CBC) + EKG + medications
-- **Total Charge:** $1,250.00
-- **Adjudication Time:** <500ms
-- **Result:** APPROVED ✅
+**Live Demo Available**: [portal.cloudhealthoffice.com/demo](https://portal.cloudhealthoffice.com/demo)
+
+- Process sample claims in real-time
+- View 10-step workflow execution
+- Test FHIR API integration
+- No signup required
 
 ### **What Happens Behind the Scenes**
 
@@ -432,7 +446,7 @@ cat tests/E2E-TEST-RESULTS.md
 
 **Total: 82ms execution + 29ms Kubernetes overhead = 111ms end-to-end**
 
-[📖 Full E2E test report](./tests/E2E-TEST-RESULTS.md)
+📖 [Full test documentation](./docs/testing/)
 
 ---
 
@@ -462,33 +476,37 @@ cat tests/E2E-TEST-RESULTS.md
 
 ## **💼 Enterprise**
 
-### **Join 31,000+ Cloners Evaluating Cloud Health Office**
+### **Enterprise & Support**
 
-If you're one of the thousands who cloned the repo in the past 2 weeks - **thank you**. Here's how to move forward:
+**📞 Contact Options:**
+- **Enterprise Sales**: [portal.cloudhealthoffice.com/contact-sales](https://portal.cloudhealthoffice.com/contact-sales)
+- **Email Support**: enterprise@cloudhealthoffice.com
+- **Partner Inquiries**: partners@cloudhealthoffice.com
+- **Investor Relations**: investors@cloudhealthoffice.com
 
-**Evaluating?** ⭐ [Star the repo](https://github.com/aurelianware/cloudhealthoffice) to stay updated on releases  
-**Ready to pilot?** 🚀 [Start 14-day free trial](https://portal.cloudhealthoffice.com)  
-**Need Enterprise?** 📞 [Contact Sales](https://portal.cloudhealthoffice.com/contact-sales)  
-**Implementation help?** 🤝 [Partner Program](mailto:partners@cloudhealthoffice.com)  
-**Investor interest?** 💰 [investors@cloudhealthoffice.com](mailto:investors@cloudhealthoffice.com)
+**📜 Legal & Compliance:**
+- [Terms of Service](./infra/marketplace/legal/terms-of-service.md)
+- [Privacy Policy](./infra/marketplace/legal/privacy-policy.md)
+- [Service Level Agreement](./infra/marketplace/legal/sla.md)
+- [Support Terms](./infra/marketplace/legal/support-terms.md)
+
+**🤝 Partner Program:**
+Implementation consultants and system integrators:
+- Competitive referral fees and co-marketing
+- Technical enablement and certification
+- No vendor lock-in (Apache 2.0 license)
+- Contact: partners@cloudhealthoffice.com
 
 ### **Production-Ready Features**
 
-- ✅ **Self-Service Portal** - Signup in 5 minutes with Stripe subscriptions, 14-day trials
-- ✅ **No Vendor Lock-In** - Apache 2.0 license, your data stays yours, export anytime
-- ✅ **Build Leverage** - Run production workloads while keeping legacy systems (for now)
-- ✅ **Your Timeline** - Integrate today, migrate at your pace, or just use CHO for negotiating power
-- ✅ **Multi-tenancy** - Cosmos DB tenant isolation (Tenants/Members/SalesInquiries containers)
-- ✅ **Smart Routing** - Azure AD authentication with tenant-scoped access via claims
-- ✅ **Contact Sales** - Integrated inquiry tracking for Enterprise deals (New→Contacted→Qualified→Closed)
-- ✅ **Mobile Optimized** - Responsive design, hamburger navigation, accessible UI
-- ✅ **Cosmos DB persistence** - 834 enrollment and 837 claims services deployed with 400 RU/s shared throughput
-- ✅ **High availability** - HPA auto-scaling (2-5 replicas), load balancing, session affinity
-- ✅ **Disaster recovery** - Multi-region deployment, backup/restore
-- ✅ **Security** - Automated vulnerability scanning, Dependabot, encrypted at rest
-- ✅ **Compliance** - HIPAA audit logging, BAA-ready, CMS-0057-F compliant
-- ✅ **Monitoring** - Prometheus metrics, Grafana dashboards, PagerDuty integration
-- ✅ **CI/CD** - GitHub Actions workflows, automated testing, deployment gates
+- ✅ **Self-Service Portal** - 5-minute signup with Stripe, 14-day trial
+- ✅ **Multi-Tenancy** - MongoDB isolation with Azure AD smart routing
+- ✅ **FHIR R4 APIs** - CMS-compliant with OpenAPI documentation
+- ✅ **High Availability** - Auto-scaling (2-5 replicas), load balancing
+- ✅ **Security** - CodeQL, Dependabot, encrypted at rest, 0 vulnerabilities
+- ✅ **Compliance** - HIPAA audit logging, BAA-ready, CMS-0057-F aligned
+- ✅ **Monitoring** - Prometheus metrics, Grafana dashboards
+- ✅ **CI/CD** - GitHub Actions with automated testing (525 tests passing)
 
 ### **Partner & Consultant Program**
 
@@ -591,7 +609,7 @@ For venture capital or strategic acquisition inquiries:
 - ✅ End-to-end claims adjudication workflow
 - ✅ Self-service portal with Stripe subscriptions
 - ✅ Azure AD multi-tenant authentication
-- ✅ Contact Sales with Cosmos DB inquiry tracking
+- ✅ Contact Sales with MongoDB inquiry tracking
 - ✅ Mobile-responsive website and portal
 - ✅ Security automation (CVE scanning, Dependabot)
 - ✅ Docker images for all microservices
@@ -705,7 +723,7 @@ If Cloud Health Office helps your organization, please **star the repo** to show
 - [🚀 Quick Start Guide](./QUICKSTART.md) - Get started in 15 minutes
 - [🏗️ Architecture Overview](./ARCHITECTURE.md) - System design and components
 - [📦 Deployment Guide](./DEPLOYMENT.md) - Production deployment instructions
-- [💾 Cosmos DB Integration](./COSMOS-DB-DEPLOYMENT.md) - **NEW: 834/837 services deployed and tested**
+- [💾 MongoDB Integration](./docs/deployment/) - 834/837 services deployed and tested
 - [🔒 Security Guide](./SECURITY.md) - HIPAA compliance and security controls
 - [🧪 Testing Guide](./tests/E2E-TEST-RESULTS.md) - End-to-end test results
 - [🤝 Contributing Guide](./CONTRIBUTING.md) - How to contribute to the project
