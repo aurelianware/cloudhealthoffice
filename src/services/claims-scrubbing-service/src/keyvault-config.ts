@@ -90,7 +90,7 @@ export async function loadSecret(mapping: SecretMapping): Promise<string | undef
   // First, check if environment variable is already set
   const envValue = process.env[mapping.envVar];
   if (envValue) {
-    console.log(`[KeyVault] Using environment variable for ${mapping.envVar}`);
+    //console.log(`[KeyVault] Using environment variable for ${mapping.envVar}`);
     return envValue;
   }
   
@@ -100,7 +100,7 @@ export async function loadSecret(mapping: SecretMapping): Promise<string | undef
     try {
       const secret = await secretClient.getSecret(secretName);
       if (secret.value) {
-        console.log(`[KeyVault] Loaded ${mapping.envVar} from Key Vault secret: ${secretName}`);
+        //console.log(`[KeyVault] Loaded ${mapping.envVar} from Key Vault secret: ${secretName}`);
         return secret.value;
       }
     } catch (error: any) {
