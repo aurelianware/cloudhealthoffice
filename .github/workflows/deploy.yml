@@ -133,7 +133,12 @@ jobs:
           RESOURCE_GROUP="${{ env.AZURE_RESOURCE_GROUP }}"
           BASE_NAME="${{ env.BASE_NAME }}"
 
-          # Run service principal script
+          # Run service principal script if it exists
+          if [ ! -f "scripts/ensure-service-principal.sh" ]; then
+            echo "⚠️  scripts/ensure-service-principal.sh not found - skipping"
+            exit 0
+          fi
+
           SP_ID=$(bash scripts/ensure-service-principal.sh "$APP_ID" "$SUBSCRIPTION_ID" "$RESOURCE_GROUP" "$BASE_NAME" | tail -1)
 
           echo "sp-id=$SP_ID" >> "$GITHUB_OUTPUT"
