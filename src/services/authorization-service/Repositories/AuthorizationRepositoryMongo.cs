@@ -144,7 +144,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         var reviewedAuths = results.Where(x => x.ReviewedDate.HasValue).ToList();
         if (reviewedAuths.Any())
         {
-            summary.AverageReviewDays = (decimal)reviewedAuths.Average(x => (x.ReviewedDate.Value - x.SubmittedDate).TotalDays);
+            summary.AverageReviewDays = (decimal)reviewedAuths.Average(x => (x.ReviewedDate!.Value - x.SubmittedDate).TotalDays);
         }
 
         return summary;
