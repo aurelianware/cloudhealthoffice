@@ -237,7 +237,7 @@ public class PaymentRepository : IPaymentRepository
             new PartitionKey(payment.TenantId));
 
         _logger.LogInformation("Created payment {PaymentId} for check {CheckNumber}",
-            payment.Id, payment.CheckNumber);
+            SanitizeForLog(payment.Id), SanitizeForLog(payment.CheckNumber));
 
         return response.Resource;
     }
@@ -262,6 +262,13 @@ public class PaymentRepository : IPaymentRepository
             id,
             new PartitionKey(tenantId));
 
-        _logger.LogInformation("Deleted payment {PaymentId}", id);
+        _logger.LogInformation("Deleted payment {PaymentId}", SanitizeForLog(id));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

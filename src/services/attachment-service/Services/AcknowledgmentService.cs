@@ -96,7 +96,7 @@ public class AcknowledgmentService : IAcknowledgmentService
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogWarning("Trading partner not found for PayerId: {PayerId}, TenantId: {TenantId}", payerId, tenantId);
+            _logger.LogWarning("Trading partner not found for PayerId: {PayerId}, TenantId: {TenantId}", SanitizeForLog(payerId), SanitizeForLog(tenantId));
             return null;
         }
     }
@@ -123,5 +123,12 @@ public class AcknowledgmentService : IAcknowledgmentService
     private string GetParentId(Attachment attachment)
     {
         return attachment.ClaimId ?? attachment.AuthorizationId ?? attachment.AppealId ?? "Unknown";
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -28,7 +28,7 @@ public class EnrollmentController : ControllerBase
         }
         
         _logger.LogInformation("Importing 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
-            enrollment.FileName, tenantId, enrollment.TransactionCount);
+            SanitizeForLog(enrollment.FileName), SanitizeForLog(tenantId), enrollment.TransactionCount);
         
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
         
@@ -39,5 +39,12 @@ public class EnrollmentController : ControllerBase
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "enrollment-import" });
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

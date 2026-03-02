@@ -153,6 +153,13 @@ public class PaymentRunRepository : IPaymentRunRepository
             id,
             new PartitionKey(tenantId));
 
-        _logger.LogInformation("Deleted payment run {Id}", id);
+        _logger.LogInformation("Deleted payment run {Id}", SanitizeForLog(id));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
