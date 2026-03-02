@@ -16,6 +16,7 @@ data:
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
+  MongoDB__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -101,6 +102,11 @@ spec:
             secretKeyRef:
               name: cosmosdb-secret
               key: connectionString
+        - name: MongoDB__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: MongoDB__DatabaseName
         - name: AzureAd__TenantId
           valueFrom:
             secretKeyRef:
