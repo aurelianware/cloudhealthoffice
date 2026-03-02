@@ -67,7 +67,7 @@ public class ClaimsService : IClaimsService
 
     private List<ClaimSummary> GetMockClaims(int count)
     {
-        var random = new Random();
+        var random = Random.Shared;
         var statuses = new[] { "Approved", "Approved", "Approved", "Denied", "Pending" };
         var members = new[] 
         {
@@ -456,7 +456,7 @@ public class AuthorizationService : IAuthorizationService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error submitting authorization, adding to mock data");
-            var authId = $"AUTH-2026-{new Random().Next(10000, 99999):D5}";
+            var authId = $"AUTH-2026-{Random.Shared.Next(10000, 99999):D5}";
             
             // Add to mock submitted authorizations so it appears in the list
             _mockSubmittedAuthorizations.Insert(0, new AuthorizationSummary
@@ -484,7 +484,7 @@ public class AuthorizationService : IAuthorizationService
 
     private List<AuthorizationSummary> GetMockAuthorizations(string? memberId)
     {
-        var random = new Random();
+        var random = Random.Shared;
         var statuses = new[] { "Approved", "Approved", "Approved", "Pending", "Review Required", "Denied" };
         var serviceTypes = new[] { "Surgery", "MRI", "CT Scan", "Physical Therapy", "Specialist Consult" };
         var members = new[] 
