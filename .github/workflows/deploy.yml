@@ -145,8 +145,10 @@ jobs:
           echo "✅ Service principal ensured: $SP_ID"
 
   # Pre-approval security validation
+  # Disabled: approval-gate and deploy are both if: false (Logic Apps not in use).
   pre-approval-checks:
     needs: setup-infrastructure
+    if: false
     permissions:
       contents: read
     uses: ./.github/workflows/pre-approval-checks.yml
