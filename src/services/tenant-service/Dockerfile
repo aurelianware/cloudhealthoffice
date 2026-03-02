@@ -33,4 +33,9 @@ COPY --from=publish /app/publish .
 COPY scripts/setup/provision-sftp-tenant.sh /app/scripts/provision-sftp-tenant.sh
 RUN chmod +x /app/scripts/provision-sftp-tenant.sh
 
+# Create non-root user (kubectl and sftp scripts run as this user)
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 ENTRYPOINT ["dotnet", "TenantService.dll"]

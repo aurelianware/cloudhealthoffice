@@ -23,4 +23,9 @@ EXPOSE 8081
 # Copy published app
 COPY --from=publish /app/publish .
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 ENTRYPOINT ["dotnet", "reference-data-service.dll"]
