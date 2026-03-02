@@ -15,4 +15,10 @@ RUN dotnet publish "EnrollmentImportService.csproj" -c Release -o /app/publish
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 ENTRYPOINT ["dotnet", "EnrollmentImportService.dll"]

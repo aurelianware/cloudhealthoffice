@@ -699,7 +699,10 @@ export class PatientAccessApi {
    */
   logAudit(entry: AuditLogEntry): void {
     this.auditLogs.push(entry);
-    console.log(`[AUDIT] ${entry.timestamp} - ${entry.eventType} - ${entry.result} - User: ${entry.userId} - ${entry.details || ''}`);
+    // Sanitize user-controlled values to prevent log injection
+    const safeUserId = String(entry.userId || '').replace(/[\r\n]/g, '');
+    const safeDetails = String(entry.details || '').replace(/[\r\n]/g, '');
+    console.log(`[AUDIT] ${entry.timestamp} - ${entry.eventType} - ${entry.result} - User: ${safeUserId} - ${safeDetails}`);
   }
 
   /**

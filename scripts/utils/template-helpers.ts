@@ -209,7 +209,9 @@ export function registerHelpers(): void {
 
   Handlebars.registerHelper('replace', function(str: string, search: string, replacement: string) {
     if (!str) return '';
-    return str.replace(new RegExp(search, 'g'), replacement);
+    // Escape regex special characters from the search string to prevent regex injection
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return str.replace(new RegExp(escapedSearch, 'g'), replacement);
   });
 
   Handlebars.registerHelper('trim', function(str: string) {
