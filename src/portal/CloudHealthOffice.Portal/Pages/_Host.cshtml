@@ -35,12 +35,13 @@
     <script src="https://js.stripe.com/v3/"></script>
     <script src="/js/stripe-handler.js"></script>
     <script>
+        // Start Blazor with explicit reconnection configuration.
+        // retryIntervalMilliseconds must be a number (ms) — not a function.
+        // configureSignalR receives an @microsoft/signalr HubConnectionBuilder.
         Blazor.start({
             reconnectionOptions: {
                 maxRetries: 8,
-                retryIntervalMilliseconds: function (previousAttempts) {
-                    return previousAttempts >= 4 ? 10000 : 3000;
-                }
+                retryIntervalMilliseconds: 3000
             },
             configureSignalR: function (builder) {
                 builder
