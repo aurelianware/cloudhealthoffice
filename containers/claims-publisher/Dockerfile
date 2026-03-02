@@ -14,8 +14,8 @@ COPY publish-claims.sh /app/
 RUN chmod +x /app/publish-claims.sh
 
 # Create non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
-    && chown -R appuser:appgroup /app
+RUN addgroup -S appuser && adduser -S -G appuser appuser \
+    && chown -R appuser:appuser /app
 USER appuser
 
 # Set entrypoint
