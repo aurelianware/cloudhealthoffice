@@ -29,7 +29,7 @@ public class PaymentRunsController : ControllerBase
     public async Task<ActionResult<PaymentRun>> CreatePaymentRun([FromBody] CreatePaymentRunRequest request)
     {
         _logger.LogInformation("Creating payment run with criteria: LOB={LOB}, Provider={Provider}",
-            request.Criteria.LineOfBusiness, request.Criteria.ProviderNPI);
+            request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
 
         var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
             request.Criteria, 
@@ -69,7 +69,7 @@ public class PaymentRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentRun>> ExecutePaymentRun(string id)
     {
-        _logger.LogInformation("Executing payment run {PaymentRunId}", id);
+        _logger.LogInformation("Executing payment run {PaymentRunId}", SanitizeForLog(id));
 
         try
         {
@@ -132,6 +132,13 @@ public class PaymentRunsController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

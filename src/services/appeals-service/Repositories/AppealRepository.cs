@@ -249,7 +249,7 @@ public class AppealRepository : IAppealRepository
             new PartitionKey(appeal.TenantId));
 
         _logger.LogInformation("Created appeal {AppealId} for claim {ClaimId}",
-            appeal.Id, appeal.ClaimId);
+            SanitizeForLog(appeal.Id), SanitizeForLog(appeal.ClaimId));
 
         return response.Resource;
     }
@@ -261,7 +261,7 @@ public class AppealRepository : IAppealRepository
             appeal.Id,
             new PartitionKey(appeal.TenantId));
 
-        _logger.LogInformation("Updated appeal {AppealId}", appeal.Id);
+        _logger.LogInformation("Updated appeal {AppealId}", SanitizeForLog(appeal.Id));
 
         return response.Resource;
     }
@@ -274,6 +274,13 @@ public class AppealRepository : IAppealRepository
             id,
             new PartitionKey(tenantId));
 
-        _logger.LogInformation("Deleted appeal {AppealId}", id);
+        _logger.LogInformation("Deleted appeal {AppealId}", SanitizeForLog(id));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

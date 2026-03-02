@@ -37,7 +37,7 @@ public class TenantMiddleware
             if (!string.IsNullOrEmpty(tenantId))
             {
                 _logger.LogInformation("TenantId extracted from JWT: {TenantId} for user {UserId}", 
-                    tenantId, context.User.FindFirst("sub")?.Value ?? "unknown");
+                    SanitizeForLog(tenantId), SanitizeForLog(context.User.FindFirst("sub")?.Value ?? "unknown"));
             }
         }
 
@@ -49,7 +49,7 @@ public class TenantMiddleware
             
             if (!string.IsNullOrEmpty(tenantId))
             {
-                _logger.LogWarning("TenantId from header (dev mode): {TenantId}", tenantId);
+                _logger.LogWarning("TenantId from header (dev mode): {TenantId}", SanitizeForLog(tenantId));
             }
         }
 
@@ -58,7 +58,7 @@ public class TenantMiddleware
         {
             tenantId = "default-tenant";
             _logger.LogWarning("No TenantId found in JWT or headers, using default: {TenantId}. " +
-                              "This should only happen in local development!", tenantId);
+                              "This should only happen in local development!", SanitizeForLog(tenantId));
         }
 
         // Store in HttpContext for repository access
@@ -72,6 +72,13 @@ public class TenantMiddleware
         return path.StartsWithSegments("/health") ||
                path.StartsWithSegments("/ready") ||
                path.StartsWithSegments("/live");
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -23,7 +23,7 @@ public class TenantMiddleware
         if (context.Request.Headers.TryGetValue("X-Tenant-ID", out var tenantId))
         {
             context.Items["TenantId"] = tenantId.ToString();
-            _logger.LogDebug("Tenant ID set to {TenantId}", tenantId);
+            _logger.LogDebug("Tenant ID set to {TenantId}", SanitizeForLog(tenantId.ToString()));
         }
         else
         {
@@ -31,7 +31,7 @@ public class TenantMiddleware
             if (context.Request.Query.TryGetValue("tenantId", out var queryTenantId))
             {
                 context.Items["TenantId"] = queryTenantId.ToString();
-                _logger.LogDebug("Tenant ID from query: {TenantId}", queryTenantId);
+                _logger.LogDebug("Tenant ID from query: {TenantId}", SanitizeForLog(queryTenantId.ToString()));
             }
             else
             {
@@ -50,6 +50,13 @@ public class TenantMiddleware
         return path.StartsWithSegments("/health") ||
                path.StartsWithSegments("/ready") ||
                path.StartsWithSegments("/live");
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

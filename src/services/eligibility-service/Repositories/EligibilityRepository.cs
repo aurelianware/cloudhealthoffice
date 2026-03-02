@@ -84,7 +84,7 @@ public class EligibilityRepository : IEligibilityRepository
         
         await _inquiryContainer.CreateItemAsync(inquiry, new PartitionKey(inquiry.TenantId));
         
-        _logger.LogInformation("Created eligibility inquiry {InquiryId}", inquiry.Id);
+        _logger.LogInformation("Created eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
     }
 
     public async Task UpdateInquiryAsync(EligibilityInquiry inquiry)
@@ -93,7 +93,7 @@ public class EligibilityRepository : IEligibilityRepository
         
         await _inquiryContainer.UpsertItemAsync(inquiry, new PartitionKey(inquiry.TenantId));
         
-        _logger.LogInformation("Updated eligibility inquiry {InquiryId}", inquiry.Id);
+        _logger.LogInformation("Updated eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
     }
 
     public async Task<EligibilityResponse?> GetResponseByIdAsync(string tenantId, string id)
@@ -133,6 +133,13 @@ public class EligibilityRepository : IEligibilityRepository
         await _responseContainer.CreateItemAsync(response, new PartitionKey(response.TenantId));
         
         _logger.LogInformation("Created eligibility response {ResponseId} for inquiry {InquiryId}", 
-            response.Id, response.InquiryId);
+            SanitizeForLog(response.Id), SanitizeForLog(response.InquiryId));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

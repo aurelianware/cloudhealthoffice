@@ -1,7 +1,8 @@
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
 WORKDIR /usr/share/nginx/html
 
 COPY . .
 
-EXPOSE 80
+# nginx-unprivileged already runs as non-root (UID 101) on port 8080
+EXPOSE 8080

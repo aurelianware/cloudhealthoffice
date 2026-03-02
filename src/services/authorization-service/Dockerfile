@@ -18,6 +18,11 @@ WORKDIR /app
 # Copy published app
 COPY --from=build /app/publish .
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 # Expose port
 EXPOSE 8080
 
