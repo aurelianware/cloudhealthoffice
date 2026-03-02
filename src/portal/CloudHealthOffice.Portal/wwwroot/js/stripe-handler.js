@@ -4,7 +4,7 @@ window.StripeHandler = {
     cardElement: null,
 
     initialize: function(publishableKey) {
-        console.log('Initializing Stripe with key:', publishableKey.substring(0, 10) + '...');
+        //console.log('Initializing Stripe with key:', publishableKey.substring(0, 10) + '...');
         
         // Check if Stripe is already loaded
         if (typeof Stripe === 'undefined') {
@@ -54,7 +54,7 @@ window.StripeHandler = {
     },
 
     createPaymentMethod: async function(name, email) {
-        console.log('Creating payment method for:', name, email);
+        //console.log('Creating payment method for:', name, email);
         
         if (!this.stripe || !this.cardElement) {
             console.error('Stripe not initialized');
@@ -88,7 +88,7 @@ window.StripeHandler = {
                 paymentMethodId: paymentMethod.id 
             });
         } catch (ex) {
-            console.error('Exception creating payment method:', ex);
+            //console.error('Exception creating payment method:', ex);
             return JSON.stringify({ 
                 success: false, 
                 error: 'Failed to process payment information: ' + ex.message 

@@ -1,0 +1,335 @@
+name: Deploy to Azure (AKS + Container Apps)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'src/**'
+      - 'containers/**'
+      - 'infra/k8s/**'
+      - 'infra/azure/aks-main.bicep'
+      - '.github/workflows/deploy-azure-aks.yml'
+
+env:
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+  NAMESPACE: cloudhealthoffice
+  AKS_NAME: ${{ vars.AKS_NAME || 'cho-aks' }}
+  ACA_SITE_NAME: ${{ vars.ACA_SITE_NAME || 'cho-site' }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RG_NAME || 'rg-cloudhealthoffice-prod' }}
+  IMAGE_PREFIX: cloudhealthoffice
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Build all images and push to ACR
+  # ─────────────────────────────────────────────────────────────
+  build-push-acr:
+    name: Build & Push to ACR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push portal
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/portal/CloudHealthOffice.Portal
+          file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-portal:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-portal:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push site
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/site
+          file: ./src/site/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}
+          platforms: linux/amd64
+
+  build-push-services:
+    name: Build & Push Services (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        service:
+          - member-service
+          - coverage-service
+          - claims-service
+          - eligibility-service
+          - authorization-service
+          - attachment-service
+          - provider-service
+          - benefit-plan-service
+          - reference-data-service
+          - sponsor-service
+          - claims-scrubbing-service
+          - tenant-service
+          - enrollment-import-service
+          - trading-partner-service
+        include:
+          # tenant-service needs repo root as context so it can reach scripts/setup/
+          - service: tenant-service
+            build_context: '.'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.build_context || format('./src/services/{0}', matrix.service) }}
+          file: ./src/services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  build-push-containers:
+    name: Build & Push Containers (${{ matrix.container }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - x12-parser
+          - x12-276-parser
+          - claims-publisher
+          - kafka-publisher
+          - sftp-fetcher
+          - x12-encoder
+          - metadata-extractor
+          - x12-834-parser
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check Dockerfile exists
+        id: check
+        run: |
+          if [ -f "./containers/${{ matrix.container }}/Dockerfile" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push ${{ matrix.container }}
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./containers/${{ matrix.container }}
+          file: ./containers/${{ matrix.container }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.container }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.container }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          platforms: linux/amd64
+
+  # ─────────────────────────────────────────────────────────────
+  # Deploy marketing site to Azure Container Apps
+  # ─────────────────────────────────────────────────────────────
+  deploy-site:
+    name: Deploy Site → Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: build-push-acr
+    permissions:
+      id-token: write
+      contents: read
+    environment: PROD
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update Container App image
+        run: |
+          az containerapp update \
+            --name "${{ env.ACA_SITE_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --image "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}"
+
+      - name: Get site URL
+        run: |
+          FQDN=$(az containerapp show \
+            --name "${{ env.ACA_SITE_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "Site deployed to: https://$FQDN"
+
+  # ─────────────────────────────────────────────────────────────
+  # Deploy portal + services to AKS
+  # ─────────────────────────────────────────────────────────────
+  deploy-aks:
+    name: Deploy Portal & Services → AKS
+    runs-on: ubuntu-latest
+    needs: build-push-acr
+    permissions:
+      id-token: write
+      contents: read
+    environment: PROD
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --name "${{ env.AKS_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --overwrite-existing
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Cosmos DB secret
+        run: |
+          kubectl create secret generic cosmosdb-secret \
+            --from-literal=connectionString="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Azure AD secret
+        run: |
+          kubectl create secret generic azure-ad-config \
+            --from-literal=TenantId="${{ secrets.AZURE_AD_TENANT_ID }}" \
+            --from-literal=ClientId="${{ secrets.AZURE_AD_CLIENT_ID }}" \
+            --from-literal=ClientSecret="${{ secrets.AZURE_AD_CLIENT_SECRET }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Stripe secret
+        run: |
+          kubectl create secret generic stripe-api-keys \
+            --from-literal=publishable-key="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+            --from-literal=secret-key="${{ secrets.STRIPE_SECRET_KEY }}" \
+            --from-literal=starter-price-id="${{ secrets.STRIPE_PRICE_STARTER }}" \
+            --from-literal=professional-price-id="${{ secrets.STRIPE_PRICE_PROFESSIONAL }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply core manifests
+        run: |
+          kubectl apply -f infra/k8s/namespaces.yaml
+
+          # cert-manager ClusterIssuer (requires cert-manager pre-installed on cluster)
+          kubectl apply -f infra/k8s/cert-manager-issuer.yaml || \
+            echo "Warning: cert-manager ClusterIssuer apply failed – ensure cert-manager is installed"
+
+      - name: Substitute ACR image in portal deployment
+        run: |
+          ACR="${{ env.REGISTRY }}"
+          SHA="sha-${{ github.sha }}"
+          sed \
+            -e "s|ghcr.io/aurelianware/cloudhealthoffice-portal:latest|${ACR}/cloudhealthoffice-portal:${SHA}|g" \
+            src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml \
+            | kubectl apply -f -
+
+      - name: Apply portal ingress (portal.cloudhealthoffice.com)
+        run: kubectl apply -f infra/k8s/portal-ingress.yaml
+
+      - name: Substitute ACR image in site deployment
+        run: |
+          ACR="${{ env.REGISTRY }}"
+          SHA="sha-${{ github.sha }}"
+          sed \
+            -e "s|REGISTRY_PLACEHOLDER|${ACR}|g" \
+            -e "s|cloudhealthoffice-site:latest|cloudhealthoffice-site:${SHA}|g" \
+            infra/k8s/site-deployment.yaml \
+            | kubectl apply -f -
+
+      - name: Apply site ingress (cloudhealthoffice.com + www)
+        run: kubectl apply -f infra/k8s/site-ingress.yaml
+
+      - name: Rollout restart portal
+        run: |
+          kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=180s
+
+      - name: Deployment summary
+        run: |
+          echo "=== Deployment Summary ==="
+          kubectl get pods -n ${{ env.NAMESPACE }} --no-headers | head -20
+          echo ""
+          echo "=== Ingress ==="
+          kubectl get ingress -n ${{ env.NAMESPACE }}
+          echo ""
+          PORTAL_IP=$(kubectl get ingress portal-ingress -n ${{ env.NAMESPACE }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
+          echo "Portal ingress IP: $PORTAL_IP"
+          echo ""
+          echo "DNS to configure:"
+          echo "  portal.cloudhealthoffice.com  →  A  $PORTAL_IP"

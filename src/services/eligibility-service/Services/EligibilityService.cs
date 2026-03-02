@@ -332,6 +332,12 @@ public class EligibilityServiceImpl : IEligibilityService
             ResponseCode = "N", // No - no active coverage
             StatusCode = "6", // Inactive
             RejectionReason = "No active coverage found for the service date",
+            IsCovered = false,
+            CoverageLevel = string.Empty,
+            CreatedDate = DateTime.UtcNow
+        };
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -342,11 +348,6 @@ public class EligibilityServiceImpl : IEligibilityService
         // Remove newline characters to prevent log forging via user-controlled data.
         return value.Replace("\r", string.Empty)
                     .Replace("\n", string.Empty);
-    }
-            IsCovered = false,
-            CoverageLevel = string.Empty,
-            CreatedDate = DateTime.UtcNow
-        };
     }
 }
 

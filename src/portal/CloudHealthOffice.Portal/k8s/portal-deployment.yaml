@@ -38,6 +38,7 @@ spec:
     spec:
       containers:
       - name: portal
+        # Image is replaced with ACR reference during deploy-azure-aks.yml CI/CD
         image: ghcr.io/aurelianware/cloudhealthoffice-portal:latest
         imagePullPolicy: Always
         ports:
@@ -95,6 +96,11 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__Prometheus
+        - name: MongoDB__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: cosmosdb-secret
+              key: connectionString
         - name: AzureAd__TenantId
           valueFrom:
             secretKeyRef:
@@ -140,16 +146,6 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: professional-price-id
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-secret
-              key: COSMOS_ENDPOINT
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-secret
-              key: COSMOS_KEY
         resources:
           requests:
             memory: "256Mi"

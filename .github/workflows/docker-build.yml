@@ -5,18 +5,18 @@ on:
     branches:
       - main
     paths:
-      - 'services/**'
-      - 'portal/**'
-      - 'site/**'
+      - 'src/services/**'
+      - 'src/portal/**'
+      - 'src/site/**'
       - 'containers/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'services/**'
-      - 'portal/**'
-      - 'site/**'
+      - 'src/services/**'
+      - 'src/portal/**'
+      - 'src/site/**'
       - 'containers/**'
   workflow_dispatch:
 
@@ -50,6 +50,10 @@ jobs:
           - tenant-service
           - enrollment-import-service
           - trading-partner-service
+        include:
+          # tenant-service needs repo root as context so it can reach scripts/setup/
+          - service: tenant-service
+            build_context: '.'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -78,8 +82,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./services/${{ matrix.service }}
-          file: ./services/${{ matrix.service }}/Dockerfile
+          context: ${{ matrix.build_context || format('./src/services/{0}', matrix.service) }}
+          file: ./src/services/${{ matrix.service }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -121,8 +125,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./portal/CloudHealthOffice.Portal
-          file: ./portal/CloudHealthOffice.Portal/Dockerfile
+          context: ./src/portal/CloudHealthOffice.Portal
+          file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -165,8 +169,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./site
-          file: ./site/Dockerfile
+          context: ./src/site
+          file: ./src/site/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

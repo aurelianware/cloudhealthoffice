@@ -65,61 +65,108 @@
         </div>
         
         <MudNavMenu Style="padding-top: 8px;">
-            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" 
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Dashboard
-            </MudNavLink>
-            <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Claims
-            </MudNavLink>
-            <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Eligibility
-            </MudNavLink>
-            <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Members
-            </MudNavLink>
-            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Sponsors
-            </MudNavLink>
-            <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Benefit Plans
-            </MudNavLink>
-            <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Providers
-            </MudNavLink>
-            <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Authorizations
-            </MudNavLink>
-            <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Workflows
-            </MudNavLink>
-            <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Trading Partners
-            </MudNavLink>
-            <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Reports
-            </MudNavLink>
-            
-            <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
-            
-            <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Reference Data
-            </MudNavLink>
-            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
-                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                Settings
-            </MudNavLink>
+            <AuthorizeView>
+                <Authorized>
+                    <!-- Authenticated User Menu -->
+                    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" 
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Dashboard
+                    </MudNavLink>
+                    <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Claims
+                    </MudNavLink>
+                    <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Eligibility
+                    </MudNavLink>
+                    <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Members
+                    </MudNavLink>
+                    <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Sponsors
+                    </MudNavLink>
+                    <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Benefit Plans
+                    </MudNavLink>
+                    <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Providers
+                    </MudNavLink>
+                    <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Authorizations
+                    </MudNavLink>
+                    <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Workflows
+                    </MudNavLink>
+                    <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Trading Partners
+                    </MudNavLink>
+                    <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Reports
+                    </MudNavLink>
+                    
+                    <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
+                    
+                    <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Reference Data
+                    </MudNavLink>
+                    <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Settings
+                    </MudNavLink>
+                </Authorized>
+                <NotAuthorized>
+                    <!-- Public Website Menu -->
+                    <MudNavLink Href="/welcome" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Home"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Home
+                    </MudNavLink>
+                    <MudNavLink Href="/docs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Documentation
+                    </MudNavLink>
+                    <MudNavLink Href="/apis" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Api"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        FHIR APIs
+                    </MudNavLink>
+                    <MudNavLink Href="/pricing" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AttachMoney"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Pricing
+                    </MudNavLink>
+                    <MudNavLink Href="/demo" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PlayCircle"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Live Demo
+                    </MudNavLink>
+                    
+                    <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
+                    
+                    <MudNavLink Href="/signup" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PersonAdd"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Sign Up
+                    </MudNavLink>
+                    <MudNavLink Href="/contact-sales" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ContactMail"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Contact Sales
+                    </MudNavLink>
+                    <MudNavLink Href="/legal" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Legal
+                    </MudNavLink>
+                    <MudNavLink Href="https://github.com/aurelianware/cloudhealthoffice" Target="_blank" Icon="@Icons.Material.Filled.Code"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        GitHub
+                    </MudNavLink>
+                </NotAuthorized>
+            </AuthorizeView>
         </MudNavMenu>
         
         <!-- Footer branding in drawer -->
