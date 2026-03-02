@@ -24,9 +24,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['javascript', 'typescript', 'csharp']
-        # CodeQL supports: 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby', 'swift'
-        # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
+        # 'javascript' and 'typescript' are the same CodeQL language — only list one.
+        # Use 'typescript' (preferred alias); it covers all JS/TS/JSX/TSX files.
+        language: ['typescript', 'csharp']
+        # CodeQL supports: 'cpp', 'csharp', 'go', 'java', 'javascript'/'typescript', 'python', 'ruby', 'swift'
 
     steps:
       - name: Checkout repository
@@ -54,8 +55,8 @@ jobs:
       - name: Restore .NET dependencies
         if: matrix.language == 'csharp'
         run: |
-          # Find and restore all .NET projects
-          for project in $(find services -name "*.csproj" -o -name "*.sln" 2>/dev/null); do
+          # Find and restore all .NET projects under src/
+          for project in $(find src -name "*.csproj" -o -name "*.sln" 2>/dev/null); do
             echo "Restoring $project..."
             dotnet restore "$project" || echo "Warning: Failed to restore $project"
           done
@@ -84,15 +85,9 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
-          output: sarif-results
-          upload: true
-
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: sarif-results/${{ matrix.language }}.sarif
-          category: "/language:${{ matrix.language }}"
+          # upload handles SARIF upload; upload-sarif must not run in the same job
+          # (only one upload per job per category is allowed)
+          upload: always
 
   results-summary:
     name: CodeQL Results Summary
@@ -111,8 +106,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Language | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| JavaScript | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| TypeScript | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript/JavaScript | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| C# | ${{ needs.analyze.result == 'success' && '✅ Completed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Review security alerts in the [Security tab](../../security/code-scanning)" >> $GITHUB_STEP_SUMMARY
