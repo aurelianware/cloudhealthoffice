@@ -67,8 +67,8 @@ jobs:
           for project in $(find src -name "*.sln" 2>/dev/null); do
             echo "Building $project..."
             dotnet build "$project" --configuration Release --no-restore
-          done          
-
+          done
+          
       - name: Setup Node.js
         if: matrix.language == 'javascript' || matrix.language == 'typescript'
         uses: actions/setup-node@v4
