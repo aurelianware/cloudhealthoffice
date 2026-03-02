@@ -122,7 +122,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         if (benefit == null)
         {
-            _logger.LogWarning("No benefit found for plan {PlanId}, category {Category}", planId, serviceCategory);
+            _logger.LogWarning("No benefit found for plan {PlanId}, category {Category}", SanitizeForLog(planId), SanitizeForLog(serviceCategory));
             return null;
         }
 
@@ -131,7 +131,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         {
             if (!benefit.CptCodes.Contains(cptCode))
             {
-                _logger.LogWarning("CPT code {CptCode} not covered in benefit", cptCode);
+                _logger.LogWarning("CPT code {CptCode} not covered in benefit", SanitizeForLog(cptCode));
                 return new BenefitAppliedResult
                 {
                     IsCovered = false,
@@ -258,6 +258,13 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         result.PayerResponsibility = allowedAmount - totalPatientResponsibility;
 
         return result;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

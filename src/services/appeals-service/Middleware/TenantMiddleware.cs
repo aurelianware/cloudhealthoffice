@@ -44,13 +44,13 @@ public class TenantMiddleware
         if (string.IsNullOrEmpty(tenantId))
         {
             tenantId = "default-tenant";
-            _logger.LogWarning("No TenantId found in JWT or headers, using default: {TenantId}", tenantId);
+            _logger.LogWarning("No TenantId found in JWT or headers, using default: {TenantId}", SanitizeForLog(tenantId));
         }
 
         // Store in HttpContext for repository access
         context.Items["TenantId"] = tenantId;
 
-        _logger.LogDebug("Request TenantId: {TenantId}", tenantId);
+        _logger.LogDebug("Request TenantId: {TenantId}", SanitizeForLog(tenantId));
 
         await _next(context);
     }
@@ -59,6 +59,13 @@ public class TenantMiddleware
     {
         return path.StartsWithSegments("/health") 
             || path.StartsWithSegments("/swagger");
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

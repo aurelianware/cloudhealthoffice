@@ -87,7 +87,7 @@ public class EnrollmentRepository : IEnrollmentRepository
         member.UpdatedAt = DateTime.UtcNow;
         
         var response = await MembersContainer.CreateItemAsync(member, new PartitionKey(member.Id));
-        _logger.LogInformation("Created member {MemberId} for tenant {TenantId}", member.MemberId, member.TenantId);
+        _logger.LogInformation("Created member {MemberId} for tenant {TenantId}", SanitizeForLog(member.MemberId), SanitizeForLog(member.TenantId));
         
         return response.Resource;
     }
@@ -97,7 +97,7 @@ public class EnrollmentRepository : IEnrollmentRepository
         member.UpdatedAt = DateTime.UtcNow;
         
         var response = await MembersContainer.ReplaceItemAsync(member, member.Id, new PartitionKey(member.Id));
-        _logger.LogInformation("Updated member {MemberId} for tenant {TenantId}", member.MemberId, member.TenantId);
+        _logger.LogInformation("Updated member {MemberId} for tenant {TenantId}", SanitizeForLog(member.MemberId), SanitizeForLog(member.TenantId));
         
         return response.Resource;
     }
@@ -108,7 +108,7 @@ public class EnrollmentRepository : IEnrollmentRepository
         coverage.UpdatedAt = DateTime.UtcNow;
         
         var response = await CoverageContainer.CreateItemAsync(coverage, new PartitionKey(coverage.Id));
-        _logger.LogInformation("Created coverage {CoverageId} for member {MemberId}", coverage.Id, coverage.MemberId);
+        _logger.LogInformation("Created coverage {CoverageId} for member {MemberId}", SanitizeForLog(coverage.Id), SanitizeForLog(coverage.MemberId));
         
         return response.Resource;
     }
@@ -118,7 +118,7 @@ public class EnrollmentRepository : IEnrollmentRepository
         coverage.UpdatedAt = DateTime.UtcNow;
         
         var response = await CoverageContainer.ReplaceItemAsync(coverage, coverage.Id, new PartitionKey(coverage.Id));
-        _logger.LogInformation("Updated coverage {CoverageId} for member {MemberId}", coverage.Id, coverage.MemberId);
+        _logger.LogInformation("Updated coverage {CoverageId} for member {MemberId}", SanitizeForLog(coverage.Id), SanitizeForLog(coverage.MemberId));
         
         return response.Resource;
     }
@@ -149,7 +149,7 @@ public class EnrollmentRepository : IEnrollmentRepository
         sponsor.UpdatedAt = DateTime.UtcNow;
         
         var response = await SponsorsContainer.CreateItemAsync(sponsor, new PartitionKey(sponsor.Id));
-        _logger.LogInformation("Created sponsor {SponsorId} for tenant {TenantId}", sponsor.SponsorId, sponsor.TenantId);
+        _logger.LogInformation("Created sponsor {SponsorId} for tenant {TenantId}", SanitizeForLog(sponsor.SponsorId), SanitizeForLog(sponsor.TenantId));
         
         return response.Resource;
     }
@@ -159,8 +159,15 @@ public class EnrollmentRepository : IEnrollmentRepository
         sponsor.UpdatedAt = DateTime.UtcNow;
         
         var response = await SponsorsContainer.ReplaceItemAsync(sponsor, sponsor.Id, new PartitionKey(sponsor.Id));
-        _logger.LogInformation("Updated sponsor {SponsorId} for tenant {TenantId}", sponsor.SponsorId, sponsor.TenantId);
+        _logger.LogInformation("Updated sponsor {SponsorId} for tenant {TenantId}", SanitizeForLog(sponsor.SponsorId), SanitizeForLog(sponsor.TenantId));
         
         return response.Resource;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
