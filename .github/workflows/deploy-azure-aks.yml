@@ -289,6 +289,17 @@ jobs:
           kubectl apply -f infra/k8s/cert-manager-issuer.yaml || \
             echo "Warning: cert-manager ClusterIssuer apply failed – ensure cert-manager is installed"
 
+      - name: Install/upgrade nginx ingress controller
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --values infra/helm/nginx-ingress-values.yaml \
+            --wait \
+            --timeout 5m
+
       - name: Substitute ACR image in portal deployment
         run: |
           ACR="${{ env.REGISTRY }}"
