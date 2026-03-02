@@ -97,10 +97,11 @@ export function isPHIFieldName(fieldName: string): boolean {
     if (lowerFieldName.includes('_' + lowerPhiName + '_')) return true;
     // CamelCase suffix match (e.g., "patientEmail" contains "Email")
     // Match if PHI name appears as a capitalized word at the end
-    const camelCasePattern = new RegExp(lowerPhiName + '$', 'i');
+    const escapedPhiName = lowerPhiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const camelCasePattern = new RegExp(escapedPhiName + '$', 'i');
     if (camelCasePattern.test(lowerFieldName)) return true;
     // Word boundary match for other cases (e.g., "name" as a whole word)
-    const wordBoundaryRegex = new RegExp(`\\b${lowerPhiName}\\b`, 'i');
+    const wordBoundaryRegex = new RegExp(`\\b${escapedPhiName}\\b`, 'i');
     if (wordBoundaryRegex.test(fieldName)) return true;
     return false;
   });

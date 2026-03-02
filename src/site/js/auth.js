@@ -150,10 +150,15 @@ async function updateNavigation(navSelector = 'nav ul') {
     logoutItem.appendChild(logoutLink);
     nav.appendChild(logoutItem);
   } else {
-    // Add sign in link
+    // Add sign in link (use DOM APIs instead of innerHTML to prevent XSS)
     const signInItem = document.createElement('li');
     signInItem.className = 'auth-link';
-    signInItem.innerHTML = `<a href="/login.html" style="color:#00ffff; font-weight:bold;">Sign In</a>`;
+    const signInLink = document.createElement('a');
+    signInLink.href = '/login.html';
+    signInLink.style.color = '#00ffff';
+    signInLink.style.fontWeight = 'bold';
+    signInLink.textContent = 'Sign In';
+    signInItem.appendChild(signInLink);
     nav.appendChild(signInItem);
   }
 }
