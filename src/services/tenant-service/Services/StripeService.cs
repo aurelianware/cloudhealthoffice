@@ -119,7 +119,7 @@ public class StripeService : IStripeService
 
         await service.UpdateAsync(subscriptionId, options);
 
-        _logger.LogInformation("Updated Stripe subscription {SubscriptionId} to tier {Tier}", subscriptionId, newTier);
+        _logger.LogInformation("Updated Stripe subscription {SubscriptionId} to tier {Tier}", SanitizeForLog(subscriptionId), SanitizeForLog(newTier));
     }
 
     public async Task<Stripe.Invoice?> GetUpcomingInvoiceAsync(string customerId)
@@ -221,7 +221,7 @@ public class StripeService : IStripeService
 
         await _tenantRepository.UpdateAsync(tenant);
 
-        _logger.LogInformation("Subscription created for tenant {TenantId}", tenantId);
+        _logger.LogInformation("Subscription created for tenant {TenantId}", SanitizeForLog(tenantId));
     }
 
     private async Task HandleSubscriptionUpdatedAsync(Event stripeEvent)
@@ -244,7 +244,7 @@ public class StripeService : IStripeService
 
         await _tenantRepository.UpdateAsync(tenant);
 
-        _logger.LogInformation("Subscription updated for tenant {TenantId}", tenantId);
+        _logger.LogInformation("Subscription updated for tenant {TenantId}", SanitizeForLog(tenantId));
     }
 
     private async Task HandleSubscriptionDeletedAsync(Event stripeEvent)
@@ -262,7 +262,7 @@ public class StripeService : IStripeService
         tenant.Status = "suspended";
         await _tenantRepository.UpdateAsync(tenant);
 
-        _logger.LogWarning("Subscription canceled for tenant {TenantId}, tenant suspended", tenantId);
+        _logger.LogWarning("Subscription canceled for tenant {TenantId}, tenant suspended", SanitizeForLog(tenantId));
     }
 
     private async Task HandlePaymentSucceededAsync(Event stripeEvent)
@@ -313,5 +313,12 @@ public class StripeService : IStripeService
             "enterprise" => priceIds["enterprise_monthly"] ?? throw new InvalidOperationException("Enterprise pricing ID not configured"),
             _ => throw new ArgumentException($"Unknown subscription tier: {tier}")
         };
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

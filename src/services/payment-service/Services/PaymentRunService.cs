@@ -123,7 +123,7 @@ public class PaymentRunService : IPaymentRunService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing payment run {PaymentRunId}", paymentRunId);
+            _logger.LogError(ex, "Error executing payment run {PaymentRunId}", SanitizeForLog(paymentRunId));
             
             paymentRun.Status = PaymentRunStatus.Failed;
             paymentRun.Errors.Add($"Execution failed: {ex.Message}");
@@ -306,12 +306,12 @@ public class PaymentRunService : IPaymentRunService
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogWarning("Failed to update claim {ClaimId} status to Paid: {StatusCode}", 
-                        claimId, response.StatusCode);
+                        SanitizeForLog(claimId), response.StatusCode);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating claim {ClaimId} status", claimId);
+                _logger.LogError(ex, "Error updating claim {ClaimId} status", SanitizeForLog(claimId));
             }
         }
     }
@@ -332,6 +332,13 @@ public class PaymentRunService : IPaymentRunService
 
         // Default starting check number
         return int.Parse(_configuration["Payment:StartingCheckNumber"] ?? "1000000");
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

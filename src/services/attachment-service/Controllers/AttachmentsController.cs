@@ -123,7 +123,7 @@ public class AttachmentsController : ControllerBase
                 created.Id,
                 !string.IsNullOrWhiteSpace(created.ClaimId) ? "Claim" :
                 !string.IsNullOrWhiteSpace(created.AuthorizationId) ? "Authorization" : "Appeal",
-                created.ClaimId ?? created.AuthorizationId ?? created.AppealId);
+                SanitizeForLog(created.ClaimId ?? created.AuthorizationId ?? created.AppealId));
 
             return CreatedAtAction(nameof(GetAttachment), new { id = created.Id, tenantId = created.TenantId }, created);
         }
@@ -310,7 +310,7 @@ public class AttachmentsController : ControllerBase
             _logger.LogInformation(
                 "Generated {AckType} acknowledgment for attachment {AttachmentId}",
                 ackType,
-                id);
+                SanitizeForLog(id));
 
             return Ok(new AcknowledgmentResponse
             {
@@ -325,7 +325,7 @@ public class AttachmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId}", id);
+            _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId}", SanitizeForLog(id));
             return StatusCode(500, new { error = "Failed to generate acknowledgment", details = ex.Message });
         }
     }
@@ -343,6 +343,13 @@ public class AttachmentsController : ControllerBase
             ApplicationSenderId = "SENDER",
             ApplicationReceiverId = attachment.ProviderId
         };
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

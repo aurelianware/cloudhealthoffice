@@ -176,7 +176,7 @@ public class TradingPartnersController : ControllerBase
         
         _logger.LogInformation(
             "Created trading partner: {TenantId}/{TradingPartnerId}/{Environment}",
-            partner.TenantId, partner.TradingPartnerId, partner.Environment);
+            SanitizeForLog(partner.TenantId), SanitizeForLog(partner.TradingPartnerId), SanitizeForLog(partner.Environment));
 
         return CreatedAtAction(
             nameof(Get),
@@ -209,7 +209,7 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogInformation(
             "Updated trading partner: {TenantId}/{TradingPartnerId}/{Environment}",
-            tenantId, tradingPartnerId, environment);
+            SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
 
         return Ok(updated);
     }
@@ -229,7 +229,7 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogWarning(
             "Deleted trading partner: {TenantId}/{TradingPartnerId}/{Environment}",
-            tenantId, tradingPartnerId, environment);
+            SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
 
         return NoContent();
     }
@@ -271,5 +271,12 @@ public class TradingPartnersController : ControllerBase
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "trading-partner-service" });
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

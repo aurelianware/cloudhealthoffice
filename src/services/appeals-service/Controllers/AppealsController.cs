@@ -28,7 +28,7 @@ public class AppealsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Appeal>> SubmitAppeal([FromBody] Appeal appeal)
     {
-        _logger.LogInformation("Submitting appeal for claim {ClaimId}", appeal.ClaimId);
+        _logger.LogInformation("Submitting appeal for claim {ClaimId}", SanitizeForLog(appeal.ClaimId));
 
         // Validation
         if (string.IsNullOrEmpty(appeal.ClaimId))
@@ -118,7 +118,7 @@ public class AppealsController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         _logger.LogInformation("Searching appeals: member {Member}, provider {Provider}, status {Status}",
-            memberId, providerNPI, status);
+            SanitizeForLog(memberId), SanitizeForLog(providerNPI), status);
 
         var appeals = await _appealRepository.SearchAsync(
             memberId, providerNPI, submittedFrom, submittedTo, status, lineOfBusiness, page, pageSize);
@@ -153,7 +153,7 @@ public class AppealsController : ControllerBase
         var updated = await _appealRepository.UpdateAsync(appeal);
 
         _logger.LogInformation("Added attachment {AttachmentId} to appeal {AppealId}", 
-            attachment.AttachmentId, id);
+            SanitizeForLog(attachment.AttachmentId), SanitizeForLog(id));
 
         return Ok(updated);
     }
@@ -248,7 +248,7 @@ public class AppealsController : ControllerBase
 
         var updated = await _appealRepository.UpdateAsync(appeal);
 
-        _logger.LogInformation("Appeal {AppealId} decision: {Decision}", id, decision.DecisionType);
+        _logger.LogInformation("Appeal {AppealId} decision: {Decision}", SanitizeForLog(id), decision.DecisionType);
 
         return Ok(updated);
     }
@@ -291,6 +291,13 @@ public class AppealsController : ControllerBase
 
         return Ok(summary);
     }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 }
 
 public class UpdateAttachmentStatusRequest
@@ -309,3 +316,4 @@ public class UpdateStatusRequest
 {
     public AppealStatus Status { get; set; }
 }
+

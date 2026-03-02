@@ -26,7 +26,7 @@ public class TenantRepository : ITenantRepository
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogWarning("Tenant with ID {TenantId} not found", id);
+            _logger.LogWarning("Tenant with ID {TenantId} not found", SanitizeForLog(id));
             return null;
         }
     }
@@ -83,7 +83,7 @@ public class TenantRepository : ITenantRepository
         tenant.UpdatedAt = DateTime.UtcNow;
 
         var response = await _container.CreateItemAsync(tenant, new PartitionKey(tenant.Id));
-        _logger.LogInformation("Created tenant {TenantId} ({TenantName})", tenant.TenantId, tenant.TenantName);
+        _logger.LogInformation("Created tenant {TenantId} ({TenantName})", SanitizeForLog(tenant.TenantId), SanitizeForLog(tenant.TenantName));
         
         return response.Resource;
     }
@@ -93,7 +93,7 @@ public class TenantRepository : ITenantRepository
         tenant.UpdatedAt = DateTime.UtcNow;
 
         var response = await _container.ReplaceItemAsync(tenant, tenant.Id, new PartitionKey(tenant.Id));
-        _logger.LogInformation("Updated tenant {TenantId}", tenant.TenantId);
+        _logger.LogInformation("Updated tenant {TenantId}", SanitizeForLog(tenant.TenantId));
         
         return response.Resource;
     }
@@ -104,7 +104,7 @@ public class TenantRepository : ITenantRepository
         if (tenant != null)
         {
             await _container.DeleteItemAsync<Tenant>(tenant.Id, new PartitionKey(tenant.Id));
-            _logger.LogInformation("Deleted tenant {TenantId}", tenantId);
+            _logger.LogInformation("Deleted tenant {TenantId}", SanitizeForLog(tenantId));
         }
     }
 
@@ -133,5 +133,12 @@ public class TenantRepository : ITenantRepository
         }
 
         return null;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

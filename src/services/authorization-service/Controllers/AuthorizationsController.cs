@@ -33,7 +33,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting authorization for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
-            authorization.MemberId, authorization.RequestingProviderNPI, authorization.RequestedServiceDateFrom);
+            SanitizeForLog(authorization.MemberId), SanitizeForLog(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
 
         // Validate authorization
         if (authorization.RequestedServices.Count == 0)
@@ -49,7 +49,7 @@ public class AuthorizationsController : ControllerBase
 
         var created = await _authorizationRepository.CreateAsync(authorization);
 
-        _logger.LogInformation("Authorization {AuthNumber} submitted successfully", authorization.AuthorizationNumber);
+        _logger.LogInformation("Authorization {AuthNumber} submitted successfully", SanitizeForLog(authorization.AuthorizationNumber));
 
         return CreatedAtAction(nameof(GetAuthorizationById), new { id = created.Id }, created);
     }
@@ -62,7 +62,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Authorization>> GetAuthorizationById(string id)
     {
-        _logger.LogInformation("Fetching authorization by ID: {Id}", id);
+        _logger.LogInformation("Fetching authorization by ID: {Id}", SanitizeForLog(id));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -81,7 +81,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Authorization>> GetAuthorizationByNumber(string authNumber)
     {
-        _logger.LogInformation("Fetching authorization by number: {AuthNumber}", authNumber);
+        _logger.LogInformation("Fetching authorization by number: {AuthNumber}", SanitizeForLog(authNumber));
 
         var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
         if (authorization == null)
@@ -108,7 +108,7 @@ public class AuthorizationsController : ControllerBase
 
         _logger.LogInformation(
             "Validating authorization {AuthNumber} for procedure {Procedure} on {Date}",
-            authNumber, procedureCode, checkDate);
+            SanitizeForLog(authNumber), SanitizeForLog(procedureCode), checkDate);
 
         var authorization = await _authorizationRepository.GetByAuthorizationNumberAsync(authNumber);
         if (authorization == null)
@@ -177,7 +177,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Searching authorizations: member={Member}, provider={Provider}, dateFrom={From}, dateTo={To}, status={Status}, lob={LOB}",
-            memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness);
+            SanitizeForLog(memberId), SanitizeForLog(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
 
         var authorizations = await _authorizationRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
@@ -197,7 +197,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Updating authorization {Id} status to {Status}",
-            id, statusUpdate.Status);
+            SanitizeForLog(id), statusUpdate.Status);
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -239,7 +239,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Processing 278 response for authorization {Id}, decision={Decision}",
-            id, response.ReviewDecision);
+            SanitizeForLog(id), SanitizeForLog(response.ReviewDecision));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -326,7 +326,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelAuthorization(string id)
     {
-        _logger.LogInformation("Cancelling authorization: {Id}", id);
+        _logger.LogInformation("Cancelling authorization: {Id}", SanitizeForLog(id));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -340,5 +340,12 @@ public class AuthorizationsController : ControllerBase
         await _authorizationRepository.UpdateAsync(authorization);
 
         return NoContent();
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
