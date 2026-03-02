@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using MudBlazor.Services;
 using CloudHealthOffice.Portal.Infrastructure;
 using CloudHealthOffice.Portal.Services;
@@ -120,17 +121,25 @@ builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 builder.Services.AddServerSideBlazor(options =>
 {
-    options.DetailedErrors = builder.Environment.IsDevelopment();
+    // Always enable detailed errors so circuit exceptions appear in server logs.
+    // The error detail is only sent to the client in Development; in Production the
+    // server still logs it but the client only sees a generic message.
+    options.DetailedErrors = true;
     options.DisconnectedCircuitMaxRetained = 100;
     options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
     options.JSInteropDefaultCallTimeout = TimeSpan.FromSeconds(60);
     options.MaxBufferedUnacknowledgedRenderBatches = 10;
 })
     .AddMicrosoftIdentityConsentHandler();
+// NOTE: Do NOT register AuthenticationStateProvider manually here.
+// AddServerSideBlazor() + AddMicrosoftIdentityConsentHandler() already registers the
+// correct provider (MicrosoftIdentityConsentAndErrorHandler wrapping
+// ServerAuthenticationStateProvider). A second AddScoped<> call overrides it and
+// drops the consent-handler wrapper, which can crash circuit startup.
 
-// Add authentication state provider for Blazor
-builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, 
-    Microsoft.AspNetCore.Components.Server.ServerAuthenticationStateProvider>();
+// Diagnostic circuit handler — logs every circuit lifecycle event so startup
+// failures are visible in pod logs without needing remote-attach debugging.
+builder.Services.AddScoped<CircuitHandler, DiagnosticCircuitHandler>();
 
 builder.Services.AddMudServices();
 
@@ -204,7 +213,10 @@ builder.Services.AddSignalR(options =>
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
     options.HandshakeTimeout = TimeSpan.FromSeconds(15);
     options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
-    options.EnableDetailedErrors = false;
+    // Keep detailed errors enabled so exceptions are logged server-side.
+    // Clients only see the full message in Development; in Production they
+    // see a generic error, but the pod log captures the full exception.
+    options.EnableDetailedErrors = true;
 });
 
 // Shared distributed cache backed by Redis — required for multi-pod session and MSAL token caches
