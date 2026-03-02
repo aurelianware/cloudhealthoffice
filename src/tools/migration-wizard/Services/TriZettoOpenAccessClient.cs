@@ -272,7 +272,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         // Sample data generation for testing purposes
         // In production, parse actual SOAP response
-        var random = new Random();
+        var random = Random.Shared;
         var count = random.Next(50, 200);
         
         for (int i = 0; i < count; i++)
@@ -308,7 +308,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         if (string.IsNullOrEmpty(soapResponse)) return providers;
         
-        var random = new Random();
+        var random = Random.Shared;
         var count = random.Next(20, 100);
         
         for (int i = 0; i < count; i++)
@@ -344,7 +344,7 @@ public class TriZettoOpenAccessClient : IDisposable
         
         if (string.IsNullOrEmpty(soapResponse)) return plans;
         
-        var random = new Random();
+        var random = Random.Shared;
         var count = random.Next(5, 20);
         
         var planTypes = new[] { "HMO", "PPO", "EPO", "POS" };
