@@ -90,7 +90,7 @@ export async function loadSecret(mapping: SecretMapping): Promise<string | undef
   // First, check if environment variable is already set
   const envValue = process.env[mapping.envVar];
   if (envValue) {
-    console.log(`[KeyVault] Using environment variable for ${mapping.envVar}`);
+    //console.log(`[KeyVault] Using environment variable for ${mapping.envVar}`);
     return envValue;
   }
   
@@ -100,13 +100,13 @@ export async function loadSecret(mapping: SecretMapping): Promise<string | undef
     try {
       const secret = await secretClient.getSecret(secretName);
       if (secret.value) {
-        console.log(`[KeyVault] Loaded ${mapping.envVar} from Key Vault secret: ${secretName}`);
+        //console.log(`[KeyVault] Loaded ${mapping.envVar} from Key Vault secret: ${secretName}`);
         return secret.value;
       }
     } catch (error: any) {
       // 404 means secret doesn't exist, which is OK if not required
       if (error?.statusCode === 404) {
-        console.log(`[KeyVault] Secret ${secretName} not found in Key Vault`);
+        //console.log(`[KeyVault] Secret ${secretName} not found in Key Vault`);
       } else {
         console.warn(`[KeyVault] Failed to load ${secretName}:`, error);
       }
@@ -115,13 +115,13 @@ export async function loadSecret(mapping: SecretMapping): Promise<string | undef
   
   // Fall back to default value
   if (mapping.defaultValue !== undefined) {
-    console.log(`[KeyVault] Using default value for ${mapping.envVar}`);
+    //console.log(`[KeyVault] Using default value for ${mapping.envVar}`);
     return mapping.defaultValue;
   }
   
   // If required and not found, log warning
   if (mapping.required) {
-    console.warn(`[KeyVault] Required secret ${mapping.envVar} not found in environment or Key Vault`);
+    //console.warn(`[KeyVault] Required secret ${mapping.envVar} not found in environment or Key Vault`);
   }
   
   return undefined;

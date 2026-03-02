@@ -365,7 +365,7 @@ async function start(): Promise<void> {
     }
 
     server.listen(PORT, () => {
-      console.log(`Claims Scrubbing Service listening on port ${PORT}`);
+      //console.log(`Claims Scrubbing Service listening on port ${PORT}`);
       console.log(`Endpoints: /livez, /readyz, /api/claims/validate, /api/rules`);
     });
   } catch (error) {

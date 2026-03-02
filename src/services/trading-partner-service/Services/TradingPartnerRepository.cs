@@ -42,7 +42,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
         {
             _logger.LogWarning(
                 "Trading partner not found: {TenantId}/{TradingPartnerId}/{Environment}",
-                tenantId, tradingPartnerId, environment);
+                SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
             return null;
         }
     }
@@ -75,7 +75,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
         _logger.LogInformation(
             "Created trading partner: {Id} in partition {TenantId}",
-            partner.Id, partner.TenantId);
+            SanitizeForLog(partner.Id), SanitizeForLog(partner.TenantId));
 
         return response.Resource;
     }
@@ -89,7 +89,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
         _logger.LogInformation(
             "Updated trading partner: {Id}",
-            partner.Id);
+            SanitizeForLog(partner.Id));
 
         return response.Resource;
     }
@@ -102,6 +102,19 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
         _logger.LogWarning(
             "Deleted trading partner: {Id} from partition {PartitionKey}",
-            id, partitionKey);
+            SanitizeForLog(id), SanitizeForLog(partitionKey));
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Remove newline characters to prevent log forging via line injection.
+        return value
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty);
     }
 }
