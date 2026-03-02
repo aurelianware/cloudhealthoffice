@@ -115,7 +115,7 @@ async function updateNavigation(navSelector = 'nav ul') {
   const nav = document.querySelector(navSelector);
   
   if (!nav) {
-    console.warn('Navigation element not found:', navSelector);
+    //console.warn('Navigation element not found:', navSelector);
     return;
   }
 
