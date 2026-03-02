@@ -33,9 +33,10 @@ COPY --from=publish /app/publish .
 COPY scripts/setup/provision-sftp-tenant.sh /app/scripts/provision-sftp-tenant.sh
 RUN chmod +x /app/scripts/provision-sftp-tenant.sh
 
-# Create non-root user (kubectl and sftp scripts run as this user)
-RUN groupadd -r appuser && useradd -r -g appuser appuser \
+# Create non-root user with home directory for kubectl config (~/.kube)
+RUN groupadd -r appuser && useradd -r -m -d /home/appuser -g appuser appuser \
     && chown -R appuser:appuser /app
+ENV HOME=/home/appuser
 USER appuser
 
 ENTRYPOINT ["dotnet", "TenantService.dll"]
