@@ -101,8 +101,8 @@ tests.forEach(test => {
   const levelStr = compliance.passAAA ? 'AAA ⭐' : compliance.passAA ? 'AA ✓' : 'FAIL ✗';
   
   console.log(`${status} ${test.use}`);
-  console.log(`  ${test.fg} (${colors[test.fg]}) on ${test.bg} (${colors[test.bg]})`);
-  console.log(`  Contrast: ${compliance.ratio}:1 | Level: ${levelStr}`);
+  //console.log(`  ${test.fg} (${colors[test.fg]}) on ${test.bg} (${colors[test.bg]})`);
+  //console.log(`  Contrast: ${compliance.ratio}:1 | Level: ${levelStr}`);
   console.log('');
   
   if (!compliance.passAA) {
@@ -183,7 +183,7 @@ htmlFiles.forEach(file => {
   if (issues.length > 0) {
     console.log(`📄 ${file}:`);
     issues.forEach(issue => {
-      console.log(`  ⚠️  ${issue}`);
+      //console.log(`  ⚠️  ${issue}`);
       totalIssues++;
     });
     console.log('');
@@ -207,8 +207,8 @@ console.log('==============================================');
 console.log('Validation complete!');
 console.log('');
 console.log('Note: This is a basic validation. For comprehensive');
-console.log('accessibility testing, use tools like:');
+//console.log('accessibility testing, use tools like:');
 console.log('  - pa11y (automated testing)');
 console.log('  - axe DevTools (browser extension)');
 console.log('  - WAVE (web accessibility evaluation tool)');
-console.log('  - Screen readers (NVDA, JAWS, VoiceOver)');
+//console.log('  - Screen readers (NVDA, JAWS, VoiceOver)');
