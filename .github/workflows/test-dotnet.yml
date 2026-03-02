@@ -4,14 +4,14 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'services/**'
-      - 'portal/**'
+      - 'src/services/**'
+      - 'src/portal/**'
       - '.github/workflows/test-dotnet.yml'
   pull_request:
     branches: ["main"]
     paths:
-      - 'services/**'
-      - 'portal/**'
+      - 'src/services/**'
+      - 'src/portal/**'
   workflow_dispatch:
 
 jobs:
@@ -28,15 +28,15 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies - Portal Tests
-        working-directory: portal/CloudHealthOffice.Portal.Tests
+        working-directory: src/portal/CloudHealthOffice.Portal.Tests
         run: dotnet restore
 
       - name: Build - Portal Tests
-        working-directory: portal/CloudHealthOffice.Portal.Tests
+        working-directory: src/portal/CloudHealthOffice.Portal.Tests
         run: dotnet build --no-restore
 
       - name: Test - Portal (Multi-Tenant Features)
-        working-directory: portal/CloudHealthOffice.Portal.Tests
+        working-directory: src/portal/CloudHealthOffice.Portal.Tests
         run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=portal-test-results.trx" --collect:"XPlat Code Coverage"
 
       # Infrastructure tests disabled - project only exists in feature/multi-cloud-infrastructure branch
