@@ -1,0 +1,30 @@
+controller:
+  replicaCount: 1
+
+  service:
+    annotations:
+      # Azure Standard LB health probe must check /healthz (returns 200).
+      # Using path "/" returns 308 (SSL redirect) which fails the HTTP probe,
+      # causing Standard LB to mark all backends unhealthy and drop all traffic.
+      service.beta.kubernetes.io/azure-load-balancer-health-probe-protocol: Http
+      service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz
+
+  config:
+    # Forward real client IP through the ingress
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+    # WebSocket support for Blazor Server SignalR
+    map-hash-bucket-size: "128"
+    http-snippet: |
+      map $http_upgrade $connection_upgrade {
+          default upgrade;
+          '' close;
+      }
+    # Buffer sizes for SignalR long-polling / streaming
+    proxy-buffer-size: "16k"
+    proxy-buffers-number: "4"
+    # Allow large file uploads (attachments)
+    proxy-body-size: "100m"
+    # Real IP
+    enable-real-ip: "true"
+    use-proxy-protocol: "false"

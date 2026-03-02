@@ -6,6 +6,7 @@ using CloudHealthOffice.Portal.Services;
 using CloudHealthOffice.Portal.Hubs;
 using System.Net.Http;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
@@ -157,10 +158,16 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 // DataProtection — persist keys to MongoDB so all replicas share the same key ring.
 // Without this each pod generates ephemeral keys and cannot decrypt cookies / Blazor
 // circuit tokens produced by a different replica.
+// NOTE: Must use AddOptions<KeyManagementOptions> to set XmlRepository directly rather
+// than registering IXmlRepository in DI — AddDataProtection's internal setup does not
+// reliably pick up a separately-registered IXmlRepository singleton.
 builder.Services.AddDataProtection()
     .SetApplicationName("CloudHealthOffice.Portal");
-builder.Services.AddSingleton<IXmlRepository>(sp =>
-    new MongoDbXmlRepository(sp.GetRequiredService<IMongoClient>()));
+builder.Services.AddOptions<KeyManagementOptions>()
+    .Configure<IMongoClient>((options, mongoClient) =>
+    {
+        options.XmlRepository = new MongoDbXmlRepository(mongoClient);
+    });
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
