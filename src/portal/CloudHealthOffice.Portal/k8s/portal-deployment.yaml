@@ -17,6 +17,7 @@ data:
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
   MongoDB__DatabaseName: "cloudhealthoffice"
+  Redis__ConnectionString: "redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -107,6 +108,11 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: MongoDB__DatabaseName
+        - name: Redis__ConnectionString
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Redis__ConnectionString
         - name: AzureAd__TenantId
           valueFrom:
             secretKeyRef:
@@ -205,7 +211,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: portal
-  minReplicas: 2
+  minReplicas: 2  # Safe with Redis-backed session + token cache
   maxReplicas: 5
   metrics:
   - type: Resource

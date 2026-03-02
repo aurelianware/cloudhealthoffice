@@ -94,7 +94,7 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
         };
     })
     .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
-    .AddInMemoryTokenCaches();
+    .AddDistributedTokenCaches();
 
 // Configure cookies for reverse proxy (HTTPS behind nginx)
 builder.Services.ConfigureApplicationCookie(options =>
@@ -207,8 +207,15 @@ builder.Services.AddSignalR(options =>
     options.EnableDetailedErrors = false;
 });
 
+// Shared distributed cache backed by Redis — required for multi-pod session and MSAL token caches
+var redisConnection = builder.Configuration["Redis:ConnectionString"] ?? "redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379";
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnection;
+    options.InstanceName = "cho:";
+});
+
 // Add session state
-builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(2);
