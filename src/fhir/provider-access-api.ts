@@ -749,8 +749,10 @@ export class ProviderAccessApi {
     // In production: send to Azure Application Insights or Log Analytics
     this.auditLogs.push(entry);
     
-    // For development: log to console
-    console.log(`[AUDIT] ${entry.timestamp} - ${entry.eventType} - ${entry.result} - User: ${entry.userId} - ${entry.details || ''}`);
+    // For development: log to console (sanitize user-controlled values to prevent log injection)
+    const safeUserId = String(entry.userId || '').replace(/[\r\n]/g, '');
+    const safeDetails = String(entry.details || '').replace(/[\r\n]/g, '');
+    console.log(`[AUDIT] ${entry.timestamp} - ${entry.eventType} - ${entry.result} - User: ${safeUserId} - ${safeDetails}`);
   }
 
   /**

@@ -31,7 +31,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting claim for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
-            claim.MemberId, claim.BillingProviderNPI, claim.ServiceDateFrom);
+            SanitizeForLog(claim.MemberId), SanitizeForLog(claim.BillingProviderNPI), claim.ServiceDateFrom);
 
         // Validate claim
         if (claim.ClaimLines.Count == 0)
@@ -50,7 +50,7 @@ public class ClaimsController : ControllerBase
 
         var created = await _claimRepository.CreateAsync(claim);
 
-        _logger.LogInformation("Claim {ClaimNumber} submitted successfully", claim.ClaimNumber);
+        _logger.LogInformation("Claim {ClaimNumber} submitted successfully", SanitizeForLog(claim.ClaimNumber));
 
         return CreatedAtAction(nameof(GetClaimById), new { id = created.Id }, created);
     }
@@ -63,7 +63,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimById(string id)
     {
-        _logger.LogInformation("Fetching claim by ID: {Id}", id);
+        _logger.LogInformation("Fetching claim by ID: {Id}", SanitizeForLog(id));
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -82,7 +82,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimByNumber(string claimNumber)
     {
-        _logger.LogInformation("Fetching claim by number: {ClaimNumber}", claimNumber);
+        _logger.LogInformation("Fetching claim by number: {ClaimNumber}", SanitizeForLog(claimNumber));
 
         var claim = await _claimRepository.GetByClaimNumberAsync(claimNumber);
         if (claim == null)
@@ -110,7 +110,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Searching claims: member={Member}, provider={Provider}, dateFrom={From}, dateTo={To}, status={Status}, lob={LOB}",
-            memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness);
+            SanitizeForLog(memberId), SanitizeForLog(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
 
         var claims = await _claimRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
@@ -130,7 +130,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Updating claim {Id} status to {Status}",
-            id, statusUpdate.Status);
+            SanitizeForLog(id), statusUpdate.Status);
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -180,7 +180,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Updating claim {Id} with adjudication: allowed={Allowed}, payer={Payer}, patient={Patient}",
-            id, adjudication.AllowedAmount, adjudication.PayerPayment, adjudication.PatientResponsibility);
+            SanitizeForLog(id), adjudication.AllowedAmount, adjudication.PayerPayment, adjudication.PatientResponsibility);
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -218,7 +218,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Processing remittance for claim {Id}, check number {CheckNumber}",
-            id, remittance.CheckNumber);
+            SanitizeForLog(id), SanitizeForLog(remittance.CheckNumber));
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -274,7 +274,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VoidClaim(string id)
     {
-        _logger.LogInformation("Voiding claim: {Id}", id);
+        _logger.LogInformation("Voiding claim: {Id}", SanitizeForLog(id));
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -288,5 +288,12 @@ public class ClaimsController : ControllerBase
         await _claimRepository.UpdateAsync(claim);
 
         return NoContent();
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
