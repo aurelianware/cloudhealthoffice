@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - 'infra/**'
+      - '!infra/helm/**'
       - 'site/**'
       - 'logicapps/**'
       - '.github/workflows/deploy.yml'
@@ -85,7 +86,7 @@ jobs:
           if ! az account show &>/dev/null; then
             echo "⚠️  Not logged in to Azure - skipping app registration setup"
             echo "Manual setup required: ./scripts/ensure-app-registration.sh"
-            echo "app-id=${{ env.CLIENT_ID }}" >> "$GITHUB_OUTPUT"
+            echo "app-id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -97,7 +98,13 @@ jobs:
           TENANT_ID="${{ env.TENANT_ID }}"
           GITHUB_REPO="${{ github.repository }}"
 
-          # Run app registration script
+          # Run app registration script if it exists
+          if [ ! -f "scripts/ensure-app-registration.sh" ]; then
+            echo "⚠️  scripts/ensure-app-registration.sh not found - skipping"
+            echo "app-id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           APP_ID=$(bash scripts/ensure-app-registration.sh "$APP_NAME" "$TENANT_ID" "$GITHUB_REPO" | tail -1)
 
           echo "app-id=$APP_ID" >> "$GITHUB_OUTPUT"
