@@ -34,7 +34,7 @@ public class BenefitPlansController : ControllerBase
         [FromQuery] bool? activeOnly = true)
     {
         _logger.LogInformation("Getting benefit plans for tenant {TenantId}: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}", 
-            TenantId, payer, planType, activeOnly);
+            SanitizeForLog(TenantId), SanitizeForLog(payer), SanitizeForLog(planType), activeOnly);
         
         var plans = await _service.GetPlansAsync(TenantId, payer, planType, activeOnly ?? true);
         return Ok(plans);
@@ -143,5 +143,12 @@ public class BenefitPlansController : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetPlanBenefits), new { id }, added);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

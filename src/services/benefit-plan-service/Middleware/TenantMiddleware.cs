@@ -36,7 +36,7 @@ public class TenantMiddleware
 
         // Set tenant context for downstream use
         context.Items["TenantId"] = tenantId;
-        _logger.LogInformation("Request from tenant: {TenantId}", tenantId);
+        _logger.LogInformation("Request from tenant: {TenantId}", SanitizeForLog(tenantId));
 
         await _next(context);
     }
@@ -71,6 +71,13 @@ public class TenantMiddleware
         }
 
         return null;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

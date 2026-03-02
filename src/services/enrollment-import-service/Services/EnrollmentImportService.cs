@@ -35,7 +35,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}", 
-                    memberEnrollment.SubscriberId);
+                    SanitizeForLog(memberEnrollment.SubscriberId));
                 result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ex.Message}");
                 result.FailedCount++;
             }
@@ -72,7 +72,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (member != null)
                 {
                     _logger.LogWarning("Member {SubscriberId} already exists, skipping addition", 
-                        enrollment.SubscriberId);
+                        SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
                     return;
                 }
@@ -85,7 +85,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (member == null)
                 {
                     _logger.LogWarning("Member {SubscriberId} not found for change, creating new", 
-                        enrollment.SubscriberId);
+                        SanitizeForLog(enrollment.SubscriberId));
                     member = await CreateMemberFromEnrollmentAsync(enrollment, tenantId, sponsor?.SponsorId);
                     result.MembersCreated++;
                 }
@@ -101,7 +101,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (member == null)
                 {
                     _logger.LogWarning("Member {SubscriberId} not found for termination, skipping", 
-                        enrollment.SubscriberId);
+                        SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
                     return;
                 }
@@ -113,7 +113,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 break;
                 
             default:
-                _logger.LogWarning("Unknown maintenance type {MaintenanceType}", enrollment.MaintenanceType);
+                _logger.LogWarning("Unknown maintenance type {MaintenanceType}", SanitizeForLog(enrollment.MaintenanceType));
                 result.SkippedCount++;
                 return;
         }
@@ -335,6 +335,13 @@ public class EnrollmentImportService : IEnrollmentImportService
             return date;
         
         return null;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

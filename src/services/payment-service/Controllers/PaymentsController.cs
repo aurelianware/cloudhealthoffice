@@ -28,7 +28,7 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Payment>> ProcessPayment([FromBody] Payment payment)
     {
-        _logger.LogInformation("Processing 835 ERA payment for check {CheckNumber}", payment.CheckNumber);
+        _logger.LogInformation("Processing 835 ERA payment for check {CheckNumber}", SanitizeForLog(payment.CheckNumber));
 
         // Validation
         if (string.IsNullOrEmpty(payment.CheckNumber))
@@ -112,7 +112,7 @@ public class PaymentsController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         _logger.LogInformation("Searching payments: date range {From} to {To}, payer {Payer}, status {Status}",
-            paymentDateFrom, paymentDateTo, payerId, status);
+            paymentDateFrom, paymentDateTo, SanitizeForLog(payerId), status);
 
         var payments = await _paymentRepository.SearchAsync(
             paymentDateFrom, paymentDateTo, payerId, status, page, pageSize);
@@ -142,7 +142,7 @@ public class PaymentsController : ControllerBase
 
         var updated = await _paymentRepository.UpdateAsync(payment);
 
-        _logger.LogInformation("Payment {PaymentId} posted by {User}", id, request.PostedBy);
+        _logger.LogInformation("Payment {PaymentId} posted by {User}", SanitizeForLog(id), SanitizeForLog(request.PostedBy));
 
         return Ok(updated);
     }
@@ -170,7 +170,7 @@ public class PaymentsController : ControllerBase
 
         var updated = await _paymentRepository.UpdateAsync(payment);
 
-        _logger.LogInformation("Payment {PaymentId} reconciled", id);
+        _logger.LogInformation("Payment {PaymentId} reconciled", SanitizeForLog(id));
 
         return Ok(updated);
     }
@@ -190,6 +190,13 @@ public class PaymentsController : ControllerBase
         var summary = await _paymentRepository.GetPaymentsSummaryAsync(fromDate, toDate);
 
         return Ok(summary);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
