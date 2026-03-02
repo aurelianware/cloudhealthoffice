@@ -30,9 +30,24 @@
         <a class="dismiss">🗙</a>
     </div>
 
-    <script src="_framework/blazor.server.js"></script>
+    <script src="_framework/blazor.server.js" autostart="false"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="https://js.stripe.com/v3/"></script>
     <script src="/js/stripe-handler.js"></script>
+    <script>
+        Blazor.start({
+            reconnectionOptions: {
+                maxRetries: 8,
+                retryIntervalMilliseconds: function (previousAttempts) {
+                    return previousAttempts >= 4 ? 10000 : 3000;
+                }
+            },
+            configureSignalR: function (builder) {
+                builder
+                    .withServerTimeout(60000)
+                    .withKeepAliveInterval(15000);
+            }
+        });
+    </script>
 </body>
 </html>

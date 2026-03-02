@@ -14,29 +14,57 @@ namespace CloudHealthOffice.Portal.Infrastructure;
 public class MongoDbXmlRepository : IXmlRepository
 {
     private readonly IMongoCollection<DataProtectionKeyDocument> _collection;
+    private readonly ILogger<MongoDbXmlRepository>? _logger;
 
-    public MongoDbXmlRepository(IMongoClient mongoClient)
+    public MongoDbXmlRepository(IMongoClient mongoClient, ILogger<MongoDbXmlRepository>? logger = null)
     {
         var db = mongoClient.GetDatabase("cloudhealthoffice");
         _collection = db.GetCollection<DataProtectionKeyDocument>("dataprotection_keys");
+        _logger = logger;
     }
 
     public IReadOnlyCollection<XElement> GetAllElements()
     {
-        var docs = _collection.Find(_ => true).ToList();
-        return docs
-            .Select(d => XElement.Parse(d.Xml))
-            .ToList()
-            .AsReadOnly();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var docs = _collection.Find(_ => true).ToList(cts.Token);
+            return docs
+                .Select(d =>
+                {
+                    try { return XElement.Parse(d.Xml); }
+                    catch { return null; }
+                })
+                .Where(x => x is not null)
+                .Select(x => x!)
+                .ToList()
+                .AsReadOnly();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex,
+                "DataProtection: failed to load keys from MongoDB. Keys will be regenerated — existing sessions may be invalidated.");
+            return Array.Empty<XElement>();
+        }
     }
 
     public void StoreElement(XElement element, string friendlyName)
     {
-        _collection.InsertOne(new DataProtectionKeyDocument
+        try
         {
-            FriendlyName = friendlyName,
-            Xml = element.ToString(SaveOptions.DisableFormatting)
-        });
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            _collection.InsertOne(new DataProtectionKeyDocument
+            {
+                FriendlyName = friendlyName,
+                Xml = element.ToString(SaveOptions.DisableFormatting)
+            }, cancellationToken: cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "DataProtection: failed to persist key '{FriendlyName}' to MongoDB.", friendlyName);
+            throw; // re-throw so DataProtection knows storage failed
+        }
     }
 }
 

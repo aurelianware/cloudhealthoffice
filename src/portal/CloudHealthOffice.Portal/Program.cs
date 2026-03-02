@@ -118,7 +118,14 @@ builder.Services.AddAuthorization(options =>
 // Add services to the container
 builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
-builder.Services.AddServerSideBlazor()
+builder.Services.AddServerSideBlazor(options =>
+{
+    options.DetailedErrors = builder.Environment.IsDevelopment();
+    options.DisconnectedCircuitMaxRetained = 100;
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
+    options.JSInteropDefaultCallTimeout = TimeSpan.FromSeconds(60);
+    options.MaxBufferedUnacknowledgedRenderBatches = 10;
+})
     .AddMicrosoftIdentityConsentHandler();
 
 // Add authentication state provider for Blazor
@@ -164,9 +171,11 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 builder.Services.AddDataProtection()
     .SetApplicationName("CloudHealthOffice.Portal");
 builder.Services.AddOptions<KeyManagementOptions>()
-    .Configure<IMongoClient>((options, mongoClient) =>
+    .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
     {
-        options.XmlRepository = new MongoDbXmlRepository(mongoClient);
+        options.XmlRepository = new MongoDbXmlRepository(
+            mongoClient,
+            loggerFactory.CreateLogger<MongoDbXmlRepository>());
     });
 
 // Register tenant context service (must be before other services that depend on it)
@@ -188,8 +197,15 @@ builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 
-// Add SignalR
-builder.Services.AddSignalR();
+// Add SignalR with tuned timeouts to reduce spurious circuit disconnects
+builder.Services.AddSignalR(options =>
+{
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+    options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
+    options.EnableDetailedErrors = false;
+});
 
 // Add session state
 builder.Services.AddDistributedMemoryCache();

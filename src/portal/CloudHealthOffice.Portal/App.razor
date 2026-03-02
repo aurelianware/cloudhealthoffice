@@ -1,8 +1,18 @@
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
-            <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
-            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+            <ErrorBoundary>
+                <ChildContent>
+                    <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                    <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+                </ChildContent>
+                <ErrorContent Context="ex">
+                    <div style="padding: 2rem; background: #0f0f0f; color: #ff0055; font-family: 'Segoe UI', sans-serif; min-height: 100vh;">
+                        <h2 style="color: #ff0055;">An error occurred</h2>
+                        <p style="color: rgba(255,255,255,0.7);">Something went wrong loading this page. Please <a href="/" style="color: #00ffff;">return to the dashboard</a> or reload.</p>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
         </Found>
         <NotFound>
             <PageTitle>Not found</PageTitle>
