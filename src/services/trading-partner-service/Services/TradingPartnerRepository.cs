@@ -42,7 +42,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
         {
             _logger.LogWarning(
                 "Trading partner not found: {TenantId}/{TradingPartnerId}/{Environment}",
-                tenantId, tradingPartnerId, environment);
+                SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
             return null;
         }
     }
@@ -105,10 +105,12 @@ public class TradingPartnerRepository : ITradingPartnerRepository
             SanitizeForLog(id), SanitizeForLog(partitionKey));
     }
 
-    private static string SanitizeForLog(string value)
+    private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
-            return value;
+        {
+            return string.Empty;
+        }
 
         // Remove newline characters to prevent log forging via line injection.
         return value
