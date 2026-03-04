@@ -22,7 +22,7 @@ spec:
       - name: site
         image: REGISTRY_PLACEHOLDER/cloudhealthoffice-site:latest
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         resources:
           requests:
             cpu: "50m"
@@ -33,13 +33,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 80
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 30
         readinessProbe:
           httpGet:
             path: /
-            port: 80
+            port: 8080
           initialDelaySeconds: 3
           periodSeconds: 10
 ---
@@ -56,5 +56,5 @@ spec:
     app: site
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 8080
     protocol: TCP
