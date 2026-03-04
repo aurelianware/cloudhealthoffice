@@ -317,19 +317,6 @@ jobs:
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
         run: kubectl apply -f infra/k8s/portal-ingress.yaml
 
-      - name: Substitute ACR image in site deployment
-        run: |
-          ACR="${{ env.REGISTRY }}"
-          SHA="sha-${{ github.sha }}"
-          sed \
-            -e "s|REGISTRY_PLACEHOLDER|${ACR}|g" \
-            -e "s|cloudhealthoffice-site:latest|cloudhealthoffice-site:${SHA}|g" \
-            infra/k8s/site-deployment.yaml \
-            | kubectl apply -f -
-
-      - name: Apply site ingress (cloudhealthoffice.com + www)
-        run: kubectl apply -f infra/k8s/site-ingress.yaml
-
       - name: Rollout restart portal
         run: |
           kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
