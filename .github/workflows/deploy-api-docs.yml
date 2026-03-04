@@ -79,4 +79,3 @@ jobs:
           curl -sf "https://${FQDN}/" -o /dev/null && \
             echo "✅ API Docs is healthy" || \
             echo "⚠️  Health check failed — container may still be warming up"
-
