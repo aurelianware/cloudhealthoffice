@@ -77,6 +77,8 @@
     ".svg": "image/svg+xml",
     ".css": "text/css",
     ".js": "text/javascript",
-    ".html": "text/html"
+    ".html": "text/html",
+    ".txt": "text/plain",
+    ".xml": "application/xml"
   }
 }
