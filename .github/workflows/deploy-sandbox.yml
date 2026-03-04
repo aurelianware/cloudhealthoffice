@@ -1,0 +1,83 @@
+name: Deploy HAPI FHIR Sandbox
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'containers/hapi-fhir-sandbox/**'
+      - '.github/workflows/deploy-sandbox.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_REGISTRY: choacrhy6h2vdulfru6.azurecr.io
+  IMAGE_NAME: hapi-fhir-sandbox
+  ACA_NAME: hapi-fhir-sandbox
+  ACA_ENV: cho-aca-env
+  RESOURCE_GROUP: rg-cloudhealthoffice-prod
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy HAPI FHIR Sandbox
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name ${{ env.ACR_REGISTRY }}
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG="${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          docker build containers/hapi-fhir-sandbox -t "${IMAGE_TAG}" -t "${IMAGE_LATEST}"
+          docker push "${IMAGE_TAG}"
+          docker push "${IMAGE_LATEST}"
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          IMAGE_TAG="${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          # Scale-to-zero (min-replicas 0) for cost control.
+          # Note: HAPI FHIR cold-start takes ~60-90s on first request after idle scale-down.
+          az containerapp create \
+            --name "${{ env.ACA_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --environment "${{ env.ACA_ENV }}" \
+            --image "${IMAGE_TAG}" \
+            --ingress external \
+            --target-port 8080 \
+            --min-replicas 0 \
+            --max-replicas 2 \
+            --cpu 0.5 \
+            --memory 1Gi \
+            --registry-server "${{ env.ACR_REGISTRY }}" 2>/dev/null || \
+          az containerapp update \
+            --name "${{ env.ACA_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --image "${IMAGE_TAG}"
+
+      - name: Verify health endpoint
+        run: |
+          echo "Waiting for container app to start..."
+          sleep 30
+          FQDN=$(az containerapp show \
+            --name "${{ env.ACA_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "Container App FQDN: ${FQDN}"
+          curl -sf "https://${FQDN}/fhir/metadata" -o /dev/null && \
+            echo "✅ HAPI FHIR sandbox is healthy" || \
+            echo "⚠️  Health check failed — container may still be warming up"
