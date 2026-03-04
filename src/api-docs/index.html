@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloud Health Office — FHIR API Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" />
+  <style>
+    :root {
+      --cho-bg: #000000;
+      --cho-surface: #0a0a0a;
+      --cho-border: rgba(0, 255, 255, 0.2);
+      --cho-cyan: #00ffff;
+      --cho-green: #00ff88;
+      --cho-text: rgba(255, 255, 255, 0.9);
+      --cho-muted: rgba(255, 255, 255, 0.55);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--cho-bg);
+      color: var(--cho-text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: rgba(0, 0, 0, 0.95);
+      border-bottom: 1px solid var(--cho-border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .header-brand .shield {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #00ffff 0%, #00ff88 100%);
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .header-brand .shield::after {
+      content: '◉';
+      color: #000;
+      font-size: 14px;
+      font-weight: 900;
+      position: absolute;
+    }
+
+    .header-brand span {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .header-brand span em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--cho-cyan), var(--cho-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-links {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .header-links a {
+      color: var(--cho-muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.2s;
+    }
+
+    .header-links a:hover { color: var(--cho-cyan); }
+
+    /* ── Spec selector toolbar ── */
+    .spec-toolbar {
+      background: rgba(0, 10, 10, 0.8);
+      border-bottom: 1px solid var(--cho-border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .spec-toolbar label {
+      font-size: 13px;
+      color: var(--cho-muted);
+      white-space: nowrap;
+    }
+
+    .spec-select {
+      background: rgba(0, 255, 255, 0.05);
+      border: 1px solid var(--cho-border);
+      color: var(--cho-text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      min-width: 280px;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300ffff' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    .spec-select:focus {
+      outline: none;
+      border-color: var(--cho-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.15);
+    }
+
+    .spec-meta {
+      display: flex;
+      gap: 12px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .badge-version {
+      background: rgba(0, 255, 255, 0.1);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      color: var(--cho-cyan);
+    }
+
+    .badge-auth {
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      color: var(--cho-green);
+    }
+
+    .badge-hipaa {
+      background: rgba(255, 165, 0, 0.1);
+      border: 1px solid rgba(255, 165, 0, 0.3);
+      color: #ffa500;
+    }
+
+    /* ── Swagger UI overrides ── */
+    #swagger-ui {
+      background: var(--cho-bg);
+    }
+
+    .swagger-ui {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .swagger-ui .topbar { display: none; }
+
+    .swagger-ui .info {
+      background: rgba(0, 10, 10, 0.6);
+      border: 1px solid var(--cho-border);
+      border-radius: 8px;
+      margin: 24px;
+      padding: 24px;
+    }
+
+    .swagger-ui .info hgroup.main h2.title {
+      color: var(--cho-cyan) !important;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .swagger-ui .info .description {
+      color: var(--cho-muted) !important;
+    }
+
+    .swagger-ui .scheme-container {
+      background: rgba(0, 10, 10, 0.8) !important;
+      border-bottom: 1px solid var(--cho-border);
+      padding: 12px 24px;
+    }
+
+    .swagger-ui .opblock-tag {
+      color: var(--cho-text) !important;
+      border-bottom: 1px solid var(--cho-border) !important;
+    }
+
+    .swagger-ui .opblock-tag:hover {
+      background: rgba(0, 255, 255, 0.05) !important;
+    }
+
+    .swagger-ui .opblock.opblock-get .opblock-summary-method {
+      background: #1a6aff;
+    }
+
+    .swagger-ui .opblock.opblock-post .opblock-summary-method {
+      background: #29a05a;
+    }
+
+    .swagger-ui .opblock.opblock-put .opblock-summary-method {
+      background: #d4820a;
+    }
+
+    .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+      background: #c12b2b;
+    }
+
+    .swagger-ui .btn.execute {
+      background: var(--cho-cyan);
+      color: #000;
+      font-weight: 700;
+    }
+
+    .swagger-ui .btn.execute:hover {
+      background: var(--cho-green);
+    }
+
+    .swagger-ui section.models {
+      border: 1px solid var(--cho-border) !important;
+    }
+
+    /* ── Swagger UI dark theme overrides (applied statically) ── */
+    .swagger-ui { background: #000 !important; color: rgba(255,255,255,0.9) !important; }
+    .swagger-ui .wrapper { background: #000 !important; }
+    .swagger-ui .opblock { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; margin-bottom: 8px !important; }
+    .swagger-ui .opblock-summary { background: transparent !important; }
+    .swagger-ui .opblock-summary-description { color: rgba(255,255,255,0.7) !important; }
+    .swagger-ui .opblock-body pre { background: #0a0a0a !important; color: #00ff88 !important; }
+    .swagger-ui table thead tr td, .swagger-ui table thead tr th { border-bottom: 1px solid rgba(0,255,255,0.2) !important; color: rgba(255,255,255,0.6) !important; }
+    .swagger-ui .parameter__name { color: #00ffff !important; }
+    .swagger-ui .parameter__type { color: rgba(255,255,255,0.5) !important; }
+    .swagger-ui .model-title { color: #00ffff !important; }
+    .swagger-ui .model { color: rgba(255,255,255,0.8) !important; }
+    .swagger-ui .response-col_status { color: #00ff88 !important; }
+    .swagger-ui section.models .model-container { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; }
+    .swagger-ui .info a { color: #00ffff !important; }
+    .swagger-ui select { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }
+    .swagger-ui input[type=text], .swagger-ui textarea { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }
+    .swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 { color: rgba(255,255,255,0.8) !important; }
+    .swagger-ui .markdown p, .swagger-ui .markdown li { color: rgba(255,255,255,0.7) !important; }
+    .swagger-ui .markdown code { background: rgba(0,255,255,0.08) !important; color: #00ffff !important; }
+    .swagger-ui .tab li { color: rgba(255,255,255,0.6) !important; }
+    .swagger-ui .tab li.active { color: #00ffff !important; border-bottom: 2px solid #00ffff !important; }
+
+    /* ── Loading state ── */
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 24px;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0, 255, 255, 0.15);
+      border-top-color: var(--cho-cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--cho-border);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--cho-muted);
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 40px;
+    }
+
+    footer a { color: var(--cho-cyan); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header>
+    <a class="header-brand" href="https://cloudhealthoffice.com">
+      <div class="shield"></div>
+      <span>Cloud Health Office <em>API</em></span>
+    </a>
+    <nav class="header-links">
+      <a href="https://portal.cloudhealthoffice.com/apis">Portal API Page</a>
+      <a href="https://cloudhealthoffice.com">Marketing Site</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/openapi" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <!-- ── Spec selector ── -->
+  <div class="spec-toolbar">
+    <label for="spec-select">API Specification:</label>
+    <select id="spec-select" class="spec-select" onchange="loadSpec(this.value)">
+      <option value="patient-access-api.yaml">Patient Access API — CMS-9115-F Compliant</option>
+      <option value="provider-access-api.yaml">Provider Access API — CMS-0057-F Compliant</option>
+      <option value="payer-to-payer-api.yaml">Payer-to-Payer API — CMS-0057-F Compliant</option>
+      <option value="prior-auth-api.yaml">Prior Authorization API — CMS-0057-F Compliant</option>
+      <option value="claims-scrubbing-api.yaml">Claims Scrubbing API — X12 EDI Validation</option>
+    </select>
+    <div class="spec-meta">
+      <span class="badge badge-version">v4.0.0</span>
+      <span class="badge badge-auth">OAuth 2.0</span>
+      <span class="badge badge-hipaa">HIPAA Compliant</span>
+    </div>
+  </div>
+
+  <!-- ── Swagger UI mount point ── -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <span style="color: rgba(255,255,255,0.5); font-size:14px;">Loading API documentation…</span>
+  </div>
+  <div id="swagger-ui"></div>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <span>© 2025 Aurelianware, Inc. — Cloud Health Office</span>
+    <span>
+      <a href="https://portal.cloudhealthoffice.com/legal">Terms of Service</a> ·
+      <a href="https://portal.cloudhealthoffice.com/legal">Privacy Policy</a> ·
+      <a href="https://cloudhealthoffice.com/security">Security</a>
+    </span>
+  </footer>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"></script>
+  <script>
+    var ui;
+
+    function getQueryParam(name) {
+      var params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
+    function specNameFromQueryParam(val) {
+      var map = {
+        'patient-access': 'patient-access-api.yaml',
+        'provider-access': 'provider-access-api.yaml',
+        'payer-to-payer': 'payer-to-payer-api.yaml',
+        'prior-auth': 'prior-auth-api.yaml',
+        'claims-scrubbing': 'claims-scrubbing-api.yaml'
+      };
+      return map[val] || null;
+    }
+
+    function loadSpec(specFile) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('swagger-ui').innerHTML = '';
+      document.getElementById('spec-select').value = specFile;
+
+      ui = SwaggerUIBundle({
+        url: 'specs/' + specFile,
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: 'StandaloneLayout',
+        deepLinking: true,
+        displayRequestDuration: true,
+        filter: true,
+        supportedSubmitMethods: [],   // "Try it out" disabled — use sandbox.cloudhealthoffice.com for live testing
+        validatorUrl: null,
+        syntaxHighlight: {
+          activate: true,
+          theme: 'monokai'
+        }
+      });
+    }
+
+    // On page load: pick spec from query param or default to patient access
+    (function init() {
+      var specParam = getQueryParam('spec');
+      var specFile = specNameFromQueryParam(specParam) || 'patient-access-api.yaml';
+      loadSpec(specFile);
+    })();
+  </script>
+
+</body>
+</html>
