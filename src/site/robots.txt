@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+Disallow: /drafts/
+Disallow: /staging/
+Disallow: /_test/
+
+Sitemap: https://cloudhealthoffice.com/sitemap.xml
