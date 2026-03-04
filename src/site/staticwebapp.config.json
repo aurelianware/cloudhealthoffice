@@ -28,6 +28,20 @@
       "allowedRoles": ["authenticated"]
     },
     {
+      "route": "/sitemap.xml",
+      "headers": {
+        "Cache-Control": "public, max-age=3600",
+        "Content-Type": "application/xml; charset=utf-8"
+      }
+    },
+    {
+      "route": "/robots.txt",
+      "headers": {
+        "Cache-Control": "public, max-age=3600",
+        "Content-Type": "text/plain; charset=utf-8"
+      }
+    },
+    {
       "route": "/*.html",
       "headers": {
         "Cache-Control": "public, max-age=3600"
@@ -54,7 +68,7 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/portal/*", "/api/*", "/.auth/*", "/assets/*", "/css/*", "/js/*", "/graphics/*"]
+    "exclude": ["/portal/*", "/api/*", "/.auth/*", "/assets/*", "/css/*", "/js/*", "/graphics/*", "/sitemap.xml", "/robots.txt"]
   },
   "responseOverrides": {
     "401": {

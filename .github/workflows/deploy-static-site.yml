@@ -23,7 +23,7 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'site/**'
+      - 'src/site/**'
       - '.github/workflows/deploy-static-site.yml'
       - 'infra/main.bicep'
 
@@ -269,7 +269,7 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.get-token.outputs.deployment_token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "/site"
+          app_location: "/src/site"
           skip_app_build: true
           skip_api_build: true
           production_branch: "main"
