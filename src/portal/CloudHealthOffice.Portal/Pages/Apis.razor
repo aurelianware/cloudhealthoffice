@@ -16,15 +16,21 @@
         <MudGrid>
             <MudItem xs="12" md="4">
                 <MudChip Color="Color.Success" Variant="Variant.Outlined">Production</MudChip>
-                <MudText Typo="Typo.body2" Class="mt-2" Style="font-family: 'Courier New', monospace;">
+                <MudLink Typo="Typo.body2" Class="mt-2 d-block"
+                         Style="font-family: 'Courier New', monospace;"
+                         Href="https://api.cloudhealthoffice.com"
+                         Target="_blank">
                     https://api.cloudhealthoffice.com/fhir/r4
-                </MudText>
+                </MudLink>
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudChip Color="Color.Warning" Variant="Variant.Outlined">Sandbox</MudChip>
-                <MudText Typo="Typo.body2" Class="mt-2" Style="font-family: 'Courier New', monospace;">
+                <MudLink Typo="Typo.body2" Class="mt-2 d-block"
+                         Style="font-family: 'Courier New', monospace;"
+                         Href="https://sandbox.cloudhealthoffice.com/fhir/r4/metadata"
+                         Target="_blank">
                     https://sandbox.cloudhealthoffice.com/fhir/r4
-                </MudText>
+                </MudLink>
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudChip Color="Color.Info" Variant="Variant.Outlined">Local Dev</MudChip>
@@ -309,18 +315,17 @@
 
     <!-- Authentication Example -->
     <MudPaper Class="mt-8 pa-4" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 15, 15, 0.5);">
-        <MudText Typo="Typo.h6" Class="mb-3">🔐 Quick Example: OAuth 2.0 Authentication</MudText>
+        <MudText Typo="Typo.h6" Class="mb-3">🔐 Quick Example: FHIR Sandbox API</MudText>
         <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255, 255, 255, 0.7);">
-            Get an access token and query patient claims:
+            Try the sandbox — no auth required, 100% synthetic data:
         </MudText>
-        <pre style="background: #000; padding: 16px; border-radius: 4px; overflow-x: auto; border: 1px solid rgba(0, 255, 255, 0.3);"><code style="color: #00ffff; font-family: 'Courier New', monospace; font-size: 13px;"># Get access token
-curl -X POST https://api.cloudhealthoffice.com/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"tenantId": "demo", "clientId": "your-client-id", "clientSecret": "your-secret"}'
+        <pre style="background: #000; padding: 16px; border-radius: 4px; overflow-x: auto; border: 1px solid rgba(0, 255, 255, 0.3);"><code style="color: #00ffff; font-family: 'Courier New', monospace; font-size: 13px;"># Get FHIR CapabilityStatement (sandbox — no auth required)
+curl https://sandbox.cloudhealthoffice.com/fhir/r4/metadata \
+  -H "Accept: application/fhir+json"
 
-# Search for patient claims
-curl https://api.cloudhealthoffice.com/fhir/r4/Claim?patient=12345 \
-  -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
+# Search for synthetic patients
+curl https://sandbox.cloudhealthoffice.com/fhir/r4/Patient?_count=5 \
+  -H "Accept: application/fhir+json"</code></pre>
     </MudPaper>
 
     <!-- Call to Action -->

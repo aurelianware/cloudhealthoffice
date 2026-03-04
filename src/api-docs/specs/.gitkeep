@@ -1,0 +1,3 @@
+# OpenAPI spec files are copied here by the deploy-api-docs.yml workflow
+# from api/openapi/*.yaml at deploy time.
+# Do not commit spec files directly — they are sourced from api/openapi/.
