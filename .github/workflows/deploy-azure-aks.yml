@@ -212,6 +212,11 @@ jobs:
             --name "${{ env.ACA_SITE_NAME }}" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}"
+          az containerapp ingress update \
+            --name "${{ env.ACA_SITE_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --target-port 8080 || \
+            echo "::warning::Could not update Container App ingress target port – ensure it is set to 8080 (nginx-unprivileged listens on 8080)"
 
       - name: Get site URL
         run: |
