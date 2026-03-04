@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloud Health Office — FHIR API Documentation</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" />
   <style>
     :root {
       --cho-bg: #000000;
@@ -245,6 +245,29 @@
       border: 1px solid var(--cho-border) !important;
     }
 
+    /* ── Swagger UI dark theme overrides (applied statically) ── */
+    .swagger-ui { background: #000 !important; color: rgba(255,255,255,0.9) !important; }
+    .swagger-ui .wrapper { background: #000 !important; }
+    .swagger-ui .opblock { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; margin-bottom: 8px !important; }
+    .swagger-ui .opblock-summary { background: transparent !important; }
+    .swagger-ui .opblock-summary-description { color: rgba(255,255,255,0.7) !important; }
+    .swagger-ui .opblock-body pre { background: #0a0a0a !important; color: #00ff88 !important; }
+    .swagger-ui table thead tr td, .swagger-ui table thead tr th { border-bottom: 1px solid rgba(0,255,255,0.2) !important; color: rgba(255,255,255,0.6) !important; }
+    .swagger-ui .parameter__name { color: #00ffff !important; }
+    .swagger-ui .parameter__type { color: rgba(255,255,255,0.5) !important; }
+    .swagger-ui .model-title { color: #00ffff !important; }
+    .swagger-ui .model { color: rgba(255,255,255,0.8) !important; }
+    .swagger-ui .response-col_status { color: #00ff88 !important; }
+    .swagger-ui section.models .model-container { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; }
+    .swagger-ui .info a { color: #00ffff !important; }
+    .swagger-ui select { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }
+    .swagger-ui input[type=text], .swagger-ui textarea { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }
+    .swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 { color: rgba(255,255,255,0.8) !important; }
+    .swagger-ui .markdown p, .swagger-ui .markdown li { color: rgba(255,255,255,0.7) !important; }
+    .swagger-ui .markdown code { background: rgba(0,255,255,0.08) !important; color: #00ffff !important; }
+    .swagger-ui .tab li { color: rgba(255,255,255,0.6) !important; }
+    .swagger-ui .tab li.active { color: #00ffff !important; border-bottom: 2px solid #00ffff !important; }
+
     /* ── Loading state ── */
     #loading {
       display: flex;
@@ -333,8 +356,8 @@
     </span>
   </footer>
 
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"></script>
   <script>
     var ui;
 
@@ -375,39 +398,8 @@
         syntaxHighlight: {
           activate: true,
           theme: 'monokai'
-        },
-        onComplete: function() {
-          applyDarkTheme();
         }
       });
-    }
-
-    function applyDarkTheme() {
-      var style = document.createElement('style');
-      style.textContent = [
-        '.swagger-ui { background: #000 !important; color: rgba(255,255,255,0.9) !important; }',
-        '.swagger-ui .wrapper { background: #000 !important; }',
-        '.swagger-ui .opblock { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; margin-bottom: 8px !important; }',
-        '.swagger-ui .opblock-summary { background: transparent !important; }',
-        '.swagger-ui .opblock-summary-description { color: rgba(255,255,255,0.7) !important; }',
-        '.swagger-ui .opblock-body pre { background: #0a0a0a !important; color: #00ff88 !important; }',
-        '.swagger-ui table thead tr td, .swagger-ui table thead tr th { border-bottom: 1px solid rgba(0,255,255,0.2) !important; color: rgba(255,255,255,0.6) !important; }',
-        '.swagger-ui .parameter__name { color: #00ffff !important; }',
-        '.swagger-ui .parameter__type { color: rgba(255,255,255,0.5) !important; }',
-        '.swagger-ui .model-title { color: #00ffff !important; }',
-        '.swagger-ui .model { color: rgba(255,255,255,0.8) !important; }',
-        '.swagger-ui .response-col_status { color: #00ff88 !important; }',
-        '.swagger-ui section.models .model-container { background: rgba(0,10,10,0.6) !important; border: 1px solid rgba(0,255,255,0.15) !important; }',
-        '.swagger-ui .info a { color: #00ffff !important; }',
-        '.swagger-ui select { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }',
-        '.swagger-ui input[type=text], .swagger-ui textarea { background: rgba(0,10,10,0.8) !important; color: #fff !important; border: 1px solid rgba(0,255,255,0.3) !important; }',
-        '.swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 { color: rgba(255,255,255,0.8) !important; }',
-        '.swagger-ui .markdown p, .swagger-ui .markdown li { color: rgba(255,255,255,0.7) !important; }',
-        '.swagger-ui .markdown code { background: rgba(0,255,255,0.08) !important; color: #00ffff !important; }',
-        '.swagger-ui .tab li { color: rgba(255,255,255,0.6) !important; }',
-        '.swagger-ui .tab li.active { color: #00ffff !important; border-bottom: 2px solid #00ffff !important; }'
-      ].join('');
-      document.head.appendChild(style);
     }
 
     // On page load: pick spec from query param or default to patient access
