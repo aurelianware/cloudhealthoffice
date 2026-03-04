@@ -34,19 +34,26 @@ if [ -f "${LOADED_FLAG}" ]; then
 else
   if [ -d "${DATA_DIR}" ] && compgen -G "${DATA_DIR}/*.json" > /dev/null 2>&1; then
     echo "[load-synthea] Loading Synthea FHIR bundles from ${DATA_DIR}..."
+    failed_bundles=0
     for bundle in "${DATA_DIR}"/*.json; do
       echo "[load-synthea]   POST ${bundle}"
-      curl -sf \
+      if ! curl -sf \
         -X POST "${HAPI_BASE_URL}" \
         -H "Content-Type: application/fhir+json" \
         --data-binary "@${bundle}" \
-        -o /dev/null
+        -o /dev/null; then
+        echo "[load-synthea]   ERROR: Failed to POST bundle ${bundle}"
+        failed_bundles=$((failed_bundles + 1))
+      fi
     done
-    touch "${LOADED_FLAG}"
-    echo "[load-synthea] Synthetic data loaded successfully."
+    if [ "${failed_bundles}" -gt 0 ]; then
+      echo "[load-synthea] Synthetic data load completed with ${failed_bundles} bundle error(s). Flag not set — will retry on next start."
+    else
+      touch "${LOADED_FLAG}"
+      echo "[load-synthea] Synthetic data loaded successfully."
+    fi
   else
-    echo "[load-synthea] No Synthea bundles found in ${DATA_DIR}. Skipping data load."
-    touch "${LOADED_FLAG}"
+    echo "[load-synthea] No Synthea bundles found in ${DATA_DIR}. Skipping data load (flag not set; will retry on next start)."
   fi
 fi
 

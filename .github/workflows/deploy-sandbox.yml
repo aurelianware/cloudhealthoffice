@@ -36,7 +36,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
-        run: az acr login --name ${{ env.ACR_REGISTRY }}
+        run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Build and push Docker image
         run: |
@@ -78,6 +78,6 @@ jobs:
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --query "properties.configuration.ingress.fqdn" -o tsv)
           echo "Container App FQDN: ${FQDN}"
-          curl -sf "https://${FQDN}/fhir/metadata" -o /dev/null && \
+          curl -sf "https://${FQDN}/fhir/r4/metadata" -o /dev/null && \
             echo "✅ HAPI FHIR sandbox is healthy" || \
             echo "⚠️  Health check failed — container may still be warming up"
