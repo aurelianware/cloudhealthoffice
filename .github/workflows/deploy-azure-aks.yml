@@ -212,11 +212,23 @@ jobs:
             --name "${{ env.ACA_SITE_NAME }}" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --image "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}"
-          az containerapp ingress update \
+
+      - name: Ensure ingress target port is 8080
+        run: |
+          CURRENT_PORT=$(az containerapp show \
             --name "${{ env.ACA_SITE_NAME }}" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --target-port 8080 || \
-            echo "::warning::Could not update Container App ingress target port – ensure it is set to 8080 (nginx-unprivileged listens on 8080)"
+            --query "properties.configuration.ingress.targetPort" -o tsv || echo "")
+
+          if [ "$CURRENT_PORT" = "8080" ]; then
+            echo "Ingress target port is already 8080; no update required."
+          else
+            echo "Ingress target port is '${CURRENT_PORT:-unknown}', updating to 8080..."
+            az containerapp ingress update \
+              --name "${{ env.ACA_SITE_NAME }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --target-port 8080
+          fi
 
       - name: Get site URL
         run: |
