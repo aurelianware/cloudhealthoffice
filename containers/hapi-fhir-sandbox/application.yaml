@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:hapi-fhir;DB_CLOSE_DELAY=-1;MODE=MySQL}
+    username: sa
+    password: ""
+    driverClassName: org.h2.Driver
+  jpa:
+    properties:
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
+    hibernate:
+      ddl-auto: update
+
+hapi:
+  fhir:
+    fhir_version: R4
+    server_address: https://sandbox.cloudhealthoffice.com/fhir/r4
+    default_encoding: JSON
+    default_pretty_print: true
+    allow_multiple_delete: false
+    allow_external_references: true
+    expunge_enabled: false
+    # Sandbox safety: limit destructive operations (no multiple delete, no expunge, no narratives)
+    # Note: standard FHIR write operations (create/update/patch) remain enabled; full read-only must be enforced elsewhere
+    narrative_enabled: false
+    cors:
+      allow_Credentials: false
+      allowed_origin:
+        - "*"
+    validation:
+      requests_enabled: false
+      responses_enabled: false
