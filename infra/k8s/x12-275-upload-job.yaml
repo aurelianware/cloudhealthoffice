@@ -94,7 +94,7 @@ spec:
                 # Use default password if secret doesn't exist
                 if [ -z "${SFTP_PASS}" ]; then
                   echo "⚠️  SFTP_PASS not set, using default (UPDATE IN PRODUCTION!)"
-                  SFTP_PASS="sJ8p8WAsE4Es6PgMbUACErOs"
+                  SFTP_PASS="changeme"
                 fi
                 
                 echo ""
@@ -269,7 +269,7 @@ metadata:
   namespace: cho-workflows
 type: Opaque
 stringData:
-  password: "sJ8p8WAsE4Es6PgMbUACErOs"  # UPDATE THIS IN PRODUCTION!
+  password: "changeme"  # UPDATE THIS IN PRODUCTION!
   username: "logicapp"
 ---
 # Optional: ConfigMap for clearinghouse-specific settings
