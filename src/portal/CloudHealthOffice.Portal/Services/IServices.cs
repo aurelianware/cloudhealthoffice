@@ -101,6 +101,11 @@ public interface ISalesInquiryService
     Task UpdateInquiryStatusAsync(string inquiryId, string status, string? notes = null);
 }
 
+public interface IEmailNotificationService
+{
+    Task SendSalesInquiryNotificationAsync(SalesInquiry inquiry);
+}
+
 // DTOs
 public class ClaimSummary
 {
