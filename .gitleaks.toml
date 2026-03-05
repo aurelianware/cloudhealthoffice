@@ -1,0 +1,110 @@
+# .gitleaks.toml - Gitleaks configuration for Cloud Health Office
+# Suppresses known false positives from documentation examples,
+# Cosmos DB Emulator keys, test fixtures, and placeholder values.
+
+title = "Cloud Health Office Gitleaks Config"
+
+[allowlist]
+
+  # ---------------------------------------------------------------
+  # Documentation & example files containing placeholder credentials
+  # ---------------------------------------------------------------
+  paths = [
+    '''docs/CMS-0057-F-COMPLIANCE\.md''',
+    '''docs/SECRETS-INVENTORY\.md''',
+    '''api/quickstarts/.*\.md''',
+    '''\.github/\.copilot-instructions''',
+  ]
+
+  # Known safe patterns (Cosmos DB Emulator key, placeholder tokens, etc.)
+  regexes = [
+    # Azure Cosmos DB Emulator well-known key
+    '''C2y6yDjf5/R\+ob0N8A7Cgv30VRDJIWEHLM\+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==''',
+    # Common placeholder patterns
+    '''your-client-id''',
+    '''your-secret''',
+    '''your-api-key''',
+    '''changeme''',
+    '''UPDATE THIS IN P(RODUCTION)?''',
+  ]
+
+# ---------------------------------------------------------------
+# Per-rule allowlists for specific false positive patterns
+# ---------------------------------------------------------------
+
+# README.md curl examples with Bearer token placeholders
+[[rules]]
+  id = "curl-auth-header"
+  description = "curl Authorization header"
+  [rules.allowlist]
+    paths = [
+      '''README\.md''',
+      '''src/portal/CloudHealthOffice\.Portal/Pages/Apis\.razor''',
+    ]
+
+# TypeScript test imports misidentified as API keys
+# (e.g., mapX12278ToFhirPriorAuth export names)
+[[rules]]
+  id = "generic-api-key"
+  description = "Generic API Key"
+  [rules.allowlist]
+    paths = [
+      '''src/fhir/mapping/__tests__/.*\.test\.ts''',
+      '''src/fhir/__tests__/.*\.test\.ts''',
+    ]
+    regexes = [
+      # TypeScript named imports/exports flagged as keys
+      '''mapX12\d+To\w+''',
+    ]
+
+# SECURITY.md example JSON showing secret format
+[[rules]]
+  id = "generic-api-key-security-md"
+  description = "SECURITY.md example values"
+  [rules.allowlist]
+    paths = [
+      '''SECURITY\.md''',
+    ]
+    regexes = [
+      '''qnxt_api_key''',
+      '''claims_backend_api_key''',
+    ]
+
+# Cosmos DB Emulator key in dev config and tests
+[[rules]]
+  id = "generic-api-key-cosmos-emulator"
+  description = "Cosmos DB Emulator key in dev settings"
+  [rules.allowlist]
+    paths = [
+      '''services/.*/appsettings\.Development\.json''',
+      '''services/.*/appsettings\.json''',
+      '''services/shared/.*Tests/.*\.cs''',
+      '''services/tenant-service/README\.md''',
+    ]
+
+# Stripe test keys in Argo workflow
+[[rules]]
+  id = "curl-auth-user"
+  description = "curl -u auth (Stripe test keys)"
+  [rules.allowlist]
+    paths = [
+      '''argo-workflows/tenant-onboarding\.yaml''',
+    ]
+
+# Test script OAuth placeholders
+[[rules]]
+  id = "generic-api-key-test-scripts"
+  description = "Test script placeholder credentials"
+  [rules.allowlist]
+    paths = [
+      '''docs/testing/test-attachment-oauth\.sh''',
+    ]
+
+# K8s manifest placeholder passwords
+[[rules]]
+  id = "generic-api-key-k8s"
+  description = "K8s manifest placeholder passwords"
+  [rules.allowlist]
+    paths = [
+      '''k8s/.*\.yaml''',
+    ]
