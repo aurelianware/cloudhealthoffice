@@ -16,7 +16,7 @@
 [![HIPAA](https://img.shields.io/badge/HIPAA-compliant-blue)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-**🚀 42,000+ clones in the past 2 weeks** • **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
+**🚀 100,000+ clones** • **⚡ Production SaaS live** • **🌐 Multi-tenant at scale**
 
 [🚀 Start Free Trial (5 min)](https://portal.cloudhealthoffice.com) • [📖 Quickstart](./QUICKSTART.md) • [🔌 FHIR APIs](#-fhir-apis--integration) • [⚡ Architecture](#-architecture) • [💼 Enterprise](#-enterprise)
 
