@@ -5,7 +5,7 @@ echo "🔐 Testing Attachment Upload with OAuth 2.0 Authentication"
 echo "=========================================================="
 
 # API Configuration
-API_CLIENT_ID="31f76844-b2cb-47b1-aede-f5b2b6dc59c8"
+API_CLIENT_ID="your-client-id"
 API_SCOPE="api://${API_CLIENT_ID}/Attachments.ReadWrite"
 
 # Get access token using Azure CLI
