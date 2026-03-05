@@ -179,6 +179,95 @@ jobs:
           platforms: linux/amd64
 
 
+  deploy-site:
+    name: Deploy Static Site to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: build-site
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Container App
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            RG="${{ vars.AZURE_RG_NAME }}"
+            APP_NAME="${{ vars.SITE_CONTAINER_APP_NAME || 'cho-site' }}"
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${GITHUB_SHA::7}"
+
+            echo "==========================================="
+            echo "Deploying Static Site Container"
+            echo "==========================================="
+            echo "Resource Group: $RG"
+            echo "Container App:  $APP_NAME"
+            echo "Image:          $IMAGE"
+            echo ""
+
+            # Update container app with new image
+            az containerapp update \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --image "$IMAGE"
+
+            echo ""
+            echo "✅ Container App updated successfully"
+
+            # Get the FQDN for verification
+            FQDN=$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --query "properties.configuration.ingress.fqdn" -o tsv)
+
+            echo "🌐 Site URL: https://$FQDN"
+
+      - name: Verify Deployment
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            RG="${{ vars.AZURE_RG_NAME }}"
+            APP_NAME="${{ vars.SITE_CONTAINER_APP_NAME || 'cho-site' }}"
+
+            FQDN=$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --query "properties.configuration.ingress.fqdn" -o tsv)
+
+            echo "Waiting 15 seconds for deployment to propagate..."
+            sleep 15
+
+            for i in $(seq 1 5); do
+              echo "⏳ Health check attempt $i/5..."
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN" || echo "000")
+
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✅ Site is healthy - HTTP $HTTP_STATUS"
+
+                # Verify sitemap and robots.txt
+                SITEMAP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/sitemap.xml" || echo "000")
+                ROBOTS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/robots.txt" || echo "000")
+                echo "📄 sitemap.xml: HTTP $SITEMAP_STATUS"
+                echo "🤖 robots.txt: HTTP $ROBOTS_STATUS"
+                exit 0
+              fi
+
+              echo "   HTTP $HTTP_STATUS - retrying in 10s..."
+              sleep 10
+            done
+
+            echo "⚠️  Site may need more time to stabilize"
+            exit 0
+
   build-containers:
     name: Build Utility Containers
     runs-on: ubuntu-latest
@@ -250,7 +339,7 @@ jobs:
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [build-services, build-portal, build-site, build-containers]
+    needs: [build-services, build-portal, build-site, deploy-site, build-containers]
     if: always()
 
     steps:
