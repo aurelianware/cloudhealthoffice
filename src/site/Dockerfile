@@ -1,9 +1,10 @@
 # Stage 1 — assemble web content, removing build artefacts not meant for the web root
-FROM alpine:3 AS content
+FROM alpine:3.21 AS content
 WORKDIR /site
 COPY . .
-# Remove the nginx config: it belongs in /etc/nginx, not the web root
-RUN rm -f nginx.conf
+# Remove files that belong in /etc/nginx or are deployment-only artefacts,
+# not web-accessible content.
+RUN rm -f nginx.conf Dockerfile .dockerignore && rm -rf k8s .k8s
 
 # Stage 2 — serve with nginx-unprivileged (non-root, port 8080)
 FROM nginxinc/nginx-unprivileged:alpine
