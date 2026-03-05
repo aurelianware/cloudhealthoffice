@@ -1,0 +1,56 @@
+# .gitleaks.toml - Gitleaks configuration for Cloud Health Office
+# Suppresses known false positives from documentation examples,
+# Cosmos DB Emulator keys, test fixtures, and placeholder values.
+
+title = "Cloud Health Office Gitleaks Config"
+
+[allowlist]
+
+  # ---------------------------------------------------------------
+  # Files that contain only placeholder/example credentials
+  # ---------------------------------------------------------------
+  paths = [
+    # Documentation & compliance reference docs
+    '''docs/CMS-0057-F-COMPLIANCE\.md''',
+    '''docs/SECRETS-INVENTORY\.md''',
+    '''api/quickstarts/.*\.md''',
+    '''\.github/\.copilot-instructions''',
+    # SECURITY.md intentionally shows credential format examples
+    '''SECURITY\.md''',
+    # README curl examples with Bearer token placeholders
+    '''README\.md''',
+    '''src/portal/CloudHealthOffice\.Portal/Pages/Apis\.razor''',
+    # TypeScript FHIR mapping tests (export names flagged as API keys)
+    '''src/fhir/mapping/__tests__/.*\.test\.ts''',
+    '''src/fhir/__tests__/.*\.test\.ts''',
+    # Cosmos DB Emulator key in dev config and test fixtures
+    '''services/.*/appsettings\.Development\.json''',
+    '''services/.*/appsettings\.json''',
+    '''services/shared/.*Tests/.*\.cs''',
+    '''services/tenant-service/README\.md''',
+    # Argo workflow uses Stripe *test* keys (not live)
+    '''argo-workflows/tenant-onboarding\.yaml''',
+    # Test scripts and K8s manifests use placeholder credentials
+    '''docs/testing/test-attachment-oauth\.sh''',
+    '''k8s/.*\.yaml''',
+    '''infra/k8s/.*\.yaml''',
+  ]
+
+  # ---------------------------------------------------------------
+  # Known safe patterns (Cosmos DB Emulator key, placeholder tokens)
+  # ---------------------------------------------------------------
+  regexes = [
+    # Azure Cosmos DB Emulator well-known public key
+    '''C2y6yDjf5/R\+ob0N8A7Cgv30VRDJIWEHLM\+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==''',
+    # Common placeholder patterns that are never real credentials
+    '''your-client-id''',
+    '''your-secret''',
+    '''your-api-key''',
+    '''changeme''',
+    '''UPDATE THIS IN P(RODUCTION)?''',
+    # SECURITY.md example key names (not values)
+    '''qnxt_api_key''',
+    '''claims_backend_api_key''',
+    # TypeScript named imports/exports flagged as API keys
+    '''mapX12\d+To\w+''',
+  ]
