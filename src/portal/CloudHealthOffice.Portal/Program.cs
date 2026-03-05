@@ -204,6 +204,7 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
