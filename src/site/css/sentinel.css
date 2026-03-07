@@ -1308,13 +1308,12 @@ footer.site-footer {
     border: 1px solid rgba(0, 255, 255, 0.2);
     border-radius: var(--radius-md);
     padding: 0;
-    margin-top: 52px;
     width: 100%;
     max-height: 70vh;
     overflow-y: auto;
     z-index: 100;
     position: absolute;
-    top: 0;
+    top: 52px;
     left: 0;
     right: 0;
   }
