@@ -6,6 +6,13 @@ function initMobileMenu() {
   const mainNav = document.getElementById('mainNav');
   
   if (!menuToggle || !mainNav) return;
+
+  // Helper: collapse the mobile menu
+  function closeMenu() {
+    mainNav.classList.remove('mobile-menu-open');
+    menuToggle.setAttribute('aria-expanded', 'false');
+    menuToggle.textContent = '☰';
+  }
   
   // Toggle menu on button click
   menuToggle.addEventListener('click', (e) => {
@@ -15,30 +22,26 @@ function initMobileMenu() {
     menuToggle.textContent = isOpen ? '✕' : '☰';
   });
   
-  // Close menu when clicking a link
-  mainNav.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', () => {
-      mainNav.classList.remove('mobile-menu-open');
-      menuToggle.setAttribute('aria-expanded', 'false');
-      menuToggle.textContent = '☰';
-    });
+  // Close menu when clicking ANY link inside mainNav, including auth links
+  // added asynchronously by updateNavigation() — event delegation handles both
+  // links present at DOMContentLoaded and those appended later.
+  mainNav.addEventListener('click', (e) => {
+    if (e.target.closest('a')) {
+      closeMenu();
+    }
   });
   
   // Close menu when clicking outside
   document.addEventListener('click', (e) => {
     if (!e.target.closest('nav') && mainNav.classList.contains('mobile-menu-open')) {
-      mainNav.classList.remove('mobile-menu-open');
-      menuToggle.setAttribute('aria-expanded', 'false');
-      menuToggle.textContent = '☰';
+      closeMenu();
     }
   });
   
   // Close menu on escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && mainNav.classList.contains('mobile-menu-open')) {
-      mainNav.classList.remove('mobile-menu-open');
-      menuToggle.setAttribute('aria-expanded', 'false');
-      menuToggle.textContent = '☰';
+      closeMenu();
       menuToggle.focus();
     }
   });
