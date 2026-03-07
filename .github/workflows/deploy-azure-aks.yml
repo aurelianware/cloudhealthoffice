@@ -222,8 +222,7 @@ jobs:
           # Probes checking port 80 cause the revision to stay in "activating" state.
           bash scripts/deploy/fix-aca-site-probes.sh \
             "${{ env.ACA_SITE_NAME }}" \
-            "${{ env.RESOURCE_GROUP }}" \
-            "$IMAGE"
+            "${{ env.RESOURCE_GROUP }}"
 
       - name: Ensure ingress target port is 8080
         run: |
