@@ -13,12 +13,6 @@
   --cyan-glow: rgba(0, 255, 255, 0.8);
   --green-glow: rgba(0, 255, 136, 0.8);
 
-  /* New Revamp Variables */
-  --glass-bg: rgba(0, 0, 0, 0.85);
-  --glass-border: rgba(0, 255, 255, 0.15);
-  --gradient-headline: linear-gradient(135deg, #00ffff 0%, #ffffff 50%, #00ff88 100%);
-  --section-pad: 100px 40px;
-  
   /* Typography */
   --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-weight-normal: 400;
