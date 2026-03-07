@@ -27,6 +27,7 @@
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css">
   <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
   <style>
     .insights-container {
       max-width: 1200px;
@@ -167,7 +168,7 @@
       </a>
       <div class="nav-right">
         <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="insightsNav">
+        <ul id="mainNav">
           <li><a href="index.html">Home</a></li>
           <li><a href="solutions-payers.html">For Payers</a></li>
           <li><a href="solutions-providers.html">For Providers</a></li>
@@ -184,7 +185,7 @@
   <script>
     // Update navigation with auth status on page load
     document.addEventListener('DOMContentLoaded', () => {
-      updateNavigation('#insightsNav');
+      updateNavigation('#mainNav');
     });
   </script>
 
