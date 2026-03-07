@@ -199,6 +199,8 @@ jobs:
     environment: PROD
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -206,12 +208,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Update Container App image
+      - name: Update Container App image and fix health probes
         run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}"
+
+          # Update image via standard CLI
           az containerapp update \
             --name "${{ env.ACA_SITE_NAME }}" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --image "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${{ github.sha }}"
+            --image "$IMAGE"
+
+          # Fix health probes: container listens on 8080 (nginx-unprivileged), not 80.
+          # Probes checking port 80 cause the revision to stay in "activating" state.
+          bash scripts/deploy/fix-aca-site-probes.sh \
+            "${{ env.ACA_SITE_NAME }}" \
+            "${{ env.RESOURCE_GROUP }}"
 
       - name: Ensure ingress target port is 8080
         run: |
