@@ -198,6 +198,8 @@ jobs:
       contents: read
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -233,34 +235,7 @@ jobs:
 
             # Fix health probes: nginx-unprivileged listens on 8080, not 80.
             # Probes on port 80 keep the revision stuck in "activating" state.
-            RESOURCE_ID=$(az containerapp show \
-              --name "$APP_NAME" \
-              --resource-group "$RG" \
-              --query id -o tsv)
-
-            jq -n --arg image "$IMAGE" '{
-              properties: {
-                template: {
-                  containers: [{
-                    name: "site",
-                    image: $image,
-                    probes: [
-                      {type: "Liveness",  tcpSocket: {port: 8080}, failureThreshold: 3,   periodSeconds: 10, successThreshold: 1, timeoutSeconds: 5},
-                      {type: "Readiness", tcpSocket: {port: 8080}, failureThreshold: 3,   periodSeconds: 10, successThreshold: 1, timeoutSeconds: 5},
-                      {type: "Startup",   tcpSocket: {port: 8080}, failureThreshold: 240, initialDelaySeconds: 1, periodSeconds: 1, successThreshold: 1, timeoutSeconds: 3}
-                    ]
-                  }]
-                }
-              }
-            }' > /tmp/probe-patch.json
-
-            echo "Patching $RESOURCE_ID with port-8080 health probes..."
-            az rest \
-              --method PATCH \
-              --url "https://management.azure.com${RESOURCE_ID}?api-version=2024-03-01" \
-              --body @/tmp/probe-patch.json \
-              --headers "Content-Type=application/json"
-            echo "Health probes updated to port 8080."
+            bash scripts/deploy/fix-aca-site-probes.sh "$APP_NAME" "$RG" "$IMAGE"
 
             echo ""
             echo "✅ Container App updated successfully (image + health probes)"
