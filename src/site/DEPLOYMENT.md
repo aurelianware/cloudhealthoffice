@@ -530,4 +530,4 @@ Azure Static Web Apps automatically:
 **Cloud Health Office v1.0.0 — The Sentinel**  
 *The deployment is inevitable. The sequence is immutable.*
 
-Apache 2.0 • © 2025 Aurelianware
+Apache 2.0 • © 2026 Aurelianware, Inc
