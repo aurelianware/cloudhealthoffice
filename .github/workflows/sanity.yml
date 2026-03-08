@@ -25,7 +25,7 @@ jobs:
           echo "🔍 Validating repository structure..."
 
           # Check for required directories
-          required_dirs=("logicapps/workflows" "infra" "scripts" ".github/workflows")
+          required_dirs=("infrastructure/logicapps/workflows" "infrastructure" "scripts" ".github/workflows")
           for dir in "${required_dirs[@]}"; do
             if [ ! -d "$dir" ]; then
               echo "::error::Required directory missing: $dir"
@@ -52,10 +52,10 @@ jobs:
           echo "🔍 Validating Logic Apps workflow files..."
 
           workflows=(
-            "logicapps/workflows/ingest275/workflow.json"
-            "logicapps/workflows/ingest278/workflow.json"
-            "logicapps/workflows/replay278/workflow.json"
-            "logicapps/workflows/rfai277/workflow.json"
+            "infrastructure/logicapps/workflows/ingest275/workflow.json"
+            "infrastructure/logicapps/workflows/ingest278/workflow.json"
+            "infrastructure/logicapps/workflows/replay278/workflow.json"
+            "infrastructure/logicapps/workflows/rfai277/workflow.json"
           )
 
           failed=0
@@ -108,17 +108,17 @@ jobs:
         run: |
           echo "🔍 Validating Bicep templates..."
 
-          if [ -f "infra/main.bicep" ]; then
-            echo "Building infra/main.bicep..."
-            if ! az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json; then
-              echo "::error::Bicep build failed for infra/main.bicep"
+          if [ -f "infrastructure/azure/main.bicep" ]; then
+            echo "Building infrastructure/azure/main.bicep..."
+            if ! az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/main-arm.json; then
+              echo "::error::Bicep build failed for infrastructure/azure/main.bicep"
               exit 1
             fi
 
             size=$(stat -c%s /tmp/main-arm.json 2>/dev/null || stat -f%z /tmp/main-arm.json 2>/dev/null)
-            echo "✓ infra/main.bicep compiled successfully ($size bytes)"
+            echo "✓ infrastructure/azure/main.bicep compiled successfully ($size bytes)"
           else
-            echo "::warning::infra/main.bicep not found"
+            echo "::warning::infrastructure/azure/main.bicep not found"
           fi
 
           echo "✅ Bicep templates validated"
@@ -129,14 +129,14 @@ jobs:
           echo "🔍 Validating Service Bus topic configuration..."
 
           # Check if Service Bus topics are defined in Bicep
-          if [ -f "infra/main.bicep" ]; then
+          if [ -f "infrastructure/azure/main.bicep" ]; then
             required_topics=("attachments-in" "rfai-requests" "edi-278")
 
             for topic in "${required_topics[@]}"; do
-              if grep -q "$topic" infra/main.bicep; then
+              if grep -q "$topic" infrastructure/azure/main.bicep; then
                 echo "✓ Found topic: $topic"
               else
-                echo "::warning::Topic not found in infra/main.bicep: $topic"
+                echo "::warning::Topic not found in infrastructure/azure/main.bicep: $topic"
               fi
             done
           fi
@@ -216,7 +216,7 @@ jobs:
           echo "🔍 Validating Argo Workflows..."
 
           argo_workflows=(
-            "argo-workflows/x12-834-enrollment-import.yaml"
+            "infrastructure/argo-workflows/x12-834-enrollment-import.yaml"
           )
 
           for workflow in "${argo_workflows[@]}"; do

@@ -6,6 +6,7 @@ describe('SFTP Argo EventSources', () => {
   const eventSourcePath = path.resolve(
     __dirname,
     '../../..',
+    'infrastructure',
     'argo-events',
     'sftp-event-source.yaml',
   );

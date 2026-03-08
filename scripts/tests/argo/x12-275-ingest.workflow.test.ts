@@ -6,6 +6,7 @@ describe('x12-275-ingest WorkflowTemplate', () => {
   const workflowPath = path.resolve(
     __dirname,
     '../../..',
+    'infrastructure',
     'argo-workflows',
     'x12-275-ingest.yaml',
   );
