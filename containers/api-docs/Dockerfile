@@ -6,8 +6,10 @@ RUN sed -i 's|text/plain\s*txt;|text/plain  txt;\n    text/yaml   yaml yml;|' /e
 # Custom nginx configuration
 COPY containers/api-docs/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Swagger UI HTML
+# Swagger UI HTML + SEO files
 COPY src/api-docs/index.html /usr/share/nginx/html/index.html
+COPY src/api-docs/sitemap.xml /usr/share/nginx/html/sitemap.xml
+COPY src/api-docs/robots.txt /usr/share/nginx/html/robots.txt
 
 # OpenAPI YAML specs
 COPY api/openapi/ /usr/share/nginx/html/specs/
