@@ -67,6 +67,18 @@ jobs:
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --image "${IMAGE_TAG}"
 
+      - name: Bind custom domains
+        run: |
+          for HOSTNAME in api.cloudhealthoffice.com sandbox.cloudhealthoffice.com; do
+            az containerapp hostname bind \
+              --name "${{ env.ACA_NAME }}" \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --hostname "${HOSTNAME}" \
+              --environment "${{ env.ACA_ENV }}" \
+              --validation-method CNAME 2>&1 | grep -v "^WARNING" || true
+            echo "✅ ${HOSTNAME} bound"
+          done
+
       - name: Verify health endpoint
         run: |
           echo "Waiting for container app to start..."
