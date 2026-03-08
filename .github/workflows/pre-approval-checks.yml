@@ -55,7 +55,7 @@ jobs:
           echo "Validating deployment readiness..."
 
           # Check for required files
-          REQUIRED_FILES=("infra/main.bicep" "logicapps/workflows")
+          REQUIRED_FILES=("infrastructure/azure/main.bicep" "infrastructure/logicapps/workflows")
           for file in "${REQUIRED_FILES[@]}"; do
             if [ ! -e "$file" ]; then
               echo "::error::Required file/directory missing: $file"

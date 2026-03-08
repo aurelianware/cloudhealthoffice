@@ -63,25 +63,25 @@ jobs:
           echo "Validating Bicep templates..."
           failed=0
 
-          if [ -f infra/main.bicep ]; then
-            echo "Building infra/main.bicep..."
-            if az bicep build --file infra/main.bicep --outfile /tmp/main-arm.json 2>&1 | tee /tmp/bicep-main.log; then
+          if [ -f infrastructure/azure/main.bicep ]; then
+            echo "Building infrastructure/azure/main.bicep..."
+            if az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/main-arm.json 2>&1 | tee /tmp/bicep-main.log; then
               if [ ! -s /tmp/main-arm.json ]; then
-                echo "::error file=infra/main.bicep::Bicep compilation produced empty ARM template"
+                echo "::error file=infrastructure/azure/main.bicep::Bicep compilation produced empty ARM template"
                 failed=1
               else
                 SIZE=$(stat -f%z /tmp/main-arm.json 2>/dev/null || stat -c%s /tmp/main-arm.json 2>/dev/null)
-                echo "✓ infra/main.bicep compiled successfully (ARM template: ${SIZE} bytes)"
+                echo "✓ infrastructure/azure/main.bicep compiled successfully (ARM template: ${SIZE} bytes)"
                 echo "ARM template preview (first 20 lines):"
                 head -20 /tmp/main-arm.json
               fi
             else
-              echo "::error file=infra/main.bicep::Bicep build failed"
+              echo "::error file=infrastructure/azure/main.bicep::Bicep build failed"
               cat /tmp/bicep-main.log
               failed=1
             fi
           else
-            echo "::warning::infra/main.bicep not found"
+            echo "::warning::infrastructure/azure/main.bicep not found"
           fi
 
           if [ -f attachments_logicapps_package/main.bicep ]; then
@@ -110,9 +110,9 @@ jobs:
       - name: Bicep parameter validation
         run: |
           echo "Validating Bicep parameters..."
-          if [ -f infra/main.bicep ]; then
-            echo "Analyzing required parameters in infra/main.bicep..."
-            grep "^param " infra/main.bicep | head -20
+          if [ -f infrastructure/azure/main.bicep ]; then
+            echo "Analyzing required parameters in infrastructure/azure/main.bicep..."
+            grep "^param " infrastructure/azure/main.bicep | head -20
             echo "✓ Parameter analysis complete"
           fi
 
@@ -289,9 +289,9 @@ jobs:
           done < <(find . \( -name "*.json" -o -name "*.bicep" -o -name "*.yml" -o -name "*.yaml" \) -print0 2>/dev/null || true)
 
           # Check for encryption settings in Bicep
-          if [ -f "infra/main.bicep" ]; then
-            if ! grep -q "encryption" infra/main.bicep; then
-              echo "::warning file=infra/main.bicep::No encryption settings found (verify HIPAA compliance)"
+          if [ -f "infrastructure/azure/main.bicep" ]; then
+            if ! grep -q "encryption" infrastructure/azure/main.bicep; then
+              echo "::warning file=infrastructure/azure/main.bicep::No encryption settings found (verify HIPAA compliance)"
             fi
           fi
 
