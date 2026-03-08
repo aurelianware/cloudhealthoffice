@@ -343,10 +343,10 @@ paths:
                 properties:
                   authorization_endpoint:
                     type: string
-                    example: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
+                    example: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
                   token_endpoint:
                     type: string
-                    example: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+                    example: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
                   token_endpoint_auth_methods_supported:
                     type: array
                     items:
@@ -368,12 +368,14 @@ components:
     oauth2_patient:
       type: oauth2
       description: |
-        OAuth 2.0 patient authentication via Azure AD.
-        Patients authenticate via their health plan credentials and grant consent.
+        OAuth 2.0 patient authentication via Azure AD (multi-tenant).
+        Use Client ID: `54f3419d-0d69-4b06-939a-c1a260596556`
+        First-time admin consent creates an Enterprise App in your tenant automatically.
+      x-clientId: "54f3419d-0d69-4b06-939a-c1a260596556"
       flows:
         authorizationCode:
-          authorizationUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize
-          tokenUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
             patient/*.read: Read access to all patient resources
             patient/Patient.read: Read access to Patient resources
