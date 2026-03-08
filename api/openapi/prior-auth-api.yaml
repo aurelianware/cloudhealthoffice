@@ -45,7 +45,7 @@ servers:
     description: Local development
 
 security:
-  - smart_on_fhir: [user/Claim.write, user/ClaimResponse.read]
+  - smart_on_fhir: [openid, profile, offline_access]
 
 tags:
   - name: Prior Authorization
@@ -758,9 +758,6 @@ components:
           authorizationUrl: https://login.cloudhealthoffice.com/oauth2/authorize
           tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
           scopes:
-            user/Claim.write: Submit prior authorization requests
-            user/Claim.read: Read authorization requests
-            user/ClaimResponse.read: Read authorization decisions
-            user/DocumentReference.write: Submit clinical attachments
-            openid: OpenID Connect
-            fhirUser: FHIR user identity
+            openid: OpenID Connect authentication
+            profile: User profile information
+            offline_access: Maintain access after session ends (refresh tokens)

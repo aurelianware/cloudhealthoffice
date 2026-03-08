@@ -46,7 +46,7 @@ servers:
     description: Local development
 
 security:
-  - oauth2_system: [system/*.read, system/Patient.read]
+  - oauth2_system: [api://54f3419d-0d69-4b06-939a-c1a260596556/.default]
 
 tags:
   - name: Member Match
@@ -573,7 +573,4 @@ components:
         clientCredentials:
           tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
           scopes:
-            system/*.read: Read all resources (system-level)
-            system/Patient.read: Read patient demographics
-            system/Claim.read: Read claims
-            system/ExplanationOfBenefit.read: Read EOBs
+            api://54f3419d-0d69-4b06-939a-c1a260596556/.default: Full access to all registered API permissions

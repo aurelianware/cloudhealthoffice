@@ -404,8 +404,12 @@
         // which creates an Enterprise App in your tenant automatically.
         initOAuth: {
           clientId: '54f3419d-0d69-4b06-939a-c1a260596556',
-          scopes: 'patient/*.read openid fhirUser',
+          // Azure AD requires scopes in URI form — SMART on FHIR scope strings
+          // (patient/*.read, fhirUser) are not valid Azure AD scope values.
+          // Standard OIDC scopes work for all multi-tenant Azure AD apps.
+          scopes: 'openid profile offline_access',
           usePkceWithAuthorizationCodeGrant: true,
+          // client_secret: leave the field blank — PKCE is used instead
           additionalQueryStringParams: { nonce: 'cloudhealthoffice' }
         }
       });

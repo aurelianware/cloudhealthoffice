@@ -64,7 +64,7 @@ servers:
 
 security:
   - apiKey: []
-  - oauth2_system: [system/Claim.write]
+  - oauth2_system: [api://54f3419d-0d69-4b06-939a-c1a260596556/.default]
 
 tags:
   - name: Validation
@@ -482,7 +482,7 @@ components:
         clientCredentials:
           tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
-            system/Claim.write: Submit and validate claims
+            api://54f3419d-0d69-4b06-939a-c1a260596556/.default: Full access to all registered API permissions
 
   schemas:
     FHIRClaim:

@@ -53,7 +53,7 @@ servers:
     description: Local development
 
 security:
-  - oauth2_patient: [patient/*.read, openid, fhirUser]
+  - oauth2_patient: [openid, profile, offline_access]
 
 tags:
   - name: Patient
@@ -377,12 +377,9 @@ components:
           authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
           tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
-            patient/*.read: Read access to all patient resources
-            patient/Patient.read: Read access to Patient resources
-            patient/Claim.read: Read access to Claim resources
-            patient/ExplanationOfBenefit.read: Read access to EOB resources
             openid: OpenID Connect authentication
-            fhirUser: FHIR user context
+            profile: User profile information
+            offline_access: Maintain access after session ends (refresh tokens)
 
   schemas:
     Patient:
