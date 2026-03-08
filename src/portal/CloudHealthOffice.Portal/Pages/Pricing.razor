@@ -3,175 +3,221 @@
 <PageTitle>Pricing - Cloud Health Office</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <!-- Hero -->
     <div style="text-align: center; margin-bottom: 48px;">
         <MudText Typo="Typo.h3" Class="mb-2" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            💰 Simple, Transparent Pricing
+            Pay Per Member. Not Per Feature.
         </MudText>
-        <MudText Typo="Typo.body1" Style="color: rgba(255, 255, 255, 0.7);">
-            No hidden fees. No vendor lock-in. Cancel anytime. 14-day free trial on all plans.
+        <MudText Typo="Typo.body1" Style="color: rgba(255, 255, 255, 0.7); max-width: 700px; margin: 0 auto;">
+            Simple per-member-per-month pricing that scales with your health plan.
+            No transaction caps. No feature gates. Every tier includes the full platform.
         </MudText>
     </div>
 
-    <MudGrid Justify="Justify.Center">
-        <!-- Starter Plan -->
-        <MudItem xs="12" md="4">
+    <!-- Tier Cards -->
+    <MudGrid Justify="Justify.Center" Spacing="4">
+
+        <!-- Open Source -->
+        <MudItem xs="12" sm="6" md="3">
             <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
                 <MudCardContent Style="flex: 1;">
                     <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
-                        Starter
+                        Open Source
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
-                        $499<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);">/month</MudText>
+                        $0<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);"> forever</MudText>
                     </MudText>
                     <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(255, 255, 255, 0.6);">
-                        Perfect for small health plans and pilots
+                        Self-hosted · Unlimited members
                     </MudText>
-                    
                     <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
-                    
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2"><strong>10,000</strong> claims/month</MudText>
+                            <MudText Typo="Typo.body2">Full platform source code</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Core EDI (837, 835)</MudText>
+                            <MudText Typo="Typo.body2">All 17 microservices</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Claims adjudication &lt;500ms</MudText>
+                            <MudText Typo="Typo.body2">All EDI transactions</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Multi-tenant portal access</MudText>
+                            <MudText Typo="Typo.body2">All FHIR R4 APIs</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Email support</MudText>
+                            <MudText Typo="Typo.body2">Apache 2.0 license</MudText>
                         </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Community forum access</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">14-day free trial</MudText>
+                        <MudListItem Icon="@Icons.Material.Filled.Remove" IconColor="Color.Default">
+                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.4);">Community support only</MudText>
                         </MudListItem>
                     </MudList>
                 </MudCardContent>
                 <MudCardActions Class="pa-4">
-                    <MudButton Href="/signup" 
-                               Variant="Variant.Outlined" 
-                               Color="Color.Primary" 
-                               FullWidth="true" 
+                    <MudButton Href="https://github.com/aurelianware/cloudhealthoffice"
+                               Target="_blank"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               FullWidth="true"
                                Size="Size.Large">
-                        Start Free Trial
+                        View on GitHub
                     </MudButton>
                 </MudCardActions>
             </MudCard>
         </MudItem>
 
-        <!-- Professional Plan -->
-        <MudItem xs="12" md="4">
+        <!-- Growth -->
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
+                <MudCardContent Style="flex: 1;">
+                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
+                        Growth
+                    </MudText>
+                    <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
+                        $0.75<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);"> PMPM</MudText>
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                        Up to 50,000 members
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                        Example: 20K members = $15,000/mo
+                    </MudText>
+                    <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+                    <MudList Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Everything in Open Source</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Managed SaaS hosting (Azure)</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Single clearinghouse connector</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">BAA included</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Email support (4hr SLA)</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">99.5% uptime SLA</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions Class="pa-4">
+                    <MudButton Href="/signup"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               FullWidth="true"
+                               Size="Size.Large">
+                        Start 30-Day Trial
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Scale (Featured) -->
+        <MudItem xs="12" sm="6" md="3">
             <MudCard Elevation="8" Style="height: 100%; border: 2px solid #00ffff; display: flex; flex-direction: column; position: relative; background: linear-gradient(180deg, rgba(0, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0) 100%);">
                 <div style="position: absolute; top: -12px; right: 20px;">
                     <MudChip Color="Color.Primary" Size="Size.Small" Style="font-weight: 700;">MOST POPULAR</MudChip>
                 </div>
                 <MudCardContent Style="flex: 1;">
                     <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
-                        Professional
+                        Scale
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
-                        $1,499<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);">/month</MudText>
+                        $0.45<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);"> PMPM</MudText>
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(255, 255, 255, 0.6);">
-                        For growing health plans and MAOs
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                        Up to 250,000 members
                     </MudText>
-                    
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                        Example: 75K members = $33,750/mo
+                    </MudText>
                     <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
-                    
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2"><strong>50,000</strong> claims/month</MudText>
+                            <MudText Typo="Typo.body2">Everything in Growth</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">All EDI transactions (270/271/275/276/277/278/834/835/837)</MudText>
+                            <MudText Typo="Typo.body2">Multi-clearinghouse failover</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">FHIR R4 APIs (CMS-compliant)</MudText>
+                            <MudText Typo="Typo.body2">Prior auth automation (278/CDS)</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Prior authorization workflows</MudText>
+                            <MudText Typo="Typo.body2">Medical attachments (275/RFAI)</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Medical attachments (275/277 RFAI)</MudText>
+                            <MudText Typo="Typo.body2">Dedicated onboarding engineer</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Priority support (24h SLA)</MudText>
+                            <MudText Typo="Typo.body2">Slack + phone (1hr SLA)</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Dedicated Slack channel</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">14-day free trial</MudText>
+                            <MudText Typo="Typo.body2">99.9% uptime SLA</MudText>
                         </MudListItem>
                     </MudList>
                 </MudCardContent>
                 <MudCardActions Class="pa-4">
-                    <MudButton Href="/signup" 
-                               Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               FullWidth="true" 
+                    <MudButton Href="/signup"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               FullWidth="true"
                                Size="Size.Large"
                                Style="box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);">
-                        Start Free Trial
+                        Start 30-Day Trial
                     </MudButton>
                 </MudCardActions>
             </MudCard>
         </MudItem>
 
-        <!-- Enterprise Plan -->
-        <MudItem xs="12" md="4">
+        <!-- Enterprise -->
+        <MudItem xs="12" sm="6" md="3">
             <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
                 <MudCardContent Style="flex: 1;">
                     <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
                         Enterprise
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
-                        Custom
+                        Custom<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);"> PMPM</MudText>
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(255, 255, 255, 0.6);">
-                        For large health plans and payers
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                        250,000+ members
                     </MudText>
-                    
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                        Volume pricing from $0.25 PMPM
+                    </MudText>
                     <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
-                    
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2"><strong>Unlimited</strong> claims</MudText>
+                            <MudText Typo="Typo.body2">Everything in Scale</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Dedicated infrastructure</MudText>
+                            <MudText Typo="Typo.body2">Volume-based PMPM discount</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Dedicated CSM + TAM</MudText>
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            <MudText Typo="Typo.body2">Hybrid / on-premise deploy</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
                             <MudText Typo="Typo.body2">White-label portal</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">SLA guarantees (99.95%+)</MudText>
+                            <MudText Typo="Typo.body2">Custom core admin integration</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">24/7 phone support</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Dedicated CSM</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">Custom integrations</MudText>
-                        </MudListItem>
-                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                            <MudText Typo="Typo.body2">BAA & compliance support</MudText>
+                            <MudText Typo="Typo.body2">99.99% uptime SLA</MudText>
                         </MudListItem>
                     </MudList>
                 </MudCardContent>
                 <MudCardActions Class="pa-4">
-                    <MudButton Href="/contact-sales" 
-                               Variant="Variant.Outlined" 
-                               Color="Color.Primary" 
-                               FullWidth="true" 
+                    <MudButton Href="/contact-sales"
+                               Variant="Variant.Outlined"
+                               Color="Color.Success"
+                               FullWidth="true"
                                Size="Size.Large">
                         Contact Sales
                     </MudButton>
@@ -180,85 +226,107 @@
         </MudItem>
     </MudGrid>
 
-    <!-- Feature Comparison -->
-    <MudText Typo="Typo.h5" Class="mt-12 mb-4" Style="font-weight: 600; text-align: center;">
-        Feature Comparison
+    <!-- PMPM Calculator -->
+    <MudPaper Class="mt-12 pa-8" Elevation="4" Style="border: 2px solid rgba(0, 255, 255, 0.3); max-width: 700px; margin-left: auto; margin-right: auto;">
+        <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; text-align: center;">
+            Estimate Your Monthly Cost
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-6" Style="color: rgba(255, 255, 255, 0.6); text-align: center;">
+            Drag the slider to see your estimated cost based on enrolled member count.
+        </MudText>
+
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+            <MudText Typo="Typo.body1" Style="min-width: 80px;">Members:</MudText>
+            <MudSlider T="double" @bind-Value="_memberCount" Min="1000" Max="500000" Step="1000"
+                       Color="Color.Primary" Style="flex: 1;" />
+            <MudText Typo="Typo.h6" Style="min-width: 100px; text-align: right; color: #00ffff;">
+                @MemberCountFormatted
+            </MudText>
+        </div>
+
+        <MudDivider Class="my-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+
+        <div style="text-align: center;">
+            <MudText Typo="Typo.h3" Style="font-weight: 700; color: #00ffff; text-shadow: 0 0 20px rgba(0, 255, 255, 0.4);">
+                @MonthlyEstimate/mo
+            </MudText>
+            <MudText Typo="Typo.body1" Class="mt-1" Style="color: rgba(255, 255, 255, 0.6);">
+                @AnnualEstimate per year
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mt-1" Style="color: #00ff88;">
+                @TierLabel tier · @RateLabel PMPM
+            </MudText>
+
+            @if (Savings > 0)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-4" Dense="true"
+                          Style="max-width: 500px; margin-left: auto; margin-right: auto;">
+                    <MudText Typo="Typo.body2">
+                        <strong>Save @SavingsFormatted+</strong> vs. a typical core admin CMS-0057-F compliance project
+                    </MudText>
+                </MudAlert>
+            }
+        </div>
+    </MudPaper>
+
+    <!-- What's Included -->
+    <MudText Typo="Typo.h5" Class="mt-12 mb-2" Style="font-weight: 600; text-align: center;">
+        Every Tier Includes the Full Platform
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-6" Style="color: rgba(255, 255, 255, 0.6); text-align: center;">
+        No feature gates. No module upsells. You get everything.
     </MudText>
 
-    <MudPaper Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.2);">
-        <MudSimpleTable Hover="true" Dense="true" Style="background: transparent;">
-            <thead>
-                <tr>
-                    <th>Feature</th>
-                    <th style="text-align: center;">Starter</th>
-                    <th style="text-align: center;">Professional</th>
-                    <th style="text-align: center;">Enterprise</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Claims per month</td>
-                    <td style="text-align: center;">10,000</td>
-                    <td style="text-align: center;">50,000</td>
-                    <td style="text-align: center;">Unlimited</td>
-                </tr>
-                <tr>
-                    <td>837/835 Claims EDI</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>270/271 Eligibility</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>278 Prior Authorization</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>275/277 Attachments & RFAI</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>FHIR R4 APIs</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>Adjudication SLA</td>
-                    <td style="text-align: center;">&lt;500ms</td>
-                    <td style="text-align: center;">&lt;500ms</td>
-                    <td style="text-align: center;">Custom</td>
-                </tr>
-                <tr>
-                    <td>Support</td>
-                    <td style="text-align: center;">Email</td>
-                    <td style="text-align: center;">Priority (24h)</td>
-                    <td style="text-align: center;">24/7 Phone</td>
-                </tr>
-                <tr>
-                    <td>White-label portal</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-                <tr>
-                    <td>Dedicated infrastructure</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;">-</td>
-                    <td style="text-align: center;"><MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" /></td>
-                </tr>
-            </tbody>
-        </MudSimpleTable>
-    </MudPaper>
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Claims Processing</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">837P/I/D, claims scrubbing (20+ rules), 10-step adjudication, 835 ERA. Sub-500ms.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Eligibility</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">Real-time and batch 270/271 verification. Member, coverage, and benefit plan management.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Prior Authorization</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">278 request/response, CDS Hooks for coverage discovery. CMS-0057-F compliant.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Medical Attachments</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">275 inbound, RFAI case management, 277 status, 824 acknowledgment.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">FHIR R4 APIs</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Enrollment &amp; EDI</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">834 import, 17 Argo Workflows, SFTP polling, Kafka events, multi-clearinghouse.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
 
     <!-- FAQ -->
     <MudText Typo="Typo.h5" Class="mt-12 mb-4" Style="font-weight: 600; text-align: center;">
@@ -267,73 +335,65 @@
 
     <MudExpansionPanels MultiExpansion="true">
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">What's included in the 14-day free trial?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">How is "member" counted for billing?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    Full access to all features in your selected tier. Process real claims, test APIs, and configure your tenant. 
-                    No credit card charge until the trial ends. Cancel anytime before February 23, 2026.
+                    We count unique enrolled members with active coverage as of the first of each month — the same
+                    member count you report to CMS or your state regulator. Dependents and subscribers both count.
+                    We pull the count from your enrollment data automatically.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
 
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">Can I change plans later?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">Is there a minimum commitment?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    Yes. Upgrade or downgrade anytime through the portal. Changes take effect immediately, 
-                    and billing is prorated for the current month.
+                    Growth and Scale plans are month-to-month. Cancel anytime. Enterprise plans offer annual
+                    or multi-year terms with additional PMPM discounts. All paid plans include a 30-day free trial.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
 
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">What happens if I exceed my claim limit?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">What if my membership fluctuates seasonally?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    We'll notify you when you reach 80% of your limit. Additional claims are billed at $0.05 per claim (Starter) 
-                    or $0.03 per claim (Professional). Enterprise plans have unlimited claims.
+                    Your bill adjusts automatically each month. Medicaid MCOs with redetermination cycles or
+                    Medicare Advantage plans with AEP enrollment spikes only pay for the members they have
+                    that month. No true-ups, no overages.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
 
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">Is there vendor lock-in?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">Are there transaction limits or overage charges?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    No. Cloud Health Office is Apache 2.0 licensed. Your data is exportable anytime in standard formats 
-                    (FHIR R4, X12 EDI). You can also self-host the entire platform.
+                    No. Every paid tier includes unlimited EDI transactions, unlimited FHIR API calls, and
+                    unlimited claims processing. Your PMPM covers everything.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
 
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">Do you offer annual billing discounts?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">Does this replace our core admin system?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    Yes. Annual plans receive 15% discount (2 months free). Contact sales for multi-year agreements 
-                    with additional discounts.
+                    It can, but it doesn't have to. Most health plans start by using Cloud Health Office as an
+                    integration layer alongside their existing core admin (QNXT, FACETS, HealthEdge, etc.).
+                    Every component is designed to either augment or replace the corresponding module — you
+                    choose which workloads to migrate and when.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
 
         <MudExpansionPanel>
-            <TitleContent>
-                <MudText Typo="Typo.h6">What compliance certifications do you have?</MudText>
-            </TitleContent>
+            <TitleContent><MudText Typo="Typo.h6">Is a BAA included?</MudText></TitleContent>
             <ChildContent>
                 <MudText Typo="Typo.body2">
-                    HIPAA compliant with BAA available. SOC 2 Type II certification in progress (Q2 2026). 
-                    CMS-9115-F and CMS-0057-F aligned for Interoperability Final Rules.
+                    Yes. Every paid tier includes a signed Business Associate Agreement. The open-source tier
+                    is self-hosted, so your own BAA framework applies.
                 </MudText>
             </ChildContent>
         </MudExpansionPanel>
@@ -342,23 +402,59 @@
     <!-- CTA -->
     <MudPaper Class="mt-12 pa-6" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.3); background: rgba(0, 255, 255, 0.05); text-align: center;">
         <MudText Typo="Typo.h5" Class="mb-3" Style="font-weight: 700;">
-            Ready to Get Started?
+            Ready to See What It Costs for Your Plan?
         </MudText>
         <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(255, 255, 255, 0.7);">
-            Start your 14-day free trial today. No credit card required.
+            30-day free trial. No credit card required. Production-grade from day one.
         </MudText>
-        <MudButton Href="/signup" 
-                   Variant="Variant.Filled" 
-                   Color="Color.Primary" 
+        <MudButton Href="/signup"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
                    Size="Size.Large"
                    Style="margin-right: 16px;">
             Start Free Trial
         </MudButton>
-        <MudButton Href="/contact-sales" 
-                   Variant="Variant.Outlined" 
-                   Color="Color.Primary" 
+        <MudButton Href="/contact-sales"
+                   Variant="Variant.Outlined"
+                   Color="Color.Primary"
                    Size="Size.Large">
             Contact Sales
         </MudButton>
     </MudPaper>
 </MudContainer>
+
+@code {
+    private double _memberCount = 50000;
+
+    private string MemberCountFormatted => ((int)_memberCount).ToString("N0");
+
+    private decimal PmpmRate
+    {
+        get
+        {
+            if (_memberCount <= 50000) return 0.75m;
+            if (_memberCount <= 250000) return 0.45m;
+            return 0.30m; // Enterprise estimate
+        }
+    }
+
+    private string TierLabel
+    {
+        get
+        {
+            if (_memberCount <= 50000) return "Growth";
+            if (_memberCount <= 250000) return "Scale";
+            return "Enterprise (est.)";
+        }
+    }
+
+    private string RateLabel => $"${PmpmRate:F2}";
+
+    private decimal MonthlyAmount => (decimal)_memberCount * PmpmRate;
+    private decimal AnnualAmount => MonthlyAmount * 12;
+    private decimal Savings => 1_500_000m - AnnualAmount;
+
+    private string MonthlyEstimate => $"${MonthlyAmount:N0}";
+    private string AnnualEstimate => $"${AnnualAmount:N0}";
+    private string SavingsFormatted => $"${Savings:N0}";
+}
