@@ -58,3 +58,9 @@ obj/
 *.pdb
 *.exe
 *.cache
+
+# Root clutter prevention (added by restructure script)
+/*.log
+/*.bak
+/tmp_*
+*.DS_Store
