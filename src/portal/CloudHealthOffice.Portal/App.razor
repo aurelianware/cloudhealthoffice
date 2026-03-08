@@ -1,9 +1,22 @@
+@inject NavigationManager Navigation
+
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
             <ErrorBoundary>
                 <ChildContent>
-                    <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                    <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                        <NotAuthorized>
+                            @{
+                                Navigation.NavigateTo($"MicrosoftIdentity/Account/SignIn?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
+                            }
+                        </NotAuthorized>
+                        <Authorizing>
+                            <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0a0a0a;">
+                                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                            </div>
+                        </Authorizing>
+                    </AuthorizeRouteView>
                     <FocusOnNavigate RouteData="@routeData" Selector="h1" />
                 </ChildContent>
                 <ErrorContent Context="ex">
