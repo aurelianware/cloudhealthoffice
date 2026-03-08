@@ -3,91 +3,142 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Healthcare Payer Integration Pricing — Cloud Health Office</title>
-  <meta name="description" content="Transparent SaaS and BYOS pricing for healthcare payers. CMS-0057-F compliance platform starting at $0/mo open-source. Enterprise EDI, FHIR R4, and prior auth — save $1.5M+ vs. replatforming." />
-  <meta name="keywords" content="payer platform integration pricing, CMS-0057-F compliance cost, FHIR API pricing, health plan EDI costs, healthcare EDI SaaS pricing, Medicaid MCO platform cost" />
+  <title>Per Member Per Month Pricing for Health Plans — Cloud Health Office</title>
+  <meta name="description" content="Transparent PMPM pricing for healthcare payers. Integration platform starting at $0.75 per member per month. CMS-0057-F compliance, EDI, FHIR R4 — predictable cost that scales with your membership." />
+  <meta name="keywords" content="healthcare payer PMPM pricing, per member per month health plan, CMS-0057-F compliance cost, FHIR API pricing health plan, payer integration platform cost, Medicaid MCO platform pricing" />
   <link rel="canonical" href="https://cloudhealthoffice.com/pricing" />
 
-  <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/pricing" />
-  <meta property="og:title" content="Healthcare Payer Integration Pricing — Cloud Health Office" />
-  <meta property="og:description" content="Transparent SaaS and BYOS pricing for healthcare payers. CMS-0057-F compliance platform starting at $0/mo open-source. Enterprise EDI, FHIR R4, and prior auth — save $1.5M+ vs. replatforming." />
+  <meta property="og:title" content="Per Member Per Month Pricing — Cloud Health Office" />
+  <meta property="og:description" content="Transparent PMPM pricing for healthcare payers. Starting at $0.75/PMPM." />
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
 
-  <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:url" content="https://cloudhealthoffice.com/pricing" />
-  <meta name="twitter:title" content="Healthcare Payer Integration Pricing — Cloud Health Office" />
-  <meta name="twitter:description" content="Transparent SaaS and BYOS pricing for healthcare payers. CMS-0057-F compliance platform starting at $0/mo open-source. Enterprise EDI, FHIR R4, and prior auth — save $1.5M+ vs. replatforming." />
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+  <meta name="twitter:title" content="Per Member Per Month Pricing — Cloud Health Office" />
+  <meta name="twitter:description" content="Transparent PMPM pricing for healthcare payers. Starting at $0.75/PMPM." />
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "name": "Healthcare Payer Integration Pricing",
+    "name": "Per Member Per Month Pricing for Health Plans",
     "url": "https://cloudhealthoffice.com/pricing",
-    "description": "Transparent SaaS and BYOS pricing for healthcare payers. CMS-0057-F compliance platform with open-source core.",
     "mainEntity": {
       "@type": "Product",
       "name": "Cloud Health Office",
-      "description": "Healthcare payer integration platform for CMS-0057-F compliance, X12 EDI processing, FHIR R4 APIs, and prior authorization.",
       "brand": { "@type": "Brand", "name": "Cloud Health Office" },
       "offers": [
-        {
-          "@type": "Offer",
-          "name": "Starter",
-          "price": "0",
-          "priceCurrency": "USD",
-          "description": "Open-source self-hosted. Full EDI and FHIR capabilities, community support.",
-          "availability": "https://schema.org/InStock"
-        },
-        {
-          "@type": "Offer",
-          "name": "Pro",
-          "price": "2500",
-          "priceCurrency": "USD",
-          "description": "SaaS managed hosting with priority support, SLA, and onboarding assistance.",
-          "availability": "https://schema.org/InStock"
-        },
-        {
-          "@type": "Offer",
-          "name": "Enterprise",
-          "description": "Custom pricing for large health plans. Dedicated support, custom integrations, BAA included.",
-          "availability": "https://schema.org/InStock"
-        }
-      ]
-    },
-    "breadcrumb": {
-      "@type": "BreadcrumbList",
-      "itemListElement": [
-        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
-        { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://cloudhealthoffice.com/pricing" }
+        { "@type": "Offer", "name": "Open Source", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" },
+        { "@type": "Offer", "name": "Growth", "description": "$0.75 PMPM, up to 50K members", "availability": "https://schema.org/InStock" },
+        { "@type": "Offer", "name": "Scale", "description": "$0.45 PMPM, up to 250K members", "availability": "https://schema.org/InStock" },
+        { "@type": "Offer", "name": "Enterprise", "description": "Custom PMPM, 250K+ members", "availability": "https://schema.org/InStock" }
       ]
     }
   }
   </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
   <link rel="stylesheet" href="css/sentinel.css" />
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
   <style>
     body { padding:0; max-width:none; margin:0; }
     main { max-width:1200px; margin:0 auto; padding:40px 20px; }
-    .pricing-hero { text-align:center; margin-bottom:60px; }
-    .deployment-models { max-width:1000px; margin:60px auto; }
-    .pricing-grid { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-bottom:60px; }
-    .pricing-tier { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:40px; }
-    .price-header { text-align:center; margin-bottom:30px; }
-    .price-label { font-size:1.3rem; color:#00ffff; margin-bottom:10px; }
-    .price-amount { font-size:2.5rem; font-weight:bold; margin-bottom:10px; }
-    .price-period { opacity:0.8; }
-    .tier-features { list-style:none; padding:0; margin:30px 0; }
-    .tier-features li { padding:8px 0; }
-    .comparison-table { background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:40px; margin:60px auto; }
-    .roi-section { background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%); border:2px solid #00ff88; border-radius:12px; padding:50px; margin:60px auto; text-align:center; }
-    @media (max-width: 900px) { .pricing-grid { grid-template-columns:1fr; } }
+
+    .pricing-hero { text-align:center; margin-bottom:60px; padding:60px 20px; }
+    .pricing-hero h1 { margin-bottom:20px; }
+    .subtitle { font-size:1.4rem; max-width:800px; margin:0 auto 30px; color:rgba(255,255,255,0.85); }
+
+    .tier-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:24px; margin:0 auto 80px; }
+    .tier-card { background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:32px 24px; display:flex; flex-direction:column; transition:border-color 0.3s; }
+    .tier-card:hover { border-color:#00ffff; }
+    .tier-card.featured { border-color:#00ffff; position:relative; }
+    .tier-card.featured::before {
+      content:'MOST POPULAR'; position:absolute; top:-14px; left:50%; transform:translateX(-50%);
+      background:#00ffff; color:#000; padding:4px 16px; border-radius:20px;
+      font-weight:bold; font-size:0.8rem; letter-spacing:1px;
+    }
+    .tier-name { font-size:1.4rem; color:#00ffff; margin-bottom:8px; text-shadow:none; }
+    .tier-price { font-size:2.8rem; font-weight:bold; color:#fff; margin:12px 0 4px; line-height:1.1; }
+    .tier-price .unit { font-size:1rem; color:rgba(255,255,255,0.6); font-weight:normal; }
+    .tier-members { font-size:0.95rem; color:rgba(255,255,255,0.5); margin-bottom:24px; }
+    .tier-example { font-size:0.85rem; color:#00ff88; margin-bottom:16px; font-style:italic; }
+    .tier-features { list-style:none; padding:0; margin:0 0 24px; flex:1; }
+    .tier-features li { padding:7px 0; padding-left:24px; position:relative; font-size:0.93rem; }
+    .tier-features li::before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; }
+    .tier-features li.no::before { content:'—'; color:#555; }
+    .tier-features li.no { color:#555; }
+    .tier-cta { margin-top:auto; }
+    .tier-cta a {
+      display:block; text-align:center; padding:14px 20px; border-radius:8px;
+      text-decoration:none; font-weight:bold; font-size:1rem; transition:all 0.3s;
+    }
+    .btn-outline { border:2px solid #00ffff; color:#00ffff; background:transparent; }
+    .btn-outline:hover { background:rgba(0,255,255,0.1); }
+    .btn-primary { border:2px solid #00ffff; background:#00ffff; color:#000; }
+    .btn-primary:hover { background:#00e6e6; box-shadow:0 0 20px rgba(0,255,255,0.4); }
+    .btn-green { border:2px solid #00ff88; background:#00ff88; color:#000; }
+    .btn-green:hover { background:#00e67a; box-shadow:0 0 20px rgba(0,255,136,0.4); }
+
+    /* Calculator */
+    .calculator { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:48px; margin:0 auto 80px; max-width:800px; }
+    .calculator h2 { text-align:center; margin-top:0; }
+    .calc-row { display:flex; align-items:center; justify-content:center; gap:16px; margin:32px 0 24px; flex-wrap:wrap; }
+    .calc-row label { font-size:1.1rem; color:rgba(255,255,255,0.8); }
+    .calc-row input[type=range] { width:300px; accent-color:#00ffff; }
+    .calc-row .member-display {
+      background:#111; border:2px solid #00ffff; border-radius:8px; padding:10px 16px;
+      color:#00ffff; font-size:1.4rem; font-weight:bold; min-width:140px; text-align:center;
+      font-family:inherit;
+    }
+    .calc-result { text-align:center; margin-top:16px; }
+    .calc-monthly { font-size:2.8rem; font-weight:bold; color:#00ffff; text-shadow:0 0 20px rgba(0,255,255,0.6); }
+    .calc-annual { font-size:1.1rem; color:rgba(255,255,255,0.6); margin-top:8px; }
+    .calc-rate { font-size:1rem; color:#00ff88; margin-top:8px; }
+    .calc-comparison { margin-top:20px; padding:16px; background:rgba(0,255,136,0.08); border:1px solid rgba(0,255,136,0.3); border-radius:8px; }
+    .calc-comparison .savings { font-size:1.3rem; font-weight:bold; color:#00ff88; }
+    .calc-comparison .context { font-size:0.9rem; color:rgba(255,255,255,0.6); margin-top:4px; }
+
+    /* What's included */
+    .included-section { margin:0 auto 80px; }
+    .included-section h2 { text-align:center; margin-bottom:16px; }
+    .included-subtitle { text-align:center; color:rgba(255,255,255,0.6); margin-bottom:40px; font-size:1.1rem; }
+    .included-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; }
+    .included-card { background:#0a0a0a; border:1px solid #222; border-radius:12px; padding:28px; }
+    .included-card h4 { color:#00ffff; margin:0 0 12px; font-size:1.1rem; text-shadow:none; }
+    .included-card p { color:rgba(255,255,255,0.7); font-size:0.93rem; margin:0; line-height:1.6; }
+
+    /* Comparison */
+    .comparison { margin:0 auto 80px; }
+    .comparison h2 { text-align:center; margin-bottom:40px; }
+    .compare-table { width:100%; border-collapse:collapse; background:#0a0a0a; border-radius:12px; overflow:hidden; border:2px solid #222; }
+    .compare-table th { background:#111; padding:16px 20px; text-align:left; color:#00ffff; font-size:0.95rem; border-bottom:2px solid #333; }
+    .compare-table td { padding:14px 20px; border-bottom:1px solid #1a1a1a; font-size:0.93rem; color:rgba(255,255,255,0.8); }
+    .compare-table tr:last-child td { border-bottom:none; }
+    .compare-table .cho-col { color:#00ff88; font-weight:bold; }
+    .compare-table .legacy-col { color:#ff6666; }
+
+    /* FAQ */
+    .faq { margin:0 auto 80px; max-width:800px; }
+    .faq h2 { text-align:center; margin-bottom:40px; }
+    .faq-item { border-bottom:1px solid #222; padding:24px 0; }
+    .faq-q { font-size:1.05rem; font-weight:bold; color:#fff; margin-bottom:10px; }
+    .faq-a { color:rgba(255,255,255,0.7); line-height:1.7; font-size:0.95rem; }
+
+    /* CTA */
+    .cta-section {
+      text-align:center; padding:60px 40px; margin:0 auto 40px;
+      background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%);
+      border:2px solid #00ffff; border-radius:12px;
+    }
+    .cta-section h2 { margin-top:0; }
+    .cta-buttons { display:flex; gap:16px; justify-content:center; margin-top:32px; flex-wrap:wrap; }
+    .cta-buttons a { padding:16px 32px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:1.1rem; transition:all 0.3s; }
+
+    @media (max-width:1000px) { .tier-grid { grid-template-columns:repeat(2, 1fr); } .included-grid { grid-template-columns:repeat(2, 1fr); } }
+    @media (max-width:600px) { .tier-grid { grid-template-columns:1fr; } .included-grid { grid-template-columns:1fr; } .compare-table { font-size:0.85rem; } .calc-monthly { font-size:2.2rem; } }
   </style>
 </head>
 <body>
@@ -113,261 +164,330 @@
       </div>
     </div>
   </nav>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });
-  </script>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
 
   <main id="main-content">
+
+    <!-- ===== HERO ===== -->
     <div class="pricing-hero">
-      <h1>Pricing for Health Plans</h1>
-      <p style="font-size:1.3rem; max-width:800px; margin:20px auto;">
-        Transparent pricing for Core Admin system integration and CMS-0057-F compliance.<br>
-        No hidden fees. Flexible deployment models.
-      </p>
-      <div style="margin-top:30px;">
-        <a href="https://portal.cloudhealthoffice.com" class="button" style="background:#00ff88; border-color:#00ff88; font-size:1.1rem; padding:12px 30px;" target="_blank" rel="noopener noreferrer">Start 30-Day Free Trial →</a>
-      </div>
-    </div>
-
-    <!-- Self-Service SaaS Plans (v4.0.0) -->
-    <div style="max-width:1200px; margin:60px auto; padding:40px; background:linear-gradient(135deg, rgba(0,255,255,0.05), rgba(0,255,136,0.05)); border:2px solid #00ffff; border-radius:12px;">
-      <h2 style="text-align:center; margin-bottom:40px; color:#00ffff;">Self-Service SaaS Plans (v4.0.0)</h2>
-      <p style="text-align:center; font-size:1.1rem; margin-bottom:40px;">Live at <a href="https://portal.cloudhealthoffice.com" style="color:#00ff88;" target="_blank" rel="noopener noreferrer">portal.cloudhealthoffice.com</a> • 30-day free trial • Zero vulnerabilities</p>
-      
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:30px;">
-        <!-- Starter -->
-        <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; text-align:center;">
-          <h3 style="color:#00ffff; margin-bottom:20px;">Starter</h3>
-          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">$499<span style="font-size:1rem; opacity:0.7;">/mo</span></div>
-          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
-            <li style="padding:8px 0;">✓ 1-3 payers</li>
-            <li style="padding:8px 0;">✓ 10,000 transactions/mo</li>
-            <li style="padding:8px 0;">✓ 100 GB storage</li>
-            <li style="padding:8px 0;">✓ Email support (4hr SLA)</li>
-            <li style="padding:8px 0;">✓ 99.5% uptime</li>
-            <li style="padding:8px 0;">✓ BAA included</li>
-          </ul>
-          <a href="https://portal.cloudhealthoffice.com" class="button" style="width:100%; margin-top:20px;" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
-        </div>
-        
-        <!-- Pro -->
-        <div style="background:#0a0a0a; border:2px solid #00ff88; border-radius:12px; padding:30px; text-align:center; position:relative;">
-          <div style="position:absolute; top:-15px; left:50%; transform:translateX(-50%); background:#00ff88; color:#000; padding:5px 20px; border-radius:20px; font-weight:bold; font-size:0.9rem;">POPULAR</div>
-          <h3 style="color:#00ff88; margin-bottom:20px;">Pro</h3>
-          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">$999<span style="font-size:1rem; opacity:0.7;">/mo</span></div>
-          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
-            <li style="padding:8px 0;">✓ 4-10 payers</li>
-            <li style="padding:8px 0;">✓ 100,000 transactions/mo</li>
-            <li style="padding:8px 0;">✓ 500 GB storage</li>
-            <li style="padding:8px 0;">✓ Email + Slack support (1hr SLA)</li>
-            <li style="padding:8px 0;">✓ 99.9% uptime</li>
-            <li style="padding:8px 0;">✓ Custom workflows (5 max)</li>
-          </ul>
-          <a href="https://portal.cloudhealthoffice.com" class="button" style="width:100%; margin-top:20px; background:#00ff88; border-color:#00ff88;" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
-        </div>
-        
-        <!-- Enterprise -->
-        <div style="background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:30px; text-align:center;">
-          <h3 style="color:#00ffff; margin-bottom:20px;">Enterprise</h3>
-          <div style="font-size:2.5rem; font-weight:bold; margin:20px 0;">Custom<span style="font-size:1rem; opacity:0.7; display:block; margin-top:10px;">Contact Sales</span></div>
-          <ul style="list-style:none; padding:0; text-align:left; margin:20px 0;">
-            <li style="padding:8px 0;">✓ Unlimited payers</li>
-            <li style="padding:8px 0;">✓ Unlimited transactions</li>
-            <li style="padding:8px 0;">✓ Unlimited storage</li>
-            <li style="padding:8px 0;">✓ Dedicated CSM (30min SLA)</li>
-            <li style="padding:8px 0;">✓ 99.99% uptime</li>
-            <li style="padding:8px 0;">✓ White-label portal</li>
-            <li style="padding:8px 0;">✓ Custom workflows</li>
-            <li style="padding:8px 0;">✓ On-premise option</li>
-          </ul>
-          <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button" style="width:100%; margin-top:20px;" target="_blank" rel="noopener noreferrer">Contact Sales</a>
-        </div>
-      </div>
-
-      <p style="text-align:center; margin-top:30px; font-size:0.95rem; opacity:0.8;">
-        Overage pricing: $0.05/transaction • $50/TB/month storage • All plans include multi-tenant isolation, zero vulnerabilities, 531 passing tests
+      <h1>Pay Per Member. Not Per Feature.</h1>
+      <p class="subtitle">
+        Simple per-member-per-month pricing that scales with your health plan.
+        No transaction caps. No feature gates. Every tier includes the full platform.
       </p>
     </div>
 
-    <!-- Deployment Model Pricing -->
-    <div class="deployment-models">
-      <h2 style="text-align:center; margin-bottom:40px;">Choose Your Deployment Model</h2>
-      
-      <div class="pricing-grid">
-        <!-- SaaS Model -->
-        <div class="pricing-tier">
-          <h3 style="color:#00ffff; text-align:center; font-size:1.8rem;">SaaS Model</h3>
-          <p style="text-align:center; opacity:0.9; margin-bottom:30px;">
-            We host on our Azure infrastructure. You pay monthly subscription.
-          </p>
-          
-          <div class="price-header">
-            <div class="price-label">Starting at</div>
-            <div class="price-amount">$10k-50k</div>
-            <div class="price-period">/month</div>
-          </div>
-          
-          <ul class="tier-features">
-            <li>✓ Full platform hosting</li>
-            <li>✓ 24/7 monitoring & support</li>
-            <li>✓ Automatic updates</li>
-            <li>✓ HIPAA-compliant infrastructure</li>
-            <li>✓ 99.9% uptime SLA</li>
-            <li>✓ Managed clearinghouse connections</li>
-            <li>✓ Compliance reporting included</li>
-          </ul>
-          
-          <p style="text-align:center; opacity:0.7; font-size:0.9rem; margin:20px 0;">
-            Pricing based on member count and transaction volume
-          </p>
-          
-          <div style="text-align:center; margin-top:20px;">
-            <a href="mailto:contact@cloudhealthoffice.com?subject=SaaS Pricing Inquiry" class="button" style="width:100%;">Request Quote</a>
-          </div>
-        </div>
+    <!-- ===== TIER CARDS ===== -->
+    <div class="tier-grid">
 
-        <!-- BYOS Model -->
-        <div class="pricing-tier">
-          <h3 style="color:#00ffff; text-align:center; font-size:1.8rem;">BYOS Model</h3>
-          <p style="text-align:center; opacity:0.9; margin-bottom:30px;">
-            Deploy to your Azure subscription. You own and control the infrastructure.
-          </p>
-          
-          <div class="price-header">
-            <div class="price-label">Implementation</div>
-            <div class="price-amount">$50k-250k</div>
-            <div class="price-period">one-time</div>
-          </div>
-          
-          <ul class="tier-features">
-            <li>✓ Full implementation services</li>
-            <li>✓ Core admin system integration</li>
-            <li>✓ Team training & enablement</li>
-            <li>✓ Documentation & runbooks</li>
-            <li>✓ 90-day post-launch support</li>
-            <li>✓ Source code access (Apache 2.0)</li>
-            <li>✓ Infrastructure as code included</li>
-          </ul>
-          
-          <div style="text-align:center; margin:20px 0; padding:20px; background:#0a0a0a; border-radius:8px;">
-            <div style="font-size:1.1rem; margin-bottom:10px;">Optional Support</div>
-            <div style="font-size:1.5rem; font-weight:bold;">$5k-15k/month</div>
-            <div style="opacity:0.7; font-size:0.9rem; margin-top:10px;">
-              Ongoing support, updates, enhancements
-            </div>
-          </div>
-          
-          <div style="text-align:center; margin-top:20px;">
-            <a href="mailto:contact@cloudhealthoffice.com?subject=BYOS Pricing Inquiry" class="button" style="width:100%;">Request Quote</a>
-          </div>
+      <div class="tier-card">
+        <div class="tier-name">Open Source</div>
+        <div class="tier-price">$0 <span class="unit">forever</span></div>
+        <div class="tier-members">Self-hosted · Unlimited members</div>
+        <ul class="tier-features">
+          <li>Full platform source code</li>
+          <li>All 17 microservices</li>
+          <li>All X12 EDI transactions</li>
+          <li>All FHIR R4 APIs</li>
+          <li>Argo Workflows adjudication</li>
+          <li>Apache 2.0 license</li>
+          <li class="no">No managed hosting</li>
+          <li class="no">Community support only</li>
+        </ul>
+        <div class="tier-cta">
+          <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn-outline" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        </div>
+      </div>
+
+      <div class="tier-card">
+        <div class="tier-name">Growth</div>
+        <div class="tier-price">$0.75 <span class="unit">PMPM</span></div>
+        <div class="tier-members">Up to 50,000 members</div>
+        <div class="tier-example">Example: 20K members = $15,000/mo</div>
+        <ul class="tier-features">
+          <li>Everything in Open Source</li>
+          <li>Managed SaaS hosting (Azure)</li>
+          <li>Single clearinghouse connector</li>
+          <li>Portal access</li>
+          <li>BAA included</li>
+          <li>Email support (4hr SLA)</li>
+          <li>99.5% uptime SLA</li>
+          <li>30-day free trial</li>
+        </ul>
+        <div class="tier-cta">
+          <a href="https://portal.cloudhealthoffice.com/signup" class="btn-outline" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+        </div>
+      </div>
+
+      <div class="tier-card featured">
+        <div class="tier-name">Scale</div>
+        <div class="tier-price">$0.45 <span class="unit">PMPM</span></div>
+        <div class="tier-members">Up to 250,000 members</div>
+        <div class="tier-example">Example: 75K members = $33,750/mo</div>
+        <ul class="tier-features">
+          <li>Everything in Growth</li>
+          <li>Multi-clearinghouse failover</li>
+          <li>Prior auth automation (278/CDS)</li>
+          <li>Medical attachments (275/RFAI)</li>
+          <li>Dedicated onboarding engineer</li>
+          <li>Slack + phone support (1hr SLA)</li>
+          <li>99.9% uptime SLA</li>
+          <li>Custom workflow configuration</li>
+        </ul>
+        <div class="tier-cta">
+          <a href="https://portal.cloudhealthoffice.com/signup" class="btn-primary" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+        </div>
+      </div>
+
+      <div class="tier-card">
+        <div class="tier-name">Enterprise</div>
+        <div class="tier-price">Custom <span class="unit">PMPM</span></div>
+        <div class="tier-members">250,000+ members</div>
+        <div class="tier-example">Volume-based pricing from $0.25 PMPM</div>
+        <ul class="tier-features">
+          <li>Everything in Scale</li>
+          <li>Volume-based PMPM discount</li>
+          <li>Dedicated CSM + TAM</li>
+          <li>Hybrid / on-premise deployment</li>
+          <li>White-label portal</li>
+          <li>Custom core admin integration</li>
+          <li>99.99% uptime SLA</li>
+          <li>Annual or multi-year terms</li>
+        </ul>
+        <div class="tier-cta">
+          <a href="https://portal.cloudhealthoffice.com/contact-sales" class="btn-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
         </div>
       </div>
     </div>
 
-    <!-- Comparison Table -->
-    <div class="comparison-table">
-      <h3 style="text-align:center; margin-bottom:30px;">Deployment Model Comparison</h3>
-      <table style="width:100%; border-collapse:collapse;">
-        <tr style="border-bottom:1px solid #333;">
-          <th style="text-align:left; padding:15px;">Factor</th>
-          <th style="text-align:center; padding:15px; color:#00ffff;">SaaS</th>
-          <th style="text-align:center; padding:15px; color:#00ffff;">BYOS</th>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:15px;">Upfront Cost</td>
-          <td style="text-align:center; padding:15px;">Low</td>
-          <td style="text-align:center; padding:15px;">Medium-High</td>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:15px;">Monthly Cost</td>
-          <td style="text-align:center; padding:15px;">Higher</td>
-          <td style="text-align:center; padding:15px;">Lower (Azure only)</td>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:15px;">Operational Control</td>
-          <td style="text-align:center; padding:15px;">Managed by us</td>
-          <td style="text-align:center; padding:15px;">Full control</td>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:15px;">Internal Resources</td>
-          <td style="text-align:center; padding:15px;">Minimal</td>
-          <td style="text-align:center; padding:15px;">Moderate</td>
-        </tr>
-        <tr>
-          <td style="padding:15px;">Best For</td>
-          <td style="text-align:center; padding:15px;">Quick deployment, less overhead</td>
-          <td style="text-align:center; padding:15px;">BPaaS exit, internal ops</td>
-        </tr>
+    <!-- ===== CALCULATOR ===== -->
+    <div class="calculator">
+      <h2>Estimate Your Monthly Cost</h2>
+      <p style="text-align:center; color:rgba(255,255,255,0.6); margin-bottom:8px;">
+        Drag the slider or type a number to see your estimated monthly cost.
+      </p>
+      <div class="calc-row">
+        <label for="memberSlider">Members:</label>
+        <input type="range" id="memberSlider" min="1000" max="500000" step="1000" value="50000" />
+        <div class="member-display" id="memberDisplay">50,000</div>
+      </div>
+      <div class="calc-result">
+        <div class="calc-monthly" id="calcMonthly">$22,500/mo</div>
+        <div class="calc-annual" id="calcAnnual">$270,000 per year</div>
+        <div class="calc-rate" id="calcRate">Scale tier · $0.45 PMPM</div>
+        <div class="calc-comparison">
+          <div class="savings" id="calcSavings">Save $1.2M+ vs. a typical core admin upgrade</div>
+          <div class="context">Based on average $1.5M cost for core system CMS-0057-F compliance projects</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function() {
+      var slider = document.getElementById('memberSlider');
+      var display = document.getElementById('memberDisplay');
+      var mo = document.getElementById('calcMonthly');
+      var yr = document.getElementById('calcAnnual');
+      var rate = document.getElementById('calcRate');
+      var sav = document.getElementById('calcSavings');
+
+      function fmt(n) { return n.toLocaleString('en-US'); }
+      function fmtUsd(n) { return '$' + fmt(Math.round(n)); }
+
+      function calc() {
+        var m = parseInt(slider.value) || 0;
+        display.textContent = fmt(m);
+
+        var pmpm, tier;
+        if (m <= 50000) { pmpm = 0.75; tier = 'Growth'; }
+        else if (m <= 250000) { pmpm = 0.45; tier = 'Scale'; }
+        else { pmpm = 0.30; tier = 'Enterprise (est.)'; }
+
+        var monthly = m * pmpm;
+        var annual = monthly * 12;
+        var saved = 1500000 - annual;
+
+        mo.textContent = fmtUsd(monthly) + '/mo';
+        yr.textContent = fmtUsd(annual) + ' per year';
+        rate.textContent = tier + ' tier · $' + pmpm.toFixed(2) + ' PMPM';
+
+        if (saved > 0) {
+          sav.textContent = 'Save ' + fmtUsd(saved) + '+ vs. a typical core admin upgrade';
+        } else {
+          sav.textContent = 'Full platform at enterprise scale — contact sales for volume pricing';
+        }
+      }
+
+      slider.addEventListener('input', calc);
+      calc();
+    })();
+    </script>
+
+    <!-- ===== WHAT'S INCLUDED ===== -->
+    <div class="included-section">
+      <h2>Every Tier Includes the Full Platform</h2>
+      <p class="included-subtitle">No feature gates. No module upsells. You get everything.</p>
+      <div class="included-grid">
+        <div class="included-card">
+          <h4>Claims Processing</h4>
+          <p>837P/I/D inbound, claims scrubbing (20+ rules), 10-step adjudication workflow, 835 ERA generation. Sub-500ms processing.</p>
+        </div>
+        <div class="included-card">
+          <h4>Eligibility</h4>
+          <p>Real-time and batch 270/271 eligibility verification. Member, coverage, and benefit plan management.</p>
+        </div>
+        <div class="included-card">
+          <h4>Prior Authorization</h4>
+          <p>278 request/response, CDS Hooks for coverage requirements discovery. CMS-0057-F Prior Auth API.</p>
+        </div>
+        <div class="included-card">
+          <h4>Medical Attachments</h4>
+          <p>275 inbound, RFAI case management, 277 status, 824 acknowledgment. Automated document correlation.</p>
+        </div>
+        <div class="included-card">
+          <h4>FHIR R4 APIs</h4>
+          <p>Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory. Full CMS-0057-F compliance.</p>
+        </div>
+        <div class="included-card">
+          <h4>Multi-Tenant Portal</h4>
+          <p>Blazor Server portal with 37 pages. Dashboard, claims, eligibility, members, providers, workflows, benefit plans.</p>
+        </div>
+        <div class="included-card">
+          <h4>Enrollment</h4>
+          <p>834 enrollment import. Member, subscriber, dependent, and sponsor management. Coverage lifecycle tracking.</p>
+        </div>
+        <div class="included-card">
+          <h4>EDI Infrastructure</h4>
+          <p>17 Argo Workflows for automated EDI processing. SFTP polling, Kafka event-driven, multi-clearinghouse routing.</p>
+        </div>
+        <div class="included-card">
+          <h4>Security &amp; Compliance</h4>
+          <p>HIPAA-grade infrastructure. BAA included. Zero known vulnerabilities. 531 tests, 85.93% coverage. Audit trails.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== COMPARISON TABLE ===== -->
+    <div class="comparison">
+      <h2>How CHO Compares</h2>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th style="width:40%;">Capability</th>
+            <th style="width:30%;">Legacy Core Admin</th>
+            <th style="width:30%;">Cloud Health Office</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CMS-0057-F compliance</td>
+            <td class="legacy-col">$1.5M–3M upgrade + 12–18 months</td>
+            <td class="cho-col">Included · Live in weeks</td>
+          </tr>
+          <tr>
+            <td>Typical annual cost (50K members)</td>
+            <td class="legacy-col">$500K–2M/yr maintenance</td>
+            <td class="cho-col">$270K/yr ($0.45 PMPM)</td>
+          </tr>
+          <tr>
+            <td>Claims adjudication speed</td>
+            <td class="legacy-col">7–14 day turnaround</td>
+            <td class="cho-col">&lt;500ms real-time</td>
+          </tr>
+          <tr>
+            <td>Clearinghouse lock-in</td>
+            <td class="legacy-col">Single vendor, 3-year contract</td>
+            <td class="cho-col">Multi-clearinghouse failover</td>
+          </tr>
+          <tr>
+            <td>FHIR R4 APIs</td>
+            <td class="legacy-col">Add-on module ($200K+)</td>
+            <td class="cho-col">Included · 5 production APIs</td>
+          </tr>
+          <tr>
+            <td>Deployment time</td>
+            <td class="legacy-col">12–18 months</td>
+            <td class="cho-col">Weeks (integration) to months (full)</td>
+          </tr>
+          <tr>
+            <td>Source code access</td>
+            <td class="legacy-col">Never</td>
+            <td class="cho-col">Apache 2.0 · Full access</td>
+          </tr>
+          <tr>
+            <td>Contract terms</td>
+            <td class="legacy-col">3–5 year lock-in</td>
+            <td class="cho-col">Month-to-month or annual</td>
+          </tr>
+        </tbody>
       </table>
     </div>
 
-    <!-- ROI Comparison -->
-    <div class="roi-section">
-      <h3 style="color:#00ff88; text-align:center; margin-bottom:20px;">
-        Compare to Traditional Platform Upgrade
-      </h3>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:30px; text-align:left;">
-        <div>
-          <h4 style="color:#ff3333; text-align:center;">Traditional Vendor</h4>
-          <ul style="padding:0 20px;">
-            <li>$2M+ implementation cost</li>
-            <li>12-18 month timeline</li>
-            <li>Ongoing vendor dependency</li>
-            <li>Per-transaction fees</li>
-            <li>Limited customization</li>
-            <li>Proprietary code</li>
-          </ul>
-        </div>
-        <div>
-          <h4 style="color:#00ff88; text-align:center;">Cloud Health Office</h4>
-          <ul style="padding:0 20px;">
-            <li>$50k-250k implementation (BYOS)</li>
-            <li>4-12 week timeline</li>
-            <li>Full source code access (Apache 2.0)</li>
-            <li>Predictable Azure costs</li>
-            <li>Fully customizable</li>
-            <li>No vendor lock-in</li>
-          </ul>
-        </div>
+    <!-- ===== FAQ ===== -->
+    <div class="faq">
+      <h2>Frequently Asked Questions</h2>
+
+      <div class="faq-item">
+        <div class="faq-q">How is "member" counted for billing?</div>
+        <div class="faq-a">We count unique enrolled members with active coverage in your system as of the first of each month. This is the same member count you report to CMS or your state regulator. Dependents and subscribers are both counted. We pull the count from your enrollment data — no manual reporting required.</div>
       </div>
-      <p style="text-align:center; margin-top:30px; font-size:1.2rem; font-weight:bold; color:#00ff88;">
-        Potential savings: $1.5M+ over 3 years
-      </p>
+
+      <div class="faq-item">
+        <div class="faq-q">Is there a minimum commitment?</div>
+        <div class="faq-a">Growth and Scale plans are month-to-month with no minimum term. Cancel anytime. Enterprise plans offer annual or multi-year terms with additional PMPM discounts. All paid plans include a 30-day free trial.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">What if my membership fluctuates seasonally?</div>
+        <div class="faq-a">Your bill adjusts automatically each month based on your enrolled member count. Medicaid MCOs with seasonal redetermination cycles or Medicare Advantage plans with AEP enrollment spikes only pay for the members they have that month. No true-ups, no overages.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Are there any transaction limits or overage charges?</div>
+        <div class="faq-a">No. Every paid tier includes unlimited EDI transactions, unlimited FHIR API calls, and unlimited claims processing. Your PMPM covers everything. We don't charge per transaction, per claim, or per API call.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Does this replace our core admin system?</div>
+        <div class="faq-a">It can, but it doesn't have to. Most health plans start by using Cloud Health Office as an integration layer alongside their existing core admin (QNXT, FACETS, HealthEdge, etc.) for EDI modernization and CMS compliance. Every component is designed to either augment or replace the corresponding module — you choose which workloads to migrate and when.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Is a BAA included?</div>
+        <div class="faq-a">Yes. Every paid tier includes a signed Business Associate Agreement. The open-source tier is self-hosted, so your own BAA framework applies.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Can I start with the open-source version and upgrade later?</div>
+        <div class="faq-a">Absolutely. Many organizations evaluate with the open-source version, then move to a managed tier when they're ready for production. Your data and configuration migrate seamlessly — it's the same platform.</div>
+      </div>
     </div>
 
-    <!-- Contact CTA -->
-    <div style="text-align:center; margin:60px 0;">
-      <h2>Questions About Pricing?</h2>
-      <p style="font-size:1.1rem; margin:20px 0;">
-        Schedule a call to discuss your specific requirements and get a custom quote.
+    <!-- ===== CTA ===== -->
+    <div class="cta-section">
+      <h2>Ready to See What It Costs for Your Plan?</h2>
+      <p style="color:rgba(255,255,255,0.7); font-size:1.1rem; margin-top:16px;">
+        30-day free trial. No credit card required. Production-grade from day one.
       </p>
-      <a href="#schedule-demo" class="button" style="font-size:1.1rem; padding:15px 40px;">Schedule Technical Demo</a>
+      <div class="cta-buttons">
+        <a href="https://portal.cloudhealthoffice.com/signup" class="btn-primary" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+        <a href="https://portal.cloudhealthoffice.com/contact-sales" class="btn-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
+        <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn-outline" target="_blank" rel="noopener noreferrer">View Source</a>
+      </div>
     </div>
 
   </main>
 
-  <footer style="text-align:center; padding:40px 20px; border-top:1px solid #333; margin-top:80px;">
-    <p>
-      <strong>Cloud Health Office v4.0.0</strong><br>
-      Modern integration platform for health plans running legacy systems developed which were not designed for current regulation.
+  <footer style="max-width:1200px; margin:60px auto 0; padding:40px 20px 30px; border-top:1px solid #222; text-align:center;">
+    <p style="color:rgba(255,255,255,0.5); font-size:0.9rem;">
+      © 2026 Cloud Health Office — Aurelianware, Inc. · Independent open-source project · Not affiliated with any payer platform or clearinghouse vendor.
     </p>
-    <p style="opacity:0.8; margin:20px 0;">
-      Apache 2.0 License • Independent open-source project • Not affiliated with any payer platform or clearinghouse vendors
-    </p>
-    <p>
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
-      <a href="mailto:contact@cloudhealthoffice.com">Contact</a> •
-      <a href="/pricing">Pricing</a>
-    </p>
-    <p style="opacity:0.6; font-size:0.9rem; margin-top:20px;">
-      © 2026 Cloud Health Office • Built by healthcare payer system experts
+    <p style="margin-top:8px;">
+      <a href="/pricing" style="color:#00ffff; margin:0 12px;">Pricing</a> ·
+      <a href="mailto:sales@cloudhealthoffice.com" style="color:rgba(255,255,255,0.5); margin:0 12px;">Contact</a> ·
+      <a href="legal/privacy-policy.html" style="color:rgba(255,255,255,0.5); margin:0 12px;">Privacy Policy</a>
     </p>
   </footer>
 
-  <script>
-    if (window.plausible) {
-      plausible('pageview', { props: { page: 'pricing' } });
-    }
-  </script>
 </body>
 </html>
