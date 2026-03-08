@@ -13,7 +13,7 @@ without replacing your core administration system.
 [![Tests](https://img.shields.io/badge/tests-531%20passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
+[![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
 
 [Website](https://cloudhealthoffice.com) · [Demo Portal](https://portal.cloudhealthoffice.com) · [API Docs](https://api.cloudhealthoffice.com) · [Contact Sales](mailto:sales@cloudhealthoffice.com)
 
@@ -186,7 +186,16 @@ cloudhealthoffice/
 
 ## License
 
-[Apache License 2.0](./LICENSE)
+Cloud Health Office is licensed under the [Business Source License 1.1](./LICENSE).
+
+| | |
+| --- | --- |
+| **Free for** | Non-production use — evaluation, development, testing, staging |
+| **Requires a license for** | Production use |
+| **Converts to** | Apache 2.0 on 2030-03-08 |
+| **Licensor** | Aurelianware, Inc |
+
+For commercial licensing: [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
 
 ## Links
 
