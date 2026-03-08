@@ -398,6 +398,15 @@
         syntaxHighlight: {
           activate: true,
           theme: 'monokai'
+        },
+        // Pre-fill client ID — multi-tenant app registration.
+        // First-time use: Azure AD will prompt for admin consent,
+        // which creates an Enterprise App in your tenant automatically.
+        initOAuth: {
+          clientId: '54f3419d-0d69-4b06-939a-c1a260596556',
+          scopes: 'patient/*.read openid fhirUser',
+          usePkceWithAuthorizationCodeGrant: true,
+          additionalQueryStringParams: { nonce: 'cloudhealthoffice' }
         }
       });
     }
