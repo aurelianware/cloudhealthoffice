@@ -16,6 +16,83 @@
   },
   "routes": [
     {
+      "route": "/index.html",
+      "redirect": "/",
+      "statusCode": 301
+    },
+    {
+      "route": "/solutions-payers.html",
+      "redirect": "/solutions-payers",
+      "statusCode": 301
+    },
+    {
+      "route": "/solutions-providers.html",
+      "redirect": "/solutions-providers",
+      "statusCode": 301
+    },
+    {
+      "route": "/pricing.html",
+      "redirect": "/pricing",
+      "statusCode": 301
+    },
+    {
+      "route": "/platform.html",
+      "redirect": "/platform",
+      "statusCode": 301
+    },
+    {
+      "route": "/assessment.html",
+      "redirect": "/assessment",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights.html",
+      "redirect": "/insights",
+      "statusCode": 301
+    },
+    {
+      "route": "/release-notes.html",
+      "redirect": "/release-notes",
+      "statusCode": 301
+    },
+    {
+      "route": "/legal/privacy-policy.html",
+      "redirect": "/legal/privacy-policy",
+      "statusCode": 301
+    },
+    {
+      "route": "/legal/privacy-policy",
+      "rewrite": "/legal/privacy-policy.html"
+    },
+    {
+      "route": "/solutions-payers",
+      "rewrite": "/solutions-payers.html"
+    },
+    {
+      "route": "/solutions-providers",
+      "rewrite": "/solutions-providers.html"
+    },
+    {
+      "route": "/pricing",
+      "rewrite": "/pricing.html"
+    },
+    {
+      "route": "/platform",
+      "rewrite": "/platform.html"
+    },
+    {
+      "route": "/assessment",
+      "rewrite": "/assessment.html"
+    },
+    {
+      "route": "/insights",
+      "rewrite": "/insights.html"
+    },
+    {
+      "route": "/release-notes",
+      "rewrite": "/release-notes.html"
+    },
+    {
       "route": "/login.html",
       "allowedRoles": ["anonymous"]
     },
