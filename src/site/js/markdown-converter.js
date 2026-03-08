@@ -110,7 +110,7 @@ function generateHtmlPage(title, content, filename) {
       Capabilities beyond question. Systems that do not fail.
     </p>
     <p>
-      Apache 2.0 • Not affiliated with third-party vendors • © 2025 Aurelianware<br>
+      Apache 2.0 • Not affiliated with third-party vendors • © 2026 Aurelianware<br>
       <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
       <a href="mailto:mark@aurelianware.com">Contact</a>
     </p>

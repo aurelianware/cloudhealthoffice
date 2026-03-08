@@ -484,5 +484,5 @@ Organizations that embrace Cloud Health Office will achieve:
 <div style="text-align: center; padding: 40px 0; font-size: 0.9em; opacity: 0.7;">
   <p><strong>Cloud Health Office v1.0.0 — The Sentinel</strong></p>
   <p>Capabilities beyond question. Systems that do not fail.</p>
-  <p>© 2025 Aurelianware • Apache 2.0 License</p>
+  <p>© 2026 Aurelianware, Inc • Apache 2.0 License</p>
 </div>

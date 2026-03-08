@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -160,17 +161,20 @@
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
 </head>
+
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
   <nav style="margin-bottom:20px;">
     <div class="nav-inner">
       <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img"
+          aria-hidden="true" />
         <span class="nav-logo-text">Cloud Health Office</span>
       </a>
       <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false"
+          id="mobileMenuToggle">&#9776;</button>
         <ul id="mainNav">
           <li><a href="/">Home</a></li>
           <li><a href="/solutions-payers">For Payers</a></li>
@@ -178,8 +182,10 @@
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
           <li><a href="/release-notes">Versions</a></li>
-          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer"
+              style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank"
+              rel="noopener noreferrer">GitHub</a></li>
         </ul>
       </div>
     </div>
@@ -188,7 +194,9 @@
   <main id="main-content">
     <div class="login-container">
       <div class="login-header">
-        <img src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg" alt="Cloud Health Office Sentinel Logo">
+        <img
+          src="https://github.com/aurelianware/cloudhealthoffice/raw/main/docs/images/logo-cloudhealthoffice-sentinel-primary.svg"
+          alt="Cloud Health Office Sentinel Logo">
         <h1>Welcome to Cloud Health Office</h1>
         <p>Healthcare organizations use their existing Microsoft Entra ID (Azure AD) credentials</p>
       </div>
@@ -228,7 +236,8 @@
           <a href="/">Learn More</a>
           <a href="/platform">Platform Overview</a>
           <a href="/solutions-payers">For Health Plans</a>
-          <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+          <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View on
+            GitHub</a>
         </div>
       </div>
     </div>
@@ -240,8 +249,8 @@
       Capabilities beyond question. Systems that do not fail.
     </p>
     <p style="font-size: 0.9rem; color: var(--medium-gray);">
-      Apache 2.0 • Not affiliated with third-party vendors • © 2025 Aurelianware<br>
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
+      Apache 2.0 • Not affiliated with third-party vendors • © 2026 Aurelianware, Inc<br>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
       <a href="mailto:mark@aurelianware.com">Contact</a>
     </p>
   </footer>
@@ -251,12 +260,12 @@
     (async function checkAuth() {
       const loadingMessage = document.getElementById('loadingMessage');
       const loginContent = document.getElementById('loginContent');
-      
+
       loadingMessage.style.display = 'block';
       loginContent.style.display = 'none';
 
       const authenticated = await isAuthenticated();
-      
+
       if (authenticated) {
         loadingMessage.textContent = 'Already signed in. Redirecting to portal...';
         setTimeout(() => {
@@ -269,4 +278,5 @@
     })();
   </script>
 </body>
+
 </html>
