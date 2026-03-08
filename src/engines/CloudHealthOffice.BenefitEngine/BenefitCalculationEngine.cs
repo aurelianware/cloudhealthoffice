@@ -109,6 +109,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         await _accumulatorService.ApplyUpdatesAsync(
             request.MemberId, request.SubscriberId,
             request.BenefitPlanId, planYear,
+            request.ClaimId,
             workingAccumulators.GetPendingUpdates(), ct);
 
         // ── Step 6: Determine overall claim outcome ──

@@ -55,6 +55,23 @@ public enum AccumulatorScope
 }
 
 /// <summary>
+/// Current state of a single accumulator as loaded from persistent storage.
+/// Passed to AccumulatorWorkingSet at the start of adjudication.
+/// </summary>
+public record AccumulatorSnapshot
+{
+    public AccumulatorType Type { get; init; }
+    public AccumulatorScope Scope { get; init; }
+    public NetworkTier NetworkTier { get; init; }
+    public decimal LimitAmount { get; init; }
+
+    /// <summary>
+    /// Balance already accumulated as of the start of this adjudication.
+    /// </summary>
+    public decimal AccumulatedAmountAfter { get; init; }
+}
+
+/// <summary>
 /// Deductible model — "embedded" means each family member has their own
 /// sub-limit within the family deductible. "Aggregate" means the family
 /// deductible is one shared pool.

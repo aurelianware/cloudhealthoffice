@@ -1,4 +1,6 @@
+using CloudHealthOffice.BenefitEngine.Persistence;
 using CloudHealthOffice.BenefitEngine.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudHealthOffice.BenefitEngine.Configuration;
@@ -62,9 +64,29 @@ public class BenefitEngineBuilder
 
     /// <summary>
     /// Use CHO's own accumulator tracking store.
+    ///
+    /// Automatically selects the MongoDB or Cosmos DB repository based on
+    /// whether <c>MongoDb:ConnectionString</c> is present in configuration.
+    /// The host service must register the appropriate DB client before calling this:
+    /// <list type="bullet">
+    ///   <item>MongoDB mode: register <c>IMongoDatabase</c></item>
+    ///   <item>Cosmos mode: register <c>CosmosClient</c></item>
+    /// </list>
+    /// The host service must also register an <c>IBenefitEngineTenantContext</c>
+    /// implementation that provides the current tenant ID.
     /// </summary>
-    public BenefitEngineBuilder UseChoAccumulatorService()
+    public BenefitEngineBuilder UseChoAccumulatorService(IConfiguration? configuration = null)
     {
+        if (configuration is not null &&
+            !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"]))
+        {
+            _services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
+        }
+        else
+        {
+            _services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
+        }
+
         _services.AddScoped<IAccumulatorService, ChoAccumulatorService>();
         return this;
     }
@@ -181,41 +203,6 @@ internal class ChoBenefitPlanProvider : IBenefitPlanProvider
 }
 
 /// <summary>
-/// CHO-native accumulator service — reads/writes CHO's own accumulator store.
-/// TODO: Implement with actual MongoDB/Cosmos queries + optimistic concurrency.
-/// </summary>
-internal class ChoAccumulatorService : IAccumulatorService
-{
-    public Task<IReadOnlyList<AccumulatorSnapshot>> GetAccumulatorsAsync(
-        string memberId, string subscriberId, Guid benefitPlanId,
-        string planYear, CancellationToken ct = default)
-    {
-        throw new NotImplementedException(
-            "ChoAccumulatorService: Implement accumulator reads. " +
-            "Collection key: (memberId, benefitPlanId, planYear). " +
-            "Use optimistic concurrency (version field) for updates.");
-    }
-
-    public Task ApplyUpdatesAsync(string memberId, string subscriberId,
-        Guid benefitPlanId, string planYear,
-        IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct = default)
-    {
-        throw new NotImplementedException("ChoAccumulatorService: Implement accumulator writes with optimistic concurrency.");
-    }
-
-    public Task ReverseAsync(string memberId, string subscriberId,
-        Guid benefitPlanId, string planYear, string claimId, CancellationToken ct = default)
-    {
-        throw new NotImplementedException("ChoAccumulatorService: Implement accumulator reversal.");
-    }
-
-    public Task ResetForPlanYearAsync(Guid benefitPlanId, string planYear, CancellationToken ct = default)
-    {
-        throw new NotImplementedException("ChoAccumulatorService: Implement annual accumulator reset.");
-    }
-}
-
-/// <summary>
 /// CHO-native service category mapping repository.
 /// TODO: Implement with actual MongoDB/Cosmos queries.
 /// </summary>
@@ -275,6 +262,7 @@ internal class QnxtAccumulatorService : IAccumulatorService
 
     public Task ApplyUpdatesAsync(string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
+        string claimId,
         IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct = default)
     {
         throw new NotImplementedException(

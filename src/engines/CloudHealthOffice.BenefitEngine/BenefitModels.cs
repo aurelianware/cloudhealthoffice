@@ -54,6 +54,12 @@ public record BenefitResolutionRequest
     public Dictionary<int, decimal> AllowedAmounts { get; init; } = [];
 
     /// <summary>
+    /// Claim identifier — required for accumulator idempotency.
+    /// Prevents double-counting if the adjudication workflow retries.
+    /// </summary>
+    public string ClaimId { get; init; } = default!;
+
+    /// <summary>
     /// Optional: claim-level context used by some benefit rules.
     /// </summary>
     public string? ClaimType { get; init; } // 837P, 837I, 837D
