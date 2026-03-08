@@ -1,2 +1,32 @@
 User-agent: *
-Disallow: /
+
+# Allow public pages
+Allow: /welcome
+Allow: /signup
+Allow: /demo
+Allow: /apis
+Allow: /docs
+Allow: /pricing
+Allow: /contact-sales
+Allow: /legal
+
+# Block authenticated/private pages
+Disallow: /dashboard
+Disallow: /claims
+Disallow: /eligibility
+Disallow: /authorizations
+Disallow: /members
+Disallow: /providers
+Disallow: /sponsors
+Disallow: /benefit-plans
+Disallow: /trading-partners
+Disallow: /reference-data
+Disallow: /workflows
+Disallow: /reports
+Disallow: /settings
+Disallow: /request-access
+Disallow: /Error/
+Disallow: /_blazor
+Disallow: /_framework
+
+Sitemap: https://portal.cloudhealthoffice.com/sitemap.xml
