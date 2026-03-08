@@ -19,6 +19,18 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>
+/// Provides the current tenant identity to engine services.
+///
+/// Implement this in the host service and register it as scoped DI.
+/// Typical implementation reads TenantId from the HTTP request context
+/// (set by the tenant middleware) or from the Argo workflow step context.
+/// </summary>
+public interface IBenefitEngineTenantContext
+{
+    string TenantId { get; }
+}
+
+/// <summary>
 /// Provides benefit plan configuration to the calculation engine.
 ///
 /// CHO-native implementation: reads from benefit-plan-service's MongoDB.
@@ -52,11 +64,13 @@ public interface IAccumulatorService
 
     /// <summary>
     /// Persist accumulator updates from a completed adjudication.
-    /// Should use optimistic concurrency to handle simultaneous claims.
+    /// Uses optimistic concurrency and claimId-based idempotency to
+    /// handle simultaneous claims and workflow retries safely.
     /// </summary>
     Task ApplyUpdatesAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
+        string claimId,
         IReadOnlyList<AccumulatorUpdate> updates,
         CancellationToken ct = default);
 
