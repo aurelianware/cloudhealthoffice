@@ -35,7 +35,7 @@ jobs:
           done
 
           # Check for required files
-          required_files=("README.md" "ARCHITECTURE.md" "SECURITY.md" "DEPLOYMENT.md" "CONTRIBUTING.md")
+          required_files=("README.md" "SECURITY.md" "CONTRIBUTING.md" "docs/guides/ARCHITECTURE.md" "docs/guides/DEPLOYMENT.md")
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then
               echo "::error::Required file missing: $file"
