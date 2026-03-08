@@ -25,7 +25,7 @@ on:
     paths:
       - 'src/site/**'
       - '.github/workflows/deploy-static-site.yml'
-      - 'infra/main.bicep'
+      - 'infrastructure/azure/main.bicep'
 
 permissions:
   id-token: write

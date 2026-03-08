@@ -4,8 +4,8 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'infra/**'
-      - '!infra/helm/**'
+      - 'infrastructure/**'
+      - '!infrastructure/helm/**'
       - 'site/**'
       - 'logicapps/**'
       - '.github/workflows/deploy.yml'
@@ -389,9 +389,9 @@ jobs:
           inlineScript: |
             echo "Installing Bicep CLI..."
             az bicep install
-            echo "Validating Bicep template: infra/main.bicep"
+            echo "Validating Bicep template: infrastructure/azure/main.bicep"
             az bicep version
-            az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+            az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/arm.json
             if [ ! -s /tmp/arm.json ]; then
               echo "::error::Bicep compilation failed - ARM template is empty"
               exit 1
@@ -405,7 +405,7 @@ jobs:
             echo "Running ARM What-If analysis"
             az deployment group what-if \
               --resource-group "${{ vars.AZURE_RG_NAME }}" \
-              --template-file infra/main.bicep \
+              --template-file infrastructure/azure/main.bicep \
               --parameters \
                 location="${{ vars.AZURE_LOCATION }}" \
                 baseName="${{ vars.BASE_NAME }}" \
@@ -425,7 +425,7 @@ jobs:
         with:
           scope: resourcegroup
           resourceGroupName: ${{ env.RG_NAME }}
-          template: infra/main.bicep
+          template: infrastructure/azure/main.bicep
           parameters: location="${{ env.LOCATION }}" baseName="${{ env.BASE_NAME }}" iaName="${{ env.IA_NAME }}" serviceBusName="${{ env.SERVICE_BUS_NAME }}" sftpHost="${{ env.SFTP_HOST }}" sftpUsername="${{ env.SFTP_USERNAME }}" sftpPassword="${{ env.SFTP_PASSWORD }}" connectorLocation="${{ env.CONNECTOR_LOCATION }}" enableB2B=true useExistingIa=false storageSku="${{ env.STORAGE_SKU }}"
           deploymentName: hipaa-logic-infra-${{ github.run_number }}
           failOnStdErr: true
@@ -473,7 +473,7 @@ jobs:
             if [ ! -f "./$schema" ]; then
               # Try to find in common subdirectories
               found=""
-              for dir in "schemas" "infra/schemas" "logicapps/schemas" "logicapps/workflows/schemas"; do
+              for dir in "schemas" "infrastructure/schemas" "infrastructure/logicapps/schemas" "infrastructure/logicapps/workflows/schemas"; do
                 if [ -f "$dir/$schema" ]; then
                   echo "Copying $dir/$schema to repo root"
                   cp "$dir/$schema" "./$schema"

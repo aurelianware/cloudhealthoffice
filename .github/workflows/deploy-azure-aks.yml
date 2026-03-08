@@ -7,8 +7,8 @@ on:
     paths:
       - 'src/**'
       - 'containers/**'
-      - 'infra/k8s/**'
-      - 'infra/azure/aks-main.bicep'
+      - 'infrastructure/k8s/**'
+      - 'infrastructure/azure/aks-main.bicep'
       - '.github/workflows/deploy-azure-aks.yml'
 
 env:
@@ -311,10 +311,10 @@ jobs:
 
       - name: Apply core manifests
         run: |
-          kubectl apply -f infra/k8s/namespaces.yaml
+          kubectl apply -f infrastructure/k8s/namespaces.yaml
 
           # cert-manager ClusterIssuer (requires cert-manager pre-installed on cluster)
-          kubectl apply -f infra/k8s/cert-manager-issuer.yaml || \
+          kubectl apply -f infrastructure/k8s/cert-manager-issuer.yaml || \
             echo "Warning: cert-manager ClusterIssuer apply failed – ensure cert-manager is installed"
 
       - name: Install/upgrade nginx ingress controller
@@ -324,7 +324,7 @@ jobs:
           helm upgrade --install nginx ingress-nginx/ingress-nginx \
             --namespace ingress-nginx \
             --create-namespace \
-            --values infra/helm/nginx-ingress-values.yaml \
+            --values infrastructure/helm/nginx-ingress-values.yaml \
             --wait \
             --timeout 5m
 
@@ -338,7 +338,7 @@ jobs:
             | kubectl apply -f -
 
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
-        run: kubectl apply -f infra/k8s/portal-ingress.yaml
+        run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
 
       - name: Rollout restart portal
         run: |
