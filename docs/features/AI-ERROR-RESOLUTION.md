@@ -705,7 +705,7 @@ For questions, issues, or feature requests:
 
 ## License
 
-This implementation is part of Cloud Health Office and is licensed under the Apache License 2.0.
+This implementation is part of Cloud Health Office and is licensed under the BSL 1.1.
 
 ---
 

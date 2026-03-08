@@ -315,7 +315,7 @@ When adding features:
 ## Support
 
 **Issues**: [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)  
-**License**: Apache 2.0  
+**License**: BSL 1.1  
 **Version**: 1.0.0
 
 ---

@@ -115,7 +115,7 @@
 | Deployment Time | 6-18 months | **< 1 hour** |
 | Implementation Cost | $500K - $2M | **$6K - $60K/year** |
 | Compliance Readiness | Uncertain | **100% Guaranteed** |
-| Source Code Access | None (vendor lock-in) | **Full (Apache 2.0)** |
+| Source Code Access | None (vendor lock-in) | **Full (BSL 1.1)** |
 | Ongoing Maintenance | $150K+/year | **$0 (included)** |
 
 ---
@@ -256,7 +256,7 @@ npm run generate -- interactive --output my-config.json --generate
 | **CMS-0057-F Ready** | Partial | Partial | Partial | ✅ **Complete** |
 | **Implementation** | 12-18 months | 6-12 months | 12+ months | **< 1 hour** |
 | **FHIR R4 Native** | Add-on ($$$) | Planned 2027 | Add-on | ✅ **Built-in** |
-| **Open Source** | ❌ | ❌ | ❌ | ✅ **Apache 2.0** |
+| **Open Source** | ❌ | ❌ | ❌ | ✅ **BSL 1.1** |
 | **Azure Native** | Hybrid | Legacy | Hybrid | ✅ **100% Native** |
 | **Annual Cost (Mid-Market)** | $150K-$500K | $100K-$300K | $200K+ | **$21K-$54K** |
 | **Vendor Lock-In** | High | High | High | **None** |

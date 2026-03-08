@@ -122,7 +122,7 @@ This strategy outlines how Cloud Health Office will build market awareness, esta
 
 **Content Topics:**
 - Why open source for healthcare
-- Apache 2.0 licensing in healthcare
+- BSL 1.1 licensing in healthcare
 - Building healthcare open source communities
 - Security through transparency
 - Case studies of successful healthcare OSS

@@ -895,4 +895,4 @@ This roadmap is a living document. We review and update quarterly based on:
 ---
 
 **Maintained By**: Aurelianware Cloud Health Office Product Team  
-**License**: Apache 2.0
+**License**: BSL 1.1

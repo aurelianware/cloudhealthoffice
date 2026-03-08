@@ -2636,7 +2636,7 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 
 **Documentation**: [docs/](../docs/)  
 **Issues**: [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)  
-**License**: Apache 2.0
+**License**: BSL 1.1
 
 **Contributors**:
 

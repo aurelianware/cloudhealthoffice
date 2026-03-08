@@ -94,7 +94,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 - Pricing page complete (pricing.html)
 - Solutions page for payers (solutions-payers.html)
 - Platform overview (platform.html)
-- GitHub repository public with Apache 2.0 license
+- GitHub repository public with BSL 1.1 license
 
 #### 2.3 Documentation
 - Comprehensive technical docs (ARCHITECTURE.md, DEPLOYMENT.md, FEATURES.md)

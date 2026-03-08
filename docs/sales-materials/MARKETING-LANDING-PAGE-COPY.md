@@ -73,7 +73,7 @@ No per-transaction fees. No per-payer licensing. No surprise professional servic
 ### Value Prop 3: Open Source Transparency
 [PLACEHOLDER: Open lock/code icon]
 
-**Apache 2.0 Licensed. No Vendor Lock-In.**
+**BSL 1.1 Licensed. No Vendor Lock-In.**
 
 Full source code access. Audit everything. Customize anything. Join a community of healthcare innovators building the future of interoperability.
 
@@ -239,7 +239,7 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 | **HIPAA Compliant** | Addresses key HIPAA technical safeguards (§164.312) |
 | **SOC 2 Type II** | [PLACEHOLDER: Certification in progress] |
 | **Azure Native** | Built on Azure Logic Apps, Key Vault, Service Bus |
-| **Open Source** | Apache 2.0 license, full source transparency |
+| **Open Source** | BSL 1.1 license, full source transparency |
 | **Da Vinci Conformant** | PDex, PAS, CRD, DTR implementation guides |
 | **US Core 3.1.1** | FHIR patient profile conformance |
 
@@ -247,7 +247,7 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 
 **🔓 Open Source**
 
-Apache 2.0 Licensed | 193 Tests | Community Driven
+BSL 1.1 Licensed | 193 Tests | Community Driven
 
 [View on GitHub] | [Star Repository] | [Contribute]
 
@@ -275,7 +275,7 @@ Apache 2.0 Licensed | 193 Tests | Community Driven
 
 ### FAQ 3: What does "open source" mean for a healthcare platform?
 
-It means **full transparency and no vendor lock-in**. The complete source code is available under Apache 2.0 license. You can audit every line, customize for your needs, or fork the project entirely. Your data and configurations are always yours.
+It means **full transparency and no vendor lock-in**. The complete source code is available under BSL 1.1 license. You can audit every line, customize for your needs, or fork the project entirely. Your data and configurations are always yours.
 
 ### FAQ 4: How does pricing compare to enterprise vendors?
 
@@ -355,7 +355,7 @@ On average, **85% lower total cost of ownership**. Enterprise vendors typically 
 
 [Privacy Policy] | [Terms of Service] | [Security] | [Status]
 
-Cloud Health Office is an open-source project licensed under Apache 2.0.
+Cloud Health Office is a source-available platform licensed under BSL 1.1.
 CMS-0057-F compliance statements reflect platform capabilities; customers are responsible for their own compliance attestation.
 
 ---

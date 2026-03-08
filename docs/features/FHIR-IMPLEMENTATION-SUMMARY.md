@@ -489,7 +489,7 @@ Time:        1.587 s
 ### Contact
 - **Issues**: [GitHub Issues](https://github.com/aurelianware/cloudhealthoffice/issues)
 - **Security**: security@aurelianware.com
-- **License**: Apache 2.0
+- **License**: BSL 1.1
 
 ---
 

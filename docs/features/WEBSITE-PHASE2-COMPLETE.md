@@ -78,7 +78,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 - Updated meta tags (dual-market keywords)
 - New navigation (removed V2/Assessment, added For Payers/Providers/Pricing)
 - Version badge: v3.0 Production Ready
-- Stats row: 82% Cost Reduction | <1 Hour Deployment | 480+ Tests | Apache 2.0
+- Stats row: 82% Cost Reduction | <1 Hour Deployment | 480+ Tests | BSL 1.1
 - Removed "The Sentinel" tagline
 - Updated all v2/V2 references to v3.0
 - Dual CTA boxes at bottom (payers vs providers)
@@ -128,7 +128,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 ### Brand Guidelines
 ✅ No "The Sentinel" tagline confusion
 ✅ Version clarity: v3.0 (current, February 2026), v4.0 (roadmap, Q2 2026)
-✅ Consistent Apache 2.0 license messaging
+✅ Consistent BSL 1.1 license messaging
 ✅ "Not affiliated with third-party vendors" disclaimer
 
 ### Dual-Market Value Props
@@ -153,7 +153,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 - **82%** cost reduction (vs traditional solutions)
 - **<1 hour** deployment time
 - **480+ tests** (100% pass rate, 80% coverage)
-- **Apache 2.0** open-source license
+- **BSL 1.1** source-available license
 - **v3.0** production ready (February 2026)
 - **v4.0** roadmap (Q2 2026)
 
@@ -177,7 +177,7 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 ### Contact Information
 - ✅ All CTAs point to: mark@aurelianware.com
 - ✅ GitHub: https://github.com/aurelianware/cloudhealthoffice
-- ✅ License: Apache 2.0
+- ✅ License: BSL 1.1
 - ✅ Copyright: © 2026 Aurelianware
 
 ---

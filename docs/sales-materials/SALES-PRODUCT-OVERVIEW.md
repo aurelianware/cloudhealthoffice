@@ -74,7 +74,7 @@ Production-grade HIPAA infrastructure:
 | Implementation Time | 12-18 months | **< 5 minutes** |
 | CMS-0057-F Readiness | Partial | **100% Complete** |
 | Pricing Model | Per-transaction + licensing | **Predictable subscription** |
-| Source Code Access | Proprietary | **Open Source (Apache 2.0)** |
+| Source Code Access | Proprietary | **Open Source (BSL 1.1)** |
 | Customization | Professional services required | **Zero-code configuration** |
 
 ### vs. Enterprise Vendors ($12K+/payer/year, 6-12 month implementation)
@@ -168,7 +168,7 @@ Production-grade HIPAA infrastructure:
 
 ### Open Source Advantage
 
-- **Apache 2.0 license** - no vendor lock-in
+- **BSL 1.1 license** - no vendor lock-in
 - **Full source code access** - audit, customize, extend
 - **Community contributions** - continuous improvement
 - **Transparent security** - no black boxes

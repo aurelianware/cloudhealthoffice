@@ -143,7 +143,7 @@
 | Deployment Time | 6-18 months | **< 5 minutes** |
 | Implementation Cost | $500K - $2M | **$36K/year** |
 | Compliance Readiness | Uncertain | **100%** |
-| Source Code Access | None | **Full (Apache 2.0)** |
+| Source Code Access | None | **Full (BSL 1.1)** |
 
 ---
 
@@ -224,7 +224,7 @@ npm run generate -- interactive --output my-config.json --generate
 | **CMS-0057-F Ready** | Partial | Partial | Partial | ✅ Complete |
 | **Implementation** | 12-18 months | 6-12 months | 12+ months | **< 5 minutes** |
 | **FHIR R4 Native** | Add-on | Planned | Add-on | ✅ Built-in |
-| **Open Source** | ❌ | ❌ | ❌ | ✅ Apache 2.0 |
+| **Open Source** | ❌ | ❌ | ❌ | ✅ BSL 1.1 |
 | **Azure Native** | Hybrid | Legacy | Hybrid | ✅ Native |
 | **Annual Cost** | $150K-$500K | $100K-$300K | $200K+ | **$12K-$96K** |
 
@@ -248,7 +248,7 @@ npm run generate -- interactive --output my-config.json --generate
 ### Headline
 **Three Pillars of Differentiation**
 
-### 1. Open Source (Apache 2.0)
+### 1. Open Source (BSL 1.1)
 
 **Why it matters:**
 - **No vendor lock-in**: Full source code access

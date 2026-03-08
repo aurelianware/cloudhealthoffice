@@ -47,7 +47,7 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
   - **Location**: [Link to agreements folder]
 
 - [ ] **Open Source License Review**
-  - Apache 2.0 license compliance confirmed
+  - BSL 1.1 license compliance confirmed
   - Third-party dependency license audit
   - No GPL or copyleft contamination
   - License compatibility matrix

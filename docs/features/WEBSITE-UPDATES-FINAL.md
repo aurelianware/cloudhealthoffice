@@ -95,7 +95,7 @@ site/
 - 82% cost reduction (vs traditional solutions)
 - <1 hour deployment time
 - 480+ tests (100% pass, 80% coverage)
-- Apache 2.0 open-source license
+- BSL 1.1 source-available license
 - v3.0 production ready (February 2026)
 - v4.0 roadmap (Q2 2026)
 
@@ -119,7 +119,7 @@ site/
 ### Contact & Legal
 ✅ Email: mark@aurelianware.com  
 ✅ GitHub: github.com/aurelianware/cloudhealthoffice  
-✅ License: Apache 2.0  
+✅ License: BSL 1.1  
 ✅ Copyright: © 2026 Aurelianware  
 ✅ Disclaimer: "Not affiliated with third-party vendors"
 
@@ -205,7 +205,7 @@ git commit -m "feat(website): complete dual-market positioning overhaul
 - Added Founding Practices Program ($99/month for first 50)
 - Updated all assessment.html references to solutions-payers.html
 
-Stats: 82% cost reduction, <1 hour deployment, 480+ tests, Apache 2.0
+Stats: 82% cost reduction, <1 hour deployment, 480+ tests, BSL 1.1
 
 BREAKING CHANGE: Navigation structure updated, old assessment.html to be archived"
 ```

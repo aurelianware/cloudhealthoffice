@@ -122,7 +122,7 @@ I'm reaching out because Cloud Health Office can reduce your EDI platform costs 
 | **3-Year TCO** | **$[X]M** | **$169,000** |
 
 **Why the difference?**
-• Open-source platform (Apache 2.0) - no vendor lock-in
+• Open-source platform (BSL 1.1) - no vendor lock-in
 • Azure-native architecture - infrastructure scales with usage
 • Self-service configuration - minimal professional services
 • All-inclusive pricing - no per-transaction or per-payer fees

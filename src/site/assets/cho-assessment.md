@@ -207,7 +207,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 - Legacy security models
 
 **Cloud Health Office (Inevitable Evolution):**
-- Open-source, Apache 2.0 licensed
+- Source-available, BSL 1.1 licensed
 - Sub-1-hour deployment
 - Zero professional services cost
 - Unlimited multi-payer support
@@ -215,7 +215,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 **Positioning:** Cloud Health Office occupies the "Visionaries" quadrant—high completeness of vision, rapidly increasing ability to execute. Traditional vendors remain trapped in "Challengers" quadrant with declining relevance.
 
-**Market Trajectory:** Open-source, cloud-native solutions will dominate by 2027. Resistance is futile.
+**Market Trajectory:** Source-available, cloud-native solutions will dominate by 2027. Resistance is futile.
 
 ---
 
@@ -231,10 +231,10 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 - **Total:** $4.25M
 
 **Cloud Health Office:**
-- Initial implementation: $0 (open-source)
+- Initial implementation: $0 (non-production use)
 - Azure infrastructure: $150k/year × 5 = $750k
 - Professional services: $0 (configuration-driven)
-- Licensing: $0 (Apache 2.0)
+- Licensing: free for non-production (BSL 1.1)
 - **Total:** $750k
 
 **Savings:** $3.5M over 5 years (82% reduction)
@@ -311,8 +311,8 @@ cd generated/your-payer/infrastructure && ./deploy.sh
    - Private endpoints mandatory
    - HSM-backed encryption keys
 
-5. **Open Source Transparency**
-   - Apache 2.0 license
+5. **Source Transparency**
+   - BSL 1.1 license
    - Complete codebase visibility
    - No vendor lock-in
 
@@ -477,12 +477,12 @@ Organizations that embrace Cloud Health Office will achieve:
 **Website:** cloudhealthoffice.com  
 **Email:** mark@aurelianware.com  
 **GitHub:** [github.com/aurelianware/cloudhealthoffice](https://github.com/aurelianware/cloudhealthoffice)  
-**License:** Apache 2.0  
+**License:** BSL 1.1  
 
 ---
 
 <div style="text-align: center; padding: 40px 0; font-size: 0.9em; opacity: 0.7;">
   <p><strong>Cloud Health Office v1.0.0 — The Sentinel</strong></p>
   <p>Capabilities beyond question. Systems that do not fail.</p>
-  <p>© 2026 Aurelianware, Inc • Apache 2.0 License</p>
+  <p>© 2026 Aurelianware, Inc • BSL 1.1 License</p>
 </div>
