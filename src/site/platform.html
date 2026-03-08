@@ -3,27 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Technical architecture of Cloud Health Office. C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure Logic Apps and Kubernetes deployment options.">
-  <meta name="keywords" content="healthcare EDI platform, FHIR R4 API health plan, X12 EDI to FHIR, Azure Logic Apps, Kubernetes healthcare, CMS-0057-F compliance, payer integration architecture">
+  <meta name="description" content="How Cloud Health Office works: C# microservices, FHIR R4 APIs, X12 EDI to FHIR transformation, Azure and Kubernetes deployment. Built for CMS-0057-F compliance without replacing your core admin system.">
+  <meta name="keywords" content="healthcare EDI platform architecture, FHIR R4 API health plan, X12 EDI to FHIR transformation, CMS-0057-F compliance platform, payer integration microservices, Azure healthcare Kubernetes, healthcare interoperability API">
   <meta name="author" content="Aurelianware">
   <link rel="canonical" href="https://cloudhealthoffice.com/platform">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cloud Health Office">
-  <meta property="og:url" content="https://cloudhealthoffice.com/platform.html">
-  <meta property="og:title" content="Platform Architecture — Cloud Health Office">
-  <meta property="og:description" content="Technical architecture of Cloud Health Office. C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure Logic Apps and Kubernetes deployment options.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/platform">
+  <meta property="og:title" content="FHIR R4 & EDI Platform Architecture — Cloud Health Office">
+  <meta property="og:description" content="How Cloud Health Office works: C# microservices, FHIR R4 APIs, X12 EDI to FHIR transformation, Azure and Kubernetes deployment. Built for CMS-0057-F compliance.">
   <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:url" content="https://cloudhealthoffice.com/platform.html">
-  <meta name="twitter:title" content="Platform Architecture — Cloud Health Office">
-  <meta name="twitter:description" content="Technical architecture of Cloud Health Office. C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure Logic Apps and Kubernetes deployment options.">
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/platform">
+  <meta name="twitter:title" content="FHIR R4 & EDI Platform Architecture — Cloud Health Office">
+  <meta name="twitter:description" content="How Cloud Health Office works: C# microservices, FHIR R4 APIs, X12 EDI to FHIR transformation, Azure and Kubernetes deployment. Built for CMS-0057-F compliance.">
   <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
 
-  <title>Platform Architecture — Cloud Health Office</title>
+  <title>FHIR R4 & X12 EDI Platform for Healthcare Payers — Cloud Health Office</title>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "FHIR R4 & X12 EDI Platform Architecture for Healthcare Payers",
+    "url": "https://cloudhealthoffice.com/platform",
+    "description": "Technical architecture of Cloud Health Office: C# microservices, Blazor Server portal, FHIR R4 APIs, X12 EDI processing, Azure and Kubernetes deployment for CMS-0057-F compliance.",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc.", "url": "https://cloudhealthoffice.com" },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "about": [
+      { "@type": "Thing", "name": "FHIR R4" },
+      { "@type": "Thing", "name": "X12 EDI" },
+      { "@type": "Thing", "name": "CMS-0057-F" },
+      { "@type": "Thing", "name": "Healthcare Payer Integration" }
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Platform", "item": "https://cloudhealthoffice.com/platform" }
+      ]
+    }
+  }
+  </script>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
   <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
