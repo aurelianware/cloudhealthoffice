@@ -1,0 +1,218 @@
+@page "/admin/inquiries"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject ISalesInquiryService SalesInquiryService
+@inject ILogger<AdminInquiries> Logger
+
+<PageTitle>Sales Inquiries - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Inbox" Class="mr-2" />
+        Sales Inquiries
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Contact form submissions from cloudhealthoffice.com
+    </MudText>
+
+    <!-- Summary cards -->
+    @if (!_loading)
+    {
+        <MudGrid Class="mb-6">
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total</MudText>
+                        <MudText Typo="Typo.h4">@_inquiries.Count</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">New</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Error">@_inquiries.Count(i => i.Status == "New")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Contacted</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_inquiries.Count(i => i.Status == "Contacted")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Qualified</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_inquiries.Count(i => i.Status == "Qualified")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+
+    <!-- Filter -->
+    <MudPaper Elevation="0" Class="mb-4 d-flex gap-2 flex-wrap">
+        @foreach (var status in new[] { "All", "New", "Contacted", "Qualified", "Closed" })
+        {
+            <MudChip T="string"
+                     Color="@(_statusFilter == status ? Color.Primary : Color.Default)"
+                     Variant="@(_statusFilter == status ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => SetFilter(status))">
+                @status
+            </MudChip>
+        }
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    }
+    else if (!_filteredInquiries.Any())
+    {
+        <MudAlert Severity="Severity.Info">No inquiries found@(_statusFilter != "All" ? $" with status \"{_statusFilter}\"" : "").</MudAlert>
+    }
+    else
+    {
+        @foreach (var inquiry in _filteredInquiries)
+        {
+            <MudCard Elevation="2" Class="mb-4" Style="@(inquiry.Status == "New" ? "border-left: 4px solid var(--mud-palette-error);" : "")">
+                <MudCardContent>
+                    <MudGrid>
+                        <!-- Left: contact info -->
+                        <MudItem xs="12" md="4">
+                            <MudText Typo="Typo.h6">@inquiry.FirstName @inquiry.LastName</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@inquiry.JobTitle — @inquiry.CompanyName</MudText>
+
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Color="Color.Primary" />
+                                <MudLink Href="@($"mailto:{inquiry.Email}?subject=Re: Your Cloud Health Office Inquiry ({inquiry.Id})&body=Hi {inquiry.FirstName},%0A%0AThank you for reaching out about {inquiry.InquiryType}. I wanted to follow up on your inquiry.%0A%0A")"
+                                         Typo="Typo.body2">
+                                    @inquiry.Email
+                                </MudLink>
+                            </MudStack>
+
+                            @if (!string.IsNullOrWhiteSpace(inquiry.Phone))
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-1" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.body2">@inquiry.Phone</MudText>
+                                </MudStack>
+                            }
+
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                                Submitted @inquiry.CreatedAt.ToString("MMM d, yyyy h:mm tt") UTC
+                            </MudText>
+                        </MudItem>
+
+                        <!-- Middle: message -->
+                        <MudItem xs="12" md="5">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mb-2">@inquiry.InquiryType</MudChip>
+                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@inquiry.Message</MudText>
+                            @if (!string.IsNullOrWhiteSpace(inquiry.Notes))
+                            {
+                                <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-2">
+                                    <strong>Notes:</strong> @inquiry.Notes
+                                </MudAlert>
+                            }
+                        </MudItem>
+
+                        <!-- Right: status + actions -->
+                        <MudItem xs="12" md="3">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Status</MudText>
+                            <MudSelect T="string"
+                                       Value="@inquiry.Status"
+                                       ValueChanged="@(s => UpdateStatus(inquiry, s))"
+                                       Variant="Variant.Outlined"
+                                       Dense="true"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem Value="@("New")">New</MudSelectItem>
+                                <MudSelectItem Value="@("Contacted")">Contacted</MudSelectItem>
+                                <MudSelectItem Value="@("Qualified")">Qualified</MudSelectItem>
+                                <MudSelectItem Value="@("Closed")">Closed</MudSelectItem>
+                            </MudSelect>
+
+                            <MudButton StartIcon="@Icons.Material.Filled.Reply"
+                                       Color="Color.Primary"
+                                       Variant="Variant.Outlined"
+                                       Size="Size.Small"
+                                       FullWidth="true"
+                                       Class="mt-2"
+                                       Href="@($"mailto:{inquiry.Email}?subject=Re: Your Cloud Health Office Inquiry ({inquiry.Id})&body=Hi {inquiry.FirstName},%0A%0AThank you for reaching out about {inquiry.InquiryType}. I wanted to follow up on your inquiry.%0A%0A")">
+                                Reply via Email
+                            </MudButton>
+
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">
+                                Ref: @inquiry.Id.Replace("inquiry-", "")
+                            </MudText>
+                            @if (inquiry.ContactedAt.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Contacted @inquiry.ContactedAt.Value.ToString("MMM d")
+                                </MudText>
+                            }
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<SalesInquiry> _inquiries = new();
+    private bool _loading = true;
+    private string _statusFilter = "All";
+
+    private IEnumerable<SalesInquiry> _filteredInquiries =>
+        _statusFilter == "All"
+            ? _inquiries
+            : _inquiries.Where(i => i.Status == _statusFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInquiries();
+    }
+
+    private async Task LoadInquiries()
+    {
+        _loading = true;
+        try
+        {
+            _inquiries = await SalesInquiryService.GetInquiriesAsync(limit: 200);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load sales inquiries");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SetFilter(string status)
+    {
+        _statusFilter = status;
+    }
+
+    private async Task UpdateStatus(SalesInquiry inquiry, string newStatus)
+    {
+        if (inquiry.Status == newStatus) return;
+        try
+        {
+            await SalesInquiryService.UpdateInquiryStatusAsync(inquiry.Id, newStatus);
+            inquiry.Status = newStatus;
+            if (newStatus == "Contacted" && !inquiry.ContactedAt.HasValue)
+                inquiry.ContactedAt = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update inquiry {Id} status", inquiry.Id);
+        }
+    }
+}
