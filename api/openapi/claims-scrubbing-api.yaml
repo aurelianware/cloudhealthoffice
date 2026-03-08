@@ -480,7 +480,7 @@ components:
       type: oauth2
       flows:
         clientCredentials:
-          tokenUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
             system/Claim.write: Submit and validate claims
 
