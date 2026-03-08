@@ -6,6 +6,7 @@ describe('SFTP Sensor wiring', () => {
   const sensorPath = path.resolve(
     __dirname,
     '../../..',
+    'infrastructure',
     'argo-events',
     'sensors',
     'sftp-sensor.yaml',
