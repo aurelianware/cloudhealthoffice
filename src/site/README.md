@@ -602,4 +602,4 @@ For questions or issues:
 **Cloud Health Office v1.0.0 — The Sentinel**  
 *Just emerged from the void*
 
-Apache 2.0 • © 2026 Aurelianware, Inc
+BSL 1.1 • © 2026 Aurelianware, Inc

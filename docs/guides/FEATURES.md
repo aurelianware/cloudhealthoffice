@@ -967,7 +967,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-Apache 2.0 - See [LICENSE](./LICENSE) for details.
+BSL 1.1 - See [LICENSE](./LICENSE) for details.
 
 ## 🤝 Integration Focus
 

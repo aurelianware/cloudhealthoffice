@@ -381,7 +381,7 @@ export AZURE_OPENAI_DEPLOYMENT="gpt-4"
 
 ## License
 
-Apache License 2.0
+BSL 1.1
 
 ---
 

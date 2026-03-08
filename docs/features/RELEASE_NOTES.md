@@ -150,7 +150,7 @@ Healthcare EDI runs anywhere—Azure, AWS, GCP, or your private cloud.
 
 **Cloud independence is now a reality.**
 
-Apache 2.0 licensed • Actively maintained by Aurelianware  
+BSL 1.1 licensed • Actively maintained by Aurelianware  
 Star ★ the repo if you believe healthcare deserves multi-cloud freedom.
 
 ---

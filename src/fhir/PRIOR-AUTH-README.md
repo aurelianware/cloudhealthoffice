@@ -633,7 +633,7 @@ console.log(JSON.stringify(fhirClaim, null, 2));
 
 ## License
 
-Apache 2.0 - See LICENSE file
+BSL 1.1 - See LICENSE file
 
 ---
 

@@ -803,4 +803,4 @@ For questions or issues:
 
 ## License
 
-Apache 2.0
+BSL 1.1

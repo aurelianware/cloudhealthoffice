@@ -89,26 +89,26 @@ Help us maintain HIPAA compliance:
 
 ## License and Contribution Agreement
 
-This project is licensed under the **Apache License 2.0**. By contributing to this project, you agree that your contributions will be licensed under the same license.
+This project is licensed under the **Business Source License 1.1 (BSL 1.1)**. By contributing to this project, you agree that your contributions will be licensed under the same license.
 
 ### Key Points About Contributing
 
-- **License Grant**: All contributions are subject to the Apache License 2.0
-- **Patent Grant**: Contributors grant a patent license for their contributions as defined in the Apache License 2.0
-- **Copyright**: Contributors retain copyright to their contributions while granting the project rights under Apache 2.0
+- **License Grant**: All contributions are subject to BSL 1.1
+- **Patent Grant**: Contributors grant a patent license for their contributions embodied in the Licensed Work
+- **Copyright**: Contributors retain copyright to their contributions while granting the project rights under BSL 1.1
 - **HIPAA Compliance**: Contributors should be aware this project handles PHI; review <SECURITY.md> for compliance guidelines
 
 For the full license text, see <LICENSE>.
 
-### Why Apache 2.0?
+### Why BSL 1.1?
 
-We chose Apache 2.0 because it:
+We chose BSL 1.1 because it:
 
-- Is widely accepted in healthcare and enterprise environments
-- Provides patent protection for contributors and users
-- Supports commercial use in HIPAA-regulated environments (including by health plans)
-- Has clear, well-understood terms for contributions
-- Allows health plans to deploy internally without licensing concerns
+- Allows free non-production use — evaluation, development, testing, and staging at no cost
+- Protects the commercial viability of the project while keeping source code fully transparent
+- Converts automatically to Apache 2.0 on 2030-03-08, preserving long-term openness
+- Is widely understood in enterprise and healthcare environments (used by HashiCorp, MariaDB)
+- Allows health plans to audit every line of code without black-box vendor risk
 
 ## Getting Started
 
@@ -607,8 +607,8 @@ By submitting a pull request or contribution to this project, you agree to the f
 **Summary of CLA Terms:**
 
 1. **Original Work**: Your contribution is your original work, or you have obtained all necessary rights and permissions to submit it
-1. **License Grant**: You agree to license your contribution under the Apache License 2.0, the same license as the project
-1. **Patent Grant**: You grant a perpetual, worldwide, royalty-free patent license as specified in the Apache License 2.0 for any patents you own that are necessarily infringed by your contribution
+1. **License Grant**: You agree to license your contribution under BSL 1.1, the same license as the project
+1. **Patent Grant**: You grant a perpetual, worldwide, royalty-free patent license for any patents you own that are necessarily infringed by your contribution
 1. **No Conflicts**: Your contribution does not violate any third-party intellectual property rights, contractual obligations, or other legal restrictions
 1. **Compliance Awareness**: You understand this project handles Protected Health Information (PHI) and have reviewed the <SECURITY.md> guidelines
 1. **Right to Grant**: You have the legal authority to enter into this agreement and grant these licenses
@@ -631,7 +631,7 @@ If you are contributing on behalf of your employer or another entity:
 
 If your contribution includes third-party code or dependencies:
 
-- Ensure compatibility with Apache 2.0 license
+- Ensure compatibility with BSL 1.1
 - Document the source, license, and any required attribution
 - Update dependency documentation as needed
 - For healthcare dependencies, verify HIPAA compliance considerations

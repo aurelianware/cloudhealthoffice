@@ -99,4 +99,4 @@ Release announcements and executive communications.
 
 ---
 
-*Apache License 2.0 • CloudHealthOffice*
+*BSL 1.1 • CloudHealthOffice*

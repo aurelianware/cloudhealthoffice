@@ -567,7 +567,7 @@ Special thanks to all contributors who made this release possible.
 
 ### License
 
-Apache License 2.0 - see [LICENSE](LICENSE) file
+BSL 1.1 - see [LICENSE](LICENSE) file
 
 ---
 

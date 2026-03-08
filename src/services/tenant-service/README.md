@@ -301,4 +301,4 @@ if (response.IsSuccessStatusCode)
 
 ## License
 
-Apache 2.0 - See [LICENSE](../../LICENSE)
+BSL 1.1 - See [LICENSE](../../LICENSE)

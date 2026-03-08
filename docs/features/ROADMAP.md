@@ -433,5 +433,5 @@ This roadmap is reviewed quarterly and updated based on:
 ---
 
 **Maintained By**: Aurelianware Cloud Health Office Product Team  
-**License**: Apache 2.0  
+**License**: BSL 1.1  
 **Repository**: [https://github.com/aurelianware/hipaa-attachments](https://github.com/aurelianware/hipaa-attachments)

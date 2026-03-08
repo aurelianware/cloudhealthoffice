@@ -254,7 +254,7 @@ Special thanks to all contributors who made this release possible. The v3.0.0 re
 
 ## 📄 License
 
-Apache License 2.0 - See [LICENSE](../../LICENSE) for details.
+BSL 1.1 - See [LICENSE](../../LICENSE) for details.
 
 ---
 

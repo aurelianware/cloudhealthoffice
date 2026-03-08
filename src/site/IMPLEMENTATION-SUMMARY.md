@@ -417,5 +417,5 @@ This implementation successfully delivers a professional, accessible, SEO-optimi
 **Implementation Version:** 1.0.0  
 **Date:** November 22, 2025  
 **Status:** ✅ Production Ready  
-**License:** Apache 2.0  
+**License:** BSL 1.1  
 **© 2026 Aurelianware, Inc**
