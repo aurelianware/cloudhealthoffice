@@ -50,6 +50,7 @@ jobs:
           - tenant-service
           - enrollment-import-service
           - trading-partner-service
+          - rfai-service
         include:
           # tenant-service needs repo root as context so it can reach scripts/setup/
           - service: tenant-service
