@@ -99,6 +99,9 @@ jobs:
           # tenant-service needs repo root as context so it can reach scripts/setup/
           - service: tenant-service
             build_context: '.'
+          # benefit-plan-service needs repo root as context so it can reach src/engines/
+          - service: benefit-plan-service
+            build_context: '.'
 
     steps:
       - uses: actions/checkout@v4
