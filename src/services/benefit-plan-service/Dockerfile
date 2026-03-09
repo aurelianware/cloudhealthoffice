@@ -7,11 +7,13 @@ WORKDIR /repo
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/benefit-plan-service/benefit-plan-service.csproj src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
 RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 
 # Copy source code and build
 COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/build --no-restore
 
 # Publish stage
