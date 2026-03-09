@@ -12,11 +12,11 @@ RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 # Copy source code and build
 COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
-RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/build
+RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/build --no-restore
 
 # Publish stage
 FROM build AS publish
-RUN dotnet publish src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
