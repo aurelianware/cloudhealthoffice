@@ -43,16 +43,18 @@ jobs:
           - authorization-service
           - attachment-service
           - provider-service
-          - benefit-plan-service
           - reference-data-service
           - sponsor-service
           - claims-scrubbing-service
-          - tenant-service
           - enrollment-import-service
           - trading-partner-service
         include:
           # tenant-service needs repo root as context so it can reach scripts/setup/
           - service: tenant-service
+            build_context: '.'
+          # benefit-plan-service references CloudHealthOffice.BenefitEngine (../../engines/...)
+          # so the build context must be the repo root
+          - service: benefit-plan-service
             build_context: '.'
     steps:
       - name: Checkout code

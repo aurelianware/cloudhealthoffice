@@ -1,0 +1,27 @@
+# Git metadata
+.git
+.github
+
+# Build output
+**/bin/
+**/obj/
+
+# Node / frontend dependencies
+node_modules
+**/node_modules/
+
+# Documentation and non-build assets
+docs/
+infra/
+
+# Test result files
+**/TestResults/
+**/*.trx
+
+# IDE and OS files
+.idea/
+.vscode/
+*.suo
+*.user
+.DS_Store
+Thumbs.db

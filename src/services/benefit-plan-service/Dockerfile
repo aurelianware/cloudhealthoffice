@@ -1,18 +1,22 @@
 # Build stage
+# Build context must be the repo root so the CloudHealthOffice.BenefitEngine
+# project reference (../../engines/...) is available during the build.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+WORKDIR /repo
 
-# Copy csproj and restore dependencies
-COPY benefit-plan-service.csproj .
-RUN dotnet restore
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/benefit-plan-service/benefit-plan-service.csproj src/services/benefit-plan-service/
+COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
+RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 
 # Copy source code and build
-COPY . .
-RUN dotnet build -c Release -o /app/build
+COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
+COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
+RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/build --no-restore
 
 # Publish stage
 FROM build AS publish
-RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
