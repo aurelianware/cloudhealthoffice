@@ -161,7 +161,7 @@ jobs:
 
     steps:
       - name: Run Snyk container scan
-        uses: snyk/actions/docker@0.4.0
+        uses: snyk/actions/docker@v1.0.0
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
