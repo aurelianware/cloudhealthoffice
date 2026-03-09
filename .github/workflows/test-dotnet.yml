@@ -69,7 +69,7 @@ jobs:
       #   run: dotnet test --no-build --verbosity normal --logger "trx;LogFileName=member-service-test-results.trx" --collect:"XPlat Code Coverage"
 
       - name: Upload test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dotnet-test-results
