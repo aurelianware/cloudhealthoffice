@@ -1,0 +1,326 @@
+using System.Text.Json.Serialization;
+using CloudHealthOffice.BenefitEngine.Domain;
+using CloudHealthOffice.BenefitEngine.Models;
+using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.FeeScheduleEngine.Services;
+using BenefitPlanService.Middleware;
+using Microsoft.AspNetCore.Mvc;
+
+namespace BenefitPlanService.Controllers;
+
+/// <summary>
+/// Adjudication endpoints called by the Argo claims-adjudication workflow.
+///
+/// These replace the inline Python scripts in the workflow steps with C#
+/// endpoints that call the BenefitCalculationEngine and FeeScheduleEngine
+/// directly via DI — no serialization overhead, full access to Redis
+/// accumulators, fee schedule lookups, and service category resolution.
+///
+/// Argo workflow step mapping:
+///   Step 6 (get-benefits) + Step 8 (calculate-cost-sharing)
+///     → POST /api/v1/adjudication/calculate-benefits
+///     → Calls IBenefitCalculationEngine.CalculateAsync()
+///
+///   Step 7 (get-rates)
+///     → POST /api/v1/adjudication/resolve-rates
+///     → Calls IRateResolutionService.ResolveBatchAsync()
+///
+///   Combined (single call replaces steps 6+7+8):
+///     → POST /api/v1/adjudication/adjudicate
+///     → Calls both engines and returns a merged result
+///
+/// All endpoints expect X-Tenant-ID header (set by TenantMiddleware).
+/// </summary>
+[ApiController]
+[Route("api/v1/adjudication")]
+public class AdjudicationController : ControllerBase
+{
+    private readonly IBenefitCalculationEngine _benefitEngine;
+    private readonly IRateResolutionService _rateEngine;
+    private readonly ILogger<AdjudicationController> _logger;
+
+    public AdjudicationController(
+        IBenefitCalculationEngine benefitEngine,
+        IRateResolutionService rateEngine,
+        ILogger<AdjudicationController> logger)
+    {
+        _benefitEngine = benefitEngine;
+        _rateEngine = rateEngine;
+        _logger = logger;
+    }
+
+    private string TenantId => HttpContext.GetTenantId()
+        ?? throw new InvalidOperationException("Tenant context missing");
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/adjudicate
+    //
+    // The "one call to rule them all" — replaces Argo steps 6, 7, and 8.
+    // Takes claim data + provider/coverage context, returns fully
+    // adjudicated result with allowed amounts, cost sharing, CAS segments.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Full adjudication: pricing + benefit calculation in one call.
+    /// Replaces the get-rates, get-benefits, and calculate-cost-sharing
+    /// workflow steps with a single HTTP round-trip.
+    /// </summary>
+    [HttpPost("adjudicate")]
+    [ProducesResponseType(typeof(AdjudicationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AdjudicationResponse>> Adjudicate(
+        [FromBody] AdjudicationRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
+            request.ClaimId, request.MemberId, request.BenefitPlanId, request.Lines.Count);
+
+        // ── Step 1: Resolve rates (fee schedule engine) ──
+        var pricingRequests = request.Lines.Select(line => new PricingRequest
+        {
+            TenantId = TenantId,
+            ProcedureCode = line.ProcedureCode,
+            Modifiers = line.Modifiers,
+            ProviderNpi = request.ProviderNpi,
+            PlaceOfServiceCode = line.PlaceOfService,
+            ServiceDate = request.ServiceDate.ToDateTime(TimeOnly.MinValue),
+            PlanId = request.BenefitPlanId.ToString(),
+            BilledAmount = line.BilledAmount,
+            Units = line.Units,
+            LineNumber = line.LineNumber
+        }).ToList();
+
+        var pricingResults = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
+
+        // ── Step 2: Build benefit request with allowed amounts from pricing ──
+        var benefitLines = request.Lines.Select(line =>
+        {
+            var priced = pricingResults.LineResults
+                .FirstOrDefault(p => p.LineNumber == line.LineNumber);
+
+            return new ClaimLineInput
+            {
+                LineNumber = line.LineNumber,
+                ProcedureCode = line.ProcedureCode,
+                CodeType = line.CodeType,
+                Modifiers = line.Modifiers,
+                RevenueCode = line.RevenueCode,
+                PlaceOfService = line.PlaceOfService,
+                BilledAmount = priced?.AllowedAmount ?? line.BilledAmount,
+                Units = line.Units,
+                DiagnosisCodes = line.DiagnosisCodes
+            };
+        }).ToList();
+
+        var benefitRequest = new BenefitResolutionRequest
+        {
+            MemberId = request.MemberId,
+            SubscriberId = request.SubscriberId,
+            BenefitPlanId = request.BenefitPlanId,
+            ServiceDate = request.ServiceDate,
+            NetworkTier = request.NetworkTier,
+            ClaimId = request.ClaimId,
+            Lines = benefitLines
+        };
+
+        var benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
+
+        // ── Step 3: Merge pricing + benefit results ──
+        var response = new AdjudicationResponse
+        {
+            ClaimId = request.ClaimId,
+            Success = benefitResult.Success,
+            DenialReasonCode = benefitResult.DenialReasonCode,
+            DenialReasonDescription = benefitResult.DenialReasonDescription,
+            Totals = new AdjudicationTotals
+            {
+                BilledAmount = request.Lines.Sum(l => l.BilledAmount),
+                AllowedAmount = benefitResult.Totals.TotalAllowed,
+                DeductibleAmount = benefitResult.Totals.TotalDeductible,
+                CopayAmount = benefitResult.Totals.TotalCopay,
+                CoinsuranceAmount = benefitResult.Totals.TotalCoinsurance,
+                MemberResponsibility = benefitResult.Totals.TotalMemberResponsibility,
+                PlanPayment = benefitResult.Totals.TotalPlanPaid,
+                ContractualAdjustment = request.Lines.Sum(l => l.BilledAmount)
+                    - benefitResult.Totals.TotalAllowed
+            },
+            Lines = benefitResult.Lines.Select(bl =>
+            {
+                var priced = pricingResults.LineResults
+                    .FirstOrDefault(p => p.LineNumber == bl.LineNumber);
+                var reqLine = request.Lines.First(l => l.LineNumber == bl.LineNumber);
+
+                return new AdjudicationLineResponse
+                {
+                    LineNumber = bl.LineNumber,
+                    ProcedureCode = reqLine.ProcedureCode,
+                    BilledAmount = reqLine.BilledAmount,
+                    AllowedAmount = priced?.AllowedAmount ?? bl.AllowedAmount,
+                    DeductibleAmount = bl.DeductibleAmount,
+                    CopayAmount = bl.CopayAmount,
+                    CoinsuranceAmount = bl.CoinsuranceAmount,
+                    MemberResponsibility = bl.MemberResponsibility,
+                    PlanPayment = bl.PlanPaidAmount,
+                    ContractualAdjustment = priced?.ContractualAdjustment ?? 0,
+                    FeeScheduleType = priced?.FeeScheduleType.ToString(),
+                    FeeScheduleId = priced?.FeeScheduleId,
+                    NetworkStatus = priced?.NetworkStatus.ToString(),
+                    ServiceTypeCode = bl.ServiceTypeCode,
+                    IsCovered = bl.IsCovered,
+                    AdjustmentReasons = bl.Adjustments
+                };
+            }).ToList(),
+            Accumulators = benefitResult.AccumulatorSnapshot
+        };
+
+        _logger.LogInformation(
+            "Adjudication complete for claim {ClaimId}: allowed={Allowed}, plan={Plan}, member={Member}",
+            request.ClaimId, response.Totals.AllowedAmount,
+            response.Totals.PlanPayment, response.Totals.MemberResponsibility);
+
+        return Ok(response);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/calculate-benefits
+    //
+    // Standalone benefit calculation (replaces Argo steps 6+8).
+    // Use when pricing is handled separately or already done.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Calculate benefit cost-sharing for a claim.
+    /// Calls the BenefitCalculationEngine with Redis-backed accumulators.
+    /// </summary>
+    [HttpPost("calculate-benefits")]
+    [ProducesResponseType(typeof(BenefitResolutionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BenefitResolutionResult>> CalculateBenefits(
+        [FromBody] BenefitResolutionRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Calculating benefits for member {MemberId}, plan {PlanId}, {LineCount} lines",
+            request.MemberId, request.BenefitPlanId, request.Lines.Count);
+
+        var result = await _benefitEngine.CalculateAsync(request, ct);
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/resolve-rates
+    //
+    // Standalone rate resolution (replaces Argo step 7).
+    // Use when benefit calculation is handled separately.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Resolve allowed rates for claim lines using the Fee Schedule Engine.
+    /// Looks up provider contracts, fee schedules, and applies modifier adjustments.
+    /// </summary>
+    [HttpPost("resolve-rates")]
+    [ProducesResponseType(typeof(PricingResultSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PricingResultSet>> ResolveRates(
+        [FromBody] List<PricingRequest> requests,
+        CancellationToken ct)
+    {
+        _logger.LogInformation("Resolving rates for {LineCount} claim lines", requests.Count);
+
+        // Inject tenant ID into each request
+        var tenantedRequests = requests.Select(r => r with { TenantId = TenantId }).ToList();
+
+        var result = await _rateEngine.ResolveBatchAsync(tenantedRequests, ct);
+        return Ok(result);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// REQUEST / RESPONSE DTOs
+//
+// These are the contract between the Argo workflow and the
+// adjudication endpoints. They're intentionally separate from
+// the engine's internal models — the controller maps between them.
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Combined adjudication request — everything the workflow knows
+/// about the claim after steps 1-5 (get-claim, verify-coverage,
+/// validate-provider, validate-codes, check-prior-auth).
+/// </summary>
+public record AdjudicationRequest
+{
+    public string ClaimId { get; init; } = default!;
+    public string MemberId { get; init; } = default!;
+    public string SubscriberId { get; init; } = default!;
+    public Guid BenefitPlanId { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public string ProviderNpi { get; init; } = default!;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public NetworkTier NetworkTier { get; init; }
+
+    public List<AdjudicationLineRequest> Lines { get; init; } = [];
+}
+
+public record AdjudicationLineRequest
+{
+    public int LineNumber { get; init; }
+    public string ProcedureCode { get; init; } = default!;
+    public string? CodeType { get; init; } = "CPT";
+    public List<string> Modifiers { get; init; } = [];
+    public string? RevenueCode { get; init; }
+    public string PlaceOfService { get; init; } = default!;
+    public decimal BilledAmount { get; init; }
+    public decimal Units { get; init; } = 1;
+    public List<string> DiagnosisCodes { get; init; } = [];
+}
+
+/// <summary>
+/// Fully adjudicated result — the workflow uses this to update the
+/// claim with final amounts and generate 835/CAS segments.
+/// </summary>
+public record AdjudicationResponse
+{
+    public string ClaimId { get; init; } = default!;
+    public bool Success { get; init; }
+    public string? DenialReasonCode { get; init; }
+    public string? DenialReasonDescription { get; init; }
+    public AdjudicationTotals Totals { get; init; } = new();
+    public List<AdjudicationLineResponse> Lines { get; init; } = [];
+    public List<AccumulatorState>? Accumulators { get; init; }
+}
+
+public record AdjudicationTotals
+{
+    public decimal BilledAmount { get; init; }
+    public decimal AllowedAmount { get; init; }
+    public decimal ContractualAdjustment { get; init; }
+    public decimal DeductibleAmount { get; init; }
+    public decimal CopayAmount { get; init; }
+    public decimal CoinsuranceAmount { get; init; }
+    public decimal MemberResponsibility { get; init; }
+    public decimal PlanPayment { get; init; }
+}
+
+public record AdjudicationLineResponse
+{
+    public int LineNumber { get; init; }
+    public string ProcedureCode { get; init; } = default!;
+    public decimal BilledAmount { get; init; }
+    public decimal AllowedAmount { get; init; }
+    public decimal ContractualAdjustment { get; init; }
+    public decimal DeductibleAmount { get; init; }
+    public decimal CopayAmount { get; init; }
+    public decimal CoinsuranceAmount { get; init; }
+    public decimal MemberResponsibility { get; init; }
+    public decimal PlanPayment { get; init; }
+    public string? FeeScheduleType { get; init; }
+    public string? FeeScheduleId { get; init; }
+    public string? NetworkStatus { get; init; }
+    public string? ServiceTypeCode { get; init; }
+    public bool IsCovered { get; init; }
+    public List<AdjustmentReason> AdjustmentReasons { get; init; } = [];
+}

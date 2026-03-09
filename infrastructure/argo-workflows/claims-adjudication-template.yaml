@@ -1,13 +1,42 @@
+# ═══════════════════════════════════════════════════════════════════
+# CLAIMS ADJUDICATION WORKFLOW v2
+#
+# Changes from v1:
+#   - Steps 6 (get-benefits), 7 (get-rates), 8 (calculate-cost-sharing)
+#     are replaced by a single call to:
+#       POST benefit-plan-service/api/v1/adjudication/adjudicate
+#
+#   - This endpoint calls both the BenefitCalculationEngine (deductible,
+#     copay, coinsurance, OOP max, Redis accumulators) and the
+#     FeeScheduleEngine (provider contract lookup, fee schedule rates,
+#     modifier adjustments) in one round-trip.
+#
+#   - Steps 1-5 remain as Python scripts (they're validation steps that
+#     call individual microservices — they'll be migrated later).
+#
+#   - Step 9 (update-claim) receives the full AdjudicationResponse
+#     including per-line CAS segments, pricing metadata, and accumulator
+#     state for the 835 ERA generation.
+#
+# DAG structure (unchanged):
+#   get-claim
+#     ├─ verify-coverage ──────────────┐
+#     ├─ validate-provider ────────────┤
+#     └─ validate-codes ───┬───────────┤
+#                          │           │
+#                check-prior-auth      │
+#                          │           │
+#                          └── adjudicate-claim (NEW: replaces steps 6+7+8)
+#                                      │
+#                                 update-claim
+# ═══════════════════════════════════════════════════════════════════
 apiVersion: argoproj.io/v1alpha1
-kind: WorkflowTemplate
+kind: Workflow
 metadata:
-  name: claims-adjudication-template
+  generateName: claims-adjudication-
   namespace: cho-workflows
 spec:
   entrypoint: adjudicate-claim
-  
-  # Reusable template for claims adjudication
-  # Can be triggered via Argo Events, CronWorkflow, or manually
   
   arguments:
     parameters:
@@ -18,26 +47,415 @@ spec:
   
   serviceAccountName: argo-workflow
   
-  # Define timeouts and retry policy
-  activeDeadlineSeconds: 300  # 5 minutes max
-  retryStrategy:
-    limit: "2"
-    retryPolicy: "OnFailure"
-    backoff:
-      duration: "5s"
-      factor: 2
-      maxDuration: "1m"
+  templates:
   
-  # Workflow will reference the main claims-adjudication-workflow.yaml
-  workflowTemplateRef:
-    name: claims-adjudication
-  
-  # Metadata for tracking
-  metadata:
-    labels:
-      workflows.argoproj.io/archive-strategy: "true"
-      app: claims-adjudication
-      version: "1.0"
-    annotations:
-      description: "Automated claims adjudication workflow - <500ms target"
-      owner: "cloud-health-office"
+  - name: adjudicate-claim
+    dag:
+      tasks:
+      # Step 1: Get claim details
+      - name: get-claim
+        template: http-request
+        arguments:
+          parameters:
+          - name: url
+            value: "http://claims-service.cloudhealthoffice/api/claims/{{workflow.parameters.claim-id}}"
+          - name: method
+            value: "GET"
+          - name: headers
+            value: |
+              X-Tenant-ID: {{workflow.parameters.tenant-id}}
+      
+      # Step 2: Verify coverage (depends on get-claim)
+      - name: verify-coverage
+        dependencies: [get-claim]
+        template: verify-coverage-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 3: Validate provider (parallel with coverage)
+      - name: validate-provider
+        dependencies: [get-claim]
+        template: validate-provider-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 4: Validate codes (parallel with coverage/provider)
+      - name: validate-codes
+        dependencies: [get-claim]
+        template: validate-codes-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+      
+      # Step 5: Check prior authorization
+      - name: check-prior-auth
+        dependencies: [validate-codes, verify-coverage]
+        template: check-prior-auth-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: codes-result
+            value: "{{tasks.validate-codes.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # ── NEW: Steps 6+7+8 combined into one engine call ──
+      # Replaces: get-benefits, get-rates, calculate-allowed, calculate-cost-sharing
+      # Calls: BenefitCalculationEngine + FeeScheduleEngine via benefit-plan-service
+      - name: adjudicate-claim-lines
+        dependencies: [verify-coverage, validate-provider, validate-codes, check-prior-auth]
+        template: adjudicate-claim-lines-step
+        arguments:
+          parameters:
+          - name: claim-data
+            value: "{{tasks.get-claim.outputs.result}}"
+          - name: coverage-result
+            value: "{{tasks.verify-coverage.outputs.result}}"
+          - name: provider-result
+            value: "{{tasks.validate-provider.outputs.result}}"
+          - name: prior-auth-result
+            value: "{{tasks.check-prior-auth.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+      
+      # Step 9: Update claim with adjudication results
+      - name: update-claim
+        dependencies: [adjudicate-claim-lines]
+        template: update-claim-step
+        arguments:
+          parameters:
+          - name: claim-id
+            value: "{{workflow.parameters.claim-id}}"
+          - name: adjudication-result
+            value: "{{tasks.adjudicate-claim-lines.outputs.result}}"
+          - name: prior-auth-result
+            value: "{{tasks.check-prior-auth.outputs.result}}"
+          - name: tenant-id
+            value: "{{workflow.parameters.tenant-id}}"
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Generic HTTP request template
+  # ═══════════════════════════════════════════════════════════════════
+  - name: http-request
+    inputs:
+      parameters:
+      - name: url
+      - name: method
+      - name: headers
+        value: ""
+      - name: body
+        value: ""
+    container:
+      image: curlimages/curl:8.5.0
+      command: [sh, -c]
+      args:
+      - |
+        curl -X {{inputs.parameters.method}} \
+          -H "Content-Type: application/json" \
+          {{inputs.parameters.headers}} \
+          {{inputs.parameters.body}} \
+          {{inputs.parameters.url}}
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Steps 2-5 remain as Python scripts (unchanged from v1)
+  # TODO: Migrate to C# endpoints in a future PR
+  # ═══════════════════════════════════════════════════════════════════
+
+  - name: verify-coverage-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request, sys
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        member_id = claim.get('memberId')
+        service_date = claim.get('serviceDateFrom')
+        url = f"http://coverage-service.cloudhealthoffice/api/coverage/member/{member_id}/active?serviceDate={service_date}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                coverage = json.loads(response.read().decode())
+                if not coverage:
+                    result = {"status": "DENIED", "reason": "No active coverage", "carc": "26"}
+                else:
+                    result = {"status": "APPROVED", "planId": coverage.get('planId'),
+                              "groupNumber": coverage.get('groupNumber'),
+                              "coverageLevel": coverage.get('coverageLevel'),
+                              "lineOfBusiness": coverage.get('lineOfBusiness'),
+                              "subscriberId": coverage.get('subscriberId', member_id)}
+                print(json.dumps(result))
+        except Exception as e:
+            print(json.dumps({"status": "ERROR", "reason": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+  - name: validate-provider-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request, sys
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        billing_npi = claim.get('billingProviderNPI')
+        url = f"http://provider-service.cloudhealthoffice/api/providers/{billing_npi}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                provider = json.loads(response.read().decode())
+                if provider.get('credentialingStatus') != 'Approved':
+                    result = {"status": "DENIED", "reason": "Provider not credentialed", "carc": "185"}
+                elif provider.get('providerStatus') != 'Active':
+                    result = {"status": "DENIED", "reason": "Provider not active", "carc": "185"}
+                else:
+                    # Determine network tier from provider-service
+                    network = provider.get('networkStatus', 'InNetwork')
+                    result = {"status": "APPROVED", "npi": billing_npi,
+                              "providerName": provider.get('organizationName') or f"{provider.get('firstName')} {provider.get('lastName')}",
+                              "specialty": provider.get('primarySpecialty'),
+                              "networkTier": network}
+                print(json.dumps(result))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(json.dumps({"status": "DENIED", "reason": "Provider not found", "carc": "185"}))
+            else:
+                print(json.dumps({"status": "ERROR", "reason": str(e)}), file=sys.stderr); sys.exit(1)
+        except Exception as e:
+            print(json.dumps({"status": "ERROR", "reason": str(e)}), file=sys.stderr); sys.exit(1)
+
+  - name: validate-codes-step
+    inputs:
+      parameters:
+      - name: claim-data
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request, sys
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        diagnosis_codes = claim.get('diagnosisCodes', [])
+        invalid_dx, non_billable_dx = [], []
+        requires_auth = False
+        for dx in diagnosis_codes:
+            code = dx.get('code')
+            try:
+                with urllib.request.urlopen(f"http://reference-data-service.cloudhealthoffice/api/referencedata/icd10/{code}/validate", timeout=3) as r:
+                    result = json.loads(r.read().decode())
+                    if not result.get('isValid'): invalid_dx.append(code)
+                    elif not result.get('isBillable'): non_billable_dx.append(code)
+            except: invalid_dx.append(code)
+        claim_lines = claim.get('claimLines', [])
+        invalid_cpt = []
+        for line in claim_lines:
+            code = line.get('procedureCode')
+            try:
+                with urllib.request.urlopen(f"http://reference-data-service.cloudhealthoffice/api/referencedata/cpt/{code}/validate", timeout=3) as r:
+                    result = json.loads(r.read().decode())
+                    if not result.get('isValid'): invalid_cpt.append(code)
+                    elif result.get('requiresPriorAuth'): requires_auth = True
+            except: invalid_cpt.append(code)
+        if invalid_dx or non_billable_dx or invalid_cpt:
+            print(json.dumps({"status": "DENIED", "reason": "Invalid codes", "invalidDiagnosis": invalid_dx, "nonBillableDiagnosis": non_billable_dx, "invalidProcedure": invalid_cpt, "carc": "11"}))
+        else:
+            print(json.dumps({"status": "APPROVED", "requiresPriorAuth": requires_auth}))
+
+  - name: check-prior-auth-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: codes-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request, sys
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        codes_result = json.loads('''{{inputs.parameters.codes-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+        requires_auth = codes_result.get('requiresPriorAuth', False)
+        auth_number = claim.get('priorAuthorizationNumber')
+        if not requires_auth:
+            print(json.dumps({"status": "NOT_REQUIRED"})); sys.exit(0)
+        if not auth_number:
+            print(json.dumps({"status": "DENIED", "reason": "Prior authorization required but not provided", "carc": "197"})); sys.exit(0)
+        service_date = claim.get('serviceDateFrom')
+        cpt = claim.get('claimLines', [{}])[0].get('procedureCode', '')
+        url = f"http://authorization-service.cloudhealthoffice/api/authorizations/{auth_number}/validate?procedureCode={cpt}&serviceDate={service_date}"
+        req = urllib.request.Request(url)
+        req.add_header('X-Tenant-ID', tenant_id)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                auth_result = json.loads(response.read().decode())
+                if not auth_result.get('isValid'):
+                    print(json.dumps({"status": "DENIED", "reason": auth_result.get('message', 'Authorization invalid'), "carc": "197"}))
+                else:
+                    print(json.dumps({"status": "APPROVED", "authorizationNumber": auth_number, "approvedUnits": auth_result.get('approvedUnits')}))
+        except Exception as e:
+            print(json.dumps({"status": "DENIED", "reason": str(e), "carc": "197"}))
+
+  # ═══════════════════════════════════════════════════════════════════
+  # NEW: Combined adjudication step (replaces steps 6+7+8)
+  #
+  # Calls POST benefit-plan-service/api/v1/adjudication/adjudicate
+  # which internally runs:
+  #   1. FeeScheduleEngine.ResolveBatchAsync() — provider contract,
+  #      fee schedule lookup, modifier adjustments → allowed amounts
+  #   2. BenefitCalculationEngine.CalculateAsync() — service category
+  #      resolution, deductible, copay, coinsurance, OOP max cap,
+  #      Redis accumulator update → cost sharing
+  #
+  # Returns AdjudicationResponse with per-line CAS segments.
+  # ═══════════════════════════════════════════════════════════════════
+  - name: adjudicate-claim-lines-step
+    inputs:
+      parameters:
+      - name: claim-data
+      - name: coverage-result
+      - name: provider-result
+      - name: prior-auth-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request, sys
+
+        claim = json.loads('''{{inputs.parameters.claim-data}}''')
+        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
+        provider = json.loads('''{{inputs.parameters.provider-result}}''')
+        prior_auth = json.loads('''{{inputs.parameters.prior-auth-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+
+        # If coverage or provider was denied, skip adjudication
+        if coverage.get('status') == 'DENIED':
+            print(json.dumps({"success": False, "denialReasonCode": coverage.get('carc'),
+                "denialReasonDescription": coverage.get('reason'), "totals": {}, "lines": []}))
+            sys.exit(0)
+
+        if provider.get('status') == 'DENIED':
+            print(json.dumps({"success": False, "denialReasonCode": provider.get('carc'),
+                "denialReasonDescription": provider.get('reason'), "totals": {}, "lines": []}))
+            sys.exit(0)
+
+        # Build the adjudication request from workflow context
+        claim_lines = claim.get('claimLines', [])
+        request = {
+            "claimId": claim.get('id') or claim.get('claimId'),
+            "memberId": claim.get('memberId'),
+            "subscriberId": coverage.get('subscriberId', claim.get('memberId')),
+            "benefitPlanId": coverage.get('planId'),
+            "serviceDate": claim.get('serviceDateFrom'),
+            "providerNpi": provider.get('npi') or claim.get('billingProviderNPI'),
+            "networkTier": provider.get('networkTier', 'InNetwork'),
+            "lines": [{
+                "lineNumber": i + 1,
+                "procedureCode": line.get('procedureCode'),
+                "codeType": line.get('codeType', 'CPT'),
+                "modifiers": line.get('modifiers', []),
+                "revenueCode": line.get('revenueCode'),
+                "placeOfService": line.get('placeOfServiceCode') or claim.get('placeOfServiceCode', '11'),
+                "billedAmount": line.get('chargeAmount', 0),
+                "units": line.get('units', 1),
+                "diagnosisCodes": [dx.get('code') for dx in claim.get('diagnosisCodes', [])]
+            } for i, line in enumerate(claim_lines)]
+        }
+
+        url = "http://benefit-plan-service.cloudhealthoffice/api/v1/adjudication/adjudicate"
+        data = json.dumps(request).encode('utf-8')
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode())
+                print(json.dumps(result))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode() if hasattr(e, 'read') else str(e)
+            print(json.dumps({"success": False, "denialReasonDescription": f"Adjudication failed: {body}"}), file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(json.dumps({"success": False, "denialReasonDescription": f"Adjudication failed: {str(e)}"}), file=sys.stderr)
+            sys.exit(1)
+
+  # ═══════════════════════════════════════════════════════════════════
+  # UPDATED: Step 9 — now receives AdjudicationResponse
+  # ═══════════════════════════════════════════════════════════════════
+  - name: update-claim-step
+    inputs:
+      parameters:
+      - name: claim-id
+      - name: adjudication-result
+      - name: prior-auth-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json, urllib.request
+
+        claim_id = "{{inputs.parameters.claim-id}}"
+        adjudication = json.loads('''{{inputs.parameters.adjudication-result}}''')
+        prior_auth = json.loads('''{{inputs.parameters.prior-auth-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+
+        # Determine final status
+        if prior_auth.get('status') == 'DENIED':
+            status = "Denied"
+            adjudication = {
+                "success": False,
+                "denialReasonCode": prior_auth.get('carc'),
+                "denialReasonDescription": prior_auth.get('reason'),
+                "totals": {"billedAmount": 0, "allowedAmount": 0, "planPayment": 0, "memberResponsibility": 0},
+                "lines": []
+            }
+        elif not adjudication.get('success', True):
+            status = "Denied"
+        else:
+            status = "Approved"
+
+        # Write adjudication result to claims-service
+        url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/adjudication"
+        data = json.dumps(adjudication).encode('utf-8')
+        req = urllib.request.Request(url, data=data, method='PUT')
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            json.loads(response.read().decode())
+
+        # Update claim status
+        status_url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/status"
+        status_data = json.dumps({"status": status}).encode('utf-8')
+        status_req = urllib.request.Request(status_url, data=status_data, method='PUT')
+        status_req.add_header('X-Tenant-ID', tenant_id)
+        status_req.add_header('Content-Type', 'application/json')
+
+        with urllib.request.urlopen(status_req, timeout=5) as response:
+            print(json.dumps({
+                "claimId": claim_id,
+                "status": status,
+                "adjudication": adjudication
+            }))
