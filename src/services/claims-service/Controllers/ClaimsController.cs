@@ -290,6 +290,48 @@ public class ClaimsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Get aggregated accumulator totals for a member or family for a plan year.
+    ///
+    /// Called by the Redis accumulator service on a cache miss to rebuild from claim
+    /// history. Returns the sum of deductible, OOP, coinsurance, and copay amounts
+    /// across all finalized claims for the given owner / plan / year combination.
+    ///
+    /// <list type="bullet">
+    ///   <item><paramref name="ownerId"/> — memberId for Individual scope; subscriberId for Family scope.</item>
+    ///   <item><paramref name="scope"/> — "Individual" or "Family".</item>
+    ///   <item><paramref name="planYear"/> — four-digit year string, e.g. "2026".</item>
+    /// </list>
+    /// </summary>
+    [HttpGet("accumulator-totals")]
+    [ProducesResponseType(typeof(AccumulatorTotalsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AccumulatorTotalsResponse>> GetAccumulatorTotals(
+        [FromQuery] string ownerId,
+        [FromQuery] string scope,
+        [FromQuery] string benefitPlanId,
+        [FromQuery] string planYear,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(ownerId))
+            return BadRequest("ownerId is required");
+        if (scope != "Individual" && scope != "Family")
+            return BadRequest("scope must be 'Individual' or 'Family'");
+        if (string.IsNullOrWhiteSpace(benefitPlanId))
+            return BadRequest("benefitPlanId is required");
+        if (!int.TryParse(planYear, out _))
+            return BadRequest("planYear must be a four-digit year, e.g. '2026'");
+
+        _logger.LogDebug(
+            "Accumulator totals request: owner={OwnerId}, scope={Scope}, plan={PlanId}, year={Year}",
+            SanitizeForLog(ownerId), scope, SanitizeForLog(benefitPlanId), planYear);
+
+        var result = await _claimRepository.GetAccumulatorTotalsAsync(
+            ownerId, scope, benefitPlanId, planYear, ct);
+
+        return Ok(result);
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))

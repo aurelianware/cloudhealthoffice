@@ -17,6 +17,23 @@ public interface IClaimRepository
         int page,
         int pageSize);
     Task<ClaimsSummary> GetClaimsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
+
+    /// <summary>
+    /// Aggregate finalized claim cost-share amounts by accumulator type and network tier
+    /// for a member (Individual scope) or all family members (Family scope).
+    ///
+    /// Called by the Redis accumulator service on a cache miss to rebuild from claim history.
+    /// The plan year is converted to a Jan 1 – Dec 31 date range for standard calendar plans.
+    /// </summary>
+    /// <param name="ownerId">memberId for Individual scope; subscriberId for Family scope.</param>
+    /// <param name="scope">"Individual" or "Family"</param>
+    Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
+        string ownerId,
+        string scope,
+        string benefitPlanId,
+        string planYear,
+        CancellationToken ct = default);
+
     Task<Claim> CreateAsync(Claim claim);
     Task<Claim> UpdateAsync(Claim claim);
     Task DeleteAsync(string id);
@@ -295,5 +312,96 @@ public class ClaimRepository : IClaimRepository
     {
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<Claim>(id, new PartitionKey(id));
+    }
+
+    public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
+        string ownerId,
+        string scope,
+        string benefitPlanId,
+        string planYear,
+        CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+
+        // Standard calendar plan year — plan-year-aware plans should store explicit dates
+        // but planYear == "2026" → Jan 1 2026 through Dec 31 2026 is the safe default.
+        var yearStart = new DateTime(int.Parse(planYear), 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var yearEnd   = new DateTime(int.Parse(planYear), 12, 31, 23, 59, 59, DateTimeKind.Utc);
+
+        // For Individual scope filter by memberId; for Family scope by subscriberId.
+        var ownerFilter = scope == "Family"
+            ? "c.subscriberId = @ownerId"
+            : "c.memberId = @ownerId";
+
+        // Fetch adjudication fields for all finalized claims matching the key.
+        // Projecting only the fields needed keeps RU cost low.
+        var queryText = $@"
+            SELECT c.adjudicationResult.deductibleAmount,
+                   c.adjudicationResult.coinsuranceAmount,
+                   c.adjudicationResult.copayAmount,
+                   c.adjudicationResult.patientResponsibility,
+                   c.adjudicationResult.networkTier
+            FROM c
+            WHERE c.tenantId       = @tenantId
+              AND {ownerFilter}
+              AND c.benefitPlanId  = @benefitPlanId
+              AND c.serviceDateFrom >= @yearStart
+              AND c.serviceDateFrom <= @yearEnd
+              AND (c.status = 'Approved' OR c.status = 'PartiallyPaid' OR c.status = 'Paid')
+              AND IS_DEFINED(c.adjudicationResult)";
+
+        var queryDef = new QueryDefinition(queryText)
+            .WithParameter("@tenantId",      tenantId)
+            .WithParameter("@ownerId",       ownerId)
+            .WithParameter("@benefitPlanId", benefitPlanId)
+            .WithParameter("@yearStart",     yearStart)
+            .WithParameter("@yearEnd",       yearEnd);
+
+        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
+
+        // Accumulate by network tier
+        var deductible   = new Dictionary<string, decimal>();
+        var oop          = new Dictionary<string, decimal>();
+        var coinsurance  = new Dictionary<string, decimal>();
+        var copay        = new Dictionary<string, decimal>();
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            foreach (var row in page)
+            {
+                var tier = (string?)row.networkTier ?? "InNetwork";
+
+                deductible[tier]  = (deductible.GetValueOrDefault(tier))  + (decimal)(row.deductibleAmount  ?? 0.0);
+                oop[tier]         = (oop.GetValueOrDefault(tier))         + (decimal)(row.patientResponsibility ?? 0.0);
+                coinsurance[tier] = (coinsurance.GetValueOrDefault(tier)) + (decimal)(row.coinsuranceAmount ?? 0.0);
+                copay[tier]       = (copay.GetValueOrDefault(tier))       + (decimal)(row.copayAmount       ?? 0.0);
+            }
+        }
+
+        // Map to accumulator type names the benefit engine understands.
+        // Individual scope → IndividualDeductible / IndividualOutOfPocketMax
+        // Family scope     → FamilyDeductible     / FamilyOutOfPocketMax
+        var deductibleType = scope == "Family" ? "FamilyDeductible"    : "IndividualDeductible";
+        var oopType        = scope == "Family" ? "FamilyOutOfPocketMax" : "IndividualOutOfPocketMax";
+
+        var totals = new List<AccumulatorTotalEntry>();
+
+        foreach (var (tier, amount) in deductible)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType,  NetworkTier = tier, AccumulatedAmount = amount });
+
+        foreach (var (tier, amount) in oop)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType,         NetworkTier = tier, AccumulatedAmount = amount });
+
+        // Coinsurance and copay also count toward OOP — they are already included in
+        // patientResponsibility above, so we don't double-count here.  They are surfaced
+        // as separate entries so the portal can display the breakdown by type.
+        foreach (var (tier, amount) in coinsurance)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Coinsurance", NetworkTier = tier, AccumulatedAmount = amount });
+
+        foreach (var (tier, amount) in copay)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay",       NetworkTier = tier, AccumulatedAmount = amount });
+
+        return new AccumulatorTotalsResponse { Totals = totals };
     }
 }

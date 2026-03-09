@@ -3,7 +3,10 @@ using BenefitPlanService.Middleware;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using MongoDB.Driver;
-
+using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.BenefitEngine.Configuration;
+using CloudHealthOffice.BenefitEngine.Persistence;
+using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Database (Cosmos DB or MongoDB)
@@ -24,6 +27,7 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
     });
 
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
+    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -38,11 +42,41 @@ else
     });
 
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
+    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
 // Add business logic services
 builder.Services.AddScoped<IBenefitPlanService, BenefitPlanServiceImpl>();
+
+// Required by RedisAccumulatorService — reads TenantId set by TenantMiddleware
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
+
+// Typed HttpClient for claims-service (used by ClaimsServiceAccumulatorSource on cache miss)
+builder.Services.AddHttpClient<IClaimsAccumulatorSource, ClaimsServiceAccumulatorSource>(client =>
+{
+    var url = builder.Configuration["Services:ClaimsServiceUrl"]
+              ?? throw new InvalidOperationException(
+                     "Services:ClaimsServiceUrl is required when using the Redis accumulator service. " +
+                     "Add it to appsettings.json or as an environment variable.");
+    client.BaseAddress = new Uri(url);
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// Redis-backed (recommended for production)
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    ConnectionMultiplexer.Connect(
+        builder.Configuration["Redis:ConnectionString"]
+        ?? throw new InvalidOperationException("Redis:ConnectionString is required.")));
+
+builder.Services.AddBenefitEngine()
+    .UseChoBenefitPlanProvider()
+    .UseRedisAccumulatorService();
+
+// Audit trail: write accumulator history to MongoDB/Cosmos alongside the Redis hot cache
+builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
+
 
 // Add controllers
 builder.Services.AddControllers();

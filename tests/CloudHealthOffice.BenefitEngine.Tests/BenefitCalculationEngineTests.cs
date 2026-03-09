@@ -2,6 +2,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
 
 namespace CloudHealthOffice.BenefitEngine.Tests;
 
@@ -526,9 +527,10 @@ internal class InMemoryAccumulatorService : IAccumulatorService
         string planYear, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AccumulatorSnapshot>>(_snapshots);
 
-    public Task ApplyUpdatesAsync(string memberId, string subscriberId,
+    public Task ApplyUpdatesAsync(string memberId, string subscriberId, 
         Guid benefitPlanId, string planYear,
-        IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct)
+        string claimId,
+        IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct = default)
     {
         _appliedUpdates.AddRange(updates);
         return Task.CompletedTask;

@@ -69,6 +69,8 @@ public record AccumulatorSnapshot
     /// Balance already accumulated as of the start of this adjudication.
     /// </summary>
     public decimal AccumulatedAmountAfter { get; init; }
+    public decimal AccumulatedAmountBefore { get; set; }
+    public decimal RemainingAmount { get; set; }
 }
 
 /// <summary>

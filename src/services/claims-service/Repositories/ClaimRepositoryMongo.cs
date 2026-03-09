@@ -218,4 +218,76 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         await _collection.DeleteOneAsync(filter);
     }
+
+    public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
+        string ownerId,
+        string scope,
+        string benefitPlanId,
+        string planYear,
+        CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+
+        var yearStart = new DateTime(int.Parse(planYear), 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var yearEnd   = new DateTime(int.Parse(planYear), 12, 31, 23, 59, 59, DateTimeKind.Utc);
+
+        var finalizedStatuses = new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid };
+
+        var builder = Builders<Claim>.Filter;
+        var filter = builder.And(
+            builder.Eq(c => c.TenantId, tenantId),
+            builder.Eq(c => c.BenefitPlanId, benefitPlanId),
+            builder.Gte(c => c.ServiceDateFrom, yearStart),
+            builder.Lte(c => c.ServiceDateFrom, yearEnd),
+            builder.In(c => c.Status, finalizedStatuses),
+            builder.Ne(c => c.AdjudicationResult, null)
+        );
+
+        // Add scope-specific owner filter
+        if (scope == "Family")
+            filter = builder.And(filter, builder.Eq(c => c.SubscriberId, ownerId));
+        else
+            filter = builder.And(filter, builder.Eq(c => c.MemberId, ownerId));
+
+        var claims = await _collection
+            .Find(filter)
+            .Project(c => new
+            {
+                c.AdjudicationResult!.DeductibleAmount,
+                c.AdjudicationResult.CoinsuranceAmount,
+                c.AdjudicationResult.CopayAmount,
+                c.AdjudicationResult.PatientResponsibility,
+                c.AdjudicationResult.NetworkTier
+            })
+            .ToListAsync(ct);
+
+        var deductibleType = scope == "Family" ? "FamilyDeductible"     : "IndividualDeductible";
+        var oopType        = scope == "Family" ? "FamilyOutOfPocketMax"  : "IndividualOutOfPocketMax";
+
+        var deductible  = new Dictionary<string, decimal>();
+        var oop         = new Dictionary<string, decimal>();
+        var coinsurance = new Dictionary<string, decimal>();
+        var copay       = new Dictionary<string, decimal>();
+
+        foreach (var row in claims)
+        {
+            var tier = row.NetworkTier ?? "InNetwork";
+            deductible[tier]  = deductible.GetValueOrDefault(tier)  + row.DeductibleAmount;
+            oop[tier]         = oop.GetValueOrDefault(tier)         + row.PatientResponsibility;
+            coinsurance[tier] = coinsurance.GetValueOrDefault(tier) + row.CoinsuranceAmount;
+            copay[tier]       = copay.GetValueOrDefault(tier)       + row.CopayAmount;
+        }
+
+        var totals = new List<AccumulatorTotalEntry>();
+        foreach (var (tier, amount) in deductible)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType, NetworkTier = tier, AccumulatedAmount = amount });
+        foreach (var (tier, amount) in oop)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType, NetworkTier = tier, AccumulatedAmount = amount });
+        foreach (var (tier, amount) in coinsurance)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Coinsurance", NetworkTier = tier, AccumulatedAmount = amount });
+        foreach (var (tier, amount) in copay)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay", NetworkTier = tier, AccumulatedAmount = amount });
+
+        return new AccumulatorTotalsResponse { Totals = totals };
+    }
 }
