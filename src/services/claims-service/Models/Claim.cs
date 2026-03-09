@@ -31,11 +31,26 @@ public class Claim
     public string ClaimNumber { get; set; } = string.Empty;
 
     /// <summary>
-    /// Member ID (subscriber ID)
+    /// Member ID (the individual receiving services; may differ from subscriber for dependents)
     /// </summary>
     [Required]
     [StringLength(50)]
     public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Subscriber ID (the policy holder; same as MemberId for self-coverage)
+    /// Required for family accumulator aggregation.
+    /// 837: NM109 (2010BA)
+    /// </summary>
+    [StringLength(50)]
+    public string? SubscriberId { get; set; }
+
+    /// <summary>
+    /// Benefit plan ID (links to BenefitPlanService for cost-sharing rules)
+    /// Required for accumulator grouping by plan year.
+    /// </summary>
+    [StringLength(50)]
+    public string? BenefitPlanId { get; set; }
 
     /// <summary>
     /// Coverage ID (links to Coverage Service for eligibility)
@@ -394,6 +409,14 @@ public class ClaimLine
 /// </summary>
 public class AdjudicationResult
 {
+    /// <summary>
+    /// Network tier used to adjudicate this claim.
+    /// Determines which accumulator bucket (InNetwork / OutOfNetwork / OutOfArea) is updated.
+    /// Populated by the calculate-cost-sharing workflow step.
+    /// </summary>
+    [StringLength(20)]
+    public string? NetworkTier { get; set; }
+
     /// <summary>
     /// Allowed amount (what payer will pay based on contracted rates)
     /// 835: CLP04

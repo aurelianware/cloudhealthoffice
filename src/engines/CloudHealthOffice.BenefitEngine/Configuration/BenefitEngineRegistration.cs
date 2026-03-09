@@ -1,3 +1,4 @@
+using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Configuration;
@@ -90,6 +91,36 @@ public class BenefitEngineBuilder
         _services.AddScoped<IAccumulatorService, ChoAccumulatorService>();
         return this;
     }
+
+// ── Redis-Backed Accumulator (runtime calculation) ──
+
+    /// <summary>
+    /// Use Redis-backed accumulators with runtime calculation from claim history.
+    ///
+    /// This follows the other platform patterns: accumulators are derived values calculated
+    /// from finalized claim lines, not stored as mutable state. Redis serves as
+    /// a hot cache with atomic increments; cache misses rebuild from claims.
+    ///
+    /// Prerequisites:
+    /// <list type="bullet">
+    ///   <item>Register <c>IConnectionMultiplexer</c> (StackExchange.Redis)</item>
+    ///   <item>Register <c>IClaimsAccumulatorSource</c> (implemented by host service)</item>
+    ///   <item>Register <c>IBenefitEngineTenantContext</c></item>
+    ///   <item>Optionally register <c>IAccumulatorAuditWriter</c> for durable audit trail</item>
+    /// </list>
+    ///
+    /// Usage:
+    /// <code>
+    ///   builder.Services.AddBenefitEngine()
+    ///       .UseChoBenefitPlanProvider()
+    ///       .UseRedisAccumulatorService();
+    /// </code>
+    /// </summary>
+    public BenefitEngineBuilder UseRedisAccumulatorService()
+    {
+        _services.AddScoped<IAccumulatorService, RedisAccumulatorService>();
+        return this;
+    }    
 
     /// <summary>
     /// Use CHO's MongoDB-backed service category mappings.

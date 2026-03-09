@@ -32,6 +32,13 @@ CloudHealthOffice v3.0.0 — The Open Frontier Release delivers multi-cloud inde
 | [HIPAA-COMPLIANCE-MATRIX.md](HIPAA-COMPLIANCE-MATRIX.md) | HIPAA security control mapping |
 | [HIPAA-AUDIT-REPORT.md](HIPAA-AUDIT-REPORT.md) | Audit report template |
 
+### Adjudication Engines
+
+| Document | Description |
+|----------|-------------|
+| [ACCUMULATOR-ENGINE.md](engines/ACCUMULATOR-ENGINE.md) | Redis-backed deductible/OOP/visit accumulator engine — design, key layout, cache miss/rebuild, and DI wiring |
+| [FEE-SCHEDULE-ENGINE.md](engines/FEE-SCHEDULE-ENGINE.md) | Rate resolution engine — MPFS RVU calc, modifier rules, provider contracts, and persistence |
+
 ### Technical Guides
 
 | Document | Description |

@@ -32,6 +32,30 @@ public class RemittanceUpdate
 }
 
 /// <summary>
+/// Accumulator totals response — aggregated cost-share amounts per bucket.
+/// Returned by GET /api/claims/accumulator-totals; consumed by the Redis
+/// accumulator service on a cache miss to rebuild from claim history.
+/// </summary>
+public class AccumulatorTotalsResponse
+{
+    /// <summary>One entry per (AccumulatorType × NetworkTier) combination that has a non-zero balance.</summary>
+    public List<AccumulatorTotalEntry> Totals { get; set; } = new();
+}
+
+/// <summary>One aggregated accumulator bucket.</summary>
+public class AccumulatorTotalEntry
+{
+    /// <summary>Matches <c>AccumulatorType</c> enum names in the benefit engine.</summary>
+    public string AccumulatorType { get; set; } = string.Empty;
+
+    /// <summary>Matches <c>NetworkTier</c> enum names: InNetwork, OutOfNetwork, OutOfArea.</summary>
+    public string NetworkTier { get; set; } = string.Empty;
+
+    /// <summary>Total accumulated amount (e.g. total deductible applied this plan year).</summary>
+    public decimal AccumulatedAmount { get; set; }
+}
+
+/// <summary>
 /// Claims summary statistics
 /// </summary>
 public class ClaimsSummary
