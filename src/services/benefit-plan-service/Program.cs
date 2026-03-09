@@ -7,6 +7,7 @@ using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.BenefitEngine.Configuration;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using StackExchange.Redis;
+using CloudHealthOffice.FeeScheduleEngine.Configuration;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Database (Cosmos DB or MongoDB)
@@ -73,6 +74,10 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 builder.Services.AddBenefitEngine()
     .UseChoBenefitPlanProvider()
     .UseRedisAccumulatorService();
+
+builder.Services.AddFeeScheduleEngine()
+    .UseRepositoriesFromConfiguration(builder.Configuration);
+
 
 // Audit trail: write accumulator history to MongoDB/Cosmos alongside the Redis hot cache
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
