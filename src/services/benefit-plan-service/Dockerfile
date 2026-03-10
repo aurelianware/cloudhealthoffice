@@ -14,7 +14,7 @@ RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
-RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release -o /app/build --no-restore
+RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release --no-restore
 
 # Publish stage
 FROM build AS publish
