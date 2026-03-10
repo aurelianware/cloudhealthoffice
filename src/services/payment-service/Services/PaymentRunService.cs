@@ -18,6 +18,7 @@ public class PaymentRunService : IPaymentRunService
 {
     private readonly IPaymentRepository _paymentRepository;
     private readonly IPaymentRunRepository _paymentRunRepository;
+    private readonly IEraGeneratorService _eraGenerator;
     private readonly HttpClient _claimsServiceClient;
     private readonly ILogger<PaymentRunService> _logger;
     private readonly IConfiguration _configuration;
@@ -25,12 +26,14 @@ public class PaymentRunService : IPaymentRunService
     public PaymentRunService(
         IPaymentRepository paymentRepository,
         IPaymentRunRepository paymentRunRepository,
+        IEraGeneratorService eraGenerator,
         IHttpClientFactory httpClientFactory,
         ILogger<PaymentRunService> logger,
         IConfiguration configuration)
     {
         _paymentRepository = paymentRepository;
         _paymentRunRepository = paymentRunRepository;
+        _eraGenerator = eraGenerator;
         _claimsServiceClient = httpClientFactory.CreateClient("ClaimsService");
         _logger = logger;
         _configuration = configuration;
@@ -291,7 +294,36 @@ public class PaymentRunService : IPaymentRunService
             }).ToList()
         };
 
-        return await _paymentRepository.CreateAsync(payment);
+        var created = await _paymentRepository.CreateAsync(payment);
+
+        // Generate 835 ERA immediately and store inline.
+        // In production this would be written to blob storage and the URL stored here;
+        // for now the raw EDI string is persisted directly so the GET /{id}/835
+        // endpoint can also re-generate on demand without reading this field.
+        try
+        {
+            var tp = new TradingPartnerInfo
+            {
+                InterchangeSenderId   = _configuration["Era:InterchangeSenderId"]   ?? "SENDER",
+                InterchangeReceiverId = _configuration["Era:InterchangeReceiverId"] ?? "RECEIVER",
+                ApplicationSenderId   = _configuration["Era:ApplicationSenderId"]   ?? "SENDER",
+                ApplicationReceiverId = _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
+                PayerRoutingNumber    = _configuration["Era:PayerRoutingNumber"],
+                PayerAccountNumber    = _configuration["Era:PayerAccountNumber"],
+                PayeeRoutingNumber    = _configuration["Era:PayeeRoutingNumber"],
+                PayeeAccountNumber    = _configuration["Era:PayeeAccountNumber"],
+            };
+
+            created.RawEdiFileUrl = _eraGenerator.Generate835(created, tp);
+            created = await _paymentRepository.UpdateAsync(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "835 generation failed for payment {CheckNumber}; payment was still created",
+                SanitizeForLog(created.CheckNumber));
+        }
+
+        return created;
     }
 
     private async Task UpdateClaimStatusesToPaidAsync(List<string> claimIds)

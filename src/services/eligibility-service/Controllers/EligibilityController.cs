@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using EligibilityService.Middleware;
 using EligibilityService.Models;
+using EligibilityService.Repositories;
 using EligibilityService.Services;
 
 namespace EligibilityService.Controllers;
@@ -10,15 +11,24 @@ namespace EligibilityService.Controllers;
 public class EligibilityController : ControllerBase
 {
     private readonly IEligibilityService _eligibilityService;
+    private readonly IEligibilityRepository _repository;
+    private readonly IEdi270Parser _edi270Parser;
+    private readonly IEdi271Generator _edi271Generator;
     private readonly ILogger<EligibilityController> _logger;
-    
+
     public string TenantId { get; set; } = string.Empty;
 
     public EligibilityController(
         IEligibilityService eligibilityService,
+        IEligibilityRepository repository,
+        IEdi270Parser edi270Parser,
+        IEdi271Generator edi271Generator,
         ILogger<EligibilityController> logger)
     {
         _eligibilityService = eligibilityService;
+        _repository = repository;
+        _edi270Parser = edi270Parser;
+        _edi271Generator = edi271Generator;
         _logger = logger;
     }
 
@@ -165,6 +175,101 @@ public class EligibilityController : ControllerBase
             _logger.LogError(ex, "Error validating auth requirement");
             return StatusCode(500, new { error = "Error validating authorization" });
         }
+    }
+
+    /// <summary>
+    /// X12 270/271 EDI endpoint — accepts raw 270 text, returns raw 271 text.
+    /// Content-Type: text/plain; body = raw X12 270 EDI string.
+    /// </summary>
+    [HttpPost("270")]
+    [Consumes("text/plain")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ProcessEdi270()
+    {
+        string edi270;
+        using (var reader = new System.IO.StreamReader(Request.Body))
+        {
+            edi270 = await reader.ReadToEndAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(edi270))
+            return BadRequest("Request body must contain the raw X12 270 EDI string.");
+
+        Edi270ParseResult parsed;
+        try
+        {
+            parsed = _edi270Parser.Parse(edi270);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse 270 EDI");
+            return BadRequest($"Invalid 270 EDI: {ex.Message}");
+        }
+
+        var inquiry = parsed.Inquiry;
+        inquiry.TenantId      = TenantId;
+        inquiry.ControlNumber = string.IsNullOrEmpty(inquiry.ControlNumber)
+            ? GenerateControlNumber()
+            : inquiry.ControlNumber;
+
+        _logger.LogInformation(
+            "Processing EDI 270 for subscriber {SubscriberId}, serviceType={ServiceType}",
+            SanitizeForLog(inquiry.SubscriberId), inquiry.ServiceTypeCode);
+
+        EligibilityResponse response;
+        try
+        {
+            response = await _eligibilityService.ProcessInquiryAsync(inquiry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing eligibility inquiry from 270 EDI");
+            return StatusCode(500, "Error processing eligibility inquiry.");
+        }
+
+        // Swap ISA sender/receiver so the 271 flows back to the submitter
+        var edi271 = _edi271Generator.Generate(
+            inquiry, response,
+            isaSenderId:   parsed.InterchangeReceiverId, // 270's receiver = 271's sender (payer)
+            isaReceiverId: parsed.InterchangeSenderId);  // 270's sender  = 271's receiver (provider)
+
+        Response.Headers["Content-Disposition"] =
+            $"inline; filename=\"271_{inquiry.SubscriberId}_{DateTime.UtcNow:yyyyMMdd}.edi\"";
+        return Content(edi271, "text/plain");
+    }
+
+    /// <summary>
+    /// Download X12 271 EDI for a stored eligibility inquiry.
+    /// </summary>
+    [HttpGet("{id}/271")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetEdi271(string id)
+    {
+        var inquiry = await _repository.GetInquiryByIdAsync(TenantId, id);
+        if (inquiry == null)
+            return NotFound($"Eligibility inquiry {id} not found.");
+
+        if (string.IsNullOrEmpty(inquiry.ResponseId))
+            return NotFound($"No 271 response yet for inquiry {id}.");
+
+        var response = await _repository.GetResponseByInquiryIdAsync(TenantId, id);
+        if (response == null)
+            return NotFound($"271 response not found for inquiry {id}.");
+
+        _logger.LogInformation(
+            "Generating 271 EDI for inquiry {InquiryId} (subscriber={SubscriberId})",
+            SanitizeForLog(id), SanitizeForLog(inquiry.SubscriberId));
+
+        var edi271 = _edi271Generator.Generate(
+            inquiry, response,
+            isaSenderId:   inquiry.PayerId,   // payer is the 271 sender
+            isaReceiverId: inquiry.ProviderId);
+
+        var filename = $"271_{inquiry.SubscriberId}_{inquiry.CreatedDate:yyyyMMdd}.edi";
+        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
+        return Content(edi271, "text/plain");
     }
 
     private string GenerateControlNumber()

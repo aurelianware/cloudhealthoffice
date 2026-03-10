@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Repositories;
+using PaymentService.Services;
 
 namespace PaymentService.Controllers;
 
@@ -10,13 +11,19 @@ namespace PaymentService.Controllers;
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentRepository _paymentRepository;
+    private readonly IEraGeneratorService _eraGenerator;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentsController> _logger;
 
     public PaymentsController(
         IPaymentRepository paymentRepository,
+        IEraGeneratorService eraGenerator,
+        IConfiguration configuration,
         ILogger<PaymentsController> logger)
     {
         _paymentRepository = paymentRepository;
+        _eraGenerator = eraGenerator;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -173,6 +180,43 @@ public class PaymentsController : ControllerBase
         _logger.LogInformation("Payment {PaymentId} reconciled", SanitizeForLog(id));
 
         return Ok(updated);
+    }
+
+    /// <summary>
+    /// Download the X12 835 ERA file for a payment
+    /// </summary>
+    [HttpGet("{id}/835")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetEra835(string id)
+    {
+        var payment = await _paymentRepository.GetByIdAsync(id);
+
+        if (payment == null)
+        {
+            return NotFound($"Payment {id} not found");
+        }
+
+        var tp = new TradingPartnerInfo
+        {
+            InterchangeSenderId   = _configuration["Era:InterchangeSenderId"]   ?? "SENDER",
+            InterchangeReceiverId = _configuration["Era:InterchangeReceiverId"] ?? "RECEIVER",
+            ApplicationSenderId   = _configuration["Era:ApplicationSenderId"]   ?? "SENDER",
+            ApplicationReceiverId = _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
+            PayerRoutingNumber    = _configuration["Era:PayerRoutingNumber"],
+            PayerAccountNumber    = _configuration["Era:PayerAccountNumber"],
+            PayeeRoutingNumber    = _configuration["Era:PayeeRoutingNumber"],
+            PayeeAccountNumber    = _configuration["Era:PayeeAccountNumber"],
+        };
+
+        _logger.LogInformation("Generating 835 ERA download for payment {PaymentId} check {CheckNumber}",
+            SanitizeForLog(id), SanitizeForLog(payment.CheckNumber));
+
+        var era = _eraGenerator.Generate835(payment, tp);
+
+        var filename = $"835_{payment.CheckNumber}.edi";
+        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
+        return Content(era, "text/plain");
     }
 
     /// <summary>

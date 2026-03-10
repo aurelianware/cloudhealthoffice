@@ -14,6 +14,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.NcciEngine\CloudHealthOffice.NcciEngine.csproj" />
   </ItemGroup>
 
 </Project>

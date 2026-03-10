@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ClaimsService.Middleware;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using ClaimsService.Services;
 
 namespace ClaimsService.Controllers;
 
@@ -11,13 +12,19 @@ namespace ClaimsService.Controllers;
 public class ClaimsController : ControllerBase
 {
     private readonly IClaimRepository _claimRepository;
+    private readonly IClaimAcknowledgmentService _ackService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimsController> _logger;
 
     public ClaimsController(
         IClaimRepository claimRepository,
+        IClaimAcknowledgmentService ackService,
+        IConfiguration configuration,
         ILogger<ClaimsController> logger)
     {
         _claimRepository = claimRepository;
+        _ackService = ackService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -264,6 +271,43 @@ public class ClaimsController : ControllerBase
 
         var summary = await _claimRepository.GetClaimsSummaryAsync(fromDate, toDate, lineOfBusiness);
         return Ok(summary);
+    }
+
+    /// <summary>
+    /// Download the X12 277CA Claim Acknowledgment for a claim
+    /// </summary>
+    [HttpGet("{id}/277ca")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClaimAcknowledgment(string id)
+    {
+        var claim = await _claimRepository.GetByIdAsync(id);
+
+        if (claim == null)
+        {
+            return NotFound($"Claim {id} not found");
+        }
+
+        var cfg = new ClaimAcknowledgmentConfig
+        {
+            InterchangeSenderId   = _configuration["Ack:InterchangeSenderId"]   ?? "CHO",
+            InterchangeReceiverId = _configuration["Ack:InterchangeReceiverId"] ?? "RECEIVER",
+            ApplicationSenderId   = _configuration["Ack:ApplicationSenderId"]   ?? "CHO",
+            ApplicationReceiverId = _configuration["Ack:ApplicationReceiverId"] ?? "RECEIVER",
+            PayerName             = _configuration["Ack:PayerName"]             ?? "Cloud Health Office",
+            PayerId               = _configuration["Ack:PayerId"]               ?? "CHO",
+            PayerOriginatorId     = _configuration["Ack:PayerOriginatorId"]     ?? "CHO",
+        };
+
+        _logger.LogInformation(
+            "Generating 277CA for claim {ClaimId} ({ClaimNumber}), status={Status}",
+            SanitizeForLog(id), SanitizeForLog(claim.ClaimNumber), claim.Status);
+
+        var edi = _ackService.Generate277CA(claim, cfg);
+
+        var filename = $"277CA_{claim.ClaimNumber}.edi";
+        Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
+        return Content(edi, "text/plain");
     }
 
     /// <summary>

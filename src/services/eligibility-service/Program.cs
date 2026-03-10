@@ -79,6 +79,10 @@ builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
 
 builder.Services.AddScoped<IEligibilityService, EligibilityServiceImpl>();
 
+// 270/271 EDI services
+builder.Services.AddScoped<IEdi270Parser, Edi270Parser>();
+builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
+
 // CORS
 builder.Services.AddCors(options =>
 {

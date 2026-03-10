@@ -8,12 +8,14 @@ WORKDIR /repo
 COPY src/services/benefit-plan-service/benefit-plan-service.csproj src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj src/engines/CloudHealthOffice.NcciEngine/
 RUN dotnet restore src/services/benefit-plan-service/benefit-plan-service.csproj
 
 # Copy source code and build
 COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
 RUN dotnet build src/services/benefit-plan-service/benefit-plan-service.csproj -c Release --no-restore
 
 # Publish stage
