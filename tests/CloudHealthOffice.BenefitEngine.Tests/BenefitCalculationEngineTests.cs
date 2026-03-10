@@ -6,19 +6,10 @@ using Xunit;
 
 namespace CloudHealthOffice.BenefitEngine.Tests;
 
-/// <summary>
-/// Unit tests for the Benefit Calculation Engine.
-///
-/// These test the core cost-sharing waterfall logic using in-memory
-/// test doubles. Each test scenario represents a real adjudication
-/// situation a payer encounters in production.
-///
-/// Test naming convention: Scenario_Condition_ExpectedOutcome
-/// </summary>
 public class BenefitCalculationEngineTests
 {
     // ═══════════════════════════════════════════════════════════════════
-    // TEST FIXTURES
+    // FIXTURES
     // ═══════════════════════════════════════════════════════════════════
 
     private static BenefitPlanConfig CreateTestPlan(
@@ -26,20 +17,27 @@ public class BenefitCalculationEngineTests
         decimal familyDeductible = 1500,
         decimal individualOopMax = 3000,
         decimal familyOopMax = 9000,
-        PlanType planType = PlanType.PPO)
+        PlanType planType = PlanType.PPO,
+        FamilyAccumulatorModel familyModel = FamilyAccumulatorModel.Embedded,
+        bool isHdhp = false,
+        HashSet<string>? hdhpExemptServices = null,
+        InpatientPricingMethod inpatientMethod = InpatientPricingMethod.PerLine)
     {
         return new BenefitPlanConfig
         {
             Id = Guid.NewGuid(),
             TenantId = "test-tenant",
-            PlanName = "Test PPO Plan",
+            PlanName = "Test Plan",
             PlanType = planType,
             PlanYear = "2026",
             IndividualDeductible = individualDeductible,
             FamilyDeductible = familyDeductible,
             IndividualOopMax = individualOopMax,
             FamilyOopMax = familyOopMax,
-            FamilyAccumulatorModel = FamilyAccumulatorModel.Embedded,
+            FamilyAccumulatorModel = familyModel,
+            IsHdhp = isHdhp,
+            HdhpDeductibleExemptServices = hdhpExemptServices ?? [],
+            DefaultInpatientPricingMethod = inpatientMethod,
             Categories =
             [
                 // Office visit — $30 copay, 20% coinsurance, deductible applies
@@ -77,7 +75,7 @@ public class BenefitCalculationEngineTests
                     ]
                 },
 
-                // Inpatient — no copay, 20% coinsurance, deductible applies, auth required
+                // Inpatient — no copay, 20% coinsurance, deductible, auth required
                 new BenefitCategoryConfig
                 {
                     ServiceTypeCode = "48",
@@ -92,7 +90,7 @@ public class BenefitCalculationEngineTests
                     ]
                 },
 
-                // Cosmetic surgery — NOT covered
+                // Dental — NOT covered
                 new BenefitCategoryConfig
                 {
                     ServiceTypeCode = "35",
@@ -112,7 +110,44 @@ public class BenefitCalculationEngineTests
                     [
                         new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 40 },
                     ]
-                }
+                },
+
+                // Preventive care — copay only, NO deductible (copay-instead mode)
+                new BenefitCategoryConfig
+                {
+                    ServiceTypeCode = "AE",
+                    ServiceTypeDescription = "Preventive Care",
+                    IsCovered = true,
+                    AuthRequired = false,
+                    InNetworkCostSharing =
+                    [
+                        new CostShareRuleConfig
+                        {
+                            CostShareType = CostShareType.Copay,
+                            CopayAmount = 0,
+                            CopayApplicationMode = CopayApplicationMode.InsteadOfDeductible
+                        },
+                    ]
+                },
+
+                // PCP visit — copay instead of deductible
+                new BenefitCategoryConfig
+                {
+                    ServiceTypeCode = "PCP",
+                    ServiceTypeDescription = "Primary Care Visit",
+                    IsCovered = true,
+                    AuthRequired = false,
+                    InNetworkCostSharing =
+                    [
+                        new CostShareRuleConfig
+                        {
+                            CostShareType = CostShareType.Copay,
+                            CopayAmount = 30,
+                            CopayApplicationMode = CopayApplicationMode.InsteadOfDeductible
+                        },
+                        new CostShareRuleConfig { CostShareType = CostShareType.Coinsurance, CoinsurancePercent = 0.20m },
+                    ]
+                },
             ]
         };
     }
@@ -121,9 +156,12 @@ public class BenefitCalculationEngineTests
         Guid planId,
         NetworkTier networkTier = NetworkTier.InNetwork,
         bool isEmergency = false,
+        string? claimType = null,
+        string? drgCode = null,
+        decimal? drgAllowedAmount = null,
         params (string code, decimal billed, decimal allowed, string pos)[] lines)
     {
-        var request = new BenefitResolutionRequest
+        return new BenefitResolutionRequest
         {
             MemberId = "MBR-001",
             SubscriberId = "SUB-001",
@@ -131,6 +169,10 @@ public class BenefitCalculationEngineTests
             ServiceDate = new DateOnly(2026, 3, 8),
             NetworkTier = networkTier,
             IsEmergency = isEmergency,
+            ClaimType = claimType,
+            DrgCode = drgCode,
+            DrgAllowedAmount = drgAllowedAmount,
+            ClaimId = Guid.NewGuid().ToString(),
             Lines = lines.Select((l, i) => new ClaimLineInput
             {
                 LineNumber = i + 1,
@@ -142,282 +184,533 @@ public class BenefitCalculationEngineTests
             AllowedAmounts = lines.Select((l, i) => (i + 1, l.allowed))
                 .ToDictionary(x => x.Item1, x => x.allowed)
         };
-        return request;
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // TEST: BASIC COST-SHARING WATERFALL
+    // ORIGINAL TESTS — BASIC COST-SHARING WATERFALL
     // ═══════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Simple office visit. Deductible not yet met.
-    /// Expected: deductible consumed first, then copay, then coinsurance on remainder.
-    ///
-    /// Billed: $200, Allowed: $150
-    /// Deductible remaining: $500 → applies $150 to deductible (entire allowed amount)
-    /// Copay: $30 → but $0 remains after deductible, so copay = $0
-    /// Coinsurance: 20% of $0 = $0
-    /// Member pays: $150 (all deductible)
-    /// Plan pays: $0
-    /// </summary>
     [Fact]
     public async Task OfficeVisit_DeductibleNotMet_EntireAllowedAppliedToDeductible()
     {
-        // Arrange
         var plan = CreateTestPlan(individualDeductible: 500);
         var engine = CreateEngine(plan, categoryCode: "98");
-        var request = CreateRequest(plan.Id,
-            lines: ("99213", 200m, 150m, "11"));
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
 
-        // Act
         var result = await engine.CalculateAsync(request);
 
-        // Assert
         Assert.True(result.Success);
         var line = result.Lines.Single();
         Assert.True(line.IsCovered);
         Assert.Equal(200m, line.BilledAmount);
         Assert.Equal(150m, line.AllowedAmount);
-        Assert.Equal(50m, line.ContractualAdjustment); // CO-45: 200 - 150
-        Assert.Equal(150m, line.DeductibleAmount);      // All to deductible
-        Assert.Equal(0m, line.CopayAmount);              // Nothing left for copay
-        Assert.Equal(0m, line.CoinsuranceAmount);        // Nothing left for coinsurance
+        Assert.Equal(50m, line.ContractualAdjustment);
+        Assert.Equal(150m, line.DeductibleAmount);
+        Assert.Equal(0m, line.CopayAmount);
+        Assert.Equal(0m, line.CoinsuranceAmount);
         Assert.Equal(150m, line.MemberResponsibility);
         Assert.Equal(0m, line.PlanPaidAmount);
-
-        // Verify CAS segments
         Assert.Contains(line.Adjustments, a => a.GroupCode == "CO" && a.ReasonCode == "45" && a.Amount == 50m);
         Assert.Contains(line.Adjustments, a => a.GroupCode == "PR" && a.ReasonCode == "1" && a.Amount == 150m);
     }
 
-    /// <summary>
-    /// Office visit where deductible is already met.
-    /// Expected: copay + coinsurance only.
-    ///
-    /// Billed: $200, Allowed: $150
-    /// Deductible remaining: $0 (already met)
-    /// Copay: $30
-    /// Coinsurance: 20% of ($150 - $30) = $24
-    /// Member pays: $30 + $24 = $54
-    /// Plan pays: $150 - $54 = $96
-    /// </summary>
     [Fact]
     public async Task OfficeVisit_DeductibleMet_CopayAndCoinsuranceOnly()
     {
         var plan = CreateTestPlan(individualDeductible: 500);
-        var engine = CreateEngine(plan, categoryCode: "98",
-            existingDeductible: 500m); // Already met
-
-        var request = CreateRequest(plan.Id,
-            lines: ("99213", 200m, 150m, "11"));
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
         Assert.Equal(0m, line.DeductibleAmount);
         Assert.Equal(30m, line.CopayAmount);
-        Assert.Equal(24m, line.CoinsuranceAmount); // 20% of (150 - 30)
+        Assert.Equal(24m, line.CoinsuranceAmount);
         Assert.Equal(54m, line.MemberResponsibility);
         Assert.Equal(96m, line.PlanPaidAmount);
     }
 
-    /// <summary>
-    /// Office visit where deductible is partially met.
-    /// Expected: remainder of deductible consumed, then copay + coinsurance.
-    ///
-    /// Billed: $200, Allowed: $150
-    /// Deductible remaining: $50 (of $500 total)
-    /// → $50 to deductible, $100 remaining
-    /// Copay: $30 of remaining $100 → $30
-    /// Coinsurance: 20% of ($100 - $30) = $14
-    /// Member pays: $50 + $30 + $14 = $94
-    /// Plan pays: $150 - $94 = $56
-    /// </summary>
     [Fact]
     public async Task OfficeVisit_DeductiblePartiallyMet_PartialDeductibleThenCopayCoinsurance()
     {
         var plan = CreateTestPlan(individualDeductible: 500);
-        var engine = CreateEngine(plan, categoryCode: "98",
-            existingDeductible: 450m); // $50 remaining
-
-        var request = CreateRequest(plan.Id,
-            lines: ("99213", 200m, 150m, "11"));
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 450m);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
         Assert.Equal(50m, line.DeductibleAmount);
         Assert.Equal(30m, line.CopayAmount);
-        Assert.Equal(14m, line.CoinsuranceAmount); // 20% of (100 - 30)
+        Assert.Equal(14m, line.CoinsuranceAmount);
         Assert.Equal(94m, line.MemberResponsibility);
         Assert.Equal(56m, line.PlanPaidAmount);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: OOP MAX
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// OOP max is about to be reached. Member's total responsibility
-    /// should be capped at the remaining OOP amount.
-    /// </summary>
     [Fact]
     public async Task OopMaxReached_MemberResponsibilityCapped()
     {
         var plan = CreateTestPlan(individualDeductible: 0, individualOopMax: 3000);
-        var engine = CreateEngine(plan, categoryCode: "48",
-            existingOop: 2980m); // Only $20 of OOP remaining
-
-        var request = CreateRequest(plan.Id,
-            lines: ("99223", 5000m, 3000m, "21"));
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2980m);
+        var request = CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
-        // Coinsurance would be 20% of 3000 = 600, but OOP max caps at $20
         Assert.Equal(20m, line.MemberResponsibility);
-        Assert.Equal(2980m, line.PlanPaidAmount); // Plan picks up the rest
+        Assert.Equal(2980m, line.PlanPaidAmount);
         Assert.True(line.OopMaxReduction > 0);
     }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: NON-COVERED SERVICE
-    // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
     public async Task NonCoveredService_DeniedWithCarc96()
     {
         var plan = CreateTestPlan();
-        var engine = CreateEngine(plan, categoryCode: "35"); // Dental — not covered
-
-        var request = CreateRequest(plan.Id,
-            lines: ("D0120", 75m, 75m, "81"));
+        var engine = CreateEngine(plan, categoryCode: "35");
+        var request = CreateRequest(plan.Id, lines: ("D0120", 75m, 75m, "81"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
         Assert.False(line.IsCovered);
         Assert.Equal("96", line.DenialReasonCode);
         Assert.Equal(0m, line.PlanPaidAmount);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: VISIT LIMITS
-    // ═══════════════════════════════════════════════════════════════════
-
     [Fact]
     public async Task VisitLimitExceeded_DeniedWithCarc119()
     {
         var plan = CreateTestPlan();
-        var engine = CreateEngine(plan, categoryCode: "BH",
-            existingVisitCount: 20); // Limit is 20, already at 20
-
-        var request = CreateRequest(plan.Id,
-            lines: ("97110", 150m, 100m, "11"));
+        var engine = CreateEngine(plan, categoryCode: "BH", existingVisitCount: 20);
+        var request = CreateRequest(plan.Id, lines: ("97110", 150m, 100m, "11"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
         Assert.False(line.IsCovered);
         Assert.Equal("119", line.DenialReasonCode);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: EMERGENCY — NO SURPRISES ACT
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Emergency visit at an out-of-network facility.
-    /// Per the No Surprises Act, in-network cost sharing applies.
-    /// </summary>
     [Fact]
     public async Task EmergencyOutOfNetwork_InNetworkCostSharingApplied()
     {
         var plan = CreateTestPlan(individualDeductible: 0);
         var engine = CreateEngine(plan, categoryCode: "86");
-
-        // Out-of-network, but emergency
         var request = CreateRequest(plan.Id,
-            networkTier: NetworkTier.OutOfNetwork,
-            isEmergency: true,
+            networkTier: NetworkTier.OutOfNetwork, isEmergency: true,
             lines: ("99283", 2000m, 1500m, "23"));
 
         var result = await engine.CalculateAsync(request);
-
         var line = result.Lines.Single();
-        // Should use in-network cost sharing (copay $250 + 20% coinsurance)
-        // not out-of-network (which might be 40% coinsurance, no copay)
         Assert.Equal(250m, line.CopayAmount);
         Assert.Equal(0.20m, line.CoinsurancePercent);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: MULTI-LINE CLAIM — ACCUMULATOR PROGRESSION
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Two-line claim. Deductible should be consumed across both lines,
-    /// not applied independently to each.
-    /// </summary>
     [Fact]
     public async Task MultiLineClaim_DeductibleSharedAcrossLines()
     {
         var plan = CreateTestPlan(individualDeductible: 200);
         var engine = CreateEngine(plan, categoryCode: "98");
-
         var request = CreateRequest(plan.Id,
-            lines:
-            [
-                ("99213", 200m, 150m, "11"),  // Line 1: $150 allowed
-                ("36415", 50m, 30m, "11"),    // Line 2: $30 allowed
-            ]);
+            lines: [("99213", 200m, 150m, "11"), ("36415", 50m, 30m, "11")]);
 
         var result = await engine.CalculateAsync(request);
-
-        // Line 1 should consume $150 of the $200 deductible
         var line1 = result.Lines.First(l => l.LineNumber == 1);
         Assert.Equal(150m, line1.DeductibleAmount);
-
-        // Line 2 should consume remaining $30 (only $50 of deductible left, but allowed is $30)
         var line2 = result.Lines.First(l => l.LineNumber == 2);
         Assert.Equal(30m, line2.DeductibleAmount);
-
-        // Total deductible applied: $180 of $200
         Assert.Equal(180m, result.Totals.TotalDeductible);
     }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // TEST: CAS SEGMENT GENERATION (for 835)
-    // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
     public async Task CasSegments_ContractualAndPatientResponsibility_CorrectGroupCodes()
     {
         var plan = CreateTestPlan(individualDeductible: 0);
-        var engine = CreateEngine(plan, categoryCode: "98",
-            existingDeductible: 500); // Deductible already met
-
-        var request = CreateRequest(plan.Id,
-            lines: ("99213", 200m, 150m, "11"));
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
 
         var result = await engine.CalculateAsync(request);
         var line = result.Lines.Single();
-
-        // CO-45: contractual adjustment ($200 billed - $150 allowed = $50)
-        Assert.Contains(line.Adjustments,
-            a => a.GroupCode == "CO" && a.ReasonCode == "45" && a.Amount == 50m);
-
-        // PR-3: copay ($30)
-        Assert.Contains(line.Adjustments,
-            a => a.GroupCode == "PR" && a.ReasonCode == "3" && a.Amount == 30m);
-
-        // PR-2: coinsurance (20% of $120 = $24)
-        Assert.Contains(line.Adjustments,
-            a => a.GroupCode == "PR" && a.ReasonCode == "2" && a.Amount == 24m);
+        Assert.Contains(line.Adjustments, a => a.GroupCode == "CO" && a.ReasonCode == "45" && a.Amount == 50m);
+        Assert.Contains(line.Adjustments, a => a.GroupCode == "PR" && a.ReasonCode == "3" && a.Amount == 30m);
+        Assert.Contains(line.Adjustments, a => a.GroupCode == "PR" && a.ReasonCode == "2" && a.Amount == 24m);
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // TEST HELPER: Create engine with test doubles
+    // FEATURE 1: HDHP / HSA DEDUCTIBLE-FIRST
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// HDHP plan: deductible MUST apply even when category says DeductibleApplies=false.
+    /// Physical therapy normally has copay-only ($40). Under HDHP, deductible applies first.
+    /// </summary>
+    [Fact]
+    public async Task Hdhp_DeductibleForcedOnNonExemptService()
+    {
+        var plan = CreateTestPlan(
+            planType: PlanType.HDHP, isHdhp: true,
+            individualDeductible: 3000);
+        var engine = CreateEngine(plan, categoryCode: "BH");
+
+        var request = CreateRequest(plan.Id, lines: ("97110", 200m, 150m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        // Deductible should consume the entire allowed (3000 remaining > 150)
+        Assert.Equal(150m, line.DeductibleAmount);
+        Assert.Equal(150m, line.MemberResponsibility);
+        Assert.Equal(0m, line.PlanPaidAmount);
+    }
+
+    /// <summary>
+    /// HDHP plan: preventive care is exempt from deductible (ACA mandate).
+    /// Should use the category's own cost-sharing rules.
+    /// </summary>
+    [Fact]
+    public async Task Hdhp_PreventiveExemptFromDeductible()
+    {
+        var plan = CreateTestPlan(
+            planType: PlanType.HDHP, isHdhp: true,
+            individualDeductible: 3000,
+            hdhpExemptServices: ["AE"]);
+        var engine = CreateEngine(plan, categoryCode: "AE");
+
+        var request = CreateRequest(plan.Id, lines: ("99395", 250m, 200m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        // Preventive: $0 copay (InsteadOfDeductible), no deductible
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(0m, line.CopayAmount);
+        Assert.Equal(0m, line.MemberResponsibility);
+        Assert.Equal(200m, line.PlanPaidAmount);
+    }
+
+    /// <summary>
+    /// HDHP: once deductible is met, standard copay/coinsurance kicks in.
+    /// </summary>
+    [Fact]
+    public async Task Hdhp_DeductibleMet_ThenCopayCoinsuranceApply()
+    {
+        var plan = CreateTestPlan(
+            planType: PlanType.HDHP, isHdhp: true,
+            individualDeductible: 3000);
+        var engine = CreateEngine(plan, categoryCode: "98",
+            existingDeductible: 3000m); // Already met
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(30m, line.CopayAmount);
+        Assert.Equal(24m, line.CoinsuranceAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FEATURE 2: AGGREGATE FAMILY ACCUMULATOR MODEL
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Aggregate model: family deductible is the only pool.
+    /// No individual sub-limit exists.
+    /// </summary>
+    [Fact]
+    public async Task Aggregate_FamilyDeductibleIsOnlyPool()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 0, // Ignored in aggregate
+            familyDeductible: 3000,
+            individualOopMax: 0,
+            familyOopMax: 12000,
+            familyModel: FamilyAccumulatorModel.Aggregate);
+        var engine = CreateEngine(plan, categoryCode: "98",
+            familyModel: FamilyAccumulatorModel.Aggregate,
+            familyDeductible: 3000);
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        // All $150 goes to family deductible pool
+        Assert.Equal(150m, line.DeductibleAmount);
+        Assert.Equal(150m, line.MemberResponsibility);
+    }
+
+    /// <summary>
+    /// Aggregate: when family deductible is met, all members benefit.
+    /// </summary>
+    [Fact]
+    public async Task Aggregate_FamilyDeductibleMet_CopayCoinsuranceOnly()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 0,
+            familyDeductible: 3000,
+            individualOopMax: 0,
+            familyOopMax: 12000,
+            familyModel: FamilyAccumulatorModel.Aggregate);
+        var engine = CreateEngine(plan, categoryCode: "98",
+            familyModel: FamilyAccumulatorModel.Aggregate,
+            familyDeductible: 3000,
+            existingFamilyDeductible: 3000m); // Met
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(30m, line.CopayAmount);
+        Assert.Equal(24m, line.CoinsuranceAmount);
+    }
+
+    /// <summary>
+    /// Aggregate: OOP max is also family-only, no individual cap.
+    /// </summary>
+    [Fact]
+    public async Task Aggregate_OopMaxIsFamilyOnly()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 0,
+            familyDeductible: 0,
+            individualOopMax: 0,
+            familyOopMax: 5000,
+            familyModel: FamilyAccumulatorModel.Aggregate);
+        var engine = CreateEngine(plan, categoryCode: "48",
+            familyModel: FamilyAccumulatorModel.Aggregate,
+            familyDeductible: 0,
+            existingFamilyOop: 4990m); // Only $10 remaining
+
+        var request = CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(10m, line.MemberResponsibility);
+        Assert.True(line.OopMaxReduction > 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FEATURE 3: ACCUMULATOR REVERSAL (VOID / REPLACE)
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Reversal_CallsAccumulatorServiceReverse()
+    {
+        var plan = CreateTestPlan();
+        var accService = new TrackingAccumulatorService(plan, 0, 0, 0, "98");
+        var engine = new BenefitCalculationEngine(
+            new FixedCategoryResolver("98", "Office Visit"),
+            new InMemoryBenefitPlanProvider(plan),
+            accService,
+            NullLogger<BenefitCalculationEngine>.Instance);
+
+        await engine.ReverseClaimAsync(
+            "MBR-001", "SUB-001", plan.Id,
+            new DateOnly(2026, 3, 8), "ORIG-CLM-001");
+
+        Assert.True(accService.ReverseCalled);
+        Assert.Equal("ORIG-CLM-001", accService.ReversedClaimId);
+    }
+
+    /// <summary>
+    /// After processing a claim and then reversing, the accumulator impact
+    /// should be unwound. We verify by processing, reversing, then processing
+    /// the same claim again — accumulators should be back to original state.
+    /// </summary>
+    [Fact]
+    public async Task Reversal_AccumulatorImpactUnwound()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var accService = new TrackingAccumulatorService(plan, 0, 0, 0, "98");
+        var engine = new BenefitCalculationEngine(
+            new FixedCategoryResolver("98", "Office Visit"),
+            new InMemoryBenefitPlanProvider(plan),
+            accService,
+            NullLogger<BenefitCalculationEngine>.Instance);
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        // First adjudication: $150 goes to deductible
+        var result1 = await engine.CalculateAsync(request);
+        Assert.Equal(150m, result1.Lines.Single().DeductibleAmount);
+
+        // Reverse
+        await engine.ReverseClaimAsync(
+            "MBR-001", "SUB-001", plan.Id,
+            new DateOnly(2026, 3, 8), request.ClaimId);
+
+        Assert.True(accService.ReverseCalled);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FEATURE 4: COPAY-ONLY (INSTEAD OF DEDUCTIBLE)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// PCP visit with CopayInsteadOfDeductible: $30 copay, no deductible consumed.
+    /// Deductible balance should remain unchanged.
+    /// </summary>
+    [Fact]
+    public async Task CopayInsteadOfDeductible_DeductibleNotConsumed()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "PCP");
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);  // No deductible
+        Assert.Equal(30m, line.CopayAmount);       // Flat copay
+        Assert.Equal(24m, line.CoinsuranceAmount); // 20% of (150 - 30)
+        Assert.Equal(54m, line.MemberResponsibility);
+        Assert.Equal(96m, line.PlanPaidAmount);
+
+        // Verify no PR-1 (deductible) adjustment was generated
+        Assert.DoesNotContain(line.Adjustments, a => a.ReasonCode == "1");
+        // Verify PR-3 (copay) is present
+        Assert.Contains(line.Adjustments, a => a.GroupCode == "PR" && a.ReasonCode == "3" && a.Amount == 30m);
+    }
+
+    /// <summary>
+    /// Copay-instead on a service where allowed < copay amount.
+    /// Copay should be capped at allowed.
+    /// </summary>
+    [Fact]
+    public async Task CopayInsteadOfDeductible_CopayExceedsAllowed_CappedAtAllowed()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "PCP");
+
+        var request = CreateRequest(plan.Id, lines: ("99213", 30m, 20m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(20m, line.CopayAmount); // Capped at allowed
+        Assert.Equal(0m, line.CoinsuranceAmount); // Nothing left
+        Assert.Equal(20m, line.MemberResponsibility);
+    }
+
+    /// <summary>
+    /// Preventive care: $0 copay, InsteadOfDeductible.
+    /// Member pays nothing, even with unmet deductible.
+    /// </summary>
+    [Fact]
+    public async Task PreventiveCare_ZeroCopayInsteadOfDeductible_MemberPaysNothing()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "AE");
+
+        var request = CreateRequest(plan.Id, lines: ("99395", 250m, 200m, "11"));
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(0m, line.CopayAmount);
+        Assert.Equal(0m, line.CoinsuranceAmount);
+        Assert.Equal(0m, line.MemberResponsibility);
+        Assert.Equal(200m, line.PlanPaidAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FEATURE 5: DRG-BASED INPATIENT PRICING
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// DRG case rate: cost-sharing applied once to the DRG allowed amount,
+    /// not per-line. Multiple lines should have proportionally allocated amounts.
+    /// </summary>
+    [Fact]
+    public async Task Drg_CostSharingAppliedOncePerAdmission()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48");
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I",
+            drgCode: "470",
+            drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("99223", 8000m, 8000m, "21"),  // Admission
+                ("99231", 2000m, 2000m, "21"),  // Daily care
+                ("99238", 2000m, 2000m, "21"),  // Discharge
+            ]);
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.DrgCostShare);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal("470", drg.DrgCode);
+        Assert.Equal(12000m, drg.DrgAllowedAmount);
+
+        // $500 deductible + 20% coinsurance on remaining $11,500 = $2,300
+        // Total member resp = $500 + $2,300 = $2,800
+        Assert.Equal(500m, drg.DeductibleAmount);
+        Assert.Equal(2300m, drg.CoinsuranceAmount);
+        Assert.Equal(2800m, drg.MemberResponsibility);
+        Assert.Equal(9200m, drg.PlanPaidAmount);
+
+        // All lines should be marked as DRG-priced
+        Assert.All(result.Lines, l => Assert.True(l.IsDrgPriced));
+
+        // Line amounts should sum to claim totals
+        Assert.Equal(drg.DeductibleAmount,
+            result.Lines.Sum(l => l.DeductibleAmount));
+    }
+
+    /// <summary>
+    /// DRG: OOP max should cap total member responsibility.
+    /// </summary>
+    [Fact]
+    public async Task Drg_OopMaxCapsResponsibility()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 3000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48",
+            existingOop: 2500m); // Only $500 OOP remaining
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines: [("99223", 12000m, 12000m, "21")]);
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        // Without OOP cap: $500 ded + $2300 coins = $2800
+        // OOP remaining: $500 → capped at $500
+        Assert.Equal(500m, drg.MemberResponsibility);
+        Assert.True(drg.OopMaxReduction > 0);
+    }
+
+    /// <summary>
+    /// Non-institutional claim with DRG code should still use per-line pricing.
+    /// </summary>
+    [Fact]
+    public async Task Drg_ProfessionalClaim_IgnoresDrg_UsesPerLine()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "98");
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837P", // Professional, not institutional
+            drgCode: "470",
+            drgAllowedAmount: 12000m,
+            lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.Null(result.DrgCostShare); // No DRG processing
+        Assert.False(result.Lines.Single().IsDrgPriced);
+        Assert.Equal(150m, result.Lines.Single().DeductibleAmount); // Normal per-line
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TEST HELPER
     // ═══════════════════════════════════════════════════════════════════
 
     private static BenefitCalculationEngine CreateEngine(
@@ -425,11 +718,16 @@ public class BenefitCalculationEngineTests
         string categoryCode,
         decimal existingDeductible = 0,
         decimal existingOop = 0,
-        int existingVisitCount = 0)
+        int existingVisitCount = 0,
+        FamilyAccumulatorModel familyModel = FamilyAccumulatorModel.Embedded,
+        decimal familyDeductible = 1500,
+        decimal existingFamilyDeductible = 0,
+        decimal existingFamilyOop = 0)
     {
         var planProvider = new InMemoryBenefitPlanProvider(plan);
         var accumulatorService = new InMemoryAccumulatorService(
-            plan, existingDeductible, existingOop, existingVisitCount, categoryCode);
+            plan, existingDeductible, existingOop, existingVisitCount, categoryCode,
+            familyModel, familyDeductible, existingFamilyDeductible, existingFamilyOop);
         var categoryResolver = new FixedCategoryResolver(categoryCode,
             plan.GetCategory(categoryCode)?.ServiceTypeDescription ?? "Unknown");
 
@@ -461,51 +759,80 @@ internal class InMemoryAccumulatorService : IAccumulatorService
         decimal existingDeductible,
         decimal existingOop,
         int existingVisitCount,
-        string categoryCode)
+        string categoryCode,
+        FamilyAccumulatorModel familyModel = FamilyAccumulatorModel.Embedded,
+        decimal familyDeductible = 1500,
+        decimal existingFamilyDeductible = 0,
+        decimal existingFamilyOop = 0)
     {
-        _snapshots.Add(new AccumulatorSnapshot
+        if (familyModel == FamilyAccumulatorModel.Aggregate)
         {
-            Type = AccumulatorType.IndividualDeductible,
-            Scope = AccumulatorScope.Individual,
-            NetworkTier = NetworkTier.InNetwork,
-            LimitAmount = plan.IndividualDeductible ?? 0,
-            AccumulatedAmountBefore = existingDeductible,
-            AccumulatedAmountAfter = existingDeductible,
-            RemainingAmount = Math.Max(0, (plan.IndividualDeductible ?? 0) - existingDeductible)
-        });
-
-        _snapshots.Add(new AccumulatorSnapshot
+            // Aggregate: only family-level accumulators
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.FamilyDeductible,
+                Scope = AccumulatorScope.Family,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = familyDeductible,
+                AccumulatedAmountBefore = existingFamilyDeductible,
+                AccumulatedAmountAfter = existingFamilyDeductible,
+                RemainingAmount = Math.Max(0, familyDeductible - existingFamilyDeductible)
+            });
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.FamilyOutOfPocketMax,
+                Scope = AccumulatorScope.Family,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = plan.FamilyOopMax ?? 0,
+                AccumulatedAmountBefore = existingFamilyOop,
+                AccumulatedAmountAfter = existingFamilyOop,
+                RemainingAmount = Math.Max(0, (plan.FamilyOopMax ?? 0) - existingFamilyOop)
+            });
+        }
+        else
         {
-            Type = AccumulatorType.FamilyDeductible,
-            Scope = AccumulatorScope.Family,
-            NetworkTier = NetworkTier.InNetwork,
-            LimitAmount = plan.FamilyDeductible ?? 0,
-            AccumulatedAmountBefore = existingDeductible,
-            AccumulatedAmountAfter = existingDeductible,
-            RemainingAmount = Math.Max(0, (plan.FamilyDeductible ?? 0) - existingDeductible)
-        });
-
-        _snapshots.Add(new AccumulatorSnapshot
-        {
-            Type = AccumulatorType.IndividualOutOfPocketMax,
-            Scope = AccumulatorScope.Individual,
-            NetworkTier = NetworkTier.InNetwork,
-            LimitAmount = plan.IndividualOopMax ?? 0,
-            AccumulatedAmountBefore = existingOop,
-            AccumulatedAmountAfter = existingOop,
-            RemainingAmount = Math.Max(0, (plan.IndividualOopMax ?? 0) - existingOop)
-        });
-
-        _snapshots.Add(new AccumulatorSnapshot
-        {
-            Type = AccumulatorType.FamilyOutOfPocketMax,
-            Scope = AccumulatorScope.Family,
-            NetworkTier = NetworkTier.InNetwork,
-            LimitAmount = plan.FamilyOopMax ?? 0,
-            AccumulatedAmountBefore = existingOop,
-            AccumulatedAmountAfter = existingOop,
-            RemainingAmount = Math.Max(0, (plan.FamilyOopMax ?? 0) - existingOop)
-        });
+            // Embedded: individual + family
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.IndividualDeductible,
+                Scope = AccumulatorScope.Individual,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = plan.IndividualDeductible ?? 0,
+                AccumulatedAmountBefore = existingDeductible,
+                AccumulatedAmountAfter = existingDeductible,
+                RemainingAmount = Math.Max(0, (plan.IndividualDeductible ?? 0) - existingDeductible)
+            });
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.FamilyDeductible,
+                Scope = AccumulatorScope.Family,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = plan.FamilyDeductible ?? 0,
+                AccumulatedAmountBefore = existingDeductible,
+                AccumulatedAmountAfter = existingDeductible,
+                RemainingAmount = Math.Max(0, (plan.FamilyDeductible ?? 0) - existingDeductible)
+            });
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.IndividualOutOfPocketMax,
+                Scope = AccumulatorScope.Individual,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = plan.IndividualOopMax ?? 0,
+                AccumulatedAmountBefore = existingOop,
+                AccumulatedAmountAfter = existingOop,
+                RemainingAmount = Math.Max(0, (plan.IndividualOopMax ?? 0) - existingOop)
+            });
+            _snapshots.Add(new AccumulatorSnapshot
+            {
+                Type = AccumulatorType.FamilyOutOfPocketMax,
+                Scope = AccumulatorScope.Family,
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = plan.FamilyOopMax ?? 0,
+                AccumulatedAmountBefore = existingOop,
+                AccumulatedAmountAfter = existingOop,
+                RemainingAmount = Math.Max(0, (plan.FamilyOopMax ?? 0) - existingOop)
+            });
+        }
 
         if (existingVisitCount > 0)
         {
@@ -528,9 +855,8 @@ internal class InMemoryAccumulatorService : IAccumulatorService
         string planYear, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AccumulatorSnapshot>>(_snapshots);
 
-    public Task ApplyUpdatesAsync(string memberId, string subscriberId, 
-        Guid benefitPlanId, string planYear,
-        string claimId,
+    public Task ApplyUpdatesAsync(string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear, string claimId,
         IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct = default)
     {
         _appliedUpdates.AddRange(updates);
@@ -546,8 +872,29 @@ internal class InMemoryAccumulatorService : IAccumulatorService
 }
 
 /// <summary>
-/// Test double that always resolves to the configured service type code.
+/// Accumulator service that tracks whether Reverse was called.
 /// </summary>
+internal class TrackingAccumulatorService : InMemoryAccumulatorService
+{
+    public bool ReverseCalled { get; private set; }
+    public string? ReversedClaimId { get; private set; }
+
+    public TrackingAccumulatorService(
+        BenefitPlanConfig plan, decimal existingDeductible, decimal existingOop,
+        int existingVisitCount, string categoryCode)
+        : base(plan, existingDeductible, existingOop, existingVisitCount, categoryCode)
+    { }
+
+    public new Task ReverseAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear, string claimId, CancellationToken ct)
+    {
+        ReverseCalled = true;
+        ReversedClaimId = claimId;
+        return Task.CompletedTask;
+    }
+}
+
 internal class FixedCategoryResolver : IServiceCategoryResolver
 {
     private readonly string _code;
