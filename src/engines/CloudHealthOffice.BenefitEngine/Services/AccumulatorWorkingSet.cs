@@ -6,16 +6,11 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// <summary>
 /// Mutable working copy of accumulator state for a single claim adjudication.
 ///
-/// This is created at the start of benefit calculation, mutated as each
-/// line is processed, and then persisted at the end. The pending updates
-/// are applied via optimistic concurrency in the accumulator repository.
-///
-/// Why a working set instead of direct DB writes per line:
-///   - A claim with 10 lines would otherwise require 10+ DB round trips
-///     just for deductible/OOP tracking
-///   - Cross-line interactions (e.g., OOP max reached partway through)
-///     need consistent state within the claim
-///   - If adjudication fails, nothing is persisted (atomic)
+/// Supports both Embedded and Aggregate family accumulator models:
+///   Embedded:  individual + family accumulators tracked independently.
+///              Individual met → that member done. Family met → all members done.
+///   Aggregate: family-only pool. No individual sub-limit. Any member
+///              contributes to the single family pool.
 ///
 /// QNXT equivalent: The in-memory accumulator state that QNXT's
 /// adjudication engine maintains during claim processing, then writes
@@ -33,11 +28,8 @@ public class AccumulatorWorkingSet
     {
         _plan = plan;
 
-        // Initialize from current persisted state
         foreach (var acc in currentState)
         {
-            // VisitCount / DayCount / DollarLimit are keyed by service type code
-            // (one counter per category). All others use Type+Scope+Tier.
             var key = acc.Type switch
             {
                 AccumulatorType.VisitCount  when acc.ServiceTypeCode is not null
@@ -55,88 +47,118 @@ public class AccumulatorWorkingSet
                 Scope = acc.Scope,
                 NetworkTier = acc.NetworkTier,
                 LimitAmount = acc.LimitAmount,
-                OriginalAccumulated = acc.AccumulatedAmountAfter, // Current state is "after" last claim
+                OriginalAccumulated = acc.AccumulatedAmountAfter,
                 CurrentAccumulated = acc.AccumulatedAmountAfter,
             };
         }
 
-        // Ensure standard accumulators exist even if no prior state
-        EnsureAccumulator(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual,
-            NetworkTier.InNetwork, plan.IndividualDeductible ?? 0);
-        EnsureAccumulator(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual,
-            NetworkTier.OutOfNetwork, plan.IndividualDeductibleOon ?? plan.IndividualDeductible ?? 0);
-        EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
-            NetworkTier.InNetwork, plan.FamilyDeductible ?? 0);
-        EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
-            NetworkTier.OutOfNetwork, plan.FamilyDeductibleOon ?? plan.FamilyDeductible ?? 0);
-        EnsureAccumulator(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual,
-            NetworkTier.InNetwork, plan.IndividualOopMax ?? 0);
-        EnsureAccumulator(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual,
-            NetworkTier.OutOfNetwork, plan.IndividualOopMaxOon ?? plan.IndividualOopMax ?? 0);
-        EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
-            NetworkTier.InNetwork, plan.FamilyOopMax ?? 0);
-        EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
-            NetworkTier.OutOfNetwork, plan.FamilyOopMaxOon ?? plan.FamilyOopMax ?? 0);
+        // Ensure standard accumulators exist based on family model
+        if (plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
+        {
+            // Aggregate: only family-level accumulators exist
+            EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
+                NetworkTier.InNetwork, plan.FamilyDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
+                NetworkTier.OutOfNetwork, plan.FamilyDeductibleOon ?? plan.FamilyDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
+                NetworkTier.InNetwork, plan.FamilyOopMax ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
+                NetworkTier.OutOfNetwork, plan.FamilyOopMaxOon ?? plan.FamilyOopMax ?? 0);
+        }
+        else
+        {
+            // Embedded: individual + family
+            EnsureAccumulator(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual,
+                NetworkTier.InNetwork, plan.IndividualDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual,
+                NetworkTier.OutOfNetwork, plan.IndividualDeductibleOon ?? plan.IndividualDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
+                NetworkTier.InNetwork, plan.FamilyDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyDeductible, AccumulatorScope.Family,
+                NetworkTier.OutOfNetwork, plan.FamilyDeductibleOon ?? plan.FamilyDeductible ?? 0);
+            EnsureAccumulator(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual,
+                NetworkTier.InNetwork, plan.IndividualOopMax ?? 0);
+            EnsureAccumulator(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual,
+                NetworkTier.OutOfNetwork, plan.IndividualOopMaxOon ?? plan.IndividualOopMax ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
+                NetworkTier.InNetwork, plan.FamilyOopMax ?? 0);
+            EnsureAccumulator(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
+                NetworkTier.OutOfNetwork, plan.FamilyOopMaxOon ?? plan.FamilyOopMax ?? 0);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // DEDUCTIBLE
     // ═══════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// How much deductible remains for this member in this network tier.
-    /// Considers both individual and family (embedded model).
-    /// </summary>
     public decimal GetRemainingDeductible(NetworkTier networkTier)
     {
+        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
+        {
+            // Aggregate: only family pool exists — no individual sub-limit
+            var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
+                AccumulatorScope.Family, networkTier);
+            var family = _entries.GetValueOrDefault(familyKey);
+            return family is null ? 0 : Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+        }
+
+        // Embedded model
         var individualKey = MakeKey(AccumulatorType.IndividualDeductible,
             AccumulatorScope.Individual, networkTier);
-        var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
+        var familyKeyEmb = MakeKey(AccumulatorType.FamilyDeductible,
             AccumulatorScope.Family, networkTier);
 
         var individual = _entries.GetValueOrDefault(individualKey);
-        var family = _entries.GetValueOrDefault(familyKey);
+        var familyEmb = _entries.GetValueOrDefault(familyKeyEmb);
 
         if (individual is null) return 0;
 
         var individualRemaining = Math.Max(0, individual.LimitAmount - individual.CurrentAccumulated);
 
-        // Embedded model: if family deductible is met, individual is also met
-        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Embedded && family is not null)
+        // Embedded: if family deductible is met, individual is also met
+        if (familyEmb is not null)
         {
-            var familyRemaining = Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+            var familyRemaining = Math.Max(0, familyEmb.LimitAmount - familyEmb.CurrentAccumulated);
             if (familyRemaining <= 0)
-            {
-                // Family aggregate met — everyone's deductible is satisfied
                 return 0;
-            }
         }
 
         return individualRemaining;
     }
 
-    /// <summary>
-    /// Apply deductible spend. Updates both individual and family accumulators.
-    /// </summary>
     public void ApplyDeductible(decimal amount, NetworkTier networkTier)
     {
         if (amount <= 0) return;
 
-        var individualKey = MakeKey(AccumulatorType.IndividualDeductible,
-            AccumulatorScope.Individual, networkTier);
-        var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
-            AccumulatorScope.Family, networkTier);
-
-        if (_entries.TryGetValue(individualKey, out var individual))
+        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            individual.CurrentAccumulated += amount;
-            RecordUpdate(individual, amount, "Deductible");
+            // Aggregate: only update family pool
+            var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
+                AccumulatorScope.Family, networkTier);
+            if (_entries.TryGetValue(familyKey, out var family))
+            {
+                family.CurrentAccumulated += amount;
+                RecordUpdate(family, amount, "Deductible-Family-Aggregate");
+            }
+            return;
         }
 
-        if (_entries.TryGetValue(familyKey, out var family))
+        // Embedded: update both individual and family
+        var individualKey = MakeKey(AccumulatorType.IndividualDeductible,
+            AccumulatorScope.Individual, networkTier);
+        var familyKeyEmb = MakeKey(AccumulatorType.FamilyDeductible,
+            AccumulatorScope.Family, networkTier);
+
+        if (_entries.TryGetValue(individualKey, out var ind))
         {
-            family.CurrentAccumulated += amount;
-            RecordUpdate(family, amount, "Deductible-Family");
+            ind.CurrentAccumulated += amount;
+            RecordUpdate(ind, amount, "Deductible");
+        }
+
+        if (_entries.TryGetValue(familyKeyEmb, out var fam))
+        {
+            fam.CurrentAccumulated += amount;
+            RecordUpdate(fam, amount, "Deductible-Family");
         }
     }
 
@@ -144,58 +166,73 @@ public class AccumulatorWorkingSet
     // OUT-OF-POCKET MAX
     // ═══════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// How much OOP remains before the member hits the maximum.
-    /// </summary>
     public decimal GetRemainingOopMax(NetworkTier networkTier)
     {
+        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
+        {
+            // Aggregate: only family pool
+            var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
+                AccumulatorScope.Family, networkTier);
+            var family = _entries.GetValueOrDefault(familyKey);
+            if (family is null) return decimal.MaxValue;
+            return Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+        }
+
+        // Embedded model
         var individualKey = MakeKey(AccumulatorType.IndividualOutOfPocketMax,
             AccumulatorScope.Individual, networkTier);
-        var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
+        var familyKeyEmb = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
             AccumulatorScope.Family, networkTier);
 
         var individual = _entries.GetValueOrDefault(individualKey);
-        var family = _entries.GetValueOrDefault(familyKey);
+        var familyEmb = _entries.GetValueOrDefault(familyKeyEmb);
 
-        if (individual is null) return decimal.MaxValue; // No OOP max configured
+        if (individual is null) return decimal.MaxValue;
 
         var individualRemaining = Math.Max(0, individual.LimitAmount - individual.CurrentAccumulated);
 
-        // Embedded model: family OOP max can also cap
-        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Embedded && family is not null)
+        if (familyEmb is not null)
         {
-            var familyRemaining = Math.Max(0, family.LimitAmount - family.CurrentAccumulated);
+            var familyRemaining = Math.Max(0, familyEmb.LimitAmount - familyEmb.CurrentAccumulated);
             if (familyRemaining <= 0)
-            {
-                return 0; // Family OOP max met — everything covered
-            }
+                return 0;
         }
 
         return individualRemaining;
     }
 
-    /// <summary>
-    /// Apply member responsibility to OOP max tracking.
-    /// </summary>
     public void ApplyOopMax(decimal memberResponsibility, NetworkTier networkTier)
     {
         if (memberResponsibility <= 0) return;
 
-        var individualKey = MakeKey(AccumulatorType.IndividualOutOfPocketMax,
-            AccumulatorScope.Individual, networkTier);
-        var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
-            AccumulatorScope.Family, networkTier);
-
-        if (_entries.TryGetValue(individualKey, out var individual))
+        if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            individual.CurrentAccumulated += memberResponsibility;
-            RecordUpdate(individual, memberResponsibility, "OOP");
+            var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
+                AccumulatorScope.Family, networkTier);
+            if (_entries.TryGetValue(familyKey, out var family))
+            {
+                family.CurrentAccumulated += memberResponsibility;
+                RecordUpdate(family, memberResponsibility, "OOP-Family-Aggregate");
+            }
+            return;
         }
 
-        if (_entries.TryGetValue(familyKey, out var family))
+        // Embedded
+        var individualKey = MakeKey(AccumulatorType.IndividualOutOfPocketMax,
+            AccumulatorScope.Individual, networkTier);
+        var familyKeyEmb = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
+            AccumulatorScope.Family, networkTier);
+
+        if (_entries.TryGetValue(individualKey, out var ind))
         {
-            family.CurrentAccumulated += memberResponsibility;
-            RecordUpdate(family, memberResponsibility, "OOP-Family");
+            ind.CurrentAccumulated += memberResponsibility;
+            RecordUpdate(ind, memberResponsibility, "OOP");
+        }
+
+        if (_entries.TryGetValue(familyKeyEmb, out var fam))
+        {
+            fam.CurrentAccumulated += memberResponsibility;
+            RecordUpdate(fam, memberResponsibility, "OOP-Family");
         }
     }
 
@@ -219,8 +256,8 @@ public class AccumulatorWorkingSet
             {
                 Type = AccumulatorType.VisitCount,
                 Scope = AccumulatorScope.Individual,
-                NetworkTier = NetworkTier.InNetwork, // Visits usually not network-specific
-                LimitAmount = 0, // Set from benefit category
+                NetworkTier = NetworkTier.InNetwork,
+                LimitAmount = 0,
                 CurrentAccumulated = 0
             };
             _entries[key] = entry;
@@ -245,12 +282,40 @@ public class AccumulatorWorkingSet
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // SNAPSHOT / PERSISTENCE
+    // REVERSAL — for void/replace claims
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Get the current state of all accumulators for the response.
+    /// Reverse all pending updates (used when the engine needs to unwind
+    /// within the same adjudication). For cross-claim reversals, use
+    /// IAccumulatorService.ReverseAsync which reads the original updates
+    /// from persistent storage.
     /// </summary>
+    public void ReversePendingUpdates()
+    {
+        foreach (var update in _pendingUpdates)
+        {
+            var key = update.Type switch
+            {
+                AccumulatorType.VisitCount => $"VisitCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DayCount => $"DayCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DollarLimit => $"DollarLimit:{update.Source.Split(':').LastOrDefault()}",
+                _ => MakeKey(update.Type, update.Scope, update.NetworkTier)
+            };
+
+            if (_entries.TryGetValue(key, out var entry))
+            {
+                entry.CurrentAccumulated -= update.Amount;
+            }
+        }
+
+        _pendingUpdates.Clear();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SNAPSHOT / PERSISTENCE
+    // ═══════════════════════════════════════════════════════════════════
+
     public List<AccumulatorState> GetSnapshot()
     {
         return _entries.Values.Select(e => new AccumulatorState
@@ -267,10 +332,6 @@ public class AccumulatorWorkingSet
         }).ToList();
     }
 
-    /// <summary>
-    /// Get pending updates to persist to the accumulator store.
-    /// These are applied with optimistic concurrency in the repository.
-    /// </summary>
     public IReadOnlyList<AccumulatorUpdate> GetPendingUpdates() => _pendingUpdates;
 
     // ═══════════════════════════════════════════════════════════════════
@@ -322,9 +383,6 @@ public class AccumulatorWorkingSet
     }
 }
 
-/// <summary>
-/// A single pending accumulator update to persist.
-/// </summary>
 public record AccumulatorUpdate
 {
     public AccumulatorType Type { get; init; }
