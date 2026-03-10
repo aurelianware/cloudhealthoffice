@@ -71,6 +71,13 @@ public record AccumulatorSnapshot
     public decimal AccumulatedAmountAfter { get; init; }
     public decimal AccumulatedAmountBefore { get; set; }
     public decimal RemainingAmount { get; set; }
+
+    /// <summary>
+    /// For VisitCount / DayCount / DollarLimit accumulators: the service type
+    /// code this counter belongs to (e.g., "BH" for Physical Therapy).
+    /// Null for deductible / OOP accumulators (they are keyed by Type+Scope+Tier).
+    /// </summary>
+    public string? ServiceTypeCode { get; init; }
 }
 
 /// <summary>

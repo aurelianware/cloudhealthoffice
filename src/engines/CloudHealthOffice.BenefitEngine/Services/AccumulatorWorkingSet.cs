@@ -36,7 +36,19 @@ public class AccumulatorWorkingSet
         // Initialize from current persisted state
         foreach (var acc in currentState)
         {
-            var key = MakeKey(acc.Type, acc.Scope, acc.NetworkTier);
+            // VisitCount / DayCount / DollarLimit are keyed by service type code
+            // (one counter per category). All others use Type+Scope+Tier.
+            var key = acc.Type switch
+            {
+                AccumulatorType.VisitCount  when acc.ServiceTypeCode is not null
+                    => $"VisitCount:{acc.ServiceTypeCode}",
+                AccumulatorType.DayCount    when acc.ServiceTypeCode is not null
+                    => $"DayCount:{acc.ServiceTypeCode}",
+                AccumulatorType.DollarLimit when acc.ServiceTypeCode is not null
+                    => $"DollarLimit:{acc.ServiceTypeCode}",
+                _ => MakeKey(acc.Type, acc.Scope, acc.NetworkTier)
+            };
+
             _entries[key] = new AccumulatorEntry
             {
                 Type = acc.Type,

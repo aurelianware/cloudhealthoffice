@@ -100,6 +100,7 @@ builder.Services.AddSingleton(s =>
 });
 
 builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
 var app = builder.Build();
