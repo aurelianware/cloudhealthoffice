@@ -207,7 +207,7 @@
 
       <div id="loginContent">
         <div class="login-options">
-          <a href="/.auth/login/aad?post_login_redirect_uri=/portal/" class="login-button" id="signInButton">
+          <a href="https://portal.cloudhealthoffice.com" class="login-button" id="signInButton">
             Sign in with your organization account
           </a>
 
@@ -269,7 +269,7 @@
       if (authenticated) {
         loadingMessage.textContent = 'Already signed in. Redirecting to portal...';
         setTimeout(() => {
-          window.location.href = '/portal/';
+          window.location.href = 'https://portal.cloudhealthoffice.com';
         }, 1000);
       } else {
         loadingMessage.style.display = 'none';
