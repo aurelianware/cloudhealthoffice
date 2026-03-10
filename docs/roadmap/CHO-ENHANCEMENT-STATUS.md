@@ -1,23 +1,27 @@
 # CHO Enhancement Roadmap — Status Tracker
 
-Date reviewed: 2026-03-09 (updated 2026-03-09)
+Date reviewed: 2026-03-09 (updated 2026-03-09, sprint 2 complete)
 Basis: `CHO-ENHANCEMENT-ROADMAP` + current branch changes
 Assumptions: Status reflects repository evidence on this branch plus maintainer confirmation.
 
 ## Related Docs
+
 - [Execution Checklist](CHO-ENHANCEMENT-CHECKLIST.md)
 
 ## Legend
+
 - ✅ Done
 - 🟡 In Progress / Partial
 - ⏳ Not Started
 
 ## Executive Summary
-All 12 roadmap PRs are now complete. The codebase has a working benefit/accumulator engine,
-fee schedule/pricing engine, NCCI/MUE edits, full EDI stack (835/277CA/824/270/271),
-RFAI service, document storage abstraction, and real adjudication workflow.
-Remaining work is entirely in the three greenfield workstreams: COB, Encounter Submission,
-and Risk Adjustment/HCC.
+
+All 12 roadmap PRs are complete and all three post-roadmap greenfield workstreams
+(COB, Encounter Submission, Risk Adjustment/HCC) are now also complete.
+The codebase has a working benefit/accumulator/COB engine, fee schedule/pricing engine,
+NCCI/MUE edits, full EDI stack (835/277CA/824/270/271/837 encounter), RFAI service,
+document storage abstraction, real adjudication workflow, encounter submission engine,
+and HCC risk scoring pipeline. 120 new tests added across sprint 2.
 
 ## Workstream Status
 
@@ -74,12 +78,13 @@ and Risk Adjustment/HCC.
   - 13 tests covering all operations, container isolation, overwrite, and typed exception.
 
 ## "What Doesn't Exist Yet" Section — Current Status
+
 - ✅ NCCI/MUE Edits Engine (now exists)
-- ⏳ COB (Coordination of Benefits)
+- ✅ COB (Coordination of Benefits) — `CloudHealthOffice.CobEngine`: payer order (birthday rule, MSP, active-employment), complementary + non-duplication models, BenefitEngine integration (OA-23 CAS), coverage-service `/cob` endpoint. 24 tests.
 - ✅ Provider Contract / Network Management
 - ✅ Payment Service + 835 (core roadmap objective implemented)
-- ⏳ Encounter Submission
-- ⏳ Risk Adjustment / HCC
+- ✅ Encounter Submission — `CloudHealthOffice.EncounterEngine`: X12 837P/837I transformer + ISA/GS batch builder, original/corrected/void, COB OI segments, MOA/MIA adjudication. 44 tests.
+- ✅ Risk Adjustment / HCC — `CloudHealthOffice.RiskAdjustmentEngine`: CMS-HCC v28 + HHS-HCC crosswalk, hierarchy resolution, demographic factor table, batch risk scoring pipeline. 52 tests.
 
 ## Recommended PR Sequence — Progress Snapshot
 - ✅ PR1 RFAI MVP
@@ -96,10 +101,13 @@ and Risk Adjustment/HCC.
 - ✅ PR12 Real 270/271
 
 ## Highest-Priority Remaining Work
-1. **COB** — Coordination of Benefits: payer order determination, primary/secondary adjudication,
-   carry-over of patient responsibility, cross-payer amounts on EOB/835.
-2. **Encounter Submission** — Outbound 837I to payers/HIEs for risk-bearing contracts.
-3. **Risk Adjustment / HCC** — HCC coding, RAF score calculation, encounter-level diagnosis tagging.
+
+All sprint 2 priorities are complete. Potential sprint 3 candidates:
+
+1. **Encounter service** (REST layer) — submission lifecycle tracking, batch dispatch, `GET /api/encounters/{id}/837` download, resubmission/correction flow wrapping `EncounterEngine`.
+2. **Risk adjustment service** (REST layer) — measurement-year diagnosis collection, per-member score endpoint, plan-level RAF summary wrapping `RiskAdjustmentEngine`.
+3. **FHIR R4 API layer** — expose member, coverage, encounter, and claim resources as FHIR-compliant endpoints.
+4. **Portal real-time accumulator display** — surface `AccumulatorSnapshot` to the member portal for deductible/OOP tracking.
 
 ## Notes on Modes (Augment vs Replace)
 - 🟡 Partial
