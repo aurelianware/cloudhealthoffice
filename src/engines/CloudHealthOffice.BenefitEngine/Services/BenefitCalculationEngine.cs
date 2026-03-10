@@ -183,7 +183,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         }
 
         // ── Get cost-sharing rules for the applicable network tier ──
-        var costShareRules = request.NetworkTier == NetworkTier.InNetwork
+        // No Surprises Act: emergency services always use in-network cost-sharing
+        var networkTierForRules = request.IsEmergency ? NetworkTier.InNetwork : request.NetworkTier;
+        var costShareRules = networkTierForRules == NetworkTier.InNetwork
             ? benefitCategory.InNetworkCostSharing
             : benefitCategory.OutOfNetworkCostSharing;
 

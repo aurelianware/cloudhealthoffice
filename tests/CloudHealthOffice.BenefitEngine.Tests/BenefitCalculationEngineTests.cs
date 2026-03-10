@@ -514,6 +514,7 @@ internal class InMemoryAccumulatorService : IAccumulatorService
                 Type = AccumulatorType.VisitCount,
                 Scope = AccumulatorScope.Individual,
                 NetworkTier = NetworkTier.InNetwork,
+                ServiceTypeCode = categoryCode,
                 LimitAmount = 0,
                 AccumulatedAmountBefore = existingVisitCount,
                 AccumulatedAmountAfter = existingVisitCount,

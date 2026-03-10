@@ -20,5 +20,6 @@
     <ProjectReference Include="..\..\src\services\payment-service\payment-service.csproj" />
     <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
     <ProjectReference Include="..\..\src\services\eligibility-service\eligibility-service.csproj" />
+    <ProjectReference Include="..\..\src\services\attachment-service\attachment-service.csproj" />
   </ItemGroup>
 </Project>
