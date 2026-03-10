@@ -48,6 +48,7 @@ builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
 
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
+builder.Services.AddScoped<IEraGeneratorService, EraGeneratorService>();
 
 // Add HttpClient for claims service integration
 builder.Services.AddHttpClient("ClaimsService", client =>

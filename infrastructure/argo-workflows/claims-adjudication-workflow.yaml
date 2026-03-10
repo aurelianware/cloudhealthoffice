@@ -5,7 +5,7 @@ metadata:
   namespace: cho-workflows
 spec:
   entrypoint: adjudicate-claim
-  
+
   # Workflow arguments
   arguments:
     parameters:
@@ -13,14 +13,30 @@ spec:
       value: ""
     - name: tenant-id
       value: ""
-  
+
   # Service account with RBAC to call microservices
   serviceAccountName: argo-workflow
-  
+
   # Workflow templates
   templates:
-  
-  # Main DAG orchestrating all steps
+
+  # ── Main DAG ────────────────────────────────────────────────────────
+  #
+  # Steps 1-5: unchanged pre-adjudication checks (coverage, provider,
+  #            codes, prior auth) run in parallel where possible.
+  #
+  # Step 6: adjudicate — single call to benefit-plan-service
+  #   POST /api/v1/adjudication/adjudicate
+  #   Runs NCCI/MUE edits, fee schedule pricing, and benefit cost-sharing
+  #   waterfall in one C# request. Returns 200 (paid) or 422 (NCCI edit
+  #   failure) or propagates denial from upstream steps.
+  #
+  # Step 7: update-claim — writes final adjudication result to claim record.
+  #
+  # Old steps 6 (get-benefits), 7 (get-rates), 8 (calculate-allowed),
+  # 9 (calculate-cost-sharing) are removed — all replaced by adjudicate.
+  # ─────────────────────────────────────────────────────────────────────
+
   - name: adjudicate-claim
     dag:
       tasks:
@@ -36,7 +52,7 @@ spec:
           - name: headers
             value: |
               X-Tenant-ID: {{workflow.parameters.tenant-id}}
-      
+
       # Step 2: Verify coverage (depends on get-claim)
       - name: verify-coverage
         dependencies: [get-claim]
@@ -47,7 +63,7 @@ spec:
             value: "{{tasks.get-claim.outputs.result}}"
           - name: tenant-id
             value: "{{workflow.parameters.tenant-id}}"
-      
+
       # Step 3: Validate provider (parallel with coverage)
       - name: validate-provider
         dependencies: [get-claim]
@@ -58,7 +74,7 @@ spec:
             value: "{{tasks.get-claim.outputs.result}}"
           - name: tenant-id
             value: "{{workflow.parameters.tenant-id}}"
-      
+
       # Step 4: Validate codes (parallel with coverage/provider)
       - name: validate-codes
         dependencies: [get-claim]
@@ -67,8 +83,8 @@ spec:
           parameters:
           - name: claim-data
             value: "{{tasks.get-claim.outputs.result}}"
-      
-      # Step 5: Check prior authorization (depends on code validation)
+
+      # Step 5: Check prior authorization (depends on code validation + coverage)
       - name: check-prior-auth
         dependencies: [validate-codes, verify-coverage]
         template: check-prior-auth-step
@@ -80,81 +96,40 @@ spec:
             value: "{{tasks.validate-codes.outputs.result}}"
           - name: tenant-id
             value: "{{workflow.parameters.tenant-id}}"
-      
-      # Step 6: Get benefit rules (depends on coverage)
-      - name: get-benefits
-        dependencies: [verify-coverage]
-        template: get-benefits-step
+
+      # Step 6: Full adjudication — NCCI edits + pricing + cost-sharing
+      # Replaces old steps 6 (get-benefits), 7 (get-rates),
+      # 8 (calculate-allowed), 9 (calculate-cost-sharing).
+      - name: adjudicate
+        dependencies: [verify-coverage, validate-provider, check-prior-auth]
+        template: adjudicate-step
         arguments:
           parameters:
           - name: claim-data
             value: "{{tasks.get-claim.outputs.result}}"
           - name: coverage-result
             value: "{{tasks.verify-coverage.outputs.result}}"
-          - name: tenant-id
-            value: "{{workflow.parameters.tenant-id}}"
-      
-      # Step 7: Get contracted rates (depends on provider validation)
-      - name: get-rates
-        dependencies: [validate-provider, verify-coverage]
-        template: get-rates-step
-        arguments:
-          parameters:
-          - name: claim-data
-            value: "{{tasks.get-claim.outputs.result}}"
           - name: provider-result
             value: "{{tasks.validate-provider.outputs.result}}"
-          - name: coverage-result
-            value: "{{tasks.verify-coverage.outputs.result}}"
+          - name: prior-auth-result
+            value: "{{tasks.check-prior-auth.outputs.result}}"
           - name: tenant-id
             value: "{{workflow.parameters.tenant-id}}"
-      
-      # Step 8: Calculate allowed amount (depends on rates and benefits)
-      - name: calculate-allowed
-        dependencies: [get-rates, get-benefits, validate-codes]
-        template: calculate-allowed-step
-        arguments:
-          parameters:
-          - name: claim-data
-            value: "{{tasks.get-claim.outputs.result}}"
-          - name: rates-result
-            value: "{{tasks.get-rates.outputs.result}}"
-          - name: benefits-result
-            value: "{{tasks.get-benefits.outputs.result}}"
-      
-      # Step 9: Calculate member cost-sharing (depends on allowed amount)
-      - name: calculate-cost-sharing
-        dependencies: [calculate-allowed, verify-coverage]
-        template: calculate-cost-sharing-step
-        arguments:
-          parameters:
-          - name: claim-data
-            value: "{{tasks.get-claim.outputs.result}}"
-          - name: allowed-result
-            value: "{{tasks.calculate-allowed.outputs.result}}"
-          - name: coverage-result
-            value: "{{tasks.verify-coverage.outputs.result}}"
-          - name: benefits-result
-            value: "{{tasks.get-benefits.outputs.result}}"
-          - name: tenant-id
-            value: "{{workflow.parameters.tenant-id}}"
-      
-      # Step 10: Update claim with adjudication results (final step)
+
+      # Step 7: Update claim with adjudication result
       - name: update-claim
-        dependencies: [calculate-cost-sharing, check-prior-auth]
+        dependencies: [adjudicate]
         template: update-claim-step
         arguments:
           parameters:
           - name: claim-id
             value: "{{workflow.parameters.claim-id}}"
-          - name: cost-sharing-result
-            value: "{{tasks.calculate-cost-sharing.outputs.result}}"
-          - name: prior-auth-result
-            value: "{{tasks.check-prior-auth.outputs.result}}"
+          - name: adjudication-result
+            value: "{{tasks.adjudicate.outputs.result}}"
           - name: tenant-id
             value: "{{workflow.parameters.tenant-id}}"
-  
-  # HTTP request template (generic)
+
+  # ── HTTP request template (generic GET/POST helper) ──────────────────
   - name: http-request
     inputs:
       parameters:
@@ -174,8 +149,8 @@ spec:
           {{inputs.parameters.headers}} \
           {{inputs.parameters.body}} \
           {{inputs.parameters.url}}
-  
-  # Step 1: Verify Coverage
+
+  # ── Step 2: Verify Coverage ──────────────────────────────────────────
   - name: verify-coverage-step
     inputs:
       parameters:
@@ -188,29 +163,27 @@ spec:
         import json
         import urllib.request
         import sys
-        import os
-        
+
         claim = json.loads('''{{inputs.parameters.claim-data}}''')
         tenant_id = "{{inputs.parameters.tenant-id}}"
-        
+
         member_id = claim.get('memberId')
         service_date = claim.get('serviceDateFrom')
-        
-        # Call Coverage Service
+
         url = f"http://coverage-service.cloudhealthoffice/api/coverage/member/{member_id}/active?serviceDate={service_date}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
         req.add_header('Content-Type', 'application/json')
-        
+
         try:
             with urllib.request.urlopen(req, timeout=5) as response:
                 coverage = json.loads(response.read().decode())
-                
+
                 if not coverage:
                     result = {
                         "status": "DENIED",
                         "reason": "No active coverage for service date",
-                        "carc": "26"  # CARC 26: Expenses incurred prior to coverage
+                        "carc": "26"
                     }
                 else:
                     result = {
@@ -218,9 +191,11 @@ spec:
                         "planId": coverage.get('planId'),
                         "groupNumber": coverage.get('groupNumber'),
                         "coverageLevel": coverage.get('coverageLevel'),
-                        "lineOfBusiness": coverage.get('lineOfBusiness')
+                        "lineOfBusiness": coverage.get('lineOfBusiness'),
+                        "subscriberId": coverage.get('subscriberId'),
+                        "networkTier": coverage.get('networkTier', 'InNetwork')
                     }
-                
+
                 print(json.dumps(result))
         except Exception as e:
             print(json.dumps({
@@ -228,8 +203,8 @@ spec:
                 "reason": f"Coverage verification failed: {str(e)}"
             }), file=sys.stderr)
             sys.exit(1)
-  
-  # Step 2: Validate Provider
+
+  # ── Step 3: Validate Provider ────────────────────────────────────────
   - name: validate-provider-step
     inputs:
       parameters:
@@ -242,26 +217,25 @@ spec:
         import json
         import urllib.request
         import sys
-        
+
         claim = json.loads('''{{inputs.parameters.claim-data}}''')
         tenant_id = "{{inputs.parameters.tenant-id}}"
-        
+
         billing_npi = claim.get('billingProviderNPI')
-        
-        # Call Provider Service
+
         url = f"http://provider-service.cloudhealthoffice/api/providers/{billing_npi}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
-        
+
         try:
             with urllib.request.urlopen(req, timeout=5) as response:
                 provider = json.loads(response.read().decode())
-                
+
                 if provider.get('credentialingStatus') != 'Approved':
                     result = {
                         "status": "DENIED",
                         "reason": "Provider not credentialed",
-                        "carc": "185"  # CARC 185: Provider not credentialed
+                        "carc": "185"
                     }
                 elif provider.get('providerStatus') != 'Active':
                     result = {
@@ -276,7 +250,7 @@ spec:
                         "providerName": provider.get('organizationName') or f"{provider.get('firstName')} {provider.get('lastName')}",
                         "specialty": provider.get('primarySpecialty')
                     }
-                
+
                 print(json.dumps(result))
         except urllib.error.HTTPError as e:
             if e.code == 404:
@@ -297,8 +271,8 @@ spec:
                 "reason": f"Provider validation failed: {str(e)}"
             }), file=sys.stderr)
             sys.exit(1)
-  
-  # Step 3: Validate Codes
+
+  # ── Step 4: Validate Codes ───────────────────────────────────────────
   - name: validate-codes-step
     inputs:
       parameters:
@@ -310,19 +284,17 @@ spec:
         import json
         import urllib.request
         import sys
-        
+
         claim = json.loads('''{{inputs.parameters.claim-data}}''')
-        
-        # Validate diagnosis codes
+
         diagnosis_codes = claim.get('diagnosisCodes', [])
         invalid_dx = []
         non_billable_dx = []
         requires_auth = False
-        
+
         for dx in diagnosis_codes:
             code = dx.get('code')
             url = f"http://reference-data-service.cloudhealthoffice/api/referencedata/icd10/{code}/validate"
-            
             try:
                 with urllib.request.urlopen(url, timeout=3) as response:
                     result = json.loads(response.read().decode())
@@ -332,15 +304,13 @@ spec:
                         non_billable_dx.append(code)
             except:
                 invalid_dx.append(code)
-        
-        # Validate procedure codes
+
         claim_lines = claim.get('claimLines', [])
         invalid_cpt = []
-        
+
         for line in claim_lines:
             code = line.get('procedureCode')
             url = f"http://reference-data-service.cloudhealthoffice/api/referencedata/cpt/{code}/validate"
-            
             try:
                 with urllib.request.urlopen(url, timeout=3) as response:
                     result = json.loads(response.read().decode())
@@ -350,7 +320,7 @@ spec:
                         requires_auth = True
             except:
                 invalid_cpt.append(code)
-        
+
         if invalid_dx or non_billable_dx or invalid_cpt:
             result = {
                 "status": "DENIED",
@@ -358,17 +328,17 @@ spec:
                 "invalidDiagnosis": invalid_dx,
                 "nonBillableDiagnosis": non_billable_dx,
                 "invalidProcedure": invalid_cpt,
-                "carc": "11"  # CARC 11: Diagnosis inconsistent with procedure
+                "carc": "11"
             }
         else:
             result = {
                 "status": "APPROVED",
                 "requiresPriorAuth": requires_auth
             }
-        
+
         print(json.dumps(result))
-  
-  # Step 4: Check Prior Authorization
+
+  # ── Step 5: Check Prior Authorization ───────────────────────────────
   - name: check-prior-auth-step
     inputs:
       parameters:
@@ -382,43 +352,40 @@ spec:
         import json
         import urllib.request
         import sys
-        
+
         claim = json.loads('''{{inputs.parameters.claim-data}}''')
         codes_result = json.loads('''{{inputs.parameters.codes-result}}''')
         tenant_id = "{{inputs.parameters.tenant-id}}"
-        
+
         requires_auth = codes_result.get('requiresPriorAuth', False)
         auth_number = claim.get('priorAuthorizationNumber')
-        
+
         if not requires_auth:
-            # No auth required
             result = {"status": "NOT_REQUIRED"}
             print(json.dumps(result))
             sys.exit(0)
-        
+
         if not auth_number:
-            # Auth required but not provided
             result = {
                 "status": "DENIED",
                 "reason": "Prior authorization required but not provided",
-                "carc": "197"  # CARC 197: Precertification/authorization absent
+                "carc": "197"
             }
             print(json.dumps(result))
             sys.exit(0)
-        
-        # Validate authorization
+
         service_date = claim.get('serviceDateFrom')
         claim_lines = claim.get('claimLines', [])
         cpt_code = claim_lines[0].get('procedureCode') if claim_lines else ''
-        
+
         url = f"http://authorization-service.cloudhealthoffice/api/authorizations/{auth_number}/validate?procedureCode={cpt_code}&serviceDate={service_date}"
         req = urllib.request.Request(url)
         req.add_header('X-Tenant-ID', tenant_id)
-        
+
         try:
             with urllib.request.urlopen(req, timeout=5) as response:
                 auth_result = json.loads(response.read().decode())
-                
+
                 if not auth_result.get('isValid'):
                     result = {
                         "status": "DENIED",
@@ -431,7 +398,7 @@ spec:
                         "authorizationNumber": auth_number,
                         "approvedUnits": auth_result.get('approvedUnits')
                     }
-                
+
                 print(json.dumps(result))
         except Exception as e:
             result = {
@@ -440,184 +407,30 @@ spec:
                 "carc": "197"
             }
             print(json.dumps(result))
-  
-  # Step 5: Get Benefits
-  - name: get-benefits-step
+
+  # ── Step 6: Adjudicate ───────────────────────────────────────────────
+  #
+  # Replaces old steps 6-9 (get-benefits, get-rates, calculate-allowed,
+  # calculate-cost-sharing). Calls the CHO benefit-plan-service which runs:
+  #   1. NCCI/MUE edit check      (NcciEngine)
+  #   2. Fee schedule pricing     (FeeScheduleEngine)
+  #   3. Benefit cost-sharing     (BenefitEngine — deductible/copay/coins/OOP)
+  #
+  # Short-circuits to denial if any upstream step (coverage, provider,
+  # prior auth) already produced a DENIED status — no point pricing a
+  # claim that will be denied.
+  #
+  # HTTP 200 → adjudication succeeded (claim may still be denied for
+  #            clinical reasons — check result.success)
+  # HTTP 422 → NCCI/MUE edit failure; routes to ncci-work-queue
+  # other    → system error; fails workflow step
+  # ─────────────────────────────────────────────────────────────────────
+  - name: adjudicate-step
     inputs:
       parameters:
       - name: claim-data
       - name: coverage-result
-      - name: tenant-id
-    script:
-      image: python:3.11-alpine
-      command: [python]
-      source: |
-        import json
-        import urllib.request
-        
-        claim = json.loads('''{{inputs.parameters.claim-data}}''')
-        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
-        tenant_id = "{{inputs.parameters.tenant-id}}"
-        
-        plan_id = coverage.get('planId')
-        
-        # Determine service category from place of service
-        pos = claim.get('placeOfServiceCode')
-        if pos in ['21', '51', '61']:
-            service_category = 'Inpatient Hospital'
-        elif pos in ['22', '19', '62']:
-            service_category = 'Outpatient Hospital'
-        elif pos == '23':
-            service_category = 'Emergency Room'
-        elif pos == '11':
-            service_category = 'Office Visit'
-        else:
-            service_category = 'Other'
-        
-        url = f"http://benefit-plan-service.cloudhealthoffice/api/benefitplans/{plan_id}/benefits?serviceCategory={service_category}"
-        req = urllib.request.Request(url)
-        req.add_header('X-Tenant-ID', tenant_id)
-        
-        with urllib.request.urlopen(req, timeout=5) as response:
-            benefits = json.loads(response.read().decode())
-            if benefits:
-                result = benefits[0]  # Get first matching benefit
-            else:
-                result = {
-                    "serviceCategory": service_category,
-                    "copayAmount": 0,
-                    "coinsurancePercentage": 20,
-                    "deductibleApplies": True
-                }
-            
-            print(json.dumps(result))
-  
-  # Step 6: Get Contracted Rates
-  - name: get-rates-step
-    inputs:
-      parameters:
-      - name: claim-data
       - name: provider-result
-      - name: coverage-result
-      - name: tenant-id
-    script:
-      image: python:3.11-alpine
-      command: [python]
-      source: |
-        import json
-        import urllib.request
-        
-        claim = json.loads('''{{inputs.parameters.claim-data}}''')
-        provider = json.loads('''{{inputs.parameters.provider-result}}''')
-        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
-        tenant_id = "{{inputs.parameters.tenant-id}}"
-        
-        npi = provider.get('npi')
-        plan_id = coverage.get('planId')
-        lob = coverage.get('lineOfBusiness')
-        
-        url = f"http://provider-service.cloudhealthoffice/api/providers/{npi}/rates?planId={plan_id}&lineOfBusiness={lob}"
-        req = urllib.request.Request(url)
-        req.add_header('X-Tenant-ID', tenant_id)
-        
-        try:
-            with urllib.request.urlopen(req, timeout=5) as response:
-                rates = json.loads(response.read().decode())
-                print(json.dumps(rates))
-        except:
-            # Default to 100% of Medicare if no contracted rate
-            result = {
-                "feeScheduleName": "Medicare",
-                "percentOfMedicare": 100.0
-            }
-            print(json.dumps(result))
-  
-  # Step 7: Calculate Allowed Amount
-  - name: calculate-allowed-step
-    inputs:
-      parameters:
-      - name: claim-data
-      - name: rates-result
-      - name: benefits-result
-    script:
-      image: python:3.11-alpine
-      command: [python]
-      source: |
-        import json
-        
-        claim = json.loads('''{{inputs.parameters.claim-data}}''')
-        rates = json.loads('''{{inputs.parameters.rates-result}}''')
-        
-        total_charge = claim.get('totalChargeAmount', 0)
-        percent_of_medicare = rates.get('percentOfMedicare', 100.0)
-        
-        # Simplified: allowed = charge * (percent / 150)
-        # In production, would look up Medicare rates from Reference Data
-        allowed_amount = total_charge * (percent_of_medicare / 150.0)
-        
-        result = {
-            "allowedAmount": round(allowed_amount, 2),
-            "chargeAmount": total_charge,
-            "contractedRate": f"{percent_of_medicare}% of Medicare"
-        }
-        
-        print(json.dumps(result))
-  
-  # Step 8: Calculate Member Cost-Sharing
-  - name: calculate-cost-sharing-step
-    inputs:
-      parameters:
-      - name: claim-data
-      - name: allowed-result
-      - name: coverage-result
-      - name: benefits-result
-      - name: tenant-id
-    script:
-      image: python:3.11-alpine
-      command: [python]
-      source: |
-        import json
-        import urllib.request
-        
-        claim = json.loads('''{{inputs.parameters.claim-data}}''')
-        allowed = json.loads('''{{inputs.parameters.allowed-result}}''')
-        coverage = json.loads('''{{inputs.parameters.coverage-result}}''')
-        benefits = json.loads('''{{inputs.parameters.benefits-result}}''')
-        tenant_id = "{{inputs.parameters.tenant-id}}"
-        
-        plan_id = coverage.get('planId')
-        allowed_amount = allowed.get('allowedAmount')
-        service_category = benefits.get('serviceCategory')
-        
-        # For now, use simplified cost-sharing (would call Benefit Plan Service in production)
-        deductible = 0  # Assume deductible met
-        copay = benefits.get('copayAmount', 0)
-        coinsurance_pct = benefits.get('coinsurancePercentage', 20)
-        
-        if copay > 0:
-            patient_responsibility = copay
-        else:
-            patient_responsibility = allowed_amount * (coinsurance_pct / 100.0)
-        
-        payer_payment = allowed_amount - patient_responsibility
-        
-        result = {
-            "allowedAmount": allowed_amount,
-            "deductibleAmount": deductible,
-            "coinsuranceAmount": patient_responsibility if copay == 0 else 0,
-            "copayAmount": copay if copay > 0 else 0,
-            "patientResponsibility": round(patient_responsibility, 2),
-            "payerPayment": round(payer_payment, 2)
-        }
-        
-        print(json.dumps(result))
-  
-  # Step 9: Update Claim
-  - name: update-claim-step
-    inputs:
-      parameters:
-      - name: claim-id
-      - name: cost-sharing-result
       - name: prior-auth-result
       - name: tenant-id
     script:
@@ -626,54 +439,206 @@ spec:
       source: |
         import json
         import urllib.request
-        
-        claim_id = "{{inputs.parameters.claim-id}}"
-        cost_sharing = json.loads('''{{inputs.parameters.cost-sharing-result}}''')
-        prior_auth = json.loads('''{{inputs.parameters.prior-auth-result}}''')
-        tenant_id = "{{inputs.parameters.tenant-id}}"
-        
-        # Check if any step resulted in denial
+        import urllib.error
+        import sys
+
+        claim         = json.loads('''{{inputs.parameters.claim-data}}''')
+        coverage      = json.loads('''{{inputs.parameters.coverage-result}}''')
+        provider      = json.loads('''{{inputs.parameters.provider-result}}''')
+        prior_auth    = json.loads('''{{inputs.parameters.prior-auth-result}}''')
+        tenant_id     = "{{inputs.parameters.tenant-id}}"
+
+        # ── Short-circuit: upstream denial ──────────────────────────────
+        for check_name, check in [('coverage', coverage), ('provider', provider)]:
+            if check.get('status') == 'DENIED':
+                print(json.dumps({
+                    "adjudicationStatus": "DENIED",
+                    "deniedBy": check_name,
+                    "carc": check.get('carc'),
+                    "reason": check.get('reason'),
+                    "totals": {
+                        "billedAmount": claim.get('totalChargeAmount', 0),
+                        "allowedAmount": 0,
+                        "planPayment": 0,
+                        "memberResponsibility": 0
+                    }
+                }))
+                sys.exit(0)
+
         if prior_auth.get('status') == 'DENIED':
-            adjudication = {
+            print(json.dumps({
+                "adjudicationStatus": "DENIED",
+                "deniedBy": "prior-auth",
+                "carc": prior_auth.get('carc'),
+                "reason": prior_auth.get('reason'),
+                "totals": {
+                    "billedAmount": claim.get('totalChargeAmount', 0),
+                    "allowedAmount": 0,
+                    "planPayment": 0,
+                    "memberResponsibility": 0
+                }
+            }))
+            sys.exit(0)
+
+        # ── Build adjudication request ──────────────────────────────────
+        claim_lines = claim.get('claimLines', [])
+        service_date = claim.get('serviceDateFrom', '')
+        # Normalize date: YYYYMMDD → YYYY-MM-DD
+        if len(service_date) == 8 and '-' not in service_date:
+            service_date = f"{service_date[:4]}-{service_date[4:6]}-{service_date[6:]}"
+
+        lines = []
+        for i, line in enumerate(claim_lines):
+            lines.append({
+                "lineNumber": line.get('lineNumber', i + 1),
+                "procedureCode": line.get('procedureCode', ''),
+                "codeType": line.get('procedureCodeQualifier', 'CPT'),
+                "modifiers": line.get('modifiers', []),
+                "revenueCode": line.get('revenueCode'),
+                "placeOfService": line.get('placeOfServiceCode') or claim.get('placeOfServiceCode', '11'),
+                "billedAmount": float(line.get('chargeAmount', 0)),
+                "units": float(line.get('units', 1)),
+                "diagnosisCodes": [
+                    claim.get('diagnosisCodes', [{}])[ptr - 1].get('code', '')
+                    for ptr in line.get('diagnosisPointers', [1])
+                    if ptr <= len(claim.get('diagnosisCodes', []))
+                ]
+            })
+
+        adjudication_request = {
+            "claimId": claim.get('claimId') or claim.get('id'),
+            "memberId": claim.get('memberId'),
+            "subscriberId": coverage.get('subscriberId') or claim.get('subscriberId'),
+            "benefitPlanId": coverage.get('planId'),
+            "serviceDate": service_date,
+            "providerNpi": provider.get('npi') or claim.get('billingProviderNPI'),
+            "networkTier": coverage.get('networkTier', 'InNetwork'),
+            "lines": lines
+        }
+
+        # ── Call adjudicate endpoint ────────────────────────────────────
+        url = "http://benefit-plan-service.cloudhealthoffice/api/v1/adjudication/adjudicate"
+        data = json.dumps(adjudication_request).encode('utf-8')
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header('X-Tenant-ID', tenant_id)
+        req.add_header('Content-Type', 'application/json')
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                adj = json.loads(response.read().decode())
+
+                print(json.dumps({
+                    "adjudicationStatus": "APPROVED" if adj.get('success') else "DENIED",
+                    "claimId": adj.get('claimId'),
+                    "carc": adj.get('denialReasonCode'),
+                    "reason": adj.get('denialReasonDescription'),
+                    "totals": adj.get('totals', {}),
+                    "lines": adj.get('lines', []),
+                    "accumulators": adj.get('accumulators', [])
+                }))
+
+        except urllib.error.HTTPError as e:
+            if e.code == 422:
+                # NCCI/MUE edit failure — read the response body for details
+                body = json.loads(e.read().decode())
+                print(json.dumps({
+                    "adjudicationStatus": "NCCI_EDIT_FAILURE",
+                    "claimId": body.get('claimId'),
+                    "carc": body.get('editFailures', [{}])[0].get('suggestedCarc', '97') if body.get('editFailures') else '97',
+                    "reason": body.get('message', 'NCCI/MUE edit failure'),
+                    "editFailures": body.get('editFailures', []),
+                    "totals": {
+                        "billedAmount": claim.get('totalChargeAmount', 0),
+                        "allowedAmount": 0,
+                        "planPayment": 0,
+                        "memberResponsibility": 0
+                    }
+                }))
+            else:
+                print(json.dumps({
+                    "status": "ERROR",
+                    "reason": f"Adjudication service error: HTTP {e.code}"
+                }), file=sys.stderr)
+                sys.exit(1)
+        except Exception as e:
+            print(json.dumps({
+                "status": "ERROR",
+                "reason": f"Adjudication failed: {str(e)}"
+            }), file=sys.stderr)
+            sys.exit(1)
+
+  # ── Step 7: Update Claim ─────────────────────────────────────────────
+  - name: update-claim-step
+    inputs:
+      parameters:
+      - name: claim-id
+      - name: adjudication-result
+      - name: tenant-id
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import urllib.request
+
+        claim_id = "{{inputs.parameters.claim-id}}"
+        adj      = json.loads('''{{inputs.parameters.adjudication-result}}''')
+        tenant_id = "{{inputs.parameters.tenant-id}}"
+
+        adj_status = adj.get('adjudicationStatus', 'DENIED')
+        totals     = adj.get('totals', {})
+
+        if adj_status in ('DENIED', 'NCCI_EDIT_FAILURE'):
+            claim_status = "Denied"
+            adjudication_payload = {
                 "allowedAmount": 0,
                 "patientResponsibility": 0,
                 "payerPayment": 0,
-                "denialReasonCode": prior_auth.get('carc'),
-                "denialReason": prior_auth.get('reason'),
+                "denialReasonCode": adj.get('carc'),
+                "denialReason": adj.get('reason'),
+                "ncciEditFailures": adj.get('editFailures', []),
                 "claimAdjustmentReasons": [{
-                    "groupCode": "CO",
-                    "reasonCode": prior_auth.get('carc'),
-                    "amount": 0,
-                    "description": prior_auth.get('reason')
+                    "groupCode": "CO" if adj_status == "DENIED" else "OA",
+                    "reasonCode": adj.get('carc', '97'),
+                    "amount": totals.get('billedAmount', 0),
+                    "description": adj.get('reason', '')
                 }]
             }
-            status = "Denied"
         else:
-            adjudication = cost_sharing
-            adjudication['claimAdjustmentReasons'] = []
-            status = "Approved"
-        
+            claim_status = "Approved"
+            adjudication_payload = {
+                "allowedAmount": totals.get('allowedAmount', 0),
+                "contractualAdjustment": totals.get('contractualAdjustment', 0),
+                "deductibleAmount": totals.get('deductibleAmount', 0),
+                "copayAmount": totals.get('copayAmount', 0),
+                "coinsuranceAmount": totals.get('coinsuranceAmount', 0),
+                "patientResponsibility": totals.get('memberResponsibility', 0),
+                "payerPayment": totals.get('planPayment', 0),
+                "lineResults": adj.get('lines', []),
+                "accumulators": adj.get('accumulators', []),
+                "claimAdjustmentReasons": []
+            }
+
+        # Write adjudication result
         url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/adjudication"
-        data = json.dumps(adjudication).encode('utf-8')
-        
+        data = json.dumps(adjudication_payload).encode('utf-8')
         req = urllib.request.Request(url, data=data, method='PUT')
         req.add_header('X-Tenant-ID', tenant_id)
         req.add_header('Content-Type', 'application/json')
-        
+
         with urllib.request.urlopen(req, timeout=5) as response:
-            result = json.loads(response.read().decode())
-            
-            # Update status
+            # Update claim status
             status_url = f"http://claims-service.cloudhealthoffice/api/claims/{claim_id}/status"
-            status_data = json.dumps({"status": status}).encode('utf-8')
-            
+            status_data = json.dumps({"status": claim_status}).encode('utf-8')
             status_req = urllib.request.Request(status_url, data=status_data, method='PUT')
             status_req.add_header('X-Tenant-ID', tenant_id)
             status_req.add_header('Content-Type', 'application/json')
-            
+
             with urllib.request.urlopen(status_req, timeout=5) as status_response:
                 print(json.dumps({
                     "claimId": claim_id,
-                    "status": status,
-                    "adjudication": adjudication
+                    "status": claim_status,
+                    "adjudicationStatus": adj_status,
+                    "payerPayment": adjudication_payload.get('payerPayment', 0),
+                    "memberResponsibility": adjudication_payload.get('patientResponsibility', 0)
                 }))

@@ -4,6 +4,8 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Services;
+using CloudHealthOffice.NcciEngine.Models;
+using CloudHealthOffice.NcciEngine.Services;
 using BenefitPlanService.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,15 +40,18 @@ public class AdjudicationController : ControllerBase
 {
     private readonly IBenefitCalculationEngine _benefitEngine;
     private readonly IRateResolutionService _rateEngine;
+    private readonly INcciEditService _ncciEngine;
     private readonly ILogger<AdjudicationController> _logger;
 
     public AdjudicationController(
         IBenefitCalculationEngine benefitEngine,
         IRateResolutionService rateEngine,
+        INcciEditService ncciEngine,
         ILogger<AdjudicationController> logger)
     {
         _benefitEngine = benefitEngine;
         _rateEngine = rateEngine;
+        _ncciEngine = ncciEngine;
         _logger = logger;
     }
 
@@ -76,6 +81,46 @@ public class AdjudicationController : ControllerBase
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
             request.ClaimId, request.MemberId, request.BenefitPlanId, request.Lines.Count);
+
+        // ── Step 0: NCCI/MUE pre-payment edit check ──
+        // Runs before pricing so bundled/excess-unit lines are caught before
+        // accumulators are touched or rates are resolved.
+        var ncciRequest = new NcciScrubRequest
+        {
+            TenantId = TenantId,
+            ClaimId = request.ClaimId,
+            ClaimType = "837P",
+            EffectiveDate = request.ServiceDate,
+            ServiceLines = request.Lines.Select(l => new ClaimServiceLine
+            {
+                LineNumber = l.LineNumber,
+                ProcedureCode = l.ProcedureCode,
+                Modifiers = l.Modifiers,
+                Units = l.Units,
+                ServiceDate = request.ServiceDate,
+                PlaceOfServiceCode = l.PlaceOfService,
+            }).ToList(),
+        };
+
+        var ncciResult = await _ncciEngine.ScrubAsync(ncciRequest, ct);
+
+        if (!ncciResult.Passed)
+        {
+            _logger.LogWarning(
+                "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
+                request.ClaimId, ncciResult.EditFailures.Count);
+
+            // Surface failures as a 422 so the Argo workflow can route to the
+            // NCCI work queue rather than proceeding to payment.
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "NCCI_MUE_EDIT_FAILURE",
+                message = $"Claim failed {ncciResult.EditFailures.Count} NCCI/MUE edit(s). " +
+                          "Review edit failures and resubmit or override.",
+                editFailures = ncciResult.EditFailures,
+            });
+        }
 
         // ── Step 1: Resolve rates (fee schedule engine) ──
         var pricingRequests = request.Lines.Select(line => new PricingRequest

@@ -56,7 +56,7 @@ public class AcknowledgmentService : IAcknowledgmentService
             _ => "TP" // Partially Accepted/Pending
         };
 
-        var oti = $"OTI*TA*TN*{attachment.Id}~"; // Transaction Information
+        var oti = $"OTI*{acceptanceCode}*TN*{attachment.Id}~"; // Transaction Information
         var ref1 = $"REF*D9*{attachment.Id}~"; // Claim Number Reference
         
         var msgText = attachment.Status switch

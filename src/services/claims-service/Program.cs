@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Models;
 using ClaimsService;
 using ClaimsService.Middleware;
 using ClaimsService.Repositories;
+using ClaimsService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -65,6 +66,9 @@ else
     // Repositories
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
 }
+
+// 277CA acknowledgment generator
+builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
