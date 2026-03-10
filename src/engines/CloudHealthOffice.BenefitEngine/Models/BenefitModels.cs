@@ -3,115 +3,71 @@ namespace CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Domain;
 
 // ═══════════════════════════════════════════════════════════════════
-// REQUEST: What the adjudication workflow sends to the engine
+// REQUEST
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// A request to resolve benefits for one or more claim lines.
-/// Sent by the Argo adjudication workflow step "get-benefits" + "calculate-payment".
-///
-/// The engine receives the full claim context so it can make decisions
-/// that depend on cross-line interactions (e.g., multiple procedure reductions,
-/// E/M with procedure on same date, etc.).
-/// </summary>
 public record BenefitResolutionRequest
 {
-    /// <summary>
-    /// Member identifier (QNXT member ID or CHO member ID).
-    /// </summary>
     public string MemberId { get; init; } = default!;
-
-    /// <summary>
-    /// Subscriber identifier (for family accumulator lookups).
-    /// </summary>
     public string SubscriberId { get; init; } = default!;
-
-    /// <summary>
-    /// The benefit plan the member is enrolled in.
-    /// </summary>
     public Guid BenefitPlanId { get; init; }
-
-    /// <summary>
-    /// Date of service (for accumulator period determination).
-    /// </summary>
     public DateOnly ServiceDate { get; init; }
-
-    /// <summary>
-    /// Network status of the rendering provider for this claim.
-    /// Determined by the "validate provider" step before this one.
-    /// </summary>
     public NetworkTier NetworkTier { get; init; }
-
-    /// <summary>
-    /// The claim lines to resolve benefits for.
-    /// </summary>
     public List<ClaimLineInput> Lines { get; init; } = [];
-
-    /// <summary>
-    /// Allowed amounts per line (from the pricing/fee schedule step).
-    /// Keyed by line number. If not provided, engine uses billed charges.
-    /// </summary>
     public Dictionary<int, decimal> AllowedAmounts { get; init; } = [];
-
-    /// <summary>
-    /// Claim identifier — required for accumulator idempotency.
-    /// Prevents double-counting if the adjudication workflow retries.
-    /// </summary>
     public string ClaimId { get; init; } = default!;
 
-    /// <summary>
-    /// Optional: claim-level context used by some benefit rules.
-    /// </summary>
+    // Claim-level context
     public string? ClaimType { get; init; } // 837P, 837I, 837D
     public string? AdmitDate { get; init; }
     public string? DischargeDate { get; init; }
-    public string? DrgCode { get; init; }
     public bool IsEmergency { get; init; }
 
+    // ── DRG / Inpatient ──
+
     /// <summary>
-    /// Coordination of Benefits context.
-    /// Null for primary claims. Required for secondary/tertiary claims.
-    /// When present and PayerSequence = Secondary, the engine applies COB
-    /// reduction after the primary cost-sharing waterfall completes.
+    /// DRG code assigned to this inpatient stay (e.g., "470" for hip replacement).
+    /// When present and the benefit category uses DrgCaseRate pricing,
+    /// the engine applies cost-sharing once per admission using the
+    /// DRG allowed amount rather than per-line.
+    /// </summary>
+    public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// DRG case rate allowed amount from the FeeScheduleEngine.
+    /// When InpatientPricingMethod is DrgCaseRate, this is the total
+    /// allowed amount for the entire stay. Individual line allowed
+    /// amounts are ignored for cost-sharing purposes (though they're
+    /// still tracked for reporting).
+    /// </summary>
+    public decimal? DrgAllowedAmount { get; init; }
+
+    /// <summary>
+    /// Length of stay in days (for per-diem pricing).
+    /// </summary>
+    public int? LengthOfStay { get; init; }
+
+    /// <summary>
+    /// COB context. Null for primary claims.
     /// </summary>
     public CobInfo? Cob { get; init; }
 }
 
-/// <summary>
-/// COB context on a benefit resolution request.
-/// Mirrors CloudHealthOffice.CobEngine.Domain.CobInfo but lives in the
-/// BenefitEngine namespace so the engine does not take a hard dependency
-/// on the CobEngine assembly.
-/// </summary>
 public record CobInfo
 {
-    /// <summary>1 = Primary, 2 = Secondary, 3 = Tertiary.</summary>
     public int PayerSequence { get; init; } = 1;
-
-    /// <summary>true = Complementary (default), false = Non-duplication.</summary>
     public bool UseComplementaryModel { get; init; } = true;
-
-    /// <summary>Primary payer ID (for 835 / EOB reporting).</summary>
     public string? PrimaryPayerId { get; init; }
-
-    /// <summary>Primary payer name.</summary>
     public string? PrimaryPayerName { get; init; }
-
-    /// <summary>Amount the primary payer paid per line (keyed by line number).</summary>
     public Dictionary<int, decimal> PrimaryPayerPaymentByLine { get; init; } = [];
-
-    /// <summary>Amount the primary payer allowed per line (non-duplication model).</summary>
     public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
 }
 
-/// <summary>
-/// A single claim line from the inbound claim.
-/// </summary>
 public record ClaimLineInput
 {
     public int LineNumber { get; init; }
     public string ProcedureCode { get; init; } = default!;
-    public string? CodeType { get; init; } = "CPT"; // CPT, HCPCS, CDT, Revenue
+    public string? CodeType { get; init; } = "CPT";
     public List<string> Modifiers { get; init; } = [];
     public string? RevenueCode { get; init; }
     public string PlaceOfService { get; init; } = default!;
@@ -121,177 +77,82 @@ public record ClaimLineInput
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RESPONSE: What the engine returns to the adjudication workflow
+// RESPONSE
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// Complete benefit resolution result for a claim.
-/// This is what the "calculate-payment" step uses to update the claim
-/// with final adjudication amounts.
-/// </summary>
 public record BenefitResolutionResult
 {
-    /// <summary>
-    /// Overall success/failure of the resolution.
-    /// </summary>
     public bool Success { get; init; }
-
-    /// <summary>
-    /// If the entire claim is denied at the benefit level (e.g., service not covered),
-    /// this contains the denial reason.
-    /// </summary>
-    public string? DenialReasonCode { get; init; } // CARC code
+    public string? DenialReasonCode { get; init; }
     public string? DenialReasonDescription { get; init; }
-
-    /// <summary>
-    /// Per-line benefit determination results.
-    /// </summary>
     public List<LineBenefitResult> Lines { get; init; } = [];
-
-    /// <summary>
-    /// Claim-level totals (sum of lines).
-    /// </summary>
     public ClaimTotals Totals { get; init; } = new();
+    public List<AccumulatorState> AccumulatorSnapshot { get; init; } = [];
 
     /// <summary>
-    /// Accumulator state after applying this claim.
-    /// Useful for the portal / 271 responses.
+    /// When DRG/per-diem pricing is used, this contains the claim-level
+    /// cost-sharing breakdown (since cost-sharing is per-admission, not per-line).
     /// </summary>
-    public List<AccumulatorState> AccumulatorSnapshot { get; init; } = [];
+    public DrgCostShareResult? DrgCostShare { get; init; }
 }
 
 /// <summary>
-/// Benefit determination for a single claim line.
-/// Contains everything needed to populate the adjudication result
-/// and eventually generate CAS segments in the 835.
+/// Claim-level cost-sharing for DRG/per-diem inpatient admissions.
 /// </summary>
+public record DrgCostShareResult
+{
+    public string? DrgCode { get; init; }
+    public decimal DrgAllowedAmount { get; init; }
+    public decimal DeductibleAmount { get; init; }
+    public decimal CopayAmount { get; init; }
+    public decimal CoinsuranceAmount { get; init; }
+    public decimal CoinsurancePercent { get; init; }
+    public decimal OopMaxReduction { get; init; }
+    public decimal MemberResponsibility { get; init; }
+    public decimal PlanPaidAmount { get; init; }
+    public List<AdjustmentReason> Adjustments { get; init; } = [];
+}
+
 public record LineBenefitResult
 {
     public int LineNumber { get; init; }
-
-    /// <summary>
-    /// Is this service covered under the member's plan?
-    /// </summary>
     public bool IsCovered { get; init; }
-
-    /// <summary>
-    /// The benefit category this line was mapped to.
-    /// </summary>
     public string ServiceTypeCode { get; init; } = default!;
     public string ServiceTypeDescription { get; init; } = default!;
-
-    /// <summary>
-    /// Was prior authorization required? Was it found?
-    /// (Populated by a preceding workflow step; echoed here for completeness.)
-    /// </summary>
     public bool AuthRequired { get; init; }
     public bool AuthFound { get; init; }
 
-    // ── Financial Breakdown ──
-
-    /// <summary>
-    /// What the provider billed.
-    /// </summary>
+    // Financial breakdown
     public decimal BilledAmount { get; init; }
-
-    /// <summary>
-    /// What the fee schedule / contract allows (from pricing step).
-    /// </summary>
     public decimal AllowedAmount { get; init; }
-
-    /// <summary>
-    /// Billed minus Allowed. Adjusted under CARC 45 (Charges exceed fee schedule).
-    /// </summary>
     public decimal ContractualAdjustment { get; init; }
-
-    /// <summary>
-    /// Amount applied to deductible (member responsibility).
-    /// </summary>
     public decimal DeductibleAmount { get; init; }
-
-    /// <summary>
-    /// Copay amount (member responsibility).
-    /// </summary>
     public decimal CopayAmount { get; init; }
-
-    /// <summary>
-    /// Coinsurance amount (member responsibility).
-    /// Calculated as: (AllowedAmount - DeductibleAmount) × CoinsurancePercent
-    /// </summary>
     public decimal CoinsuranceAmount { get; init; }
-
-    /// <summary>
-    /// The coinsurance percentage applied (for transparency/audit).
-    /// </summary>
     public decimal CoinsurancePercent { get; init; }
-
-    /// <summary>
-    /// Amount reduced because OOP max was reached.
-    /// When OOP max is hit, remaining member responsibility is waived.
-    /// </summary>
     public decimal OopMaxReduction { get; init; }
-
-    /// <summary>
-    /// Total member responsibility = Deductible + Copay + Coinsurance - OopMaxReduction
-    /// </summary>
     public decimal MemberResponsibility { get; init; }
-
-    /// <summary>
-    /// What the plan pays = AllowedAmount - MemberResponsibility
-    /// </summary>
     public decimal PlanPaidAmount { get; init; }
-
-    /// <summary>
-    /// Adjustment reason codes for 835 CAS segment generation.
-    /// </summary>
     public List<AdjustmentReason> Adjustments { get; init; } = [];
-
-    /// <summary>
-    /// If the line is denied, why.
-    /// </summary>
     public string? DenialReasonCode { get; init; }
     public string? DenialReasonDescription { get; init; }
+
+    /// <summary>
+    /// True when this line's cost-sharing was calculated at the claim level
+    /// (DRG/per-diem) rather than per-line. In this case, the line-level
+    /// amounts are allocated shares of the claim-level cost-sharing.
+    /// </summary>
+    public bool IsDrgPriced { get; init; }
 }
 
-/// <summary>
-/// Claim Adjustment Reason — maps directly to CAS segments in the 835.
-/// Group code + CARC + optional RARC + amount.
-/// </summary>
 public record AdjustmentReason
 {
-    /// <summary>
-    /// CAS group code:
-    /// CO = Contractual Obligation (provider write-off)
-    /// PR = Patient Responsibility
-    /// OA = Other Adjustment
-    /// PI = Payer Initiated Reductions
-    /// CR = Corrections/Reversals
-    /// </summary>
     public string GroupCode { get; init; } = default!;
-
-    /// <summary>
-    /// CARC — Claim Adjustment Reason Code.
-    /// Examples: 1 (Deductible), 2 (Coinsurance), 3 (Copay),
-    /// 45 (Charges exceed fee schedule), 96 (Non-covered charge),
-    /// 197 (Auth/pre-cert required), etc.
-    /// </summary>
     public string ReasonCode { get; init; } = default!;
-
-    /// <summary>
-    /// RARC — Remittance Advice Remark Code (optional, supplemental).
-    /// Examples: N30 (Missing auth), M76 (Missing/incomplete records).
-    /// </summary>
     public string? RemarkCode { get; init; }
-
-    /// <summary>
-    /// Adjustment amount.
-    /// </summary>
     public decimal Amount { get; init; }
 }
 
-/// <summary>
-/// Claim-level totals — sums across all lines.
-/// </summary>
 public record ClaimTotals
 {
     public decimal TotalBilled { get; init; }
@@ -305,9 +166,6 @@ public record ClaimTotals
     public decimal TotalPlanPaid { get; init; }
 }
 
-/// <summary>
-/// Accumulator state after applying a claim.
-/// </summary>
 public record AccumulatorState
 {
     public AccumulatorType Type { get; init; }
