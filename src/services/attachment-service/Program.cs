@@ -6,6 +6,7 @@ using Microsoft.OpenApi.Models;
 using AttachmentService;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
+using CloudHealthOffice.DocumentStore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,13 +92,14 @@ builder.Services.AddSingleton(s =>
     return new CosmosClient(endpoint, key, cosmosOptions);
 });
 
-// Configure Azure Blob Storage
+// Configure Azure Blob Storage + IDocumentStore
 builder.Services.AddSingleton(s =>
 {
     var config = s.GetRequiredService<IConfiguration>();
     var connectionString = config["BlobStorage:ConnectionString"] ?? throw new InvalidOperationException("BlobStorage:ConnectionString not configured");
     return new Azure.Storage.Blobs.BlobServiceClient(connectionString);
 });
+builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 
 builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();

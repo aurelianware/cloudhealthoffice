@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
-using Azure.Storage.Blobs;
+using CloudHealthOffice.DocumentStore;
 using System.Security.Cryptography;
 
 namespace AttachmentService.Controllers;
@@ -15,18 +15,18 @@ public class AttachmentsController : ControllerBase
 {
     private readonly IAttachmentRepository _repository;
     private readonly IAcknowledgmentService _acknowledgmentService;
-    private readonly BlobServiceClient _blobServiceClient;
+    private readonly IDocumentStore _documentStore;
     private readonly ILogger<AttachmentsController> _logger;
 
     public AttachmentsController(
         IAttachmentRepository repository,
         IAcknowledgmentService acknowledgmentService,
-        BlobServiceClient blobServiceClient,
+        IDocumentStore documentStore,
         ILogger<AttachmentsController> logger)
     {
         _repository = repository;
         _acknowledgmentService = acknowledgmentService;
-        _blobServiceClient = blobServiceClient;
+        _documentStore = documentStore;
         _logger = logger;
     }
 
@@ -76,37 +76,34 @@ public class AttachmentsController : ControllerBase
                 return BadRequest("Cannot specify multiple parent entities (ClaimId, AuthorizationId, AppealId)");
             }
 
-            // Upload file to Azure Blob Storage if provided
+            // Upload file to document store if provided
             if (file != null && file.Length > 0)
             {
-                var containerName = "attachments";
-                var blobContainer = _blobServiceClient.GetBlobContainerClient(containerName);
-                await blobContainer.CreateIfNotExistsAsync();
+                const string containerName = "attachments";
 
                 // Generate blob name: tenantId/parentType/parentId/attachmentId.ext
                 var parentType = !string.IsNullOrWhiteSpace(attachment.ClaimId) ? "claims" :
-                                !string.IsNullOrWhiteSpace(attachment.AuthorizationId) ? "authorizations" : "appeals";
-                var parentId = attachment.ClaimId ?? attachment.AuthorizationId ?? attachment.AppealId;
-                var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-                var blobName = $"{attachment.TenantId}/{parentType}/{parentId}/{attachment.Id}{extension}";
+                                 !string.IsNullOrWhiteSpace(attachment.AuthorizationId) ? "authorizations" : "appeals";
+                var parentId   = attachment.ClaimId ?? attachment.AuthorizationId ?? attachment.AppealId;
+                var extension  = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var blobName   = $"{attachment.TenantId}/{parentType}/{parentId}/{attachment.Id}{extension}";
 
-                var blobClient = blobContainer.GetBlobClient(blobName);
-
-                // Calculate file hash while uploading
+                // Compute SHA-256 hash before upload
                 using var stream = file.OpenReadStream();
                 using var sha256 = SHA256.Create();
                 var hashBytes = await sha256.ComputeHashAsync(stream);
                 var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
 
                 stream.Position = 0;
-                await blobClient.UploadAsync(stream, overwrite: true);
+                var contentType = $"application/{attachment.DocumentFormat.ToLowerInvariant()}";
+                var uploaded = await _documentStore.UploadAsync(containerName, blobName, stream, contentType);
 
-                attachment.BlobUrl = blobClient.Uri.ToString();
+                attachment.BlobUrl           = uploaded.Uri.ToString();
                 attachment.BlobContainerName = containerName;
-                attachment.BlobName = blobName;
-                attachment.FileSizeBytes = file.Length;
-                attachment.FileHash = hash;
-                attachment.Status = "Validated";
+                attachment.BlobName          = blobName;
+                attachment.FileSizeBytes      = file.Length;
+                attachment.FileHash          = hash;
+                attachment.Status            = "Validated";
             }
 
             // If this is a solicited attachment (RFAI response), link it to the authorization
@@ -236,20 +233,16 @@ public class AttachmentsController : ControllerBase
             return NotFound();
         }
 
-        var blobClient = _blobServiceClient
-            .GetBlobContainerClient(attachment.BlobContainerName!)
-            .GetBlobClient(attachment.BlobName);
-
-        if (!await blobClient.ExistsAsync())
+        if (!await _documentStore.ExistsAsync(attachment.BlobContainerName!, attachment.BlobName))
         {
             return NotFound("File not found in storage");
         }
 
-        var download = await blobClient.DownloadAsync();
+        var stream      = await _documentStore.DownloadAsync(attachment.BlobContainerName!, attachment.BlobName);
         var contentType = $"application/{attachment.DocumentFormat.ToLowerInvariant()}";
-        var fileName = $"{attachment.Id}.{attachment.DocumentFormat.ToLowerInvariant()}";
+        var fileName    = $"{attachment.Id}.{attachment.DocumentFormat.ToLowerInvariant()}";
 
-        return File(download.Value.Content, contentType, fileName);
+        return File(stream, contentType, fileName);
     }
 
     /// <summary>
