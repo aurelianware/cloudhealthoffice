@@ -197,6 +197,10 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             categoryMatch.ServiceTypeCode, categoryMatch.ServiceTypeDescription,
             benefitCategory.AuthRequired);
 
+        // ── Apply COB reduction (secondary claims only) ──
+        if (request.Cob is { PayerSequence: 2 } cob)
+            result = ApplyCob(result, cob, billedAmount, allowedAmount, line.LineNumber);
+
         // ── Update visit/day counters in accumulators ──
         if (benefitCategory.VisitLimit.HasValue)
         {
@@ -374,6 +378,82 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             MemberResponsibility = memberResponsibility,
             PlanPaidAmount = planPaid,
             Adjustments = adjustments
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COB ADJUSTMENT
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Apply Coordination of Benefits reduction after the secondary payer's
+    /// own cost-sharing waterfall has run.
+    ///
+    /// Complementary model (UseComplementaryModel = true, default):
+    ///   secondaryPay = min(preCobPlanPay, max(0, billed - primaryPay))
+    ///   memberResp   = max(0, billed - primaryPay - secondaryPay)
+    ///
+    /// Non-duplication model:
+    ///   maxBenefit   = allowed - preCobMemberResp
+    ///   secondaryPay = max(0, maxBenefit - primaryPay)
+    ///   memberResp   = max(0, billed - primaryPay - secondaryPay)
+    ///
+    /// The COB reduction is added as an OA-23 adjustment reason.
+    /// </summary>
+    private static LineBenefitResult ApplyCob(
+        LineBenefitResult preCob,
+        CobInfo cob,
+        decimal billed,
+        decimal allowed,
+        int lineNumber)
+    {
+        var primaryPay = cob.PrimaryPayerPaymentByLine.GetValueOrDefault(lineNumber, 0);
+        var primaryAllowed = cob.PrimaryAllowedByLine.GetValueOrDefault(lineNumber, 0);
+
+        decimal secondaryPay;
+        decimal cobReduction;
+
+        if (cob.UseComplementaryModel)
+        {
+            // Complementary: secondary fills the gap up to its own benefit
+            var effectiveBalance = Math.Max(0, billed - primaryPay);
+            secondaryPay = Math.Min(preCob.PlanPaidAmount, effectiveBalance);
+            cobReduction = preCob.PlanPaidAmount - secondaryPay;
+        }
+        else
+        {
+            // Non-duplication: secondary only pays if its benefit > primary's payment
+            var maxBenefit = Math.Max(0, allowed - preCob.MemberResponsibility);
+            if (primaryPay >= maxBenefit)
+            {
+                secondaryPay = 0;
+                cobReduction = preCob.PlanPaidAmount;
+            }
+            else
+            {
+                secondaryPay = maxBenefit - primaryPay;
+                cobReduction = preCob.PlanPaidAmount - secondaryPay;
+            }
+        }
+
+        var memberResp = Math.Max(0, billed - primaryPay - secondaryPay);
+
+        var adjustments = new List<AdjustmentReason>(preCob.Adjustments);
+        if (cobReduction > 0)
+        {
+            adjustments.Add(new AdjustmentReason
+            {
+                GroupCode  = "OA",
+                ReasonCode = "23", // Impact of prior payer(s) adjudication
+                Amount     = -cobReduction // Negative = reduces secondary plan payment
+            });
+        }
+
+        return preCob with
+        {
+            PlanPaidAmount       = secondaryPay,
+            MemberResponsibility = memberResp,
+            Adjustments          = adjustments
         };
     }
 

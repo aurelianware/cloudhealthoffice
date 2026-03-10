@@ -67,6 +67,41 @@ public record BenefitResolutionRequest
     public string? DischargeDate { get; init; }
     public string? DrgCode { get; init; }
     public bool IsEmergency { get; init; }
+
+    /// <summary>
+    /// Coordination of Benefits context.
+    /// Null for primary claims. Required for secondary/tertiary claims.
+    /// When present and PayerSequence = Secondary, the engine applies COB
+    /// reduction after the primary cost-sharing waterfall completes.
+    /// </summary>
+    public CobInfo? Cob { get; init; }
+}
+
+/// <summary>
+/// COB context on a benefit resolution request.
+/// Mirrors CloudHealthOffice.CobEngine.Domain.CobInfo but lives in the
+/// BenefitEngine namespace so the engine does not take a hard dependency
+/// on the CobEngine assembly.
+/// </summary>
+public record CobInfo
+{
+    /// <summary>1 = Primary, 2 = Secondary, 3 = Tertiary.</summary>
+    public int PayerSequence { get; init; } = 1;
+
+    /// <summary>true = Complementary (default), false = Non-duplication.</summary>
+    public bool UseComplementaryModel { get; init; } = true;
+
+    /// <summary>Primary payer ID (for 835 / EOB reporting).</summary>
+    public string? PrimaryPayerId { get; init; }
+
+    /// <summary>Primary payer name.</summary>
+    public string? PrimaryPayerName { get; init; }
+
+    /// <summary>Amount the primary payer paid per line (keyed by line number).</summary>
+    public Dictionary<int, decimal> PrimaryPayerPaymentByLine { get; init; } = [];
+
+    /// <summary>Amount the primary payer allowed per line (non-duplication model).</summary>
+    public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
 }
 
 /// <summary>

@@ -167,7 +167,16 @@ public class AdjudicationController : ControllerBase
             ServiceDate = request.ServiceDate,
             NetworkTier = request.NetworkTier,
             ClaimId = request.ClaimId,
-            Lines = benefitLines
+            Lines = benefitLines,
+            Cob = request.Cob is null ? null : new CobInfo
+            {
+                PayerSequence              = request.Cob.PayerSequence,
+                UseComplementaryModel      = request.Cob.UseComplementaryModel,
+                PrimaryPayerId             = request.Cob.PrimaryPayerId,
+                PrimaryPayerName           = request.Cob.PrimaryPayerName,
+                PrimaryPayerPaymentByLine  = request.Cob.PrimaryPayerPaymentByLine,
+                PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine
+            }
         };
 
         var benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
@@ -308,6 +317,31 @@ public record AdjudicationRequest
     public NetworkTier NetworkTier { get; init; }
 
     public List<AdjudicationLineRequest> Lines { get; init; } = [];
+
+    /// <summary>
+    /// COB context. Null for primary claims; required for secondary/tertiary.
+    /// When present, the benefit engine applies COB reduction after its own
+    /// cost-sharing waterfall.
+    /// </summary>
+    public AdjudicationCobInfo? Cob { get; init; }
+}
+
+public record AdjudicationCobInfo
+{
+    /// <summary>1 = Primary, 2 = Secondary, 3 = Tertiary.</summary>
+    public int PayerSequence { get; init; } = 1;
+
+    /// <summary>true = Complementary (default for commercial), false = Non-duplication.</summary>
+    public bool UseComplementaryModel { get; init; } = true;
+
+    public string? PrimaryPayerId { get; init; }
+    public string? PrimaryPayerName { get; init; }
+
+    /// <summary>Primary payer payment per line (key = line number).</summary>
+    public Dictionary<int, decimal> PrimaryPayerPaymentByLine { get; init; } = [];
+
+    /// <summary>Primary payer allowed per line (non-duplication model).</summary>
+    public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
 }
 
 public record AdjudicationLineRequest

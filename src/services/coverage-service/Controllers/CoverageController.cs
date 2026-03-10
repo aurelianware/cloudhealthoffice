@@ -213,6 +213,52 @@ public class CoverageController : ControllerBase
     }
 
     /// <summary>
+    /// Get Coordination of Benefits (COB) entries for a member.
+    ///
+    /// Returns all other-insurance and Medicare records on the member's coverage,
+    /// ordered by payer sequence (Primary first). Used by:
+    ///   - Eligibility service when building the 271 response (SB/OI loops)
+    ///   - Claims intake to populate CobInfo on secondary/tertiary claims
+    ///   - Portal to display "Other Insurance" for member management
+    ///
+    /// Source: Coverage.OtherInsurance and Coverage.MedicareCoverage fields,
+    /// populated via the 834 COB segment during enrollment.
+    /// </summary>
+    [HttpGet("member/{memberId}/cob")]
+    [ProducesResponseType(typeof(List<CobEntryResponse>), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetCobEntries(
+        [FromRoute] string memberId,
+        [FromQuery] DateTime? asOfDate = null)
+    {
+        var checkDate = asOfDate ?? DateTime.UtcNow;
+
+        // TODO: Query Cosmos/Mongo for active coverage records where MemberId = memberId
+        // and TenantId = TenantId, then project OtherInsurance and MedicareCoverage into
+        // CobEntryResponse objects.
+
+        // Stub response — matches the shape the eligibility service expects
+        var cobEntries = new List<CobEntryResponse>();
+
+        // Example: member has secondary Medicare
+        cobEntries.Add(new CobEntryResponse
+        {
+            PayerName        = "Example Primary Payer",
+            PayerId          = "PAYER01",
+            CoverageSequence = "P",
+            GroupNumber      = "GRP-PRIMARY",
+            CoverageBeginDate = DateTime.UtcNow.AddYears(-2).Date,
+            CoverageEndDate  = null,
+            IsMedicare       = false
+        });
+
+        if (!cobEntries.Any())
+            return NotFound(new { MemberId = memberId, Message = "No COB entries found" });
+
+        return Ok(cobEntries);
+    }
+
+    /// <summary>
     /// Create new coverage (typically from 834 transaction)
     /// </summary>
     /// <param name="request">Coverage creation request</param>
@@ -395,6 +441,24 @@ public class CoverageListResponse
     public List<Coverage> Coverage { get; set; } = new();
     public string? ContinuationToken { get; set; }
     public int TotalCount { get; set; }
+}
+
+/// <summary>
+/// A single COB (other insurance) entry for a member.
+/// Returned by GET /member/{id}/cob.
+/// CoverageSequence mirrors X12 SBR01: P = Primary, S = Secondary, T = Tertiary.
+/// </summary>
+public class CobEntryResponse
+{
+    public string PayerName { get; set; } = string.Empty;
+    public string PayerId { get; set; } = string.Empty;
+    /// <summary>P = Primary, S = Secondary, T = Tertiary.</summary>
+    public string CoverageSequence { get; set; } = "S";
+    public string? GroupNumber { get; set; }
+    public string? PolicyNumber { get; set; }
+    public DateTime CoverageBeginDate { get; set; }
+    public DateTime? CoverageEndDate { get; set; }
+    public bool IsMedicare { get; set; }
 }
 
 public class GroupCoverageSummary
