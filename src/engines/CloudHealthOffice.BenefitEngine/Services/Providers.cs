@@ -5,68 +5,25 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 
 // ═══════════════════════════════════════════════════════════════════
 // PROVIDER INTERFACES
-//
-// These abstractions are the "mode toggle" between:
-//   - CHO-native mode: backed by CHO's own MongoDB/Cosmos collections
-//   - QNXT adapter mode: backed by QNXT API calls or DB extracts
-//
-// The benefit calculation engine depends only on these interfaces.
-// The DI container resolves the appropriate implementation based
-// on tenant configuration.
-//
-// To add a new core admin backend (FACETS, HealthEdge, etc.),
-// implement these interfaces for that system's data model.
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// Provides the current tenant identity to engine services.
-///
-/// Implement this in the host service and register it as scoped DI.
-/// Typical implementation reads TenantId from the HTTP request context
-/// (set by the tenant middleware) or from the Argo workflow step context.
-/// </summary>
 public interface IBenefitEngineTenantContext
 {
     string TenantId { get; }
 }
 
-/// <summary>
-/// Provides benefit plan configuration to the calculation engine.
-///
-/// CHO-native implementation: reads from benefit-plan-service's MongoDB.
-/// QNXT adapter implementation: reads from QNXT Plan/BenefitPlanDetail tables.
-/// </summary>
 public interface IBenefitPlanProvider
 {
-    /// <summary>
-    /// Load the complete plan configuration (plan-level caps + all benefit
-    /// categories + cost-sharing rules) needed for adjudication.
-    /// </summary>
     Task<BenefitPlanConfig?> GetPlanAsync(Guid benefitPlanId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Manages accumulator state (deductible, OOP, visit counts, etc.).
-///
-/// CHO-native: reads/writes CHO's accumulator collection.
-/// QNXT adapter: reads from QNXT AccumBalance tables; optionally
-/// shadow-writes to CHO for portal/analytics use.
-/// </summary>
 public interface IAccumulatorService
 {
-    /// <summary>
-    /// Load current accumulator state for a member in a plan year.
-    /// </summary>
     Task<IReadOnlyList<AccumulatorSnapshot>> GetAccumulatorsAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Persist accumulator updates from a completed adjudication.
-    /// Uses optimistic concurrency and claimId-based idempotency to
-    /// handle simultaneous claims and workflow retries safely.
-    /// </summary>
     Task ApplyUpdatesAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
@@ -76,6 +33,12 @@ public interface IAccumulatorService
 
     /// <summary>
     /// Reverse accumulator entries for a voided/adjusted claim.
+    /// Finds all updates tagged with the given claimId and subtracts
+    /// them from the current accumulator balances.
+    ///
+    /// Idempotent: if the claim has already been reversed, this is a no-op.
+    ///
+    /// QNXT equivalent: ACCUM_BALANCE reversal triggered by claim void/replace.
     /// </summary>
     Task ReverseAsync(
         string memberId, string subscriberId,
@@ -83,9 +46,6 @@ public interface IAccumulatorService
         string claimId,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Reset all accumulators for a plan year (annual reset batch job).
-    /// </summary>
     Task ResetForPlanYearAsync(
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);
@@ -93,15 +53,8 @@ public interface IAccumulatorService
 
 // ═══════════════════════════════════════════════════════════════════
 // CONFIGURATION RECORDS
-//
-// These are the "flattened" configuration objects that the engine
-// consumes. They're produced by the IBenefitPlanProvider from
-// whatever backing store is configured.
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// Complete plan configuration needed for a single adjudication.
-/// </summary>
 public record BenefitPlanConfig
 {
     public Guid Id { get; init; }
@@ -117,7 +70,7 @@ public record BenefitPlanConfig
     public decimal? IndividualOopMax { get; init; }
     public decimal? FamilyOopMax { get; init; }
 
-    // Accumulator caps — out-of-network (if different)
+    // Accumulator caps — out-of-network
     public decimal? IndividualDeductibleOon { get; init; }
     public decimal? FamilyDeductibleOon { get; init; }
     public decimal? IndividualOopMaxOon { get; init; }
@@ -126,14 +79,31 @@ public record BenefitPlanConfig
     // Deductible model
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; init; } = FamilyAccumulatorModel.Embedded;
 
-    // HDHP-specific
+    // ── HDHP / HSA ──
+
+    /// <summary>
+    /// True if this is a High Deductible Health Plan (HSA-eligible).
+    /// When true, deductible applies to ALL services before copay/coinsurance,
+    /// except services listed in HdhpDeductibleExemptServices (ACA preventive).
+    ///
+    /// This overrides per-category DeductibleApplies settings: even if a
+    /// category says DeductibleApplies=false, the HDHP flag forces deductible
+    /// first — unless the category's service type code is in the exempt list.
+    /// </summary>
     public bool IsHdhp { get; init; }
 
     /// <summary>
-    /// Service type codes exempt from deductible in HDHP plans
-    /// (typically preventive services per ACA).
+    /// Service type codes exempt from deductible in HDHP plans.
+    /// Typically ACA-mandated preventive services.
     /// </summary>
     public HashSet<string> HdhpDeductibleExemptServices { get; init; } = [];
+
+    // ── Inpatient pricing ──
+
+    /// <summary>
+    /// Default inpatient pricing method. Can be overridden per benefit category.
+    /// </summary>
+    public InpatientPricingMethod DefaultInpatientPricingMethod { get; init; } = InpatientPricingMethod.PerLine;
 
     // Benefit categories
     public List<BenefitCategoryConfig> Categories { get; init; } = [];
@@ -141,17 +111,11 @@ public record BenefitPlanConfig
     // Cross-reference
     public string? QnxtPlanId { get; init; }
 
-    /// <summary>
-    /// Look up a benefit category by service type code.
-    /// </summary>
     public BenefitCategoryConfig? GetCategory(string serviceTypeCode)
         => Categories.FirstOrDefault(c =>
             string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>
-/// Benefit rules for a single service category within a plan.
-/// </summary>
 public record BenefitCategoryConfig
 {
     public string ServiceTypeCode { get; init; } = default!;
@@ -165,18 +129,28 @@ public record BenefitCategoryConfig
     public int? DayLimit { get; init; }
     public decimal? DollarLimit { get; init; }
 
+    /// <summary>
+    /// Override the plan-level inpatient pricing method for this category.
+    /// Null = use plan default.
+    /// </summary>
+    public InpatientPricingMethod? InpatientPricingMethod { get; init; }
+
     // Cost sharing
     public IReadOnlyList<CostShareRuleConfig> InNetworkCostSharing { get; init; } = [];
     public IReadOnlyList<CostShareRuleConfig> OutOfNetworkCostSharing { get; init; } = [];
 }
 
-/// <summary>
-/// A single cost-sharing rule.
-/// </summary>
 public record CostShareRuleConfig
 {
     public CostShareType CostShareType { get; init; }
     public decimal? CopayAmount { get; init; }
     public decimal? CoinsurancePercent { get; init; }
     public bool DeductibleApplies { get; init; }
+
+    /// <summary>
+    /// How the copay interacts with the deductible.
+    /// Defaults to AfterDeductible (standard waterfall).
+    /// Set to InsteadOfDeductible for "copay only, no deductible" services.
+    /// </summary>
+    public CopayApplicationMode CopayApplicationMode { get; init; } = CopayApplicationMode.AfterDeductible;
 }
