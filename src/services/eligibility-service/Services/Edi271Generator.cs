@@ -241,7 +241,7 @@ public class Edi271Generator : IEdi271Generator
         }
 
         // ── SE ─────────────────────────────────────────────────────────
-        sb.Append(Seg(ref segmentCount, true, $"SE*{segmentCount}*0001~"));
+        sb.Append(Seg(ref segmentCount, true, $"SE*{segmentCount + 1}*0001~"));
 
         // ── GE / IEA ───────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false, "GE*1*1~"));
