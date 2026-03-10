@@ -102,6 +102,9 @@ jobs:
           # benefit-plan-service needs repo root as context so it can reach src/engines/
           - service: benefit-plan-service
             build_context: '.'
+          # attachment-service needs repo root as context so it can reach src/engines/
+          - service: attachment-service
+            build_context: '.'
 
     steps:
       - uses: actions/checkout@v4
