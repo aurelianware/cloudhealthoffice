@@ -176,6 +176,14 @@ public class Attachment
     public string? Notes { get; set; }
 
     /// <summary>
+    /// Structured rejection reason code when Status = "Failed".
+    /// One of the constants defined in <see cref="AttachmentRejectionCode"/>.
+    /// Drives the TED segment in the 824 Application Advice.
+    /// </summary>
+    [StringLength(30)]
+    public string? RejectionCode { get; set; }
+
+    /// <summary>
     /// Acknowledgment type sent: '999', '824', 'Both', or null if not yet sent
     /// </summary>
     [StringLength(10)]

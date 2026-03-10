@@ -77,11 +77,25 @@ public class AcknowledgmentGeneratorService
         if (!string.IsNullOrWhiteSpace(attachment.RFAIReference))
             segments.Add($"REF*EJ*{attachment.RFAIReference}~");
 
+        // TED — Transaction Error Data (rejections only)
+        // TED01 = X12 Error Type Code, TED02 = free-form description
+        if (acceptanceCode == "TR" || acceptanceCode == "TP")
+        {
+            var ted01 = AttachmentRejectionCode.ToTed01ErrorTypeCode(attachment.RejectionCode);
+            if (ted01 is not null)
+            {
+                var ted02 = !string.IsNullOrWhiteSpace(attachment.Notes)
+                    ? attachment.Notes
+                    : AttachmentRejectionCode.DefaultDescription(attachment.RejectionCode);
+                segments.Add($"TED*{ted01}*{ted02}~");
+            }
+        }
+
         var msgText = attachment.Status switch
         {
             "Linked"    => $"Attachment accepted and linked to {GetParentType(attachment)} {GetParentId(attachment)}",
             "Validated" => "Attachment accepted and validated",
-            "Failed"    => $"Attachment rejected: {attachment.Notes}",
+            "Failed"    => $"Attachment rejected: {(!string.IsNullOrWhiteSpace(attachment.Notes) ? attachment.Notes : AttachmentRejectionCode.DefaultDescription(attachment.RejectionCode))}",
             _           => "Attachment received and pending validation"
         };
         segments.Add($"MSG*{msgText}~");
