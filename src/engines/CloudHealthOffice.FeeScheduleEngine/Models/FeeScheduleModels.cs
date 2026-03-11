@@ -74,6 +74,13 @@ public class FeeSchedule
     /// </summary>
     public decimal? PerDiemRate { get; set; }
 
+    /// <summary>
+    /// For FeeScheduleType.Drg: base rate used with DRG relative weights.
+    /// AllowedAmount = DrgBaseRate × FeeScheduleLine.DrgWeight.
+    /// If null, each DRG line stores its own flat case rate in Line.Rate.
+    /// </summary>
+    public decimal? DrgBaseRate { get; set; }
+
     /// <summary>The procedure/service lines for this schedule.</summary>
     public List<FeeScheduleLine> Lines { get; set; } = new();
 
@@ -130,6 +137,15 @@ public class FeeScheduleLine
     /// CMS publishes both; the engine selects based on PlaceOfService.
     /// </summary>
     public decimal? PeRvuFacility { get; set; }
+
+    // ── DRG fields ────────────────────────────────────────────
+
+    /// <summary>
+    /// DRG relative weight. When the schedule is FeeScheduleType.Drg,
+    /// allowed amount = DrgBaseRate × DrgWeight. If null, Rate is the
+    /// flat case rate for this DRG code.
+    /// </summary>
+    public decimal? DrgWeight { get; set; }
 
     // ── Limits ──────────────────────────────────────────────────
 
