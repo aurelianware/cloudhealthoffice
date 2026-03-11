@@ -7,7 +7,7 @@
     <!-- Fix CVE-2024-43485: System.Formats.Asn1 Remote Code Execution vulnerability -->
     <!-- Severity: High | Advisory: GHSA-447r-wph3-92pm -->
     <!-- Minimum safe version: 8.0.1 (fixes RCE in certificate parsing) -->
-    <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
+    <PackageReference Include="System.Formats.Asn1" Version="10.0.4" />
     
     <!-- Fix CVE-2024-21907: Newtonsoft.Json Improper Handling vulnerability -->
     <!-- Severity: High | Advisory: GHSA-5crp-9r3c-p9vr -->
