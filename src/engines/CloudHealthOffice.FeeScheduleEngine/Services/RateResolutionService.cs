@@ -64,23 +64,38 @@ public class RateResolutionService : IRateResolutionService
                 request.TenantId, request.PlanId, request.ServiceDate, ct);
         }
 
-        // 3. Find the rate line (tries each modifier in order, then base rate)
+        // 3. Find the rate line
         FeeScheduleLine? rateLine = null;
         if (schedule is not null)
         {
-            rateLine = FindRateLine(schedule, request.ProcedureCode, request.Modifiers);
+            rateLine = schedule.Type == FeeScheduleType.Drg
+                ? FindDrgRateLine(schedule, request.DrgCode)
+                : FindRateLine(schedule, request.ProcedureCode, request.Modifiers);
         }
 
         // 4. Calculate base allowed amount
-        var (baseAmount, rateSource, scheduleType) = CalculateBaseAmount(
-            request, schedule, rateLine, networkStatus);
+        var (baseAmount, rateSource, scheduleType) = await CalculateBaseAmountAsync(
+            request, schedule, rateLine, networkStatus, ct);
 
-        // 5. Apply modifier adjustments
-        var (finalAmount, adjustments) = ApplyModifierAdjustments(
-            baseAmount, request, rateLine, schedule);
+        // 5. Apply modifier adjustments (not applicable for DRG/PerDiem/Capitation)
+        IReadOnlyList<RateAdjustment> adjustments;
+        decimal finalAmount;
 
-        // 6. Apply units
-        finalAmount *= request.Units;
+        if (scheduleType is FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation)
+        {
+            // DRG, per diem, and capitation rates are not subject to modifier adjustments
+            finalAmount = baseAmount;
+            adjustments = [];
+        }
+        else
+        {
+            (finalAmount, adjustments) = ApplyModifierAdjustments(
+                baseAmount, request, rateLine, schedule);
+        }
+
+        // 6. Apply units (not for DRG — case rate is per-admission regardless of line count)
+        if (scheduleType != FeeScheduleType.Drg)
+            finalAmount *= request.Units;
 
         return new PricingResult
         {
@@ -97,23 +112,102 @@ public class RateResolutionService : IRateResolutionService
         };
     }
 
+    /// <summary>
+    /// Batch pricing with proper multiple-procedure ranking.
+    ///
+    /// CMS multiple procedure rules rank lines by allowed amount
+    /// (highest-paid = 100%, second = 50%, third+ = 25% for most
+    /// endoscopic/surgical families). This implementation:
+    ///   1. Prices all lines at 100% first
+    ///   2. Ranks by allowed amount descending
+    ///   3. Re-applies multiple procedure reductions based on rank
+    /// </summary>
     public async Task<PricingResultSet> ResolveBatchAsync(
         IReadOnlyList<PricingRequest> requests, CancellationToken ct = default)
     {
-        var results = new List<PricingResult>(requests.Count);
+        if (requests.Count <= 1)
+        {
+            // Single line — no multiple procedure ranking needed
+            var results = new List<PricingResult>(requests.Count);
+            foreach (var request in requests)
+                results.Add(await ResolveAsync(request, ct));
+            return new PricingResultSet { LineResults = results };
+        }
 
+        // Phase 1: Price all lines at 100% (override LineNumber/TotalLineCount to suppress
+        // the per-line multiple procedure logic in ApplyModifierAdjustments)
+        var initialResults = new List<(PricingRequest Request, PricingResult Result)>(requests.Count);
         foreach (var request in requests.OrderBy(r => r.LineNumber))
-            results.Add(await ResolveAsync(request, ct));
+        {
+            // Create a modified request that suppresses multiple procedure reduction
+            var singleLineRequest = request with { LineNumber = 1, TotalLineCount = 1 };
+            var result = await ResolveAsync(singleLineRequest, ct);
+            initialResults.Add((request, result));
+        }
 
-        return new PricingResultSet { LineResults = results };
+        // Phase 2: Identify lines eligible for multiple procedure reduction
+        var eligibleForReduction = initialResults
+            .Where(r => r.Result.FeeScheduleType is not (FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation))
+            .OrderByDescending(r => r.Result.AllowedAmount)
+            .ToList();
+
+        // Phase 3: Apply rank-based reductions
+        var finalResults = new List<PricingResult>(requests.Count);
+
+        foreach (var (request, result) in initialResults)
+        {
+            var rank = eligibleForReduction.FindIndex(e => e.Request.LineNumber == request.LineNumber);
+
+            if (rank <= 0)
+            {
+                // Rank 0 (highest paid) or not eligible — no reduction
+                finalResults.Add(result);
+                continue;
+            }
+
+            // Check if the rate line allows multiple procedure reduction
+            // (we need to re-check the rate line's flag)
+            var hasMultProcModifier = request.Modifiers.Contains(
+                PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase);
+            var isMultProcEligible = hasMultProcModifier || eligibleForReduction.Count > 1;
+
+            if (!isMultProcEligible)
+            {
+                finalResults.Add(result);
+                continue;
+            }
+
+            // Rank 1 = 50%, Rank 2+ = 25% (CMS MPPR indicator 2/3 rules)
+            var reductionFactor = rank == 1 ? 0.50m : 0.25m;
+            var reducedAmount = Math.Round(result.AllowedAmount * reductionFactor, 2);
+            var reductionAmount = reducedAmount - result.AllowedAmount;
+
+            var adjustments = new List<RateAdjustment>(result.Adjustments);
+            adjustments.Add(new RateAdjustment
+            {
+                Modifier = PaymentModifiers.MultipleProcedures,
+                Description = rank == 1
+                    ? $"Multiple procedure reduction — rank {rank + 1} ({reductionFactor:P0} of base)"
+                    : $"Multiple procedure reduction — rank {rank + 1} ({reductionFactor:P0} of base)",
+                AdjustmentFactor = reductionFactor,
+                AdjustmentAmount = reductionAmount,
+            });
+
+            finalResults.Add(result with
+            {
+                AllowedAmount = reducedAmount,
+                Adjustments = adjustments
+            });
+        }
+
+        return new PricingResultSet
+        {
+            LineResults = finalResults.OrderBy(r => r.LineNumber).ToList()
+        };
     }
 
     // ── Schedule selection ─────────────────────────────────────────────
 
-    /// <summary>
-    /// Checks contract lines for a procedure-specific override before falling back
-    /// to the contract's default FeeScheduleId.
-    /// </summary>
     private static string? ResolveScheduleId(ProviderContract? contract, string procedureCode)
     {
         if (contract is null) return null;
@@ -129,7 +223,7 @@ public class RateResolutionService : IRateResolutionService
 
     private static bool IsInCodeRange(string code, string? from, string? to)
     {
-        if (from is null) return true; // null = all procedures
+        if (from is null) return true;
 
         var cmp = StringComparer.OrdinalIgnoreCase;
 
@@ -142,8 +236,7 @@ public class RateResolutionService : IRateResolutionService
     // ── Rate line lookup ───────────────────────────────────────────────
 
     /// <summary>
-    /// Tries modifiers in claim order, then falls back to base rate (null modifier).
-    /// Priority: first exact modifier match wins; then base rate.
+    /// Procedure code lookup — tries modifiers in claim order, then base rate.
     /// </summary>
     private static FeeScheduleLine? FindRateLine(
         FeeSchedule schedule, string procedureCode, IReadOnlyList<string> modifiers)
@@ -168,17 +261,48 @@ public class RateResolutionService : IRateResolutionService
         return baseRate;
     }
 
+    /// <summary>
+    /// DRG code lookup — matches by DRG code stored in the ProcedureCode field
+    /// of the fee schedule line. DRG schedule lines use ProcedureCode to hold
+    /// the DRG code (e.g., "470" for major hip/knee joint replacement).
+    ///
+    /// DRG schedules may include weight-based lines where Rate is the base rate
+    /// and the DRG weight is a multiplier. If the line has a DrgWeight, the
+    /// allowed amount = Rate × DrgWeight.
+    /// </summary>
+    private static FeeScheduleLine? FindDrgRateLine(FeeSchedule schedule, string? drgCode)
+    {
+        if (drgCode is null)
+            return null;
+
+        // Exact DRG code match
+        var match = schedule.Lines.FirstOrDefault(l =>
+            string.Equals(l.ProcedureCode, drgCode, StringComparison.OrdinalIgnoreCase));
+
+        if (match is not null)
+            return match;
+
+        // Some DRG schedules use a single "base rate" line (ProcedureCode = "*" or empty)
+        // with the DRG weight stored per-line. Check for a wildcard/default line.
+        return schedule.Lines.FirstOrDefault(l =>
+            string.Equals(l.ProcedureCode, "*", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrEmpty(l.ProcedureCode));
+    }
+
     // ── Base amount calculation ────────────────────────────────────────
 
-    private (decimal amount, RateSource source, FeeScheduleType scheduleType) CalculateBaseAmount(
+    /// <summary>
+    /// Async version of base amount calculation — needed for Medicaid cross-schedule resolution.
+    /// </summary>
+    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType)> CalculateBaseAmountAsync(
         PricingRequest request,
         FeeSchedule? schedule,
         FeeScheduleLine? line,
-        NetworkStatus networkStatus)
+        NetworkStatus networkStatus,
+        CancellationToken ct)
     {
         if (schedule is null || line is null)
         {
-            // UCR fallback — use billed charges
             return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr);
         }
 
@@ -195,7 +319,13 @@ public class RateResolutionService : IRateResolutionService
             }
 
             case FeeScheduleType.Drg:
-                return (line.Rate, RateSource.Drg, FeeScheduleType.Drg);
+            {
+                var drgRate = line.Rate;
+                // If DRG weight is specified, rate = base rate × weight
+                if (line.DrgWeight.HasValue && line.DrgWeight.Value > 0)
+                    drgRate = (schedule.DrgBaseRate ?? line.Rate) * line.DrgWeight.Value;
+                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg);
+            }
 
             case FeeScheduleType.MedicareMpfs:
             case FeeScheduleType.MedicareOpps:
@@ -208,14 +338,8 @@ public class RateResolutionService : IRateResolutionService
 
             case FeeScheduleType.Medicaid:
             {
-                // If a pre-calculated rate is stored, use it. Otherwise RVU path.
-                var amount = line.RateType == FeeScheduleRateType.Rvu
-                    ? CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode)
-                    : line.Rate;
-
-                if (schedule.PercentOfMedicare.HasValue)
-                    amount *= schedule.PercentOfMedicare.Value;
-
+                var amount = await ResolveMedicaidRateAsync(
+                    request, schedule, line, ct);
                 return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid);
             }
 
@@ -223,9 +347,9 @@ public class RateResolutionService : IRateResolutionService
             {
                 var amount = line.RateType switch
                 {
-                    FeeScheduleRateType.PercentOfBilled  => request.BilledAmount * line.Rate,
-                    FeeScheduleRateType.PercentOfMedicare => request.BilledAmount * line.Rate, // caller provides Medicare rate as billed
-                    _                                     => line.Rate,
+                    FeeScheduleRateType.PercentOfBilled   => request.BilledAmount * line.Rate,
+                    FeeScheduleRateType.PercentOfMedicare  => request.BilledAmount * line.Rate,
+                    _                                      => line.Rate,
                 };
 
                 var source = schedule.Type == FeeScheduleType.Commercial
@@ -236,6 +360,99 @@ public class RateResolutionService : IRateResolutionService
             }
         }
     }
+
+    // ── Medicaid cross-schedule resolution ─────────────────────────────
+
+    /// <summary>
+    /// Resolves the Medicaid allowed amount using one of three strategies:
+    ///
+    /// 1. Pre-calculated flat rate: line.Rate contains the Medicaid rate directly.
+    ///    Used when the state publishes a flat fee schedule (most common).
+    ///
+    /// 2. Percent-of-Medicare with cross-schedule lookup: load the referenced
+    ///    Medicare MPFS schedule, calculate the Medicare rate via RVU, then
+    ///    apply PercentOfMedicare. Used by states that define Medicaid rates
+    ///    as a percentage of Medicare (e.g., "72% of Medicare MPFS").
+    ///
+    /// 3. Percent-of-Medicare with inline RVU: the Medicaid schedule line
+    ///    itself stores RVU values, and the schedule has GPCI/CF and
+    ///    PercentOfMedicare. Rate = RVU calculation × PercentOfMedicare.
+    ///
+    /// QNXT equivalent: FS_FEE_SCHEDULE → REFERENCE_SCHEDULE_ID lookup
+    /// for percent-of-Medicare pricing.
+    /// </summary>
+    private async Task<decimal> ResolveMedicaidRateAsync(
+        PricingRequest request,
+        FeeSchedule medicaidSchedule,
+        FeeScheduleLine medicaidLine,
+        CancellationToken ct)
+    {
+        // Strategy 1: Flat rate (no RVU, no percent-of-Medicare, or rate already pre-calculated)
+        if (medicaidLine.RateType == FeeScheduleRateType.FlatRate
+            && !medicaidSchedule.PercentOfMedicare.HasValue)
+        {
+            return medicaidLine.Rate;
+        }
+
+        // Strategy 3: Inline RVU on the Medicaid line itself
+        if (medicaidLine.RateType == FeeScheduleRateType.Rvu)
+        {
+            var rvuAmount = CalculateRvuAmount(medicaidSchedule, medicaidLine, request.PlaceOfServiceCode);
+            if (medicaidSchedule.PercentOfMedicare.HasValue)
+                rvuAmount *= medicaidSchedule.PercentOfMedicare.Value;
+            return Math.Round(rvuAmount, 2);
+        }
+
+        // Strategy 2: Cross-schedule lookup — load the base Medicare MPFS schedule
+        if (medicaidSchedule.BaseMpfsFeeScheduleId is not null
+            && medicaidSchedule.PercentOfMedicare.HasValue)
+        {
+            var baseSchedule = await _feeScheduleRepo.GetByIdAsync(
+                request.TenantId, medicaidSchedule.BaseMpfsFeeScheduleId, ct);
+
+            if (baseSchedule is not null)
+            {
+                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                if (baseLine is not null)
+                {
+                    var medicareRate = baseLine.RateType == FeeScheduleRateType.Rvu
+                        ? CalculateRvuAmount(baseSchedule, baseLine, request.PlaceOfServiceCode)
+                        : baseLine.Rate;
+
+                    var medicaidRate = medicareRate * medicaidSchedule.PercentOfMedicare.Value;
+
+                    _logger.LogDebug(
+                        "Medicaid cross-schedule: {ProcedureCode} Medicare={MedicareRate:C} " +
+                        "× {Percent:P0} = {MedicaidRate:C}",
+                        request.ProcedureCode, medicareRate,
+                        medicaidSchedule.PercentOfMedicare.Value, medicaidRate);
+
+                    return Math.Round(medicaidRate, 2);
+                }
+
+                _logger.LogWarning(
+                    "Medicaid cross-schedule: base MPFS schedule {ScheduleId} has no line " +
+                    "for {ProcedureCode}; falling back to Medicaid line rate",
+                    medicaidSchedule.BaseMpfsFeeScheduleId, request.ProcedureCode);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Medicaid cross-schedule: base MPFS schedule {ScheduleId} not found; " +
+                    "falling back to Medicaid line rate",
+                    medicaidSchedule.BaseMpfsFeeScheduleId);
+            }
+        }
+
+        // Fallback: use the Medicaid line's stored rate, apply percent if configured
+        var fallbackRate = medicaidLine.Rate;
+        if (medicaidSchedule.PercentOfMedicare.HasValue)
+            fallbackRate *= medicaidSchedule.PercentOfMedicare.Value;
+
+        return Math.Round(fallbackRate, 2);
+    }
+
+    // ── RVU calculation ───────────────────────────────────────────────
 
     private static decimal CalculateRvuAmount(
         FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
@@ -266,8 +483,6 @@ public class RateResolutionService : IRateResolutionService
         var amount = baseAmount;
 
         // 26 / TC — professional or technical component
-        // Rate line is already the component-specific rate (looked up by modifier).
-        // No additional factor needed; record it for the audit trail.
         if (modifiers.Contains(PaymentModifiers.ProfessionalComponent, StringComparer.OrdinalIgnoreCase))
         {
             adjustments.Add(Adjustment(PaymentModifiers.ProfessionalComponent,
@@ -283,7 +498,7 @@ public class RateResolutionService : IRateResolutionService
         if (modifiers.Contains(PaymentModifiers.Bilateral, StringComparer.OrdinalIgnoreCase)
             && (line?.BilateralAdjustmentApplies ?? true))
         {
-            var adj = amount * 0.50m; // extra 50% on top of base
+            var adj = amount * 0.50m;
             adjustments.Add(Adjustment(PaymentModifiers.Bilateral,
                 "Bilateral procedure (150% of unilateral rate)", 1.5m, adj));
             amount += adj;
@@ -365,7 +580,9 @@ public class RateResolutionService : IRateResolutionService
             }
         }
 
-        // 51 — multiple procedure reduction (50% for line 2+)
+        // Note: Multiple procedure reduction (mod 51) is now handled in ResolveBatchAsync
+        // via rank-based ordering. The per-line fallback below only applies when
+        // ResolveBatchAsync is not used (single-line ResolveAsync calls).
         if (modifiers.Contains(PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase)
             || (request.LineNumber > 1 && request.TotalLineCount > 1
                 && (line?.MultipleProcedureReductionApplies ?? true)))
