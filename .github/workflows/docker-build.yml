@@ -56,6 +56,10 @@ jobs:
           # so the build context must be the repo root
           - service: benefit-plan-service
             build_context: '.'
+          # attachment-service references CloudHealthOffice.DocumentStore (../../engines/...)
+          # so the build context must be the repo root
+          - service: attachment-service
+            build_context: '.'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
