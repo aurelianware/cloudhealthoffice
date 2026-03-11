@@ -53,7 +53,10 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "lodash": "^4.17.21"
+    "lodash": "^4.17.21",
+    "fast-xml-parser": "5.3.8",
+    "minimatch@<3.1.4": "3.1.4",
+    "minimatch@>=9.0.0 <9.0.7": "9.0.7"
   },
   "engines": {
     "node": ">=18.0.0"
