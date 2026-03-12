@@ -119,13 +119,19 @@ async function updateNavigation(navSelector = 'nav ul') {
     return;
   }
 
-  // Remove existing auth links if present
+  // Remove existing dynamic auth links if present
   const existingAuthLinks = nav.querySelectorAll('.auth-link');
   existingAuthLinks.forEach(link => link.remove());
 
+  // Find and remove the static Sign In link (added in HTML)
+  const staticSignIn = nav.querySelector('a[href="/login"], a[href="/login.html"], a[href="../login.html"]');
+  if (staticSignIn) {
+    staticSignIn.closest('li')?.remove();
+  }
+
   if (authenticated) {
     const userName = await getUserDisplayName();
-    
+
     // Add user menu
     const userMenuItem = document.createElement('li');
     userMenuItem.className = 'auth-link';
@@ -149,17 +155,6 @@ async function updateNavigation(navSelector = 'nav ul') {
     });
     logoutItem.appendChild(logoutLink);
     nav.appendChild(logoutItem);
-  } else {
-    // Add sign in link (use DOM APIs instead of innerHTML to prevent XSS)
-    const signInItem = document.createElement('li');
-    signInItem.className = 'auth-link';
-    const signInLink = document.createElement('a');
-    signInLink.href = '/login.html';
-    signInLink.style.color = '#00ffff';
-    signInLink.style.fontWeight = 'bold';
-    signInLink.textContent = 'Sign In';
-    signInItem.appendChild(signInLink);
-    nav.appendChild(signInItem);
   }
 }
 
