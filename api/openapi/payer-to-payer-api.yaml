@@ -569,8 +569,9 @@ components:
         System-level OAuth 2.0 (Backend Services / Client Credentials).
         Payer-to-payer exchange uses system-level tokens, not user tokens.
         The requesting payer authenticates with its client credentials.
+        Replace `{tenant}` in the tokenUrl with your Azure AD tenant ID or verified domain (e.g. `contoso.onmicrosoft.com`).
       flows:
         clientCredentials:
-          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
+          tokenUrl: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
           scopes:
             api://54f3419d-0d69-4b06-939a-c1a260596556/.default: Full access to all registered API permissions
