@@ -94,6 +94,12 @@
     },
     {
       "route": "/login.html",
+      "redirect": "/login",
+      "statusCode": 301
+    },
+    {
+      "route": "/login",
+      "rewrite": "/login.html",
       "allowedRoles": ["anonymous"]
     },
     {

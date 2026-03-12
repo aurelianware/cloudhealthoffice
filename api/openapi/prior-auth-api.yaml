@@ -755,8 +755,8 @@ components:
       description: SMART on FHIR for provider EHR integration
       flows:
         authorizationCode:
-          authorizationUrl: https://login.cloudhealthoffice.com/oauth2/authorize
-          tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
             openid: OpenID Connect authentication
             profile: User profile information
