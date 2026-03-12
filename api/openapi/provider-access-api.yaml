@@ -357,8 +357,8 @@ paths:
               schema:
                 type: object
               example:
-                authorization_endpoint: "https://login.cloudhealthoffice.com/oauth2/authorize"
-                token_endpoint: "https://login.cloudhealthoffice.com/oauth2/token"
+                authorization_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
                 scopes_supported: ["user/*.read", "openid", "fhirUser", "launch/practitioner"]
                 capabilities: ["launch-standalone", "client-confidential-symmetric", "sso-openid-connect", "permission-user"]
 
@@ -442,8 +442,8 @@ components:
         using their NPI-linked credentials.
       flows:
         authorizationCode:
-          authorizationUrl: https://login.cloudhealthoffice.com/oauth2/authorize
-          tokenUrl: https://login.cloudhealthoffice.com/oauth2/token
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
           scopes:
             openid: OpenID Connect authentication
             profile: User profile information
