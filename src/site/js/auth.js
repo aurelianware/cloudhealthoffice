@@ -123,13 +123,12 @@ async function updateNavigation(navSelector = 'nav ul') {
   const existingAuthLinks = nav.querySelectorAll('.auth-link');
   existingAuthLinks.forEach(link => link.remove());
 
-  // Find and remove the static Sign In link (added in HTML)
-  const staticSignIn = nav.querySelector('a[href="/login"], a[href="/login.html"], a[href="../login.html"]');
-  if (staticSignIn) {
-    staticSignIn.closest('li')?.remove();
-  }
-
   if (authenticated) {
+    // Find and remove the static Sign In link (added in HTML) so we can replace it with the user menu
+    const staticSignIn = nav.querySelector('a[href="/login"], a[href="/login.html"], a[href="../login.html"]');
+    if (staticSignIn) {
+      staticSignIn.closest('li')?.remove();
+    }
     const userName = await getUserDisplayName();
 
     // Add user menu
