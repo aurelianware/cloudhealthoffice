@@ -18,8 +18,11 @@
     <PackageReference Include="OpenIddict.Server.AspNetCore" Version="5.4.0" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="5.4.0" />
     <PackageReference Include="OpenIddict.MongoDb" Version="5.4.0" />
-<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.25" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <!-- Security: force patched transitive versions (CVE-2024-30105, CVE-2024-43485, CVE-2024-43483) -->
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
   </ItemGroup>
 
 </Project>
