@@ -241,7 +241,30 @@ GET  /scrubbing/v1/analytics/first-pass-rate</code></pre>
     <!-- Quickstart Section -->
     <section id="quickstart" style="padding: 60px 20px; background: var(--dark-gray); margin: 40px 0; border-radius: 12px;">
       <h2 style="text-align: center; margin-bottom: 40px;">Get Started in 15 Minutes</h2>
-      
+
+      <div style="max-width: 800px; margin: 0 auto 40px;">
+        <div style="background: var(--dark-bg); padding: 30px; border-radius: 8px; border-left: 4px solid var(--neon-green);">
+          <h3 style="margin-top: 0; color: var(--neon-green);">Run the Full Stack Locally</h3>
+          <p style="color: #b0b0b0; margin-bottom: 16px;">
+            Start MongoDB + Redis + both adjudication services with Docker Compose, seed NCCI edits,
+            create a benefit plan, submit a claim, and see it adjudicated end-to-end — no Azure account needed.
+          </p>
+          <pre style="background: #000; padding: 20px; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);"># Clone and start the local stack
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+docker compose up -d
+
+# Run the full adjudication demo (seeds data + submits + adjudicates)
+./scripts/seed-local.sh</code></pre>
+          <div style="margin-top: 20px;">
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/local-claims-quickstart.md"
+               class="button-primary" target="_blank">
+              📋 Local Claims Quickstart
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div style="max-width: 800px; margin: 0 auto;">
         <div style="background: var(--dark-bg); padding: 30px; border-radius: 8px; border-left: 4px solid var(--neon-cyan);">
           <h3 style="margin-top: 0;">Quick Test with Sandbox</h3>
