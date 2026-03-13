@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using EncounterService.Middleware;
 using EncounterService.Models;
@@ -45,10 +46,10 @@ public class EncountersController : ControllerBase
             SanitizeForLog(encounter.BillingProviderNPI),
             SanitizeForLog(encounter.PayerId));
 
-        if (encounter.ServiceLines.Count == 0)
+        if (encounter.ServiceLines == null || encounter.ServiceLines.Count == 0)
             return BadRequest("Encounter must have at least one service line");
 
-        encounter.TotalChargeAmount = encounter.ServiceLines.Sum(l => l.ChargeAmount * l.Units);
+        encounter.TotalChargeAmount = encounter.ServiceLines!.Sum(l => l.ChargeAmount * l.Units);
 
         encounter.Id = Guid.NewGuid().ToString();
         encounter.Status = EncounterStatus.Pending;
@@ -115,8 +116,8 @@ public class EncountersController : ControllerBase
         [FromQuery] EncounterStatus? status = null,
         [FromQuery] SubmissionType? submissionType = null,
         [FromQuery] LineOfBusiness? lineOfBusiness = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery, Range(1, int.MaxValue)] int page = 1,
+        [FromQuery, Range(1, 200)] int pageSize = 50)
     {
         _logger.LogInformation(
             "Searching encounters: member={Member}, payer={Payer}, batch={Batch}, status={Status}",
@@ -316,7 +317,14 @@ public class EncountersController : ControllerBase
             EncounterType.Dental => "837D",
             _ => "837"
         };
-        var filename = $"{typeCode}_{encounter.EncounterControlNumber}.edi";
+        // Sanitize the control number — allow only safe filename characters to prevent header injection;
+        // fall back to encounter ID if control number is missing
+        var controlNumberSource = string.IsNullOrEmpty(encounter.EncounterControlNumber)
+            ? encounter.Id
+            : encounter.EncounterControlNumber;
+        var safeControlNumber = string.Concat(
+            controlNumberSource.Where(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'));
+        var filename = $"{typeCode}_{safeControlNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
         return Content(edi, "text/plain");
     }

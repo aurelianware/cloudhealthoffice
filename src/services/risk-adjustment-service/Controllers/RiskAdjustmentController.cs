@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using RiskAdjustmentService.Models;
 using RiskAdjustmentService.Repositories;
@@ -133,7 +134,7 @@ public class RiskAdjustmentController : ControllerBase
         if (score.MemberId != memberId || score.MeasurementYear != measurementYear)
             return BadRequest("Member ID and measurement year in URL must match the request body");
 
-        if (score.HccCategories.Count == 0 && score.RiskScore == 0 && score.DemographicFactor == 0)
+        if ((score.HccCategories?.Count ?? 0) == 0 && score.RiskScore == 0 && score.DemographicFactor == 0)
             return BadRequest("Risk score must have at least a demographic factor or HCC categories");
 
         var existing = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
@@ -220,8 +221,8 @@ public class RiskAdjustmentController : ControllerBase
     public async Task<ActionResult<IEnumerable<MemberRiskScore>>> GetMeasurementYearScores(
         int measurementYear,
         [FromQuery] LineOfBusiness? lineOfBusiness = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery, Range(1, int.MaxValue)] int page = 1,
+        [FromQuery, Range(1, 200)] int pageSize = 50)
     {
         _logger.LogInformation("Fetching measurement year {Year} scores, lob={LOB}, page={Page}",
             measurementYear, lineOfBusiness, page);
@@ -265,8 +266,8 @@ public class RiskAdjustmentController : ControllerBase
         [FromQuery] ScoreStatus? status = null,
         [FromQuery] decimal? minScore = null,
         [FromQuery] decimal? maxScore = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery, Range(1, int.MaxValue)] int page = 1,
+        [FromQuery, Range(1, 200)] int pageSize = 50)
     {
         _logger.LogInformation(
             "Searching risk scores: year={Year}, member={Member}, lob={LOB}, status={Status}",

@@ -66,10 +66,13 @@ public class Encounter837Service : IEncounter837Service
         int hlCount = 0;
 
         // ── ISA ────────────────────────────────────────────────────────
+        // ISA06/ISA08 must be exactly 15 characters; truncate if longer, pad if shorter
+        var senderId   = FormatIsaId(cfg.InterchangeSenderId);
+        var receiverId = FormatIsaId(cfg.InterchangeReceiverId);
         sb.Append(Seg(ref segmentCount, false,
             $"ISA*00*          *00*          " +
-            $"*ZZ*{cfg.InterchangeSenderId.PadRight(15)}" +
-            $"*ZZ*{cfg.InterchangeReceiverId.PadRight(15)}" +
+            $"*ZZ*{senderId}" +
+            $"*ZZ*{receiverId}" +
             $"*{now:yyMMdd}*{now:HHmm}*^*00501*{controlNumber}*0*P*:~"));
 
         // ── GS — HC = Health Care Claim ────────────────────────────────
@@ -166,23 +169,23 @@ public class Encounter837Service : IEncounter837Service
 
             if (encounter.EncounterType == EncounterType.Institutional)
             {
-                // SV2 — Institutional service line
+                // SV2 — Institutional service line; units formatted per X12 R data type (max 3 decimal places)
                 var revCode = line.RevenueCode ?? "0001";
                 sb.Append(Seg(ref segmentCount, true,
                     $"SV2*{revCode}*HC:{line.ProcedureCode}" +
                     $"{FormatModifiers(line.Modifiers)}" +
-                    $"*{line.ChargeAmount:F2}*UN*{line.Units:F0}~"));
+                    $"*{line.ChargeAmount:F2}*UN*{line.Units:0.###}~"));
             }
             else
             {
-                // SV1 — Professional service line
+                // SV1 — Professional service line; units formatted per X12 R data type (max 3 decimal places)
                 var dxPointers = line.DiagnosisPointers.Count > 0
                     ? string.Join(":", line.DiagnosisPointers)
                     : "1";
                 sb.Append(Seg(ref segmentCount, true,
                     $"SV1*HC:{line.ProcedureCode}" +
                     $"{FormatModifiers(line.Modifiers)}" +
-                    $"*{line.ChargeAmount:F2}*UN*{line.Units:F0}***{dxPointers}~"));
+                    $"*{line.ChargeAmount:F2}*UN*{line.Units:0.###}***{dxPointers}~"));
             }
 
             // DTP*472 — Service date
@@ -217,6 +220,13 @@ public class Encounter837Service : IEncounter837Service
         if (modifiers.Count == 0) return string.Empty;
         return ":" + string.Join(":", modifiers.Take(4));
     }
+
+    /// <summary>
+    /// Formats an ISA sender/receiver ID to exactly 15 characters as required by X12.
+    /// Truncates values that exceed 15 characters; right-pads shorter values with spaces.
+    /// </summary>
+    private static string FormatIsaId(string value)
+        => value.Length > 15 ? value[..15] : value.PadRight(15);
 
     private static string Seg(ref int count, bool counted, string segment)
     {

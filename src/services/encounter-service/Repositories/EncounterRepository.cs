@@ -251,7 +251,7 @@ public class EncounterRepository : IEncounterRepository
         if (!string.IsNullOrEmpty(payerId))
             queryDef.WithParameter("@payerId", payerId);
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
+        var iterator = _container.GetItemQueryIterator<EncounterSummaryProjection>(queryDef);
         var summary = new EncounterSummary();
 
         if (iterator.HasMoreResults)
@@ -260,14 +260,14 @@ public class EncounterRepository : IEncounterRepository
             var result = response.FirstOrDefault();
             if (result != null)
             {
-                summary.TotalEncounters = result.TotalEncounters ?? 0;
-                summary.PendingEncounters = result.PendingEncounters ?? 0;
-                summary.QueuedEncounters = result.QueuedEncounters ?? 0;
-                summary.SubmittedEncounters = result.SubmittedEncounters ?? 0;
-                summary.AcceptedEncounters = result.AcceptedEncounters ?? 0;
-                summary.RejectedEncounters = result.RejectedEncounters ?? 0;
-                summary.CorrectionEncounters = result.CorrectionEncounters ?? 0;
-                summary.TotalChargeAmount = result.TotalChargeAmount ?? 0;
+                summary.TotalEncounters = result.TotalEncounters;
+                summary.PendingEncounters = result.PendingEncounters;
+                summary.QueuedEncounters = result.QueuedEncounters;
+                summary.SubmittedEncounters = result.SubmittedEncounters;
+                summary.AcceptedEncounters = result.AcceptedEncounters;
+                summary.RejectedEncounters = result.RejectedEncounters;
+                summary.CorrectionEncounters = result.CorrectionEncounters;
+                summary.TotalChargeAmount = result.TotalChargeAmount;
 
                 if (summary.TotalEncounters > 0)
                 {
@@ -279,6 +279,17 @@ public class EncounterRepository : IEncounterRepository
 
         return summary;
     }
+
+    /// <summary>Typed projection matching the aggregate SELECT aliases.</summary>
+    private sealed record EncounterSummaryProjection(
+        int TotalEncounters,
+        int PendingEncounters,
+        int QueuedEncounters,
+        int SubmittedEncounters,
+        int AcceptedEncounters,
+        int RejectedEncounters,
+        int CorrectionEncounters,
+        decimal TotalChargeAmount);
 
     public async Task<Encounter> CreateAsync(Encounter encounter)
     {
