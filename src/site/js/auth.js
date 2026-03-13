@@ -124,7 +124,7 @@ async function updateNavigation(navSelector = 'nav ul') {
   existingAuthLinks.forEach(link => link.remove());
 
   // Find and remove the static Sign In link (added in HTML)
-  const staticSignIn = nav.querySelector('a[href="/login"], a[href="/login.html"], a[href="../login.html"]');
+  const staticSignIn = nav.querySelector('a[href="/login"], a[href="/login.html"], a[href="../login.html"], a[href^="/.auth/login/"]');
   if (staticSignIn) {
     staticSignIn.closest('li')?.remove();
   }
@@ -155,6 +155,17 @@ async function updateNavigation(navSelector = 'nav ul') {
     });
     logoutItem.appendChild(logoutLink);
     nav.appendChild(logoutItem);
+  } else {
+    // Add Sign In link for unauthenticated users
+    const signInItem = document.createElement('li');
+    signInItem.className = 'auth-link';
+    const signInLink = document.createElement('a');
+    signInLink.href = '/.auth/login/aad?post_login_redirect_uri=%2Fportal%2F';
+    signInLink.style.color = '#00ffff';
+    signInLink.style.fontWeight = 'bold';
+    signInLink.textContent = 'Sign In';
+    signInItem.appendChild(signInLink);
+    nav.appendChild(signInItem);
   }
 }
 

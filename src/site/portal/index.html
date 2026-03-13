@@ -21,7 +21,7 @@
       <li><a href="/platform">Platform</a></li>
       <li><a href="/release-notes">Versions</a></li>
       <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+          <li><a href="/.auth/login/aad?post_login_redirect_uri=%2Fportal%2F" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
     </ul>
   </nav>
 
@@ -229,13 +229,13 @@
           portalContent.style.display = 'block';
         } else {
           // Redirect to login if no user profile
-          window.location.href = '/login.html';
+          window.location.href = '/.auth/login/aad?post_login_redirect_uri=%2Fportal%2F';
         }
       } catch (error) {
         console.error('Portal error:', error);
         loadingMessage.innerHTML = '<p style="color: var(--neon-green);">Error loading portal. Redirecting to login...</p>';
         setTimeout(() => {
-          window.location.href = '/login.html';
+          window.location.href = '/.auth/login/aad?post_login_redirect_uri=%2Fportal%2F';
         }, 2000);
       }
     })();
