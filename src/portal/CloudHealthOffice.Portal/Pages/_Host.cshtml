@@ -1,7 +1,8 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Http
 @namespace CloudHealthOffice.Portal.Pages
-@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@inject IHttpContextAccessor HttpContextAccessor
 
 <!DOCTYPE html>
 <html lang="en">
@@ -9,7 +10,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     @{
-        var path = HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "/";
+        var path = HttpContextAccessor.HttpContext?.Request.Path.Value?.ToLowerInvariant() ?? "/";
         var publicPaths = new[] { "/welcome", "/signup", "/demo", "/apis", "/docs", "/pricing", "/contact-sales", "/legal", "/quickstarts" };
         var isPublicPage = publicPaths.Any(p => path.StartsWith(p));
         var robotsContent = isPublicPage ? "index, follow" : "noindex, nofollow";
