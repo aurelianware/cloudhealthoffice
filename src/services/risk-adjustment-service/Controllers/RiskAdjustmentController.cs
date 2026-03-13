@@ -2,6 +2,10 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using RiskAdjustmentService.Models;
 using RiskAdjustmentService.Repositories;
+using CloudHealthOffice.RiskAdjustmentEngine.Domain;
+using CloudHealthOffice.RiskAdjustmentEngine.Services;
+using EngineRiskAdjustmentEngine = CloudHealthOffice.RiskAdjustmentEngine.Services.RiskAdjustmentEngine;
+using ServiceHccCategory = RiskAdjustmentService.Models.HccCategory;
 
 namespace RiskAdjustmentService.Controllers;
 
@@ -11,13 +15,16 @@ namespace RiskAdjustmentService.Controllers;
 public class RiskAdjustmentController : ControllerBase
 {
     private readonly IRiskScoreRepository _riskScoreRepository;
+    private readonly EngineRiskAdjustmentEngine _riskEngine;
     private readonly ILogger<RiskAdjustmentController> _logger;
 
     public RiskAdjustmentController(
         IRiskScoreRepository riskScoreRepository,
+        EngineRiskAdjustmentEngine riskEngine,
         ILogger<RiskAdjustmentController> logger)
     {
         _riskScoreRepository = riskScoreRepository;
+        _riskEngine = riskEngine;
         _logger = logger;
     }
 
@@ -162,9 +169,9 @@ public class RiskAdjustmentController : ControllerBase
     }
 
     /// <summary>
-    /// Request a score calculation for a member.
-    /// In a full implementation this would trigger the HCC scoring engine;
-    /// here it creates a placeholder score record with Calculated status.
+    /// Calculate a risk score for a member using the HCC scoring engine.
+    /// Provide AgeAsOfPaymentYear, Gender, and DiagnosisCodes in the request body
+    /// to invoke full CMS-HCC v28 / HHS-HCC scoring. The result is persisted and returned.
     /// </summary>
     [HttpPost("scores/calculate")]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status200OK)]
@@ -176,17 +183,79 @@ public class RiskAdjustmentController : ControllerBase
             "Score calculation requested for member {MemberId}, year {Year}, model {Model}",
             SanitizeForLog(request.MemberId), request.MeasurementYear, SanitizeForLog(request.RiskModel));
 
+        var hccModel = MapHccModel(request.RiskModel);
+        var gender   = MapGender(request.Gender);
+        var age      = request.AgeAsOfPaymentYear ?? 0;
+
+        var engineInput = new RiskScoreInput
+        {
+            MemberId           = request.MemberId,
+            SubscriberId       = request.SubscriberId ?? request.MemberId,
+            Model              = hccModel,
+            Segment            = EnrollmentSegment.CommunityNonDual,
+            AgeAsOfPaymentYear = age,
+            Gender             = gender,
+            DiagnosisCodes     = [.. request.DiagnosisCodes]
+        };
+
+        var engineResult = _riskEngine.ComputeRiskScore(engineInput);
+
+        var suppressedSet = engineResult.SuppressedHccs.ToHashSet();
+
+        var hccCategories = engineResult.HccContributions
+            .Select(c => new ServiceHccCategory
+            {
+                CategoryCode         = c.CategoryCode.ToString(),
+                Coefficient          = c.RelativeFactor,
+                SourceDiagnosisCodes = c.SourceDiagnosisCodes,
+                IsSuperseded         = false
+            })
+            .ToList();
+
+        // Include suppressed HCCs (zero coefficient, marked as superseded)
+        foreach (var suppressed in engineResult.SuppressedHccs)
+        {
+            var sourceDx = engineResult.DiagnosisToHccMap
+                .Where(kvp => kvp.Value == suppressed)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            hccCategories.Add(new ServiceHccCategory
+            {
+                CategoryCode         = suppressed.ToString(),
+                Coefficient          = 0m,
+                SourceDiagnosisCodes = sourceDx,
+                IsSuperseded         = true
+            });
+        }
+
+        var diagnoses = engineResult.DiagnosisToHccMap
+            .Select(kvp => new RiskDiagnosis
+            {
+                DiagnosisCode    = kvp.Key,
+                MappedHccCategory = kvp.Value?.ToString()
+            })
+            .ToList();
+
         var existing = await _riskScoreRepository.GetByMemberAndYearAsync(
             request.MemberId, request.MeasurementYear);
 
         if (existing != null)
         {
-            existing.Status = ScoreStatus.Calculated;
-            existing.CalculatedDate = DateTime.UtcNow;
-            existing.LastUpdatedDate = DateTime.UtcNow;
-            existing.RiskModel = request.RiskModel;
-            existing.ModelVersion = request.ModelVersion;
-            existing.LineOfBusiness = request.LineOfBusiness;
+            existing.RiskModel        = request.RiskModel;
+            existing.ModelVersion     = request.ModelVersion;
+            existing.LineOfBusiness   = request.LineOfBusiness;
+            existing.MemberFirstName  = request.MemberFirstName ?? existing.MemberFirstName;
+            existing.MemberLastName   = request.MemberLastName  ?? existing.MemberLastName;
+            existing.Gender           = request.Gender          ?? existing.Gender;
+            existing.DemographicFactor = engineResult.DemographicFactor;
+            existing.HccFactor        = engineResult.TotalHccFactor;
+            existing.RiskScore        = engineResult.FinalRiskScore;
+            existing.HccCategories    = hccCategories;
+            existing.Diagnoses        = diagnoses;
+            existing.Status           = ScoreStatus.Calculated;
+            existing.CalculatedDate   = DateTime.UtcNow;
+            existing.LastUpdatedDate  = DateTime.UtcNow;
 
             var updated = await _riskScoreRepository.UpdateAsync(existing);
             return Ok(updated);
@@ -194,21 +263,42 @@ public class RiskAdjustmentController : ControllerBase
 
         var score = new MemberRiskScore
         {
-            Id = Guid.NewGuid().ToString(),
-            MemberId = request.MemberId,
-            MeasurementYear = request.MeasurementYear,
-            RiskModel = request.RiskModel,
-            ModelVersion = request.ModelVersion,
-            LineOfBusiness = request.LineOfBusiness,
-            Status = ScoreStatus.Calculated,
-            CalculatedDate = DateTime.UtcNow,
-            CreatedDate = DateTime.UtcNow,
-            LastUpdatedDate = DateTime.UtcNow
+            Id                = Guid.NewGuid().ToString(),
+            MemberId          = request.MemberId,
+            MemberFirstName   = request.MemberFirstName,
+            MemberLastName    = request.MemberLastName,
+            Gender            = request.Gender,
+            MeasurementYear   = request.MeasurementYear,
+            RiskModel         = request.RiskModel,
+            ModelVersion      = request.ModelVersion,
+            LineOfBusiness    = request.LineOfBusiness,
+            DemographicFactor = engineResult.DemographicFactor,
+            HccFactor         = engineResult.TotalHccFactor,
+            RiskScore         = engineResult.FinalRiskScore,
+            HccCategories     = hccCategories,
+            Diagnoses         = diagnoses,
+            Status            = ScoreStatus.Calculated,
+            CalculatedDate    = DateTime.UtcNow,
+            CreatedDate       = DateTime.UtcNow,
+            LastUpdatedDate   = DateTime.UtcNow
         };
 
         var created = await _riskScoreRepository.CreateAsync(score);
         return Ok(created);
     }
+
+    private static HccModel MapHccModel(string riskModel) => riskModel?.ToUpperInvariant() switch
+    {
+        "HHS-HCC" or "HHS_HCC" or "HHSHCC" => HccModel.HhsHcc,
+        _ => HccModel.CmsHccV28
+    };
+
+    private static MemberGender MapGender(string? gender) => gender?.ToUpperInvariant() switch
+    {
+        "M" or "MALE"   => MemberGender.Male,
+        "F" or "FEMALE" => MemberGender.Female,
+        _ => MemberGender.Female   // default
+    };
 
     // ── Measurement Year Data ─────────────────────────────────────────
 
