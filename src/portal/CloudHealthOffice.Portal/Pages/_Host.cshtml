@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     @{
-        var path = Context.Request.Path.Value?.ToLowerInvariant() ?? "/";
+        var path = HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "/";
         var publicPaths = new[] { "/welcome", "/signup", "/demo", "/apis", "/docs", "/pricing", "/contact-sales", "/legal" };
         var isPublicPage = publicPaths.Any(p => path.StartsWith(p));
         var robotsContent = isPublicPage ? "index, follow" : "noindex, nofollow";
