@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
+using Task = System.Threading.Tasks.Task;
 using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace FhirService.Formatters;

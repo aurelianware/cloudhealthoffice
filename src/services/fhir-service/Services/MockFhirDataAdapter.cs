@@ -1,5 +1,6 @@
 using Hl7.Fhir.Model;
 using FhirService.Models;
+using Task = System.Threading.Tasks.Task;
 
 namespace FhirService.Services;
 
@@ -121,7 +122,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 2, 10, 0, 0, 0, TimeSpan.Zero) },
             Status = ExplanationOfBenefit.ExplanationOfBenefitStatus.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ExplanationOfBenefit.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-001"),
             Created = "2025-02-10",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -136,19 +137,19 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "99213"),
                     Serviced = new Date("2025-02-05"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 150.00m, Currency = "USD" },
+                    UnitPrice = new Money { Value = 150.00m, Currency = Money.Currencies.USD },
                     Adjudication =
                     [
-                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 150.00m, Currency = "USD" } },
-                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "eligible"), Amount = new Money { Value = 130.00m, Currency = "USD" } },
-                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"), Amount = new Money { Value = 104.00m, Currency = "USD" } }
+                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 150.00m, Currency = Money.Currencies.USD } },
+                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "eligible"), Amount = new Money { Value = 130.00m, Currency = Money.Currencies.USD } },
+                        new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"), Amount = new Money { Value = 104.00m, Currency = Money.Currencies.USD } }
                     ]
                 }
             ],
             Total =
             [
-                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 150.00m, Currency = "USD" } },
-                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"), Amount = new Money { Value = 104.00m, Currency = "USD" } }
+                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 150.00m, Currency = Money.Currencies.USD } },
+                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"), Amount = new Money { Value = 104.00m, Currency = Money.Currencies.USD } }
             ]
         },
         new()
@@ -157,7 +158,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 5, 20, 0, 0, 0, TimeSpan.Zero) },
             Status = ExplanationOfBenefit.ExplanationOfBenefitStatus.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ExplanationOfBenefit.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-001"),
             Created = "2025-05-20",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -172,12 +173,12 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "93000"),
                     Serviced = new Date("2025-05-15"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 210.00m, Currency = "USD" }
+                    UnitPrice = new Money { Value = 210.00m, Currency = Money.Currencies.USD }
                 }
             ],
             Total =
             [
-                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 210.00m, Currency = "USD" } }
+                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 210.00m, Currency = Money.Currencies.USD } }
             ]
         },
         new()
@@ -186,7 +187,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 7, 8, 0, 0, 0, TimeSpan.Zero) },
             Status = ExplanationOfBenefit.ExplanationOfBenefitStatus.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ExplanationOfBenefit.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-002"),
             Created = "2025-07-08",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -201,12 +202,12 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "99214"),
                     Serviced = new Date("2025-07-01"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 195.00m, Currency = "USD" }
+                    UnitPrice = new Money { Value = 195.00m, Currency = Money.Currencies.USD }
                 }
             ],
             Total =
             [
-                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 195.00m, Currency = "USD" } }
+                new() { Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "submitted"), Amount = new Money { Value = 195.00m, Currency = Money.Currencies.USD } }
             ]
         }
     ];
@@ -263,7 +264,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 2, 6, 0, 0, 0, TimeSpan.Zero) },
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = Claim.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-001"),
             Created = "2025-02-06",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -278,7 +279,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "99213"),
                     Serviced = new Date("2025-02-05"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 150.00m, Currency = "USD" }
+                    UnitPrice = new Money { Value = 150.00m, Currency = Money.Currencies.USD }
                 }
             ]
         },
@@ -288,7 +289,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 5, 16, 0, 0, 0, TimeSpan.Zero) },
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = Claim.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-001"),
             Created = "2025-05-16",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -303,7 +304,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "93000"),
                     Serviced = new Date("2025-05-15"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 210.00m, Currency = "USD" }
+                    UnitPrice = new Money { Value = 210.00m, Currency = Money.Currencies.USD }
                 }
             ]
         },
@@ -313,7 +314,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
             Meta = new Meta { LastUpdated = new DateTimeOffset(2025, 7, 2, 0, 0, 0, TimeSpan.Zero) },
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = Claim.Use.Claim,
+            Use = ClaimUseCode.Claim,
             Patient = new ResourceReference("Patient/pat-002"),
             Created = "2025-07-02",
             Insurer = new ResourceReference("Organization/cho-payer-001"),
@@ -328,7 +329,7 @@ public class MockFhirDataAdapter : IFhirDataAdapter
                     ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "99214"),
                     Serviced = new Date("2025-07-01"),
                     Quantity = new Quantity(1, "1"),
-                    UnitPrice = new Money { Value = 195.00m, Currency = "USD" }
+                    UnitPrice = new Money { Value = 195.00m, Currency = Money.Currencies.USD }
                 }
             ]
         }

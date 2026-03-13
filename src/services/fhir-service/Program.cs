@@ -1,10 +1,42 @@
 using FhirService.Formatters;
 using FhirService.Middleware;
 using FhirService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// FHIR data adapter — swap MockFhirDataAdapter for real adapters in Sprint 3
+// ── SMART JWT Bearer authentication ──────────────────────────────────────────
+// Validates tokens issued by smart-auth-service using OIDC discovery.
+// smart-auth-service uses DisableAccessTokenEncryption() so tokens are standard
+// RS256-signed JWTs discoverable via /.well-known/openid-configuration.
+var smartIssuer = builder.Configuration["SmartAuth:Issuer"]
+    ?? throw new InvalidOperationException("SmartAuth:Issuer is required.");
+var smartAudience = builder.Configuration["SmartAuth:Audience"] ?? "fhir-api";
+var requireHttps = builder.Configuration.GetValue<bool>("SmartAuth:RequireHttpsMetadata", true);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // OIDC discovery: fetches signing keys from {Issuer}/.well-known/openid-configuration
+        options.Authority = smartIssuer;
+        options.Audience = smartAudience;
+        options.RequireHttpsMetadata = requireHttps;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = smartIssuer,
+            ValidateAudience = true,
+            ValidAudience = smartAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+
+// Allow scope-based authorization policies
+builder.Services.AddAuthorization();
+
+// ── FHIR data adapter ─────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 
@@ -36,7 +68,17 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+
+// JWT validation must run before SMART scope enforcement
+app.UseAuthentication();
+
+// TenantMiddleware: extracts CHO tenant context from JWT or header
 app.UseMiddleware<TenantMiddleware>();
+
+// SmartScopeEnforcementMiddleware: enforces SMART scopes and patient binding
+// Runs after authentication so User.Claims are populated
+app.UseMiddleware<SmartScopeEnforcementMiddleware>();
+
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
