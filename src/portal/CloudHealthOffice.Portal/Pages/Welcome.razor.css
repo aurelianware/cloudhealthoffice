@@ -1,105 +1,367 @@
-/* Hero Section - Sentinel Branding */
-.hero {
+/* ============================================
+   Welcome Page - Sentinel Aesthetic
+   Matches marketing site sentinel.css style
+   ============================================ */
+
+/* --- Hero Section --- */
+.w-hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #000000;
-    background-image: 
-        radial-gradient(circle at 20% 50%, rgba(0, 255, 255, 0.03) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(255, 0, 255, 0.03) 0%, transparent 50%);
-    color: white;
-    padding: 5rem 2rem;
+    overflow: hidden;
     text-align: center;
-}
-
-.hero-logo {
-    max-width: 250px;
-    margin-bottom: 2rem;
-    filter: drop-shadow(0 0 30px rgba(0, 255, 255, 0.5));
-}
-
-.hero .display-4 {
-    font-weight: bold;
-    margin-bottom: 1.5rem;
-    color: #00ffff;
-    text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
-}
-
-.hero .lead {
-    font-size: 1.5rem;
-    margin-bottom: 2rem;
-    color: #b0b0b0;
-}
-
-/* Feature Icons */
-.feature-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-}
-
-/* Testimonials - Sentinel Branding */
-.testimonial {
-    padding: 2rem;
-    background: #0a0a0a;
-    border: 1px solid #00ffff;
-    border-radius: 8px;
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
-    height: 100%;
-}
-
-.testimonial p:first-child {
-    font-style: italic;
-    color: #b0b0b0;
-    margin-bottom: 1rem;
-}
-
-.testimonial strong {
-    color: #00ff88;
-}
-
-/* Signup Section - Sentinel Branding */
-.signup-section {
-    background: #0a0a0a;
     padding: 4rem 2rem;
 }
 
-.signup-section h2 {
+/* Circuit grid background */
+.w-hero-circuit {
+    position: absolute;
+    inset: 0;
+    background-image:
+        repeating-linear-gradient(90deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 255, 0.03) 2px,
+            rgba(0, 255, 255, 0.03) 3px),
+        repeating-linear-gradient(0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 255, 0.03) 2px,
+            rgba(0, 255, 255, 0.03) 3px);
+    background-size: 50px 50px;
+    animation: w-circuit-pulse 5s ease-in-out infinite;
+    pointer-events: none;
+}
+
+/* Animated scan line */
+.w-hero-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(0, 255, 255, 0.6) 20%,
+        rgba(0, 255, 255, 0.9) 50%,
+        rgba(0, 255, 255, 0.6) 80%,
+        transparent 100%);
+    animation: w-scan-line 9s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.w-hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 900px;
+    width: 100%;
+}
+
+.w-hero-logo {
+    width: 160px;
+    margin-bottom: 2rem;
+    filter: drop-shadow(0 0 24px rgba(0, 255, 255, 0.5));
+    animation: w-float 7s ease-in-out infinite;
+}
+
+.w-hero-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
     color: #00ffff;
-    text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+    border: 1px solid rgba(0, 255, 255, 0.4);
+    background: rgba(0, 255, 255, 0.06);
+    padding: 6px 20px;
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
 }
 
-.signup-section p {
+.w-hero-headline {
+    font-size: clamp(2.4rem, 6vw, 4.5rem);
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 1.1;
+    margin: 0 0 1.5rem;
+    background: linear-gradient(135deg, #00ffff 0%, #ffffff 60%, #00ff88 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+}
+
+.w-hero-sub {
+    font-size: clamp(1rem, 2.5vw, 1.35rem);
     color: #b0b0b0;
+    max-width: 660px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.6;
 }
 
-.signup-section .form-label {
-    font-weight: 600;
+.w-hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+}
+
+/* Override MudButton for primary CTA to look like marketing site */
+.w-btn-primary {
+    background: #00ffff !important;
+    color: #000000 !important;
+    border: 2px solid #00ffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.4) !important;
+}
+
+.w-btn-primary:hover {
+    background: transparent !important;
+    color: #00ffff !important;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.6) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* --- Stats Bar --- */
+.w-stats-bar {
+    background: rgba(0, 15, 15, 0.98);
+    border-top: 1px solid rgba(0, 255, 255, 0.15);
+    border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+    padding: 32px 24px;
+}
+
+.w-stat-link {
+    display: block;
+    text-align: center;
+    padding: 20px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s ease;
+    border-radius: 8px;
+}
+
+.w-stat-link:hover {
+    background: rgba(0, 255, 255, 0.05);
+}
+
+.w-stat-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+}
+
+.w-stat-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #00ffff;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.w-stat-desc {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* --- Section Common --- */
+.w-section {
+    padding: 80px 24px;
+    background: linear-gradient(180deg, #000000 0%, #000d1a 50%, #000000 100%);
+}
+
+.w-section-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.w-section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #00ffff;
+    margin-bottom: 12px;
+}
+
+.w-section-title {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: none;
+    margin-bottom: 48px;
+    letter-spacing: 1px;
+}
+
+/* --- Feature Cards --- */
+.w-feature-card {
+    background: rgba(8, 8, 8, 0.9);
+    border: 1px solid rgba(0, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 36px;
+    height: 100%;
+    transition: all 0.3s ease;
+}
+
+.w-feature-card:hover {
+    border-color: rgba(0, 255, 255, 0.35);
+    transform: translateY(-6px);
+    box-shadow: 0 12px 60px rgba(0, 255, 255, 0.12);
+}
+
+.w-feature-icon {
+    font-size: 2.2rem;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.w-feature-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: none;
+    margin: 0 0 12px;
+}
+
+.w-feature-desc {
+    font-size: 0.9rem;
+    color: rgba(176, 176, 176, 0.85);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* --- Testimonials Section --- */
+.w-testimonials-section {
+    padding: 80px 24px;
+    background: linear-gradient(135deg, rgba(0, 20, 10, 1), rgba(0, 10, 0, 1));
+    border-top: 1px solid rgba(0, 255, 136, 0.2);
+    border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.w-testimonial {
+    background: rgba(8, 8, 8, 0.9);
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 32px;
+    height: 100%;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.08);
+    transition: all 0.3s ease;
+}
+
+.w-testimonial:hover {
+    border-color: rgba(0, 255, 136, 0.4);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
+}
+
+.w-testimonial-quote {
+    font-style: italic;
     color: #b0b0b0;
+    font-size: 0.98rem;
+    line-height: 1.7;
+    margin-bottom: 16px;
 }
 
-.signup-section .form-control,
-.signup-section .form-select {
-    background: #0f0f0f;
-    border: 1px solid #00ffff;
+.w-testimonial-author {
+    font-weight: 700;
+    color: #00ff88;
+    font-size: 0.88rem;
+    margin: 0;
+}
+
+/* --- CTA Section --- */
+.w-cta-section {
+    padding: 100px 24px;
+    background: linear-gradient(135deg, #000d1a 0%, #000000 50%, #000d0d 100%);
+}
+
+.w-cta-headline {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 900;
     color: #ffffff;
+    text-shadow: none;
+    margin-bottom: 16px;
+    letter-spacing: 0;
 }
 
-.signup-section .form-control:focus,
-.signup-section .form-select:focus {
-    background: #0f0f0f;
-    border-color: #00ff88;
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+.w-cta-accent {
+    color: #00ffff;
+    text-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+}
+
+.w-cta-sub {
+    color: rgba(176, 176, 176, 0.85);
+    font-size: 1.1rem;
+    margin-bottom: 36px;
+}
+
+.w-cta-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 48px;
+}
+
+.w-cta-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    justify-content: center;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.w-cta-links a {
+    color: #00ffff;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.w-cta-links a:hover {
     color: #ffffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
 }
 
-/* Responsive adjustments */
+/* --- Keyframe Animations --- */
+@keyframes w-circuit-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+@keyframes w-scan-line {
+    0% { top: -4px; }
+    100% { top: 110%; }
+}
+
+@keyframes w-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+}
+
+/* --- Responsive --- */
 @media (max-width: 768px) {
-    .hero {
-        padding: 3rem 1rem;
+    .w-hero {
+        padding: 3rem 1.5rem;
+        min-height: 0;
     }
-    
-    .hero .display-4 {
-        font-size: 2rem;
+
+    .w-hero-logo {
+        width: 120px;
     }
-    
-    .hero .lead {
-        font-size: 1.2rem;
+
+    .w-hero-cta {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .w-section,
+    .w-testimonials-section,
+    .w-cta-section {
+        padding: 60px 20px;
+    }
+
+    .w-cta-links {
+        gap: 20px;
     }
 }
