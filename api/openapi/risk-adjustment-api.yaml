@@ -44,9 +44,11 @@ servers:
   - url: https://sandbox.cloudhealthoffice.com/risk-adjustment/v1
     description: Sandbox (test data)
 
-security:
-  - bearerAuth: []
-  - tenantHeader: []
+security: []
+  # Note: JWT bearer auth (bearerAuth) and tenant header (tenantHeader) are required for
+  # production deployments. The current implementation enforces tenant isolation via the
+  # X-Tenant-Id header (TenantMiddleware) but does not yet validate bearer tokens.
+  # Configure authentication middleware before deploying to a production environment.
 
 tags:
   - name: Member Scores

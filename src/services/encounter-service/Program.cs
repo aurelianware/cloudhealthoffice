@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using System.Text.Json.Serialization;
 using EncounterService;
 using EncounterService.Middleware;
 using EncounterService.Repositories;
@@ -7,8 +8,12 @@ using EncounterService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
+// Add services to the container — serialize enums as strings to match OpenAPI spec
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -20,6 +25,7 @@ builder.Services.AddSwaggerGen(c =>
                      "Handles encounter submission, batch dispatch, 837 generation/download, " +
                      "payer acknowledgment tracking, and correction/resubmission workflows."
     });
+    c.UseInlineDefinitionsForEnums();
 });
 
 // Database Configuration
@@ -55,9 +61,15 @@ else
             throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
         }
 
+        var serializerOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters = { new JsonStringEnumConverter() }
+        };
         var options = new CosmosClientOptions
         {
-            Serializer = new CosmosSystemTextJsonSerializer()
+            Serializer = new CosmosSystemTextJsonSerializer(serializerOptions)
         };
         return new CosmosClient(endpoint, key, options);
     });

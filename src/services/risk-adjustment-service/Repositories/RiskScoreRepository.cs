@@ -241,7 +241,7 @@ public class RiskScoreRepository : IRiskScoreRepository
         if (lineOfBusiness.HasValue)
             queryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
+        var iterator = _container.GetItemQueryIterator<MeasurementYearProjection>(queryDef);
         var summary = new MeasurementYearSummary
         {
             MeasurementYear = measurementYear,
@@ -254,17 +254,26 @@ public class RiskScoreRepository : IRiskScoreRepository
             var result = response.FirstOrDefault();
             if (result != null)
             {
-                summary.TotalMembers = result.TotalMembers ?? 0;
-                summary.ScoredMembers = result.ScoredMembers ?? 0;
-                summary.SubmittedMembers = result.SubmittedMembers ?? 0;
-                summary.AverageRiskScore = result.AverageRiskScore ?? 0;
-                summary.MinRiskScore = result.MinRiskScore ?? 0;
-                summary.MaxRiskScore = result.MaxRiskScore ?? 0;
+                summary.TotalMembers = result.TotalMembers;
+                summary.ScoredMembers = result.ScoredMembers;
+                summary.SubmittedMembers = result.SubmittedMembers;
+                summary.AverageRiskScore = result.AverageRiskScore;
+                summary.MinRiskScore = result.MinRiskScore;
+                summary.MaxRiskScore = result.MaxRiskScore;
             }
         }
 
         return summary;
     }
+
+    /// <summary>Typed projection matching the aggregate SELECT aliases.</summary>
+    private sealed record MeasurementYearProjection(
+        int TotalMembers,
+        int ScoredMembers,
+        int SubmittedMembers,
+        decimal AverageRiskScore,
+        decimal MinRiskScore,
+        decimal MaxRiskScore);
 
     public async Task<MemberRiskScore> CreateAsync(MemberRiskScore score)
     {
