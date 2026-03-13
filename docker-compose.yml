@@ -1,16 +1,15 @@
-version: "3.9"
-
 # Local development stack for Cloud Health Office
-# Starts MongoDB + Redis infrastructure, then the two core adjudication services.
+# Starts MongoDB + Redis infrastructure + core adjudication and payment services.
 #
 # Usage:
 #   docker compose up -d
 #
 # Service URLs:
-#   Claims service:      http://localhost:5001  (Swagger at http://localhost:5001/swagger)
+#   Claims service:       http://localhost:5001  (Swagger at http://localhost:5001/swagger)
 #   Benefit-plan service: http://localhost:5002  (Swagger at http://localhost:5002/swagger)
-#   MongoDB:             localhost:27017
-#   Redis:               localhost:6379
+#   Payment service:      http://localhost:5003  (Swagger at http://localhost:5003/swagger)
+#   MongoDB:              localhost:27017
+#   Redis:                localhost:6379
 
 services:
   mongo:
@@ -56,8 +55,8 @@ services:
 
   benefit-plan-service:
     build:
-      context: src/services/benefit-plan-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/services/benefit-plan-service/Dockerfile
     ports:
       - "5002:8080"
     environment:
@@ -70,6 +69,23 @@ services:
       mongo:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: src/services/payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=PaymentDB
+      - ClaimsService__BaseUrl=http://claims-service:8080
+    depends_on:
+      mongo:
         condition: service_healthy
       claims-service:
         condition: service_healthy
