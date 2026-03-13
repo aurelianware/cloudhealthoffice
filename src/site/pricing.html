@@ -1,539 +1,873 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Per Member Per Month Pricing for Health Plans — Cloud Health Office</title>
-  <meta name="description" content="Transparent PMPM pricing for healthcare payers. Full platform starting at $0.75 per member per month. CMS-0057-F compliance, EDI, FHIR R4 — predictable cost that scales with your membership." />
-  <meta name="keywords" content="healthcare payer PMPM pricing, per member per month health plan, CMS-0057-F compliance cost, FHIR API pricing health plan, payer integration platform cost, Medicaid MCO platform pricing" />
-  <link rel="canonical" href="https://cloudhealthoffice.com/pricing" />
-
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Cloud Health Office" />
-  <meta property="og:url" content="https://cloudhealthoffice.com/pricing" />
-  <meta property="og:title" content="Per Member Per Month Pricing — Cloud Health Office" />
-  <meta property="og:description" content="Transparent PMPM pricing for healthcare payers. Starting at $0.75/PMPM." />
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
-
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Per Member Per Month Pricing — Cloud Health Office" />
-  <meta name="twitter:description" content="Transparent PMPM pricing for healthcare payers. Starting at $0.75/PMPM." />
-
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "Per Member Per Month Pricing for Health Plans",
-    "url": "https://cloudhealthoffice.com/pricing",
-    "mainEntity": {
-      "@type": "Product",
-      "name": "Cloud Health Office",
-      "brand": { "@type": "Brand", "name": "Cloud Health Office" },
-      "offers": [
-        { "@type": "Offer", "name": "Growth", "description": "$0.75 PMPM, up to 50K members", "availability": "https://schema.org/InStock" },
-        { "@type": "Offer", "name": "Scale", "description": "$0.45 PMPM, up to 250K members", "availability": "https://schema.org/InStock" },
-        { "@type": "Offer", "name": "Enterprise", "description": "Custom PMPM, 250K+ members", "availability": "https://schema.org/InStock" }
-      ]
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Health Office — Pricing</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0a0f1a;
+    --bg-secondary: #111827;
+    --bg-card: #161d2e;
+    --bg-card-hover: #1c2540;
+    --bg-accent: #0d2847;
+    --text-primary: #f0f4f8;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-blue: #38bdf8;
+    --accent-teal: #2dd4bf;
+    --accent-indigo: #818cf8;
+    --accent-gold: #fbbf24;
+    --border: rgba(148, 163, 184, 0.12);
+    --border-hover: rgba(56, 189, 248, 0.3);
+    --gradient-blue: linear-gradient(135deg, #38bdf8, #818cf8);
+    --gradient-teal: linear-gradient(135deg, #2dd4bf, #38bdf8);
+    --gradient-gold: linear-gradient(135deg, #fbbf24, #f97316);
+    --shadow-card: 0 4px 32px rgba(0,0,0,0.3);
+    --shadow-glow-blue: 0 0 40px rgba(56, 189, 248, 0.15);
+    --shadow-glow-teal: 0 0 40px rgba(45, 212, 191, 0.15);
+    --shadow-glow-gold: 0 0 40px rgba(251, 191, 36, 0.15);
+    --radius: 16px;
+    --radius-sm: 8px;
   }
-  </script>
 
-  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
 
-  <link rel="stylesheet" href="css/sentinel.css" />
-  <script src="js/auth.js"></script>
-  <script src="js/mobile-nav.js"></script>
-  <style>
-    body { padding:0; max-width:none; margin:0; }
-    main { max-width:1200px; margin:0 auto; padding:40px 20px; }
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%; left: -20%;
+    width: 80%; height: 80%;
+    background: radial-gradient(ellipse, rgba(56, 189, 248, 0.04) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -30%; right: -20%;
+    width: 70%; height: 70%;
+    background: radial-gradient(ellipse, rgba(45, 212, 191, 0.03) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-```
-.pricing-hero { text-align:center; margin-bottom:60px; padding:60px 20px; }
-.pricing-hero h1 { margin-bottom:20px; }
-.subtitle { font-size:1.4rem; max-width:800px; margin:0 auto 30px; color:rgba(255,255,255,0.85); }
+  .page-wrapper { position: relative; z-index: 1; }
 
-.tier-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; margin:0 auto 80px; }
-.tier-card { background:#0a0a0a; border:2px solid #333; border-radius:12px; padding:32px 24px; display:flex; flex-direction:column; transition:border-color 0.3s; }
-.tier-card:hover { border-color:#00ffff; }
-.tier-card.featured { border-color:#00ffff; position:relative; }
-.tier-card.featured::before {
-  content:'MOST POPULAR'; position:absolute; top:-14px; left:50%; transform:translateX(-50%);
-  background:#00ffff; color:#000; padding:4px 16px; border-radius:20px;
-  font-weight:bold; font-size:0.8rem; letter-spacing:1px;
-}
-.tier-name { font-size:1.4rem; color:#00ffff; margin-bottom:8px; text-shadow:none; }
-.tier-price { font-size:2.8rem; font-weight:bold; color:#fff; margin:12px 0 4px; line-height:1.1; }
-.tier-price .unit { font-size:1rem; color:rgba(255,255,255,0.6); font-weight:normal; }
-.tier-members { font-size:0.95rem; color:rgba(255,255,255,0.5); margin-bottom:24px; }
-.tier-example { font-size:0.85rem; color:#00ff88; margin-bottom:16px; font-style:italic; }
-.tier-features { list-style:none; padding:0; margin:0 0 24px; flex:1; }
-.tier-features li { padding:7px 0; padding-left:24px; position:relative; font-size:0.93rem; }
-.tier-features li::before { content:'✓'; position:absolute; left:0; color:#00ff88; font-weight:bold; }
-.tier-cta { margin-top:auto; }
-.tier-cta a {
-  display:block; text-align:center; padding:14px 20px; border-radius:8px;
-  text-decoration:none; font-weight:bold; font-size:1rem; transition:all 0.3s;
-}
-.btn-outline { border:2px solid #00ffff; color:#00ffff; background:transparent; }
-.btn-outline:hover { background:rgba(0,255,255,0.1); }
-.btn-primary { border:2px solid #00ffff; background:#00ffff; color:#000; }
-.btn-primary:hover { background:#00e6e6; box-shadow:0 0 20px rgba(0,255,255,0.4); }
-.btn-green { border:2px solid #00ff88; background:#00ff88; color:#000; }
-.btn-green:hover { background:#00e67a; box-shadow:0 0 20px rgba(0,255,136,0.4); }
+  /* NAV */
+  nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 48px;
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--text-muted); font-weight: 400; }
+  nav a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--text-primary); }
+  .nav-links { display: flex; gap: 32px; align-items: center; }
+  .nav-cta {
+    background: var(--gradient-blue);
+    color: var(--bg-primary) !important;
+    padding: 10px 24px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+  }
 
-/* Calculator */
-.calculator { background:#0a0a0a; border:2px solid #00ffff; border-radius:12px; padding:48px; margin:0 auto 80px; max-width:800px; }
-.calculator h2 { text-align:center; margin-top:0; }
-.calc-row { display:flex; align-items:center; justify-content:center; gap:16px; margin:32px 0 24px; flex-wrap:wrap; }
-.calc-row label { font-size:1.1rem; color:rgba(255,255,255,0.8); }
-.calc-row input[type=range] { width:300px; accent-color:#00ffff; }
-.calc-row .member-display {
-  background:#111; border:2px solid #00ffff; border-radius:8px; padding:10px 16px;
-  color:#00ffff; font-size:1.4rem; font-weight:bold; min-width:140px; text-align:center;
-  font-family:inherit;
-}
-.calc-result { text-align:center; margin-top:16px; }
-.calc-monthly { font-size:2.8rem; font-weight:bold; color:#00ffff; text-shadow:0 0 20px rgba(0,255,255,0.6); }
-.calc-annual { font-size:1.1rem; color:rgba(255,255,255,0.6); margin-top:8px; }
-.calc-rate { font-size:1rem; color:#00ff88; margin-top:8px; }
-.calc-comparison { margin-top:20px; padding:16px; background:rgba(0,255,136,0.08); border:1px solid rgba(0,255,136,0.3); border-radius:8px; }
-.calc-comparison .savings { font-size:1.3rem; font-weight:bold; color:#00ff88; }
-.calc-comparison .context { font-size:0.9rem; color:rgba(255,255,255,0.6); margin-top:4px; }
+  /* HERO */
+  .hero {
+    text-align: center;
+    padding: 80px 48px 48px;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .hero-badge {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent-teal);
+    border: 1px solid rgba(45, 212, 191, 0.3);
+    padding: 6px 16px;
+    border-radius: 999px;
+    margin-bottom: 28px;
+  }
+  .hero h1 {
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, var(--text-primary) 40%, var(--accent-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto 40px;
+    line-height: 1.7;
+  }
 
-/* Adoption path */
-.adoption-section { margin:0 auto 80px; max-width:900px; }
-.adoption-section h2 { text-align:center; margin-bottom:16px; }
-.adoption-subtitle { text-align:center; color:rgba(255,255,255,0.6); margin-bottom:40px; font-size:1.1rem; }
-.adoption-step { background:#0a0a0a; border:1px solid #222; border-radius:12px; padding:28px 32px; margin-bottom:16px; display:flex; gap:24px; align-items:flex-start; }
-.adoption-step:hover { border-color:#00ffff; }
-.step-number { color:#00ffff; font-size:2rem; font-weight:bold; min-width:48px; line-height:1; }
-.step-content h4 { color:#fff; margin:0 0 8px; font-size:1.05rem; text-shadow:none; }
-.step-content p { color:rgba(255,255,255,0.7); font-size:0.93rem; margin:0; line-height:1.6; }
+  /* TOGGLE */
+  .pricing-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 56px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px;
+    display: inline-flex;
+  }
+  .toggle-wrap { display: flex; justify-content: center; margin-bottom: 56px; }
+  .toggle-btn {
+    padding: 10px 28px;
+    border: none;
+    border-radius: 999px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .toggle-btn.active {
+    background: var(--gradient-blue);
+    color: var(--bg-primary);
+    font-weight: 600;
+  }
+  .toggle-btn:not(.active):hover { color: var(--text-primary); }
+  .save-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-teal);
+    margin-left: 6px;
+  }
 
-/* What's included */
-.included-section { margin:0 auto 80px; }
-.included-section h2 { text-align:center; margin-bottom:16px; }
-.included-subtitle { text-align:center; color:rgba(255,255,255,0.6); margin-bottom:40px; font-size:1.1rem; }
-.included-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; }
-.included-card { background:#0a0a0a; border:1px solid #222; border-radius:12px; padding:28px; }
-.included-card h4 { color:#00ffff; margin:0 0 12px; font-size:1.1rem; text-shadow:none; }
-.included-card p { color:rgba(255,255,255,0.7); font-size:0.93rem; margin:0; line-height:1.6; }
+  /* CARDS */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 48px;
+    align-items: start;
+  }
 
-/* Comparison */
-.comparison { margin:0 auto 80px; }
-.comparison h2 { text-align:center; margin-bottom:40px; }
-.compare-table { width:100%; border-collapse:collapse; background:#0a0a0a; border-radius:12px; overflow:hidden; border:2px solid #222; }
-.compare-table th { background:#111; padding:16px 20px; text-align:left; color:#00ffff; font-size:0.95rem; border-bottom:2px solid #333; }
-.compare-table td { padding:14px 20px; border-bottom:1px solid #1a1a1a; font-size:0.93rem; color:rgba(255,255,255,0.8); }
-.compare-table tr:last-child td { border-bottom:none; }
-.compare-table .cho-col { color:#00ff88; font-weight:bold; }
-.compare-table .legacy-col { color:#ff6666; }
+  .pricing-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 36px;
+    position: relative;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .pricing-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    transform: translateY(-4px);
+  }
+  .pricing-card.featured {
+    border-color: rgba(56, 189, 248, 0.35);
+    box-shadow: var(--shadow-glow-blue);
+  }
+  .pricing-card.featured::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 24px; right: 24px;
+    height: 2px;
+    background: var(--gradient-blue);
+    border-radius: 0 0 2px 2px;
+  }
 
-/* FAQ */
-.faq { margin:0 auto 80px; max-width:800px; }
-.faq h2 { text-align:center; margin-bottom:40px; }
-.faq-item { border-bottom:1px solid #222; padding:24px 0; }
-.faq-q { font-size:1.05rem; font-weight:bold; color:#fff; margin-bottom:10px; }
-.faq-a { color:rgba(255,255,255,0.7); line-height:1.7; font-size:0.95rem; }
+  .card-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+  .badge-starter { color: var(--accent-teal); border: 1px solid rgba(45, 212, 191, 0.3); }
+  .badge-pro { color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); }
+  .badge-enterprise { color: var(--accent-gold); border: 1px solid rgba(251, 191, 36, 0.3); }
 
-/* Self-hosted note */
-.self-hosted-note { margin:0 auto 80px; max-width:800px; background:#0a0a0a; border:1px solid #222; border-radius:12px; padding:32px; text-align:center; }
-.self-hosted-note h3 { color:#fff; margin:0 0 12px; text-shadow:none; }
-.self-hosted-note p { color:rgba(255,255,255,0.6); font-size:0.95rem; margin:0 0 16px; line-height:1.6; }
-.self-hosted-note a { color:#00ffff; }
+  .card-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .card-desc {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-bottom: 28px;
+    line-height: 1.6;
+  }
 
-/* CTA */
-.cta-section {
-  text-align:center; padding:60px 40px; margin:0 auto 40px;
-  background:linear-gradient(135deg, #001a1a 0%, #0a0a0a 100%);
-  border:2px solid #00ffff; border-radius:12px;
-}
-.cta-section h2 { margin-top:0; }
-.cta-buttons { display:flex; gap:16px; justify-content:center; margin-top:32px; flex-wrap:wrap; }
-.cta-buttons a { padding:16px 32px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:1.1rem; transition:all 0.3s; }
+  .price-block { margin-bottom: 8px; }
+  .platform-price {
+    font-family: 'Space Mono', monospace;
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .price-period {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .pmpm-price {
+    font-family: 'Space Mono', monospace;
+    font-size: 15px;
+    color: var(--accent-teal);
+    margin-top: 8px;
+    margin-bottom: 24px;
+  }
+  .pmpm-price span { color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-size: 13px; }
 
-@media (max-width:1000px) { .tier-grid { grid-template-columns:1fr; max-width:480px; margin-left:auto; margin-right:auto; } .included-grid { grid-template-columns:repeat(2, 1fr); } }
-@media (max-width:600px) { .included-grid { grid-template-columns:1fr; } .compare-table { font-size:0.85rem; } .calc-monthly { font-size:2.2rem; } .adoption-step { flex-direction:column; gap:12px; } }
-```
+  .annual-price {
+    display: none;
+  }
+  .annual-price .platform-price { color: var(--accent-teal); }
 
-  </style>
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  .feature-list { list-style: none; margin-bottom: 24px; }
+  .feature-list li {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 7px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.5;
+  }
+  .feature-list li::before {
+    content: '→';
+    color: var(--accent-teal);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .cta-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    text-align: center;
+    text-decoration: none;
+    margin-top: 8px;
+  }
+  .cta-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+  .cta-outline:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .cta-primary {
+    background: var(--gradient-blue);
+    color: var(--bg-primary);
+    border: none;
+  }
+  .cta-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .cta-gold {
+    background: var(--gradient-gold);
+    color: var(--bg-primary);
+    border: none;
+  }
+  .cta-gold:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  /* CALCULATOR */
+  .calculator-section {
+    max-width: 800px;
+    margin: 80px auto 0;
+    padding: 0 48px;
+  }
+  .calculator-section h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .calculator-section > p {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 40px;
+  }
+  .calculator {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+  }
+  .calc-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .calc-field label {
+    display: block;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .calc-field select,
+  .calc-field input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .calc-field select:focus,
+  .calc-field input:focus {
+    border-color: var(--accent-blue);
+  }
+  .calc-field select { cursor: pointer; -webkit-appearance: none; appearance: none; }
+  .calc-field select option { background: var(--bg-secondary); }
+
+  .calc-results {
+    background: var(--bg-accent);
+    border-radius: var(--radius-sm);
+    padding: 28px;
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .calc-result-item { text-align: center; }
+  .calc-result-label {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .calc-result-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  .calc-result-value.blue { color: var(--accent-blue); }
+  .calc-result-value.teal { color: var(--accent-teal); }
+  .calc-result-value.gold { color: var(--accent-gold); }
+  .calc-result-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ADAPTER SECTION */
+  .adapters-section {
+    max-width: 1200px;
+    margin: 80px auto 0;
+    padding: 0 48px;
+  }
+  .adapters-section h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .adapters-section > p {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    margin-bottom: 40px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .adapter-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .adapter-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 24px;
+    transition: all 0.25s;
+  }
+  .adapter-card:hover { border-color: var(--border-hover); }
+  .adapter-name {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
+  .adapter-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .adapter-status {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 12px;
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .status-live { color: var(--accent-teal); border: 1px solid rgba(45, 212, 191, 0.3); }
+  .status-q1 { color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.3); }
+  .status-soon { color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* FAQ */
+  .faq-section {
+    max-width: 760px;
+    margin: 80px auto 0;
+    padding: 0 48px 100px;
+  }
+  .faq-section h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .faq-item {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  .faq-q {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .faq-q::after {
+    content: '+';
+    font-family: 'Space Mono', monospace;
+    color: var(--accent-blue);
+    font-size: 18px;
+  }
+  .faq-a {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    padding-right: 32px;
+  }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 40px 48px;
+    border-top: 1px solid var(--border);
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .footer p {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .footer a { color: var(--accent-blue); text-decoration: none; }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; max-width: 440px; }
+    .adapter-grid { grid-template-columns: 1fr; }
+    .calc-row { grid-template-columns: 1fr; }
+    .calc-results { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 36px; }
+    nav { padding: 20px 24px; }
+    .hero, .pricing-grid, .calculator-section, .adapters-section, .faq-section { padding-left: 24px; padding-right: 24px; }
+  }
+</style>
 </head>
 <body>
-  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+<div class="page-wrapper">
 
-  <nav style="margin-bottom:40px;">
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li><a href="/">Home</a></li>
-          <li><a href="/solutions-payers">Solutions</a></li>
-          <li><a href="/pricing" style="color:#00ffff;" aria-current="page">Pricing</a></li>
-          <li><a href="/platform">Platform</a></li>
-          <li><a href="/release-notes">Versions</a></li>
-          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
-        </ul>
+<nav>
+  <div class="logo">CloudHealthOffice <span>by Aurelianware</span></div>
+  <div class="nav-links">
+    <a href="#">Platform</a>
+    <a href="#">Documentation</a>
+    <a href="#">API Reference</a>
+    <a href="#" class="nav-cta">Get Started</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">CMS-0057-F Compliant by January 2027</div>
+  <h1>One platform. Any backend. Full compliance.</h1>
+  <p>Cloud Health Office delivers all four required CMS-0057-F FHIR APIs as a vendor-neutral compliance layer — or as your complete core admin system. You choose the deployment mode. We handle the interoperability.</p>
+</section>
+
+<div class="toggle-wrap">
+  <div class="pricing-toggle">
+    <button class="toggle-btn active" onclick="togglePricing('monthly')">Monthly</button>
+    <button class="toggle-btn" onclick="togglePricing('annual')">Annual <span class="save-badge">Save 15%</span></button>
+  </div>
+</div>
+
+<div class="pricing-grid">
+  <!-- STARTER -->
+  <div class="pricing-card">
+    <div class="card-badge badge-starter">Starter</div>
+    <div class="card-title">Standalone</div>
+    <div class="card-desc">CHO as your core admin system with built-in CMS-0057-F compliance. For new plans and startups.</div>
+
+    <div class="price-block monthly-price">
+      <div class="platform-price">$999<span class="price-period">/mo</span></div>
+    </div>
+    <div class="price-block annual-price">
+      <div class="platform-price">$849<span class="price-period">/mo</span></div>
+    </div>
+    <div class="pmpm-price">+ $0.75 PMPM <span>up to 25K members</span></div>
+
+    <hr class="divider">
+
+    <div class="section-label">Deployment</div>
+    <ul class="feature-list">
+      <li>CHO native engines (adjudication, benefits, COB, enrollment)</li>
+      <li>All four CMS-0057-F FHIR APIs included</li>
+      <li>SMART on FHIR authorization</li>
+      <li>835, 271, 278 EDI generation</li>
+    </ul>
+
+    <div class="section-label">Adapters</div>
+    <ul class="feature-list">
+      <li>ChoNativeAdapter included</li>
+    </ul>
+
+    <div class="section-label">Support</div>
+    <ul class="feature-list">
+      <li>Community support + documentation</li>
+      <li>API reference at api.cloudhealthoffice.com</li>
+    </ul>
+
+    <a href="#" class="cta-btn cta-outline">Start Free Trial</a>
+  </div>
+
+  <!-- PROFESSIONAL -->
+  <div class="pricing-card featured">
+    <div class="card-badge badge-pro">Professional</div>
+    <div class="card-title">Single System</div>
+    <div class="card-desc">CHO as a compliance layer alongside your existing CAPS. Connect one core admin backend.</div>
+
+    <div class="price-block monthly-price">
+      <div class="platform-price">$2,999<span class="price-period">/mo</span></div>
+    </div>
+    <div class="price-block annual-price">
+      <div class="platform-price">$2,549<span class="price-period">/mo</span></div>
+    </div>
+    <div class="pmpm-price">+ $0.50 PMPM <span>25K–150K members</span></div>
+
+    <hr class="divider">
+
+    <div class="section-label">Deployment</div>
+    <ul class="feature-list">
+      <li>Everything in Starter</li>
+      <li>One core admin adapter of your choice</li>
+      <li>Augmentation mode — CHO reads from your CAPS</li>
+      <li>X12 278 ↔ FHIR PAS bidirectional bridge</li>
+    </ul>
+
+    <div class="section-label">Adapters — choose one</div>
+    <ul class="feature-list">
+      <li>QNXT (Open Access, Connect, direct DB)</li>
+      <li>Facets</li>
+      <li>HealthEdge (HealthRules Payer)</li>
+      <li>Generic DB/API adapter</li>
+    </ul>
+
+    <div class="section-label">Support</div>
+    <ul class="feature-list">
+      <li>Business-hours email + Slack support</li>
+      <li>Adapter configuration assistance</li>
+      <li>Quarterly compliance review</li>
+    </ul>
+
+    <a href="#" class="cta-btn cta-primary">Get Started</a>
+  </div>
+
+  <!-- ENTERPRISE -->
+  <div class="pricing-card">
+    <div class="card-badge badge-enterprise">Enterprise</div>
+    <div class="card-title">Multi-System</div>
+    <div class="card-desc">Full adapter library, custom integrations, and dedicated onboarding for complex environments.</div>
+
+    <div class="price-block monthly-price">
+      <div class="platform-price">$7,999<span class="price-period">/mo</span></div>
+    </div>
+    <div class="price-block annual-price">
+      <div class="platform-price">$6,799<span class="price-period">/mo</span></div>
+    </div>
+    <div class="pmpm-price">+ $0.25 PMPM <span>150K+ members, volume discount</span></div>
+
+    <hr class="divider">
+
+    <div class="section-label">Deployment</div>
+    <ul class="feature-list">
+      <li>Everything in Professional</li>
+      <li>All available adapters included</li>
+      <li>Custom adapter development</li>
+      <li>Multi-CAPS environments supported</li>
+      <li>Payer-to-Payer orchestration</li>
+    </ul>
+
+    <div class="section-label">Adapters — all included</div>
+    <ul class="feature-list">
+      <li>QNXT, Facets, HealthEdge, Amisys, Jiva</li>
+      <li>Generic DB + Generic REST adapters</li>
+      <li>Custom adapter for proprietary systems</li>
+    </ul>
+
+    <div class="section-label">Support</div>
+    <ul class="feature-list">
+      <li>Dedicated solution architect</li>
+      <li>24/7 support with SLA</li>
+      <li>On-site onboarding available</li>
+      <li>Conformance testing assistance</li>
+    </ul>
+
+    <a href="#" class="cta-btn cta-gold">Contact Sales</a>
+  </div>
+</div>
+
+<!-- COST CALCULATOR -->
+<section class="calculator-section">
+  <h2>Estimate Your Cost</h2>
+  <p>Select your deployment mode and member count to see your total monthly investment.</p>
+
+  <div class="calculator">
+    <div class="calc-row">
+      <div class="calc-field">
+        <label>Deployment Mode</label>
+        <select id="calcTier" onchange="calculateCost()">
+          <option value="starter">Starter — Standalone ($999/mo)</option>
+          <option value="professional" selected>Professional — Single System ($2,999/mo)</option>
+          <option value="enterprise">Enterprise — Multi-System ($7,999/mo)</option>
+        </select>
+      </div>
+      <div class="calc-field">
+        <label>Total Members</label>
+        <input type="number" id="calcMembers" value="75000" min="1000" step="1000" onchange="calculateCost()" oninput="calculateCost()">
       </div>
     </div>
-  </nav>
-  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
 
-  <main id="main-content">
-
-```
-<!-- ===== HERO ===== -->
-<div class="pricing-hero">
-  <h1>Pay Per Member. Not Per Feature.</h1>
-  <p class="subtitle">
-    Simple per-member-per-month pricing that scales with your health plan.
-    No transaction caps. No feature gates. Every tier includes the full platform.
-  </p>
-</div>
-
-<!-- ===== TIER CARDS ===== -->
-<div class="tier-grid">
-
-  <div class="tier-card">
-    <div class="tier-name">Growth</div>
-    <div class="tier-price">$0.75 <span class="unit">PMPM</span></div>
-    <div class="tier-members">Up to 50,000 members</div>
-    <div class="tier-example">Example: 20K members = $15,000/mo</div>
-    <ul class="tier-features">
-      <li>Full platform &mdash; all 17 services + 6 engines</li>
-      <li>Managed SaaS hosting (Azure)</li>
-      <li>Single clearinghouse connector</li>
-      <li>CMS-0057-F compliance (all 5 FHIR APIs)</li>
-      <li>Portal access</li>
-      <li>BAA included</li>
-      <li>Email support (4hr SLA)</li>
-      <li>99.5% uptime SLA</li>
-      <li>30-day free trial</li>
-    </ul>
-    <div class="tier-cta">
-      <a href="https://portal.cloudhealthoffice.com/signup" class="btn-outline" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+    <div class="calc-results">
+      <div class="calc-result-item">
+        <div class="calc-result-label">Platform Fee</div>
+        <div class="calc-result-value blue" id="resultPlatform">$2,999</div>
+        <div class="calc-result-sub">per month</div>
+      </div>
+      <div class="calc-result-item">
+        <div class="calc-result-label">PMPM Cost</div>
+        <div class="calc-result-value teal" id="resultPmpm">$37,500</div>
+        <div class="calc-result-sub" id="resultPmpmRate">@ $0.50 PMPM</div>
+      </div>
+      <div class="calc-result-item">
+        <div class="calc-result-label">Total Monthly</div>
+        <div class="calc-result-value gold" id="resultTotal">$40,499</div>
+        <div class="calc-result-sub" id="resultAnnual">$485,988/year</div>
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="tier-card featured">
-    <div class="tier-name">Scale</div>
-    <div class="tier-price">$0.45 <span class="unit">PMPM</span></div>
-    <div class="tier-members">Up to 250,000 members</div>
-    <div class="tier-example">Example: 75K members = $33,750/mo</div>
-    <ul class="tier-features">
-      <li>Everything in Growth</li>
-      <li>Multi-clearinghouse failover</li>
-      <li>Prior auth automation (278/CDS Hooks)</li>
-      <li>Medical attachments (275/RFAI)</li>
-      <li>Dedicated onboarding engineer</li>
-      <li>Slack + phone support (1hr SLA)</li>
-      <li>99.9% uptime SLA</li>
-      <li>Custom workflow configuration</li>
-    </ul>
-    <div class="tier-cta">
-      <a href="https://portal.cloudhealthoffice.com/signup" class="btn-primary" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
+<!-- ADAPTERS -->
+<section class="adapters-section">
+  <h2>Core Admin Adapters</h2>
+  <p>CHO connects to your existing system through pluggable adapters. One FHIR layer, any backend.</p>
+
+  <div class="adapter-grid">
+    <div class="adapter-card">
+      <div class="adapter-name">QNXT</div>
+      <div class="adapter-desc">Direct DB read replica, QNXT Open Access API, and QNXT Connect. PA submission via X12 278 into CareAdvance/UM workflow.</div>
+      <div class="adapter-status status-live">Available</div>
+    </div>
+    <div class="adapter-card">
+      <div class="adapter-name">CHO Native</div>
+      <div class="adapter-desc">Built-in adapter for CHO's own adjudication, benefits, enrollment, and authorization engines. Zero external dependencies.</div>
+      <div class="adapter-status status-live">Available</div>
+    </div>
+    <div class="adapter-card">
+      <div class="adapter-name">Facets</div>
+      <div class="adapter-desc">TriZetto Facets database integration with claims, enrollment, and authorization mapping. Direct DB and API access patterns.</div>
+      <div class="adapter-status status-q1">Q1 2027</div>
+    </div>
+    <div class="adapter-card">
+      <div class="adapter-name">HealthEdge</div>
+      <div class="adapter-desc">HealthRules Payer REST API integration. API-first architecture makes this the cleanest adapter pattern.</div>
+      <div class="adapter-status status-q1">Q1 2027</div>
+    </div>
+    <div class="adapter-card">
+      <div class="adapter-name">Generic DB</div>
+      <div class="adapter-desc">Configuration-driven adapter for any RDBMS-backed core admin system. Map your tables to CHO's domain model via config.</div>
+      <div class="adapter-status status-q1">Q2 2027</div>
+    </div>
+    <div class="adapter-card">
+      <div class="adapter-name">Generic REST</div>
+      <div class="adapter-desc">Configuration-driven adapter for any API-first core admin system. Map your endpoints to CHO's domain model via config.</div>
+      <div class="adapter-status status-soon">Q2 2027</div>
     </div>
   </div>
+</section>
 
-  <div class="tier-card">
-    <div class="tier-name">Enterprise</div>
-    <div class="tier-price">Custom <span class="unit">PMPM</span></div>
-    <div class="tier-members">250,000+ members</div>
-    <div class="tier-example">Volume-based pricing from $0.25 PMPM</div>
-    <ul class="tier-features">
-      <li>Everything in Scale</li>
-      <li>Volume-based PMPM discount</li>
-      <li>Dedicated CSM + TAM</li>
-      <li>Hybrid / on-premise deployment</li>
-      <li>White-label portal</li>
-      <li>Custom core admin integration</li>
-      <li>99.99% uptime SLA</li>
-      <li>Annual or multi-year terms</li>
-    </ul>
-    <div class="tier-cta">
-      <a href="https://portal.cloudhealthoffice.com/contact-sales" class="btn-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
-    </div>
-  </div>
-</div>
+<!-- FAQ -->
+<section class="faq-section">
+  <h2>Frequently Asked</h2>
 
-<!-- ===== ADOPTION PATH ===== -->
-<div class="adoption-section">
-  <h2>Start With Compliance. Expand From There.</h2>
-  <p class="adoption-subtitle">Most health plans follow a phased approach. Your PMPM covers the full platform from day one &mdash; activate modules as you&rsquo;re ready.</p>
-
-  <div class="adoption-step">
-    <div class="step-number">1</div>
-    <div class="step-content">
-      <h4>CMS-0057-F Compliance (weeks)</h4>
-      <p>Deploy FHIR R4 APIs alongside your existing core admin. Your claims and enrollment continue running where they are. CHO handles the API layer, EDI-to-FHIR transformation, and compliance reporting.</p>
-    </div>
+  <div class="faq-item">
+    <div class="faq-q">Does CHO replace my existing core admin system?</div>
+    <div class="faq-a">It can, but it doesn't have to. In augmentation mode, CHO sits alongside your QNXT, Facets, HealthEdge, or other CAPS and provides the FHIR interoperability layer for CMS-0057-F compliance. In standalone mode, CHO serves as your complete core admin platform with compliance built in. You choose the deployment that fits your organization.</div>
   </div>
 
-  <div class="adoption-step">
-    <div class="step-number">2</div>
-    <div class="step-content">
-      <h4>EDI Modernization (months)</h4>
-      <p>Route clearinghouse EDI through CHO for multi-clearinghouse failover, real-time 276/277 status, and medical attachment (275/RFAI) workflows. Claims still adjudicate in your core system.</p>
-    </div>
+  <div class="faq-item">
+    <div class="faq-q">What does the PMPM cover vs. the platform fee?</div>
+    <div class="faq-a">The platform fee covers your deployment mode, adapter entitlement, and support tier — it's what you are. The PMPM covers actual usage — how many members flow through the FHIR APIs, PA transactions processed, and data exchanged via Payer-to-Payer. This hybrid model ensures you only pay for the scale you're operating at.</div>
   </div>
 
-  <div class="adoption-step">
-    <div class="step-number">3</div>
-    <div class="step-content">
-      <h4>Workload Migration (your timeline)</h4>
-      <p>Begin shifting adjudication workloads &mdash; claims scrubbing, benefit calculation, NCCI edits, fee schedule pricing, COB &mdash; into CHO&rsquo;s engines. Migrate service by service, not all-or-nothing. Keep your core admin as long as you need it.</p>
-    </div>
+  <div class="faq-item">
+    <div class="faq-q">Which Da Vinci Implementation Guides does CHO conform to?</div>
+    <div class="faq-a">CHO implements C4BB (CARIN Blue Button) for ExplanationOfBenefit profiles, US Core for clinical resources, PDex for payer data exchange, PAS for prior authorization support, DTR for documentation templates, CRD for coverage requirements discovery, and HRex for payer-to-payer member matching. All four required APIs are validated against ONC Inferno test suites.</div>
   </div>
-</div>
 
-<!-- ===== CALCULATOR ===== -->
-<div class="calculator">
-  <h2>Estimate Your Monthly Cost</h2>
-  <p style="text-align:center; color:rgba(255,255,255,0.6); margin-bottom:8px;">
-    Drag the slider or type a number to see your estimated monthly cost.
-  </p>
-  <div class="calc-row">
-    <label for="memberSlider">Members:</label>
-    <input type="range" id="memberSlider" min="1000" max="500000" step="1000" value="50000" />
-    <div class="member-display" id="memberDisplay">50,000</div>
+  <div class="faq-item">
+    <div class="faq-q">How does CHO handle X12 278 alongside FHIR PAS?</div>
+    <div class="faq-a">CHO includes a bidirectional X12 278 ↔ FHIR PAS translation bridge. Prior authorization requests can be submitted via either channel and route to the same processing engine. For augmentation deployments, PA requests are translated to X12 278 and routed into your existing UM workflow — your clinicians don't change how they work.</div>
   </div>
-  <div class="calc-result">
-    <div class="calc-monthly" id="calcMonthly">$22,500/mo</div>
-    <div class="calc-annual" id="calcAnnual">$270,000 per year</div>
-    <div class="calc-rate" id="calcRate">Scale tier · $0.45 PMPM</div>
-    <div class="calc-comparison">
-      <div class="savings" id="calcSavings">Save $1.2M+ vs. a typical CMS-0057-F compliance project</div>
-      <div class="context">Based on average $1.5M cost for core system compliance upgrades (implementation + first-year maintenance)</div>
-    </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Can I switch from augmentation to standalone later?</div>
+    <div class="faq-a">Yes. The adapter architecture means switching deployment modes is a configuration change, not a rebuild. Some health plans start with augmentation to meet the January 2027 deadline, then migrate to standalone over time as they reduce dependency on their legacy CAPS.</div>
   </div>
+
+  <div class="faq-item">
+    <div class="faq-q">What if my core admin system isn't listed?</div>
+    <div class="faq-a">The Generic DB and Generic REST adapters handle any system with a relational database or REST API — you configure the mapping between your schema and CHO's domain model. For proprietary or mainframe-based systems, Enterprise tier includes custom adapter development.</div>
+  </div>
+</section>
+
+<footer class="footer">
+  <p>&copy; 2026 Aurelianware, Inc. &middot; <a href="#">Privacy</a> &middot; <a href="#">Terms</a> &middot; <a href="#">api.cloudhealthoffice.com</a></p>
+</footer>
+
 </div>
 
 <script>
-(function() {
-  var slider = document.getElementById('memberSlider');
-  var display = document.getElementById('memberDisplay');
-  var mo = document.getElementById('calcMonthly');
-  var yr = document.getElementById('calcAnnual');
-  var rate = document.getElementById('calcRate');
-  var sav = document.getElementById('calcSavings');
+function togglePricing(mode) {
+  document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
 
-  function fmt(n) { return n.toLocaleString('en-US'); }
-  function fmtUsd(n) { return '$' + fmt(Math.round(n)); }
+  const monthlyEls = document.querySelectorAll('.monthly-price');
+  const annualEls = document.querySelectorAll('.annual-price');
 
-  function calc() {
-    var m = parseInt(slider.value) || 0;
-    display.textContent = fmt(m);
-
-    var pmpm, tier;
-    if (m <= 50000) { pmpm = 0.75; tier = 'Growth'; }
-    else if (m <= 250000) { pmpm = 0.45; tier = 'Scale'; }
-    else { pmpm = 0.30; tier = 'Enterprise (est.)'; }
-
-    var monthly = m * pmpm;
-    var annual = monthly * 12;
-    var saved = 1500000 - annual;
-
-    mo.textContent = fmtUsd(monthly) + '/mo';
-    yr.textContent = fmtUsd(annual) + ' per year';
-    rate.textContent = tier + ' tier · $' + pmpm.toFixed(2) + ' PMPM';
-
-    if (saved > 0) {
-      sav.textContent = 'Save ' + fmtUsd(saved) + '+ vs. a typical CMS-0057-F compliance project';
-    } else {
-      sav.textContent = 'Full platform at enterprise scale — contact sales for volume pricing';
-    }
+  if (mode === 'annual') {
+    monthlyEls.forEach(el => el.style.display = 'none');
+    annualEls.forEach(el => el.style.display = 'block');
+  } else {
+    monthlyEls.forEach(el => el.style.display = 'block');
+    annualEls.forEach(el => el.style.display = 'none');
   }
+  calculateCost();
+}
 
-  slider.addEventListener('input', calc);
-  calc();
-})();
+function calculateCost() {
+  const tier = document.getElementById('calcTier').value;
+  const members = parseInt(document.getElementById('calcMembers').value) || 0;
+
+  const isAnnual = document.querySelector('.toggle-btn.active').textContent.includes('Annual');
+
+  const config = {
+    starter:      { monthly: 999,  annual: 849,  pmpm: 0.75 },
+    professional: { monthly: 2999, annual: 2549, pmpm: 0.50 },
+    enterprise:   { monthly: 7999, annual: 6799, pmpm: 0.25 }
+  };
+
+  const c = config[tier];
+  const platform = isAnnual ? c.annual : c.monthly;
+  const pmpmCost = members * c.pmpm;
+  const total = platform + pmpmCost;
+
+  document.getElementById('resultPlatform').textContent = '$' + platform.toLocaleString();
+  document.getElementById('resultPmpm').textContent = '$' + pmpmCost.toLocaleString();
+  document.getElementById('resultPmpmRate').textContent = '@ $' + c.pmpm.toFixed(2) + ' PMPM';
+  document.getElementById('resultTotal').textContent = '$' + Math.round(total).toLocaleString();
+  document.getElementById('resultAnnual').textContent = '$' + Math.round(total * 12).toLocaleString() + '/year';
+}
+
+calculateCost();
 </script>
-
-<!-- ===== WHAT'S INCLUDED ===== -->
-<div class="included-section">
-  <h2>Every Tier Includes the Full Platform</h2>
-  <p class="included-subtitle">No feature gates. No module upsells. Activate what you need, when you need it.</p>
-  <div class="included-grid">
-    <div class="included-card">
-      <h4>Claims Processing</h4>
-      <p>837P/I/D inbound, 20+ scrubbing rules, benefit calculation, NCCI edits, fee schedule pricing, COB, and 835 ERA generation.</p>
-    </div>
-    <div class="included-card">
-      <h4>Eligibility &amp; Coverage</h4>
-      <p>Real-time and batch 270/271 eligibility verification. Member, coverage, accumulator, and benefit plan management.</p>
-    </div>
-    <div class="included-card">
-      <h4>Prior Authorization</h4>
-      <p>278 request/response, CDS Hooks for coverage requirements discovery, and the CMS-0057-F Prior Authorization API.</p>
-    </div>
-    <div class="included-card">
-      <h4>Medical Attachments</h4>
-      <p>275 inbound, RFAI case management, 277 status, 824 acknowledgment. Automated document correlation.</p>
-    </div>
-    <div class="included-card">
-      <h4>FHIR R4 APIs</h4>
-      <p>Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory. Full CMS-0057-F compliance.</p>
-    </div>
-    <div class="included-card">
-      <h4>Multi-Tenant Portal</h4>
-      <p>Blazor Server portal with 37 pages. Dashboard, claims, eligibility, members, providers, workflows, benefit plans.</p>
-    </div>
-    <div class="included-card">
-      <h4>Enrollment</h4>
-      <p>834 enrollment import. Member, subscriber, dependent, and sponsor management. Coverage lifecycle tracking.</p>
-    </div>
-    <div class="included-card">
-      <h4>EDI Infrastructure</h4>
-      <p>17 Argo Workflows for automated EDI processing. SFTP polling, Kafka event-driven, multi-clearinghouse routing.</p>
-    </div>
-    <div class="included-card">
-      <h4>Security &amp; Compliance</h4>
-      <p>HIPAA-grade infrastructure. BAA included. Zero known vulnerabilities. Automated audit trails and compliance reporting.</p>
-    </div>
-  </div>
-</div>
-
-<!-- ===== COMPARISON TABLE ===== -->
-<div class="comparison">
-  <h2>How CHO Compares</h2>
-  <table class="compare-table">
-    <thead>
-      <tr>
-        <th style="width:40%;">Capability</th>
-        <th style="width:30%;">Legacy Core Admin Upgrade</th>
-        <th style="width:30%;">Cloud Health Office</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>CMS-0057-F compliance</td>
-        <td class="legacy-col">$1.5M&ndash;3M upgrade + 12&ndash;18 months</td>
-        <td class="cho-col">Included &middot; Live in weeks</td>
-      </tr>
-      <tr>
-        <td>Typical annual cost (50K members)</td>
-        <td class="legacy-col">$500K&ndash;2M/yr maintenance</td>
-        <td class="cho-col">$270K/yr ($0.45 PMPM)</td>
-      </tr>
-      <tr>
-        <td>Clearinghouse flexibility</td>
-        <td class="legacy-col">Single vendor, 3-year contract</td>
-        <td class="cho-col">Multi-clearinghouse with failover</td>
-      </tr>
-      <tr>
-        <td>FHIR R4 APIs</td>
-        <td class="legacy-col">Add-on module ($200K+)</td>
-        <td class="cho-col">Included &middot; 5 production APIs</td>
-      </tr>
-      <tr>
-        <td>Time to CMS compliance</td>
-        <td class="legacy-col">12&ndash;18 months</td>
-        <td class="cho-col">Weeks (alongside existing core admin)</td>
-      </tr>
-      <tr>
-        <td>Operational disruption</td>
-        <td class="legacy-col">Full replatform risk</td>
-        <td class="cho-col">Zero &mdash; runs alongside your core system</td>
-      </tr>
-      <tr>
-        <td>Source code access</td>
-        <td class="legacy-col">Never</td>
-        <td class="cho-col">BSL 1.1 &middot; Full source access</td>
-      </tr>
-      <tr>
-        <td>Contract terms</td>
-        <td class="legacy-col">3&ndash;5 year lock-in</td>
-        <td class="cho-col">Month-to-month or annual</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- ===== SELF-HOSTED NOTE ===== -->
-<div class="self-hosted-note">
-  <h3>Prefer to Self-Host?</h3>
-  <p>
-    Cloud Health Office is licensed under BSL 1.1. You can evaluate, develop, and test the full platform
-    at no cost in non-production environments. When you&rsquo;re ready for production, contact us for a
-    commercial license &mdash; self-hosted or managed.
-  </p>
-  <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" class="btn-outline" style="display:inline-block; padding:10px 24px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:0.95rem;">View Source on GitHub</a>
-</div>
-
-<!-- ===== FAQ ===== -->
-<div class="faq">
-  <h2>Frequently Asked Questions</h2>
-
-  <div class="faq-item">
-    <div class="faq-q">How is &ldquo;member&rdquo; counted for billing?</div>
-    <div class="faq-a">We count unique enrolled members with active coverage in your system as of the first of each month. This is the same member count you report to CMS or your state regulator. Dependents and subscribers are both counted. We pull the count from your enrollment data &mdash; no manual reporting required.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">Is there a minimum commitment?</div>
-    <div class="faq-a">Growth and Scale plans are month-to-month with no minimum term. Cancel anytime. Enterprise plans offer annual or multi-year terms with additional PMPM discounts. All plans include a 30-day free trial.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">What if my membership fluctuates seasonally?</div>
-    <div class="faq-a">Your bill adjusts automatically each month based on your enrolled member count. Medicaid MCOs with seasonal redetermination cycles or Medicare Advantage plans with AEP enrollment spikes only pay for the members they have that month. No true-ups, no overages.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">Are there any transaction limits or overage charges?</div>
-    <div class="faq-a">No. Every tier includes unlimited EDI transactions, unlimited FHIR API calls, and unlimited claims processing. Your PMPM covers everything. We don&rsquo;t charge per transaction, per claim, or per API call.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">Does this replace our core admin system?</div>
-    <div class="faq-a">It can, but most health plans start by deploying Cloud Health Office alongside their existing core admin (QNXT, FACETS, HealthEdge, etc.) for CMS-0057-F compliance and EDI modernization. Every module is designed to either augment or replace the corresponding function in your core system &mdash; you choose which workloads to migrate and when. Some plans use CHO for compliance and EDI only; others progressively shift claims adjudication workloads over time.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">Is a BAA included?</div>
-    <div class="faq-a">Yes. Every tier includes a signed Business Associate Agreement.</div>
-  </div>
-
-  <div class="faq-item">
-    <div class="faq-q">Can I evaluate the platform before committing?</div>
-    <div class="faq-a">Two ways. First, every paid plan includes a 30-day free trial with managed hosting. Second, the full source code is available on GitHub under BSL 1.1 &mdash; you can deploy it in your own non-production environment for evaluation at no cost.</div>
-  </div>
-</div>
-
-<!-- ===== CTA ===== -->
-<div class="cta-section">
-  <h2>Ready to See What It Costs for Your Plan?</h2>
-  <p style="color:rgba(255,255,255,0.7); font-size:1.1rem; margin-top:16px;">
-    30-day free trial. No credit card required. Production-grade from day one.
-  </p>
-  <div class="cta-buttons">
-    <a href="https://portal.cloudhealthoffice.com/signup" class="btn-primary" target="_blank" rel="noopener noreferrer">Start Free Trial</a>
-    <a href="https://portal.cloudhealthoffice.com/contact-sales" class="btn-green" target="_blank" rel="noopener noreferrer">Contact Sales</a>
-    <a href="https://github.com/aurelianware/cloudhealthoffice" class="btn-outline" target="_blank" rel="noopener noreferrer">View Source</a>
-  </div>
-</div>
-```
-
-  </main>
-
-  <footer style="max-width:1200px; margin:60px auto 0; padding:40px 20px 30px; border-top:1px solid #222; text-align:center;">
-    <p style="color:rgba(255,255,255,0.5); font-size:0.9rem;">
-      &copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &middot; BSL 1.1 Licensed &middot; Not affiliated with any payer platform or clearinghouse vendor.
-    </p>
-    <p style="margin-top:8px;">
-      <a href="/pricing" style="color:#00ffff; margin:0 12px;">Pricing</a> &middot;
-      <a href="mailto:sales@cloudhealthoffice.com" style="color:rgba(255,255,255,0.5); margin:0 12px;">Contact</a> &middot;
-      <a href="legal/privacy-policy.html" style="color:rgba(255,255,255,0.5); margin:0 12px;">Privacy Policy</a>
-    </p>
-  </footer>
-
 </body>
 </html>
