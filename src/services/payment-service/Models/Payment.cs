@@ -12,9 +12,8 @@ namespace PaymentService.Models;
 public class Payment
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Multi-tenant partition key (set by repository from request tenant context)
     /// </summary>
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
