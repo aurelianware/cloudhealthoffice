@@ -197,11 +197,11 @@ public class PaymentRunService : IPaymentRunService
         if (criteria.ServiceDateTo.HasValue)
             queryParams.Add($"serviceDateTo={criteria.ServiceDateTo.Value:yyyy-MM-dd}");
 
-        // Fetch claims with Approved or Finalized status
-        queryParams.Add("status=4"); // Approved
+        // Fetch claims with Approved status
+        queryParams.Add("status=5"); // Approved
         
         var queryString = string.Join("&", queryParams);
-        var response = await _claimsServiceClient.GetAsync($"/api/claims?{queryString}&pageSize=5000");
+        var response = await _claimsServiceClient.GetAsync($"/api/claims/search?{queryString}&pageSize=5000");
 
         if (!response.IsSuccessStatusCode)
         {
