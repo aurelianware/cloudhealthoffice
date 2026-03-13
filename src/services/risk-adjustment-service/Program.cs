@@ -1,13 +1,18 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using System.Text.Json.Serialization;
 using RiskAdjustmentService;
 using RiskAdjustmentService.Middleware;
 using RiskAdjustmentService.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
+// Add services to the container — serialize enums as strings to match OpenAPI spec
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -19,6 +24,7 @@ builder.Services.AddSwaggerGen(c =>
                      "Provides per-member HCC risk scores, measurement-year data, " +
                      "and population risk analytics for Medicare Advantage, Medicaid, and ACA plans."
     });
+    c.UseInlineDefinitionsForEnums();
 });
 
 // Database Configuration
@@ -54,9 +60,15 @@ else
             throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
         }
 
+        var serializerOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters = { new JsonStringEnumConverter() }
+        };
         var options = new CosmosClientOptions
         {
-            Serializer = new CosmosSystemTextJsonSerializer()
+            Serializer = new CosmosSystemTextJsonSerializer(serializerOptions)
         };
         return new CosmosClient(endpoint, key, options);
     });

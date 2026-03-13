@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 using RiskAdjustmentService.Models;
 
@@ -132,25 +133,74 @@ public class RiskScoreRepositoryMongo : IRiskScoreRepository
         if (lineOfBusiness.HasValue)
             filters.Add(builder.Eq(s => s.LineOfBusiness, lineOfBusiness.Value));
 
-        var filter = builder.And(filters);
-        var scores = await _collection.Find(filter).ToListAsync();
+        var matchFilter = builder.And(filters);
+
+        // Compute aggregate statistics server-side via a $group pipeline stage
+        var groupStage = new BsonDocument("$group", new BsonDocument
+        {
+            { "_id",              BsonNull.Value },
+            { "totalMembers",     new BsonDocument("$sum", 1) },
+            { "scoredMembers",    new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$ne", new BsonArray { "$Status", (int)ScoreStatus.Rejected }), 1, 0 })) },
+            { "submittedMembers", new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$IsSubmitted", true }), 1, 0 })) },
+            { "averageRiskScore", new BsonDocument("$avg", "$RiskScore") },
+            { "minRiskScore",     new BsonDocument("$min", "$RiskScore") },
+            { "maxRiskScore",     new BsonDocument("$max", "$RiskScore") }
+        });
+
+        var aggResult = await _collection.Aggregate()
+            .Match(matchFilter)
+            .AppendStage<BsonDocument>(groupStage)
+            .FirstOrDefaultAsync();
 
         var summary = new MeasurementYearSummary
         {
             MeasurementYear = measurementYear,
-            LineOfBusiness = lineOfBusiness,
-            TotalMembers = scores.Count,
-            ScoredMembers = scores.Count(s => s.Status != ScoreStatus.Rejected),
-            SubmittedMembers = scores.Count(s => s.IsSubmitted),
-            AverageRiskScore = scores.Count > 0 ? scores.Average(s => s.RiskScore) : 0,
-            MinRiskScore = scores.Count > 0 ? scores.Min(s => s.RiskScore) : 0,
-            MaxRiskScore = scores.Count > 0 ? scores.Max(s => s.RiskScore) : 0
+            LineOfBusiness = lineOfBusiness
         };
 
-        if (scores.Count > 0)
+        if (aggResult != null)
         {
-            var sorted = scores.OrderBy(s => s.RiskScore).ToList();
-            summary.MedianRiskScore = sorted[sorted.Count / 2].RiskScore;
+            summary.TotalMembers     = aggResult["totalMembers"].AsInt32;
+            summary.ScoredMembers    = aggResult["scoredMembers"].AsInt32;
+            summary.SubmittedMembers = aggResult["submittedMembers"].AsInt32;
+            summary.AverageRiskScore = aggResult["averageRiskScore"].IsDouble
+                ? (decimal)aggResult["averageRiskScore"].AsDouble
+                : (decimal)aggResult["averageRiskScore"].AsDecimal128;
+            summary.MinRiskScore = aggResult["minRiskScore"].IsDecimal128
+                ? (decimal)aggResult["minRiskScore"].AsDecimal128
+                : (decimal)aggResult["minRiskScore"].AsDouble;
+            summary.MaxRiskScore = aggResult["maxRiskScore"].IsDecimal128
+                ? (decimal)aggResult["maxRiskScore"].AsDecimal128
+                : (decimal)aggResult["maxRiskScore"].AsDouble;
+
+            // Compute median using index-based server-side queries (sort + skip + limit)
+            // to avoid loading the full result set into memory.
+            // For even-sized datasets the median is the average of the two middle elements.
+            if (summary.TotalMembers > 0)
+            {
+                var midIndex = summary.TotalMembers / 2;
+                var lower = await _collection.Find(matchFilter)
+                    .SortBy(s => s.RiskScore)
+                    .Skip(midIndex - (summary.TotalMembers % 2 == 0 ? 1 : 0))
+                    .Limit(1)
+                    .Project(s => s.RiskScore)
+                    .FirstOrDefaultAsync();
+
+                if (summary.TotalMembers % 2 == 0)
+                {
+                    var upper = await _collection.Find(matchFilter)
+                        .SortBy(s => s.RiskScore)
+                        .Skip(midIndex)
+                        .Limit(1)
+                        .Project(s => s.RiskScore)
+                        .FirstOrDefaultAsync();
+                    summary.MedianRiskScore = (lower + upper) / 2m;
+                }
+                else
+                {
+                    summary.MedianRiskScore = lower;
+                }
+            }
         }
 
         return summary;
@@ -165,15 +215,21 @@ public class RiskScoreRepositoryMongo : IRiskScoreRepository
 
     public async Task<MemberRiskScore> UpdateAsync(MemberRiskScore score)
     {
-        score.TenantId = GetTenantId();
-        var filter = Builders<MemberRiskScore>.Filter.Eq(s => s.Id, score.Id);
+        var tenantId = GetTenantId();
+        score.TenantId = tenantId;
+        var filter = Builders<MemberRiskScore>.Filter.And(
+            Builders<MemberRiskScore>.Filter.Eq(s => s.Id, score.Id),
+            Builders<MemberRiskScore>.Filter.Eq(s => s.TenantId, tenantId));
         await _collection.ReplaceOneAsync(filter, score);
         return score;
     }
 
     public async Task DeleteAsync(string id)
     {
-        var filter = Builders<MemberRiskScore>.Filter.Eq(s => s.Id, id);
+        var tenantId = GetTenantId();
+        var filter = Builders<MemberRiskScore>.Filter.And(
+            Builders<MemberRiskScore>.Filter.Eq(s => s.Id, id),
+            Builders<MemberRiskScore>.Filter.Eq(s => s.TenantId, tenantId));
         await _collection.DeleteOneAsync(filter);
     }
 }

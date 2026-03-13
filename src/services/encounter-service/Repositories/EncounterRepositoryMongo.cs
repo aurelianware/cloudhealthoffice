@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 using EncounterService.Models;
 
@@ -127,23 +128,44 @@ public class EncounterRepositoryMongo : IEncounterRepository
         if (!string.IsNullOrEmpty(payerId))
             filters.Add(builder.Eq(e => e.PayerId, payerId));
 
-        var filter = builder.And(filters);
-        var encounters = await _collection.Find(filter).ToListAsync();
+        var matchFilter = builder.And(filters);
 
-        var summary = new EncounterSummary
+        // Compute aggregate counts server-side via a single $group pipeline stage
+        var groupStage = new BsonDocument("$group", new BsonDocument
         {
-            TotalEncounters = encounters.Count,
-            PendingEncounters = encounters.Count(e => e.Status == EncounterStatus.Pending),
-            QueuedEncounters = encounters.Count(e => e.Status == EncounterStatus.Queued),
-            SubmittedEncounters = encounters.Count(e => e.Status == EncounterStatus.Submitted),
-            AcceptedEncounters = encounters.Count(e => e.Status == EncounterStatus.Accepted),
-            RejectedEncounters = encounters.Count(e => e.Status == EncounterStatus.Rejected),
-            CorrectionEncounters = encounters.Count(e => e.SubmissionType == SubmissionType.Correction),
-            TotalChargeAmount = encounters.Sum(e => e.TotalChargeAmount)
-        };
+            { "_id", BsonNull.Value },
+            { "totalEncounters",     new BsonDocument("$sum", 1) },
+            { "pendingEncounters",   new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$Status", (int)EncounterStatus.Pending }),    1, 0 })) },
+            { "queuedEncounters",    new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$Status", (int)EncounterStatus.Queued }),     1, 0 })) },
+            { "submittedEncounters", new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$Status", (int)EncounterStatus.Submitted }),  1, 0 })) },
+            { "acceptedEncounters",  new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$Status", (int)EncounterStatus.Accepted }),   1, 0 })) },
+            { "rejectedEncounters",  new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$Status", (int)EncounterStatus.Rejected }),   1, 0 })) },
+            { "correctionEncounters",new BsonDocument("$sum", new BsonDocument("$cond", new BsonArray { new BsonDocument("$eq", new BsonArray { "$SubmissionType", (int)SubmissionType.Correction }), 1, 0 })) },
+            { "totalChargeAmount",   new BsonDocument("$sum", "$TotalChargeAmount") }
+        });
 
-        if (summary.TotalEncounters > 0)
-            summary.AcceptanceRate = (decimal)summary.AcceptedEncounters / summary.TotalEncounters * 100;
+        var result = await _collection.Aggregate()
+            .Match(matchFilter)
+            .AppendStage<BsonDocument>(groupStage)
+            .FirstOrDefaultAsync();
+
+        var summary = new EncounterSummary();
+        if (result != null)
+        {
+            summary.TotalEncounters     = result["totalEncounters"].AsInt32;
+            summary.PendingEncounters   = result["pendingEncounters"].AsInt32;
+            summary.QueuedEncounters    = result["queuedEncounters"].AsInt32;
+            summary.SubmittedEncounters = result["submittedEncounters"].AsInt32;
+            summary.AcceptedEncounters  = result["acceptedEncounters"].AsInt32;
+            summary.RejectedEncounters  = result["rejectedEncounters"].AsInt32;
+            summary.CorrectionEncounters = result["correctionEncounters"].AsInt32;
+            summary.TotalChargeAmount   = result["totalChargeAmount"].IsDecimal128
+                ? (decimal)result["totalChargeAmount"].AsDecimal128
+                : (decimal)result["totalChargeAmount"].AsDouble;
+
+            if (summary.TotalEncounters > 0)
+                summary.AcceptanceRate = (decimal)summary.AcceptedEncounters / summary.TotalEncounters * 100;
+        }
 
         return summary;
     }
@@ -157,15 +179,21 @@ public class EncounterRepositoryMongo : IEncounterRepository
 
     public async Task<Encounter> UpdateAsync(Encounter encounter)
     {
-        encounter.TenantId = GetTenantId();
-        var filter = Builders<Encounter>.Filter.Eq(e => e.Id, encounter.Id);
+        var tenantId = GetTenantId();
+        encounter.TenantId = tenantId;
+        var filter = Builders<Encounter>.Filter.And(
+            Builders<Encounter>.Filter.Eq(e => e.Id, encounter.Id),
+            Builders<Encounter>.Filter.Eq(e => e.TenantId, tenantId));
         await _collection.ReplaceOneAsync(filter, encounter);
         return encounter;
     }
 
     public async Task DeleteAsync(string id)
     {
-        var filter = Builders<Encounter>.Filter.Eq(e => e.Id, id);
+        var tenantId = GetTenantId();
+        var filter = Builders<Encounter>.Filter.And(
+            Builders<Encounter>.Filter.Eq(e => e.Id, id),
+            Builders<Encounter>.Filter.Eq(e => e.TenantId, tenantId));
         await _collection.DeleteOneAsync(filter);
     }
 }
