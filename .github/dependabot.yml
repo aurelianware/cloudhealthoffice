@@ -1,6 +1,8 @@
 version: 2
 updates:
-  # Root package.json
+  # ============================================================
+  # npm — Root project
+  # ============================================================
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -12,17 +14,24 @@ updates:
       - "aurelianware"
     labels:
       - "dependencies"
-      - "security"
+      - "npm"
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Claims Scrubbing Service
+  # ============================================================
+  # npm — Claims Scrubbing Service
+  # ============================================================
   - package-ecosystem: "npm"
-    directory: "/services/claims-scrubbing-service"
+    directory: "/src/services/claims-scrubbing-service"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -32,87 +41,283 @@ updates:
       - "aurelianware"
     labels:
       - "dependencies"
+      - "npm"
       - "claims-scrubbing"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      claims-scrubbing-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # .NET Services
-  - package-ecosystem: "nuget"
-    directory: "/services/sponsor-service"
+  # ============================================================
+  # npm — X12 834 Parser container
+  # ============================================================
+  - package-ecosystem: "npm"
+    directory: "/containers/x12-834-parser"
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "monday"
       time: "02:00"
     open-pull-requests-limit: 5
     reviewers:
       - "aurelianware"
     labels:
       - "dependencies"
+      - "npm"
+      - "containers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      x12-834-parser-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ============================================================
+  # NuGet — .NET Microservices (all under src/services/)
+  # ============================================================
+  - package-ecosystem: "nuget"
+    directory: "/src/services/appeals-service"
+    schedule: &dotnet-schedule
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers: &dotnet-reviewers
+      - "aurelianware"
+    labels: &dotnet-labels
+      - "dependencies"
       - "dotnet"
+    commit-message: &dotnet-commit
+      prefix: "chore"
+      include: "scope"
+    groups: &dotnet-groups
+      dotnet-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore: &dotnet-ignore
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "nuget"
-    directory: "/services/member-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/attachment-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/coverage-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/authorization-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/provider-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/benefit-plan-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/claims-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/claims-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/authorization-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/coverage-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/reference-data-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/eligibility-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/benefit-plan-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/enrollment-import-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
   - package-ecosystem: "nuget"
-    directory: "/services/eligibility-service"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-      time: "02:00"
+    directory: "/src/services/member-service"
+    schedule: *dotnet-schedule
     open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
 
-  # Docker base images
+  - package-ecosystem: "nuget"
+    directory: "/src/services/payment-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/provider-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/reference-data-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/rfai-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/sponsor-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/tenant-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/trading-partner-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  # ============================================================
+  # NuGet — Engines
+  # ============================================================
+  - package-ecosystem: "nuget"
+    directory: "/src/engines/CloudHealthOffice.CobEngine"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels:
+      - "dependencies"
+      - "dotnet"
+      - "engines"
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/engines/CloudHealthOffice.RiskAdjustmentEngine"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels:
+      - "dependencies"
+      - "dotnet"
+      - "engines"
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/engines/CloudHealthOffice.NcciEngine"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels:
+      - "dependencies"
+      - "dotnet"
+      - "engines"
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/engines/CloudHealthOffice.DocumentStore"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels:
+      - "dependencies"
+      - "dotnet"
+      - "engines"
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  # ============================================================
+  # Docker — Base images
+  # ============================================================
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -125,8 +330,16 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
+  # ============================================================
   # GitHub Actions
+  # ============================================================
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -139,3 +352,11 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
