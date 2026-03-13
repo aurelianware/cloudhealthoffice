@@ -1,0 +1,137 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fhir-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Fhir__ServerName: "CHO FHIR Server"
+  Fhir__ServerVersion: "1.0.0"
+  Fhir__DefaultPageSize: "20"
+  Fhir__MaxPageSize: "100"
+  Fhir__ServerBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fhir-service-secrets
+  namespace: cloudhealthoffice
+type: Opaque
+stringData:
+  # Sprint 3: add CHO service URLs and credentials when real adapters land
+  Services__MemberServiceUrl: "http://member-service/api"
+  Services__CoverageServiceUrl: "http://coverage-service/api"
+  Services__ClaimsServiceUrl: "http://claims-service/api"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fhir-service
+  namespace: cloudhealthoffice
+  labels:
+    app: fhir-service
+    component: fhir-layer
+    compliance: cms-0057-f
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fhir-service
+  template:
+    metadata:
+      labels:
+        app: fhir-service
+    spec:
+      containers:
+        - name: fhir-service
+          image: ghcr.io/aurelianware/cloudhealthoffice-fhir-service:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: fhir-service-config
+            - secretRef:
+                name: fhir-service-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fhir-service
+  namespace: cloudhealthoffice
+spec:
+  type: ClusterIP
+  selector:
+    app: fhir-service
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fhir-service-hpa
+  namespace: cloudhealthoffice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fhir-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# Ingress — exposes /fhir/r4/* through the existing portal ingress controller.
+# The FHIR base path is api.cloudhealthoffice.com/fhir/r4.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fhir-service-ingress
+  namespace: cloudhealthoffice
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.cloudhealthoffice.com
+      http:
+        paths:
+          - path: /fhir/r4(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: fhir-service
+                port:
+                  number: 80
