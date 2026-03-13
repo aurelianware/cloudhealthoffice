@@ -5,6 +5,7 @@ Allow: /welcome
 Allow: /signup
 Allow: /demo
 Allow: /apis
+Allow: /quickstarts
 Allow: /docs
 Allow: /pricing
 Allow: /contact-sales
