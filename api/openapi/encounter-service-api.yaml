@@ -1,0 +1,649 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Encounter Service API
+  version: 1.0.0
+  description: |
+    **Healthcare Encounter Submission Lifecycle API**
+
+    Manages the full lifecycle of encounter submissions to payers/trading partners,
+    from initial creation through batch dispatch, payer acknowledgment, and
+    correction/resubmission workflows.
+
+    **Key Features:**
+    - Encounter submission lifecycle tracking (Pending → Queued → Submitted → Acknowledged → Accepted)
+    - Batch dispatch — group pending encounters by payer for 837 file generation
+    - X12 837 (Professional/Institutional/Dental) download per encounter
+    - Correction flow — void + replace workflow (CLM05-3 frequency codes 7/8)
+    - Resubmission of rejected encounters with new control numbers
+    - Multi-tenant isolation via TenantId partitioning
+    - Support for Cosmos DB and MongoDB backends
+
+    **Encounter Lifecycle:**
+    1. **Submit** — Create encounter record (Pending status)
+    2. **Batch Dispatch** — Group pending encounters by payer, mark as Queued
+    3. **Submit Batch** — Mark batch as Submitted after 837 transmission
+    4. **Acknowledgment** — Update status from 999/277CA response
+    5. **Accept/Reject** — Final payer disposition
+    6. **Correct/Resubmit** — Handle rejections or data corrections
+
+    **EDI Transaction Support:**
+    - **837P** — Professional encounters (005010X222A1)
+    - **837I** — Institutional encounters (005010X223A3)
+    - **837D** — Dental encounters
+    - **999** — Functional acknowledgment tracking
+    - **277CA** — Claim acknowledgment status tracking
+
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+    email: api@cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/encounter/v1
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/encounter/v1
+    description: Sandbox (test data)
+
+security:
+  - bearerAuth: []
+  - tenantHeader: []
+
+tags:
+  - name: Encounters
+    description: Encounter submission and lifecycle management
+  - name: Batch
+    description: Batch dispatch and submission operations
+  - name: EDI
+    description: X12 837 download and EDI operations
+  - name: Corrections
+    description: Correction and resubmission workflows
+
+paths:
+  /api/encounters:
+    post:
+      tags: [Encounters]
+      summary: Submit a new encounter
+      description: |
+        Creates a new encounter record in Pending status.
+        The encounter can then be batched and dispatched to a payer.
+      operationId: submitEncounter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Encounter'
+      responses:
+        '201':
+          description: Encounter created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '400':
+          description: Invalid encounter data
+
+  /api/encounters/{id}:
+    get:
+      tags: [Encounters]
+      summary: Get encounter by ID
+      operationId: getEncounterById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Encounter found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '404':
+          description: Encounter not found
+    delete:
+      tags: [Encounters]
+      summary: Void an encounter
+      operationId: voidEncounter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Encounter voided
+        '404':
+          description: Encounter not found
+
+  /api/encounters/control-number/{controlNumber}:
+    get:
+      tags: [Encounters]
+      summary: Get encounter by control number
+      operationId: getEncounterByControlNumber
+      parameters:
+        - name: controlNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Encounter found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '404':
+          description: Encounter not found
+
+  /api/encounters/search:
+    get:
+      tags: [Encounters]
+      summary: Search encounters
+      operationId: searchEncounters
+      parameters:
+        - name: memberId
+          in: query
+          schema:
+            type: string
+        - name: payerId
+          in: query
+          schema:
+            type: string
+        - name: batchId
+          in: query
+          schema:
+            type: string
+        - name: serviceDateFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: serviceDateTo
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/EncounterStatus'
+        - name: submissionType
+          in: query
+          schema:
+            $ref: '#/components/schemas/SubmissionType'
+        - name: lineOfBusiness
+          in: query
+          schema:
+            $ref: '#/components/schemas/LineOfBusiness'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Encounter'
+
+  /api/encounters/{id}/status:
+    put:
+      tags: [Encounters]
+      summary: Update encounter status
+      description: Update status from 999/277CA acknowledgment or manual review.
+      operationId: updateEncounterStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterStatusUpdate'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '404':
+          description: Encounter not found
+
+  /api/encounters/summary:
+    get:
+      tags: [Encounters]
+      summary: Get encounter summary statistics
+      operationId: getEncounterSummary
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: payerId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterSummary'
+
+  /api/encounters/batch/dispatch:
+    post:
+      tags: [Batch]
+      summary: Dispatch a batch of pending encounters
+      description: |
+        Gathers all Pending encounters for the specified payer and marks them as Queued.
+        Returns the batch ID and list of encounter IDs included.
+      operationId: dispatchBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDispatchRequest'
+      responses:
+        '200':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchDispatchResult'
+        '400':
+          description: No pending encounters found
+
+  /api/encounters/batch/{batchId}/submit:
+    post:
+      tags: [Batch]
+      summary: Mark batch as submitted
+      description: Called after the 837 file has been transmitted to the trading partner.
+      operationId: markBatchSubmitted
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Batch marked as submitted
+        '404':
+          description: No queued encounters found for batch
+
+  /api/encounters/{id}/837:
+    get:
+      tags: [EDI]
+      summary: Download X12 837 transaction
+      description: |
+        Generates and returns the X12 837 EDI transaction for the encounter.
+        Returns raw EDI text as a downloadable file.
+      operationId: download837
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: X12 837 EDI file
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Encounter not found
+
+  /api/encounters/{id}/correction:
+    post:
+      tags: [Corrections]
+      summary: Submit a correction for an encounter
+      description: |
+        Creates a Void encounter (frequency code 8) and a Replacement encounter
+        (frequency code 7) for the original. Both are set to Pending status.
+      operationId: submitCorrection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectionRequest'
+      responses:
+        '200':
+          description: Correction submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectionResult'
+        '400':
+          description: Cannot correct encounter in current status
+        '404':
+          description: Original encounter not found
+
+  /api/encounters/{id}/resubmit:
+    post:
+      tags: [Corrections]
+      summary: Resubmit a rejected encounter
+      description: Creates a new encounter with same data but new control number.
+      operationId: resubmitEncounter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Encounter resubmitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Encounter'
+        '400':
+          description: Cannot resubmit encounter in current status
+        '404':
+          description: Encounter not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-ID
+
+  schemas:
+    Encounter:
+      type: object
+      required:
+        - memberId
+        - billingProviderNPI
+        - lineOfBusiness
+        - encounterType
+        - payerId
+        - totalChargeAmount
+        - serviceDateFrom
+        - serviceDateTo
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        encounterControlNumber:
+          type: string
+        claimId:
+          type: string
+        claimNumber:
+          type: string
+        memberId:
+          type: string
+        subscriberId:
+          type: string
+        billingProviderNPI:
+          type: string
+        billingProviderName:
+          type: string
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        encounterType:
+          $ref: '#/components/schemas/EncounterType'
+        submissionType:
+          $ref: '#/components/schemas/SubmissionType'
+        claimFrequencyCode:
+          type: string
+        originalEncounterId:
+          type: string
+        originalEncounterControlNumber:
+          type: string
+        payerId:
+          type: string
+        payerName:
+          type: string
+        totalChargeAmount:
+          type: number
+          format: decimal
+        serviceDateFrom:
+          type: string
+          format: date-time
+        serviceDateTo:
+          type: string
+          format: date-time
+        diagnosisCodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncounterDiagnosis'
+        serviceLines:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncounterServiceLine'
+        status:
+          $ref: '#/components/schemas/EncounterStatus'
+        batchId:
+          type: string
+        createdDate:
+          type: string
+          format: date-time
+        submittedDate:
+          type: string
+          format: date-time
+        acknowledgedDate:
+          type: string
+          format: date-time
+        acceptedDate:
+          type: string
+          format: date-time
+        rejectedDate:
+          type: string
+          format: date-time
+        rejectionReasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncounterRejectionReason'
+
+    EncounterDiagnosis:
+      type: object
+      properties:
+        code:
+          type: string
+        codeQualifier:
+          type: string
+        pointerNumber:
+          type: integer
+        description:
+          type: string
+
+    EncounterServiceLine:
+      type: object
+      properties:
+        lineNumber:
+          type: integer
+        procedureCode:
+          type: string
+        procedureDescription:
+          type: string
+        modifiers:
+          type: array
+          items:
+            type: string
+        diagnosisPointers:
+          type: array
+          items:
+            type: integer
+        units:
+          type: number
+        chargeAmount:
+          type: number
+          format: decimal
+        serviceDateFrom:
+          type: string
+          format: date-time
+        serviceDateTo:
+          type: string
+          format: date-time
+        revenueCode:
+          type: string
+
+    EncounterRejectionReason:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+        description:
+          type: string
+        loopId:
+          type: string
+        segmentId:
+          type: string
+        elementPosition:
+          type: integer
+
+    EncounterStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/EncounterStatus'
+        edi999Status:
+          type: string
+        rejectionReasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncounterRejectionReason'
+        notes:
+          type: string
+
+    BatchDispatchRequest:
+      type: object
+      required: [payerId]
+      properties:
+        payerId:
+          type: string
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        encounterType:
+          $ref: '#/components/schemas/EncounterType'
+        maxBatchSize:
+          type: integer
+          default: 1000
+
+    BatchDispatchResult:
+      type: object
+      properties:
+        batchId:
+          type: string
+        payerId:
+          type: string
+        encounterCount:
+          type: integer
+        dispatchedDate:
+          type: string
+          format: date-time
+        encounterIds:
+          type: array
+          items:
+            type: string
+
+    CorrectionRequest:
+      type: object
+      required: [correctedEncounter, correctionReason]
+      properties:
+        correctedEncounter:
+          $ref: '#/components/schemas/Encounter'
+        correctionReason:
+          type: string
+
+    CorrectionResult:
+      type: object
+      properties:
+        voidEncounter:
+          $ref: '#/components/schemas/Encounter'
+        replacementEncounter:
+          $ref: '#/components/schemas/Encounter'
+
+    EncounterSummary:
+      type: object
+      properties:
+        totalEncounters:
+          type: integer
+        pendingEncounters:
+          type: integer
+        queuedEncounters:
+          type: integer
+        submittedEncounters:
+          type: integer
+        acceptedEncounters:
+          type: integer
+        rejectedEncounters:
+          type: integer
+        correctionEncounters:
+          type: integer
+        totalChargeAmount:
+          type: number
+          format: decimal
+        acceptanceRate:
+          type: number
+          format: decimal
+
+    EncounterStatus:
+      type: string
+      enum:
+        - Pending
+        - Queued
+        - Submitted
+        - Acknowledged
+        - Accepted
+        - Rejected
+        - CorrectionSubmitted
+        - Voided
+
+    EncounterType:
+      type: string
+      enum: [Professional, Institutional, Dental]
+
+    SubmissionType:
+      type: string
+      enum: [Original, Correction, Resubmission, Void]
+
+    LineOfBusiness:
+      type: string
+      enum: [Commercial, Medicare, Medicaid, Exchange, TRICARE, VA]
