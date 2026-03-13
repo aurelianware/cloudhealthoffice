@@ -149,8 +149,9 @@
                     
                     <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
 
-                    <MudNavLink Href="/MicrosoftIdentity/Account/SignIn" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Login"
-                                Style="border-left: 3px solid rgba(0, 255, 255, 0.6); color: #00ffff; transition: all 0.3s ease;">
+                    <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Login"
+                                Style="border-left: 3px solid rgba(0, 255, 255, 0.6); color: #00ffff; transition: all 0.3s ease; cursor: pointer;"
+                                @onclick="SignIn">
                         Sign In
                     </MudNavLink>
                     <MudNavLink Href="/signup" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PersonAdd"
@@ -195,6 +196,8 @@
     private bool _drawerOpen = true;
     private string? _tenantName;
     private bool _isDemo;
+
+    private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
 
     protected override async Task OnInitializedAsync()
     {
