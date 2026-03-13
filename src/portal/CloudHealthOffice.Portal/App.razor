@@ -8,7 +8,7 @@
                     <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
                         <NotAuthorized>
                             @{
-                                Navigation.NavigateTo($"MicrosoftIdentity/Account/SignIn?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
+                                Navigation.NavigateTo($"/MicrosoftIdentity/Account/SignIn?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
                             }
                         </NotAuthorized>
                         <Authorizing>

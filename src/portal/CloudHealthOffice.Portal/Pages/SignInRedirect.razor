@@ -1,0 +1,31 @@
+@page "/login"
+@page "/signin"
+@using Microsoft.AspNetCore.Authorization
+@inject NavigationManager Navigation
+
+@attribute [AllowAnonymous]
+
+<PageTitle>Sign In — Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-6" Elevation="3">
+        <MudText Typo="Typo.h6" Class="mb-2">Redirecting to sign in…</MudText>
+        <MudText Typo="Typo.body2">If you are not redirected, use the button below.</MudText>
+        <MudButton Class="mt-4" Variant="Variant.Filled" Color="Color.Primary" OnClick="GoToSignIn">
+            Continue to Sign In
+        </MudButton>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    protected override void OnInitialized()
+    {
+        GoToSignIn();
+    }
+
+    private void GoToSignIn()
+    {
+        var redirectUri = Uri.EscapeDataString(Navigation.Uri);
+        Navigation.NavigateTo($"/MicrosoftIdentity/Account/SignIn?redirectUri={redirectUri}", forceLoad: true);
+    }
+}
