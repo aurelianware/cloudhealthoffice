@@ -39,7 +39,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
         var body = await response.Content.ReadAsStringAsync();
         var cs = JsonSerializer.Deserialize<CapabilityStatement>(body, FhirOptions);
         cs.Should().NotBeNull();
-        cs!.ResourceType.Should().Be("CapabilityStatement");
+        cs!.TypeName.Should().Be("CapabilityStatement");
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
         var patient = JsonSerializer.Deserialize<Patient>(body, FhirOptions);
         patient.Should().NotBeNull();
         patient!.Id.Should().Be("pat-001");
-        patient.ResourceType.Should().Be("Patient");
+        patient.TypeName.Should().Be("Patient");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
         var body = await response.Content.ReadAsStringAsync();
         var outcome = JsonSerializer.Deserialize<OperationOutcome>(body, FhirOptions);
         outcome.Should().NotBeNull();
-        outcome!.ResourceType.Should().Be("OperationOutcome");
+        outcome!.TypeName.Should().Be("OperationOutcome");
         outcome.Issue.Should().NotBeEmpty();
     }
 

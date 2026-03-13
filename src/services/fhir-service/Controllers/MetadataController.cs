@@ -47,7 +47,7 @@ public class MetadataController : FhirControllerBase
             [
                 new CapabilityStatement.RestComponent
                 {
-                    Mode = RestfulCapabilityMode.Server,
+                    Mode = CapabilityStatement.RestfulCapabilityMode.Server,
                     Security = new CapabilityStatement.SecurityComponent
                     {
                         Cors = true,

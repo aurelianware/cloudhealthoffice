@@ -26,6 +26,20 @@ public abstract class FhirControllerBase : ControllerBase
     protected string RawQueryString
         => HttpContext.Request.QueryString.Value ?? string.Empty;
 
+    // ── SMART context ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Patient ID injected by SmartScopeEnforcementMiddleware from the `patient` JWT claim.
+    /// Non-null when the token is patient-scoped.  Controllers use this to auto-restrict
+    /// searches to the bound patient without requiring the caller to pass a patient param.
+    /// </summary>
+    protected string? SmartPatientId
+        => HttpContext.Items["SmartPatientId"] as string;
+
+    /// <summary>SMART scopes approved for this request.</summary>
+    protected IReadOnlySet<string> SmartScopes
+        => HttpContext.Items["SmartScopes"] as HashSet<string> ?? new HashSet<string>();
+
     // ── OperationOutcome helpers ──────────────────────────────────────────────
 
     protected IActionResult FhirNotFound(string resourceType, string id)

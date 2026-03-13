@@ -1,0 +1,146 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smart-auth-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  SmartAuth__FhirBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
+  SmartAuth__Issuer: "https://auth.cloudhealthoffice.com"
+  SmartAuth__AccessTokenLifetimeMinutes: "60"
+  SmartAuth__RefreshTokenLifetimeDays: "7"
+  SmartAuth__LaunchContextTtlMinutes: "5"
+  SmartAuth__DevMode: "false"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smart-auth-service-secrets
+  namespace: cloudhealthoffice
+type: Opaque
+stringData:
+  MongoDb__ConnectionString: "mongodb://admin:CHANGE_ME@mongodb:27017/CloudHealthOffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  # Production: signing/encryption certificates from Azure Key Vault
+  # Sprint 3: mount KeyVault secrets here
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-auth-service
+  namespace: cloudhealthoffice
+  labels:
+    app: smart-auth-service
+    component: auth-server
+    compliance: smart-on-fhir
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: smart-auth-service
+  template:
+    metadata:
+      labels:
+        app: smart-auth-service
+    spec:
+      containers:
+        - name: smart-auth-service
+          image: ghcr.io/aurelianware/cloudhealthoffice-smart-auth-service:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: smart-auth-service-config
+            - secretRef:
+                name: smart-auth-service-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-auth-service
+  namespace: cloudhealthoffice
+spec:
+  type: ClusterIP
+  selector:
+    app: smart-auth-service
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: smart-auth-service-hpa
+  namespace: cloudhealthoffice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: smart-auth-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# Exposed at auth.cloudhealthoffice.com — separate subdomain from api.cloudhealthoffice.com
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smart-auth-ingress
+  namespace: cloudhealthoffice
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Larger body size for token endpoint form posts
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    # Required for OAuth2 cookie handling
+    nginx.ingress.kubernetes.io/proxy-cookie-path: "/ /"
+    nginx.ingress.kubernetes.io/proxy-cookie-domain: ".cloudhealthoffice.com"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - auth.cloudhealthoffice.com
+      secretName: smart-auth-tls-secret
+  rules:
+    - host: auth.cloudhealthoffice.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: smart-auth-service
+                port:
+                  number: 80

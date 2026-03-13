@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SmartAuthService</RootNamespace>
+    <AssemblyName>smart-auth-service</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Using OpenIddict.MongoDb instead of EntityFrameworkCore — the entire CHO stack
+      is MongoDB/CosmosDB; no Entity Framework anywhere.  OpenIddict.MongoDb provides
+      first-class MongoDB stores for applications, authorizations, scopes, and tokens.
+    -->
+    <PackageReference Include="OpenIddict.AspNetCore" Version="5.4.0" />
+    <PackageReference Include="OpenIddict.Server.AspNetCore" Version="5.4.0" />
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="5.4.0" />
+    <PackageReference Include="OpenIddict.MongoDb" Version="5.4.0" />
+<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+</Project>

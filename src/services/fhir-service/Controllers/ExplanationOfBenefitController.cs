@@ -38,9 +38,17 @@ public class ExplanationOfBenefitController : FhirControllerBase
     [ProducesResponseType(typeof(OperationOutcome), 400)]
     public async Task<IActionResult> Search([FromQuery] EobSearchParams search, CancellationToken ct)
     {
-        // CMS-0057-F requires patient parameter for Patient Access API calls
+        // Auto-inject patient binding from SMART token so patient apps don't need to
+        // pass an explicit patient= param — the scope enforcement middleware already
+        // validated that any explicit param matches the bound patient.
+        if (string.IsNullOrEmpty(search.Patient) && SmartPatientId != null)
+            search.Patient = SmartPatientId;
+
+        // CMS-0057-F requires patient context on EOB search
         if (string.IsNullOrEmpty(search.Patient) && string.IsNullOrEmpty(search.Id))
-            return FhirBadRequest("ExplanationOfBenefit search requires 'patient' or '_id' parameter");
+            return FhirBadRequest(
+                "ExplanationOfBenefit search requires 'patient' or '_id' parameter. " +
+                "Provide a patient-scoped token or an explicit 'patient' search parameter.");
 
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
