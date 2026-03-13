@@ -1,36 +1,39 @@
 /* ============================================
    THE SENTINEL THEME - Cloud Health Office
    Obsidian Black • Chromatic Neon • Kubrickian Future
+   Aligned with marketing site sentinel.css palette
    ============================================ */
 
 :root {
   color-scheme: dark;
-  
-  /* Brand Colors - The Sentinel Palette */
+
+  /* Brand Colors - Sentinel Palette (cyan + green, no magenta) */
   --cho-black: #000000;
   --cho-obsidian: #0a0a0a;
   --cho-surface: #0f0f0f;
   --cho-cyan: #00ffff;
-  --cho-magenta: #ff00ff;
   --cho-green: #00ff88;
+  --cho-gray: #b0b0b0;
   --cho-white: #ffffff;
-  
+
   /* Neon Glow Effects */
   --glow-cyan: 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
-  --glow-magenta: 0 0 10px rgba(255, 0, 255, 0.4), 0 0 20px rgba(255, 0, 255, 0.2);
   --glow-green: 0 0 10px rgba(0, 255, 136, 0.4), 0 0 20px rgba(0, 255, 136, 0.2);
-  --glow-circuit: 0 0 15px rgba(0, 255, 255, 0.3), 0 0 30px rgba(255, 0, 255, 0.2);
+  --glow-circuit: 0 0 15px rgba(0, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.15);
 }
 
 body {
   margin: 0;
-  font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", Arial, sans-serif;
   background-color: var(--cho-black);
   color: var(--cho-white);
-  background-image: 
+  background-image:
     radial-gradient(circle at 20% 50%, rgba(0, 255, 255, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(255, 0, 255, 0.03) 0%, transparent 50%);
+    radial-gradient(circle at 80% 80%, rgba(0, 255, 136, 0.03) 0%, transparent 50%);
   background-attachment: fixed;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -40,13 +43,15 @@ a {
 }
 
 a:hover {
-  color: var(--cho-magenta);
+  color: var(--cho-white);
   text-shadow: var(--glow-cyan);
 }
 
-/* MudBlazor Component Overrides - The Sentinel Aesthetic */
+/* ============================================
+   MudBlazor Component Overrides - Sentinel Aesthetic
+   ============================================ */
 
-/* Cards - Obsidian with neon borders */
+/* Cards - Obsidian with cyan border */
 .mud-card {
   background: var(--cho-obsidian) !important;
   border: 1px solid rgba(0, 255, 255, 0.2) !important;
@@ -55,8 +60,8 @@ a:hover {
 }
 
 .mud-card:hover {
-  border-color: rgba(0, 255, 255, 0.4) !important;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), 0 0 40px rgba(255, 0, 255, 0.3) !important;
+  border-color: rgba(0, 255, 255, 0.45) !important;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.4), 0 0 40px rgba(0, 255, 136, 0.2) !important;
   transform: translateY(-2px);
 }
 
@@ -89,7 +94,7 @@ a:hover {
   box-shadow: inset 3px 0 0 var(--cho-cyan);
 }
 
-/* Buttons - Neon glow on hover */
+/* Buttons */
 .mud-button-root {
   font-weight: 600 !important;
   transition: all 0.3s ease !important;
@@ -103,24 +108,25 @@ a:hover {
 }
 
 .mud-button-filled-primary:hover {
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.3), rgba(0, 255, 255, 0.2)) !important;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.3), rgba(0, 255, 255, 0.15)) !important;
   box-shadow: var(--glow-cyan) !important;
   transform: translateY(-1px);
 }
 
 .mud-button-filled-secondary {
-  background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(255, 0, 255, 0.1)) !important;
-  border: 1px solid var(--cho-magenta) !important;
-  color: var(--cho-magenta) !important;
-  box-shadow: 0 0 10px rgba(255, 0, 255, 0.3) !important;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.1)) !important;
+  border: 1px solid var(--cho-green) !important;
+  color: var(--cho-green) !important;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3) !important;
 }
 
 .mud-button-filled-secondary:hover {
-  background: linear-gradient(135deg, rgba(255, 0, 255, 0.3), rgba(255, 0, 255, 0.2)) !important;
-  box-shadow: var(--glow-magenta) !important;
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.3), rgba(0, 255, 136, 0.15)) !important;
+  box-shadow: var(--glow-green) !important;
+  transform: translateY(-1px);
 }
 
-/* Inputs - Neon underline */
+/* Inputs */
 .mud-input-underline:before {
   border-bottom-color: rgba(0, 255, 255, 0.3) !important;
 }
@@ -140,7 +146,7 @@ a:hover {
   box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
 }
 
-/* Chips - Outlined neon style */
+/* Chips */
 .mud-chip {
   background: rgba(0, 255, 255, 0.05) !important;
   border: 1px solid rgba(0, 255, 255, 0.3) !important;
@@ -153,11 +159,11 @@ a:hover {
   box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
 }
 
-/* Dialogs - Sentinel modal with glow */
+/* Dialogs */
 .mud-dialog {
   background: var(--cho-obsidian) !important;
   border: 1px solid rgba(0, 255, 255, 0.3) !important;
-  box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), 0 0 60px rgba(255, 0, 255, 0.2) !important;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), 0 0 60px rgba(0, 255, 136, 0.15) !important;
 }
 
 .mud-dialog-title {
@@ -166,7 +172,7 @@ a:hover {
   border-bottom: 1px solid rgba(0, 255, 255, 0.2) !important;
 }
 
-/* Navigation - Active link glow */
+/* Navigation */
 .mud-nav-link.active {
   color: var(--cho-cyan) !important;
   background: rgba(0, 255, 255, 0.1) !important;
@@ -179,9 +185,9 @@ a:hover {
   border-left-color: rgba(0, 255, 255, 0.5) !important;
 }
 
-/* Progress indicators - Cyan glow */
+/* Progress indicators */
 .mud-progress-linear .mud-progress-linear-bar {
-  background: linear-gradient(90deg, var(--cho-cyan), var(--cho-magenta)) !important;
+  background: linear-gradient(90deg, var(--cho-cyan), var(--cho-green)) !important;
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
 }
 
@@ -190,15 +196,15 @@ a:hover {
   filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.5));
 }
 
-/* Badges - Neon accent */
+/* Badges */
 .mud-badge {
-  background: var(--cho-magenta) !important;
-  color: var(--cho-white) !important;
-  box-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+  background: var(--cho-green) !important;
+  color: #000000 !important;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
   font-weight: 700;
 }
 
-/* Alerts - Bordered sentinel style */
+/* Alerts */
 .mud-alert {
   background: rgba(0, 255, 255, 0.05) !important;
   border-left: 3px solid var(--cho-cyan) !important;
@@ -217,7 +223,7 @@ a:hover {
   box-shadow: 0 0 10px rgba(255, 0, 85, 0.2);
 }
 
-/* Tooltips - Floating neon */
+/* Tooltips */
 .mud-tooltip {
   background: var(--cho-obsidian) !important;
   border: 1px solid var(--cho-cyan) !important;
@@ -225,7 +231,7 @@ a:hover {
   color: var(--cho-white) !important;
 }
 
-/* Scrollbar - Minimal cyan */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -245,7 +251,10 @@ a:hover {
   box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
 }
 
-/* Loading skeleton - Pulsing neon */
+/* ============================================
+   Animations - aligned with marketing site
+   ============================================ */
+
 @keyframes sentinel-pulse {
   0%, 100% {
     opacity: 0.4;
@@ -257,17 +266,48 @@ a:hover {
   }
 }
 
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes circuit-pulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.07; }
+}
+
+@keyframes scan-line {
+  0% { top: -4px; }
+  100% { top: 110%; }
+}
+
+/* Loading skeleton */
 .mud-skeleton {
-  background: linear-gradient(90deg, 
-    rgba(0, 255, 255, 0.1) 0%, 
-    rgba(0, 255, 255, 0.2) 50%, 
+  background: linear-gradient(90deg,
+    rgba(0, 255, 255, 0.1) 0%,
+    rgba(0, 255, 255, 0.2) 50%,
     rgba(0, 255, 255, 0.1) 100%) !important;
   animation: sentinel-pulse 2s ease-in-out infinite;
 }
 
-/* Stats cards - Special glow treatment */
+/* ============================================
+   Custom Component Classes
+   ============================================ */
+
+/* Stats cards */
 .stat-card {
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(255, 0, 255, 0.05));
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(0, 255, 136, 0.03));
   border: 1px solid rgba(0, 255, 255, 0.3);
   padding: 24px;
   border-radius: 8px;
@@ -283,14 +323,13 @@ a:hover {
 .stat-value {
   font-size: 2.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--cho-cyan), var(--cho-magenta));
+  background: linear-gradient(135deg, var(--cho-cyan), var(--cho-green));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-shadow: var(--glow-cyan);
 }
 
-/* The Sentinel - signature branding element */
+/* Signature branding element */
 .sentinel-brand {
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -300,18 +339,27 @@ a:hover {
   text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
-/* Circuit pattern background (subtle) */
+/* Circuit pattern background */
 .circuit-bg {
-  background-image: 
-    repeating-linear-gradient(90deg, 
-      transparent, 
-      transparent 2px, 
-      rgba(0, 255, 255, 0.03) 2px, 
+  background-image:
+    repeating-linear-gradient(90deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 255, 255, 0.03) 2px,
       rgba(0, 255, 255, 0.03) 3px),
-    repeating-linear-gradient(0deg, 
-      transparent, 
-      transparent 2px, 
-      rgba(0, 255, 255, 0.03) 2px, 
+    repeating-linear-gradient(0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 255, 255, 0.03) 2px,
       rgba(0, 255, 255, 0.03) 3px);
   background-size: 50px 50px;
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,0 +1,59 @@
+/* APIs Page - Sentinel Aesthetic */
+
+.apis-header {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+    margin-bottom: 32px;
+}
+
+.apis-header-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #00ffff;
+    margin-bottom: 12px;
+}
+
+.apis-page-title {
+    font-weight: 700 !important;
+    background: linear-gradient(135deg, #00ffff, #00ff88) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    margin-bottom: 16px !important;
+}
+
+.apis-page-sub {
+    color: rgba(255, 255, 255, 0.65) !important;
+    max-width: 680px;
+    line-height: 1.7;
+    margin-bottom: 0 !important;
+}
+
+/* Auth banner shown when signed out */
+.apis-auth-banner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 28px;
+    padding: 20px 24px;
+    background: rgba(0, 255, 255, 0.05);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.08);
+}
+
+.apis-auth-banner-text {
+    flex: 1;
+    min-width: 220px;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.apis-auth-banner-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
