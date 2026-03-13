@@ -1,0 +1,78 @@
+version: "3.9"
+
+# Local development stack for Cloud Health Office
+# Starts MongoDB + Redis infrastructure, then the two core adjudication services.
+#
+# Usage:
+#   docker compose up -d
+#
+# Service URLs:
+#   Claims service:      http://localhost:5001  (Swagger at http://localhost:5001/swagger)
+#   Benefit-plan service: http://localhost:5002  (Swagger at http://localhost:5002/swagger)
+#   MongoDB:             localhost:27017
+#   Redis:               localhost:6379
+
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  claims-service:
+    build:
+      context: src/services/claims-service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=ClaimsDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  benefit-plan-service:
+    build:
+      context: src/services/benefit-plan-service
+      dockerfile: Dockerfile
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=BenefitPlanDB
+      - Redis__ConnectionString=redis:6379
+      - Services__ClaimsServiceUrl=http://claims-service:8080
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

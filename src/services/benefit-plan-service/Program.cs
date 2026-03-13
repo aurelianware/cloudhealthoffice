@@ -73,8 +73,11 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
         ?? throw new InvalidOperationException("Redis:ConnectionString is required.")));
 
 builder.Services.AddBenefitEngine()
-    .UseChoBenefitPlanProvider()
     .UseRedisAccumulatorService();
+
+// Real CHO-native providers (replace engine stubs)
+builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlanProvider, BenefitPlanService.Services.ChoBenefitPlanProvider>();
+builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository, BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
 
 builder.Services.AddFeeScheduleEngine()
     .UseRepositoriesFromConfiguration(builder.Configuration);
