@@ -173,7 +173,7 @@ public class RiskAdjustmentController : ControllerBase
     {
         _logger.LogInformation(
             "Score calculation requested for member {MemberId}, year {Year}, model {Model}",
-            SanitizeForLog(request.MemberId), request.MeasurementYear, request.RiskModel);
+            SanitizeForLog(request.MemberId), request.MeasurementYear, SanitizeForLog(request.RiskModel));
 
         var existing = await _riskScoreRepository.GetByMemberAndYearAsync(
             request.MemberId, request.MeasurementYear);
