@@ -238,6 +238,45 @@ curl -s -X PUT "http://localhost:5001/api/claims/$CLAIM_ID/adjudication" \
 
 ## 8. Run a payment batch and generate an 835 ERA
 
+Preflight check (recommended): make sure you have at least one approved claim.
+
+```bash
+curl -s "http://localhost:5001/api/claims/search?status=5&pageSize=5" \
+  -H "X-Tenant-ID: $TENANT" | jq 'map({id, claimNumber, status})'
+```
+
+If the result is empty (`[]`), create and approve a quick test claim first:
+
+```bash
+CLAIM=$(curl -s -X POST http://localhost:5001/api/claims \
+  -H "X-Tenant-ID: $TENANT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claimNumber": "LOCAL-PAY-001",
+    "memberId": "MBR001",
+    "subscriberId": "SUB001",
+    "providerNpi": "1234567890",
+    "serviceDate": "2025-06-15T00:00:00Z",
+    "serviceLines": [
+      {
+        "procedureCode": "99213",
+        "placeOfServiceCode": "11",
+        "billedAmount": 175.00,
+        "units": 1
+      }
+    ],
+    "totalBilledAmount": 175.00,
+    "status": "Submitted"
+  }')
+
+CLAIM_ID=$(echo "$CLAIM" | jq -r '.id')
+
+curl -s -X PUT "http://localhost:5001/api/claims/$CLAIM_ID/status" \
+  -H "X-Tenant-ID: $TENANT" \
+  -H "Content-Type: application/json" \
+  -d '{"status":5}' | jq '{id, status}'
+```
+
 Execute a payment run that picks up all adjudicated claims and generates 835 EDI for each:
 
 ```bash
