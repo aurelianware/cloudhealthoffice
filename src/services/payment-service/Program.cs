@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
+using MongoDB.Driver;
 using PaymentService.Middleware;
 using PaymentService.Repositories;
 using PaymentService.Services;
@@ -20,31 +21,47 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var endpoint = config["CosmosDb:Endpoint"];
-    var key = config["CosmosDb:Key"];
-
-    if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-    {
-        throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-    }
-
-    var options = new CosmosClientOptions
-    {
-        Serializer = new CosmosSystemTextJsonSerializer()
-    };
-    return new CosmosClient(endpoint, key, options);
-});
-
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
-// Repositories
-builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
+// Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
+if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+{
+    builder.Services.AddSingleton<IMongoClient>(sp =>
+        new MongoClient(sp.GetRequiredService<IConfiguration>()["MongoDb:ConnectionString"]));
+
+    builder.Services.AddScoped<IMongoDatabase>(sp =>
+    {
+        var client = sp.GetRequiredService<IMongoClient>();
+        var dbName = sp.GetRequiredService<IConfiguration>()["MongoDb:DatabaseName"] ?? "PaymentDB";
+        return client.GetDatabase(dbName);
+    });
+
+    builder.Services.AddScoped<IPaymentRepository, PaymentRepositoryMongo>();
+    builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
+    Console.WriteLine("Using MongoDB repository");
+}
+else
+{
+    builder.Services.AddSingleton<CosmosClient>(sp =>
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        var endpoint = config["CosmosDb:Endpoint"];
+        var key = config["CosmosDb:Key"];
+
+        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
+
+        return new CosmosClient(endpoint, key, new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer()
+        });
+    });
+
+    builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+    builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
+    Console.WriteLine("Using Cosmos DB repository");
+}
 
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();

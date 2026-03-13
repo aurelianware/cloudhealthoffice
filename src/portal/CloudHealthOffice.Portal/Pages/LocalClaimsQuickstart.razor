@@ -1,0 +1,75 @@
+@page "/quickstarts/local-claims"
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [AllowAnonymous]
+
+<PageTitle>Local Claims + Payment Quickstart — Cloud Health Office</PageTitle>
+
+<div class="apis-header">
+    <div class="apis-header-label">QUICKSTART</div>
+    <MudText Typo="Typo.h3" Class="apis-page-title">
+        Local Claims + Payment Testing
+    </MudText>
+    <MudText Typo="Typo.body1" Class="apis-page-sub">
+        Run claims adjudication locally, execute a payment run, and download a valid 835 ERA with MongoDB-backed services.
+    </MudText>
+</div>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-0 px-0">
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        This is a portal-rendered quickstart. Full source markdown is also available in the repository under
+        <MudLink Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/local-claims-quickstart.md" Target="_blank">api/quickstarts/local-claims-quickstart.md</MudLink>.
+    </MudAlert>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-2">1) Start local stack</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">From repo root:</MudText>
+        <pre><code>docker compose up -d</code></pre>
+        <pre><code>curl -s http://localhost:5001/health
+    curl -s http://localhost:5002/health
+    curl -s http://localhost:5003/health</code></pre>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-2">2) Set tenant + seed NCCI</MudText>
+        <pre><code>TENANT="demo"</code></pre>
+        <pre><code>curl -s -X POST http://localhost:5002/api/v1/ncci/seed -H "X-Tenant-ID: $TENANT" | jq .</code></pre>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-2">3) Execute payment run and capture IDs</MudText>
+          <pre><code>PAYRUN=$(curl -s -X POST http://localhost:5003/api/paymentruns/execute \
+      -H "X-Tenant-ID: $TENANT" \
+      -H "Content-Type: application/json" \
+      -d "{\"criteria\":{\"includeClaimIds\":[\"$CLAIM_ID\"]}}")
+
+    PAYRUN_ID=$(echo $PAYRUN | jq -r '.id')
+    PAYMENT_ID=$(echo $PAYRUN | jq -r '.paymentIds[0]')</code></pre>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-2">4) Download and verify 835</MudText>
+          <pre><code>curl -s "http://localhost:5003/api/payments/$PAYMENT_ID/835" \
+      -H "X-Tenant-ID: $TENANT" \
+      -o era-$(date +%Y%m%d).835
+
+    head -5 era-$(date +%Y%m%d).835</code></pre>
+        <MudText Typo="Typo.body2" Class="mt-2">Expected segments include ISA/GS, ST*835, BPR, CLP, CAS, SVC, and SE.</MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-2">5) Validate payment features</MudText>
+        <pre><code>curl -s "http://localhost:5003/api/paymentruns/$PAYRUN_ID" -H "X-Tenant-ID: $TENANT" | jq '{id,status,totalClaims,totalPaymentAmount}'
+    curl -s "http://localhost:5003/api/payments/$PAYMENT_ID" -H "X-Tenant-ID: $TENANT" | jq '{id,status,totalPaymentAmount}'
+    curl -s "http://localhost:5003/api/payments/summary?from=2025-06-01&to=2025-12-31" -H "X-Tenant-ID: $TENANT" | jq .</code></pre>
+    </MudPaper>
+
+    <MudStack Row="true" Spacing="2" Class="mb-2">
+        <MudButton Href="https://github.com/aurelianware/cloudhealthoffice/blob/main/api/quickstarts/local-claims-quickstart.md" Target="_blank" Variant="Variant.Outlined" Color="Color.Primary">
+            View Full Quickstart (GitHub)
+        </MudButton>
+        <MudButton Href="/apis" Variant="Variant.Text" Color="Color.Secondary">
+            Back to API Catalog
+        </MudButton>
+    </MudStack>
+</MudContainer>
