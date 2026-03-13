@@ -36,15 +36,15 @@ jobs:
       - name: Run npm audit
         run: |
           echo "## NPM Security Audit" >> $GITHUB_STEP_SUMMARY
-          npm audit --production --audit-level=moderate
-          npm audit --json > npm-audit.json
+          npm audit --omit=dev --audit-level=moderate
+          npm audit --omit=dev --audit-level=moderate --json > npm-audit.json || true
 
       - name: Check claims-scrubbing-service
         run: |
           if [ -d "services/claims-scrubbing-service" ]; then
             cd services/claims-scrubbing-service
             npm ci
-            npm audit --production --audit-level=moderate
+            npm audit --omit=dev --audit-level=moderate
           else
             echo "⚠️  claims-scrubbing-service not found, skipping"
           fi
