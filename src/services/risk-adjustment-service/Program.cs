@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using RiskAdjustmentService;
 using RiskAdjustmentService.Middleware;
 using RiskAdjustmentService.Repositories;
+using CloudHealthOffice.RiskAdjustmentEngine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +76,12 @@ else
 
     builder.Services.AddScoped<IRiskScoreRepository, RiskScoreRepository>();
 }
+
+// HCC Risk Adjustment Engine
+builder.Services.AddSingleton<IcdToHccMapper>();
+builder.Services.AddSingleton<HccHierarchyResolver>();
+builder.Services.AddSingleton<RiskScoreCalculator>();
+builder.Services.AddSingleton<CloudHealthOffice.RiskAdjustmentEngine.Services.RiskAdjustmentEngine>();
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();

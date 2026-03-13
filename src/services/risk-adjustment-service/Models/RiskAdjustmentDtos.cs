@@ -27,12 +27,18 @@ public class MemberScoreResponse
 
 /// <summary>
 /// Request to calculate or recalculate a member's risk score.
+/// Provide demographics (AgeAsOfPaymentYear, Gender) and DiagnosisCodes to
+/// invoke the HCC scoring engine. SubscriberId defaults to MemberId when omitted.
 /// </summary>
 public class ScoreCalculationRequest
 {
     [Required]
     [StringLength(50)]
     public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>Subscriber/group ID. Defaults to MemberId when not provided.</summary>
+    [StringLength(50)]
+    public string? SubscriberId { get; set; }
 
     [Required]
     public int MeasurementYear { get; set; }
@@ -45,6 +51,28 @@ public class ScoreCalculationRequest
 
     [StringLength(20)]
     public string ModelVersion { get; set; } = "V28";
+
+    /// <summary>Member age as of the payment/rating year (used for demographic factor).</summary>
+    [Range(0, 125)]
+    public int? AgeAsOfPaymentYear { get; set; }
+
+    /// <summary>Member gender: "M" or "F" (used for demographic factor).</summary>
+    [StringLength(1)]
+    public string? Gender { get; set; }
+
+    /// <summary>
+    /// ICD-10-CM diagnosis codes collected during the measurement year.
+    /// When provided, the HCC scoring engine is invoked to compute the full RAF score.
+    /// </summary>
+    public List<string> DiagnosisCodes { get; set; } = new();
+
+    /// <summary>Optional member first name (denormalized for display).</summary>
+    [StringLength(100)]
+    public string? MemberFirstName { get; set; }
+
+    /// <summary>Optional member last name (denormalized for display).</summary>
+    [StringLength(100)]
+    public string? MemberLastName { get; set; }
 }
 
 /// <summary>
