@@ -263,6 +263,7 @@ app.UseSession();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithMetadata(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute());
 
+app.MapControllers();
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
