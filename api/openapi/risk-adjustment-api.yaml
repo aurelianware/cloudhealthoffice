@@ -1,0 +1,686 @@
+openapi: 3.1.0
+info:
+  title: Cloud Health Office — Risk Adjustment Service API
+  version: 1.0.0
+  description: |
+    **Healthcare Risk Adjustment Scoring API**
+
+    Provides per-member HCC (Hierarchical Condition Category) risk scores,
+    measurement-year analytics, and population risk management for
+    Medicare Advantage, Medicaid managed care, and ACA marketplace plans.
+
+    **Key Features:**
+    - Per-member risk score endpoint with full HCC category breakdown
+    - Measurement-year data — population-level scoring summaries
+    - Score trend analysis across multiple years per member
+    - Batch status updates (mark scores as Submitted/Accepted)
+    - Support for CMS-HCC (V24/V28), HHS-HCC, and CDPS risk models
+    - Multi-tenant isolation via TenantId partitioning
+
+    **Risk Score Components:**
+    - **Demographic Factor** — Age/gender baseline risk
+    - **HCC Factor** — Disease burden from mapped diagnosis codes
+    - **Interaction Factor** — Comorbidity adjustment terms
+    - **RAF (Risk Adjustment Factor)** — Composite score (1.0 = average expected cost)
+
+    **Workflow:**
+    1. **Calculate** — Trigger score calculation from encounter/claim diagnoses
+    2. **Review** — Validate HCC mappings and diagnosis coding accuracy
+    3. **Finalize** — Lock score for submission
+    4. **Submit** — Report to CMS/payer via RAPS or EDPS
+    5. **Accept/Reject** — Track CMS/payer response
+
+  contact:
+    name: Aurelianware, Inc.
+    url: https://cloudhealthoffice.com
+    email: api@cloudhealthoffice.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.cloudhealthoffice.com/risk-adjustment/v1
+    description: Production
+  - url: https://sandbox.cloudhealthoffice.com/risk-adjustment/v1
+    description: Sandbox (test data)
+
+security:
+  - bearerAuth: []
+  - tenantHeader: []
+
+tags:
+  - name: Member Scores
+    description: Per-member risk score retrieval and management
+  - name: Measurement Year
+    description: Measurement-year population data and analytics
+  - name: Score Management
+    description: Score search, batch operations, and lifecycle
+
+paths:
+  /api/risk-adjustment/members/{memberId}/scores/{measurementYear}:
+    get:
+      tags: [Member Scores]
+      summary: Get member risk score
+      description: |
+        Returns the full risk score for a member in a specific measurement year,
+        including HCC category breakdown, diagnosis mappings, and interaction terms.
+      operationId: getMemberScore
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: measurementYear
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Risk score found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRiskScore'
+        '404':
+          description: No score found for member/year
+    put:
+      tags: [Member Scores]
+      summary: Create or update member risk score
+      operationId: upsertMemberScore
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: measurementYear
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRiskScore'
+      responses:
+        '200':
+          description: Score updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRiskScore'
+        '201':
+          description: Score created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRiskScore'
+        '400':
+          description: Invalid score data
+
+  /api/risk-adjustment/members/{memberId}/scores/{measurementYear}/summary:
+    get:
+      tags: [Member Scores]
+      summary: Get member score summary
+      description: Lighter response without full HCC detail — suitable for list views.
+      operationId: getMemberScoreSummary
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: measurementYear
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Score summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberScoreResponse'
+        '404':
+          description: No score found
+
+  /api/risk-adjustment/members/{memberId}/scores:
+    get:
+      tags: [Member Scores]
+      summary: Get member score trend
+      description: Returns risk scores across all measurement years for trend analysis.
+      operationId: getMemberScoreTrend
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Score trend
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberScoreTrend'
+
+  /api/risk-adjustment/scores/calculate:
+    post:
+      tags: [Score Management]
+      summary: Request score calculation
+      description: Triggers score calculation for a member in a measurement year.
+      operationId: requestScoreCalculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoreCalculationRequest'
+      responses:
+        '200':
+          description: Score calculated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRiskScore'
+
+  /api/risk-adjustment/measurement-years/{measurementYear}/scores:
+    get:
+      tags: [Measurement Year]
+      summary: Get measurement year scores
+      description: Returns all member risk scores for a measurement year (paginated).
+      operationId: getMeasurementYearScores
+      parameters:
+        - name: measurementYear
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: lineOfBusiness
+          in: query
+          schema:
+            $ref: '#/components/schemas/LineOfBusiness'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Measurement year scores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberRiskScore'
+
+  /api/risk-adjustment/measurement-years/{measurementYear}/summary:
+    get:
+      tags: [Measurement Year]
+      summary: Get measurement year summary
+      description: |
+        Returns aggregate statistics for a measurement year: average/min/max RAF,
+        member counts, and scoring status breakdown.
+      operationId: getMeasurementYearSummary
+      parameters:
+        - name: measurementYear
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: lineOfBusiness
+          in: query
+          schema:
+            $ref: '#/components/schemas/LineOfBusiness'
+      responses:
+        '200':
+          description: Measurement year summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementYearSummary'
+
+  /api/risk-adjustment/scores/search:
+    get:
+      tags: [Score Management]
+      summary: Search risk scores
+      operationId: searchScores
+      parameters:
+        - name: measurementYear
+          in: query
+          schema:
+            type: integer
+        - name: memberId
+          in: query
+          schema:
+            type: string
+        - name: lineOfBusiness
+          in: query
+          schema:
+            $ref: '#/components/schemas/LineOfBusiness'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ScoreStatus'
+        - name: minScore
+          in: query
+          schema:
+            type: number
+        - name: maxScore
+          in: query
+          schema:
+            type: number
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberRiskScore'
+
+  /api/risk-adjustment/scores/batch-status:
+    post:
+      tags: [Score Management]
+      summary: Batch update score status
+      description: Update status for multiple members at once (e.g., mark as Submitted).
+      operationId: batchUpdateStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchStatusUpdate'
+      responses:
+        '200':
+          description: Batch update result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requested:
+                    type: integer
+                  updated:
+                    type: integer
+                  notFound:
+                    type: integer
+                  status:
+                    type: string
+
+  /api/risk-adjustment/scores/{id}:
+    get:
+      tags: [Score Management]
+      summary: Get score by document ID
+      operationId: getScoreById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Score found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRiskScore'
+        '404':
+          description: Score not found
+    delete:
+      tags: [Score Management]
+      summary: Delete a risk score
+      operationId: deleteScore
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Score deleted
+        '404':
+          description: Score not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-ID
+
+  schemas:
+    MemberRiskScore:
+      type: object
+      required:
+        - memberId
+        - measurementYear
+        - riskModel
+        - modelVersion
+        - lineOfBusiness
+        - riskScore
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        memberId:
+          type: string
+        memberFirstName:
+          type: string
+        memberLastName:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date-time
+        gender:
+          type: string
+        measurementYear:
+          type: integer
+        riskModel:
+          type: string
+          example: CMS-HCC
+        modelVersion:
+          type: string
+          example: V28
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        riskScore:
+          type: number
+          format: decimal
+          description: Composite RAF score (1.0 = average expected cost)
+        demographicFactor:
+          type: number
+          format: decimal
+        hccFactor:
+          type: number
+          format: decimal
+        interactionFactor:
+          type: number
+          format: decimal
+        hccCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HccCategory'
+        diagnoses:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskDiagnosis'
+        interactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiseaseInteraction'
+        isSubmitted:
+          type: boolean
+        submittedDate:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ScoreStatus'
+        calculatedDate:
+          type: string
+          format: date-time
+
+    HccCategory:
+      type: object
+      properties:
+        categoryCode:
+          type: string
+          example: HCC19
+        description:
+          type: string
+          example: Diabetes without Complication
+        coefficient:
+          type: number
+          format: decimal
+        sourceDiagnosisCodes:
+          type: array
+          items:
+            type: string
+        isSuperseded:
+          type: boolean
+        supersededBy:
+          type: string
+
+    RiskDiagnosis:
+      type: object
+      properties:
+        diagnosisCode:
+          type: string
+          example: E11.9
+        description:
+          type: string
+        mappedHccCategory:
+          type: string
+        source:
+          type: string
+        serviceDate:
+          type: string
+          format: date-time
+        providerNPI:
+          type: string
+        sourceEncounterId:
+          type: string
+
+    DiseaseInteraction:
+      type: object
+      properties:
+        interactionLabel:
+          type: string
+          example: DIABETES_CHF
+        involvedCategories:
+          type: array
+          items:
+            type: string
+        coefficient:
+          type: number
+          format: decimal
+
+    MemberScoreResponse:
+      type: object
+      properties:
+        memberId:
+          type: string
+        memberFirstName:
+          type: string
+        memberLastName:
+          type: string
+        measurementYear:
+          type: integer
+        riskModel:
+          type: string
+        modelVersion:
+          type: string
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        riskScore:
+          type: number
+          format: decimal
+        demographicFactor:
+          type: number
+          format: decimal
+        hccFactor:
+          type: number
+          format: decimal
+        interactionFactor:
+          type: number
+          format: decimal
+        hccCategoryCount:
+          type: integer
+        diagnosisCount:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ScoreStatus'
+        calculatedDate:
+          type: string
+          format: date-time
+        isSubmitted:
+          type: boolean
+
+    MemberScoreTrend:
+      type: object
+      properties:
+        memberId:
+          type: string
+        memberFirstName:
+          type: string
+        memberLastName:
+          type: string
+        yearlyScores:
+          type: array
+          items:
+            $ref: '#/components/schemas/YearlyScore'
+
+    YearlyScore:
+      type: object
+      properties:
+        measurementYear:
+          type: integer
+        riskScore:
+          type: number
+          format: decimal
+        demographicFactor:
+          type: number
+          format: decimal
+        hccFactor:
+          type: number
+          format: decimal
+        hccCategoryCount:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ScoreStatus'
+
+    ScoreCalculationRequest:
+      type: object
+      required: [memberId, measurementYear, lineOfBusiness]
+      properties:
+        memberId:
+          type: string
+        measurementYear:
+          type: integer
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        riskModel:
+          type: string
+          default: CMS-HCC
+        modelVersion:
+          type: string
+          default: V28
+
+    MeasurementYearSummary:
+      type: object
+      properties:
+        measurementYear:
+          type: integer
+        riskModel:
+          type: string
+        lineOfBusiness:
+          $ref: '#/components/schemas/LineOfBusiness'
+        totalMembers:
+          type: integer
+        scoredMembers:
+          type: integer
+        submittedMembers:
+          type: integer
+        averageRiskScore:
+          type: number
+          format: decimal
+        minRiskScore:
+          type: number
+          format: decimal
+        maxRiskScore:
+          type: number
+          format: decimal
+        medianRiskScore:
+          type: number
+          format: decimal
+        topHccCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HccDistribution'
+        scoreDistribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDistributionBucket'
+
+    HccDistribution:
+      type: object
+      properties:
+        categoryCode:
+          type: string
+        description:
+          type: string
+        memberCount:
+          type: integer
+        averageCoefficient:
+          type: number
+          format: decimal
+
+    ScoreDistributionBucket:
+      type: object
+      properties:
+        rangeFrom:
+          type: number
+          format: decimal
+        rangeTo:
+          type: number
+          format: decimal
+        memberCount:
+          type: integer
+
+    BatchStatusUpdate:
+      type: object
+      required: [memberIds, measurementYear, status]
+      properties:
+        memberIds:
+          type: array
+          items:
+            type: string
+        measurementYear:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ScoreStatus'
+        notes:
+          type: string
+
+    ScoreStatus:
+      type: string
+      enum:
+        - Calculated
+        - UnderReview
+        - Finalized
+        - Submitted
+        - Accepted
+        - Rejected
+
+    LineOfBusiness:
+      type: string
+      enum: [Commercial, Medicare, Medicaid, Exchange, TRICARE, VA]
