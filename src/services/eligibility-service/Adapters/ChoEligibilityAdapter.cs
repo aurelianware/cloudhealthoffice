@@ -11,18 +11,18 @@ namespace EligibilityService.Adapters;
 /// </summary>
 public class ChoEligibilityAdapter : IEligibilityAdapter
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ChoEligibilityAdapter> _logger;
 
     public string Platform => "cho";
 
     public ChoEligibilityAdapter(
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILogger<ChoEligibilityAdapter> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
     }
@@ -73,7 +73,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     private async Task<ChoCoverageDto?> GetActiveCoverageAsync(string tenantId, string subscriberId, DateTime serviceDate)
     {
         var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
-        var response = await _httpClient.GetAsync(
+        var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
             $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
 
         if (!response.IsSuccessStatusCode)
@@ -87,15 +87,15 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
     private async Task<List<EligibilityBenefit>> GetBenefitsAsync(string tenantId, string benefitPlanId, string? serviceType)
     {
-        var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
-        var url = $"{benefitUrl}/benefit-plans/{benefitPlanId}/benefits?tenantId={tenantId}";
+        var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api/v1";
+        var url = $"{benefitUrl}/plans/{benefitPlanId}/benefits?tenantId={tenantId}";
 
         if (!string.IsNullOrEmpty(serviceType))
         {
             url += $"&serviceType={serviceType}";
         }
 
-        var response = await _httpClient.GetAsync(url);
+        var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(url);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -127,9 +127,9 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     {
         try
         {
-            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
-            var response = await _httpClient.GetAsync(
-                $"{benefitUrl}/benefit-plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
+            var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api/v1";
+            var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
+                $"{benefitUrl}/plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -151,7 +151,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         try
         {
             var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
-            var response = await _httpClient.GetAsync(
+            var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
 
             if (!response.IsSuccessStatusCode)

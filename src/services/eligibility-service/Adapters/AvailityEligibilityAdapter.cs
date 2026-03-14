@@ -14,16 +14,16 @@ namespace EligibilityService.Adapters;
 /// </summary>
 public class AvailityEligibilityAdapter : IEligibilityAdapter
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AvailityEligibilityAdapter> _logger;
 
     public string Platform => "availity";
 
     public AvailityEligibilityAdapter(
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         ILogger<AvailityEligibilityAdapter> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
