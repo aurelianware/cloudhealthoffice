@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ffff" opacity="0.7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ff88" opacity="0.7"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="600" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="45" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
+        fill="#ffffff" text-anchor="middle">837 Claims Adjudication Flow</text>
+  <text x="600" y="70" font-family="Segoe UI, system-ui, sans-serif" font-size="14" fill="#00ffff"
+        text-anchor="middle" opacity="0.8">10-Step Intelligent Pipeline</text>
+
+  <!-- SFTP Ingestion (left side) -->
+  <g transform="translate(80, 180)">
+    <rect x="-55" y="-20" width="110" height="40" rx="6" fill="rgba(0,255,255,0.1)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle">SFTP</text>
+  </g>
+
+  <!-- Arrow from SFTP to Argo -->
+  <line x1="135" y1="180" x2="175" y2="240" stroke="#00ffff" stroke-width="1" opacity="0.5" marker-end="url(#arrow)"/>
+
+  <!-- Argo Workflow -->
+  <g transform="translate(80, 280)">
+    <rect x="-65" y="-35" width="130" height="70" rx="8" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1"/>
+    <text x="0" y="-12" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#00ffff" text-anchor="middle">Argo Workflow</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">Fetch &rarr; Parse 837</text>
+    <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">&rarr; Create Claim</text>
+  </g>
+
+  <!-- Arrow to Kafka -->
+  <line x1="80" y1="315" x2="80" y2="355" stroke="#00ffff" stroke-width="1" opacity="0.5" marker-end="url(#arrow)"/>
+
+  <!-- Kafka -->
+  <g transform="translate(80, 390)">
+    <rect x="-65" y="-20" width="130" height="40" rx="6" fill="rgba(0,255,136,0.1)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#00ff88" text-anchor="middle">Kafka Topic</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">claims-adjudication</text>
+  </g>
+
+  <!-- Claims Service API Box -->
+  <rect x="190" y="100" width="580" height="420" rx="12" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+  <text x="480" y="128" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+        fill="#ffffff" text-anchor="middle">Claims Service API</text>
+
+  <!-- Step 1: Get Claim -->
+  <g transform="translate(270, 180)">
+    <circle cx="-25" cy="0" r="12" fill="#00ffff" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">1</text>
+    <rect x="-10" y="-15" width="100" height="30" rx="5" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1"/>
+    <text x="40" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Get claim</text>
+  </g>
+
+  <!-- Step 2: Validate codes -->
+  <g transform="translate(420, 180)">
+    <circle cx="-25" cy="0" r="12" fill="#00ffff" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">2</text>
+    <rect x="-10" y="-15" width="120" height="30" rx="5" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1"/>
+    <text x="50" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Validate codes</text>
+  </g>
+
+  <!-- Step 3: Verify coverage -->
+  <g transform="translate(270, 250)">
+    <circle cx="-25" cy="0" r="12" fill="#00ff88" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">3</text>
+    <rect x="-10" y="-15" width="130" height="30" rx="5" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
+    <text x="55" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Verify coverage</text>
+  </g>
+
+  <!-- Step 4: Validate provider -->
+  <g transform="translate(270, 320)">
+    <circle cx="-25" cy="0" r="12" fill="#00ff88" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">4</text>
+    <rect x="-10" y="-15" width="140" height="30" rx="5" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
+    <text x="60" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Validate provider</text>
+  </g>
+
+  <!-- Step 5: Check prior auth -->
+  <g transform="translate(460, 250)">
+    <circle cx="-25" cy="0" r="12" fill="#00ffff" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">5</text>
+    <rect x="-10" y="-15" width="140" height="30" rx="5" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1"/>
+    <text x="60" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Check prior auth</text>
+  </g>
+
+  <!-- Step 6: Get benefits -->
+  <g transform="translate(460, 320)">
+    <circle cx="-25" cy="0" r="12" fill="#00ffff" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">6</text>
+    <rect x="-10" y="-15" width="120" height="30" rx="5" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1"/>
+    <text x="50" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Get benefits</text>
+  </g>
+
+  <!-- Arrows between steps -->
+  <g stroke="#00ffff" stroke-width="1" opacity="0.5" marker-end="url(#arrow)">
+    <line x1="360" y1="180" x2="385" y2="180"/>
+    <line x1="390" y1="250" x2="425" y2="250"/>
+    <line x1="400" y1="320" x2="425" y2="320"/>
+    <line x1="145" y1="280" x2="235" y2="250"/>
+    <line x1="145" y1="390" x2="235" y2="250"/>
+  </g>
+
+  <!-- Benefit Engine Box (right) -->
+  <rect x="800" y="100" width="370" height="420" rx="12" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,136,0.25)" stroke-width="1"/>
+  <text x="985" y="128" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+        fill="#ffffff" text-anchor="middle">Benefit Engine</text>
+
+  <!-- Decision Diamond -->
+  <g transform="translate(880, 260)">
+    <polygon points="0,-35 50,0 0,35 -50,0" fill="rgba(0,255,255,0.1)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#00ffff" text-anchor="middle">7</text>
+  </g>
+
+  <!-- Approved -->
+  <g transform="translate(980, 200)">
+    <rect x="-45" y="-15" width="90" height="30" rx="5" fill="rgba(0,255,136,0.15)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+          fill="#00ff88" text-anchor="middle">Approved</text>
+  </g>
+
+  <!-- Denied -->
+  <g transform="translate(980, 330)">
+    <rect x="-40" y="-15" width="80" height="30" rx="5" fill="rgba(255,140,0,0.15)" stroke="#ff8c00" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+          fill="#ff8c00" text-anchor="middle">Denied</text>
+  </g>
+
+  <!-- Step 8: Calculate allowed -->
+  <g transform="translate(880, 370)">
+    <circle cx="-25" cy="0" r="12" fill="#00ff88" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">8</text>
+    <rect x="-10" y="-15" width="140" height="30" rx="5" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
+    <text x="60" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Calculate allowed</text>
+  </g>
+
+  <!-- Step 9: Cost-sharing -->
+  <g transform="translate(880, 430)">
+    <circle cx="-25" cy="0" r="12" fill="#00ff88" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">9</text>
+    <rect x="-10" y="-15" width="155" height="30" rx="5" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
+    <text x="67" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Calculate cost-sharing</text>
+  </g>
+
+  <!-- Step 10: Update claim -->
+  <g transform="translate(620, 180)">
+    <circle cx="-25" cy="0" r="12" fill="#00ffff" opacity="0.9"/>
+    <text x="-25" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
+          fill="#000000" text-anchor="middle">10</text>
+    <rect x="-10" y="-15" width="120" height="30" rx="5" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1"/>
+    <text x="50" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#ffffff" text-anchor="middle">Update claim</text>
+  </g>
+
+  <!-- Arrows to benefit engine -->
+  <g stroke="#00ffff" stroke-width="1" opacity="0.5" marker-end="url(#arrow)">
+    <line x1="590" y1="250" x2="830" y2="250"/>
+    <line x1="570" y1="320" x2="830" y2="270"/>
+    <line x1="930" y1="245" x2="940" y2="205"/>
+    <line x1="930" y1="275" x2="940" y2="320"/>
+  </g>
+  <g stroke="#00ff88" stroke-width="1" opacity="0.5" marker-end="url(#arrowGreen)">
+    <line x1="1020" y1="215" x2="1020" y2="430"/>
+    <line x1="1020" y1="430" x2="730" y2="186"/>
+  </g>
+
+  <!-- Bottom bar -->
+  <g transform="translate(0, 555)">
+    <rect x="0" y="0" width="1200" height="45" fill="rgba(0,255,255,0.03)"/>
+    <text x="600" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="rgba(176,176,176,0.6)"
+          text-anchor="middle">Orchestrated by Argo Workflows &bull; Event-driven &bull; HIPAA Compliant &bull; Multi-cloud &bull; &lt;500ms end-to-end</text>
+  </g>
+</svg>
