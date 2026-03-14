@@ -18,6 +18,12 @@ public record BenefitResolutionRequest
     public string ClaimId { get; init; } = default!;
 
     // Claim-level context
+    /// <summary>
+    /// Line of business from coverage (1=Commercial, 2=Medicare, 3=Medicaid, etc.).
+    /// Available for LOB-specific adjudication rules in future iterations.
+    /// </summary>
+    public int? LineOfBusiness { get; init; }
+
     public string? ClaimType { get; init; } // 837P, 837I, 837D
     public string? AdmitDate { get; init; }
     public string? DischargeDate { get; init; }
