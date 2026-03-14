@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="500" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="32" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Cloud Health Office</text>
+  <text x="600" y="78" font-family="Segoe UI, system-ui, sans-serif" font-size="16" fill="#b0b0b0"
+        text-anchor="middle">Kubernetes-Native HIPAA Platform &bull; X12 EDI &bull; FHIR R4 &bull; Prior Auth Automation</text>
+
+  <!-- Cloud provider badges -->
+  <g transform="translate(600, 125)">
+    <!-- Azure -->
+    <g transform="translate(-180, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#00b4ff" text-anchor="middle">Azure AKS</text>
+    </g>
+    <!-- AWS -->
+    <g transform="translate(0, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#ff9900" text-anchor="middle">AWS EKS</text>
+    </g>
+    <!-- GCP -->
+    <g transform="translate(180, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#4285f4" text-anchor="middle">GCP GKE</text>
+    </g>
+  </g>
+
+  <!-- Main platform box -->
+  <rect x="100" y="165" width="1000" height="240" rx="14" fill="rgba(8,8,8,0.6)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
+
+  <!-- Row 1: Core Stats -->
+  <g transform="translate(0, 210)">
+    <g transform="translate(200, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">17</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">MICROSERVICES</text>
+    </g>
+    <g transform="translate(380, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">6</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">CALC ENGINES</text>
+    </g>
+    <g transform="translate(540, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">5</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">X12 PARSERS</text>
+    </g>
+    <g transform="translate(700, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">5</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">FHIR R4 APIs</text>
+    </g>
+    <g transform="translate(870, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">17</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">ARGO WORKFLOWS</text>
+    </g>
+    <g transform="translate(1030, 0)">
+      <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">37</text>
+      <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#b0b0b0" text-anchor="middle">PORTAL PAGES</text>
+    </g>
+  </g>
+
+  <!-- Divider -->
+  <line x1="140" y1="260" x2="1060" y2="260" stroke="rgba(0,255,255,0.1)" stroke-width="1"/>
+
+  <!-- Row 2: Capabilities -->
+  <g transform="translate(0, 300)">
+    <g transform="translate(200, 0)">
+      <rect x="-70" y="-18" width="140" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Benefit Engine</text>
+    </g>
+    <g transform="translate(380, 0)">
+      <rect x="-75" y="-18" width="150" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Fee Schedule Engine</text>
+    </g>
+    <g transform="translate(570, 0)">
+      <rect x="-65" y="-18" width="130" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Risk Adjustment</text>
+    </g>
+    <g transform="translate(745, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle">COB Engine</text>
+    </g>
+    <g transform="translate(905, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle">NCCI Engine</text>
+    </g>
+    <g transform="translate(1050, 0)">
+      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Accumulators</text>
+    </g>
+  </g>
+
+  <!-- Row 3: EDI Transactions -->
+  <g transform="translate(0, 355)">
+    <g transform="translate(200, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">837 Claims</text>
+    </g>
+    <g transform="translate(360, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">835 Remittance</text>
+    </g>
+    <g transform="translate(520, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">270/271 Eligibility</text>
+    </g>
+    <g transform="translate(680, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">278 Prior Auth</text>
+    </g>
+    <g transform="translate(840, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">275 Attachments</text>
+    </g>
+    <g transform="translate(1000, 0)">
+      <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">834 Enrollment</text>
+    </g>
+  </g>
+
+  <!-- Bottom bar -->
+  <g transform="translate(0, 435)">
+    <rect x="100" y="0" width="1000" height="50" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.15)" stroke-width="1"/>
+    <text x="600" y="30" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#b0b0b0"
+          text-anchor="middle">Deploy Anywhere &bull; Free for Non-Production &bull; BSL 1.1 License &bull; .NET 8 &bull; Python 3.11 &bull; Node.js 20</text>
+  </g>
+</svg>
