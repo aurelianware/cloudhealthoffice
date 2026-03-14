@@ -166,6 +166,7 @@ public class AdjudicationController : ControllerBase
             BenefitPlanId = request.BenefitPlanId,
             ServiceDate = request.ServiceDate,
             NetworkTier = request.NetworkTier,
+            LineOfBusiness = request.LineOfBusiness,
             ClaimId = request.ClaimId,
             Lines = benefitLines,
             Cob = request.Cob is null ? null : new CobInfo
@@ -315,6 +316,12 @@ public record AdjudicationRequest
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public NetworkTier NetworkTier { get; init; }
+
+    /// <summary>
+    /// Line of business from coverage verification (1=Commercial, 2=Medicare, 3=Medicaid, etc.).
+    /// Passed through to the benefit engine for LOB-specific adjudication rules.
+    /// </summary>
+    public int? LineOfBusiness { get; init; }
 
     public List<AdjudicationLineRequest> Lines { get; init; } = [];
 

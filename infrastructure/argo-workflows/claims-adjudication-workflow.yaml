@@ -513,6 +513,7 @@ spec:
             "serviceDate": service_date,
             "providerNpi": provider.get('npi') or claim.get('billingProviderNPI'),
             "networkTier": coverage.get('networkTier', 'InNetwork'),
+            "lineOfBusiness": coverage.get('lineOfBusiness'),
             "lines": lines
         }
 
