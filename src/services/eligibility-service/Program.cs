@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using EligibilityService;
+using EligibilityService.Adapters;
 using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
@@ -69,7 +70,35 @@ else
     builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
 }
 
-// HTTP Client for service calls
+// HTTP Client for service calls (shared by adapters, factory, and eligibility service)
+builder.Services.AddHttpClient("EligibilityDefault")
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(5);
+    });
+
+// Eligibility adapters — each tenant can be configured to use a different platform
+builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
+    new ChoEligibilityAdapter(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<ChoEligibilityAdapter>>()));
+builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
+    new AvailityEligibilityAdapter(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
+        sp.GetRequiredService<ILogger<AvailityEligibilityAdapter>>()));
+builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
+    new ChangeHealthcareEligibilityAdapter(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
+        sp.GetRequiredService<ILogger<ChangeHealthcareEligibilityAdapter>>()));
+builder.Services.AddSingleton<EligibilityAdapterFactory>(sp =>
+    new EligibilityAdapterFactory(
+        sp.GetRequiredService<IEnumerable<IEligibilityAdapter>>(),
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<EligibilityAdapterFactory>>()));
+
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(client =>

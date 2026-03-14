@@ -1,3 +1,4 @@
+using EligibilityService.Adapters;
 using EligibilityService.Models;
 using EligibilityService.Repositories;
 using System.Net.Http.Json;
@@ -10,68 +11,82 @@ public class EligibilityServiceImpl : IEligibilityService
     private readonly HttpClient _httpClient;
     private readonly ILogger<EligibilityServiceImpl> _logger;
     private readonly IConfiguration _configuration;
+    private readonly EligibilityAdapterFactory _adapterFactory;
 
     public EligibilityServiceImpl(
         IEligibilityRepository repository,
         HttpClient httpClient,
         ILogger<EligibilityServiceImpl> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        EligibilityAdapterFactory adapterFactory)
     {
         _repository = repository;
         _httpClient = httpClient;
         _logger = logger;
         _configuration = configuration;
+        _adapterFactory = adapterFactory;
     }
 
     public async Task<EligibilityResponse> ProcessInquiryAsync(EligibilityInquiry inquiry)
     {
         inquiry.Status = EligibilityInquiryStatus.Processing;
         inquiry.CreatedDate = DateTime.UtcNow;
-        
+
         // Store inquiry
         await _repository.CreateInquiryAsync(inquiry);
 
         try
         {
-            // 1. Check active coverage
-            var coverage = await GetActiveCoverageAsync(inquiry.TenantId, inquiry.SubscriberId, inquiry.ServiceDateFrom ?? DateTime.UtcNow);
-            
-            if (coverage == null || !coverage.IsActive)
+            // Resolve the eligibility adapter for this tenant
+            var (adapter, platformSettings) = await _adapterFactory.GetAdapterWithSettingsAsync(inquiry.TenantId);
+
+            _logger.LogInformation(
+                "Processing eligibility inquiry {InquiryId} using {Platform} adapter for tenant {TenantId}",
+                SanitizeForLog(inquiry.Id), adapter.Platform, SanitizeForLog(inquiry.TenantId));
+
+            var adapterRequest = new EligibilityAdapterRequest
             {
-                return CreateInactiveCoverageResponse(inquiry);
-            }
+                TenantId = inquiry.TenantId,
+                SubscriberId = inquiry.SubscriberId,
+                GroupNumber = inquiry.GroupNumber,
+                ProviderNPI = inquiry.ProviderNPI,
+                ServiceTypeCode = inquiry.ServiceTypeCode,
+                ServiceDate = inquiry.ServiceDateFrom ?? DateTime.UtcNow,
+                ServiceDateTo = inquiry.ServiceDateTo,
+                SubscriberFirstName = inquiry.SubscriberFirstName,
+                SubscriberLastName = inquiry.SubscriberLastName,
+                SubscriberDOB = inquiry.SubscriberDOB,
+                DependentFirstName = inquiry.DependentFirstName,
+                DependentLastName = inquiry.DependentLastName,
+                DependentDOB = inquiry.DependentDOB,
+                DependentRelationship = inquiry.DependentRelationship,
+                PayerId = inquiry.PayerId,
+                PayerName = inquiry.PayerName,
+                PlatformSettings = platformSettings
+            };
 
-            // 2. Get member info
-            var member = await GetMemberAsync(inquiry.TenantId, inquiry.SubscriberId);
-            
-            // 3. Get benefit plan details
-            var benefits = await GetBenefitsAsync(inquiry.TenantId, coverage.BenefitPlanId, inquiry.ServiceTypeCode);
-            
-            // 4. Get accumulation (deductible/OOP)
-            var accumulation = await GetAccumulationDataAsync(inquiry.TenantId, inquiry.SubscriberId, coverage.BenefitPlanId);
-            
-            // 5. Check COB
-            var additionalInsurances = await GetAdditionalInsurancesAsync(inquiry.TenantId, inquiry.SubscriberId);
+            var adapterResponse = await adapter.VerifyEligibilityAsync(adapterRequest);
 
-            // Build response
+            // Map adapter response to EligibilityResponse
             var response = new EligibilityResponse
             {
                 Id = Guid.NewGuid().ToString(),
                 TenantId = inquiry.TenantId,
                 InquiryId = inquiry.Id,
                 ControlNumber = inquiry.ControlNumber,
-                ResponseCode = "Y", // Yes - coverage exists
-                StatusCode = "1", // Active
-                IsCovered = true,
-                CoverageLevel = coverage.CoverageLevel,
-                InsurancePlanName = coverage.PlanName,
-                GroupNumber = coverage.GroupNumber,
-                CoverageBeginDate = coverage.EffectiveDate,
-                CoverageEndDate = coverage.TerminationDate,
-                Benefits = benefits,
-                Deductible = accumulation.Deductible,
-                OutOfPocket = accumulation.OutOfPocket,
-                AdditionalInsurances = additionalInsurances,
+                ResponseCode = adapterResponse.IsEligible ? "Y" : "N",
+                StatusCode = adapterResponse.StatusCode,
+                RejectionReason = adapterResponse.RejectionReason,
+                IsCovered = adapterResponse.IsEligible,
+                CoverageLevel = adapterResponse.CoverageLevel ?? string.Empty,
+                InsurancePlanName = adapterResponse.PlanName ?? string.Empty,
+                GroupNumber = adapterResponse.GroupNumber ?? string.Empty,
+                CoverageBeginDate = adapterResponse.CoverageBeginDate,
+                CoverageEndDate = adapterResponse.CoverageEndDate,
+                Benefits = adapterResponse.Benefits,
+                Deductible = adapterResponse.Deductible,
+                OutOfPocket = adapterResponse.OutOfPocket,
+                AdditionalInsurances = adapterResponse.AdditionalInsurances,
                 CreatedDate = DateTime.UtcNow
             };
 
@@ -85,17 +100,17 @@ public class EligibilityServiceImpl : IEligibilityService
             await _repository.CreateResponseAsync(response);
 
             _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", SanitizeForLog(inquiry.Id));
-            
+
             return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
-            
+
             inquiry.Status = EligibilityInquiryStatus.Failed;
             inquiry.CompletedDate = DateTime.UtcNow;
             await _repository.UpdateInquiryAsync(inquiry);
-            
+
             throw;
         }
     }
