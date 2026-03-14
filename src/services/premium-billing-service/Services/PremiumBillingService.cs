@@ -450,6 +450,24 @@ public class SponsorDto
     public int BillingDay { get; set; } = 1;
     public int GracePeriodDays { get; set; } = 30;
     public string? PaymentMethod { get; set; }
+    public SponsorBankAccountDto? BankAccount { get; set; }
+}
+
+/// <summary>
+/// Bank account info from sponsor-service for EFT/ACH drafts
+/// </summary>
+public class SponsorBankAccountDto
+{
+    public bool EftEnabled { get; set; }
+    public string? PreferredEftMethod { get; set; }
+    public string? RoutingNumber { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountType { get; set; }
+    public string? AccountHolderName { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripePaymentMethodId { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
 }
 
 /// <summary>
