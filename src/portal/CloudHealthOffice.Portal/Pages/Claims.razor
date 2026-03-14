@@ -1,5 +1,8 @@
 @page "/claims"
+@page "/demo/claims"
+@using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
+@attribute [AllowAnonymous]
 @inject IClaimsService ClaimsService
 @inject NavigationManager NavigationManager
 
