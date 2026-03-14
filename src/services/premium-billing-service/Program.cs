@@ -40,6 +40,7 @@ if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 
     builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepositoryMongo>();
     builder.Services.AddScoped<IBillingRunRepository, BillingRunRepositoryMongo>();
+    builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -61,11 +62,15 @@ else
 
     builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepository>();
     builder.Services.AddScoped<IBillingRunRepository, BillingRunRepository>();
+    builder.Services.AddScoped<IEftDraftRepository, EftDraftRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
 // Services
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService.Services.PremiumBillingService>();
+builder.Services.AddSingleton<INachaFileService, NachaFileService>();
+builder.Services.AddScoped<IStripeAchService, StripeAchService>();
+builder.Services.AddScoped<IEftDraftService, EftDraftService>();
 
 // Add HttpClients for service-to-service communication
 builder.Services.AddHttpClient("CoverageService", client =>
