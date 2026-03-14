@@ -116,12 +116,18 @@ public class EligibilityAdapterFactory
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch tenant config for {TenantId}, using default adapter", tenantId);
+            _logger.LogWarning(ex, "Failed to fetch tenant config for {TenantId}, using default adapter", SanitizeForLog(tenantId));
         }
 
         // Default to CHO
         var defaultSettings = new Dictionary<string, string>();
         _cache[tenantId] = ("cho", defaultSettings, DateTime.UtcNow.Add(CacheDuration));
         return ("cho", defaultSettings);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
