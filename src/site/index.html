@@ -239,6 +239,12 @@
           <p class="section-subtitle">The January 2027 deadline is not a future problem. It was solved in production, now.</p>
         </div>
 
+        <figure style="margin:0 auto 40px auto; max-width:1000px;">
+          <img src="graphics/cms-0057f-compliance.svg"
+               alt="CMS-0057-F compliance diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API — all complete"
+               style="width:100%; height:auto; border-radius:12px; border:1px solid rgba(0,255,136,0.15);" />
+        </figure>
+
         <div class="compliance-badges" role="list" aria-label="Compliance certifications">
           <span class="compliance-badge-item" role="listitem">&#10003; Patient Access API</span>
           <span class="compliance-badge-item" role="listitem">&#10003; Provider Access API</span>
@@ -310,6 +316,23 @@
             </ul>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== CLAIMS PIPELINE ===== -->
+    <section>
+      <div class="section-wrapper">
+        <div class="section-header">
+          <span class="section-eyebrow">Architecture</span>
+          <h2 class="section-title">10-Step Claims Adjudication.<br><span>&lt;500ms end-to-end.</span></h2>
+          <p class="section-subtitle">From SFTP ingestion through Argo Workflows to real-time adjudication with full benefit calculation.</p>
+        </div>
+
+        <figure style="margin:0 auto; max-width:1100px;">
+          <img src="graphics/claims-adjudication-flow.svg"
+               alt="837 claims adjudication pipeline showing 10-step flow from SFTP ingestion through Kafka, claims service API, benefit engine, to approved or denied outcome"
+               style="width:100%; height:auto; border-radius:12px; border:1px solid rgba(0,255,255,0.12);" />
+        </figure>
       </div>
     </section>
 
