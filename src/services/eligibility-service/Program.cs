@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using EligibilityService;
+using EligibilityService.Adapters;
 using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
@@ -69,7 +70,22 @@ else
     builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
 }
 
-// HTTP Client for service calls
+// HTTP Client for service calls (shared by adapters, factory, and eligibility service)
+builder.Services.AddHttpClient("EligibilityDefault")
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(5);
+    });
+
+// Eligibility adapters — each tenant can be configured to use a different platform.
+// Registered as singletons with IHttpClientFactory injected (not HttpClient) so that
+// handler rotation and DNS refresh work correctly over the application lifetime.
+builder.Services.AddSingleton<IEligibilityAdapter, ChoEligibilityAdapter>();
+builder.Services.AddSingleton<IEligibilityAdapter, AvailityEligibilityAdapter>();
+builder.Services.AddSingleton<IEligibilityAdapter, ChangeHealthcareEligibilityAdapter>();
+builder.Services.AddSingleton<EligibilityAdapterFactory>();
+
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(client =>

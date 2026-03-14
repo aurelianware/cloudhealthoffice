@@ -146,6 +146,9 @@ public class TenantConfiguration
     [JsonPropertyName("clearinghouseConfig")]
     public ClearinghouseConfig? Clearinghouse { get; set; }
 
+    [JsonPropertyName("eligibilityPlatform")]
+    public EligibilityConfig? EligibilityPlatform { get; set; }
+
     [JsonPropertyName("customSettings")]
     public Dictionary<string, string> CustomSettings { get; set; } = new();
 }
@@ -166,6 +169,31 @@ public class ClearinghouseConfig
 
     [JsonPropertyName("sftpUsername")]
     public string SftpUsername { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Configuration for tenant's eligibility verification platform.
+/// Controls which adapter is used at runtime during eligibility checks.
+/// </summary>
+public class EligibilityConfig
+{
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "cho"; // cho, availity, change-healthcare, waystar, custom
+
+    [JsonPropertyName("apiEndpoint")]
+    public string? ApiEndpoint { get; set; }
+
+    [JsonPropertyName("keyVaultSecretName")]
+    public string? KeyVaultSecretName { get; set; }
+
+    [JsonPropertyName("timeoutMs")]
+    public int TimeoutMs { get; set; } = 5000;
+
+    [JsonPropertyName("retryCount")]
+    public int RetryCount { get; set; } = 2;
+
+    [JsonPropertyName("platformSettings")]
+    public Dictionary<string, string> PlatformSettings { get; set; } = new();
 }
 
 public class BillingInfo
@@ -238,6 +266,8 @@ public class CreateTenantRequest
     public List<string>? Environments { get; set; } // prod, preprod, dev
 
     public ClearinghouseConfig? Clearinghouse { get; set; }
+
+    public EligibilityConfig? EligibilityPlatform { get; set; }
 }
 
 /// <summary>
