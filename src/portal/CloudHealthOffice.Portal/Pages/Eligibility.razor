@@ -1,5 +1,8 @@
 @page "/eligibility"
+@page "/demo/eligibility"
+@using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
+@attribute [AllowAnonymous]
 @inject IEligibilityService EligibilityService
 @inject IMemberService MemberService
 
