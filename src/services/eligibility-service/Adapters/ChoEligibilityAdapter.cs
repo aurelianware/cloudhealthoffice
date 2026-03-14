@@ -78,7 +78,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("No active coverage found for member {SubscriberId}", subscriberId);
+            _logger.LogWarning("No active coverage found for member {SubscriberId}", SanitizeForLog(subscriberId));
             return null;
         }
 
@@ -99,7 +99,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", benefitPlanId);
+            _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", SanitizeForLog(benefitPlanId));
             return new List<EligibilityBenefit>();
         }
 
@@ -176,6 +176,12 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             _logger.LogWarning(ex, "Error getting COB data");
             return new List<AdditionalInsurance>();
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
