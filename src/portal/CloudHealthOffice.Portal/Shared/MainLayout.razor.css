@@ -1,0 +1,38 @@
+::deep .appbar-logo {
+    height: 32px;
+    margin-left: 12px;
+    margin-right: 16px;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));
+}
+
+::deep .appbar-title {
+    font-weight: 700;
+    background: linear-gradient(135deg, #00ffff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@media (max-width: 768px) {
+    ::deep .appbar-logo {
+        height: 24px;
+        margin-left: 4px;
+        margin-right: 8px;
+    }
+
+    ::deep .appbar-title {
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    ::deep .appbar-logo {
+        height: 24px;
+        margin-left: 4px;
+        margin-right: 4px;
+    }
+
+    ::deep .appbar-title {
+        display: none;
+    }
+}
