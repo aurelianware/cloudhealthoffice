@@ -14,23 +14,23 @@ namespace EligibilityService.Adapters;
 public class EligibilityAdapterFactory
 {
     private readonly IEnumerable<IEligibilityAdapter> _adapters;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<EligibilityAdapterFactory> _logger;
 
     // Cache tenant platform config to avoid repeated HTTP calls.
-    // Key: tenantId, Value: (platform, expiry)
+    // Key: tenantId, Value: (platform, settings, expiry)
     private readonly ConcurrentDictionary<string, (string Platform, Dictionary<string, string> Settings, DateTime ExpiresAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
     public EligibilityAdapterFactory(
         IEnumerable<IEligibilityAdapter> adapters,
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILogger<EligibilityAdapterFactory> logger)
     {
         _adapters = adapters;
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
     }
@@ -52,7 +52,8 @@ public class EligibilityAdapterFactory
         string tenantId, CancellationToken ct = default)
     {
         var (platform, settings) = await GetTenantPlatformAsync(tenantId, ct);
-        return (ResolveAdapter(platform), settings);
+        // Return a copy to prevent callers from mutating the cached dictionary
+        return (ResolveAdapter(platform), new Dictionary<string, string>(settings));
     }
 
     private IEligibilityAdapter ResolveAdapter(string platform)
@@ -84,8 +85,9 @@ public class EligibilityAdapterFactory
         try
         {
             var tenantUrl = _configuration["Services:TenantService"]
-                ?? "http://tenant-service.cloudhealthoffice/api";
-            var response = await _httpClient.GetAsync(
+                ?? "http://tenant-service.cloudhealthoffice/api/v1";
+            var httpClient = _httpClientFactory.CreateClient("EligibilityDefault");
+            var response = await httpClient.GetAsync(
                 $"{tenantUrl}/tenants/{tenantId}", ct);
 
             if (response.IsSuccessStatusCode)

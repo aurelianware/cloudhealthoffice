@@ -78,26 +78,13 @@ builder.Services.AddHttpClient("EligibilityDefault")
         client.Timeout = TimeSpan.FromSeconds(5);
     });
 
-// Eligibility adapters — each tenant can be configured to use a different platform
-builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
-    new ChoEligibilityAdapter(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
-        sp.GetRequiredService<IConfiguration>(),
-        sp.GetRequiredService<ILogger<ChoEligibilityAdapter>>()));
-builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
-    new AvailityEligibilityAdapter(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
-        sp.GetRequiredService<ILogger<AvailityEligibilityAdapter>>()));
-builder.Services.AddSingleton<IEligibilityAdapter>(sp =>
-    new ChangeHealthcareEligibilityAdapter(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
-        sp.GetRequiredService<ILogger<ChangeHealthcareEligibilityAdapter>>()));
-builder.Services.AddSingleton<EligibilityAdapterFactory>(sp =>
-    new EligibilityAdapterFactory(
-        sp.GetRequiredService<IEnumerable<IEligibilityAdapter>>(),
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("EligibilityDefault"),
-        sp.GetRequiredService<IConfiguration>(),
-        sp.GetRequiredService<ILogger<EligibilityAdapterFactory>>()));
+// Eligibility adapters — each tenant can be configured to use a different platform.
+// Registered as singletons with IHttpClientFactory injected (not HttpClient) so that
+// handler rotation and DNS refresh work correctly over the application lifetime.
+builder.Services.AddSingleton<IEligibilityAdapter, ChoEligibilityAdapter>();
+builder.Services.AddSingleton<IEligibilityAdapter, AvailityEligibilityAdapter>();
+builder.Services.AddSingleton<IEligibilityAdapter, ChangeHealthcareEligibilityAdapter>();
+builder.Services.AddSingleton<EligibilityAdapterFactory>();
 
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))

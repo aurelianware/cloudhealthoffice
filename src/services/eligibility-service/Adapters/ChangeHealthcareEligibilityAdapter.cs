@@ -14,16 +14,16 @@ namespace EligibilityService.Adapters;
 /// </summary>
 public class ChangeHealthcareEligibilityAdapter : IEligibilityAdapter
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ChangeHealthcareEligibilityAdapter> _logger;
 
     public string Platform => "change-healthcare";
 
     public ChangeHealthcareEligibilityAdapter(
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         ILogger<ChangeHealthcareEligibilityAdapter> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
