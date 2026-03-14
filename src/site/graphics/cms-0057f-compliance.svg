@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="680" fill="#000000"/>
+  <rect width="1200" height="680" fill="none" stroke="#00ffff" stroke-width="0.3" opacity="0.1"
+        style="stroke-dasharray: 50 50;" />
+
+  <!-- Title -->
+  <text x="600" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
+        fill="#ffffff" text-anchor="middle" letter-spacing="1">Cloud Health Office</text>
+  <text x="600" y="90" font-family="Segoe UI, system-ui, sans-serif" font-size="20" font-weight="400"
+        fill="#00ffff" text-anchor="middle" opacity="0.9">FHIR R4 APIs for CMS-0057-F Compliance</text>
+
+  <!-- Central shield -->
+  <g transform="translate(600, 330)">
+    <path d="M0 -100 L70 -70 L70 30 C70 80 35 110 0 110 C-35 110 -70 80 -70 30 L-70 -70 Z"
+          fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="2" filter="url(#glow)"/>
+    <text x="0" y="-20" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+          fill="#ffffff" text-anchor="middle">100%</text>
+    <text x="0" y="2" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+          fill="#00ffff" text-anchor="middle">CMS-0057-F</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="400"
+          fill="#00ff88" text-anchor="middle">Ready</text>
+    <!-- Checkmark -->
+    <circle cx="0" cy="55" r="16" fill="#00ff88" opacity="0.9"/>
+    <path d="M-7 55 L-2 60 L7 50" fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Prior Authorization (top) -->
+  <g transform="translate(600, 145)">
+    <rect x="-90" y="-25" width="180" height="50" rx="8" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-3" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Prior Authorization</text>
+    <text x="0" y="15" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="400"
+          fill="#00ffff" text-anchor="middle">PAS + CDS Hooks</text>
+  </g>
+
+  <!-- Patient Access API (left) -->
+  <g transform="translate(250, 270)">
+    <rect x="-100" y="-35" width="200" height="70" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-10" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Patient Access API</text>
+    <text x="0" y="8" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Patient, Coverage, Claim</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">EOB, Encounter</text>
+    <!-- Checkmark -->
+    <circle cx="75" cy="-20" r="10" fill="#00ff88" opacity="0.9"/>
+    <path d="M70 -20 L73 -17 L80 -24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Provider Access API (left lower) -->
+  <g transform="translate(250, 390)">
+    <rect x="-100" y="-30" width="200" height="60" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Provider Access API</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci PDex</text>
+    <circle cx="75" cy="-15" r="10" fill="#00ff88" opacity="0.9"/>
+    <path d="M70 -15 L73 -12 L80 -19" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Payer-to-Payer API (right) -->
+  <g transform="translate(950, 270)">
+    <rect x="-100" y="-35" width="200" height="70" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-10" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Payer-to-Payer API</text>
+    <text x="0" y="8" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">$export</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci PAS</text>
+    <circle cx="75" cy="-20" r="10" fill="#00ff88" opacity="0.9"/>
+    <path d="M70 -20 L73 -17 L80 -24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Provider Directory API (right lower) -->
+  <g transform="translate(950, 390)">
+    <rect x="-100" y="-30" width="200" height="60" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Provider Directory API</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci DTR</text>
+    <circle cx="75" cy="-15" r="10" fill="#00ff88" opacity="0.9"/>
+    <path d="M70 -15 L73 -12 L80 -19" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Connection lines from APIs to shield -->
+  <g stroke="#00ffff" stroke-width="1" opacity="0.4">
+    <line x1="350" y1="270" x2="540" y2="310"/>
+    <line x1="350" y1="390" x2="540" y2="350"/>
+    <line x1="850" y1="270" x2="660" y2="310"/>
+    <line x1="850" y1="390" x2="660" y2="350"/>
+    <line x1="600" y1="170" x2="600" y2="230"/>
+  </g>
+
+  <!-- Deadline banner -->
+  <rect x="350" y="480" width="500" height="40" rx="6" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
+  <text x="600" y="506" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600"
+        fill="#00ff88" text-anchor="middle">January 2027 Deadline - Complete Nov 2024</text>
+
+  <!-- Bottom stats -->
+  <g transform="translate(0, 550)">
+    <!-- X12 Transactions -->
+    <g transform="translate(150, 0)">
+      <rect x="-120" y="-15" width="240" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+            fill="#00ffff" text-anchor="middle">X12 Transactions</text>
+      <text x="-40" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">270 ~ Patient</text>
+      <text x="40" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">837 ~ Claim</text>
+      <text x="-40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">277 ~ Patient</text>
+      <text x="40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">835 ~ EOB</text>
+      <text x="0" y="58" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">278 ~ Coverage &middot; 275 ~ Encounter</text>
+    </g>
+
+    <!-- FHIR Resources -->
+    <g transform="translate(450, 0)">
+      <rect x="-120" y="-15" width="240" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+            fill="#00ffff" text-anchor="middle">FHIR Resources</text>
+      <text x="0" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Patient, Coverage, Claim, EOB</text>
+      <text x="0" y="45" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Encounter, Practitioner, Organization</text>
+    </g>
+
+    <!-- Tests -->
+    <g transform="translate(750, 0)">
+      <rect x="-100" y="-15" width="200" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
+            fill="#00ff88" text-anchor="middle">531</text>
+      <text x="0" y="32" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#ffffff" text-anchor="middle">Tests Passed</text>
+      <text x="0" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">85.93% Coverage</text>
+    </g>
+
+    <!-- Response Time -->
+    <g transform="translate(1020, 0)">
+      <rect x="-90" y="-15" width="180" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
+            fill="#00ff88" text-anchor="middle">&lt;500ms</text>
+      <text x="0" y="35" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#ffffff" text-anchor="middle">Avg Response</text>
+    </g>
+  </g>
+</svg>
