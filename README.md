@@ -69,6 +69,12 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 ## Platform
 
+<div align="center">
+
+![Platform Overview](src/site/graphics/platform-overview.svg)
+
+</div>
+
 |Component          |Count    |Details                                                                        |
 |-------------------|---------|-------------------------------------------------------------------------------|
 |Microservices      |17       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                          |
@@ -114,6 +120,12 @@ Start with compliance. Expand into claims. Move at your own pace.
 |EncounterEngine     |Encounter data transformation and batch submission for Medicaid/MA reporting                                |
 
 ### CMS-0057-F Compliance
+
+<div align="center">
+
+![CMS-0057-F Compliance](src/site/graphics/cms-0057f-compliance.svg)
+
+</div>
 
 Cloud Health Office implements the CMS Interoperability and Prior Authorization Final Rule ahead of the January 2027 deadline.
 
