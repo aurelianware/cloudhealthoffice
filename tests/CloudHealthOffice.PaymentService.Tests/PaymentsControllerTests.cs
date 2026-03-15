@@ -201,9 +201,11 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         var response = await _client.GetAsync("/api/payments/pay-disp-test/835");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(response.Headers.Contains("Content-Disposition"));
-        var disposition = response.Headers.GetValues("Content-Disposition").First();
-        Assert.Contains("835_CHK-DISP-001.edi", disposition);
+        var contentDisposition = response.Content.Headers.ContentDisposition;
+        Assert.NotNull(contentDisposition);
+        var filename = contentDisposition.FileNameStar ?? contentDisposition.FileName?.Trim('"');
+        Assert.NotNull(filename);
+        Assert.Contains("835_CHK-DISP-001.edi", filename);
     }
 
     [Fact]
@@ -343,9 +345,11 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         Assert.Equal(ediContent, body);
 
         // Verify attachment filename
-        Assert.True(response.Headers.Contains("Content-Disposition"));
-        var disposition = response.Headers.GetValues("Content-Disposition").First();
-        Assert.Contains("835_CHK-DOWNLOAD-001.edi", disposition);
+        var contentDisposition = response.Content.Headers.ContentDisposition;
+        Assert.NotNull(contentDisposition);
+        var filename = contentDisposition.FileNameStar ?? contentDisposition.FileName?.Trim('"');
+        Assert.NotNull(filename);
+        Assert.Contains("835_CHK-DOWNLOAD-001.edi", filename);
     }
 
     // ═══════════════════════════════════════════════════════════════════
