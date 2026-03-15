@@ -9,6 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="PremiumBillingService.Tests/**" />
+    <Content Remove="PremiumBillingService.Tests/**" />
+    <None Remove="PremiumBillingService.Tests/**" />
+    <EmbeddedResource Remove="PremiumBillingService.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.45.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
