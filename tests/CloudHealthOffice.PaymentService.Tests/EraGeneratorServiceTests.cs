@@ -226,7 +226,7 @@ public class EraGeneratorServiceTests
     }
 
     [Fact]
-    public void Generate835_CheckPaymentMethod_UsesACHWithBankingDetails()
+    public void Generate835_AchPaymentMethod_UsesBankingDetails()
     {
         var payment = CreateTestPayment();
         var tp = CreateTestTradingPartner();
