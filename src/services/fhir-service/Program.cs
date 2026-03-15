@@ -42,6 +42,14 @@ builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 
+// ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
+builder.Services.AddHttpClient("NppesApi", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Nppes:BaseUrl"] ?? "https://npiregistry.cms.hhs.gov/api/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
 // Insert FHIR formatters first so they take priority over default System.Text.Json
 builder.Services.AddControllers(options =>
 {
