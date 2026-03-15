@@ -132,3 +132,7 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+// Marker class so integration tests can reference the entry point assembly
+// via WebApplicationFactory<Program>.
+public partial class Program { }

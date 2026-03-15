@@ -290,6 +290,35 @@ public class AdjudicationController : ControllerBase
         var result = await _rateEngine.ResolveBatchAsync(tenantedRequests, ct);
         return Ok(result);
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/ncci-check
+    //
+    // Standalone NCCI/MUE pre-payment edit check.
+    // Use when you want to validate a claim before full adjudication.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Run NCCI Column 1/Column 2 and MUE edits on a claim.
+    /// Returns the scrub result indicating whether the claim passed.
+    /// </summary>
+    [HttpPost("ncci-check")]
+    [ProducesResponseType(typeof(NcciScrubResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<NcciScrubResult>> NcciCheck(
+        [FromBody] NcciScrubRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Running NCCI/MUE check for claim {ClaimId}, {LineCount} lines",
+            request.ClaimId, request.ServiceLines.Count);
+
+        // Inject tenant ID from middleware
+        request.TenantId = TenantId;
+
+        var result = await _ncciEngine.ScrubAsync(request, ct);
+        return Ok(result);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
