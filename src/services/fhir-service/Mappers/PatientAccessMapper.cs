@@ -345,38 +345,3 @@ public static class PatientAccessMapper
         };
     }
 }
-
-// ── Lightweight FHIR Claim record ───────────────────────────────────────────
-
-/// <summary>
-/// Lightweight FHIR R4 Claim resource for System.Text.Json serialization.
-/// </summary>
-public record FhirClaimResource : FhirResource
-{
-    [System.Text.Json.Serialization.JsonPropertyName("resourceType")]
-    public override string ResourceType => "Claim";
-
-    [System.Text.Json.Serialization.JsonPropertyName("status")]
-    public string? Status { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("type")]
-    public FhirCodeableConcept? ClaimType { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("use")]
-    public string? Use { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("patient")]
-    public FhirReference? Patient { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("provider")]
-    public FhirReference? Provider { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("created")]
-    public string? Created { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("priority")]
-    public FhirCodeableConcept? Priority { get; init; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("insurance")]
-    public IReadOnlyList<FhirEobInsurance>? Insurance { get; init; }
-}

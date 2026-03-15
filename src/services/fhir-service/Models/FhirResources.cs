@@ -395,6 +395,39 @@ public record FhirBundleEntry
 }
 
 /// <summary>
+/// Lightweight FHIR R4 Claim resource for System.Text.Json serialization.
+/// </summary>
+public record FhirClaimResource : FhirResource
+{
+    [JsonPropertyName("resourceType")]
+    public override string ResourceType => "Claim";
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
+
+    [JsonPropertyName("type")]
+    public FhirCodeableConcept? ClaimType { get; init; }
+
+    [JsonPropertyName("use")]
+    public string? Use { get; init; }
+
+    [JsonPropertyName("patient")]
+    public FhirReference? Patient { get; init; }
+
+    [JsonPropertyName("provider")]
+    public FhirReference? Provider { get; init; }
+
+    [JsonPropertyName("created")]
+    public string? Created { get; init; }
+
+    [JsonPropertyName("priority")]
+    public FhirCodeableConcept? Priority { get; init; }
+
+    [JsonPropertyName("insurance")]
+    public IReadOnlyList<FhirEobInsurance>? Insurance { get; init; }
+}
+
+/// <summary>
 /// FHIR R4 Bundle resource.
 /// </summary>
 public record FhirBundle
