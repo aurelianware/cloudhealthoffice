@@ -1,30 +1,39 @@
-# Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+WORKDIR /repo
 
-# Copy csproj and restore dependencies
-COPY risk-adjustment-service.csproj .
-RUN dotnet restore
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/risk-adjustment-service/risk-adjustment-service.csproj src/services/risk-adjustment-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.RiskAdjustmentEngine/CloudHealthOffice.RiskAdjustmentEngine.csproj src/engines/CloudHealthOffice.RiskAdjustmentEngine/
+RUN dotnet restore src/services/risk-adjustment-service/risk-adjustment-service.csproj
 
 # Copy source code and build
-COPY . .
-RUN dotnet build -c Release -o /app/build
-RUN dotnet publish -c Release -o /app/publish
+COPY src/services/risk-adjustment-service/ src/services/risk-adjustment-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.RiskAdjustmentEngine/ src/engines/CloudHealthOffice.RiskAdjustmentEngine/
+RUN dotnet build src/services/risk-adjustment-service/risk-adjustment-service.csproj -c Release --no-restore
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/risk-adjustment-service/risk-adjustment-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Copy published app
-COPY --from=build /app/publish .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+COPY --from=publish /app/publish .
+
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
 EXPOSE 8080
 
-# Run the application
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
+
 ENTRYPOINT ["dotnet", "risk-adjustment-service.dll"]

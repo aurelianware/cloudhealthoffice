@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ReferenceDataService.Repositories;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,10 +34,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add health checks
-builder.Services.AddHealthChecks()
-    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
-    .AddNpgSql(postgresConnection, name: "postgres", timeout: TimeSpan.FromSeconds(10));
+// Add health checks (PostgreSQL — uses NpgSql check alongside standard CHO checks)
+builder.Services.AddChoHealthChecks()
+    .AddNpgSql(postgresConnection, name: "postgres", tags: new[] { "ready", "db" }, timeout: TimeSpan.FromSeconds(10));
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -65,10 +65,6 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health/ready");
-app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = check => check.Name == "self"
-});
+app.MapChoHealthChecks();
 
 app.Run();

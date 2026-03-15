@@ -30,11 +30,15 @@ public static class ServiceCollectionExtensions
         services.AddControllers();
         services.AddEndpointsApiExplorer();
 
-        // Health checks
+        // Health checks — auto-detect database from configuration
         services.AddChoHealthChecks(hc =>
         {
             hc.MongoDbConnectionString = configuration["MongoDb:ConnectionString"];
+            hc.CosmosDbConnectionString = configuration["CosmosDb:ConnectionString"];
+            hc.CosmosDbEndpoint = configuration["CosmosDb:Endpoint"];
+            hc.CosmosDbKey = configuration["CosmosDb:Key"];
             hc.RedisConnectionString = configuration["Redis:ConnectionString"];
+            options.ConfigureHealthChecks?.Invoke(hc);
         });
 
         // CORS — use custom configuration if provided, otherwise default to AllowAll
@@ -192,6 +196,12 @@ public class ChoInfrastructureOptions
     /// Must match a policy name registered via <see cref="ConfigureCors"/> if customized.
     /// </summary>
     public string CorsPolicyName { get; set; } = "AllowAll";
+
+    /// <summary>
+    /// Additional health check configuration (e.g., HTTP dependency URLs).
+    /// MongoDB and Redis are auto-detected from configuration; use this for extra checks.
+    /// </summary>
+    public Action<ChoHealthCheckOptions>? ConfigureHealthChecks { get; set; }
 }
 
 internal class CorsPolicyNameHolder

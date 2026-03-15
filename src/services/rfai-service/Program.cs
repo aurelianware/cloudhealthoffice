@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using RfaiService.Middleware;
 using RfaiService.Repositories;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,7 +57,13 @@ else
 // ── Middleware / infra ────────────────────────────────────────────────────────
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddHealthChecks();
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -81,6 +88,6 @@ app.UseCors("AllowAll");
 app.UseTenantMiddleware();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();

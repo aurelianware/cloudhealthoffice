@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using ProviderService.Middleware;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,8 +65,14 @@ else
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB or Cosmos DB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
 
 // CORS (for development)
 builder.Services.AddCors(options =>
@@ -101,6 +108,6 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();

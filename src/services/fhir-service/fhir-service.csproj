@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
     <!-- Standard JWT Bearer validation — tokens issued by smart-auth-service with
          DisableAccessTokenEncryption() are standard RS256-signed JWTs discoverable

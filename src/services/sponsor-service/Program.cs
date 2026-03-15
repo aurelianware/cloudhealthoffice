@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using SponsorService.Middleware;
 using SponsorService.Repositories;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,8 +80,14 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB or Cosmos DB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
 
 var app = builder.Build();
 
@@ -96,6 +103,6 @@ app.UseCors();
 app.UseTenantContext();  // Extract tenant from JWT or header
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();

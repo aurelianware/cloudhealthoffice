@@ -4,6 +4,7 @@ using MongoDB.Driver;
 using PremiumBillingService.Middleware;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,8 +88,14 @@ builder.Services.AddHttpClient("SponsorService", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB or Cosmos DB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
 
 // CORS (for development)
 builder.Services.AddCors(options =>
@@ -124,6 +131,6 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();
