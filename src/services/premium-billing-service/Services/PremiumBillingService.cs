@@ -199,7 +199,7 @@ public class PremiumBillingService : IPremiumBillingService
             AdjustmentDate = DateTime.UtcNow
         });
 
-        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", invoice.InvoiceNumber, reason);
+        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", invoice.InvoiceNumber, SanitizeForLog(reason));
 
         return await _invoiceRepository.UpdateAsync(invoice);
     }
@@ -296,6 +296,13 @@ public class PremiumBillingService : IPremiumBillingService
     }
 
     // --- Private helper methods ---
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 
     private async Task<PremiumInvoice> GenerateInvoiceForSponsorAsync(
         SponsorDto sponsor, DateTime billingPeriod, string billingRunId)

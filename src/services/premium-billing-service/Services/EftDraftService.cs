@@ -396,7 +396,7 @@ public class EftDraftService : IEftDraftService
 
         _logger.LogWarning(
             "ACH return processed for draft {DraftId}, invoice {InvoiceNumber}: {ReturnCode} - {ReturnReason}",
-            draft.Id, draft.InvoiceNumber, draft.ReturnCode, draft.ReturnReason);
+            draft.Id, draft.InvoiceNumber, SanitizeForLog(draft.ReturnCode), SanitizeForLog(draft.ReturnReason));
 
         // Check if auto-retry is appropriate
         if (ShouldRetry(draft))
@@ -576,6 +576,13 @@ public class EftDraftService : IEftDraftService
         // Don't retry for account closed, unauthorized, or invalid account
         var nonRetryableCodes = new[] { "R02", "R03", "R04", "R07", "R10", "R16", "R20" };
         return !nonRetryableCodes.Contains(draft.ReturnCode);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static string MapReturnCodeToReason(string returnCode)
