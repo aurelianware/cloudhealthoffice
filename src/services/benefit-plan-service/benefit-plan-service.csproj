@@ -12,6 +12,7 @@
     <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.NcciEngine\CloudHealthOffice.NcciEngine.csproj" />

@@ -7,6 +7,7 @@ using AttachmentService;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
 using CloudHealthOffice.DocumentStore;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -105,6 +106,15 @@ builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
+// Health checks (MongoDB or Cosmos DB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -122,8 +132,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Health check endpoint (no auth required)
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "attachment-service" }))
-   .AllowAnonymous();
+// Health check endpoints (no auth required — handled by middleware before routing)
+app.MapChoHealthChecks();
 
 app.Run();

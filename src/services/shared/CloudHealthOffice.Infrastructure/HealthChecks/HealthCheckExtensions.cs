@@ -28,6 +28,21 @@ public static class HealthCheckExtensions
                 tags: ["ready", "db"]);
         }
 
+        if (!string.IsNullOrEmpty(options.CosmosDbConnectionString))
+        {
+            builder.AddCheck("cosmosdb",
+                new CosmosDbHealthCheck(options.CosmosDbConnectionString),
+                failureStatus: HealthStatus.Unhealthy,
+                tags: ["ready", "db"]);
+        }
+        else if (!string.IsNullOrEmpty(options.CosmosDbEndpoint) && !string.IsNullOrEmpty(options.CosmosDbKey))
+        {
+            builder.AddCheck("cosmosdb",
+                new CosmosDbHealthCheck(options.CosmosDbEndpoint, options.CosmosDbKey),
+                failureStatus: HealthStatus.Unhealthy,
+                tags: ["ready", "db"]);
+        }
+
         if (!string.IsNullOrEmpty(options.RedisConnectionString))
         {
             builder.AddCheck("redis",
@@ -48,7 +63,7 @@ public static class HealthCheckExtensions
     }
 
     /// <summary>
-    /// Maps standard Cloud Health Office health check endpoints: /health (all), /live (liveness), /ready (readiness).
+    /// Maps standard Cloud Health Office health check endpoints: /health (all), /health/live (liveness), /health/ready (readiness).
     /// </summary>
     public static IApplicationBuilder MapChoHealthChecks(this IApplicationBuilder app)
     {
@@ -57,13 +72,13 @@ public static class HealthCheckExtensions
             ResponseWriter = WriteHealthCheckResponse
         });
 
-        app.UseHealthChecks("/live", new HealthCheckOptions
+        app.UseHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains("live"),
             ResponseWriter = WriteHealthCheckResponse
         });
 
-        app.UseHealthChecks("/ready", new HealthCheckOptions
+        app.UseHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains("ready"),
             ResponseWriter = WriteHealthCheckResponse
@@ -98,6 +113,15 @@ public class ChoHealthCheckOptions
 {
     /// <summary>MongoDB connection string for DB health check. Leave null to skip.</summary>
     public string? MongoDbConnectionString { get; set; }
+
+    /// <summary>Cosmos DB connection string for DB health check. Leave null to skip.</summary>
+    public string? CosmosDbConnectionString { get; set; }
+
+    /// <summary>Cosmos DB endpoint for DB health check (used with <see cref="CosmosDbKey"/>). Leave null to skip.</summary>
+    public string? CosmosDbEndpoint { get; set; }
+
+    /// <summary>Cosmos DB key for DB health check (used with <see cref="CosmosDbEndpoint"/>). Leave null to skip.</summary>
+    public string? CosmosDbKey { get; set; }
 
     /// <summary>Redis connection string for cache health check. Leave null to skip.</summary>
     public string? RedisConnectionString { get; set; }

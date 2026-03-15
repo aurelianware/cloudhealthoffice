@@ -1,5 +1,6 @@
 using EnrollmentImportService;
 using EnrollmentImportService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,8 +29,14 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB or Cosmos DB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
+});
 
 // CORS
 builder.Services.AddCors(options =>
@@ -55,7 +62,6 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
-app.MapGet("/ready", () => Results.Ok(new { status = "ready" }));
+app.MapChoHealthChecks();
 
 app.Run();

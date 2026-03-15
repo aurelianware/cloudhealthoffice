@@ -48,22 +48,13 @@ jobs:
           - claims-scrubbing-service
           - enrollment-import-service
           - trading-partner-service
+          - tenant-service
+          - benefit-plan-service
+          - payment-service
         include:
-          # tenant-service needs repo root as context so it can reach scripts/setup/
-          - service: tenant-service
-            build_context: '.'
-          # benefit-plan-service references CloudHealthOffice.BenefitEngine (../../engines/...)
-          # so the build context must be the repo root
-          - service: benefit-plan-service
-            build_context: '.'
-          # attachment-service references CloudHealthOffice.DocumentStore (../../engines/...)
-          # so the build context must be the repo root
-          - service: attachment-service
-            build_context: '.'
-          # claims-service references CloudHealthOffice.Infrastructure (../shared/...)
-          # so the build context must be the repo root
-          - service: claims-service
-            build_context: '.'
+          # claims-scrubbing-service is Node.js — its Dockerfile uses service-local paths
+          - service: claims-scrubbing-service
+            build_context: './src/services/claims-scrubbing-service'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -95,7 +86,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.build_context || format('./src/services/{0}', matrix.service) }}
+          context: ${{ matrix.build_context || '.' }}
           file: ./src/services/${{ matrix.service }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
