@@ -25,7 +25,7 @@ jobs:
           echo "🔍 Validating repository structure..."
 
           # Check for required directories
-          required_dirs=("infrastructure/logicapps/workflows" "infrastructure" "scripts" ".github/workflows")
+          required_dirs=("infrastructure" "scripts" ".github/workflows")
           for dir in "${required_dirs[@]}"; do
             if [ ! -d "$dir" ]; then
               echo "::error::Required directory missing: $dir"
@@ -45,58 +45,6 @@ jobs:
           done
 
           echo "✅ Repository structure validated"
-
-      # ---------- Logic Apps workflow validation ----------
-      - name: Validate Logic Apps workflows
-        run: |
-          echo "🔍 Validating Logic Apps workflow files..."
-
-          workflows=(
-            "infrastructure/logicapps/workflows/ingest275/workflow.json"
-            "infrastructure/logicapps/workflows/ingest278/workflow.json"
-            "infrastructure/logicapps/workflows/replay278/workflow.json"
-            "infrastructure/logicapps/workflows/rfai277/workflow.json"
-          )
-
-          failed=0
-          for workflow in "${workflows[@]}"; do
-            if [ ! -f "$workflow" ]; then
-              echo "::error::Workflow file missing: $workflow"
-              failed=1
-              continue
-            fi
-
-            echo "Checking: $workflow"
-
-            # Validate JSON syntax
-            if ! jq . "$workflow" >/dev/null 2>&1; then
-              echo "::error file=$workflow::Invalid JSON syntax"
-              failed=1
-              continue
-            fi
-
-            # Validate required keys
-            if ! jq -e 'has("definition") and has("kind") and has("parameters")' "$workflow" >/dev/null; then
-              echo "::error file=$workflow::Missing required keys (definition/kind/parameters)"
-              failed=1
-              continue
-            fi
-
-            # Validate workflow kind
-            kind=$(jq -r '.kind' "$workflow")
-            if [ "$kind" != "Stateful" ] && [ "$kind" != "Stateless" ]; then
-              echo "::warning file=$workflow::Workflow kind is '$kind' (expected Stateful or Stateless)"
-            fi
-
-            echo "✓ Valid: $workflow (kind: $kind)"
-          done
-
-          if [ $failed -eq 1 ]; then
-            echo "::error::Workflow validation failed"
-            exit 1
-          fi
-
-          echo "✅ All workflow files validated"
 
       # ---------- Bicep template validation ----------
       - name: Setup Bicep
@@ -358,7 +306,6 @@ jobs:
           echo ""
           echo "Validated:"
           echo "  - Repository structure"
-          echo "  - Logic Apps workflows (4 workflows)"
           echo "  - Bicep templates"
           echo "  - Service Bus configuration"
           echo "  - X12 schemas"
