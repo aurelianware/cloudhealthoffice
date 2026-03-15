@@ -1,4 +1,3 @@
-using FhirService.Controllers;
 using FhirService.Formatters;
 using FhirService.Middleware;
 using FhirService.Services;
