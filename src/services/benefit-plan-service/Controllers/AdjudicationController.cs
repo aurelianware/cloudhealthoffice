@@ -58,6 +58,13 @@ public class AdjudicationController : ControllerBase
     private string TenantId => HttpContext.GetTenantId()
         ?? throw new InvalidOperationException("Tenant context missing");
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/adjudicate
     //
@@ -311,7 +318,7 @@ public class AdjudicationController : ControllerBase
     {
         _logger.LogInformation(
             "Running NCCI/MUE check for claim {ClaimId}, {LineCount} lines",
-            request.ClaimId, request.ServiceLines.Count);
+            SanitizeForLog(request.ClaimId), request.ServiceLines.Count);
 
         // Inject tenant ID from middleware
         request.TenantId = TenantId;
