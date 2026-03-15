@@ -473,7 +473,7 @@ jobs:
             if [ ! -f "./$schema" ]; then
               # Try to find in common subdirectories
               found=""
-              for dir in "schemas" "infrastructure/schemas" "infrastructure/logicapps/schemas" "infrastructure/logicapps/workflows/schemas"; do
+              for dir in "schemas" "infrastructure/schemas"; do
                 if [ -f "$dir/$schema" ]; then
                   echo "Copying $dir/$schema to repo root"
                   cp "$dir/$schema" "./$schema"
