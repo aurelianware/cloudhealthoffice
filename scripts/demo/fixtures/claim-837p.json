@@ -1,0 +1,36 @@
+{
+  "memberId": "SUB900112345",
+  "subscriberId": "SUB900112345",
+  "patientFirstName": "Maria",
+  "patientLastName": "Santos",
+  "patientDateOfBirth": "19880422",
+  "billingProviderNPI": "1234567890",
+  "billingProviderName": "Dr. James Wilson",
+  "billingProviderTaxId": "45-1234567",
+  "serviceProviderNPI": "1234567890",
+  "facilityNPI": "9876543210",
+  "placeOfService": "11",
+  "diagnosisCodes": ["M54.5", "M54.16"],
+  "serviceDateFrom": "2026-03-15",
+  "serviceDateTo": "2026-03-15",
+  "lineOfBusiness": 1,
+  "claimLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99214",
+      "modifiers": ["25"],
+      "description": "Office/outpatient visit, established patient, moderate complexity",
+      "chargeAmount": 225.00,
+      "units": 1,
+      "diagnosisPointers": ["1"]
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "97110",
+      "description": "Therapeutic exercises, 15 min",
+      "chargeAmount": 85.00,
+      "units": 2,
+      "diagnosisPointers": ["1", "2"]
+    }
+  ]
+}
