@@ -58,6 +58,13 @@ public class AdjudicationController : ControllerBase
     private string TenantId => HttpContext.GetTenantId()
         ?? throw new InvalidOperationException("Tenant context missing");
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/adjudicate
     //
@@ -288,6 +295,35 @@ public class AdjudicationController : ControllerBase
         var tenantedRequests = requests.Select(r => r with { TenantId = TenantId }).ToList();
 
         var result = await _rateEngine.ResolveBatchAsync(tenantedRequests, ct);
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/ncci-check
+    //
+    // Standalone NCCI/MUE pre-payment edit check.
+    // Use when you want to validate a claim before full adjudication.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Run NCCI Column 1/Column 2 and MUE edits on a claim.
+    /// Returns the scrub result indicating whether the claim passed.
+    /// </summary>
+    [HttpPost("ncci-check")]
+    [ProducesResponseType(typeof(NcciScrubResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<NcciScrubResult>> NcciCheck(
+        [FromBody] NcciScrubRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Running NCCI/MUE check for claim {ClaimId}, {LineCount} lines",
+            SanitizeForLog(request.ClaimId), request.ServiceLines.Count);
+
+        // Inject tenant ID from middleware
+        request.TenantId = TenantId;
+
+        var result = await _ncciEngine.ScrubAsync(request, ct);
         return Ok(result);
     }
 }

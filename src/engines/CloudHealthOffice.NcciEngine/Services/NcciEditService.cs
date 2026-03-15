@@ -72,7 +72,7 @@ internal class NcciEditService : INcciEditService
 
         _logger.LogDebug(
             "NCCI scrub for claim {ClaimId}: {PairChecks} pair checks, {MueChecks} MUE checks, {Failures} failures",
-            request.ClaimId, result.NcciPairsChecked, result.MueChecked, result.EditFailures.Count);
+            SanitizeForLog(request.ClaimId), result.NcciPairsChecked, result.MueChecked, result.EditFailures.Count);
 
         return result;
     }
@@ -100,6 +100,13 @@ internal class NcciEditService : INcciEditService
             quarter, pairsWritten, mueWritten);
 
         return (pairsWritten, mueWritten);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // ═══════════════════════════════════════════════════════════════
