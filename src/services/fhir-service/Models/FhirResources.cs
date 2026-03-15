@@ -148,6 +148,12 @@ public record FhirHumanName
 
     [JsonPropertyName("given")]
     public IReadOnlyList<string>? Given { get; init; }
+
+    [JsonPropertyName("prefix")]
+    public IReadOnlyList<string>? Prefix { get; init; }
+
+    [JsonPropertyName("suffix")]
+    public IReadOnlyList<string>? Suffix { get; init; }
 }
 
 /// <summary>
@@ -157,6 +163,9 @@ public record FhirAddress
 {
     [JsonPropertyName("use")]
     public string? Use { get; init; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; init; }
 
     [JsonPropertyName("line")]
     public IReadOnlyList<string>? Line { get; init; }
@@ -169,6 +178,9 @@ public record FhirAddress
 
     [JsonPropertyName("postalCode")]
     public string? PostalCode { get; init; }
+
+    [JsonPropertyName("country")]
+    public string? Country { get; init; }
 }
 
 /// <summary>
@@ -446,4 +458,344 @@ public record FhirBundle
 
     [JsonPropertyName("entry")]
     public IReadOnlyList<FhirBundleEntry>? Entry { get; init; }
+}
+
+// ── FHIR Bundle Search Component ─────────────────────────────────────────────
+
+/// <summary>
+/// FHIR R4 Bundle entry search component.
+/// </summary>
+public record FhirBundleSearch
+{
+    [JsonPropertyName("mode")]
+    public string? Mode { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Bundle entry with search component.
+/// </summary>
+public record FhirBundleEntryWithSearch
+{
+    [JsonPropertyName("fullUrl")]
+    public string? FullUrl { get; init; }
+
+    [JsonPropertyName("resource")]
+    public FhirResource? Resource { get; init; }
+
+    [JsonPropertyName("search")]
+    public FhirBundleSearch? Search { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 searchset Bundle with search mode support.
+/// </summary>
+public record FhirSearchBundle
+{
+    [JsonPropertyName("resourceType")]
+    public string ResourceType => "Bundle";
+
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = "searchset";
+
+    [JsonPropertyName("total")]
+    public int Total { get; init; }
+
+    [JsonPropertyName("link")]
+    public IReadOnlyList<FhirBundleLink>? Link { get; init; }
+
+    [JsonPropertyName("entry")]
+    public IReadOnlyList<FhirBundleEntryWithSearch>? Entry { get; init; }
+}
+
+// ============================================================================
+// Provider Directory FHIR R4 Resources
+// ============================================================================
+
+/// <summary>
+/// FHIR R4 Qualification component for Practitioner.
+/// </summary>
+public record FhirQualification
+{
+    [JsonPropertyName("identifier")]
+    public IReadOnlyList<FhirIdentifier>? Identifier { get; init; }
+
+    [JsonPropertyName("code")]
+    public FhirCodeableConcept? Code { get; init; }
+
+    [JsonPropertyName("period")]
+    public FhirPeriod? Period { get; init; }
+
+    [JsonPropertyName("issuer")]
+    public FhirReference? Issuer { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Practitioner resource (US Core profile).
+/// </summary>
+public record FhirPractitioner : FhirResource
+{
+    [JsonPropertyName("resourceType")]
+    public override string ResourceType => "Practitioner";
+
+    [JsonPropertyName("identifier")]
+    public IReadOnlyList<FhirIdentifier>? Identifier { get; init; }
+
+    [JsonPropertyName("active")]
+    public bool? Active { get; init; }
+
+    [JsonPropertyName("name")]
+    public IReadOnlyList<FhirHumanName>? Name { get; init; }
+
+    [JsonPropertyName("gender")]
+    public string? Gender { get; init; }
+
+    [JsonPropertyName("address")]
+    public IReadOnlyList<FhirAddress>? Address { get; init; }
+
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+
+    [JsonPropertyName("qualification")]
+    public IReadOnlyList<FhirQualification>? Qualification { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Organization resource (US Core profile).
+/// </summary>
+public record FhirOrganization : FhirResource
+{
+    [JsonPropertyName("resourceType")]
+    public override string ResourceType => "Organization";
+
+    [JsonPropertyName("identifier")]
+    public IReadOnlyList<FhirIdentifier>? Identifier { get; init; }
+
+    [JsonPropertyName("active")]
+    public bool? Active { get; init; }
+
+    [JsonPropertyName("type")]
+    public IReadOnlyList<FhirCodeableConcept>? Type { get; init; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; init; }
+
+    [JsonPropertyName("alias")]
+    public IReadOnlyList<string>? Alias { get; init; }
+
+    [JsonPropertyName("address")]
+    public IReadOnlyList<FhirAddress>? Address { get; init; }
+
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 PractitionerRole resource (US Core profile).
+/// </summary>
+public record FhirPractitionerRole : FhirResource
+{
+    [JsonPropertyName("resourceType")]
+    public override string ResourceType => "PractitionerRole";
+
+    [JsonPropertyName("active")]
+    public bool? Active { get; init; }
+
+    [JsonPropertyName("practitioner")]
+    public FhirReference? Practitioner { get; init; }
+
+    [JsonPropertyName("organization")]
+    public FhirReference? Organization { get; init; }
+
+    [JsonPropertyName("code")]
+    public IReadOnlyList<FhirCodeableConcept>? Code { get; init; }
+
+    [JsonPropertyName("specialty")]
+    public IReadOnlyList<FhirCodeableConcept>? Specialty { get; init; }
+
+    [JsonPropertyName("location")]
+    public IReadOnlyList<FhirReference>? Location { get; init; }
+
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Location resource (US Core profile).
+/// </summary>
+public record FhirLocation : FhirResource
+{
+    [JsonPropertyName("resourceType")]
+    public override string ResourceType => "Location";
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; init; }
+
+    [JsonPropertyName("mode")]
+    public string? Mode { get; init; }
+
+    [JsonPropertyName("type")]
+    public IReadOnlyList<FhirCodeableConcept>? Type { get; init; }
+
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+
+    [JsonPropertyName("address")]
+    public FhirAddress? Address { get; init; }
+
+    [JsonPropertyName("managingOrganization")]
+    public FhirReference? ManagingOrganization { get; init; }
+}
+
+// ============================================================================
+// NPPES Integration Models (Provider Directory source data)
+// ============================================================================
+
+/// <summary>
+/// NPPES API response wrapper.
+/// </summary>
+public record NppesResponse
+{
+    [JsonPropertyName("result_count")]
+    public int ResultCount { get; init; }
+
+    [JsonPropertyName("results")]
+    public IReadOnlyList<NppesResult>? Results { get; init; }
+}
+
+/// <summary>
+/// Individual NPPES provider result.
+/// </summary>
+public record NppesResult
+{
+    [JsonPropertyName("number")]
+    public string Number { get; init; } = "";
+
+    [JsonPropertyName("enumeration_type")]
+    public string EnumerationType { get; init; } = "";
+
+    [JsonPropertyName("basic")]
+    public NppesBasicInfo Basic { get; init; } = new();
+
+    [JsonPropertyName("addresses")]
+    public IReadOnlyList<NppesAddress> Addresses { get; init; } = [];
+
+    [JsonPropertyName("taxonomies")]
+    public IReadOnlyList<NppesTaxonomy> Taxonomies { get; init; } = [];
+
+    [JsonPropertyName("other_names")]
+    public IReadOnlyList<NppesOtherName>? OtherNames { get; init; }
+}
+
+/// <summary>
+/// NPPES basic provider information.
+/// </summary>
+public record NppesBasicInfo
+{
+    [JsonPropertyName("first_name")]
+    public string? FirstName { get; init; }
+
+    [JsonPropertyName("last_name")]
+    public string? LastName { get; init; }
+
+    [JsonPropertyName("middle_name")]
+    public string? MiddleName { get; init; }
+
+    [JsonPropertyName("name_prefix")]
+    public string? NamePrefix { get; init; }
+
+    [JsonPropertyName("name_suffix")]
+    public string? NameSuffix { get; init; }
+
+    [JsonPropertyName("credential")]
+    public string? Credential { get; init; }
+
+    [JsonPropertyName("organization_name")]
+    public string? OrganizationName { get; init; }
+
+    [JsonPropertyName("gender")]
+    public string? Gender { get; init; }
+
+    [JsonPropertyName("enumeration_date")]
+    public string? EnumerationDate { get; init; }
+
+    [JsonPropertyName("last_updated")]
+    public string? LastUpdated { get; init; }
+
+    [JsonPropertyName("deactivation_date")]
+    public string? DeactivationDate { get; init; }
+
+    [JsonPropertyName("reactivation_date")]
+    public string? ReactivationDate { get; init; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
+}
+
+/// <summary>
+/// NPPES address information.
+/// </summary>
+public record NppesAddress
+{
+    [JsonPropertyName("address_purpose")]
+    public string AddressPurpose { get; init; } = "";
+
+    [JsonPropertyName("address_1")]
+    public string Address1 { get; init; } = "";
+
+    [JsonPropertyName("address_2")]
+    public string? Address2 { get; init; }
+
+    [JsonPropertyName("city")]
+    public string City { get; init; } = "";
+
+    [JsonPropertyName("state")]
+    public string State { get; init; } = "";
+
+    [JsonPropertyName("postal_code")]
+    public string PostalCode { get; init; } = "";
+
+    [JsonPropertyName("country_code")]
+    public string CountryCode { get; init; } = "";
+
+    [JsonPropertyName("telephone_number")]
+    public string? TelephoneNumber { get; init; }
+
+    [JsonPropertyName("fax_number")]
+    public string? FaxNumber { get; init; }
+}
+
+/// <summary>
+/// NPPES taxonomy (specialty) information.
+/// </summary>
+public record NppesTaxonomy
+{
+    [JsonPropertyName("code")]
+    public string Code { get; init; } = "";
+
+    [JsonPropertyName("desc")]
+    public string Desc { get; init; } = "";
+
+    [JsonPropertyName("primary")]
+    public bool Primary { get; init; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; init; }
+
+    [JsonPropertyName("license")]
+    public string? License { get; init; }
+}
+
+/// <summary>
+/// NPPES other name entry.
+/// </summary>
+public record NppesOtherName
+{
+    [JsonPropertyName("organization_name")]
+    public string? OrganizationName { get; init; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; init; }
 }
