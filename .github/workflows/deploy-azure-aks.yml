@@ -96,14 +96,27 @@ jobs:
           - enrollment-import-service
           - trading-partner-service
         include:
-          # tenant-service needs repo root as context so it can reach scripts/setup/
-          - service: tenant-service
+          # Most .NET services need repo root as context to reach
+          # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
+          # Only self-contained services (claims-scrubbing-service, reference-data-service,
+          # provider-service, sponsor-service, trading-partner-service) use their own directory.
+          - service: member-service
             build_context: '.'
-          # benefit-plan-service needs repo root as context so it can reach src/engines/
+          - service: coverage-service
+            build_context: '.'
+          - service: claims-service
+            build_context: '.'
+          - service: eligibility-service
+            build_context: '.'
+          - service: authorization-service
+            build_context: '.'
+          - service: attachment-service
+            build_context: '.'
           - service: benefit-plan-service
             build_context: '.'
-          # attachment-service needs repo root as context so it can reach src/engines/
-          - service: attachment-service
+          - service: enrollment-import-service
+            build_context: '.'
+          - service: tenant-service
             build_context: '.'
 
     steps:
