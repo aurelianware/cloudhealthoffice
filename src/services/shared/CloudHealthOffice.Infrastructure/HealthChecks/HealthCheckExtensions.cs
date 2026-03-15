@@ -1,0 +1,107 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
+
+namespace CloudHealthOffice.Infrastructure.HealthChecks;
+
+public static class HealthCheckExtensions
+{
+    /// <summary>
+    /// Registers CHO standard health checks: liveness, readiness with optional MongoDB, Redis, and HTTP dependency checks.
+    /// </summary>
+    public static IHealthChecksBuilder AddChoHealthChecks(this IServiceCollection services, Action<ChoHealthCheckOptions>? configure = null)
+    {
+        var options = new ChoHealthCheckOptions();
+        configure?.Invoke(options);
+
+        var builder = services.AddHealthChecks()
+            .AddCheck("self", () => HealthCheckResult.Healthy("Service is running"), tags: ["live"]);
+
+        if (!string.IsNullOrEmpty(options.MongoDbConnectionString))
+        {
+            builder.AddCheck("mongodb",
+                new MongoDbHealthCheck(options.MongoDbConnectionString),
+                failureStatus: HealthStatus.Unhealthy,
+                tags: ["ready", "db"]);
+        }
+
+        if (!string.IsNullOrEmpty(options.RedisConnectionString))
+        {
+            builder.AddCheck("redis",
+                new RedisHealthCheck(options.RedisConnectionString),
+                failureStatus: HealthStatus.Degraded,
+                tags: ["ready", "cache"]);
+        }
+
+        foreach (var dep in options.HttpDependencies)
+        {
+            builder.AddCheck(dep.Key,
+                new HttpDependencyHealthCheck(dep.Value),
+                failureStatus: HealthStatus.Degraded,
+                tags: ["ready", "dependency"]);
+        }
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Maps standard CHO health check endpoints: /health (all), /live (liveness), /ready (readiness).
+    /// </summary>
+    public static IApplicationBuilder MapChoHealthChecks(this IApplicationBuilder app)
+    {
+        app.UseHealthChecks("/health", new HealthCheckOptions
+        {
+            ResponseWriter = WriteHealthCheckResponse
+        });
+
+        app.UseHealthChecks("/live", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("live"),
+            ResponseWriter = WriteHealthCheckResponse
+        });
+
+        app.UseHealthChecks("/ready", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready"),
+            ResponseWriter = WriteHealthCheckResponse
+        });
+
+        return app;
+    }
+
+    private static async Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var result = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                duration = e.Value.Duration.TotalMilliseconds
+            }),
+            totalDuration = report.TotalDuration.TotalMilliseconds
+        };
+
+        await context.Response.WriteAsync(
+            JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    }
+}
+
+public class ChoHealthCheckOptions
+{
+    /// <summary>MongoDB connection string for DB health check. Leave null to skip.</summary>
+    public string? MongoDbConnectionString { get; set; }
+
+    /// <summary>Redis connection string for cache health check. Leave null to skip.</summary>
+    public string? RedisConnectionString { get; set; }
+
+    /// <summary>Named HTTP dependency URLs to check (e.g., {"auth-service", "https://auth/health"}).</summary>
+    public Dictionary<string, string> HttpDependencies { get; set; } = new();
+}
