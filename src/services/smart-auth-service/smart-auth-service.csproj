@@ -14,6 +14,7 @@
       is MongoDB/CosmosDB; no Entity Framework anywhere.  OpenIddict.MongoDb provides
       first-class MongoDB stores for applications, authorizations, scopes, and tokens.
     -->
+    <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="OpenIddict.AspNetCore" Version="5.4.0" />
     <PackageReference Include="OpenIddict.Server.AspNetCore" Version="5.4.0" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="5.4.0" />

@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using TenantService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,8 +33,11 @@ builder.Services.AddScoped<ITenantService, TenantManagementService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+});
 
 // CORS
 builder.Services.AddCors(options =>
@@ -62,7 +66,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Health check endpoints
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/ready");
+app.MapChoHealthChecks();
 
 app.Run();

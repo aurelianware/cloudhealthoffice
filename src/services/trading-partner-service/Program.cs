@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Identity.Web;
 using CloudHealthOffice.TradingPartnerService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,8 +62,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+});
 
 var app = builder.Build();
 
@@ -94,6 +98,6 @@ app.Use(async (context, next) =>
 });
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();

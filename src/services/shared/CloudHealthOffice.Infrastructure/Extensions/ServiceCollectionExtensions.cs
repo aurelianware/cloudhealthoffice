@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
         {
             hc.MongoDbConnectionString = configuration["MongoDb:ConnectionString"];
             hc.RedisConnectionString = configuration["Redis:ConnectionString"];
+            options.ConfigureHealthChecks?.Invoke(hc);
         });
 
         // CORS — use custom configuration if provided, otherwise default to AllowAll
@@ -192,6 +193,12 @@ public class ChoInfrastructureOptions
     /// Must match a policy name registered via <see cref="ConfigureCors"/> if customized.
     /// </summary>
     public string CorsPolicyName { get; set; } = "AllowAll";
+
+    /// <summary>
+    /// Additional health check configuration (e.g., HTTP dependency URLs).
+    /// MongoDB and Redis are auto-detected from configuration; use this for extra checks.
+    /// </summary>
+    public Action<ChoHealthCheckOptions>? ConfigureHealthChecks { get; set; }
 }
 
 internal class CorsPolicyNameHolder

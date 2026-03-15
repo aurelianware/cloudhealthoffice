@@ -9,6 +9,7 @@ using CloudHealthOffice.BenefitEngine.Persistence;
 using StackExchange.Redis;
 using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Database (Cosmos DB or MongoDB)
@@ -96,8 +97,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add health checks
-builder.Services.AddHealthChecks();
+// Add health checks (MongoDB, Redis, claims-service HTTP)
+var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"] ?? "http://claims-service:8080";
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.RedisConnectionString = builder.Configuration["Redis:ConnectionString"];
+    options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
+});
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -129,7 +136,7 @@ app.UseMiddleware<TenantMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();
 

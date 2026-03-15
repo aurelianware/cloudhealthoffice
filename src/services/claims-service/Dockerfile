@@ -1,6 +1,3 @@
-# Build stage
-# Build context must be the repo root so the CloudHealthOffice.Infrastructure
-# project reference (../shared/...) is available during the build.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /repo
 
@@ -26,15 +23,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy published app
 COPY --from=publish /app/publish .
 
-# Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
 
 ENTRYPOINT ["dotnet", "claims-service.dll"]

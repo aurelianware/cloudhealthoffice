@@ -5,6 +5,7 @@ using EligibilityService.Adapters;
 using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -110,9 +111,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks
-builder.Services.AddHealthChecks()
-    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy());
+// Health checks (MongoDB)
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+});
 
 var app = builder.Build();
 
@@ -130,6 +133,6 @@ app.UseCors("AllowAll");
 app.UseTenantMiddleware();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();
