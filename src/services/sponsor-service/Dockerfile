@@ -1,29 +1,37 @@
-# Multi-stage build for Sponsor Service
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+WORKDIR /repo
 
-# Copy csproj and restore dependencies
-COPY ["sponsor-service.csproj", "./"]
-RUN dotnet restore "sponsor-service.csproj"
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/sponsor-service/sponsor-service.csproj src/services/sponsor-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet restore src/services/sponsor-service/sponsor-service.csproj
 
 # Copy source code and build
-COPY . .
-RUN dotnet build "sponsor-service.csproj" -c Release -o /app/build
+COPY src/services/sponsor-service/ src/services/sponsor-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet build src/services/sponsor-service/sponsor-service.csproj -c Release --no-restore
 
-# Publish
+# Publish stage
 FROM build AS publish
-RUN dotnet publish "sponsor-service.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish src/services/sponsor-service/sponsor-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
-# Final runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
 
-# Copy published app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=publish /app/publish .
 
-# Run as non-root user for security
-USER $APP_UID
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
 
 ENTRYPOINT ["dotnet", "sponsor-service.dll"]

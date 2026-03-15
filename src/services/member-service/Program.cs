@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using MemberService.Middleware;
 using MemberService.Repositories;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,7 +79,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddHealthChecks();
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+});
 
 var app = builder.Build();
 
@@ -92,6 +96,6 @@ app.UseCors();
 app.UseTenantContext();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();

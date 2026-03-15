@@ -3,6 +3,7 @@ using FhirService.Middleware;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,7 +50,10 @@ builder.Services.AddControllers(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddHealthChecks();
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+});
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddCors(options =>
@@ -81,7 +85,7 @@ app.UseMiddleware<SmartScopeEnforcementMiddleware>();
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();
 

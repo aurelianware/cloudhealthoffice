@@ -4,6 +4,7 @@ using MongoDB.Driver;
 using PaymentService.Middleware;
 using PaymentService.Repositories;
 using PaymentService.Services;
+using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,8 +76,13 @@ builder.Services.AddHttpClient("ClaimsService", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// Health checks
-builder.Services.AddHealthChecks();
+// Health checks (MongoDB, claims-service HTTP)
+var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
+builder.Services.AddChoHealthChecks(options =>
+{
+    options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
+});
 
 // CORS (for development)
 builder.Services.AddCors(options =>
@@ -112,7 +118,7 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapChoHealthChecks();
 
 app.Run();
 

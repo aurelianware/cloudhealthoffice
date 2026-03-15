@@ -57,13 +57,13 @@ public static class HealthCheckExtensions
             ResponseWriter = WriteHealthCheckResponse
         });
 
-        app.UseHealthChecks("/live", new HealthCheckOptions
+        app.UseHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains("live"),
             ResponseWriter = WriteHealthCheckResponse
         });
 
-        app.UseHealthChecks("/ready", new HealthCheckOptions
+        app.UseHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains("ready"),
             ResponseWriter = WriteHealthCheckResponse
