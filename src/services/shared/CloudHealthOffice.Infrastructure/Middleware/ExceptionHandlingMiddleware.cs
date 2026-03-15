@@ -64,10 +64,11 @@ public class ExceptionHandlingMiddleware
 
     private static (HttpStatusCode statusCode, string code) MapException(Exception exception) => exception switch
     {
+        TenantContextMissingException => (HttpStatusCode.Unauthorized, "TENANT_CONTEXT_MISSING"),
         ArgumentException => (HttpStatusCode.BadRequest, "BAD_REQUEST"),
-        InvalidOperationException => (HttpStatusCode.Conflict, "INVALID_OPERATION"),
         UnauthorizedAccessException => (HttpStatusCode.Forbidden, "FORBIDDEN"),
         KeyNotFoundException => (HttpStatusCode.NotFound, "NOT_FOUND"),
+        InvalidOperationException => (HttpStatusCode.InternalServerError, "INVALID_OPERATION"),
         NotImplementedException => (HttpStatusCode.NotImplemented, "NOT_IMPLEMENTED"),
         TimeoutException => (HttpStatusCode.GatewayTimeout, "TIMEOUT"),
         _ => (HttpStatusCode.InternalServerError, "INTERNAL_ERROR")
@@ -75,10 +76,11 @@ public class ExceptionHandlingMiddleware
 
     private static string GetPublicMessage(string code) => code switch
     {
+        "TENANT_CONTEXT_MISSING" => "Tenant context is required but was not provided.",
         "BAD_REQUEST" => "The request was invalid.",
-        "INVALID_OPERATION" => "The operation could not be completed.",
         "FORBIDDEN" => "Access denied.",
         "NOT_FOUND" => "The requested resource was not found.",
+        "INVALID_OPERATION" => "An unexpected error occurred.",
         "NOT_IMPLEMENTED" => "This feature is not yet available.",
         "TIMEOUT" => "The request timed out.",
         _ => "An unexpected error occurred."

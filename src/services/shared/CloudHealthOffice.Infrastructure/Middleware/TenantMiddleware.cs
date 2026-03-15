@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using System.Security.Claims;
+using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -13,6 +16,11 @@ public class TenantMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantMiddleware> _logger;
     private readonly TenantMiddlewareOptions _options;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger, TenantMiddlewareOptions options)
     {
@@ -37,8 +45,14 @@ public class TenantMiddleware
             {
                 _logger.LogWarning("Missing tenant context for {Path}", SanitizeForLog(context.Request.Path));
                 context.Response.StatusCode = 401;
-                await context.Response.WriteAsync(
-                    "Missing tenant context. Provide X-Tenant-ID header or valid JWT with tenant claim.");
+                context.Response.ContentType = "application/json";
+                var error = new StandardErrorResponse
+                {
+                    Code = "TENANT_CONTEXT_MISSING",
+                    Message = "Missing tenant context. Provide X-Tenant-ID header or valid JWT with tenant claim.",
+                    TraceId = Activity.Current?.Id ?? context.TraceIdentifier
+                };
+                await context.Response.WriteAsync(JsonSerializer.Serialize(error, JsonOptions));
                 return;
             }
 

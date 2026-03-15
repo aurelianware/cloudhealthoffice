@@ -1,6 +1,6 @@
 # CloudHealthOffice.Infrastructure
 
-Shared infrastructure library that extracts common patterns duplicated across all CHO microservices into a single reusable package.
+Shared infrastructure library that extracts common patterns duplicated across all Cloud Health Office microservices into a single reusable package.
 
 ## What's Included
 
@@ -117,6 +117,11 @@ builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
 
 var app = builder.Build();
 
+// IMPORTANT: If your service uses JWT/Azure AD authentication, register it
+// BEFORE UseChoInfrastructure so HttpContext.User is populated for tenant
+// claim extraction:
+//   app.UseAuthentication();
+
 // One call replaces: UseSwagger, UseHttpsRedirection, UseTenantMiddleware,
 // UseCors, UseAuthorization, MapHealthChecks, ExceptionHandling
 app.UseChoInfrastructure(builder.Configuration);
@@ -136,11 +141,16 @@ app.Run();
 
 2. **Replace Program.cs boilerplate** with `AddChoInfrastructure()` + `UseChoInfrastructure()` (see above).
 
-3. **Delete local duplicates**:
-   - `Middleware/TenantMiddleware.cs`
-   - `Middleware/CosmosSystemTextJsonSerializer.cs`
+3. **Delete local duplicates** — search your service for these types and remove them:
+   - `TenantMiddleware` class (typically in a `Middleware/` folder, but some services place it elsewhere)
+   - `CosmosSystemTextJsonSerializer` class (found in `Middleware/`, project root, or other locations depending on the service)
+   - Any `TenantMiddlewareExtensions` (`UseTenantMiddleware()` / `UseTenantContext()`)
 
-4. **Update tenant ID access** in controllers/repositories:
+4. **If your service uses authentication**, ensure `app.UseAuthentication()` is called
+   **before** `app.UseChoInfrastructure()`. The shared tenant middleware reads
+   `HttpContext.User` claims, which requires the authentication middleware to have run first.
+
+5. **Update tenant ID access** in controllers/repositories:
    ```csharp
    // Before
    var tenantId = HttpContext.Items["TenantId"]?.ToString();
@@ -150,7 +160,7 @@ app.Run();
    var tenantId = HttpContext.GetTenantId();
    ```
 
-5. **Use MongoDbConnectionFactory** for tenant-scoped databases (optional):
+6. **Use MongoDbConnectionFactory** for tenant-scoped databases (optional):
    ```csharp
    // Enable in appsettings.json:
    "MongoDb": {
@@ -159,6 +169,35 @@ app.Run();
    ```
 
 ## Configuration
+
+### ChoInfrastructureOptions
+
+| Property | Default | Description |
+|---|---|---|
+| `ServiceName` | `null` | Display name for Swagger UI |
+| `ServiceDescription` | `null` | Description for Swagger UI |
+| `TenantOptions` | see below | Tenant middleware configuration |
+| `ConfigureCors` | `null` | Custom CORS configuration. When null, uses permissive AllowAll policy |
+| `CorsPolicyName` | `"AllowAll"` | CORS policy name used in the pipeline. Must match a registered policy |
+
+#### Custom CORS example
+
+```csharp
+builder.Services.AddChoInfrastructure(builder.Configuration, options =>
+{
+    options.ServiceName = "Claims Service";
+    options.CorsPolicyName = "Production";
+    options.ConfigureCors = cors =>
+    {
+        cors.AddPolicy("Production", policy =>
+        {
+            policy.WithOrigins("https://app.cloudhealthoffice.com")
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    };
+});
+```
 
 ### TenantMiddlewareOptions
 
@@ -182,3 +221,19 @@ app.Run();
 | `/health` | All registered checks | — |
 | `/live` | Self check only | `live` |
 | `/ready` | MongoDB, Redis, HTTP dependencies | `ready` |
+
+### Authentication
+
+`UseChoInfrastructure()` does **not** call `UseAuthentication()`. Services that rely on JWT or Azure AD must register authentication themselves:
+
+```csharp
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options => { /* ... */ });
+
+var app = builder.Build();
+app.UseAuthentication();           // MUST come before UseChoInfrastructure
+app.UseChoInfrastructure(config);
+app.MapControllers();
+```
+
+This is intentional — not all services require authentication, and authentication configuration varies across services (Azure AD B2C, custom JWT, etc.).

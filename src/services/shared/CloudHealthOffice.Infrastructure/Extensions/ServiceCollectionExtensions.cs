@@ -12,13 +12,13 @@ using MongoDB.Driver;
 namespace CloudHealthOffice.Infrastructure.Extensions;
 
 /// <summary>
-/// Central extension methods to wire all CHO infrastructure into a service.
+/// Central extension methods to wire all Cloud Health Office infrastructure into a service.
 /// Replaces duplicated setup code across 20+ microservices.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers all shared CHO infrastructure services: health checks, HTTP context accessor,
+    /// Registers all shared Cloud Health Office infrastructure services: health checks, HTTP context accessor,
     /// CORS, Swagger, and database connections (MongoDB or Cosmos DB based on configuration).
     /// </summary>
     public static IServiceCollection AddChoInfrastructure(this IServiceCollection services, IConfiguration configuration, Action<ChoInfrastructureOptions>? configure = null)
@@ -37,16 +37,23 @@ public static class ServiceCollectionExtensions
             hc.RedisConnectionString = configuration["Redis:ConnectionString"];
         });
 
-        // CORS
-        services.AddCors(cors =>
+        // CORS — use custom configuration if provided, otherwise default to AllowAll
+        if (options.ConfigureCors is not null)
         {
-            cors.AddPolicy("AllowAll", policy =>
+            services.AddCors(options.ConfigureCors);
+        }
+        else
+        {
+            services.AddCors(cors =>
             {
-                policy.AllowAnyOrigin()
-                      .AllowAnyMethod()
-                      .AllowAnyHeader();
+                cors.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
             });
-        });
+        }
 
         // Swagger
         if (!string.IsNullOrEmpty(options.ServiceName))
@@ -72,12 +79,27 @@ public static class ServiceCollectionExtensions
         // Store tenant middleware options for use in UseChoInfrastructure
         services.AddSingleton(options.TenantOptions);
 
+        // Store the CORS policy name for UseChoInfrastructure
+        services.AddSingleton(new CorsPolicyNameHolder(options.CorsPolicyName));
+
         return services;
     }
 
     /// <summary>
-    /// Configures the CHO middleware pipeline: exception handling, tenant middleware,
-    /// CORS, health check endpoints, Swagger (in dev), and authorization.
+    /// Configures the Cloud Health Office middleware pipeline: exception handling, tenant middleware,
+    /// CORS, health check endpoints, and Swagger (in dev).
+    /// <para>
+    /// <b>Important:</b> This method does NOT call <c>UseAuthentication()</c>. If your service uses
+    /// JWT/Azure AD authentication, you must register authentication middleware yourself before
+    /// calling this method so that <c>HttpContext.User</c> is populated for tenant claim extraction.
+    /// </para>
+    /// <example>
+    /// <code>
+    /// app.UseAuthentication();           // your auth setup
+    /// app.UseChoInfrastructure(config);  // infrastructure pipeline
+    /// app.MapControllers();
+    /// </code>
+    /// </example>
     /// </summary>
     public static IApplicationBuilder UseChoInfrastructure(this IApplicationBuilder app, IConfiguration configuration)
     {
@@ -102,7 +124,8 @@ public static class ServiceCollectionExtensions
         var tenantOptions = app.ApplicationServices.GetRequiredService<TenantMiddlewareOptions>();
         app.UseMiddleware<TenantMiddleware>(tenantOptions);
 
-        app.UseCors("AllowAll");
+        var corsPolicyName = app.ApplicationServices.GetRequiredService<CorsPolicyNameHolder>().PolicyName;
+        app.UseCors(corsPolicyName);
         app.UseAuthorization();
 
         // Health check endpoints
@@ -157,4 +180,22 @@ public class ChoInfrastructureOptions
 
     /// <summary>Tenant middleware configuration.</summary>
     public TenantMiddlewareOptions TenantOptions { get; set; } = new();
+
+    /// <summary>
+    /// Custom CORS configuration. When set, replaces the default AllowAll policy.
+    /// Leave null to use the default permissive policy (AllowAnyOrigin/Method/Header).
+    /// </summary>
+    public Action<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>? ConfigureCors { get; set; }
+
+    /// <summary>
+    /// The CORS policy name applied in the middleware pipeline. Default: "AllowAll".
+    /// Must match a policy name registered via <see cref="ConfigureCors"/> if customized.
+    /// </summary>
+    public string CorsPolicyName { get; set; } = "AllowAll";
+}
+
+internal class CorsPolicyNameHolder
+{
+    public string PolicyName { get; }
+    public CorsPolicyNameHolder(string policyName) => PolicyName = policyName;
 }
