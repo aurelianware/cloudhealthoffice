@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PremiumBillingService</RootNamespace>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="PremiumBillingService.Tests/**" />
+    <Content Remove="PremiumBillingService.Tests/**" />
+    <None Remove="PremiumBillingService.Tests/**" />
+    <EmbeddedResource Remove="PremiumBillingService.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.45.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
+    <PackageReference Include="Stripe.net" Version="45.15.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+</Project>
