@@ -76,12 +76,14 @@ public class EftController : ControllerBase
     }
 
     /// <summary>
-    /// Download a NACHA file (returns the raw ACH file content)
+    /// Generate a NACHA file for all pending drafts and return it as a downloadable file.
+    /// This endpoint has side effects: it marks pending drafts as submitted.
+    /// Use POST /nacha/generate if you only need the file metadata.
     /// </summary>
-    [HttpPost("nacha/download")]
+    [HttpPost("nacha/generate-and-download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> DownloadNachaFile()
+    public async Task<ActionResult> GenerateAndDownloadNachaFile()
     {
         try
         {
