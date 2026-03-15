@@ -1,3 +1,4 @@
+using FhirService.Controllers;
 using FhirService.Formatters;
 using FhirService.Middleware;
 using FhirService.Services;
@@ -40,6 +41,7 @@ builder.Services.AddAuthorization();
 // ── FHIR data adapter ─────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
+builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 
 // Insert FHIR formatters first so they take priority over default System.Text.Json
 builder.Services.AddControllers(options =>
