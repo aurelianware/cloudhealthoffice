@@ -2,14 +2,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore dependencies
-COPY claims-service.csproj .
-RUN dotnet restore
+# Copy shared library first
+COPY shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj shared/CloudHealthOffice.Infrastructure/
+# Copy service project
+COPY claims-service/claims-service.csproj claims-service/
+RUN dotnet restore claims-service/claims-service.csproj
 
-# Copy source code and build
-COPY . .
-RUN dotnet build -c Release -o /app/build
-RUN dotnet publish -c Release -o /app/publish
+# Copy all source and build
+COPY shared/CloudHealthOffice.Infrastructure/ shared/CloudHealthOffice.Infrastructure/
+COPY claims-service/ claims-service/
+RUN dotnet build claims-service/claims-service.csproj -c Release -o /app/build
+RUN dotnet publish claims-service/claims-service.csproj -c Release -o /app/publish
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
