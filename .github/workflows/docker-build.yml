@@ -60,6 +60,10 @@ jobs:
           # so the build context must be the repo root
           - service: attachment-service
             build_context: '.'
+          # claims-service references CloudHealthOffice.Infrastructure (../shared/...)
+          # so the build context must be the repo root
+          - service: claims-service
+            build_context: '.'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
