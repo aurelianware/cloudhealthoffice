@@ -60,13 +60,6 @@
     width: 100%;
 }
 
-.w-hero-logo {
-    width: 160px;
-    margin-bottom: 2rem;
-    filter: drop-shadow(0 0 24px rgba(0, 255, 255, 0.5));
-    animation: w-float 7s ease-in-out infinite;
-}
-
 .w-hero-badge {
     display: inline-block;
     font-size: 0.75rem;
@@ -344,11 +337,6 @@
     .w-hero {
         padding: 2rem 1.5rem;
         min-height: 0;
-    }
-
-    .w-hero-logo {
-        width: 80px;
-        margin-bottom: 1.25rem;
     }
 
     .w-hero-badge {
