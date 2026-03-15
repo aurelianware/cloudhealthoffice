@@ -97,11 +97,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add health checks (MongoDB, Redis, claims-service HTTP)
+// Add health checks (MongoDB or Cosmos DB, Redis, claims-service HTTP)
 var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"] ?? "http://claims-service:8080";
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
     options.RedisConnectionString = builder.Configuration["Redis:ConnectionString"];
     options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
