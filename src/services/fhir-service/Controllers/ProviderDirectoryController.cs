@@ -285,7 +285,7 @@ public class ProviderDirectoryController : FhirControllerBase
     {
         if (!ProviderDirectoryMapper.ValidateNpi(npi))
         {
-            _logger.LogWarning("Invalid NPI format: {Npi}", npi);
+            _logger.LogWarning("Invalid NPI format: {Npi}", SanitizeForLog(npi));
             return null;
         }
 
@@ -302,7 +302,7 @@ public class ProviderDirectoryController : FhirControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "NPPES lookup failed for NPI {Npi}", npi);
+            _logger.LogError(ex, "NPPES lookup failed for NPI {Npi}", SanitizeForLog(npi));
             throw;
         }
     }

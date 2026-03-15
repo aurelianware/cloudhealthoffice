@@ -84,4 +84,15 @@ public abstract class FhirControllerBase : ControllerBase
 
     protected static int ClampPage(int requested)
         => Math.Max(1, requested);
+
+    // ── Logging helpers ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Removes CR/LF characters from a user-supplied value before it is written
+    /// to a log entry, preventing log-injection attacks.
+    /// </summary>
+    protected static string SanitizeForLog(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty
+           : value.Replace("\r", string.Empty, StringComparison.Ordinal)
+                  .Replace("\n", string.Empty, StringComparison.Ordinal);
 }
