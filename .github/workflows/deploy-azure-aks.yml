@@ -98,8 +98,7 @@ jobs:
         include:
           # Most .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
-          # Only self-contained services (claims-scrubbing-service, reference-data-service,
-          # provider-service, sponsor-service, trading-partner-service) use their own directory.
+          # Only claims-scrubbing-service (Node.js) is truly self-contained.
           - service: member-service
             build_context: '.'
           - service: coverage-service
@@ -117,6 +116,14 @@ jobs:
           - service: enrollment-import-service
             build_context: '.'
           - service: tenant-service
+            build_context: '.'
+          - service: provider-service
+            build_context: '.'
+          - service: sponsor-service
+            build_context: '.'
+          - service: trading-partner-service
+            build_context: '.'
+          - service: reference-data-service
             build_context: '.'
 
     steps:
