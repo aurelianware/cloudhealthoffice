@@ -1,18 +1,22 @@
 # Build stage
+# Build context must be the repo root so the CloudHealthOffice.Infrastructure
+# project reference (../shared/...) is available during the build.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+WORKDIR /repo
 
-# Copy shared library first
-COPY shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj shared/CloudHealthOffice.Infrastructure/
-# Copy service project
-COPY claims-service/claims-service.csproj claims-service/
-RUN dotnet restore claims-service/claims-service.csproj
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/claims-service/claims-service.csproj src/services/claims-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet restore src/services/claims-service/claims-service.csproj
 
-# Copy all source and build
-COPY shared/CloudHealthOffice.Infrastructure/ shared/CloudHealthOffice.Infrastructure/
-COPY claims-service/ claims-service/
-RUN dotnet build claims-service/claims-service.csproj -c Release -o /app/build
-RUN dotnet publish claims-service/claims-service.csproj -c Release -o /app/publish
+# Copy source code and build
+COPY src/services/claims-service/ src/services/claims-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/claims-service/claims-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
@@ -23,7 +27,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy published app
-COPY --from=build /app/publish .
+COPY --from=publish /app/publish .
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
@@ -33,5 +37,4 @@ USER appuser
 # Expose port
 EXPOSE 8080
 
-# Run the application
 ENTRYPOINT ["dotnet", "claims-service.dll"]
