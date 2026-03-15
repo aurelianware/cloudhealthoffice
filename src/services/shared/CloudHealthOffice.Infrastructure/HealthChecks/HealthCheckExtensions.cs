@@ -10,7 +10,7 @@ namespace CloudHealthOffice.Infrastructure.HealthChecks;
 public static class HealthCheckExtensions
 {
     /// <summary>
-    /// Registers CHO standard health checks: liveness, readiness with optional MongoDB, Redis, and HTTP dependency checks.
+    /// Registers Cloud Health Office standard health checks: liveness, readiness with optional MongoDB, Redis, and HTTP dependency checks.
     /// </summary>
     public static IHealthChecksBuilder AddChoHealthChecks(this IServiceCollection services, Action<ChoHealthCheckOptions>? configure = null)
     {
@@ -48,7 +48,7 @@ public static class HealthCheckExtensions
     }
 
     /// <summary>
-    /// Maps standard CHO health check endpoints: /health (all), /live (liveness), /ready (readiness).
+    /// Maps standard Cloud Health Office health check endpoints: /health (all), /live (liveness), /ready (readiness).
     /// </summary>
     public static IApplicationBuilder MapChoHealthChecks(this IApplicationBuilder app)
     {
