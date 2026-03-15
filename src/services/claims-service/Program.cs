@@ -21,6 +21,18 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
 }
 else
 {
+    var cosmosEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    var cosmosKey = builder.Configuration["CosmosDb:Key"];
+    var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+
+    if (string.IsNullOrEmpty(cosmosConnectionString) &&
+        (string.IsNullOrEmpty(cosmosEndpoint) || string.IsNullOrEmpty(cosmosKey)))
+    {
+        throw new InvalidOperationException(
+            "Claims Service requires a database. Configure either MongoDb:ConnectionString " +
+            "or CosmosDb:ConnectionString (or CosmosDb:Endpoint + CosmosDb:Key).");
+    }
+
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
 }
 
