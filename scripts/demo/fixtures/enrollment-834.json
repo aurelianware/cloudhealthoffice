@@ -1,0 +1,58 @@
+{
+  "fileName": "DEMOHLTH_834_20260315_001.edi",
+  "parsedAt": "2026-03-15T10:00:00Z",
+  "transactionCount": 1,
+  "enrollments": [
+    {
+      "relationship": "18",
+      "maintenanceType": "021",
+      "benefitStatus": "A",
+      "subscriberId": "SUB900112345",
+      "groupNumber": "GRP-HIMSS-2026",
+      "enrollmentDate": "20260301",
+      "demographics": {
+        "firstName": "Maria",
+        "lastName": "Santos",
+        "dateOfBirth": "19880422",
+        "gender": "F",
+        "ssn": "XXX-XX-6789",
+        "address1": "4200 Convention Center Dr",
+        "address2": "Suite 100",
+        "city": "Orlando",
+        "state": "FL",
+        "zip": "32819"
+      },
+      "coverage": [
+        {
+          "insuranceLineCode": "HLT",
+          "coverageLevel": "FAM",
+          "planId": "GOLD-PPO-2026",
+          "effectiveDate": "20260301",
+          "terminationDate": "20261231"
+        }
+      ],
+      "dependents": [
+        {
+          "relationship": "01",
+          "maintenanceType": "021",
+          "demographics": {
+            "firstName": "Carlos",
+            "lastName": "Santos",
+            "dateOfBirth": "19860715",
+            "gender": "M"
+          }
+        },
+        {
+          "relationship": "19",
+          "maintenanceType": "021",
+          "demographics": {
+            "firstName": "Sofia",
+            "lastName": "Santos",
+            "dateOfBirth": "20180310",
+            "gender": "F"
+          }
+        }
+      ]
+    }
+  ]
+}

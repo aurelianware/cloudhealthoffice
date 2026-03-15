@@ -1,0 +1,30 @@
+{
+  "claimId": "__CLAIM_ID__",
+  "memberId": "SUB900112345",
+  "subscriberId": "SUB900112345",
+  "benefitPlanId": "00000000-0000-0000-0000-000000000001",
+  "serviceDate": "2026-03-15",
+  "providerNpi": "1234567890",
+  "networkTier": "InNetwork",
+  "lineOfBusiness": 1,
+  "lines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99214",
+      "codeType": "CPT",
+      "modifiers": ["25"],
+      "placeOfService": "11",
+      "billedAmount": 225.00,
+      "units": 1
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "97110",
+      "codeType": "CPT",
+      "modifiers": [],
+      "placeOfService": "11",
+      "billedAmount": 170.00,
+      "units": 2
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "subscriberId": "SUB900112345",
+  "groupNumber": "GRP-HIMSS-2026",
+  "firstName": "Maria",
+  "lastName": "Santos",
+  "dateOfBirth": "19880422",
+  "serviceTypeCode": "30",
+  "serviceDateFrom": "2026-03-15",
+  "payerId": "CHO-DEMO-PAYER",
+  "providerId": "1234567890"
+}
