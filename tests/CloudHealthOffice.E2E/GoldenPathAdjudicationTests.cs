@@ -65,13 +65,17 @@ public class DockerComposeFixture : IAsyncLifetime
         {
             try
             {
-                var response = await client.GetAsync(healthPath);
+                using var response = await client.GetAsync(healthPath);
                 if (response.IsSuccessStatusCode)
                     return;
             }
             catch (HttpRequestException)
             {
                 // Service not up yet
+            }
+            catch (OperationCanceledException)
+            {
+                // Per-request timeout — keep waiting for the service to start
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -116,8 +120,10 @@ public class GoldenPathAdjudicationTests
         // ── Arrange: build a professional claim (837P) ──────────────────
         var serviceDate = DateTime.UtcNow.Date;
         var claimNumber = $"E2E-{Guid.NewGuid():N}".Substring(0, 20);
-        var memberId = "MBR-E2E-001";
-        var subscriberId = "SUB-E2E-001";
+        // Use unique IDs per run so Redis-backed accumulator state doesn't bleed
+        // between runs and cost-sharing assertions remain deterministic.
+        var memberId = $"MBR-{Guid.NewGuid():N}".Substring(0, 20);
+        var subscriberId = $"SUB-{Guid.NewGuid():N}".Substring(0, 20);
         var providerNpi = "1234567890";
 
         var claim = new
@@ -182,13 +188,70 @@ public class GoldenPathAdjudicationTests
         var claimId = createdClaim.GetProperty("id").GetString()!;
         Assert.False(string.IsNullOrEmpty(claimId), "Claim ID should not be empty");
 
-        // ── Step 2: Adjudicate via benefit-plan-service ─────────────────
+        // ── Step 2: Create a benefit plan and adjudicate ────────────────
+        // A benefit plan must exist before adjudication; seed one for this run.
+        var planBusinessId = $"E2E-PLN-{Guid.NewGuid():N}".Substring(0, 20);
+        var benefitPlanPayload = new
+        {
+            tenantId = "e2e-test-tenant",
+            planId = planBusinessId,
+            planName = "E2E Golden Path PPO Plan",
+            payer = "E2E Health Plan",
+            effectiveDate = DateTime.UtcNow.AddYears(-1),
+            planType = "PPO",
+            lineOfBusiness = "Commercial",
+            costSharing = new
+            {
+                individualDeductible = 0m,
+                familyDeductible = 0m,
+                individualOutOfPocketMax = 5000m,
+                familyOutOfPocketMax = 10000m,
+                inNetworkDeductible = 0m,
+                outOfNetworkDeductible = 0m,
+                inNetworkOutOfPocketMax = 5000m,
+                outOfNetworkOutOfPocketMax = 10000m
+            },
+            benefits = new[]
+            {
+                new
+                {
+                    serviceCategory = "OutpatientServices",
+                    description = "Office visits and lab",
+                    cptCodes = new[] { "99213", "36415" },
+                    inNetworkCopay = 30m,
+                    inNetworkCoinsurance = 0.20m,
+                    deductibleApplies = false
+                }
+            },
+            networkTiers = new[]
+            {
+                new
+                {
+                    tierName = "InNetwork",
+                    tierLevel = 1,
+                    providerNpis = new[] { providerNpi }
+                }
+            },
+            isActive = true
+        };
+
+        var planCreateResponse = await _fixture.BenefitPlanClient.PostAsJsonAsync(
+            "/api/v1/plans", benefitPlanPayload, Json);
+
+        var planCreateContent = await planCreateResponse.Content.ReadAsStringAsync();
+        Assert.True(
+            planCreateResponse.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK,
+            $"Benefit plan creation failed: {planCreateResponse.StatusCode} — {planCreateContent}");
+
+        var createdPlan = JsonSerializer.Deserialize<JsonElement>(planCreateContent, Json);
+        var benefitPlanId = Guid.Parse(createdPlan.GetProperty("id").GetString()!);
+
         var adjudicationRequest = new
         {
             claimId,
             memberId,
             subscriberId,
-            benefitPlanId = Guid.Empty,  // Uses default/fallback plan in dev
+            benefitPlanId,
             serviceDate = DateOnly.FromDateTime(serviceDate).ToString("yyyy-MM-dd"),
             providerNpi = providerNpi,
             networkTier = "InNetwork",
@@ -284,6 +347,10 @@ public class GoldenPathAdjudicationTests
                 $"Line {lineProcedure}: should have isCovered field");
         }
 
+        // Build a stable lookup by lineNumber so indexing doesn't depend on array order
+        var adjLinesByNumber = lines.EnumerateArray()
+            .ToDictionary(l => l.GetProperty("lineNumber").GetInt32());
+
         // ── Step 4: Create 835 ERA payment via payment-service ──────────
         var checkNumber = $"E2E-CHK-{Guid.NewGuid():N}".Substring(0, 20);
         var payment = new
@@ -317,7 +384,7 @@ public class GoldenPathAdjudicationTests
                             lineNumber = 1,
                             procedureCode = "99213",
                             chargeAmount = 150.00m,
-                            paymentAmount = lines[0].GetProperty("planPayment").GetDecimal(),
+                            paymentAmount = adjLinesByNumber[1].GetProperty("planPayment").GetDecimal(),
                             units = 1m,
                             serviceDateFrom = serviceDate,
                             serviceDateTo = serviceDate,
@@ -328,7 +395,7 @@ public class GoldenPathAdjudicationTests
                             lineNumber = 2,
                             procedureCode = "36415",
                             chargeAmount = 25.00m,
-                            paymentAmount = lines[1].GetProperty("planPayment").GetDecimal(),
+                            paymentAmount = adjLinesByNumber[2].GetProperty("planPayment").GetDecimal(),
                             units = 1m,
                             serviceDateFrom = serviceDate,
                             serviceDateTo = serviceDate,
