@@ -22,6 +22,7 @@ namespace FhirService.Services;
 /// </summary>
 public interface ICms0057ComplianceChecker
 {
+    IReadOnlyList<string> SupportedResourceTypes { get; }
     ComplianceResult ValidateCompliance(Resource resource);
     IReadOnlyList<ComplianceResult> ValidateBatchCompliance(IEnumerable<Resource> resources);
     string GenerateComplianceReport(IReadOnlyList<ComplianceResult> results);
@@ -29,6 +30,9 @@ public interface ICms0057ComplianceChecker
 
 public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
 {
+    public IReadOnlyList<string> SupportedResourceTypes { get; } =
+        ["ServiceRequest", "ExplanationOfBenefit", "Claim", "Patient"];
+
     /// <summary>
     /// Main compliance validation — dispatches to resource-specific validators.
     /// </summary>
@@ -119,7 +123,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
         }
 
         if (resource.AuthoredOn is null)
-            issues.Add(new("warning", "MISSING_AUTHORED_ON", "ServiceRequest.authoredOn should be present for timeline tracking", Requirement: "CMS-0057-F Timeline"));
+            warnings.Add(new("MISSING_AUTHORED_ON", "ServiceRequest.authoredOn should be present for timeline tracking", "Add authoredOn for CMS-0057-F timeline compliance tracking"));
         else
             requiredPresent++;
 
@@ -135,7 +139,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
 
         if (resource.Insurance is null || resource.Insurance.Count == 0)
         {
-            issues.Add(new("warning", "MISSING_INSURANCE", "ServiceRequest.insurance should reference coverage information", Requirement: "Da Vinci PAS"));
+            warnings.Add(new("MISSING_INSURANCE", "ServiceRequest.insurance should reference coverage information", "Add insurance reference for coverage tracking"));
         }
         else
         {
@@ -178,7 +182,8 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
             requiredPresent++;
         }
 
-        var timelineCompliance = CheckPriorAuthTimeline(resource.AuthoredOn);
+        var isUrgent = resource.Priority == RequestPriority.Urgent || resource.Priority == RequestPriority.Stat;
+        var timelineCompliance = CheckPriorAuthTimeline(resource.AuthoredOn, isUrgent);
 
         return new ComplianceResult(
             Compliant: issues.All(i => i.Severity != "error"),
@@ -230,7 +235,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
         }
 
         if (resource.Created is null)
-            issues.Add(new("warning", "MISSING_CREATED", "ExplanationOfBenefit.created should be present", Requirement: "CMS-0057-F"));
+            warnings.Add(new("MISSING_CREATED", "ExplanationOfBenefit.created should be present", "Add created date for CMS-0057-F tracking"));
         else
             requiredPresent++;
 
@@ -255,7 +260,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
         }
 
         if (resource.Outcome is null)
-            issues.Add(new("warning", "MISSING_OUTCOME", "ExplanationOfBenefit.outcome should be present", Requirement: "US Core"));
+            warnings.Add(new("MISSING_OUTCOME", "ExplanationOfBenefit.outcome should be present", "Add outcome for US Core compliance"));
         else
             requiredPresent++;
 
@@ -349,7 +354,7 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
         }
 
         if (resource.Created is null)
-            issues.Add(new("warning", "MISSING_CREATED", "Claim.created should be present", Requirement: "CMS-0057-F"));
+            warnings.Add(new("MISSING_CREATED", "Claim.created should be present", "Add created date for CMS-0057-F tracking"));
         else
             requiredPresent++;
 
@@ -483,23 +488,23 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
     /// <summary>
     /// Check prior authorization timeline compliance.
     /// CMS-0057-F requires response within specific timeframes:
-    /// 72 hours for urgent, 7 calendar days for standard.
+    /// 72 hours for urgent/stat, 7 calendar days for standard.
+    /// Urgency is determined by ServiceRequest.priority, not elapsed time.
     /// </summary>
-    private static TimelineCompliance CheckPriorAuthTimeline(string? authoredOn)
+    private static TimelineCompliance CheckPriorAuthTimeline(string? authoredOn, bool isUrgent)
     {
         if (authoredOn is null || !DateTimeOffset.TryParse(authoredOn, out var authoredDate))
             return new TimelineCompliance(Applicable: false);
 
         var hoursDiff = (DateTimeOffset.UtcNow - authoredDate).TotalHours;
 
-        var withinUrgentWindow = hoursDiff <= 72;
-        var deadline = withinUrgentWindow ? "72 hours" : "7 calendar days";
-        var maxAllowedHours = withinUrgentWindow ? 72.0 : 168.0;
+        var deadline = isUrgent ? "72 hours" : "7 calendar days";
+        var maxAllowedHours = isUrgent ? 72.0 : 168.0;
         var compliant = hoursDiff <= maxAllowedHours;
 
         return new TimelineCompliance(
             Applicable: true,
-            Requirement: $"CMS-0057-F: Response within {deadline} for {(withinUrgentWindow ? "urgent" : "standard")} requests",
+            Requirement: $"CMS-0057-F: Response within {deadline} for {(isUrgent ? "urgent" : "standard")} requests",
             Deadline: deadline,
             Compliant: compliant);
     }
@@ -508,16 +513,17 @@ public class Cms0057ComplianceChecker : ICms0057ComplianceChecker
 
     private static ComplianceResult BuildUnsupportedResult(Resource resource)
     {
-        var issues = new List<ComplianceIssue>
+        var warnings = new List<ComplianceWarning>
         {
-            new("warning", "UNSUPPORTED_RESOURCE",
-                $"Resource type {resource.TypeName} is not specifically validated for CMS-0057-F")
+            new("UNSUPPORTED_RESOURCE",
+                $"Resource type {resource.TypeName} is not specifically validated for CMS-0057-F",
+                "Submit a supported resource type: ServiceRequest, ExplanationOfBenefit, Claim, or Patient")
         };
 
         return new ComplianceResult(
             Compliant: true,
-            Issues: issues,
-            Warnings: [],
+            Issues: [],
+            Warnings: warnings,
             Summary: new ComplianceSummary(
                 ResourceType: resource.TypeName ?? "Unknown",
                 RequiredElementsPresent: 0,

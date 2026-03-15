@@ -1,4 +1,5 @@
 using FhirService.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -8,7 +9,8 @@ namespace FhirService.Controllers;
 /// Returns a structured report of which CMS-0057-F requirements are met/unmet
 /// for the current tenant — a key differentiator for CHO health plans.
 /// </summary>
-[Route("fhir")]
+[Route("fhir/r4")]
+[Authorize]
 public class ComplianceController : FhirControllerBase
 {
     private readonly IConfiguration _config;
@@ -21,7 +23,7 @@ public class ComplianceController : FhirControllerBase
     }
 
     /// <summary>
-    /// GET /fhir/compliance-status
+    /// GET /fhir/r4/compliance-status
     /// Returns a structured report of CMS-0057-F compliance posture for the current tenant.
     /// </summary>
     [HttpGet("compliance-status")]
@@ -48,6 +50,8 @@ public class ComplianceController : FhirControllerBase
 
         var metCount = requirements.Count(r => r.Met);
 
+        var supportedResourceTypes = _complianceChecker.SupportedResourceTypes;
+
         var report = new Cms0057ComplianceReport(
             TenantId: tenantId,
             OverallCompliant: requirements.All(r => r.Met),
@@ -55,6 +59,7 @@ public class ComplianceController : FhirControllerBase
             TotalRequirements: requirements.Count,
             CompliancePercentage: (int)Math.Round(100.0 * metCount / requirements.Count),
             Requirements: requirements,
+            SupportedValidationResources: supportedResourceTypes,
             AssessedAt: DateTimeOffset.UtcNow,
             FhirVersion: "4.0.1",
             RuleName: "CMS-0057-F",
@@ -109,9 +114,12 @@ public class ComplianceController : FhirControllerBase
         if (!enabled)
             issues.Add("Provider Directory API is not enabled");
 
-        var hasNppesIntegration = !string.IsNullOrEmpty(_config["Nppes:BaseUrl"]);
-        if (!hasNppesIntegration)
-            issues.Add("NPPES integration is not configured for provider directory lookups");
+        // Program.cs registers NppesApi HttpClient with a default base URL when Nppes:BaseUrl
+        // is absent, so the provider directory is functional even without explicit config.
+        // Only flag as non-compliant if the config explicitly disables NPPES.
+        var nppesDisabled = _config.GetValue("Nppes:Disabled", false);
+        if (nppesDisabled)
+            issues.Add("NPPES integration is explicitly disabled for provider directory lookups");
 
         return new Cms0057Requirement(
             Id: "CMS-0057-F-02",
@@ -144,7 +152,11 @@ public class ComplianceController : FhirControllerBase
         var supportedOperations = _config.GetSection("Cms0057:PriorAuthorizationApi:Operations")
             .GetChildren().Select(c => c.Value).ToList();
 
-        if (supportedOperations.Count > 0)
+        if (supportedOperations.Count == 0)
+        {
+            issues.Add($"Required operations are not explicitly configured: {string.Join(", ", requiredOperations)}");
+        }
+        else
         {
             var missing = requiredOperations.Except(supportedOperations!, StringComparer.OrdinalIgnoreCase).ToList();
             if (missing.Count > 0)
@@ -237,6 +249,7 @@ public record Cms0057ComplianceReport(
     int TotalRequirements,
     int CompliancePercentage,
     IReadOnlyList<Cms0057Requirement> Requirements,
+    IReadOnlyList<string> SupportedValidationResources,
     DateTimeOffset AssessedAt,
     string FhirVersion,
     string RuleName,
