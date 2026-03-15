@@ -83,6 +83,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "risk-adjustment-service", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.ClaimsService.Tests", "tests\CloudHealthOffice.ClaimsService.Tests\CloudHealthOffice.ClaimsService.Tests.csproj", "{7F2A3B4C-D5E6-4F7A-8B9C-0D1E2F3A4B5C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.AdjudicationController.Tests", "tests\CloudHealthOffice.AdjudicationController.Tests\CloudHealthOffice.AdjudicationController.Tests.csproj", "{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -453,6 +455,18 @@ Global
 		{7F2A3B4C-D5E6-4F7A-8B9C-0D1E2F3A4B5C}.Release|x64.Build.0 = Release|Any CPU
 		{7F2A3B4C-D5E6-4F7A-8B9C-0D1E2F3A4B5C}.Release|x86.ActiveCfg = Release|Any CPU
 		{7F2A3B4C-D5E6-4F7A-8B9C-0D1E2F3A4B5C}.Release|x86.Build.0 = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|x64.Build.0 = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Debug|x86.Build.0 = Debug|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|x64.ActiveCfg = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|x64.Build.0 = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|x86.ActiveCfg = Release|Any CPU
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -493,6 +507,7 @@ Global
 		{A1B2C3D4-E5F6-4A5B-9C8D-7E6F5A4B3C2D} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 		{B2C3D4E5-F6A7-4B5C-AD8E-8F7A6B5C4D3E} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 		{7F2A3B4C-D5E6-4F7A-8B9C-0D1E2F3A4B5C} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{A3B4C5D6-E7F8-4A9B-BC01-2D3E4F5A6B7C} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}
