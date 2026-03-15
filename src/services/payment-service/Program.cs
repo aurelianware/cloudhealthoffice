@@ -76,11 +76,14 @@ builder.Services.AddHttpClient("ClaimsService", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// Health checks (MongoDB, claims-service HTTP)
+// Health checks (MongoDB or Cosmos DB, claims-service HTTP)
 var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
+    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
+    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
     options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 

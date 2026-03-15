@@ -30,10 +30,13 @@ public static class ServiceCollectionExtensions
         services.AddControllers();
         services.AddEndpointsApiExplorer();
 
-        // Health checks
+        // Health checks — auto-detect database from configuration
         services.AddChoHealthChecks(hc =>
         {
             hc.MongoDbConnectionString = configuration["MongoDb:ConnectionString"];
+            hc.CosmosDbConnectionString = configuration["CosmosDb:ConnectionString"];
+            hc.CosmosDbEndpoint = configuration["CosmosDb:Endpoint"];
+            hc.CosmosDbKey = configuration["CosmosDb:Key"];
             hc.RedisConnectionString = configuration["Redis:ConnectionString"];
             options.ConfigureHealthChecks?.Invoke(hc);
         });

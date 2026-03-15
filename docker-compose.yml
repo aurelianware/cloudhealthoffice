@@ -36,8 +36,8 @@ services:
 
   claims-service:
     build:
-      context: src/services/claims-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/services/claims-service/Dockerfile
     ports:
       - "5001:8080"
     environment:
@@ -48,7 +48,7 @@ services:
       mongo:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -75,8 +75,8 @@ services:
 
   payment-service:
     build:
-      context: src/services/payment-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/services/payment-service/Dockerfile
     ports:
       - "5003:8080"
     environment:
