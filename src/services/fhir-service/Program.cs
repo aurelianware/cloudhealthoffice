@@ -41,6 +41,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
+builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
 
 // ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>
