@@ -115,3 +115,6 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+// Enable WebApplicationFactory<Program> access from test projects
+public partial class Program { }
