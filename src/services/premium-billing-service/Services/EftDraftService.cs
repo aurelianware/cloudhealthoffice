@@ -178,13 +178,15 @@ public class EftDraftService : IEftDraftService
             invoiceIds.AddRange(billingRun.InvoiceIds);
         }
 
-        result.TotalInvoices = invoiceIds.Count;
+        // Deduplicate before counting
+        var uniqueInvoiceIds = invoiceIds.Distinct().ToList();
+        result.TotalInvoices = uniqueInvoiceIds.Count;
 
         // Separate NACHA entries (built as batch) from Stripe (initiated individually)
         var nachaEntries = new List<NachaEntryDetail>();
         var nachaDrafts = new List<EftDraft>();
 
-        foreach (var invoiceId in invoiceIds.Distinct())
+        foreach (var invoiceId in uniqueInvoiceIds)
         {
             try
             {
@@ -267,13 +269,15 @@ public class EftDraftService : IEftDraftService
             var nachaResult = _nachaFileService.GenerateNachaFile(nachaEntries, nachaOptions);
             result.NachaFile = nachaResult;
 
-            // Update NACHA drafts with file reference and mark as submitted
-            foreach (var draft in nachaDrafts)
+            // Update NACHA drafts with file reference, trace numbers, and mark as submitted
+            for (int i = 0; i < nachaDrafts.Count; i++)
             {
+                var draft = nachaDrafts[i];
                 draft.NachaFileReference = nachaResult.FileReference;
                 draft.Status = EftDraftStatus.Submitted;
                 draft.SubmittedAt = DateTime.UtcNow;
                 draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
+                draft.TraceNumber = nachaEntries[i].TraceNumber;
                 await _draftRepository.UpdateAsync(draft);
             }
         }
@@ -295,6 +299,8 @@ public class EftDraftService : IEftDraftService
             throw new InvalidOperationException("No pending NACHA drafts to process");
 
         var entries = new List<NachaEntryDetail>();
+        var includedDrafts = new List<EftDraft>();
+        var skippedDraftIds = new HashSet<string>();
 
         foreach (var draft in pendingDrafts)
         {
@@ -303,6 +309,7 @@ public class EftDraftService : IEftDraftService
             {
                 _logger.LogWarning("Skipping draft {DraftId}: missing bank account for group {GroupNumber}",
                     draft.Id, draft.GroupNumber);
+                skippedDraftIds.Add(draft.Id);
                 continue;
             }
 
@@ -316,26 +323,24 @@ public class EftDraftService : IEftDraftService
                 IndividualName = bankAccount.AccountHolderName ?? draft.GroupNumber,
                 IndividualId = draft.GroupNumber
             });
+            includedDrafts.Add(draft);
         }
+
+        if (entries.Count == 0)
+            throw new InvalidOperationException("No drafts with valid bank accounts to include in NACHA file");
 
         var nachaOptions = BuildNachaOptionsFromConfig();
         var result = _nachaFileService.GenerateNachaFile(entries, nachaOptions);
 
-        // Mark drafts as submitted
-        int entryIndex = 0;
-        foreach (var draft in pendingDrafts)
+        // Only mark drafts that were actually included in the file as submitted
+        for (int i = 0; i < includedDrafts.Count; i++)
         {
+            var draft = includedDrafts[i];
             draft.NachaFileReference = result.FileReference;
             draft.Status = EftDraftStatus.Submitted;
             draft.SubmittedAt = DateTime.UtcNow;
             draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-
-            if (entryIndex < entries.Count)
-            {
-                draft.TraceNumber = entries[entryIndex].TraceNumber;
-                entryIndex++;
-            }
-
+            draft.TraceNumber = entries[i].TraceNumber;
             await _draftRepository.UpdateAsync(draft);
         }
 
