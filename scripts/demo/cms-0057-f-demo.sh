@@ -23,6 +23,7 @@
 #   BENEFIT_PLAN_URL (default: http://localhost:5002)
 #   FHIR_URL         (default: http://localhost:5007)
 #   TENANT_ID        (default: demo-tenant)
+#   FHIR_TOKEN       (default: empty — set to a SMART on FHIR Bearer token)
 #   PAUSE_SECONDS    (default: 2)
 # =============================================================================
 set -euo pipefail
@@ -37,6 +38,7 @@ CLAIMS_URL="${CLAIMS_URL:-http://localhost:5001}"
 BENEFIT_PLAN_URL="${BENEFIT_PLAN_URL:-http://localhost:5002}"
 FHIR_URL="${FHIR_URL:-http://localhost:5007}"
 TENANT_ID="${TENANT_ID:-demo-tenant}"
+FHIR_TOKEN="${FHIR_TOKEN:-}"
 PAUSE="${PAUSE_SECONDS:-2}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -96,6 +98,25 @@ pause() {
   sleep "$PAUSE"
 }
 
+# check_response exits the demo if a non-2xx status is returned
+check_response() {
+  local step_name="$1"
+  local http_code="$2"
+
+  if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
+    echo ""
+    echo -e "  ${RED}FATAL: ${step_name} returned HTTP ${http_code}. Halting demo.${RESET}" >&2
+    echo -e "  ${RED}Check that all services are running (docker compose up -d).${RESET}" >&2
+    exit 1
+  fi
+}
+
+# Build FHIR authorization header array for curl
+fhir_auth_args=()
+if [[ -n "$FHIR_TOKEN" ]]; then
+  fhir_auth_args=(-H "Authorization: Bearer ${FHIR_TOKEN}")
+fi
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
@@ -109,6 +130,11 @@ echo -e "  ${BOLD}Enrollment:${RESET} ${ENROLLMENT_URL}"
 echo -e "  ${BOLD}Eligibility:${RESET}${ELIGIBILITY_URL}"
 echo -e "  ${BOLD}Auth:${RESET}       ${AUTH_URL}"
 echo -e "  ${BOLD}FHIR:${RESET}       ${FHIR_URL}"
+if [[ -n "$FHIR_TOKEN" ]]; then
+  echo -e "  ${BOLD}FHIR Auth:${RESET}  Bearer ${FHIR_TOKEN:0:12}..."
+else
+  echo -e "  ${BOLD}FHIR Auth:${RESET}  ${YELLOW}not set (export FHIR_TOKEN for authenticated endpoints)${RESET}"
+fi
 echo ""
 
 if ! command -v curl &>/dev/null; then
@@ -142,6 +168,7 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Enrollment import" "$HTTP_CODE"
 
 narrate "Member enrolled with subscriber ID SUB900112345, Gold PPO family plan."
 pause
@@ -165,6 +192,7 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Eligibility inquiry" "$HTTP_CODE"
 
 narrate "271 response confirms active coverage. Member is eligible for services."
 pause
@@ -189,6 +217,7 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Prior authorization" "$HTTP_CODE"
 
 # Extract authorization ID for reference
 AUTH_ID=$(echo "$BODY" | jq -r '.id // .authorizationNumber // "AUTH-PENDING"' 2>/dev/null || echo "AUTH-PENDING")
@@ -206,25 +235,24 @@ narrate "Total billed: \$395.00 (2 service lines)"
 narrate "POST ${CLAIMS_URL}/api/claims"
 echo ""
 
+# Inject tenant ID into claim payload
+CLAIM_PAYLOAD=$(sed "s/__TENANT_ID__/${TENANT_ID}/g" "${FIXTURES_DIR}/claim-837p.json")
+
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X POST "${CLAIMS_URL}/api/claims" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: ${TENANT_ID}" \
-  -d @"${FIXTURES_DIR}/claim-837p.json")
+  -d "$CLAIM_PAYLOAD")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Claim submission" "$HTTP_CODE"
 
 # Extract claim ID for adjudication
 CLAIM_ID=$(echo "$BODY" | jq -r '.id // empty' 2>/dev/null || echo "")
 CLAIM_NUMBER=$(echo "$BODY" | jq -r '.claimNumber // empty' 2>/dev/null || echo "")
-
-if [[ -z "$CLAIM_ID" ]]; then
-  CLAIM_ID="demo-claim-001"
-  narrate "Using placeholder claim ID for adjudication step."
-fi
 
 narrate "Claim ${CLAIM_NUMBER:-$CLAIM_ID} received. Auto-calculated total charge from service lines."
 pause
@@ -257,6 +285,7 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Adjudication" "$HTTP_CODE"
 
 narrate "Adjudication complete. Plan payment and member responsibility calculated."
 pause
@@ -274,12 +303,14 @@ echo ""
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X GET "${FHIR_URL}/fhir/r4/ExplanationOfBenefit?patient=SUB900112345" \
   -H "Accept: application/fhir+json" \
-  -H "X-Tenant-ID: ${TENANT_ID}")
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${fhir_auth_args[@]+"${fhir_auth_args[@]}"}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "FHIR ExplanationOfBenefit" "$HTTP_CODE"
 
 narrate "FHIR R4 ExplanationOfBenefit bundle returned — adjudicated claims accessible to member apps."
 pause
@@ -297,12 +328,14 @@ echo ""
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X GET "${FHIR_URL}/fhir/r4/Practitioner/1234567890" \
   -H "Accept: application/fhir+json" \
-  -H "X-Tenant-ID: ${TENANT_ID}")
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${fhir_auth_args[@]+"${fhir_auth_args[@]}"}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "FHIR Practitioner" "$HTTP_CODE"
 
 narrate "Provider directory entry returned with NPI, specialty, and network status."
 pause
@@ -325,12 +358,14 @@ echo ""
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -X GET "${FHIR_URL}/fhir/r4/compliance-status" \
   -H "Accept: application/json" \
-  -H "X-Tenant-ID: ${TENANT_ID}")
+  -H "X-Tenant-ID: ${TENANT_ID}" \
+  "${fhir_auth_args[@]+"${fhir_auth_args[@]}"}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 show_response "$HTTP_CODE" "$BODY"
+check_response "Compliance status" "$HTTP_CODE"
 
 # Extract compliance summary if available
 COMPLIANT=$(echo "$BODY" | jq -r '.overallCompliant // empty' 2>/dev/null || echo "")
