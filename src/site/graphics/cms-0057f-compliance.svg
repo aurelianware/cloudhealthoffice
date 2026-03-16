@@ -117,7 +117,7 @@
       <text x="40" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">837 ~ Claim</text>
       <text x="-40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">277 ~ Patient</text>
       <text x="40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">835 ~ EOB</text>
-      <text x="0" y="58" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">278 ~ Coverage &middot; 275 ~ Encounter</text>
+      <text x="0" y="58" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">278 ~ Coverage &#x00B7; 275 ~ Encounter</text>
     </g>
 
     <!-- FHIR Resources -->
