@@ -17,7 +17,7 @@
   <text x="600" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="32" font-weight="900"
         fill="#ffffff" text-anchor="middle">Cloud Health Office</text>
   <text x="600" y="78" font-family="Segoe UI, system-ui, sans-serif" font-size="16" fill="#b0b0b0"
-        text-anchor="middle">Kubernetes-Native HIPAA Platform &bull; X12 EDI &bull; FHIR R4 &bull; Prior Auth Automation</text>
+        text-anchor="middle">Kubernetes-Native HIPAA Platform &#x2022; X12 EDI &#x2022; FHIR R4 &#x2022; Prior Auth Automation</text>
 
   <!-- Cloud provider badges -->
   <g transform="translate(600, 125)">
@@ -153,6 +153,6 @@
   <g transform="translate(0, 435)">
     <rect x="100" y="0" width="1000" height="50" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.15)" stroke-width="1"/>
     <text x="600" y="30" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#b0b0b0"
-          text-anchor="middle">Deploy Anywhere &bull; Free for Non-Production &bull; BSL 1.1 License &bull; .NET 8 &bull; Python 3.11 &bull; Node.js 20</text>
+          text-anchor="middle">Deploy Anywhere &#x2022; Free for Non-Production &#x2022; BSL 1.1 License &#x2022; .NET 8 &#x2022; Python 3.11 &#x2022; Node.js 20</text>
   </g>
 </svg>

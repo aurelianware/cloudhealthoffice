@@ -303,170 +303,317 @@
 
   <main id="main-content">
     <div class="release-hero">
-      <span class="version-badge">V3.0 Release</span>
-      <h1>Cloud Health Office V3</h1>
+      <span class="version-badge">V4.1 Release</span>
+      <h1>Cloud Health Office V4</h1>
       <p style="font-size: 1.5rem; max-width: 800px; margin: 0 auto;">
-        The Open Frontier Release<br>
-        Multi-Cloud Independence<br>
-        <strong>Deploy Anywhere: Azure, AWS, GCP</strong>
+        Production SaaS. Zero Vulnerabilities.<br>
+        22 Microservices. 6 Calculation Engines.<br>
+        <strong>CMS-0057-F Compliant &mdash; 10 Months Early</strong>
       </p>
     </div>
 
     <div class="content-container">
       <!-- Key Metrics -->
       <section class="feature-section">
-        <h2>V3 At A Glance</h2>
+        <h2>V4 At A Glance</h2>
         <div class="metrics-grid">
           <div class="metric-card">
-            <div class="metric-value">3</div>
-            <div class="metric-label">Cloud Providers Supported</div>
+            <div class="metric-value">22</div>
+            <div class="metric-label">Microservices</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">6</div>
+            <div class="metric-label">Calculation Engines</div>
           </div>
           <div class="metric-card">
             <div class="metric-value">1,018</div>
             <div class="metric-label">Tests Passing</div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">&lt;1hr</div>
-            <div class="metric-label">Deployment Time</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-value">17</div>
-            <div class="metric-label">PRs Since V2</div>
+            <div class="metric-value">85.93%</div>
+            <div class="metric-label">Code Coverage</div>
           </div>
           <div class="metric-card">
             <div class="metric-value">0</div>
             <div class="metric-label">Security Vulnerabilities</div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">100%</div>
-            <div class="metric-label">CMS-0057-F Ready</div>
+            <div class="metric-value">5</div>
+            <div class="metric-label">FHIR R4 APIs</div>
           </div>
         </div>
       </section>
 
-      <!-- V3 Features -->
-      <section id="v3-features" class="feature-section">
-        <h2>🌐 V3 — The Open Frontier</h2>
-        <p>V3 delivers multi-cloud independence, Azure Marketplace readiness, and Kubernetes-native workflow orchestration.</p>
+      <!-- V4 Features -->
+      <section id="v4-features" class="feature-section">
+        <h2>V4 &mdash; Production SaaS</h2>
+        <p>V4 delivers multi-tenant SaaS isolation, zero-vulnerability security hardening, cloud portability, and a developer-first API experience.</p>
 
         <div class="feature-grid">
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>Multi-Cloud Deployment</h3>
-            <p>Deploy Cloud Health Office on any cloud platform with unified Helm charts.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>Multi-Tenant SaaS Isolation</h3>
+            <p>Enterprise-grade tenant isolation for production SaaS deployments.</p>
             <ul>
-              <li>Azure AKS / AWS EKS / GCP GKE</li>
-              <li>Argo Workflows orchestration</li>
-              <li>Apache Kafka messaging</li>
-              <li>HashiCorp Vault secrets</li>
+              <li>TenantContextService maps Azure AD tenant to CHO tenant</li>
+              <li>X-Tenant-ID header injection on all API calls</li>
+              <li>Cross-tenant data leakage prevention</li>
+              <li>Dynamic tenant name display with demo/production badges</li>
             </ul>
           </div>
 
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>Azure Marketplace</h3>
-            <p>One-click deployment with meter-based billing per transaction.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>Zero-Vulnerability Security</h3>
+            <p>Complete security hardening &mdash; from 86 high-severity issues to zero.</p>
             <ul>
-              <li>Managed Application plan</li>
-              <li>SaaS metered billing</li>
-              <li>3-tier pricing structure</li>
-              <li>Partner Center ready</li>
+              <li>59 package updates across all services</li>
+              <li>CVE-2024-43485 (System.Formats.Asn1 RCE) fixed</li>
+              <li>CVE-2024-21907 (Newtonsoft.Json) fixed</li>
+              <li>Global transitive dependency enforcement</li>
             </ul>
           </div>
 
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>Argo Workflows</h3>
-            <p>Kubernetes-native workflow orchestration for X12 EDI processing.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>Cloud Portability</h3>
+            <p>Cloud-agnostic infrastructure with dual-provider support.</p>
             <ul>
-              <li>X12 275/278 ingest workflows</li>
-              <li>X12 277 response generation</li>
-              <li>Kafka event triggers</li>
-              <li>Container-based processing</li>
+              <li>IDocumentStore&lt;T&gt; abstraction layer</li>
+              <li>Azure Cosmos DB (production)</li>
+              <li>MongoDB / DigitalOcean (65% cost savings)</li>
+              <li>3-click GitHub Actions deployment toggle</li>
             </ul>
           </div>
 
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>ClaimRiskScorer</h3>
-            <p>ML-powered fraud/abuse detection for 837 claims.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>OpenAPI 3.1 Specifications</h3>
+            <p>Full API documentation with interactive Swagger UI for all FHIR endpoints.</p>
             <ul>
-              <li>PyTorch risk scoring (0-100)</li>
-              <li>Custom ZZZ segment in 277</li>
-              <li>Application Insights events</li>
-              <li>Service Bus triggered</li>
+              <li>Patient Access API spec (CARIN Blue Button)</li>
+              <li>Provider Access API spec (Da Vinci PDex)</li>
+              <li>Claims Scrubbing API spec with ROI metrics</li>
+              <li>Interactive Swagger UI viewers</li>
             </ul>
           </div>
 
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>Eligibility Service</h3>
-            <p>Dual-interface microservice on Azure Container Apps.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>Developer Quickstarts</h3>
+            <p>From zero to first API call in under 30 minutes.</p>
             <ul>
-              <li>X12 270/271 + FHIR API</li>
-              <li>Cosmos DB with TTL cache</li>
-              <li>Event Grid integration</li>
-              <li>Dapr sidecar support</li>
+              <li>CMS-0057-F Compliance quickstart (15 min)</li>
+              <li>Patient Access API quickstart (30 min)</li>
+              <li>Claims Scrubbing API quickstart (20 min)</li>
+              <li>Code examples in JavaScript, Python, C#</li>
             </ul>
           </div>
 
           <div class="feature-card">
-            <span class="status-badge status-new">NEW IN V3</span>
-            <h3>Migration Wizard</h3>
-            <p>Blazor web app for legacy system migration.</p>
+            <span class="status-badge status-new">NEW IN V4</span>
+            <h3>SFTP Trading Partner Integration</h3>
+            <p>Direct SFTP connectivity for EDI file exchange with trading partners.</p>
             <ul>
-              <li>SOAP API export</li>
-              <li>95%+ auto-match mapping</li>
-              <li>One-click API cutover</li>
-              <li>Key Vault credentials</li>
+              <li>Multi-tenant SFTP endpoint provisioning</li>
+              <li>837/835/277 transaction folder structure</li>
+              <li>Azure Key Vault credential storage</li>
+              <li>Dental claims EDI support</li>
             </ul>
           </div>
         </div>
       </section>
 
-      <!-- Pricing Tiers -->
+      <!-- Platform -->
       <section class="feature-section">
-        <h2>💰 Azure Marketplace Pricing</h2>
-        <p>Three-tier pricing with meter-based billing for per-transaction costs.</p>
+        <h2>Platform Overview</h2>
+        <p>The full Cloud Health Office platform as of V4.</p>
 
         <table class="compliance-table">
           <thead>
             <tr>
-              <th>Plan</th>
-              <th>Monthly Price</th>
-              <th>837 Claims Included</th>
-              <th>Price Per Additional Transaction</th>
+              <th>Component</th>
+              <th>Count</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Microservices</strong></td>
+              <td>22</td>
+              <td>C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo</td>
+            </tr>
+            <tr>
+              <td><strong>Calculation Engines</strong></td>
+              <td>6</td>
+              <td>Benefit, Fee Schedule, NCCI, COB, Risk Adjustment, Encounter</td>
+            </tr>
+            <tr>
+              <td><strong>X12 Parsers</strong></td>
+              <td>5</td>
+              <td>275, 276, 277, 278 (Python), 834 (Node.js)</td>
+            </tr>
+            <tr>
+              <td><strong>FHIR R4 APIs</strong></td>
+              <td>5</td>
+              <td>Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory</td>
+            </tr>
+            <tr>
+              <td><strong>Argo Workflows</strong></td>
+              <td>17</td>
+              <td>Claims adjudication, EDI ingest, enrollment import, RFAI</td>
+            </tr>
+            <tr>
+              <td><strong>Portal Pages</strong></td>
+              <td>37</td>
+              <td>Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)</td>
+            </tr>
+            <tr>
+              <td><strong>CI/CD Workflows</strong></td>
+              <td>20</td>
+              <td>GitHub Actions &mdash; build, test, deploy, security scan</td>
+            </tr>
+            <tr>
+              <td><strong>Claims Scrubbing Rules</strong></td>
+              <td>20+</td>
+              <td>Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Pricing -->
+      <section class="feature-section">
+        <h2>Pricing</h2>
+        <p>Per-member-per-month (PMPM) pricing that scales with your health plan. No transaction caps. No feature gates.</p>
+
+        <table class="compliance-table">
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Platform Fee</th>
+              <th>PMPM</th>
+              <th>Best For</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td><strong>Starter</strong></td>
-              <td>$499/mo</td>
-              <td>1,000</td>
-              <td>$0.50 per claim</td>
+              <td>$999/mo</td>
+              <td>$0.75</td>
+              <td>Standalone CHO deployments, up to 25K members</td>
             </tr>
             <tr>
               <td><strong>Professional</strong></td>
-              <td>$1,999/mo</td>
-              <td>10,000</td>
-              <td>$0.20 per claim</td>
+              <td>$2,999/mo</td>
+              <td>$0.50</td>
+              <td>Single legacy system + CHO, 25K&ndash;150K members</td>
             </tr>
             <tr>
               <td><strong>Enterprise</strong></td>
-              <td>$4,999/mo</td>
-              <td>50,000</td>
-              <td>$0.10 per claim</td>
+              <td>$7,999/mo</td>
+              <td>$0.25</td>
+              <td>Multi-system, custom adapters, 150K+ members</td>
             </tr>
           </tbody>
         </table>
 
-        <p style="color: #888; margin-top: 20px;">All plans include 278 prior auth, 275 attachments, and FHIR API metering. Annual contracts receive 10% discount.</p>
+        <p style="color: #888; margin-top: 20px;">Every tier includes the full platform. 15% discount on annual contracts. <a href="/pricing" style="color: #00ffff;">Full pricing details &rarr;</a></p>
+      </section>
+
+      <!-- CMS-0057-F Compliance -->
+      <section class="feature-section">
+        <h2>CMS-0057-F Compliance Status</h2>
+        <p>Cloud Health Office V4 provides production-ready compliance for all CMS-0057-F requirements, with full FHIR R4, US Core, and Da Vinci Implementation Guide coverage.</p>
+
+        <table class="compliance-table">
+          <thead>
+            <tr>
+              <th>Requirement</th>
+              <th>Implementation</th>
+              <th>Deadline</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Patient Access API</td>
+              <td>FHIR R4 &mdash; Claim, EOB, Coverage, Patient, Encounter</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+            <tr>
+              <td>Provider Access API</td>
+              <td>FHIR R4 &mdash; Claim, EOB, Patient, Condition, Observation</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+            <tr>
+              <td>Prior Authorization API</td>
+              <td>FHIR R4 + CDS Hooks &mdash; real-time PA decisions</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+            <tr>
+              <td>Payer-to-Payer API</td>
+              <td>FHIR R4 &mdash; bidirectional member data exchange</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+            <tr>
+              <td>Provider Directory API</td>
+              <td>FHIR R4 &mdash; Practitioner, Organization, Location, Network</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+            <tr>
+              <td>USCDI v1/v2</td>
+              <td>US Core profiles, Da Vinci IGs (PDex, PAS, CRD, DTR, HRex)</td>
+              <td>January 1, 2027</td>
+              <td><span class="check-icon">&#10003; Production</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>Full compliance documentation:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/features/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide &rarr;</a></p>
+      </section>
+
+      <!-- V3 Features (Retained) -->
+      <section class="feature-section">
+        <h2>V3 Features (Included)</h2>
+        <p>V4 includes all V3 features: multi-cloud deployment, Argo Workflows orchestration, and Kubernetes-native infrastructure.</p>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <span class="status-badge status-ready">V3</span>
+            <h3>Multi-Cloud Deployment</h3>
+            <p>Deploy on Azure AKS, AWS EKS, or GCP GKE with unified Helm charts, Argo Workflows, and HashiCorp Vault.</p>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-ready">V3</span>
+            <h3>Argo Workflows</h3>
+            <p>17 Kubernetes-native workflow DAGs for claims adjudication, EDI ingest, enrollment import, and RFAI.</p>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-ready">V3</span>
+            <h3>ClaimRiskScorer</h3>
+            <p>ML-powered fraud/abuse detection with PyTorch risk scoring (0-100) and custom ZZZ segment in 277.</p>
+          </div>
+
+          <div class="feature-card">
+            <span class="status-badge status-ready">V3</span>
+            <h3>Migration Wizard</h3>
+            <p>Blazor web app for legacy system migration with 95%+ auto-match mapping and one-click API cutover.</p>
+          </div>
+        </div>
       </section>
 
       <!-- V2 Features (Retained) -->
-      <section id="delivered-features" class="feature-section">
-        <h2>✅ V2 Features (Included)</h2>
-        <p>V3 includes all V2 features: complete CMS-0057-F compliance with production-ready FHIR R4 APIs.</p>
+      <section class="feature-section">
+        <h2>V2 Features (Included)</h2>
+        <p>V4 includes all V2 features: complete CMS-0057-F compliance with production-ready FHIR R4 APIs.</p>
 
         <div class="feature-grid">
           <div class="feature-card">
@@ -484,160 +631,83 @@
           <div class="feature-card">
             <span class="status-badge status-ready">V2</span>
             <h3>Prior Authorization API</h3>
-            <p>Automated prior auth with 72-hour urgent and 7-day standard response tracking.</p>
+            <p>Automated prior auth with 72-hour urgent and 7-day standard response tracking via FHIR R4 + CDS Hooks.</p>
           </div>
 
           <div class="feature-card">
             <span class="status-badge status-ready">V2</span>
             <h3>Payer-to-Payer API</h3>
-            <p>Bulk FHIR export for member data exchange during enrollment transitions.</p>
+            <p>Bulk FHIR export for bidirectional member data exchange during enrollment transitions.</p>
           </div>
         </div>
       </section>
 
-      <!-- CMS-0057-F Compliance -->
-      <section class="feature-section">
-        <h2>📋 CMS-0057-F Compliance Status</h2>
-        <p>Cloud Health Office V3 provides production-ready compliance for all CMS-0057-F requirements.</p>
-
-        <table class="compliance-table">
-          <thead>
-            <tr>
-              <th>Requirement</th>
-              <th>Applicable Payers</th>
-              <th>Deadline</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Patient Access API</td>
-              <td>MA, Medicaid MC, CHIP MC, QHP</td>
-              <td>January 1, 2027</td>
-              <td><span class="check-icon">✅ Ready</span></td>
-            </tr>
-            <tr>
-              <td>Provider Access API</td>
-              <td>All impacted payers</td>
-              <td>January 1, 2027</td>
-              <td><span class="check-icon">✅ Ready</span></td>
-            </tr>
-            <tr>
-              <td>Payer-to-Payer API</td>
-              <td>MA, Medicaid MC, CHIP MC, QHP</td>
-              <td>January 1, 2027</td>
-              <td><span class="check-icon">✅ Ready</span></td>
-            </tr>
-            <tr>
-              <td>Prior Authorization API</td>
-              <td>All impacted payers</td>
-              <td>January 1, 2027</td>
-              <td><span class="check-icon">✅ Ready</span></td>
-            </tr>
-            <tr>
-              <td>Multi-Cloud Deployment</td>
-              <td>All payers</td>
-              <td>N/A</td>
-              <td><span class="check-icon">✅ NEW in V3</span></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p><strong>Full compliance documentation:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">CMS-0057-F Compliance Guide →</a></p>
-      </section>
-
-      <!-- Sandbox Testing -->
+      <!-- Quick Start -->
       <section id="sandbox-testing" class="sandbox-section">
-        <h2>🧪 Sandbox Testing</h2>
-        <p style="font-size: 1.2rem;">Test Cloud Health Office V3 in your environment. Choose Azure or Kubernetes deployment.</p>
+        <h2>Quick Start</h2>
+        <p style="font-size: 1.2rem;">Get Cloud Health Office running in your environment.</p>
 
         <div class="code-block">
           <code>
-# Option 1: Azure Deploy Button<br>
-# Click "Deploy to Azure" below<br>
-<br>
-# Option 2: Kubernetes/Helm<br>
+# Clone and run<br>
 git clone https://github.com/aurelianware/cloudhealthoffice.git<br>
 cd cloudhealthoffice<br>
+docker-compose up -d<br>
 <br>
-# Deploy with Helm<br>
-helm install cloudhealthoffice ./helm/cloudhealthoffice \<br>
-&nbsp;&nbsp;--set vault.enabled=true \<br>
-&nbsp;&nbsp;--set vault.type=hashicorp<br>
+# Verify<br>
+curl http://localhost:5000/health<br>
 <br>
-# Apply Argo Workflows<br>
-kubectl apply -f argo-workflows/<br>
+# Or deploy with Helm (Azure/AWS/GCP)<br>
+helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice<br>
 <br>
 # Run full test suite (1,018 tests)<br>
-npm install && npm test
+npm install &amp;&amp; npm test
           </code>
         </div>
 
         <p style="margin: 30px 0;">Deploy instantly to Azure:</p>
 
-        <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure →</a>
+        <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json" class="button button-green" target="_blank" rel="noopener noreferrer">Deploy to Azure &rarr;</a>
 
-        <p style="margin-top: 30px; color: #888;">Sandbox deployments are fully isolated and can be deleted at any time.</p>
-      </section>
-
-      <!-- Early Adopter Signup -->
-      <section id="early-adopter-signup" class="signup-form">
-        <h2>🎯 Early Adopter Program</h2>
-        <p style="font-size: 1.2rem;">Join our early adopter program for priority support, implementation guidance, and direct access to the engineering team.</p>
-
-        <p style="margin: 20px 0;"><strong>Benefits include:</strong></p>
-        <ul style="list-style: none; padding: 0; text-align: left; max-width: 500px; margin: 0 auto 30px auto;">
-          <li style="padding: 8px 0;">✅ Priority technical support</li>
-          <li style="padding: 8px 0;">✅ Direct engineering team access</li>
-          <li style="padding: 8px 0;">✅ Early access to new features</li>
-          <li style="padding: 8px 0;">✅ Multi-cloud deployment assistance</li>
-          <li style="padding: 8px 0;">✅ Azure Marketplace pilot access</li>
-        </ul>
-
-        <p style="font-size: 1.1rem; margin: 30px 0;">
-          <strong>Contact us to join:</strong><br>
-          <a href="mailto:early-adopters@cloudhealthoffice.com" style="color: #00ffff;">early-adopters@cloudhealthoffice.com</a>
-        </p>
-
-        <a href="https://portal.cloudhealthoffice.com/contact-sales" class="button">Contact Sales →</a>
+        <p style="margin-top: 30px; color: #888;">Docker Compose for evaluation in 5 minutes. Kubernetes for production in 1&ndash;2 hours.</p>
       </section>
 
       <!-- Documentation Links -->
       <section class="feature-section">
-        <h2>📚 Documentation</h2>
+        <h2>Documentation</h2>
         <div class="feature-grid">
           <div class="feature-card">
-            <h3>Multi-Cloud Deployment</h3>
-            <p>Complete guide for deploying to Azure, AWS, or GCP with Kubernetes.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/MULTI-CLOUD-DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">Read Guide →</a>
+            <h3>Quickstart</h3>
+            <p>Get running in 5 minutes with Docker Compose or deploy to Azure/Kubernetes.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
 
           <div class="feature-card">
-            <h3>Argo Migration</h3>
-            <p>Step-by-step migration from Azure Logic Apps to Argo Workflows.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/ARGO-MIGRATION-GUIDE.md" target="_blank" rel="noopener noreferrer">Read Guide →</a>
+            <h3>Architecture</h3>
+            <p>System design, service interactions, and the 10-step claims adjudication pipeline.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
 
           <div class="feature-card">
             <h3>CMS-0057-F Compliance</h3>
-            <p>Complete guide to regulatory requirements and implementation steps.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">Read Guide →</a>
+            <p>Complete regulatory compliance mapping with FHIR R4 implementation details.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/features/CMS-0057-F-COMPLIANCE.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
 
           <div class="feature-card">
-            <h3>Full Changelog</h3>
-            <p>Complete version history with all features, improvements, and fixes.</p>
-            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">View Changelog →</a>
+            <h3>Deployment Guide</h3>
+            <p>Production deployment for Azure and Kubernetes with Helm charts.</p>
+            <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">Read Guide &rarr;</a>
           </div>
         </div>
       </section>
 
       <!-- CTA Section -->
       <section class="cta-section" style="text-align: center; margin: 60px 0;">
-        <h2>Ready for Multi-Cloud Healthcare EDI?</h2>
+        <h2>Production-Ready Payer Platform</h2>
         <p style="font-size: 1.2rem; max-width: 700px; margin: 20px auto;">
-          Deploy production-ready healthcare EDI on any cloud. Azure, AWS, or GCP.
-          Zero vendor lock-in. Full CMS-0057-F compliance.
+          22 microservices. 6 calculation engines. 5 FHIR R4 APIs.<br>
+          CMS-0057-F compliant. Zero vulnerabilities. Deploy anywhere.
         </p>
         <div style="margin-top: 30px;">
           <a href="https://github.com/aurelianware/cloudhealthoffice" class="button" target="_blank" rel="noopener noreferrer">View on GitHub</a>
@@ -649,8 +719,8 @@ npm install && npm test
 
   <footer>
     <p>
-      <strong>Cloud Health Office V3 — The Open Frontier</strong><br>
-      Multi-Cloud Independence. Deploy Anywhere.
+      <strong>Cloud Health Office V4 &mdash; Production SaaS</strong><br>
+      22 Microservices. 6 Engines. 5 FHIR R4 APIs. Zero Vulnerabilities.
     </p>
     <p>
       BSL 1.1 Licensed &bull; Actively maintained by Aurelianware<br>
@@ -658,9 +728,8 @@ npm install && npm test
       <a href="mailto:mark@cloudhealthoffice.com">Contact</a>
     </p>
     <p style="color: #00ffe7; font-size: 1rem; margin-top: 10px;">
-      <strong>mark@cloudhealthoffice.com</strong> is monitored 24/7 by The Sentinel.<br>
-      All onboarding, support, and compliance inquiries receive priority response.<br>
-      <em>Cloud Health Office: The future of payer integration, delivered today.</em>
+      <a href="mailto:sales@cloudhealthoffice.com" style="color: #00ffe7;"><strong>sales@cloudhealthoffice.com</strong></a><br>
+      <em>Cloud Health Office: The payer platform that starts where your core admin stops.</em>
     </p>
   </footer>
 </body>
