@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
@@ -8,6 +9,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Models;
 using CloudHealthOffice.ClaimsScrubEngine.Services;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
+using CloudHealthOffice.Infrastructure.Observability;
 using BenefitPlanService.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
@@ -90,20 +92,48 @@ public class AdjudicationController : ControllerBase
         [FromBody] AdjudicationRequest request,
         CancellationToken ct)
     {
+        using var adjudicationSpan = ChoActivitySource.StartActivity(
+            "claim.adjudication",
+            ActivityKind.Server,
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: "837P",
+            memberId: request.MemberId);
+
+        adjudicationSpan?.SetTag("cho.benefit_plan_id", request.BenefitPlanId.ToString());
+        adjudicationSpan?.SetTag("cho.line_count", request.Lines.Count);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
             request.ClaimId, request.MemberId, request.BenefitPlanId, request.Lines.Count);
 
         // ── Step 0a: Claims scrub validation ──
-        // Run scrub rules (data completeness, code validation, date logic,
-        // amount logic, provider validation, modifier validation) before
-        // NCCI edits so obviously bad data is caught early.
-        var scrubClaim = MapToScrubClaim(request);
-        var scrubResponse = await _scrubEngine.ScrubAndRouteAsync(
-            new ClaimsScrubRequest { Claim = scrubClaim }, ct);
+        ClaimsScrubResponse scrubResponse;
+        using (var scrubSpan = ChoActivitySource.StartActivity(
+            "claim.scrub",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: "837P",
+            memberId: request.MemberId))
+        {
+            var scrubClaim = MapToScrubClaim(request);
+            scrubResponse = await _scrubEngine.ScrubAndRouteAsync(
+                new ClaimsScrubRequest { Claim = scrubClaim }, ct);
+
+            scrubSpan?.SetTag("cho.scrub.passed", scrubResponse.Result.Routing.Destination == "adjudication");
+            scrubSpan?.SetTag("cho.scrub.error_count", scrubResponse.Result.ErrorCount);
+            scrubSpan?.SetTag("cho.scrub.warning_count", scrubResponse.Result.WarningCount);
+        }
 
         if (scrubResponse.Result.Routing.Destination != "adjudication")
         {
+            adjudicationSpan?.SetTag("cho.outcome", "scrub_failure");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Scrub validation failed");
+
+            RecordLatency(sw, TenantId, "837P", "scrub_failure");
+
             _logger.LogWarning(
                 "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
                 SanitizeForLog(request.ClaimId), scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
@@ -122,35 +152,48 @@ public class AdjudicationController : ControllerBase
         }
 
         // ── Step 0b: NCCI/MUE pre-payment edit check ──
-        // Runs before pricing so bundled/excess-unit lines are caught before
-        // accumulators are touched or rates are resolved.
-        var ncciRequest = new NcciScrubRequest
+        NcciScrubResult ncciResult;
+        using (var ncciSpan = ChoActivitySource.StartActivity(
+            "claim.ncci",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: "837P",
+            memberId: request.MemberId))
         {
-            TenantId = TenantId,
-            ClaimId = request.ClaimId,
-            ClaimType = "837P",
-            EffectiveDate = request.ServiceDate,
-            ServiceLines = request.Lines.Select(l => new ClaimServiceLine
+            var ncciRequest = new NcciScrubRequest
             {
-                LineNumber = l.LineNumber,
-                ProcedureCode = l.ProcedureCode,
-                Modifiers = l.Modifiers,
-                Units = l.Units,
-                ServiceDate = request.ServiceDate,
-                PlaceOfServiceCode = l.PlaceOfService,
-            }).ToList(),
-        };
+                TenantId = TenantId,
+                ClaimId = request.ClaimId,
+                ClaimType = "837P",
+                EffectiveDate = request.ServiceDate,
+                ServiceLines = request.Lines.Select(l => new ClaimServiceLine
+                {
+                    LineNumber = l.LineNumber,
+                    ProcedureCode = l.ProcedureCode,
+                    Modifiers = l.Modifiers,
+                    Units = l.Units,
+                    ServiceDate = request.ServiceDate,
+                    PlaceOfServiceCode = l.PlaceOfService,
+                }).ToList(),
+            };
 
-        var ncciResult = await _ncciEngine.ScrubAsync(ncciRequest, ct);
+            ncciResult = await _ncciEngine.ScrubAsync(ncciRequest, ct);
+
+            ncciSpan?.SetTag("cho.ncci.passed", ncciResult.Passed);
+            ncciSpan?.SetTag("cho.ncci.failure_count", ncciResult.EditFailures.Count);
+        }
 
         if (!ncciResult.Passed)
         {
+            adjudicationSpan?.SetTag("cho.outcome", "ncci_failure");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "NCCI/MUE edit failed");
+
+            RecordLatency(sw, TenantId, "837P", "ncci_failure");
+
             _logger.LogWarning(
                 "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
                 request.ClaimId, ncciResult.EditFailures.Count);
 
-            // Surface failures as a 422 so the Argo workflow can route to the
-            // NCCI work queue rather than proceeding to payment.
             return UnprocessableEntity(new
             {
                 claimId = request.ClaimId,
@@ -162,64 +205,104 @@ public class AdjudicationController : ControllerBase
         }
 
         // ── Step 1: Resolve rates (fee schedule engine) ──
-        var pricingRequests = request.Lines.Select(line => new PricingRequest
+        PricingResultSet pricingResults;
+        using (var rateSpan = ChoActivitySource.StartActivity(
+            "claim.rate-resolution",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: "837P",
+            memberId: request.MemberId))
         {
-            TenantId = TenantId,
-            ProcedureCode = line.ProcedureCode,
-            Modifiers = line.Modifiers,
-            ProviderNpi = request.ProviderNpi,
-            PlaceOfServiceCode = line.PlaceOfService,
-            ServiceDate = request.ServiceDate.ToDateTime(TimeOnly.MinValue),
-            PlanId = request.BenefitPlanId.ToString(),
-            BilledAmount = line.BilledAmount,
-            Units = line.Units,
-            LineNumber = line.LineNumber
-        }).ToList();
+            var pricingRequests = request.Lines.Select(line => new PricingRequest
+            {
+                TenantId = TenantId,
+                ProcedureCode = line.ProcedureCode,
+                Modifiers = line.Modifiers,
+                ProviderNpi = request.ProviderNpi,
+                PlaceOfServiceCode = line.PlaceOfService,
+                ServiceDate = request.ServiceDate.ToDateTime(TimeOnly.MinValue),
+                PlanId = request.BenefitPlanId.ToString(),
+                BilledAmount = line.BilledAmount,
+                Units = line.Units,
+                LineNumber = line.LineNumber
+            }).ToList();
 
-        var pricingResults = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
+            pricingResults = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
+
+            rateSpan?.SetTag("cho.rate.line_count", pricingResults.LineResults.Count);
+        }
 
         // ── Step 2: Build benefit request with allowed amounts from pricing ──
-        var benefitLines = request.Lines.Select(line =>
+        BenefitResolutionResult benefitResult;
+        using (var benefitSpan = ChoActivitySource.StartActivity(
+            "claim.benefit-calc",
+            tenantId: TenantId,
+            claimId: request.ClaimId,
+            claimType: "837P",
+            memberId: request.MemberId))
         {
-            var priced = pricingResults.LineResults
-                .FirstOrDefault(p => p.LineNumber == line.LineNumber);
-
-            return new ClaimLineInput
+            var benefitLines = request.Lines.Select(line =>
             {
-                LineNumber = line.LineNumber,
-                ProcedureCode = line.ProcedureCode,
-                CodeType = line.CodeType,
-                Modifiers = line.Modifiers,
-                RevenueCode = line.RevenueCode,
-                PlaceOfService = line.PlaceOfService,
-                BilledAmount = priced?.AllowedAmount ?? line.BilledAmount,
-                Units = line.Units,
-                DiagnosisCodes = line.DiagnosisCodes
+                var priced = pricingResults.LineResults
+                    .FirstOrDefault(p => p.LineNumber == line.LineNumber);
+
+                return new ClaimLineInput
+                {
+                    LineNumber = line.LineNumber,
+                    ProcedureCode = line.ProcedureCode,
+                    CodeType = line.CodeType,
+                    Modifiers = line.Modifiers,
+                    RevenueCode = line.RevenueCode,
+                    PlaceOfService = line.PlaceOfService,
+                    BilledAmount = priced?.AllowedAmount ?? line.BilledAmount,
+                    Units = line.Units,
+                    DiagnosisCodes = line.DiagnosisCodes
+                };
+            }).ToList();
+
+            var benefitRequest = new BenefitResolutionRequest
+            {
+                MemberId = request.MemberId,
+                SubscriberId = request.SubscriberId,
+                BenefitPlanId = request.BenefitPlanId,
+                ServiceDate = request.ServiceDate,
+                NetworkTier = request.NetworkTier,
+                LineOfBusiness = request.LineOfBusiness,
+                ClaimId = request.ClaimId,
+                Lines = benefitLines,
+                Cob = request.Cob is null ? null : new CobInfo
+                {
+                    PayerSequence              = request.Cob.PayerSequence,
+                    UseComplementaryModel      = request.Cob.UseComplementaryModel,
+                    PrimaryPayerId             = request.Cob.PrimaryPayerId,
+                    PrimaryPayerName           = request.Cob.PrimaryPayerName,
+                    PrimaryPayerPaymentByLine  = request.Cob.PrimaryPayerPaymentByLine,
+                    PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine
+                }
             };
-        }).ToList();
 
-        var benefitRequest = new BenefitResolutionRequest
+            benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
+
+            benefitSpan?.SetTag("cho.benefit.success", benefitResult.Success);
+            if (benefitResult.DenialReasonCode is not null)
+                benefitSpan?.SetTag("cho.benefit.denial_code", benefitResult.DenialReasonCode);
+        }
+
+        // ── Step 2b: COB (if applicable) ──
+        if (request.Cob is not null)
         {
-            MemberId = request.MemberId,
-            SubscriberId = request.SubscriberId,
-            BenefitPlanId = request.BenefitPlanId,
-            ServiceDate = request.ServiceDate,
-            NetworkTier = request.NetworkTier,
-            LineOfBusiness = request.LineOfBusiness,
-            ClaimId = request.ClaimId,
-            Lines = benefitLines,
-            Cob = request.Cob is null ? null : new CobInfo
-            {
-                PayerSequence              = request.Cob.PayerSequence,
-                UseComplementaryModel      = request.Cob.UseComplementaryModel,
-                PrimaryPayerId             = request.Cob.PrimaryPayerId,
-                PrimaryPayerName           = request.Cob.PrimaryPayerName,
-                PrimaryPayerPaymentByLine  = request.Cob.PrimaryPayerPaymentByLine,
-                PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine
-            }
-        };
+            using var cobSpan = ChoActivitySource.StartActivity(
+                "claim.cob",
+                tenantId: TenantId,
+                claimId: request.ClaimId,
+                claimType: "837P",
+                memberId: request.MemberId);
 
-        var benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
+            cobSpan?.SetTag("cho.cob.payer_sequence", request.Cob.PayerSequence);
+            cobSpan?.SetTag("cho.cob.model", request.Cob.UseComplementaryModel ? "complementary" : "non-duplication");
+            // COB reduction is already applied by the benefit engine when Cob is provided.
+            // This span captures that the COB path was taken for trace visibility.
+        }
 
         // ── Step 3: Merge pricing + benefit results ──
         var response = new AdjudicationResponse
@@ -269,12 +352,31 @@ public class AdjudicationController : ControllerBase
             Accumulators = benefitResult.AccumulatorSnapshot
         };
 
+        var outcome = benefitResult.Success ? "approved" : "denied";
+        adjudicationSpan?.SetTag("cho.outcome", outcome);
+        adjudicationSpan?.SetTag("cho.plan_payment", response.Totals.PlanPayment);
+
+        RecordLatency(sw, TenantId, "837P", outcome);
+        ChoMetrics.AdjudicationOutcome.Add(1,
+            new KeyValuePair<string, object?>("cho.tenant_id", TenantId),
+            new KeyValuePair<string, object?>("cho.outcome", outcome));
+
         _logger.LogInformation(
             "Adjudication complete for claim {ClaimId}: allowed={Allowed}, plan={Plan}, member={Member}",
             request.ClaimId, response.Totals.AllowedAmount,
             response.Totals.PlanPayment, response.Totals.MemberResponsibility);
 
         return Ok(response);
+    }
+
+    private static void RecordLatency(System.Diagnostics.Stopwatch sw, string tenantId, string claimType, string step)
+    {
+        sw.Stop();
+        ChoMetrics.ClaimProcessingLatency.Record(
+            sw.Elapsed.TotalSeconds,
+            new KeyValuePair<string, object?>("cho.tenant_id", tenantId),
+            new KeyValuePair<string, object?>("cho.claim_type", claimType),
+            new KeyValuePair<string, object?>("cho.adjudication_step", step));
     }
 
     // ═══════════════════════════════════════════════════════════════════
