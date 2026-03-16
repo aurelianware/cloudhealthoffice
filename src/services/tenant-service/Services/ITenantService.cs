@@ -1,3 +1,4 @@
+using CloudHealthOffice.OperatingMode;
 using TenantService.Models;
 
 namespace TenantService.Services;
@@ -19,4 +20,7 @@ public interface ITenantService
     
     Task UpdateUsageAsync(string tenantId, string metricName, int increment = 1);
     Task<UsageMetrics> GetUsageAsync(string tenantId);
+
+    Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId);
+    Task<OperatingModeConfiguration> UpdateOperatingModeAsync(string tenantId, UpdateOperatingModeRequest request);
 }

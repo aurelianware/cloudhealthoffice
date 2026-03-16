@@ -1,3 +1,4 @@
+using CloudHealthOffice.OperatingMode;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Services;
@@ -186,6 +187,51 @@ public class TenantsController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get operating mode configuration for tenant
+    /// </summary>
+    [HttpGet("{tenantId}/operating-mode")]
+    [ProducesResponseType(typeof(OperatingModeConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OperatingModeConfiguration>> GetOperatingMode(string tenantId)
+    {
+        try
+        {
+            var operatingMode = await _tenantService.GetOperatingModeAsync(tenantId);
+            return Ok(operatingMode);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update operating mode configuration for tenant.
+    /// Allows setting individual engines to "augment" or "replace" mode.
+    /// </summary>
+    [HttpPut("{tenantId}/operating-mode")]
+    [ProducesResponseType(typeof(OperatingModeConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OperatingModeConfiguration>> UpdateOperatingMode(
+        string tenantId, [FromBody] UpdateOperatingModeRequest request)
+    {
+        try
+        {
+            var operatingMode = await _tenantService.UpdateOperatingModeAsync(tenantId, request);
+            return Ok(operatingMode);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
     }
 

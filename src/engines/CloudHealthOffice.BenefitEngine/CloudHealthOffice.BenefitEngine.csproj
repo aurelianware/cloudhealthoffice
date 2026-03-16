@@ -13,4 +13,7 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.45.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
+  </ItemGroup>
 </Project>

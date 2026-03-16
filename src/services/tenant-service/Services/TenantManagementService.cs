@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using CloudHealthOffice.OperatingMode;
 using TenantService.Models;
 
 namespace TenantService.Services;
@@ -308,6 +309,69 @@ public class TenantManagementService : ITenantService
         }
 
         return tenant.Usage;
+    }
+
+    public async Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId)
+    {
+        var tenant = await _repository.GetByTenantIdAsync(tenantId);
+        if (tenant == null)
+        {
+            throw new KeyNotFoundException($"Tenant {tenantId} not found");
+        }
+
+        return tenant.OperatingMode ?? new OperatingModeConfiguration();
+    }
+
+    public async Task<OperatingModeConfiguration> UpdateOperatingModeAsync(string tenantId, UpdateOperatingModeRequest request)
+    {
+        var tenant = await _repository.GetByTenantIdAsync(tenantId);
+        if (tenant == null)
+        {
+            throw new KeyNotFoundException($"Tenant {tenantId} not found");
+        }
+
+        // Validate engine names and modes
+        var validModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "augment", "replace" };
+        foreach (var (engine, mode) in request.Engines)
+        {
+            if (string.IsNullOrWhiteSpace(engine))
+            {
+                throw new InvalidOperationException("Engine name cannot be null or empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(mode) || !validModes.Contains(mode))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid operating mode '{mode ?? "null"}' for engine '{engine}'. Must be 'augment' or 'replace'.");
+            }
+        }
+
+        tenant.OperatingMode ??= new OperatingModeConfiguration();
+
+        // Merge: update specified engines, keep existing ones unchanged
+        // Normalize engine keys with trim to prevent casing/whitespace duplicates
+        foreach (var (engine, mode) in request.Engines)
+        {
+            tenant.OperatingMode.Engines[engine.Trim()] = mode.ToLowerInvariant();
+        }
+
+        tenant.OperatingMode.UpdatedAt = DateTime.UtcNow;
+
+        await _repository.UpdateAsync(tenant);
+
+        _logger.LogInformation(
+            "Updated operating mode for tenant {TenantId}: {Engines}",
+            SanitizeForLog(tenantId),
+            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{SanitizeForLog(e.Key)}={SanitizeForLog(e.Value)}")));
+
+        return tenant.OperatingMode;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // Helper methods
