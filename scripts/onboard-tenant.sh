@@ -29,8 +29,8 @@ set -euo pipefail
 # ── Constants ────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEED_DATA_DIR="${SCRIPT_DIR}/seed-data"
-TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 EFFECTIVE_DATE="$(date -u +%Y)-01-01T00:00:00Z"
+EFFECTIVE_YYYYMMDD="$(date -u +%Y)0101"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 TENANT_ID=""
@@ -355,7 +355,8 @@ step 4 "Seed sample fee schedule"
 
 FEE_SCHEDULE_PAYLOAD=$(cat "${SEED_DATA_DIR}/sample-fee-schedule.json" \
   | sed "s/__TENANT_ID__/${TENANT_ID}/g" \
-  | sed "s/__EFFECTIVE_DATE__/${EFFECTIVE_DATE}/g")
+  | sed "s/__EFFECTIVE_DATE__/${EFFECTIVE_DATE}/g" \
+  | sed "s/__EFFECTIVE_YYYYMMDD__/${EFFECTIVE_YYYYMMDD}/g")
 
 FEE_LINE_COUNT=$(echo "$FEE_SCHEDULE_PAYLOAD" | grep -c '"procedureCode"' || echo "0")
 
@@ -529,7 +530,7 @@ echo ""
 if ! $DRY_RUN; then
   echo "  Admin Credentials:"
   echo "    Email:           ${ADMIN_EMAIL}"
-  echo "    Initial access:  Password reset link sent to admin email"
+  echo "    Initial access:  Configure via identity provider (not provisioned by this script)"
   if [[ -n "${API_KEY:-}" ]]; then
     echo ""
     echo -e "  ${YELLOW}API Key (save this — shown only once):${NC}"
