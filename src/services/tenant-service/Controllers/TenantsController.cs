@@ -1,3 +1,4 @@
+using CloudHealthOffice.OperatingMode;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Services;
@@ -193,9 +194,9 @@ public class TenantsController : ControllerBase
     /// Get operating mode configuration for tenant
     /// </summary>
     [HttpGet("{tenantId}/operating-mode")]
-    [ProducesResponseType(typeof(OperatingModeConfig), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperatingModeConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<OperatingModeConfig>> GetOperatingMode(string tenantId)
+    public async Task<ActionResult<OperatingModeConfiguration>> GetOperatingMode(string tenantId)
     {
         try
         {
@@ -213,10 +214,10 @@ public class TenantsController : ControllerBase
     /// Allows setting individual engines to "augment" or "replace" mode.
     /// </summary>
     [HttpPut("{tenantId}/operating-mode")]
-    [ProducesResponseType(typeof(OperatingModeConfig), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperatingModeConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<OperatingModeConfig>> UpdateOperatingMode(
+    public async Task<ActionResult<OperatingModeConfiguration>> UpdateOperatingMode(
         string tenantId, [FromBody] UpdateOperatingModeRequest request)
     {
         try

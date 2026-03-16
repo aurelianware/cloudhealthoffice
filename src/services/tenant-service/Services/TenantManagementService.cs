@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using CloudHealthOffice.OperatingMode;
 using TenantService.Models;
 
 namespace TenantService.Services;
@@ -310,7 +311,7 @@ public class TenantManagementService : ITenantService
         return tenant.Usage;
     }
 
-    public async Task<OperatingModeConfig> GetOperatingModeAsync(string tenantId)
+    public async Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId)
     {
         var tenant = await _repository.GetByTenantIdAsync(tenantId);
         if (tenant == null)
@@ -318,10 +319,10 @@ public class TenantManagementService : ITenantService
             throw new KeyNotFoundException($"Tenant {tenantId} not found");
         }
 
-        return tenant.OperatingMode ?? new OperatingModeConfig();
+        return tenant.OperatingMode ?? new OperatingModeConfiguration();
     }
 
-    public async Task<OperatingModeConfig> UpdateOperatingModeAsync(string tenantId, UpdateOperatingModeRequest request)
+    public async Task<OperatingModeConfiguration> UpdateOperatingModeAsync(string tenantId, UpdateOperatingModeRequest request)
     {
         var tenant = await _repository.GetByTenantIdAsync(tenantId);
         if (tenant == null)
@@ -329,23 +330,29 @@ public class TenantManagementService : ITenantService
             throw new KeyNotFoundException($"Tenant {tenantId} not found");
         }
 
-        // Validate engine modes
+        // Validate engine names and modes
         var validModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "augment", "replace" };
         foreach (var (engine, mode) in request.Engines)
         {
-            if (!validModes.Contains(mode))
+            if (string.IsNullOrWhiteSpace(engine))
+            {
+                throw new InvalidOperationException("Engine name cannot be null or empty.");
+            }
+
+            if (string.IsNullOrWhiteSpace(mode) || !validModes.Contains(mode))
             {
                 throw new InvalidOperationException(
-                    $"Invalid operating mode '{mode}' for engine '{engine}'. Must be 'augment' or 'replace'.");
+                    $"Invalid operating mode '{mode ?? "null"}' for engine '{engine}'. Must be 'augment' or 'replace'.");
             }
         }
 
-        tenant.OperatingMode ??= new OperatingModeConfig();
+        tenant.OperatingMode ??= new OperatingModeConfiguration();
 
         // Merge: update specified engines, keep existing ones unchanged
+        // Normalize engine keys with trim to prevent casing/whitespace duplicates
         foreach (var (engine, mode) in request.Engines)
         {
-            tenant.OperatingMode.Engines[engine] = mode.ToLowerInvariant();
+            tenant.OperatingMode.Engines[engine.Trim()] = mode.ToLowerInvariant();
         }
 
         tenant.OperatingMode.UpdatedAt = DateTime.UtcNow;

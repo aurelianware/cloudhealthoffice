@@ -40,6 +40,7 @@ public interface IBenefitCalculationEngine
     Task<AugmentResult<BenefitResolutionResult>> CalculateWithModeAsync(
         BenefitResolutionRequest request,
         IOperatingMode operatingMode,
+        string tenantId,
         BenefitResolutionResult? legacyResult = null,
         CancellationToken ct = default);
 
@@ -155,6 +156,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     public async Task<AugmentResult<BenefitResolutionResult>> CalculateWithModeAsync(
         BenefitResolutionRequest request,
         IOperatingMode operatingMode,
+        string tenantId,
         BenefitResolutionResult? legacyResult = null,
         CancellationToken ct = default)
     {
@@ -174,7 +176,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             choResult, legacyResult, discrepancies,
             _logger,
             OperatingModeConfiguration.EngineNames.BenefitCalculation,
-            request.MemberId);
+            tenantId);
     }
 
     /// <summary>
@@ -215,18 +217,29 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         if (choResult.Lines.Count != legacyResult.Lines.Count)
             discrepancies.Add($"Line count differs: CHO={choResult.Lines.Count}, Legacy={legacyResult.Lines.Count}");
 
-        // Compare per-line results where possible
-        var maxLines = Math.Min(choResult.Lines.Count, legacyResult.Lines.Count);
-        for (var i = 0; i < maxLines; i++)
+        // Compare per-line results by LineNumber (not by index, since ordering may differ)
+        var legacyLinesByNumber = legacyResult.Lines.ToDictionary(l => l.LineNumber);
+        foreach (var choLine in choResult.Lines)
         {
-            var choLine = choResult.Lines[i];
-            var legacyLine = legacyResult.Lines[i];
+            if (!legacyLinesByNumber.TryGetValue(choLine.LineNumber, out var legacyLine))
+            {
+                discrepancies.Add($"Line {choLine.LineNumber} present in CHO but missing from legacy");
+                continue;
+            }
 
             if (choLine.PlanPaidAmount != legacyLine.PlanPaidAmount)
                 discrepancies.Add($"Line {choLine.LineNumber} plan paid differs: CHO={choLine.PlanPaidAmount:C}, Legacy={legacyLine.PlanPaidAmount:C}");
 
             if (choLine.IsCovered != legacyLine.IsCovered)
                 discrepancies.Add($"Line {choLine.LineNumber} coverage differs: CHO={choLine.IsCovered}, Legacy={legacyLine.IsCovered}");
+        }
+
+        // Check for lines present in legacy but not in CHO
+        var choLineNumbers = new HashSet<int>(choResult.Lines.Select(l => l.LineNumber));
+        foreach (var legacyLine in legacyResult.Lines)
+        {
+            if (!choLineNumbers.Contains(legacyLine.LineNumber))
+                discrepancies.Add($"Line {legacyLine.LineNumber} present in legacy but missing from CHO");
         }
 
         return discrepancies.ToArray();
