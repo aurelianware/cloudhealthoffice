@@ -117,9 +117,10 @@ public sealed partial class ValidationRuleEngine : IValidationRuleEngine
         Add("DC006", "Service Date Required",
             "Validates that service date is present on all lines",
             ValidationCategory.DataCompleteness, ValidationSeverity.Error, AllTypes, dc.ServiceDateRequired, 1);
-        Add("DC007", "Charge Amount Required",
-            "Validates that charge amount is present on all lines",
-            ValidationCategory.DataCompleteness, ValidationSeverity.Error, AllTypes, dc.ChargeAmountRequired, 1);
+        // DC007 is intentionally not registered as a runtime rule.
+        // ChargeAmount is a non-nullable decimal (default 0), so a
+        // presence check cannot meaningfully fail at the engine layer.
+        // The field is structurally guaranteed by the model.
 
         var cv = _standardRules.CodeValidation;
         Add("CV001", "Valid ICD-10 Code Format",
@@ -246,7 +247,7 @@ public sealed partial class ValidationRuleEngine : IValidationRuleEngine
                 RuleName = rule.RuleName,
                 Passed = false,
                 Severity = ValidationSeverity.Error,
-                Message = $"Rule execution error: {ex.Message}",
+                Message = "Rule execution error. See server logs for details.",
                 ExecutionTimeMs = sw.ElapsedMilliseconds,
             };
         }
@@ -260,8 +261,6 @@ public sealed partial class ValidationRuleEngine : IValidationRuleEngine
         "DC004" => ValidateDiagnosisRequired(rule, claim),
         "DC005" => ValidateMinServiceLines(rule, claim),
         "DC006" => ValidateServiceDateRequired(rule, claim),
-        "DC007" => ValidateChargeAmountRequired(rule, claim),
-
         "CV001" => ValidateIcd10Format(rule, claim),
         "CV002" => ValidateCptFormat(rule, claim),
         "CV003" => ValidateHcpcsFormat(rule, claim),
@@ -334,16 +333,6 @@ public sealed partial class ValidationRuleEngine : IValidationRuleEngine
         if (missing.Count > 0)
             return FailResult(rule, $"Service date is required on line(s): {string.Join(", ", missing)}",
                 ["serviceLines.serviceDate"], "DC006", missing);
-        return PassResult(rule);
-    }
-
-    private static ValidationResult ValidateChargeAmountRequired(ValidationRule rule, X12837Claim claim)
-    {
-        // ChargeAmount is a non-nullable decimal so the original TS check for undefined/null
-        // is represented by checking for exactly 0 when lines exist. However, the TS code
-        // only fails if the value is undefined/null, not 0. In C# records with default(decimal)=0,
-        // we treat this as always present. Keep pass for parity with the TS behaviour where
-        // the field is always present once the JSON is parsed.
         return PassResult(rule);
     }
 
