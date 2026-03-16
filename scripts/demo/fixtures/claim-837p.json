@@ -1,0 +1,56 @@
+{
+  "tenantId": "__TENANT_ID__",
+  "claimNumber": "CLM-HIMSS-2026-001",
+  "memberId": "SUB900112345",
+  "subscriberId": "SUB900112345",
+  "subscriberFirstName": "Maria",
+  "subscriberLastName": "Santos",
+  "patientFirstName": "Maria",
+  "patientLastName": "Santos",
+  "billingProviderNPI": "1234567890",
+  "serviceProviderNPI": "1234567890",
+  "facilityNPI": "9876543210",
+  "placeOfServiceCode": "11",
+  "claimType": "Professional",
+  "lineOfBusiness": 1,
+  "serviceDateFrom": "2026-03-15T00:00:00Z",
+  "serviceDateTo": "2026-03-15T00:00:00Z",
+  "diagnosisCodes": [
+    {
+      "code": "M54.5",
+      "codeQualifier": "ABK",
+      "pointerNumber": 1,
+      "description": "Low back pain"
+    },
+    {
+      "code": "M54.16",
+      "codeQualifier": "ABK",
+      "pointerNumber": 2,
+      "description": "Radiculopathy, lumbar region"
+    }
+  ],
+  "claimLines": [
+    {
+      "lineNumber": 1,
+      "procedureCode": "99214",
+      "procedureDescription": "Office/outpatient visit, established patient, moderate complexity",
+      "modifiers": ["25"],
+      "chargeAmount": 225.00,
+      "units": 1,
+      "serviceDateFrom": "2026-03-15T00:00:00Z",
+      "serviceDateTo": "2026-03-15T00:00:00Z",
+      "diagnosisPointers": [1]
+    },
+    {
+      "lineNumber": 2,
+      "procedureCode": "97110",
+      "procedureDescription": "Therapeutic exercises, 15 min",
+      "modifiers": [],
+      "chargeAmount": 85.00,
+      "units": 2,
+      "serviceDateFrom": "2026-03-15T00:00:00Z",
+      "serviceDateTo": "2026-03-15T00:00:00Z",
+      "diagnosisPointers": [1, 2]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "memberId": "SUB900112345",
+  "requestingProviderNPI": "1234567890",
+  "requestingProviderName": "Dr. James Wilson",
+  "facilityNPI": "9876543210",
+  "facilityName": "Orlando Regional Medical Center",
+  "diagnosisCode": "M54.5",
+  "diagnosisDescription": "Low back pain",
+  "requestedServiceDateFrom": "2026-03-20",
+  "requestedServiceDateTo": "2026-04-20",
+  "requestedServices": [
+    {
+      "procedureCode": "99214",
+      "description": "Office/outpatient visit, established patient, moderate complexity",
+      "requestedUnits": 3
+    },
+    {
+      "procedureCode": "97110",
+      "description": "Therapeutic exercises",
+      "requestedUnits": 12
+    }
+  ],
+  "lineOfBusiness": 1,
+  "urgency": "Routine",
+  "clinicalNotes": "Patient presents with chronic low back pain. Requesting office visits and physical therapy."
+}
