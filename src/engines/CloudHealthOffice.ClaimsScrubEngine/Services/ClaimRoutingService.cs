@@ -33,6 +33,13 @@ public sealed class ClaimRoutingService : IClaimRoutingService
         _logger = logger;
     }
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     public async Task<ClaimsScrubResponse> ScrubAndRouteAsync(
         ClaimsScrubRequest request,
         CancellationToken ct = default)
@@ -49,7 +56,7 @@ public sealed class ClaimRoutingService : IClaimRoutingService
 
         _logger.LogInformation(
             "Claim {ClaimId} scrub complete: status={Status}, errors={Errors}, warnings={Warnings}, route={Destination}",
-            result.ClaimId, result.Status, result.ErrorCount, result.WarningCount,
+            SanitizeForLog(result.ClaimId), result.Status, result.ErrorCount, result.WarningCount,
             result.Routing.Destination);
 
         return new ClaimsScrubResponse
