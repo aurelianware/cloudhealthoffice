@@ -40,8 +40,8 @@
     <rect x="-65" y="-35" width="130" height="70" rx="8" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1"/>
     <text x="0" y="-12" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="700"
           fill="#00ffff" text-anchor="middle">Argo Workflow</text>
-    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">Fetch &rarr; Parse 837</text>
-    <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">&rarr; Create Claim</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">Fetch &#x2192; Parse 837</text>
+    <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">&#x2192; Create Claim</text>
   </g>
 
   <!-- Arrow to Kafka -->
@@ -192,6 +192,6 @@
   <g transform="translate(0, 555)">
     <rect x="0" y="0" width="1200" height="45" fill="rgba(0,255,255,0.03)"/>
     <text x="600" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="rgba(176,176,176,0.6)"
-          text-anchor="middle">Orchestrated by Argo Workflows &bull; Event-driven &bull; HIPAA Compliant &bull; Multi-cloud &bull; &lt;500ms end-to-end</text>
+          text-anchor="middle">Orchestrated by Argo Workflows &#x2022; Event-driven &#x2022; HIPAA Compliant &#x2022; Multi-cloud &#x2022; &lt;500ms end-to-end</text>
   </g>
 </svg>
