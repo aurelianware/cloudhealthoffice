@@ -106,7 +106,7 @@ public class AdjudicationController : ControllerBase
         {
             _logger.LogWarning(
                 "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
-                request.ClaimId, scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
+                SanitizeForLog(request.ClaimId), scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
 
             return UnprocessableEntity(new
             {
