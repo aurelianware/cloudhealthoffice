@@ -7,7 +7,7 @@
 **The payer platform that starts where your core admin stops — and grows from there.**
 
 CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engines.
-Deploy alongside QNXT, FACETS, or HealthEdge today. Migrate workloads on your timeline.
+Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.0.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0)
 [![Tests](https://img.shields.io/badge/tests-1018%20passing-brightgreen)](./tests/)
