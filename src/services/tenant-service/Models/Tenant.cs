@@ -42,6 +42,9 @@ public class Tenant
     [JsonPropertyName("billing")]
     public BillingInfo? Billing { get; set; }
 
+    [JsonPropertyName("operatingMode")]
+    public OperatingModeConfig? OperatingMode { get; set; }
+
     [JsonPropertyName("usage")]
     public UsageMetrics Usage { get; set; } = new();
 
@@ -307,4 +310,33 @@ public class ApiKeyResponse
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public List<string> Scopes { get; set; } = new();
+}
+
+/// <summary>
+/// Per-tenant operating mode configuration for CHO engines.
+/// Controls whether each engine runs in Augment mode (alongside legacy system)
+/// or Replace mode (CHO is authoritative).
+/// </summary>
+public class OperatingModeConfig
+{
+    [JsonPropertyName("engines")]
+    public Dictionary<string, string> Engines { get; set; } = new();
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
+}
+
+/// <summary>
+/// DTO for updating a tenant's operating mode configuration.
+/// </summary>
+public class UpdateOperatingModeRequest
+{
+    /// <summary>
+    /// Engine operating modes. Keys are engine names (e.g., "benefitCalculation"),
+    /// values are "augment" or "replace".
+    /// </summary>
+    public Dictionary<string, string> Engines { get; set; } = new();
 }

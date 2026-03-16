@@ -1,5 +1,6 @@
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
+using CloudHealthOffice.OperatingMode;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
@@ -28,6 +29,18 @@ public interface IBenefitCalculationEngine
 {
     Task<BenefitResolutionResult> CalculateAsync(
         BenefitResolutionRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Calculate benefits with operating mode awareness.
+    /// In Replace mode, behaves identically to CalculateAsync.
+    /// In Augment mode, also accepts a legacy result for comparison,
+    /// logs discrepancies, and returns an AugmentResult wrapping both.
+    /// </summary>
+    Task<AugmentResult<BenefitResolutionResult>> CalculateWithModeAsync(
+        BenefitResolutionRequest request,
+        IOperatingMode operatingMode,
+        BenefitResolutionResult? legacyResult = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -133,6 +146,90 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             Totals = totals,
             AccumulatorSnapshot = accumulatorSnapshot
         };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // AUGMENT / REPLACE MODE
+    // ═══════════════════════════════════════════════════════════════════
+
+    public async Task<AugmentResult<BenefitResolutionResult>> CalculateWithModeAsync(
+        BenefitResolutionRequest request,
+        IOperatingMode operatingMode,
+        BenefitResolutionResult? legacyResult = null,
+        CancellationToken ct = default)
+    {
+        var choResult = await CalculateAsync(request, ct);
+
+        if (operatingMode.Mode == EngineOperatingMode.Replace)
+        {
+            return AugmentResult.ForReplace(choResult);
+        }
+
+        // Augment mode: compare with legacy result if available
+        var discrepancies = legacyResult is not null
+            ? CompareBenefitResults(choResult, legacyResult)
+            : Array.Empty<string>();
+
+        return AugmentResult.ForAugment(
+            choResult, legacyResult, discrepancies,
+            _logger,
+            OperatingModeConfiguration.EngineNames.BenefitCalculation,
+            request.MemberId);
+    }
+
+    /// <summary>
+    /// Compares CHO and legacy benefit results, returning human-readable discrepancy descriptions.
+    /// </summary>
+    private static string[] CompareBenefitResults(
+        BenefitResolutionResult choResult,
+        BenefitResolutionResult legacyResult)
+    {
+        var discrepancies = new List<string>();
+
+        if (choResult.Success != legacyResult.Success)
+            discrepancies.Add($"Outcome differs: CHO={choResult.Success}, Legacy={legacyResult.Success}");
+
+        if (choResult.DenialReasonCode != legacyResult.DenialReasonCode)
+            discrepancies.Add($"Denial code differs: CHO={choResult.DenialReasonCode ?? "none"}, Legacy={legacyResult.DenialReasonCode ?? "none"}");
+
+        // Compare totals
+        if (choResult.Totals.TotalPlanPaid != legacyResult.Totals.TotalPlanPaid)
+            discrepancies.Add($"Total plan paid differs: CHO={choResult.Totals.TotalPlanPaid:C}, Legacy={legacyResult.Totals.TotalPlanPaid:C}");
+
+        if (choResult.Totals.TotalMemberResponsibility != legacyResult.Totals.TotalMemberResponsibility)
+            discrepancies.Add($"Total member responsibility differs: CHO={choResult.Totals.TotalMemberResponsibility:C}, Legacy={legacyResult.Totals.TotalMemberResponsibility:C}");
+
+        if (choResult.Totals.TotalDeductible != legacyResult.Totals.TotalDeductible)
+            discrepancies.Add($"Total deductible differs: CHO={choResult.Totals.TotalDeductible:C}, Legacy={legacyResult.Totals.TotalDeductible:C}");
+
+        if (choResult.Totals.TotalCopay != legacyResult.Totals.TotalCopay)
+            discrepancies.Add($"Total copay differs: CHO={choResult.Totals.TotalCopay:C}, Legacy={legacyResult.Totals.TotalCopay:C}");
+
+        if (choResult.Totals.TotalCoinsurance != legacyResult.Totals.TotalCoinsurance)
+            discrepancies.Add($"Total coinsurance differs: CHO={choResult.Totals.TotalCoinsurance:C}, Legacy={legacyResult.Totals.TotalCoinsurance:C}");
+
+        if (choResult.Totals.TotalAllowed != legacyResult.Totals.TotalAllowed)
+            discrepancies.Add($"Total allowed differs: CHO={choResult.Totals.TotalAllowed:C}, Legacy={legacyResult.Totals.TotalAllowed:C}");
+
+        // Compare line count
+        if (choResult.Lines.Count != legacyResult.Lines.Count)
+            discrepancies.Add($"Line count differs: CHO={choResult.Lines.Count}, Legacy={legacyResult.Lines.Count}");
+
+        // Compare per-line results where possible
+        var maxLines = Math.Min(choResult.Lines.Count, legacyResult.Lines.Count);
+        for (var i = 0; i < maxLines; i++)
+        {
+            var choLine = choResult.Lines[i];
+            var legacyLine = legacyResult.Lines[i];
+
+            if (choLine.PlanPaidAmount != legacyLine.PlanPaidAmount)
+                discrepancies.Add($"Line {choLine.LineNumber} plan paid differs: CHO={choLine.PlanPaidAmount:C}, Legacy={legacyLine.PlanPaidAmount:C}");
+
+            if (choLine.IsCovered != legacyLine.IsCovered)
+                discrepancies.Add($"Line {choLine.LineNumber} coverage differs: CHO={choLine.IsCovered}, Legacy={legacyLine.IsCovered}");
+        }
+
+        return discrepancies.ToArray();
     }
 
     // ═══════════════════════════════════════════════════════════════════

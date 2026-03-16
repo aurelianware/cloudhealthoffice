@@ -310,6 +310,56 @@ public class TenantManagementService : ITenantService
         return tenant.Usage;
     }
 
+    public async Task<OperatingModeConfig> GetOperatingModeAsync(string tenantId)
+    {
+        var tenant = await _repository.GetByTenantIdAsync(tenantId);
+        if (tenant == null)
+        {
+            throw new KeyNotFoundException($"Tenant {tenantId} not found");
+        }
+
+        return tenant.OperatingMode ?? new OperatingModeConfig();
+    }
+
+    public async Task<OperatingModeConfig> UpdateOperatingModeAsync(string tenantId, UpdateOperatingModeRequest request)
+    {
+        var tenant = await _repository.GetByTenantIdAsync(tenantId);
+        if (tenant == null)
+        {
+            throw new KeyNotFoundException($"Tenant {tenantId} not found");
+        }
+
+        // Validate engine modes
+        var validModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "augment", "replace" };
+        foreach (var (engine, mode) in request.Engines)
+        {
+            if (!validModes.Contains(mode))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid operating mode '{mode}' for engine '{engine}'. Must be 'augment' or 'replace'.");
+            }
+        }
+
+        tenant.OperatingMode ??= new OperatingModeConfig();
+
+        // Merge: update specified engines, keep existing ones unchanged
+        foreach (var (engine, mode) in request.Engines)
+        {
+            tenant.OperatingMode.Engines[engine] = mode.ToLowerInvariant();
+        }
+
+        tenant.OperatingMode.UpdatedAt = DateTime.UtcNow;
+
+        await _repository.UpdateAsync(tenant);
+
+        _logger.LogInformation(
+            "Updated operating mode for tenant {TenantId}: {Engines}",
+            tenantId,
+            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{e.Key}={e.Value}")));
+
+        return tenant.OperatingMode;
+    }
+
     // Helper methods
     private string GenerateTenantId(string organizationName)
     {

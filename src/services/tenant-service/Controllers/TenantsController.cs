@@ -190,6 +190,51 @@ public class TenantsController : ControllerBase
     }
 
     /// <summary>
+    /// Get operating mode configuration for tenant
+    /// </summary>
+    [HttpGet("{tenantId}/operating-mode")]
+    [ProducesResponseType(typeof(OperatingModeConfig), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OperatingModeConfig>> GetOperatingMode(string tenantId)
+    {
+        try
+        {
+            var operatingMode = await _tenantService.GetOperatingModeAsync(tenantId);
+            return Ok(operatingMode);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Update operating mode configuration for tenant.
+    /// Allows setting individual engines to "augment" or "replace" mode.
+    /// </summary>
+    [HttpPut("{tenantId}/operating-mode")]
+    [ProducesResponseType(typeof(OperatingModeConfig), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OperatingModeConfig>> UpdateOperatingMode(
+        string tenantId, [FromBody] UpdateOperatingModeRequest request)
+    {
+        try
+        {
+            var operatingMode = await _tenantService.UpdateOperatingModeAsync(tenantId, request);
+            return Ok(operatingMode);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get usage metrics for tenant
     /// </summary>
     [HttpGet("{tenantId}/usage")]
