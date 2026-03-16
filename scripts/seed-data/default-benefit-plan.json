@@ -1,0 +1,104 @@
+{
+  "tenantId": "__TENANT_ID__",
+  "planId": "__TENANT_ID__-DEFAULT-PPO",
+  "planName": "Default PPO Plan",
+  "payer": "__TENANT_NAME__",
+  "effectiveDate": "__EFFECTIVE_DATE__",
+  "planType": "PPO",
+  "lineOfBusiness": "Commercial",
+  "costSharing": {
+    "individualDeductible": 1500.00,
+    "familyDeductible": 3000.00,
+    "individualOutOfPocketMax": 6000.00,
+    "familyOutOfPocketMax": 12000.00,
+    "inNetworkDeductible": 1500.00,
+    "outOfNetworkDeductible": 3000.00,
+    "inNetworkOutOfPocketMax": 6000.00,
+    "outOfNetworkOutOfPocketMax": 15000.00
+  },
+  "benefits": [
+    {
+      "serviceCategory": "98",
+      "description": "Professional Office Visit",
+      "inNetworkCopay": 30.00,
+      "outNetworkCopay": 60.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "73",
+      "description": "Diagnostic Lab",
+      "inNetworkCoinsurance": 0.10,
+      "outNetworkCoinsurance": 0.30,
+      "deductibleApplies": true,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "47",
+      "description": "Hospital Inpatient",
+      "inNetworkCoinsurance": 0.20,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "priorAuthRequired": true
+    },
+    {
+      "serviceCategory": "42",
+      "description": "Emergency Room",
+      "inNetworkCopay": 250.00,
+      "deductibleApplies": true,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "86",
+      "description": "Urgent Care",
+      "inNetworkCopay": 50.00,
+      "outNetworkCopay": 75.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "88",
+      "description": "Preventive Care",
+      "inNetworkCopay": 0.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "MH",
+      "description": "Mental Health Outpatient",
+      "inNetworkCopay": 30.00,
+      "outNetworkCopay": 60.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "PT",
+      "description": "Physical Therapy",
+      "inNetworkCopay": 40.00,
+      "outNetworkCopay": 80.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false,
+      "visitLimit": 30,
+      "visitLimitPeriod": "annual"
+    },
+    {
+      "serviceCategory": "RX",
+      "description": "Prescription Drugs (Generic)",
+      "inNetworkCopay": 10.00,
+      "deductibleApplies": false,
+      "priorAuthRequired": false
+    },
+    {
+      "serviceCategory": "DME",
+      "description": "Durable Medical Equipment",
+      "inNetworkCoinsurance": 0.20,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "priorAuthRequired": true
+    }
+  ],
+  "networkTiers": [
+    { "tierName": "In-Network", "tierLevel": 1 },
+    { "tierName": "Out-of-Network", "tierLevel": 2 }
+  ]
+}
