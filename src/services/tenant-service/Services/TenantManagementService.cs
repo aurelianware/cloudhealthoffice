@@ -354,10 +354,17 @@ public class TenantManagementService : ITenantService
 
         _logger.LogInformation(
             "Updated operating mode for tenant {TenantId}: {Engines}",
-            tenantId,
-            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{e.Key}={e.Value}")));
+            SanitizeForLog(tenantId),
+            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{SanitizeForLog(e.Key)}={SanitizeForLog(e.Value)}")));
 
         return tenant.OperatingMode;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // Helper methods
