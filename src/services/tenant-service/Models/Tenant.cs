@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.OperatingMode;
 
 namespace TenantService.Models;
 
@@ -43,7 +44,7 @@ public class Tenant
     public BillingInfo? Billing { get; set; }
 
     [JsonPropertyName("operatingMode")]
-    public OperatingModeConfig? OperatingMode { get; set; }
+    public OperatingModeConfiguration? OperatingMode { get; set; }
 
     [JsonPropertyName("usage")]
     public UsageMetrics Usage { get; set; } = new();
@@ -310,23 +311,6 @@ public class ApiKeyResponse
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public List<string> Scopes { get; set; } = new();
-}
-
-/// <summary>
-/// Per-tenant operating mode configuration for CHO engines.
-/// Controls whether each engine runs in Augment mode (alongside legacy system)
-/// or Replace mode (CHO is authoritative).
-/// </summary>
-public class OperatingModeConfig
-{
-    [JsonPropertyName("engines")]
-    public Dictionary<string, string> Engines { get; set; } = new();
-
-    [JsonPropertyName("updatedAt")]
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-    [JsonPropertyName("updatedBy")]
-    public string? UpdatedBy { get; set; }
 }
 
 /// <summary>

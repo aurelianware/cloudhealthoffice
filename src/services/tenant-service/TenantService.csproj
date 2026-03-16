@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\engines\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.45.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />

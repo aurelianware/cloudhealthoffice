@@ -24,10 +24,11 @@ public class OperatingModeConfiguration
     public string TenantId { get; set; } = string.Empty;
 
     [JsonPropertyName("engines")]
-    public Dictionary<string, string> Engines { get; set; } = new();
+    public Dictionary<string, string> Engines { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     [JsonPropertyName("updatedAt")]
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+
 
     [JsonPropertyName("updatedBy")]
     public string? UpdatedBy { get; set; }
@@ -54,7 +55,7 @@ public class OperatingModeConfiguration
     /// </summary>
     public void SetEngineMode(string engineName, EngineOperatingMode mode)
     {
-        Engines[engineName] = mode.ToString().ToLowerInvariant();
+        Engines[engineName.Trim()] = mode.ToString().ToLowerInvariant();
         UpdatedAt = DateTime.UtcNow;
     }
 
