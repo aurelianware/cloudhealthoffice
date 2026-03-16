@@ -4,6 +4,8 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Services;
+using CloudHealthOffice.ClaimsScrubEngine.Models;
+using CloudHealthOffice.ClaimsScrubEngine.Services;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using BenefitPlanService.Middleware;
@@ -38,17 +40,20 @@ namespace BenefitPlanService.Controllers;
 [Route("api/v1/adjudication")]
 public class AdjudicationController : ControllerBase
 {
+    private readonly IClaimRoutingService _scrubEngine;
     private readonly IBenefitCalculationEngine _benefitEngine;
     private readonly IRateResolutionService _rateEngine;
     private readonly INcciEditService _ncciEngine;
     private readonly ILogger<AdjudicationController> _logger;
 
     public AdjudicationController(
+        IClaimRoutingService scrubEngine,
         IBenefitCalculationEngine benefitEngine,
         IRateResolutionService rateEngine,
         INcciEditService ncciEngine,
         ILogger<AdjudicationController> logger)
     {
+        _scrubEngine = scrubEngine;
         _benefitEngine = benefitEngine;
         _rateEngine = rateEngine;
         _ncciEngine = ncciEngine;
@@ -89,7 +94,34 @@ public class AdjudicationController : ControllerBase
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
             request.ClaimId, request.MemberId, request.BenefitPlanId, request.Lines.Count);
 
-        // ── Step 0: NCCI/MUE pre-payment edit check ──
+        // ── Step 0a: Claims scrub validation ──
+        // Run scrub rules (data completeness, code validation, date logic,
+        // amount logic, provider validation, modifier validation) before
+        // NCCI edits so obviously bad data is caught early.
+        var scrubClaim = MapToScrubClaim(request);
+        var scrubResponse = await _scrubEngine.ScrubAndRouteAsync(
+            new ClaimsScrubRequest { Claim = scrubClaim }, ct);
+
+        if (scrubResponse.Result.Routing.Destination != "adjudication")
+        {
+            _logger.LogWarning(
+                "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
+                request.ClaimId, scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "SCRUB_VALIDATION_FAILURE",
+                message = $"Claim failed scrub validation with {scrubResponse.Result.ErrorCount} error(s) " +
+                          $"and {scrubResponse.Result.WarningCount} warning(s). " +
+                          scrubResponse.Result.Routing.Reason,
+                status = scrubResponse.Result.Status,
+                routing = scrubResponse.Result.Routing,
+                validationResults = scrubResponse.Result.Results.Where(r => !r.Passed).ToList(),
+            });
+        }
+
+        // ── Step 0b: NCCI/MUE pre-payment edit check ──
         // Runs before pricing so bundled/excess-unit lines are caught before
         // accumulators are touched or rates are resolved.
         var ncciRequest = new NcciScrubRequest
@@ -326,6 +358,101 @@ public class AdjudicationController : ControllerBase
         var result = await _ncciEngine.ScrubAsync(request, ct);
         return Ok(result);
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/scrub-check
+    //
+    // Standalone claims scrub validation.
+    // Use when you want to run scrub rules without full adjudication.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Run claims scrub validation rules on a claim.
+    /// Returns the validation result with routing decision.
+    /// </summary>
+    [HttpPost("scrub-check")]
+    [ProducesResponseType(typeof(ClaimsScrubResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ClaimsScrubResponse>> ScrubCheck(
+        [FromBody] ClaimsScrubRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Running scrub validation for claim {ClaimId}",
+            SanitizeForLog(request.Claim.ClaimId));
+
+        var result = await _scrubEngine.ScrubAndRouteAsync(request, ct);
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Helper: Map AdjudicationRequest → X12837Claim for scrub engine
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static X12837Claim MapToScrubClaim(AdjudicationRequest request) => new()
+    {
+        ClaimId = request.ClaimId,
+        ClaimType = ClaimType.Professional,
+        TransactionControlNumber = request.ClaimId,
+        InterchangeControlNumber = request.ClaimId,
+        TransactionDate = request.ServiceDate.ToString("yyyyMMdd"),
+        Submitter = new ClaimsScrubEngine.Models.ClaimSubmitter
+        {
+            Name = "Adjudication Pipeline",
+            IdentificationCode = "ADJ",
+            IdentificationQualifier = "46",
+        },
+        Receiver = new ClaimsScrubEngine.Models.ClaimReceiver
+        {
+            Name = "Internal",
+            IdentificationCode = "INT",
+            IdentificationQualifier = "PI",
+        },
+        BillingProvider = new ClaimsScrubEngine.Models.BillingProvider
+        {
+            Npi = request.ProviderNpi,
+            Name = "Provider",
+            EntityType = "2",
+            Address = new ClaimsScrubEngine.Models.ProviderAddress
+            {
+                Line1 = "", City = "", State = "", PostalCode = "",
+            },
+        },
+        Subscriber = new ClaimsScrubEngine.Models.ClaimSubscriber
+        {
+            MemberId = request.MemberId,
+            FirstName = "N/A",
+            LastName = "N/A",
+            DateOfBirth = "19000101", // Not available from AdjudicationRequest
+        },
+        ClaimHeader = new ClaimsScrubEngine.Models.ClaimHeader
+        {
+            PatientControlNumber = request.ClaimId,
+            TotalChargeAmount = request.Lines.Sum(l => l.BilledAmount),
+            DiagnosisCodes = request.Lines
+                .SelectMany(l => l.DiagnosisCodes)
+                .Distinct()
+                .Select(c => new ClaimsScrubEngine.Models.DiagnosisCode
+                {
+                    Code = c,
+                    Qualifier = "ABK",
+                })
+                .ToList(),
+        },
+        ServiceLines = request.Lines.Select(l => new ClaimsScrubEngine.Models.ServiceLine
+        {
+            LineNumber = l.LineNumber,
+            ProcedureCode = l.ProcedureCode,
+            Modifiers = l.Modifiers,
+            ServiceDate = request.ServiceDate.ToString("yyyyMMdd"),
+            ChargeAmount = l.BilledAmount,
+            Units = l.Units,
+            PlaceOfService = l.PlaceOfService,
+            RevenueCode = l.RevenueCode,
+        }).ToList(),
+        TotalClaimedAmount = request.Lines.Sum(l => l.BilledAmount),
+        ParsedAt = DateTime.UtcNow.ToString("o"),
+    };
 }
 
 // ═══════════════════════════════════════════════════════════════════

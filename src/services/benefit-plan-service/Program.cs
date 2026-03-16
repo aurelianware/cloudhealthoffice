@@ -8,6 +8,7 @@ using CloudHealthOffice.BenefitEngine.Configuration;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using StackExchange.Redis;
 using CloudHealthOffice.FeeScheduleEngine.Configuration;
+using CloudHealthOffice.ClaimsScrubEngine.Configuration;
 using CloudHealthOffice.NcciEngine.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 var builder = WebApplication.CreateBuilder(args);
@@ -82,6 +83,8 @@ builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCate
 
 builder.Services.AddFeeScheduleEngine()
     .UseRepositoriesFromConfiguration(builder.Configuration);
+
+builder.Services.AddClaimsScrubEngine();
 
 builder.Services.AddNcciEngine()
     .UseRepositoryFromConfiguration(builder.Configuration);
