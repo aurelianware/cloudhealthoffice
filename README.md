@@ -192,8 +192,7 @@ cloudhealthoffice/
 │   ├── azure/              # Bicep IaC
 │   ├── helm/               # Helm chart
 │   ├── k8s/                # Kubernetes manifests
-│   ├── monitoring/         # Grafana + Prometheus
-│   └── logicapps/          # Azure Logic Apps (attachment workflows)
+│   └── monitoring/         # Grafana + Prometheus
 ├── containers/             # Sidecar containers (parsers, encoders, SFTP)
 ├── schemas/                # X12 XSD schemas, JSON schemas (auth, appeals)
 ├── tests/                  # Unit, integration, E2E, fixtures
@@ -219,7 +218,6 @@ cloudhealthoffice/
 
 |Option                      |Best For                               |Time to Production|
 |----------------------------|---------------------------------------|------------------|
-|**Azure Logic Apps**        |Azure-first orgs, minimal ops overhead |< 1 hour          |
 |**Kubernetes (AKS/EKS/GKE)**|Enterprise control, multi-cloud, hybrid|1–2 hours         |
 |**Docker Compose**          |Development, evaluation, POC           |5 minutes         |
 
