@@ -10,7 +10,7 @@ CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engi
 Deploy alongside QNXT, FACETS, or HealthEdge today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.0.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0)
-[![Tests](https://img.shields.io/badge/tests-531%20passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-1018%20passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
@@ -77,7 +77,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 |Component          |Count    |Details                                                                        |
 |-------------------|---------|-------------------------------------------------------------------------------|
-|Microservices      |17       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                          |
+|Microservices      |22       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                          |
 |Calculation Engines|6        |Benefit/accumulator, fee schedule, NCCI edits, COB, risk adjustment, encounter |
 |X12 Parsers        |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                     |
 |FHIR APIs          |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory|
@@ -107,6 +107,11 @@ Start with compliance. Expand into claims. Move at your own pace.
 |tenant-service           |Multi-tenant provisioning                    |—               |
 |rfai-service             |Request for additional information workflows |—               |
 |reference-data-service   |ICD-10, CPT, CARC/RARC code sets             |—               |
+|encounter-service        |Encounter data submission and reporting       |—               |
+|fhir-service             |FHIR R4 API gateway and resource serving      |—               |
+|premium-billing-service  |Premium billing and invoicing                 |—               |
+|risk-adjustment-service  |HCC risk score calculation and submission     |—               |
+|smart-auth-service       |SMART on FHIR authorization                   |—               |
 
 ### Calculation Engines
 
@@ -173,7 +178,7 @@ Or deploy to Azure:
 ```
 cloudhealthoffice/
 ├── src/
-│   ├── services/           # 17 C# microservices
+│   ├── services/           # 22 C# microservices
 │   ├── engines/            # Calculation engines (Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter)
 │   ├── portal/             # Blazor Server portal (MudBlazor)
 │   ├── site/               # Marketing site (cloudhealthoffice.com)
