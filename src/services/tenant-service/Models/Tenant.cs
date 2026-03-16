@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.OperatingMode;
 
 namespace TenantService.Models;
 
@@ -41,6 +42,9 @@ public class Tenant
 
     [JsonPropertyName("billing")]
     public BillingInfo? Billing { get; set; }
+
+    [JsonPropertyName("operatingMode")]
+    public OperatingModeConfiguration? OperatingMode { get; set; }
 
     [JsonPropertyName("usage")]
     public UsageMetrics Usage { get; set; } = new();
@@ -307,4 +311,16 @@ public class ApiKeyResponse
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public List<string> Scopes { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for updating a tenant's operating mode configuration.
+/// </summary>
+public class UpdateOperatingModeRequest
+{
+    /// <summary>
+    /// Engine operating modes. Keys are engine names (e.g., "benefitCalculation"),
+    /// values are "augment" or "replace".
+    /// </summary>
+    public Dictionary<string, string> Engines { get; set; } = new();
 }
