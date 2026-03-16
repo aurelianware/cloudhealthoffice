@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace CloudHealthOffice.ClaimsScrubEngine.Models;
 
 // ============================================================================
@@ -8,9 +6,9 @@ namespace CloudHealthOffice.ClaimsScrubEngine.Models;
 
 public enum ClaimType
 {
-    [JsonStringEnumMemberName("837P")] Professional,
-    [JsonStringEnumMemberName("837I")] Institutional,
-    [JsonStringEnumMemberName("837D")] Dental
+    Professional,
+    Institutional,
+    Dental
 }
 
 public static class ClaimTypeExtensions
