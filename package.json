@@ -46,7 +46,7 @@
     "handlebars": "^4.7.7",
     "inquirer": "^9.2.0",
     "marked": "^11.2.0",
-    "openai": "^6.9.1",
+    "openai": "^6.29.0",
     "ora": "^7.0.0"
   },
   "devDependencies": {
