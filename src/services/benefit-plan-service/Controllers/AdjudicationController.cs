@@ -429,6 +429,7 @@ public class AdjudicationController : ControllerBase
         {
             PatientControlNumber = request.ClaimId,
             TotalChargeAmount = request.Lines.Sum(l => l.BilledAmount),
+            PlaceOfServiceCode = request.Lines.Select(l => l.PlaceOfService).FirstOrDefault(),
             DiagnosisCodes = request.Lines
                 .SelectMany(l => l.DiagnosisCodes)
                 .Distinct()
