@@ -396,50 +396,50 @@ public class AdjudicationController : ControllerBase
         TransactionControlNumber = request.ClaimId,
         InterchangeControlNumber = request.ClaimId,
         TransactionDate = request.ServiceDate.ToString("yyyyMMdd"),
-        Submitter = new ClaimsScrubEngine.Models.ClaimSubmitter
+        Submitter = new CloudHealthOffice.ClaimsScrubEngine.Models.ClaimSubmitter
         {
             Name = "Adjudication Pipeline",
             IdentificationCode = "ADJ",
             IdentificationQualifier = "46",
         },
-        Receiver = new ClaimsScrubEngine.Models.ClaimReceiver
+        Receiver = new CloudHealthOffice.ClaimsScrubEngine.Models.ClaimReceiver
         {
             Name = "Internal",
             IdentificationCode = "INT",
             IdentificationQualifier = "PI",
         },
-        BillingProvider = new ClaimsScrubEngine.Models.BillingProvider
+        BillingProvider = new CloudHealthOffice.ClaimsScrubEngine.Models.BillingProvider
         {
             Npi = request.ProviderNpi,
             Name = "Provider",
             EntityType = "2",
-            Address = new ClaimsScrubEngine.Models.ProviderAddress
+            Address = new CloudHealthOffice.ClaimsScrubEngine.Models.ProviderAddress
             {
                 Line1 = "", City = "", State = "", PostalCode = "",
             },
         },
-        Subscriber = new ClaimsScrubEngine.Models.ClaimSubscriber
+        Subscriber = new CloudHealthOffice.ClaimsScrubEngine.Models.ClaimSubscriber
         {
             MemberId = request.MemberId,
             FirstName = "N/A",
             LastName = "N/A",
             DateOfBirth = "19000101", // Not available from AdjudicationRequest
         },
-        ClaimHeader = new ClaimsScrubEngine.Models.ClaimHeader
+        ClaimHeader = new CloudHealthOffice.ClaimsScrubEngine.Models.ClaimHeader
         {
             PatientControlNumber = request.ClaimId,
             TotalChargeAmount = request.Lines.Sum(l => l.BilledAmount),
             DiagnosisCodes = request.Lines
                 .SelectMany(l => l.DiagnosisCodes)
                 .Distinct()
-                .Select(c => new ClaimsScrubEngine.Models.DiagnosisCode
+                .Select(c => new CloudHealthOffice.ClaimsScrubEngine.Models.DiagnosisCode
                 {
                     Code = c,
                     Qualifier = "ABK",
                 })
                 .ToList(),
         },
-        ServiceLines = request.Lines.Select(l => new ClaimsScrubEngine.Models.ServiceLine
+        ServiceLines = request.Lines.Select(l => new CloudHealthOffice.ClaimsScrubEngine.Models.ServiceLine
         {
             LineNumber = l.LineNumber,
             ProcedureCode = l.ProcedureCode,
