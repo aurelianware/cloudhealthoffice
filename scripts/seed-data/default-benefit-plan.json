@@ -1,4 +1,5 @@
 {
+  "tenantId": "__TENANT_ID__",
   "planId": "__TENANT_ID__-DEFAULT-PPO",
   "planName": "Default PPO Plan",
   "payer": "__TENANT_NAME__",
