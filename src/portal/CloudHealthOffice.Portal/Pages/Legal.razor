@@ -21,7 +21,8 @@
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                        Href="@TermsOfServiceUrl" 
-                                       Target="_blank" />
+                                       Target="_blank"
+                                       Rel="noopener noreferrer" />
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudCardContent>
@@ -35,7 +36,8 @@
                 </MudCardContent>
                 <MudCardActions>
                     <MudButton Href="@TermsOfServiceUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Text" 
                                Color="Color.Primary">
                         Read Full Terms
@@ -54,7 +56,8 @@
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                        Href="@PrivacyPolicyUrl" 
-                                       Target="_blank" />
+                                       Target="_blank"
+                                       Rel="noopener noreferrer" />
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudCardContent>
@@ -68,7 +71,8 @@
                 </MudCardContent>
                 <MudCardActions>
                     <MudButton Href="@PrivacyPolicyUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Text" 
                                Color="Color.Primary">
                         Read Privacy Policy
@@ -87,7 +91,8 @@
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                        Href="@SlaUrl" 
-                                       Target="_blank" />
+                                       Target="_blank"
+                                       Rel="noopener noreferrer" />
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudCardContent>
@@ -101,7 +106,8 @@
                 </MudCardContent>
                 <MudCardActions>
                     <MudButton Href="@SlaUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Text" 
                                Color="Color.Primary">
                         Read SLA
@@ -120,7 +126,8 @@
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" 
                                        Href="@SupportTermsUrl" 
-                                       Target="_blank" />
+                                       Target="_blank"
+                                       Rel="noopener noreferrer" />
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudCardContent>
@@ -134,7 +141,8 @@
                 </MudCardContent>
                 <MudCardActions>
                     <MudButton Href="@SupportTermsUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Text" 
                                Color="Color.Primary">
                         Read Support Terms
@@ -231,7 +239,8 @@
                         Vulnerability disclosure process, security contact information, and responsible disclosure guidelines.
                     </MudText>
                     <MudButton Href="@SecurityPolicyUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Outlined" 
                                Color="Color.Primary" 
                                FullWidth="true">
@@ -249,7 +258,8 @@
                         Community guidelines for respectful collaboration, reporting violations, and enforcement procedures.
                     </MudText>
                     <MudButton Href="@CodeOfConductUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Outlined" 
                                Color="Color.Primary" 
                                FullWidth="true">
@@ -267,7 +277,8 @@
                         Project governance model, decision-making process, and community leadership structure.
                     </MudText>
                     <MudButton Href="@GovernanceUrl" 
-                               Target="_blank" 
+                               Target="_blank"
+                               Rel="noopener noreferrer"
                                Variant="Variant.Outlined" 
                                Color="Color.Primary" 
                                FullWidth="true">
@@ -297,11 +308,12 @@
 </MudContainer>
 
 @code {
-    private const string TermsOfServiceUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/infrastructure/azure/marketplace/legal/terms-of-service.md";
-    private const string PrivacyPolicyUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/infrastructure/azure/marketplace/legal/privacy-policy.md";
-    private const string SlaUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/infrastructure/azure/marketplace/legal/sla.md";
-    private const string SupportTermsUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/infrastructure/azure/marketplace/legal/support-terms.md";
-    private const string SecurityPolicyUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/SECURITY.md";
-    private const string CodeOfConductUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/governance/CODE_OF_CONDUCT.md";
-    private const string GovernanceUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/governance/GOVERNANCE.md";
+    private const string GitHubBaseUrl = "https://github.com/aurelianware/cloudhealthoffice/blob/main/";
+    private const string TermsOfServiceUrl = GitHubBaseUrl + "infrastructure/azure/marketplace/legal/terms-of-service.md";
+    private const string PrivacyPolicyUrl = GitHubBaseUrl + "infrastructure/azure/marketplace/legal/privacy-policy.md";
+    private const string SlaUrl = GitHubBaseUrl + "infrastructure/azure/marketplace/legal/sla.md";
+    private const string SupportTermsUrl = GitHubBaseUrl + "infrastructure/azure/marketplace/legal/support-terms.md";
+    private const string SecurityPolicyUrl = GitHubBaseUrl + "SECURITY.md";
+    private const string CodeOfConductUrl = GitHubBaseUrl + "docs/governance/CODE_OF_CONDUCT.md";
+    private const string GovernanceUrl = GitHubBaseUrl + "docs/governance/GOVERNANCE.md";
 }
