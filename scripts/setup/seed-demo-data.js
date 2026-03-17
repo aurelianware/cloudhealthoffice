@@ -249,7 +249,7 @@ const sponsors = [
     zipCode: "78701",
     contactName: "Patricia Garza",
     contactPhone: "5122345678",
-    contactEmail: "pgarza@sponsor1.example.com",
+    contactEmail: "contact@sponsor-one.test",
     effectiveDate: new Date("2025-01-01"),
     terminationDate: null,
     status: "Active",
@@ -282,7 +282,7 @@ const sponsors = [
     zipCode: "78205",
     contactName: "Robert Tran",
     contactPhone: "2108765432",
-    contactEmail: "rtran@sponsor2.example.com",
+    contactEmail: "contact@sponsor-two.test",
     effectiveDate: new Date("2025-07-01"),
     terminationDate: null,
     status: "Active",
@@ -331,7 +331,7 @@ const providers = [
     zipCode: "78756",
     phone: "5129876543",
     fax: "5129876544",
-    email: "msantos@austinfamilymed.example.com",
+    email: "provider-001@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -378,7 +378,7 @@ const providers = [
     zipCode: "78705",
     phone: "5124567890",
     fax: "5124567891",
-    email: "jchen@atxinternal.example.com",
+    email: "provider-002@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -423,7 +423,7 @@ const providers = [
     zipCode: "78704",
     phone: "5123456789",
     fax: "5123456780",
-    email: "rokafor@lonestarortho.example.com",
+    email: "provider-003@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -472,7 +472,7 @@ const providers = [
     zipCode: "78731",
     phone: "5127654321",
     fax: "5127654322",
-    email: "dpatel@atximaging.example.com",
+    email: "provider-004@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -519,7 +519,7 @@ const providers = [
     zipCode: "78731",
     phone: "5129991234",
     fax: "5129991235",
-    email: "kmitchell@stemed.example.com",
+    email: "provider-005@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -566,7 +566,7 @@ const providers = [
     zipCode: "78704",
     phone: "5128887766",
     fax: "5128887767",
-    email: "lnguyen@atxpt.example.com",
+    email: "provider-006@demo-clinic.test",
     networkParticipations: [
       {
         planId: makeId("plan", 1),
@@ -611,7 +611,7 @@ const providers = [
     zipCode: "78717",
     phone: "5126661234",
     fax: "5126661235",
-    email: "info@hillcountryortho.example.com",
+    email: "facility-001@demo-clinic.test",
     networkParticipations: [],
     credentialingStatus: "Pending",
     credentialingDate: null,
@@ -647,7 +647,7 @@ const providers = [
     zipCode: "78681",
     phone: "5125554321",
     fax: "5125554322",
-    email: "referrals@lonestarrad.example.com",
+    email: "facility-002@demo-clinic.test",
     networkParticipations: [],
     credentialingStatus: "Expired",
     credentialingDate: new Date("2022-01-10"),
