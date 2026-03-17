@@ -730,7 +730,7 @@ const members = memberData.map(function (m, i) {
     state: "TX",
     zipCode: m.zip,
     phone: "512" + String(2000000 + idx * 1111),
-    email: (m.first.toLowerCase() + "." + m.last.toLowerCase() + "@example.com").replace("'", ""),
+    email: (m.first.toLowerCase() + "." + m.last.toLowerCase() + "@example.com").replace(/'/g, ""),
     effectiveDate: new Date("2025-01-01"),
     terminationDate: m.status === "Terminated" ? new Date("2026-02-28") : null,
     status: m.status,
