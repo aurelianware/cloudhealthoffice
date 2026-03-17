@@ -1,10 +1,8 @@
 @page "/dashboard"
 @using CloudHealthOffice.Portal.Services
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Components.Authorization
 @attribute [Authorize]
-@inject AuthenticationStateProvider AuthenticationStateProvider
-@inject NavigationManager Navigation
+@inject ILogger<Dashboard> Logger
 @inject IMetricsService MetricsService
 @inject IClaimsService ClaimsService
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
@@ -56,7 +54,7 @@
         <MudGrid Class="mb-4">
             @* Total Claims *@
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                             <MudText Typo="Typo.body2" Color="Color.Secondary">Total Claims</MudText>
@@ -81,7 +79,7 @@
 
             @* Approval Rate *@
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                             <MudText Typo="Typo.body2" Color="Color.Secondary">Approval Rate</MudText>
@@ -99,7 +97,7 @@
 
             @* Average Processing Time *@
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                             <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Processing Time</MudText>
@@ -115,7 +113,7 @@
 
             @* Total Plan Paid *@
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                             <MudText Typo="Typo.body2" Color="Color.Secondary">Total Plan Paid</MudText>
@@ -133,7 +131,7 @@
         @* ── Claims by Status Chart + Recent Authorizations ── *@
         <MudGrid Class="mb-4">
             <MudItem xs="12" md="5">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudText Typo="Typo.h6" GutterBottom="true">Claims by Status</MudText>
                         <MudChart ChartType="ChartType.Donut"
@@ -161,7 +159,7 @@
             </MudItem>
 
             <MudItem xs="12" md="7">
-                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                <MudCard Elevation="0">
                     <MudCardContent>
                         <MudText Typo="Typo.h6" GutterBottom="true">Recent Authorizations</MudText>
                         @if (recentAuthorizations == null)
@@ -202,7 +200,7 @@
     }
 
     @* ── Recent Claims Table ── *@
-    <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);" Class="mb-4">
+    <MudCard Elevation="0" Class="mb-4">
         <MudCardContent>
             <MudText Typo="Typo.h6" GutterBottom="true">Recent Claims</MudText>
             @if (recentClaims == null)
@@ -244,7 +242,7 @@
     </MudCard>
 
     @* ── Quick Actions ── *@
-    <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);" Class="mb-4">
+    <MudCard Elevation="0" Class="mb-4">
         <MudCardContent>
             <MudText Typo="Typo.h6" GutterBottom="true">Quick Actions</MudText>
             <MudStack Row="true" Spacing="3" Class="mt-2">
@@ -293,15 +291,19 @@
         {
             tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load tenant context");
+        }
 
         try
         {
             metrics = await MetricsService.GetDashboardMetricsAsync();
             _chartData = new double[] { metrics.ApprovedClaims, metrics.DeniedClaims, metrics.PendingClaims };
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogWarning(ex, "Failed to load dashboard metrics");
             _metricsError = true;
         }
 
@@ -309,14 +311,24 @@
         {
             recentClaims = await ClaimsService.GetRecentClaimsAsync(10);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load recent claims");
+            recentClaims = new();
+        }
 
         try
         {
+            // TODO: Add a server-side "recent authorizations" endpoint with limit/sort
+            // to avoid fetching the full list just for the dashboard's 5 most recent.
             var allAuths = await AuthorizationService.GetAuthorizationsAsync();
             recentAuthorizations = allAuths.OrderByDescending(a => a.RequestDate).Take(5).ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load recent authorizations");
+            recentAuthorizations = new();
+        }
 
         _loading = false;
     }
