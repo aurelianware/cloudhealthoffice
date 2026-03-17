@@ -1,0 +1,94 @@
+# HealthTech Solutions — Tenant Onboarding Checklist
+
+## 1. Get HealthTech's Azure AD Tenant ID
+
+- [ ] Ask Justin Cooper (jcooper@healthtechsolutions.com) for their Azure AD **Tenant ID** (GUID).
+  - He can find it at: **Azure Portal → Azure Active Directory → Overview → Tenant ID**
+- [ ] Update `seed-healthtech-tenant.js`: replace `REPLACE_WITH_HEALTHTECH_AZURE_AD_TENANT_ID` with the real GUID.
+- [ ] Confirm Justin's email address and update `adminEmails` in the seed script if needed.
+
+## 2. Run the MongoDB Seed Script
+
+```bash
+mongosh "<your-mongodb-connection-string>/CloudHealthOffice" scripts/setup/seed-healthtech-tenant.js
+```
+
+- [ ] Verify the document was inserted:
+  ```bash
+  mongosh "<connection-string>/CloudHealthOffice" --eval 'db.Tenants.findOne({tenantId:"healthtech-solutions"})'
+  ```
+
+## 3. Azure AD — What You (CHO Admin) Need to Do
+
+The portal app registration (`54f3419d-0d69-4b06-939a-c1a260596556`) is already configured as **multi-tenant** (`TenantId: "common"`), so:
+
+- [x] **No redirect URI changes needed.** The existing `/signin-oidc` and `/signout-callback-oidc` paths work for all tenants.
+- [x] **No API permission changes needed.** The portal's permissions (OpenID Connect `openid profile email` + downstream API scopes) are already declared on the app registration. They apply to all tenants that consent.
+- [x] **No app registration modifications needed.** Multi-tenant apps accept tokens from any Azure AD tenant.
+
+## 4. Azure AD — What Justin (HealthTech Admin) Needs to Do
+
+Justin needs **Azure AD admin consent** the first time a HealthTech user logs in. There are two options:
+
+### Option A: Admin Consent URL (Recommended — Proactive)
+
+Send Justin this URL (replace `HEALTHTECH_TENANT_ID` with their actual tenant ID):
+
+```
+https://login.microsoftonline.com/HEALTHTECH_TENANT_ID/adminconsent?client_id=54f3419d-0d69-4b06-939a-c1a260596556
+```
+
+When Justin (who must be a **Global Admin**, **Cloud Application Admin**, or **Application Admin**) visits this URL:
+1. Azure AD shows the permissions the CHO Portal requests
+2. Justin clicks **Accept** to grant consent for all HealthTech users
+3. Azure AD creates a **service principal** for the CHO Portal in HealthTech's tenant
+
+### Option B: First-Login Consent Prompt (Automatic)
+
+If Justin doesn't pre-consent, Azure AD will prompt him to grant admin consent on first login to `portal.cloudhealthoffice.com`. He'll see an "Approval required" screen. This works, but:
+- Only admin users see the consent prompt; regular users get an error (AADSTS65001)
+- It's a better experience to use Option A before telling users to log in
+
+### Option C: Use the Grant-AdminConsent.ps1 Script
+
+You can also run the existing script from Justin's machine or with his credentials:
+
+```powershell
+.\scripts\setup\Grant-AdminConsent.ps1 `
+  -TenantId "HEALTHTECH_TENANT_ID" `
+  -ApiClientId "31f76844-b2cb-47b1-aede-f5b2b6dc59c8" `
+  -PortalClientId "54f3419d-0d69-4b06-939a-c1a260596556"
+```
+
+This creates the service principals and grants consent for both the API and Portal apps in HealthTech's tenant.
+
+## 5. Downstream API Consent
+
+The portal calls the CHO Authorization Service API (`31f76844-b2cb-47b1-aede-f5b2b6dc59c8`) with these scopes:
+- `Authorization.ReadWrite`
+- `Attachments.ReadWrite`
+- `Eligibility.Query`
+- `Claims.Submit`
+
+Justin must also consent to the **API** app registration. The `Grant-AdminConsent.ps1` script (Option C) handles both. If using the URL method, send a second URL:
+
+```
+https://login.microsoftonline.com/HEALTHTECH_TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+```
+
+## 6. Verify End-to-End
+
+- [ ] Justin logs in at `portal.cloudhealthoffice.com`
+- [ ] Index.razor extracts `tid` claim → matches `azureTenantId` in Tenants collection
+- [ ] User is routed to `/dashboard` (not `/signup` or `/demo`)
+- [ ] Downstream API calls succeed (no AADSTS650052 errors)
+
+## Summary: Do I Need to Change the App Registration?
+
+| Question | Answer |
+|----------|--------|
+| Add redirect URIs? | **No** — existing URIs work for all tenants |
+| Add API permissions? | **No** — permissions are on the app reg, not per-tenant |
+| Change TenantId from "common"? | **No** — "common" is correct for multi-tenant |
+| Modify the portal code? | **No** — Index.razor already handles the lookup |
+| Justin needs to do something? | **Yes** — grant admin consent (Option A, B, or C above) |

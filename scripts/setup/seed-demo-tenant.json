@@ -1,4 +1,5 @@
 {
+  "_comment": "Demo tenant for sandbox access. For production tenants (e.g. HealthTech Solutions), use seed-healthtech-tenant.js and set azureTenantId to the real Azure AD tenant GUID.",
   "id": "demo-tenant-001",
   "tenantId": "demo-tenant-001",
   "azureTenantId": "demo",
