@@ -1,98 +1,351 @@
 @page "/dashboard"
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
+@inject IMetricsService MetricsService
+@inject IClaimsService ClaimsService
+@inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
+@inject ITenantContextService TenantContextService
 
 <PageTitle>Dashboard - Cloud Health Office</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="mr-2" />
-        Dashboard
-    </MudText>
 
-    <MudGrid Class="mt-4">
-        <!-- Quick Actions -->
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Claims</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Process 837/835 claims</MudText>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Href="/claims" StartIcon="@Icons.Material.Filled.Description" Color="Color.Primary">View Claims</MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+    @* ── Top Bar: Welcome + Tenant ── *@
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">
+                Welcome back@(tenantContext != null ? $", {tenantContext.TenantName}" : "")
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @DateTime.Now.ToString("dddd, MMMM d, yyyy")
+            </MudText>
+        </MudStack>
+        @if (tenantContext != null)
+        {
+            <MudChip Color="@GetTierColor(tenantContext.SubscriptionTier)"
+                      Size="Size.Small"
+                      Variant="Variant.Outlined">
+                @tenantContext.SubscriptionTier
+                @if (tenantContext.IsDemo)
+                {
+                    <span>&nbsp;(Demo)</span>
+                }
+            </MudChip>
+        }
+    </MudStack>
 
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Eligibility</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">270/271 verification</MudText>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Href="/eligibility" StartIcon="@Icons.Material.Filled.VerifiedUser" Color="Color.Primary">Check Eligibility</MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
 
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Members</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Enrollment & demographics</MudText>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Href="/members" StartIcon="@Icons.Material.Filled.People" Color="Color.Primary">View Members</MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
+    @if (_metricsError)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined">
+            Connecting to services...
+        </MudAlert>
+    }
 
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard>
-                <MudCardContent>
-                    <MudText Typo="Typo.h6">Workflows</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">View automation status</MudText>
-                </MudCardContent>
-                <MudCardActions>
-                    <MudButton Href="/workflows" StartIcon="@Icons.Material.Filled.AccountTree" Color="Color.Primary">View Workflows</MudButton>
-                </MudCardActions>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
+    @if (metrics != null)
+    {
+        @* ── KPI Row ── *@
+        <MudGrid Class="mb-4">
+            @* Total Claims *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Total Claims</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" />
+                        </MudStack>
+                        <MudText Typo="Typo.h4" Class="mt-2">@metrics.TotalClaims.ToString("N0")</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                            @if (metrics.ClaimsTrend >= 0)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Color="Color.Success">+@((metrics.ClaimsTrend * 100).ToString("F1"))%</MudText>
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Color="Color.Error" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Color="Color.Error">@((metrics.ClaimsTrend * 100).ToString("F1"))%</MudText>
+                            }
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
 
-    <!-- Test Section - Remove after testing -->
-    <MudAlert Severity="Severity.Info" Class="mt-6">
-        <MudText Typo="Typo.h6">Testing Stripe Integration</MudText>
-        <MudText Typo="Typo.body2" Class="mt-2">
-            To test the new self-service signup with Stripe payment integration:
-        </MudText>
-        <MudButton Href="/signup" StartIcon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Variant="Variant.Filled" Class="mt-3">
-            Test Signup Flow
-        </MudButton>
-    </MudAlert>
+            @* Approval Rate *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Approval Rate</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="@GetApprovalRateColor()" />
+                        </MudStack>
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="@GetApprovalRateColor()">
+                            @((metrics.ApprovalRate * 100).ToString("F1"))%
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                            @metrics.ApprovedClaims approved of @metrics.TotalClaims
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
 
-    <!-- Recent Activity -->
-    <MudPaper Class="mt-6 pa-4">
-        <MudText Typo="Typo.h5" GutterBottom="true">Recent Activity</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">
-            No recent activity
-        </MudText>
-    </MudPaper>
+            @* Average Processing Time *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Processing Time</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Info" />
+                        </MudStack>
+                        <MudText Typo="Typo.h4" Class="mt-2">@metrics.AvgProcessingTimeMs ms</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                            Per claim average
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Total Plan Paid *@
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Total Plan Paid</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Success" />
+                        </MudStack>
+                        <MudText Typo="Typo.h4" Class="mt-2">@metrics.TotalPayerAmount.ToString("C0")</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                            All-time payer amount
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        @* ── Claims by Status Chart + Recent Authorizations ── *@
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="5">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" GutterBottom="true">Claims by Status</MudText>
+                        <MudChart ChartType="ChartType.Donut"
+                                  InputData="@_chartData"
+                                  InputLabels="@_chartLabels"
+                                  Width="250px"
+                                  Height="250px"
+                                  ChartOptions="@_chartOptions" />
+                        <MudStack Row="true" Justify="Justify.Center" Spacing="4" Class="mt-3">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Success" Size="Size.Small" />
+                                <MudText Typo="Typo.caption">Approved (@metrics.ApprovedClaims)</MudText>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Error" Size="Size.Small" />
+                                <MudText Typo="Typo.caption">Denied (@metrics.DeniedClaims)</MudText>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Warning" Size="Size.Small" />
+                                <MudText Typo="Typo.caption">Pending (@metrics.PendingClaims)</MudText>
+                            </MudStack>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="7">
+                <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" GutterBottom="true">Recent Authorizations</MudText>
+                        @if (recentAuthorizations == null)
+                        {
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        }
+                        else if (recentAuthorizations.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No recent authorizations</MudText>
+                        }
+                        else
+                        {
+                            <MudTable Items="@recentAuthorizations" Dense="true" Hover="true" Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>Auth ID</MudTh>
+                                    <MudTh>Member</MudTh>
+                                    <MudTh>Service</MudTh>
+                                    <MudTh>Status</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Auth ID">
+                                        <MudText Typo="Typo.body2">@context.AuthorizationId</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                                    <MudTd DataLabel="Service">@context.ServiceType</MudTd>
+                                    <MudTd DataLabel="Status">
+                                        <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                            @context.Status
+                                        </MudChip>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+
+    @* ── Recent Claims Table ── *@
+    <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);" Class="mb-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" GutterBottom="true">Recent Claims</MudText>
+            @if (recentClaims == null)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (recentClaims.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No recent claims</MudText>
+            }
+            else
+            {
+                <MudTable Items="@recentClaims" Dense="true" Hover="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Claim ID</MudTh>
+                        <MudTh>Member</MudTh>
+                        <MudTh>Provider</MudTh>
+                        <MudTh Style="text-align:right">Amount</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh Style="text-align:right">Processing Time</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Claim ID">
+                            <MudLink Href="@($"/claims/{context.ClaimId}")">@context.ClaimId</MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                        <MudTd DataLabel="Provider">@context.ProviderName</MudTd>
+                        <MudTd DataLabel="Amount" Style="text-align:right">@context.TotalChargeAmount.ToString("C")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Processing Time" Style="text-align:right">@context.ProcessingTimeMs ms</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudCardContent>
+    </MudCard>
+
+    @* ── Quick Actions ── *@
+    <MudCard Elevation="0" Style="border: 1px solid rgba(0,255,255,0.15);" Class="mb-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" GutterBottom="true">Quick Actions</MudText>
+            <MudStack Row="true" Spacing="3" Class="mt-2">
+                <MudButton Href="/claims/submit"
+                           Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.NoteAdd">
+                    Submit Claim
+                </MudButton>
+                <MudButton Href="/eligibility"
+                           Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.VerifiedUser">
+                    Check Eligibility
+                </MudButton>
+                <MudButton Href="/authorizations"
+                           Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Assignment">
+                    Submit Prior Auth
+                </MudButton>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+
 </MudContainer>
 
 @code {
-    private string? userName;
+    private DashboardMetrics? metrics;
+    private List<ClaimSummary>? recentClaims;
+    private List<AuthorizationSummary>? recentAuthorizations;
+    private TenantContext? tenantContext;
+    private bool _loading = true;
+    private bool _metricsError;
+
+    private double[] _chartData = Array.Empty<double>();
+    private string[] _chartLabels = { "Approved", "Denied", "Pending" };
+    private ChartOptions _chartOptions = new()
+    {
+        ChartPalette = new[] { "#00ff88", "#ff0055", "#ffaa00" }
+    };
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        
-        if (user.Identity?.IsAuthenticated == true)
+        try
         {
-            userName = user.Identity.Name;
+            tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
         }
+        catch { }
+
+        try
+        {
+            metrics = await MetricsService.GetDashboardMetricsAsync();
+            _chartData = new double[] { metrics.ApprovedClaims, metrics.DeniedClaims, metrics.PendingClaims };
+        }
+        catch
+        {
+            _metricsError = true;
+        }
+
+        try
+        {
+            recentClaims = await ClaimsService.GetRecentClaimsAsync(10);
+        }
+        catch { }
+
+        try
+        {
+            var allAuths = await AuthorizationService.GetAuthorizationsAsync();
+            recentAuthorizations = allAuths.OrderByDescending(a => a.RequestDate).Take(5).ToList();
+        }
+        catch { }
+
+        _loading = false;
     }
+
+    private Color GetApprovalRateColor()
+    {
+        if (metrics == null) return Color.Default;
+        return metrics.ApprovalRate switch
+        {
+            > 0.90 => Color.Success,
+            > 0.80 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Approved" => Color.Success,
+        "Denied" => Color.Error,
+        "Pending" => Color.Warning,
+        "Review Required" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetTierColor(string tier) => tier?.ToLowerInvariant() switch
+    {
+        "enterprise" => Color.Primary,
+        "professional" => Color.Info,
+        "starter" => Color.Success,
+        _ => Color.Default
+    };
 }
