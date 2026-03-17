@@ -114,7 +114,6 @@
                 <MudDateRangePicker @bind-DateRange="_serviceDateRange"
                                    Label="Service Date Range"
                                    Class="w-100"
-                                   ComparisonOperator="DateRangeOperator.And"
                                    Variant="Variant.Outlined">
                 </MudDateRangePicker>
             </MudItem>
@@ -349,7 +348,7 @@
         {
             <MudPaper Class="pa-4 mt-4" Elevation="0">
                 <MudPagination Count="@_searchResult.TotalPages"
-                              @bind-Selected="_currentPage"
+                              Selected="_currentPage"
                               SelectedChanged="PageChanged"
                               Disabled="_loading" />
             </MudPaper>
