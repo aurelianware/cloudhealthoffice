@@ -7,7 +7,7 @@
 ## 2. Run the MongoDB Seed Script
 
 ```bash
-mongosh "<your-mongodb-connection-string>/CloudHealthOffice" scripts/setup/seed-healthtech-tenant.js \
+mongosh "<your-mongodb-connection-string>/CloudHealthOffice" scripts/setup/seed-tenant.js \
   --eval 'var tenantId="my-org", azureTenantId="AZURE-AD-GUID", orgName="My Org", adminEmail="admin@example.com"'
 ```
 

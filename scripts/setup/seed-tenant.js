@@ -1,8 +1,8 @@
-// seed-healthtech-tenant.js
+// seed-tenant.js
 // MongoDB seed script for provisioning a new tenant.
 //
 // Usage:
-//   mongosh <connection-string> seed-healthtech-tenant.js \
+//   mongosh <connection-string> seed-tenant.js \
 //     --eval 'var tenantId="my-org", azureTenantId="AZURE-AD-GUID", orgName="My Org", adminEmail="admin@example.com"'
 //
 // All four variables are required.
