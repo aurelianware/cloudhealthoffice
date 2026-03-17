@@ -161,7 +161,7 @@
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">Operating Mode Configuration</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
-                    Controls how CHO engines interact with your existing core admin system
+                    Controls how Cloud Health Office engines interact with your existing core admin system
                 </MudText>
 
                 @if (isLoadingOperatingMode)
@@ -173,7 +173,7 @@
                     @if (isUsingDefaults)
                     {
                         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.Info">
-                            Operating mode configuration loaded from defaults. Contact the Aurelianware team to customize engine modes for your tenant.
+                            Operating mode configuration loaded from defaults. Contact support or your account team to customize engine modes for your tenant.
                         </MudAlert>
                     }
 
@@ -211,19 +211,22 @@
                     <MudGrid>
                         <MudItem xs="12" md="6">
                             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CompareArrows" NoIcon="false">
-                                <strong>Augment</strong> — CHO runs alongside your existing system. Both results are computed and compared, but your legacy system remains authoritative.
+                                <strong>Augment</strong> — Cloud Health Office runs alongside your existing system. Both results are computed and compared, but your legacy system remains authoritative.
                             </MudAlert>
                         </MudItem>
                         <MudItem xs="12" md="6">
                             <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CheckCircle" NoIcon="false">
-                                <strong>Replace</strong> — CHO is the authoritative system for this function. Your legacy system is no longer used for this engine.
+                                <strong>Replace</strong> — Cloud Health Office is the authoritative system for this function. Your legacy system is no longer used for this engine.
                             </MudAlert>
                         </MudItem>
                     </MudGrid>
 
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-4">
-                        Last updated: @operatingModeConfig.UpdatedAt.ToString("MMM dd, yyyy 'at' h:mm tt") UTC.
-                        Operating mode changes are managed by the Aurelianware team.
+                        @if (operatingModeConfig.UpdatedAt.HasValue)
+                        {
+                            <span>Last updated: @operatingModeConfig.UpdatedAt.Value.ToString("MMM dd, yyyy 'at' h:mm tt") UTC. </span>
+                        }
+                        Operating mode changes are managed by your account team.
                     </MudText>
                 }
             </MudPaper>
@@ -333,25 +336,17 @@
                 operatingModeConfig = new OperatingModeConfiguration
                 {
                     TenantId = "unknown",
-                    Engines = new Dictionary<string, string>
-                    {
-                        { "benefitCalculation", "replace" },
-                        { "rateResolution", "replace" },
-                        { "ncciEdits", "replace" },
-                        { "eligibilityVerification", "replace" },
-                        { "claimsAdjudication", "replace" }
-                    },
-                    UpdatedAt = DateTime.UtcNow
+                    Engines = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase),
+                    UpdatedAt = null
                 };
                 return;
             }
 
             operatingModeConfig = await OperatingModeService.GetOperatingModeAsync(tenantId);
 
-            // The service returns defaults on failure; detect this by checking if the
-            // returned tenantId matches what we sent (defaults always set it).
-            // Since the default config is fine, just flag it for the info banner.
-            isUsingDefaults = false;
+            // The service sets UpdatedAt = null when returning defaults (service unreachable).
+            // A real API response will always have a non-null UpdatedAt.
+            isUsingDefaults = !operatingModeConfig.UpdatedAt.HasValue;
         }
         catch (Exception ex)
         {
@@ -381,22 +376,22 @@
         {
             "benefitCalculation" => isAugment
                 ? "Benefit calculations run in parallel with your legacy system for comparison."
-                : "CHO is the sole engine computing member benefit amounts.",
+                : "Cloud Health Office is the sole engine computing member benefit amounts.",
             "rateResolution" => isAugment
-                ? "Rate lookups are performed by both CHO and your existing system; legacy rates are authoritative."
-                : "CHO resolves all provider and procedure rates directly.",
+                ? "Rate lookups are performed by both systems; legacy rates are authoritative."
+                : "Cloud Health Office resolves all provider and procedure rates directly.",
             "ncciEdits" => isAugment
                 ? "NCCI compliance edits are applied by both systems; legacy edits take precedence."
-                : "CHO applies all NCCI bundling and compliance edits.",
+                : "Cloud Health Office applies all NCCI bundling and compliance edits.",
             "eligibilityVerification" => isAugment
                 ? "Eligibility checks run through both systems; your existing system is the source of truth."
-                : "CHO handles all member eligibility verification.",
+                : "Cloud Health Office handles all member eligibility verification.",
             "claimsAdjudication" => isAugment
                 ? "Claims are adjudicated by both engines; your legacy system's decisions are authoritative."
-                : "CHO is the authoritative claims adjudication engine.",
+                : "Cloud Health Office is the authoritative claims adjudication engine.",
             _ => isAugment
                 ? "Running alongside your existing system in comparison mode."
-                : "CHO is the authoritative system for this function."
+                : "Cloud Health Office is the authoritative system for this function."
         };
     }
 
