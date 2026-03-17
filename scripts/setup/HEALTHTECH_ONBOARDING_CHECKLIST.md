@@ -4,18 +4,16 @@
 
 - [ ] Ask the tenant admin for their Azure AD **Tenant ID** (GUID).
   - Found at: **Azure Portal → Azure Active Directory → Overview → Tenant ID**
-- [ ] Update `seed-healthtech-tenant.js`: replace `REPLACE_WITH_HTR_AZURE_AD_TENANT_ID` with the real GUID.
-- [ ] Confirm the admin's email address and update `adminEmails` in the seed script if needed.
-
 ## 2. Run the MongoDB Seed Script
 
 ```bash
-mongosh "<your-mongodb-connection-string>/CloudHealthOffice" scripts/setup/seed-healthtech-tenant.js
+mongosh "<your-mongodb-connection-string>/CloudHealthOffice" scripts/setup/seed-healthtech-tenant.js \
+  --eval 'var tenantId="my-org", azureTenantId="AZURE-AD-GUID", orgName="My Org", adminEmail="admin@example.com"'
 ```
 
 - [ ] Verify the document was inserted:
   ```bash
-  mongosh "<connection-string>/CloudHealthOffice" --eval 'db.Tenants.findOne({tenantId:"healthtech-solutions"})'
+  mongosh "<connection-string>/CloudHealthOffice" --eval 'db.Tenants.findOne({tenantId:"my-org"})'
   ```
 
 ## 3. Azure AD — What You (CHO Admin) Need to Do
