@@ -9,11 +9,102 @@
         Manage provider network, credentials, and performance
     </MudText>
 
+    <!-- Search Form -->
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudTextField @bind-Value="_npiSearch"
+                                  Label="NPI"
+                                  Placeholder="Exact match"
+                                  Variant="Variant.Outlined"
+                                  OnKeyUp="OnSearchKeyUp" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudTextField @bind-Value="_nameSearch"
+                                  Label="Provider Name"
+                                  Placeholder="Contains..."
+                                  Variant="Variant.Outlined"
+                                  OnKeyUp="OnSearchKeyUp" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSelect @bind-Value="_selectedSpecialty"
+                               Label="Specialty"
+                               Clearable="true"
+                               T="string"
+                               AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
+                        <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
+                        <MudSelectItem Value="@("Pediatrics")">Pediatrics</MudSelectItem>
+                        <MudSelectItem Value="@("Cardiology")">Cardiology</MudSelectItem>
+                        <MudSelectItem Value="@("Orthopedic Surgery")">Orthopedic Surgery</MudSelectItem>
+                        <MudSelectItem Value="@("Radiology")">Radiology</MudSelectItem>
+                        <MudSelectItem Value="@("Dermatology")">Dermatology</MudSelectItem>
+                        <MudSelectItem Value="@("Psychiatry")">Psychiatry</MudSelectItem>
+                        <MudSelectItem Value="@("Obstetrics and Gynecology")">OB/GYN</MudSelectItem>
+                        <MudSelectItem Value="@("Emergency Medicine")">Emergency Medicine</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudSelect @bind-Value="_selectedNetworkStatus"
+                               Label="Network Status"
+                               Clearable="true"
+                               T="string"
+                               AnchorOrigin="Origin.BottomCenter">
+                        <MudSelectItem Value="@("In-Network")">In-Network</MudSelectItem>
+                        <MudSelectItem Value="@("Out-of-Network")">Out-of-Network</MudSelectItem>
+                        <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudGrid Spacing="1">
+                        <MudItem xs="7">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       FullWidth="true"
+                                       OnClick="SearchProviders"
+                                       Disabled="_loading">
+                                <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-1" />
+                                Search
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="5">
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Default"
+                                       FullWidth="true"
+                                       OnClick="ClearSearch"
+                                       Disabled="_loading">
+                                Clear
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudItem>
+            </MudGrid>
+
+            @if (_showValidationMessage)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                    Please enter at least one search criterion.
+                </MudAlert>
+            }
+        </MudCardContent>
+    </MudCard>
+
+    <!-- Add Provider button always visible -->
+    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-4">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => OpenCreateDialog())">
+            Add Provider
+        </MudButton>
+    </MudStack>
+
     @if (_loading)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
-    else
+    else if (_hasSearched)
     {
         <!-- Stats Cards -->
         <MudGrid Class="mb-4">
@@ -53,169 +144,172 @@
             </MudItem>
         </MudGrid>
 
-        <!-- Filters and Search -->
-        <MudCard Elevation="2" Class="mb-4">
-            <MudCardContent>
-                <MudGrid>
-                    <MudItem xs="12" md="4">
-                        <MudTextField @bind-Value="_searchTerm"
-                                      Label="Search providers"
-                                      Placeholder="Name, NPI, or practice name..."
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Filled.Search"
-                                      Immediate="true"
-                                      OnDebounceIntervalElapsed="LoadProvidersAsync"
-                                      DebounceInterval="300" />
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect @bind-Value="_selectedSpecialty"
-                                   Label="Specialty"
-                                   Clearable="true"
-                                   T="string"
-                                   OnClearButtonClick="@(() => { _selectedSpecialty = null; InvokeAsync(LoadProvidersAsync); })">
-                            <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
-                            <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
-                            <MudSelectItem Value="@("Pediatrics")">Pediatrics</MudSelectItem>
-                            <MudSelectItem Value="@("Cardiology")">Cardiology</MudSelectItem>
-                            <MudSelectItem Value="@("Orthopedic Surgery")">Orthopedic Surgery</MudSelectItem>
-                            <MudSelectItem Value="@("Radiology")">Radiology</MudSelectItem>
-                            <MudSelectItem Value="@("Dermatology")">Dermatology</MudSelectItem>
-                            <MudSelectItem Value="@("Psychiatry")">Psychiatry</MudSelectItem>
-                            <MudSelectItem Value="@("Obstetrics and Gynecology")">OB/GYN</MudSelectItem>
-                            <MudSelectItem Value="@("Emergency Medicine")">Emergency Medicine</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="3">
-                        <MudSelect @bind-Value="_selectedNetworkStatus"
-                                   Label="Network Status"
-                                   Clearable="true"
-                                   T="string"
-                                   OnClearButtonClick="@(() => { _selectedNetworkStatus = null; InvokeAsync(LoadProvidersAsync); })">
-                            <MudSelectItem Value="@("In-Network")">In-Network</MudSelectItem>
-                            <MudSelectItem Value="@("Out-of-Network")">Out-of-Network</MudSelectItem>
-                            <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
-                        </MudSelect>
-                    </MudItem>
-                    <MudItem xs="12" md="2">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Add"
-                                   FullWidth="true"
-                                   OnClick="@(() => OpenCreateDialog())">
-                            Add Provider
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-            </MudCardContent>
-        </MudCard>
+        @if (_providers.Any())
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                Showing @_providers.Count provider(s)
+            </MudText>
 
-        <!-- Providers Table -->
-        <MudCard Elevation="2">
-            <MudCardContent>
-                <MudTable Items="@_filteredProviders"
-                          Hover="true"
-                          Striped="true"
-                          Dense="true">
-                    <HeaderContent>
-                        <MudTh>NPI</MudTh>
-                        <MudTh>Provider Name</MudTh>
-                        <MudTh>Practice Type</MudTh>
-                        <MudTh>Specialty</MudTh>
-                        <MudTh>Practice Name</MudTh>
-                        <MudTh>Location</MudTh>
-                        <MudTh>Network Status</MudTh>
-                        <MudTh>Credentials</MudTh>
-                        <MudTh>Networks</MudTh>
-                        <MudTh>Last Claim</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="NPI">@context.NPI</MudTd>
-                        <MudTd DataLabel="Provider Name">
-                            <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Practice Type">
-                            <MudChip Size="Size.Small"
-                                     Color="@(context.PracticeType == "Individual" ? Color.Info : Color.Secondary)">
-                                @context.PracticeType
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Specialty">@context.Specialty</MudTd>
-                        <MudTd DataLabel="Practice Name">@context.PracticeName</MudTd>
-                        <MudTd DataLabel="Location">@context.City, @context.State</MudTd>
-                        <MudTd DataLabel="Network Status">
-                            <MudChip Size="Size.Small"
-                                     Color="@GetNetworkStatusColor(context.NetworkStatus)">
-                                @context.NetworkStatus
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Credentials">
-                            <MudChip Size="Size.Small"
-                                     Color="@GetCredentialStatusColor(context.CredentialingStatus)">
-                                @context.CredentialingStatus
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Networks">
-                            <MudChip Size="Size.Small" Color="Color.Default">@context.NetworkCount</MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Last Claim">
-                            @if (context.LastClaimDate.HasValue)
-                            {
-                                <MudText Typo="Typo.caption">@context.LastClaimDate.Value.ToString("MMM d, yyyy")</MudText>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
-                                           Size="Size.Small"
-                                           Color="Color.Primary"
-                                           OnClick="@(() => OpenDetailsDialog(context.ProviderId))" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Size="Size.Small"
-                                           Color="Color.Secondary"
-                                           OnClick="@(() => OpenEditDialog(context.ProviderId))" />
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            </MudCardContent>
-        </MudCard>
+            <!-- Providers Table -->
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudTable Items="@_providers"
+                              Hover="true"
+                              Striped="true"
+                              Dense="true">
+                        <HeaderContent>
+                            <MudTh>NPI</MudTh>
+                            <MudTh>Provider Name</MudTh>
+                            <MudTh>Practice Type</MudTh>
+                            <MudTh>Specialty</MudTh>
+                            <MudTh>Practice Name</MudTh>
+                            <MudTh>Location</MudTh>
+                            <MudTh>Network Status</MudTh>
+                            <MudTh>Credentials</MudTh>
+                            <MudTh>Networks</MudTh>
+                            <MudTh>Last Claim</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="NPI">@context.NPI</MudTd>
+                            <MudTd DataLabel="Provider Name">
+                                <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Practice Type">
+                                <MudChip Size="Size.Small"
+                                         Color="@(context.PracticeType == "Individual" ? Color.Info : Color.Secondary)">
+                                    @context.PracticeType
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Specialty">@context.Specialty</MudTd>
+                            <MudTd DataLabel="Practice Name">@context.PracticeName</MudTd>
+                            <MudTd DataLabel="Location">@context.City, @context.State</MudTd>
+                            <MudTd DataLabel="Network Status">
+                                <MudChip Size="Size.Small"
+                                         Color="@GetNetworkStatusColor(context.NetworkStatus)">
+                                    @context.NetworkStatus
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Credentials">
+                                <MudChip Size="Size.Small"
+                                         Color="@GetCredentialStatusColor(context.CredentialingStatus)">
+                                    @context.CredentialingStatus
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Networks">
+                                <MudChip Size="Size.Small" Color="Color.Default">@context.NetworkCount</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Last Claim">
+                                @if (context.LastClaimDate.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption">@context.LastClaimDate.Value.ToString("MMM d, yyyy")</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                               Size="Size.Small"
+                                               Color="Color.Primary"
+                                               OnClick="@(() => OpenDetailsDialog(context.ProviderId))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Color="Color.Secondary"
+                                               OnClick="@(() => OpenEditDialog(context.ProviderId))" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        }
+        else
+        {
+            <MudPaper Class="pa-8 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No providers found</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your search criteria</MudText>
+            </MudPaper>
+        }
+    }
+    else
+    {
+        <MudPaper Class="pa-8 text-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a provider to view details</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Enter an NPI or provider name to begin</MudText>
+        </MudPaper>
     }
 </MudContainer>
 
-<ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="LoadProvidersAsync" />
-<CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="LoadProvidersAsync" />
+<ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="SearchProviders" />
+<CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="SearchProviders" />
 
 @code {
-    private bool _loading = true;
+    private bool _loading = false;
+    private bool _hasSearched = false;
+    private bool _showValidationMessage = false;
     private List<ProviderListItem> _providers = new();
-    private IEnumerable<ProviderListItem> _filteredProviders => FilterProviders();
 
-    private string? _searchTerm;
+    private string? _npiSearch;
+    private string? _nameSearch;
     private string? _selectedSpecialty;
     private string? _selectedNetworkStatus;
 
     private ProviderDetailsDialog? _detailsDialog;
     private CreateEditProviderDialog? _createEditDialog;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadProvidersAsync();
-    }
+    private bool HasCriteria =>
+        !string.IsNullOrWhiteSpace(_npiSearch) ||
+        !string.IsNullOrWhiteSpace(_nameSearch);
 
-    private async Task LoadProvidersAsync()
+    private async Task SearchProviders()
     {
+        if (!HasCriteria)
+        {
+            _showValidationMessage = true;
+            return;
+        }
+
+        _showValidationMessage = false;
         _loading = true;
-        _providers = await ProviderService.SearchProvidersAsync(_selectedSpecialty, _selectedNetworkStatus, _searchTerm);
-        _loading = false;
         StateHasChanged();
+
+        try
+        {
+            // Pass NPI as search term if filled, otherwise name
+            var searchTerm = !string.IsNullOrWhiteSpace(_npiSearch) ? _npiSearch : _nameSearch;
+            _providers = await ProviderService.SearchProvidersAsync(_selectedSpecialty, _selectedNetworkStatus, searchTerm);
+            _hasSearched = true;
+        }
+        catch
+        {
+            _providers = new();
+            _hasSearched = true;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
-    private IEnumerable<ProviderListItem> FilterProviders()
+    private void ClearSearch()
     {
-        return _providers;
+        _npiSearch = null;
+        _nameSearch = null;
+        _selectedSpecialty = null;
+        _selectedNetworkStatus = null;
+        _providers = new();
+        _hasSearched = false;
+        _showValidationMessage = false;
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SearchProviders();
     }
 
     private async Task OpenDetailsDialog(string providerId)
