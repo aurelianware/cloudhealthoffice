@@ -1,20 +1,40 @@
-// seed-healthtech-demo-data.js
-// MongoDB seed script that populates realistic healthcare demo data for the
-// healthtech-solutions tenant in the CloudHealthOffice database.
+// seed-demo-data.js
+// MongoDB seed script that populates realistic healthcare demo data for a
+// given tenant in the CloudHealthOffice database.
 //
-// WARNING: This script REPLACES any existing data for the healthtech-solutions
-// tenant in the seeded collections. Back up first if you need to preserve data.
+// WARNING: This script REPLACES any existing data for the specified tenant
+// in the seeded collections. Back up first if you need to preserve data.
 //
 // Usage:
-//   mongosh < scripts/setup/seed-healthtech-demo-data.js
-//   mongosh <connection-string> scripts/setup/seed-healthtech-demo-data.js
+//   mongosh <connection-string> scripts/setup/seed-demo-data.js \
+//     --eval 'var tenantId="my-tenant", groupNumber="GRP-001-2026", sponsor1="Acme Employees Association", sponsor2="Regional Health Cooperative"'
 //
-// No --eval parameters required — all data is self-contained.
+// Required --eval variables:
+//   tenantId   — tenant identifier written to every document
+//   groupNumber — primary group number for the main sponsor
+//
+// Optional --eval variables:
+//   sponsor1   — name for the large-group sponsor  (default: "Metro Employees Association")
+//   sponsor2   — name for the small-group sponsor  (default: "Regional Health Cooperative")
+
+// Validate required parameters
+if (typeof tenantId === "undefined" || typeof groupNumber === "undefined") {
+  print("ERROR: Missing required parameters.");
+  print("");
+  print("Usage:");
+  print('  mongosh <connection-string> seed-demo-data.js \\');
+  print('    --eval \'var tenantId="my-tenant", groupNumber="GRP-001-2026"\'');
+  print("");
+  print("Optional: sponsor1, sponsor2 (display names for the two sponsor orgs)");
+  quit(1);
+}
+
+const TENANT_ID = tenantId;
+const GROUP_NUMBER = groupNumber;
+const SPONSOR1_NAME = (typeof sponsor1 !== "undefined") ? sponsor1 : "Metro Employees Association";
+const SPONSOR2_NAME = (typeof sponsor2 !== "undefined") ? sponsor2 : "Regional Health Cooperative";
 
 const choDb = db.getSiblingDB("CloudHealthOffice");
-
-const TENANT_ID = "healthtech-solutions";
-const GROUP_NUMBER = "GRP-CHO-2026";
 const now = new Date();
 
 // ---------------------------------------------------------------------------
@@ -221,7 +241,7 @@ const sponsors = [
     _id: makeId("spon", 1),
     tenantId: TENANT_ID,
     groupNumber: GROUP_NUMBER,
-    employerName: "Texas Municipal Employees Association",
+    employerName: SPONSOR1_NAME,
     taxId: "74-3218956",
     address: "200 Congress Ave, Suite 400",
     city: "Austin",
@@ -229,7 +249,7 @@ const sponsors = [
     zipCode: "78701",
     contactName: "Patricia Garza",
     contactPhone: "5122345678",
-    contactEmail: "pgarza@txmea.example.com",
+    contactEmail: "pgarza@sponsor1.example.com",
     effectiveDate: new Date("2025-01-01"),
     terminationDate: null,
     status: "Active",
@@ -238,7 +258,7 @@ const sponsors = [
       premiumAmount: 487500.00,
       frequency: "Monthly",
       billingDay: 1,
-      billingAccountNumber: "TXMEA-2026-001",
+      billingAccountNumber: GROUP_NUMBER + "-BA-001",
       paymentMethod: "ACH",
       gracePeriodDays: 30
     },
@@ -253,8 +273,8 @@ const sponsors = [
   {
     _id: makeId("spon", 2),
     tenantId: TENANT_ID,
-    groupNumber: "GRP-CHO-SRH",
-    employerName: "Southwest Regional Health Cooperative",
+    groupNumber: GROUP_NUMBER + "-SG",
+    employerName: SPONSOR2_NAME,
     taxId: "74-6543210",
     address: "500 Main Plaza",
     city: "San Antonio",
@@ -262,7 +282,7 @@ const sponsors = [
     zipCode: "78205",
     contactName: "Robert Tran",
     contactPhone: "2108765432",
-    contactEmail: "rtran@srhcoop.example.com",
+    contactEmail: "rtran@sponsor2.example.com",
     effectiveDate: new Date("2025-07-01"),
     terminationDate: null,
     status: "Active",
@@ -271,7 +291,7 @@ const sponsors = [
       premiumAmount: 24000.00,
       frequency: "Monthly",
       billingDay: 15,
-      billingAccountNumber: "SRHC-2026-001",
+      billingAccountNumber: GROUP_NUMBER + "-SG-BA-001",
       paymentMethod: "ACH",
       gracePeriodDays: 30
     },
@@ -696,7 +716,7 @@ const members = memberData.map(function (m, i) {
     memberId: memberId,
     subscriberId: subscriberId,
     ssn: "***-**-" + String(1000 + idx),
-    groupNumber: (i < 8) ? GROUP_NUMBER : "GRP-CHO-SRH",
+    groupNumber: (i < 8) ? GROUP_NUMBER : (GROUP_NUMBER + "-SG"),
     isSubscriber: true,
     subscriberMemberId: null,
     relationshipCode: "18",
