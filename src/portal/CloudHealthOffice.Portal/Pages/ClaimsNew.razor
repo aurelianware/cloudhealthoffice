@@ -42,7 +42,7 @@
                                ToStringFunc="@(m => m == null ? null : $"{m.FirstName} {m.LastName} ({m.MemberId})")"
                                Variant="Variant.Outlined"
                                ResetValueOnEmptyText="true"
-                               OffsetY="true"
+                               AnchorOrigin="Origin.BottomCenter"
                                MaxItems="10">
                     <ItemTemplate>
                         <div>
@@ -61,7 +61,7 @@
                                ToStringFunc="@(p => p == null ? null : $"{p.Name} ({p.NPI})")"
                                Variant="Variant.Outlined"
                                ResetValueOnEmptyText="true"
-                               OffsetY="true"
+                               AnchorOrigin="Origin.BottomCenter"
                                MaxItems="10">
                     <ItemTemplate>
                         <div>
