@@ -1,0 +1,17 @@
+{
+  "id": "aurelianware",
+  "tenantId": "aurelianware",
+  "azureTenantId": "32177734-051b-4fdc-9568-cc35530191b1",
+  "organizationName": "Aurelianware",
+  "subscriptionStatus": "Active",
+  "tier": "enterprise",
+  "isDemo": false,
+  "stripeCustomerId": null,
+  "stripeSubscriptionId": null,
+  "trialEndsAt": null,
+  "createdAt": "2026-03-17T00:00:00Z",
+  "updatedAt": "2026-03-17T00:00:00Z",
+  "adminEmails": [
+    "mark@cloudhealthoffice.com"
+  ]
+}
