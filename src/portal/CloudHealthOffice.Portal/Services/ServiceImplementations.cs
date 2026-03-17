@@ -353,10 +353,12 @@ public class ClaimsService : IClaimsService
             });
         }
 
+        var claimNum = int.Parse(claimId.Replace("CLM-2026-", ""));
+
         return new ClaimDetails
         {
             ClaimId = claimId,
-            ClaimNumber = $"CLM{int.Parse(claimId.Replace("CLM-2026-", ")):D8}",
+            ClaimNumber = $"CLM{claimNum:D8}",
             MemberId = "MBR-2024-001",
             MemberName = "Sarah Johnson",
             SubscriberId = "MBR-2024-001",

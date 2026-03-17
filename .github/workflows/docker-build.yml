@@ -63,6 +63,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Azure Login (OIDC)
+        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -70,6 +71,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
+        if: github.event_name != 'pull_request'
         run: az acr login --name choacrhy6h2vdulfru6
 
       - name: Extract metadata
@@ -109,6 +111,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Azure Login (OIDC)
+        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -116,6 +119,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
+        if: github.event_name != 'pull_request'
         run: az acr login --name choacrhy6h2vdulfru6
 
       - name: Extract metadata
@@ -156,6 +160,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Azure Login (OIDC)
+        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -163,6 +168,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
+        if: github.event_name != 'pull_request'
         run: az acr login --name choacrhy6h2vdulfru6
 
       - name: Extract metadata
@@ -337,6 +343,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Azure Login (OIDC)
+        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -344,6 +351,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
+        if: github.event_name != 'pull_request'
         run: az acr login --name choacrhy6h2vdulfru6
 
       - name: Extract metadata
