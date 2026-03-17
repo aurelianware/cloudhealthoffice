@@ -31,11 +31,15 @@ The tenant admin needs **Azure AD admin consent** the first time a user from the
 
 ### Option A: Admin Consent URL (Recommended — Proactive)
 
-Send the tenant admin this URL (replace `TENANT_ID` with their actual tenant ID):
+Send the tenant admin these URLs (replace `TENANT_ID` with their actual tenant ID).
+
+**Portal consent:**
 
 ```
-https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=54f3419d-0d69-4b06-939a-c1a260596556
+https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=54f3419d-0d69-4b06-939a-c1a260596556&redirect_uri=https://portal.cloudhealthoffice.com/signin-oidc
 ```
+
+> **Note:** The `redirect_uri` parameter is required. Without it, Azure AD redirects to the app's default homepage after consent, which returns a 404.
 
 The admin (who must be a **Global Admin**, **Cloud Application Admin**, or **Application Admin**) visits this URL:
 1. Azure AD shows the permissions the CHO Portal requests
@@ -72,7 +76,7 @@ The portal calls the CHO Authorization Service API (`31f76844-b2cb-47b1-aede-f5b
 The tenant admin must also consent to the **API** app registration. The `Grant-AdminConsent.ps1` script (Option C) handles both. If using the URL method, send a second URL:
 
 ```
-https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8&redirect_uri=https://portal.cloudhealthoffice.com/signin-oidc
 ```
 
 ## 6. Verify End-to-End
