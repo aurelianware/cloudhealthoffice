@@ -9,11 +9,17 @@ using OpenTelemetry.Trace;
 namespace CloudHealthOffice.Infrastructure.Observability;
 
 /// <summary>
-/// One-call extension to wire OpenTelemetry tracing + metrics into any CHO service.
+/// Extensions to wire OpenTelemetry tracing + metrics into any CHO service.
+/// Requires a two-step setup in Program.cs:
 ///
-/// Usage in Program.cs:
 /// <code>
+///   // 1. Register services
 ///   builder.Services.AddChoObservability(builder.Configuration);
+///
+///   var app = builder.Build();
+///
+///   // 2. Map Prometheus /metrics endpoint
+///   app.UseChoObservability();
 /// </code>
 ///
 /// Configuration (appsettings.json / env vars):
