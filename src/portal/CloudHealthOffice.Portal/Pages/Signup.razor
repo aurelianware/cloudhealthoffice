@@ -129,10 +129,16 @@
                 <div class="form-section">
                     <h2>Payment Information</h2>
                     <p class="payment-note">💳 Secure payment powered by Stripe. Your card will be charged after the 14-day trial.</p>
-                    
+
                     <div class="form-group">
                         <label for="card-element">Credit Card *</label>
-                        <div id="card-element" class="stripe-element">
+                        @if (!string.IsNullOrEmpty(_stripeInitError))
+                        {
+                            <div class="alert alert-warning mt-2">
+                                <strong>Payment system unavailable:</strong> @_stripeInitError
+                            </div>
+                        }
+                        <div id="card-element" class="stripe-element" style="@(!string.IsNullOrEmpty(_stripeInitError) ? "display:none" : "")">
                             <!-- Stripe Element will be inserted here -->
                         </div>
                         <div id="card-errors" class="payment-error" role="alert"></div>
@@ -161,7 +167,7 @@
                     
                     <div class="alert alert-info mt-3">
                         <strong>14-Day Free Trial</strong><br/>
-                        Start using the platform immediately. Your card won't be charged until February 23, 2026.
+                        Start using the platform immediately. Your card won't be charged until @DateTime.Now.AddDays(14).ToString("MMMM d, yyyy").
                     </div>
                 </div>
 
@@ -170,7 +176,7 @@
                     <div class="alert alert-danger">@errorMessage</div>
                 }
 
-                <button type="submit" class="btn btn-primary btn-lg" disabled="@isSubmitting">
+                <button type="submit" class="btn btn-primary btn-lg" disabled="@(isSubmitting || !string.IsNullOrEmpty(_stripeInitError))">
                     @if (isSubmitting)
                     {
                         <span>Creating account...</span>
@@ -228,6 +234,8 @@
     private bool enableAttachments = false;
     private bool enableEnrollment = false;
 
+    private string? _stripeInitError;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -240,13 +248,32 @@
     {
         try
         {
-            var stripePublishableKey = Configuration["Stripe:PublishableKey"] ?? "pk_test_placeholder";
-            await JSRuntime.InvokeVoidAsync("StripeHandler.initialize", stripePublishableKey);
-            Logger.LogInformation("Stripe initialized successfully");
+            var stripePublishableKey = Configuration["Stripe:PublishableKey"];
+            if (string.IsNullOrEmpty(stripePublishableKey))
+            {
+                _stripeInitError = "Payment system is not configured. Please contact support@cloudhealthoffice.com.";
+                Logger.LogError("Stripe:PublishableKey is not configured");
+                StateHasChanged();
+                return;
+            }
+
+            var initError = await JSRuntime.InvokeAsync<string?>("StripeHandler.initialize", stripePublishableKey);
+            if (initError != null)
+            {
+                _stripeInitError = initError;
+                Logger.LogError("Stripe initialization failed: {Error}", initError);
+                StateHasChanged();
+            }
+            else
+            {
+                Logger.LogInformation("Stripe initialized successfully");
+            }
         }
         catch (Exception ex)
         {
+            _stripeInitError = "Failed to load payment form. Please refresh the page and try again.";
             Logger.LogError(ex, "Failed to initialize Stripe");
+            StateHasChanged();
         }
     }
 
