@@ -2961,29 +2961,21 @@ public class TenantService : ITenantService
 
     public async Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId)
     {
-        try
-        {
-            _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
+        _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
 
-            if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
-                return null;
-
-            var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-            var tenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
-
-            if (tenant != null)
-                _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})",
-                    azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
-            else
-                _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
-
-            return tenant;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error querying MongoDB for tenant {TenantId}", azureTenantId);
+        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
             return null;
-        }
+
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var tenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
+
+        if (tenant != null)
+            _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})",
+                azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
+        else
+            _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
+
+        return tenant;
     }
 
     public async Task<TenantSubscription?> GetDemoTenantAsync()
