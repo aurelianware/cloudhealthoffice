@@ -2,7 +2,28 @@
 
 <PageTitle>Submit Claim - Cloud Health Office</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Submit Claim</MudText>
-<MudText Typo="Typo.body1" Color="Color.Secondary">
-    Claim submission UI is being finalized.
-</MudText>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.NoteAdd" Class="mr-2" />
+        Submit Claim
+    </MudText>
+
+    <MudCard Elevation="0" Class="mt-4">
+        <MudCardContent Class="d-flex flex-column align-center pa-8">
+            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+            <MudText Typo="Typo.h6" GutterBottom="true">Claim Submission</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+                The claim submission portal is being finalized and will be available shortly.
+                In the meantime, claims can be submitted via the X12 837 EDI interface or FHIR API.
+            </MudText>
+            <MudStack Row="true" Spacing="3" Class="mt-4">
+                <MudButton Href="/apis" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Api">
+                    View API Documentation
+                </MudButton>
+                <MudButton Href="/docs" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.MenuBook">
+                    EDI Integration Guide
+                </MudButton>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>

@@ -1,7 +1,7 @@
 @page "/settings"
 @inject HttpClient Http
 @inject IConfiguration Configuration
-@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 
 <PageTitle>Settings - Cloud Health Office</PageTitle>
 
@@ -128,29 +128,29 @@
         <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Business">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">Tenant Information</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Organization and contact details (coming soon)
-                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.AdminPanelSettings">
+                    Configuration managed by your administrator. Contact support for changes to your organization details.
+                </MudAlert>
             </MudPaper>
         </MudTabPanel>
-        
+
         <!-- Users & Permissions Tab -->
         <MudTabPanel Text="Users & Permissions" Icon="@Icons.Material.Filled.People">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">User Management</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Invite users, manage roles and permissions (coming soon)
-                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.Security">
+                    User management is configured through your Azure AD tenant. Use the Azure portal to manage user access and role assignments.
+                </MudAlert>
             </MudPaper>
         </MudTabPanel>
-        
+
         <!-- Integration Tab -->
         <MudTabPanel Text="Integrations" Icon="@Icons.Material.Filled.IntegrationInstructions">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">API Keys & Integrations</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Manage API keys, webhooks, and external integrations (coming soon)
-                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.IntegrationInstructions">
+                    Contact your account manager to configure API keys, webhooks, and external integrations.
+                </MudAlert>
             </MudPaper>
         </MudTabPanel>
     </MudTabs>
@@ -222,22 +222,25 @@
         return "https://billing.stripe.com/p/login/test_123";
     }
 
-    private async Task ShowUpgradeDialog()
+    private Task ShowUpgradeDialog()
     {
         // TODO: Implement plan change dialog
-        await JSRuntime.InvokeVoidAsync("alert", "Plan change feature coming soon!");
+        Snackbar.Add("Please contact your account manager to change your plan.", Severity.Info);
+        return Task.CompletedTask;
     }
 
-    private async Task ShowCancelDialog()
+    private Task ShowCancelDialog()
     {
         // TODO: Implement cancellation dialog
-        await JSRuntime.InvokeVoidAsync("alert", "Cancellation feature coming soon!");
+        Snackbar.Add("Please contact your account manager to manage your subscription.", Severity.Info);
+        return Task.CompletedTask;
     }
 
-    private async Task UpdatePaymentMethod()
+    private Task UpdatePaymentMethod()
     {
         // TODO: Implement payment method update via Stripe Elements
-        await JSRuntime.InvokeVoidAsync("alert", "Payment method update coming soon!");
+        Snackbar.Add("Please contact your account manager to update payment details.", Severity.Info);
+        return Task.CompletedTask;
     }
 
     private class SubscriptionInfo
