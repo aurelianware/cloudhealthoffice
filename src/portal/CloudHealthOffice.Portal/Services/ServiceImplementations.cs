@@ -1862,14 +1862,14 @@ public class MetricsService : IMetricsService
         // For now, return sample data
         return new DashboardMetrics
         {
-            TotalClaims = 1247,
-            ClaimsTrend = 0.085,
-            ApprovalRate = 0.923,
-            AvgProcessingTimeMs = 387,
-            TotalPayerAmount = 2_847_392.50m,
-            ApprovedClaims = 1151,
-            DeniedClaims = 96,
-            PendingClaims = 23
+            TotalClaims = 2847,
+            ClaimsTrend = 4.2,
+            ApprovalRate = 96.2,
+            AvgProcessingTimeMs = 340,
+            TotalPayerAmount = 1_847_293.00m,
+            ApprovedClaims = 2738,
+            DeniedClaims = 57,
+            PendingClaims = 52
         };
     }
 }
