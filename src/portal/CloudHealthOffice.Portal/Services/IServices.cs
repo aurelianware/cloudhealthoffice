@@ -678,3 +678,25 @@ public class CreateSalesInquiryRequest
     public string Message { get; set; } = string.Empty;
     public string Source { get; set; } = "Contact Sales Page";
 }
+
+// Operating Mode
+public interface IOperatingModeService
+{
+    Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId);
+}
+
+public class OperatingModeConfiguration
+{
+    public static readonly Dictionary<string, string> DefaultEngines = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "benefitCalculation", "replace" },
+        { "rateResolution", "replace" },
+        { "ncciEdits", "replace" },
+        { "eligibilityVerification", "replace" },
+        { "claimsAdjudication", "replace" }
+    };
+
+    public string TenantId { get; set; } = string.Empty;
+    public Dictionary<string, string> Engines { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public DateTime? UpdatedAt { get; set; }
+}
