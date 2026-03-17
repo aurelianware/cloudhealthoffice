@@ -6,7 +6,7 @@ on:
       tenantId:
         description: "Tenant identifier written to every document"
         required: true
-        default: "demo"
+        default: "32177734-051b-4fdc-9568-cc35530191b1"
       groupNumber:
         description: "Primary group number for the main sponsor"
         required: true
