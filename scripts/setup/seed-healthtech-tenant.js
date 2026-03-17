@@ -1,10 +1,10 @@
 // seed-healthtech-tenant.js
-// MongoDB seed script for HealthTech Solutions tenant provisioning.
+// MongoDB seed script for HTR tenant provisioning.
 // Run with: mongosh <connection-string> seed-healthtech-tenant.js
 //
 // Prerequisites:
 //   - MongoDB connection string with write access to CloudHealthOffice database
-//   - Replace the azureTenantId placeholder with HealthTech's actual Azure AD tenant ID
+//   - Replace the azureTenantId placeholder with the tenant's actual Azure AD tenant ID
 //     (found in Azure Portal > Azure Active Directory > Overview > Tenant ID)
 
 const db = db.getSiblingDB("CloudHealthOffice");
@@ -14,10 +14,10 @@ const now = new Date();
 const tenant = {
   _id: "healthtech-solutions",
   tenantId: "healthtech-solutions",
-  // TODO: Replace with HealthTech Solutions' actual Azure AD tenant ID (GUID).
-  // Get it from Justin at HealthTech, or look it up in Azure Portal:
+  // TODO: Replace with HTR's actual Azure AD tenant ID (GUID).
+  // Get it from the tenant admin, or look it up in Azure Portal:
   //   Azure Active Directory > Overview > Tenant ID
-  azureTenantId: "REPLACE_WITH_HEALTHTECH_AZURE_AD_TENANT_ID",
+  azureTenantId: "REPLACE_WITH_HTR_AZURE_AD_TENANT_ID",
   organizationName: "HealthTech Solutions",
   subscriptionStatus: "Active",
   tier: "enterprise",
@@ -27,7 +27,7 @@ const tenant = {
   trialEndsAt: null,
   createdAt: now,
   updatedAt: now,
-  // TODO: Confirm Justin Cooper's email address before running in production.
+  // TODO: Confirm the admin's email address before running in production.
   adminEmails: [
     "jcooper@healthtechsolutions.com"
   ]
@@ -41,9 +41,9 @@ const result = db.Tenants.replaceOne(
 );
 
 if (result.upsertedCount === 1) {
-  print("✓ Inserted new tenant: HealthTech Solutions");
+  print("✓ Inserted new tenant: HTR");
 } else if (result.modifiedCount === 1) {
-  print("✓ Updated existing tenant: HealthTech Solutions");
+  print("✓ Updated existing tenant: HTR");
 } else {
   print("⚠ No changes made (tenant already matches)");
 }
