@@ -448,7 +448,7 @@ npm run generate -- interactive --output my-config.json --generate
 ✅ **Early access** to roadmap features (prior auth AI, provider portal)  
 ✅ **Co-developed case study**: Showcase your success story  
 ✅ **No long-term commitment**: Cancel anytime during Beta (14-day notice)  
-✅ **Free professional services**: $5,000 value (implementation assistance)
+✅ **Implementation assistance**: Onboarding support from our partner network
 
 ### What We Ask in Return
 
