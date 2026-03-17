@@ -3146,7 +3146,10 @@ public class OperatingModeService : IOperatingModeService
         {
             var result = await _httpClient.GetFromJsonAsync<OperatingModeConfiguration>(
                 $"{baseUrl}/v1/tenants/{tenantId}/operating-mode");
-            return result ?? GetDefaultConfiguration(tenantId);
+            if (result != null)
+                return NormalizeConfiguration(result, tenantId);
+
+            return GetDefaultConfiguration(tenantId);
         }
         catch (Exception ex)
         {
@@ -3155,20 +3158,27 @@ public class OperatingModeService : IOperatingModeService
         }
     }
 
+    private static OperatingModeConfiguration NormalizeConfiguration(OperatingModeConfiguration config, string tenantId)
+    {
+        // Merge API results onto defaults so missing engines get "replace" mode
+        var merged = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in config.Engines)
+        {
+            merged[kvp.Key] = kvp.Value;
+        }
+
+        config.TenantId = string.IsNullOrEmpty(config.TenantId) ? tenantId : config.TenantId;
+        config.Engines = merged;
+        return config;
+    }
+
     private static OperatingModeConfiguration GetDefaultConfiguration(string tenantId)
     {
         return new OperatingModeConfiguration
         {
             TenantId = tenantId,
-            Engines = new Dictionary<string, string>
-            {
-                { "benefitCalculation", "replace" },
-                { "rateResolution", "replace" },
-                { "ncciEdits", "replace" },
-                { "eligibilityVerification", "replace" },
-                { "claimsAdjudication", "replace" }
-            },
-            UpdatedAt = DateTime.UtcNow
+            Engines = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase),
+            UpdatedAt = null
         };
     }
 }
