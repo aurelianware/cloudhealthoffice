@@ -83,15 +83,15 @@
       ]
     },
     {
-      "title": "Adjudication Latency by Tenant",
+      "title": "Adjudication Latency by Step",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le, cho_tenant_id))",
-          "legendFormat": "{{cho_tenant_id}} p95"
+          "expr": "histogram_quantile(0.95, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le, cho_adjudication_step))",
+          "legendFormat": "{{cho_adjudication_step}} p95"
         }
       ]
     },

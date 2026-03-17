@@ -15,7 +15,7 @@ public static class ChoMetrics
 
     /// <summary>
     /// Histogram tracking end-to-end HTTP request duration (seconds).
-    /// Dimensions: http.method, http.route, http.status_code, cho.tenant_id.
+    /// Dimensions: http.method, http.route, http.status_code.
     /// </summary>
     public static readonly Histogram<double> RequestDuration =
         Meter.CreateHistogram<double>(
@@ -25,7 +25,7 @@ public static class ChoMetrics
 
     /// <summary>
     /// Histogram tracking claim adjudication latency (seconds).
-    /// Dimensions: cho.tenant_id, cho.claim_type, cho.adjudication_step.
+    /// Dimensions: cho.claim_type, cho.adjudication_step.
     /// </summary>
     public static readonly Histogram<double> ClaimProcessingLatency =
         Meter.CreateHistogram<double>(
@@ -35,7 +35,7 @@ public static class ChoMetrics
 
     /// <summary>
     /// Counter tracking EDI transactions processed.
-    /// Dimensions: cho.tenant_id, cho.edi_transaction_type (837, 835, 270, 271, etc.).
+    /// Dimensions: cho.edi_transaction_type (837, 835, 270, 271, etc.).
     /// </summary>
     public static readonly Counter<long> EdiTransactionCount =
         Meter.CreateCounter<long>(
@@ -45,7 +45,7 @@ public static class ChoMetrics
 
     /// <summary>
     /// Counter tracking adjudication outcomes.
-    /// Dimensions: cho.tenant_id, cho.outcome (approved, denied, pended).
+    /// Dimensions: cho.outcome (approved, denied, pended).
     /// </summary>
     public static readonly Counter<long> AdjudicationOutcome =
         Meter.CreateCounter<long>(

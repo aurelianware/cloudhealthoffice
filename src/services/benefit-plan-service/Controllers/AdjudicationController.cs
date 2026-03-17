@@ -94,7 +94,7 @@ public class AdjudicationController : ControllerBase
     {
         using var adjudicationSpan = ChoActivitySource.StartActivity(
             "claim.adjudication",
-            ActivityKind.Server,
+            ActivityKind.Internal,
             tenantId: TenantId,
             claimId: request.ClaimId,
             claimType: "837P",
@@ -132,7 +132,7 @@ public class AdjudicationController : ControllerBase
             adjudicationSpan?.SetTag("cho.outcome", "scrub_failure");
             adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Scrub validation failed");
 
-            RecordLatency(sw, TenantId, "837P", "scrub_failure");
+            RecordLatency(sw, "837P", "scrub_failure");
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
@@ -188,7 +188,7 @@ public class AdjudicationController : ControllerBase
             adjudicationSpan?.SetTag("cho.outcome", "ncci_failure");
             adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "NCCI/MUE edit failed");
 
-            RecordLatency(sw, TenantId, "837P", "ncci_failure");
+            RecordLatency(sw, "837P", "ncci_failure");
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
@@ -356,9 +356,8 @@ public class AdjudicationController : ControllerBase
         adjudicationSpan?.SetTag("cho.outcome", outcome);
         adjudicationSpan?.SetTag("cho.plan_payment", response.Totals.PlanPayment);
 
-        RecordLatency(sw, TenantId, "837P", outcome);
+        RecordLatency(sw, "837P", outcome);
         ChoMetrics.AdjudicationOutcome.Add(1,
-            new KeyValuePair<string, object?>("cho.tenant_id", TenantId),
             new KeyValuePair<string, object?>("cho.outcome", outcome));
 
         _logger.LogInformation(
@@ -369,12 +368,11 @@ public class AdjudicationController : ControllerBase
         return Ok(response);
     }
 
-    private static void RecordLatency(System.Diagnostics.Stopwatch sw, string tenantId, string claimType, string step)
+    private static void RecordLatency(System.Diagnostics.Stopwatch sw, string claimType, string step)
     {
         sw.Stop();
         ChoMetrics.ClaimProcessingLatency.Record(
             sw.Elapsed.TotalSeconds,
-            new KeyValuePair<string, object?>("cho.tenant_id", tenantId),
             new KeyValuePair<string, object?>("cho.claim_type", claimType),
             new KeyValuePair<string, object?>("cho.adjudication_step", step));
     }
