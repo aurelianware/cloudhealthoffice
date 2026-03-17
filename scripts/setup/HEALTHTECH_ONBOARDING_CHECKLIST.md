@@ -4,6 +4,7 @@
 
 - [ ] Ask the tenant admin for their Azure AD **Tenant ID** (GUID).
   - Found at: **Azure Portal → Azure Active Directory → Overview → Tenant ID**
+
 ## 2. Run the MongoDB Seed Script
 
 ```bash
