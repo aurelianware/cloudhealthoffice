@@ -1,0 +1,83 @@
+# Observability overlay for Cloud Health Office local development.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#
+# Service URLs:
+#   Jaeger UI:     http://localhost:16686
+#   Prometheus:    http://localhost:9090
+#   Grafana:       http://localhost:3000  (admin / admin)
+#
+# Services receive OTLP config via environment variables so the
+# application code exports traces/metrics to the Jaeger OTLP endpoint.
+
+services:
+  # ── Jaeger (all-in-one: collector + query + UI) ──
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  # ── Prometheus ──
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - claims-service
+      - benefit-plan-service
+      - payment-service
+
+  # ── Grafana ──
+  grafana:
+    image: grafana/grafana:10.4.1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - jaeger
+
+  # ── Override service environment to enable OTLP export ──
+  claims-service:
+    environment:
+      - Observability__ServiceName=claims-service
+      - Observability__OtlpEndpoint=http://jaeger:4317
+      - Observability__EnableConsole=false
+      - Observability__Environment=Development
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  benefit-plan-service:
+    environment:
+      - Observability__ServiceName=benefit-plan-service
+      - Observability__OtlpEndpoint=http://jaeger:4317
+      - Observability__EnableConsole=false
+      - Observability__Environment=Development
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  payment-service:
+    environment:
+      - Observability__ServiceName=payment-service
+      - Observability__OtlpEndpoint=http://jaeger:4317
+      - Observability__EnableConsole=false
+      - Observability__Environment=Development
+    depends_on:
+      jaeger:
+        condition: service_started

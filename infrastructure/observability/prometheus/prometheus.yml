@@ -1,0 +1,29 @@
+# Prometheus configuration for Cloud Health Office local dev.
+# Scrapes the /metrics endpoint exposed by OpenTelemetry Prometheus exporter
+# on each microservice.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "claims-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["claims-service:8080"]
+        labels:
+          service: claims-service
+
+  - job_name: "benefit-plan-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["benefit-plan-service:8080"]
+        labels:
+          service: benefit-plan-service
+
+  - job_name: "payment-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["payment-service:8080"]
+        labels:
+          service: payment-service
