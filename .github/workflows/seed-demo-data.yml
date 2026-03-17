@@ -10,7 +10,7 @@ on:
       groupNumber:
         description: "Primary group number for the main sponsor"
         required: true
-        default: "GRP-001-2026"
+        default: "GRP-HIMSS-2026"
       sponsor1:
         description: "Large-group sponsor name"
         required: false
