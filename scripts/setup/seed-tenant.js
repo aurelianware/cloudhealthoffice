@@ -13,12 +13,12 @@ if (typeof tenantId === "undefined" || typeof azureTenantId === "undefined" ||
   print("ERROR: Missing required parameters.");
   print("");
   print("Usage:");
-  print('  mongosh <connection-string> seed-healthtech-tenant.js \\');
+  print('  mongosh <connection-string> seed-tenant.js \\');
   print('    --eval \'var tenantId="my-org", azureTenantId="AZURE-AD-GUID", orgName="My Org", adminEmail="admin@example.com"\'');
   quit(1);
 }
 
-const db = db.getSiblingDB("CloudHealthOffice");
+const choDb = db.getSiblingDB("CloudHealthOffice");
 
 const now = new Date();
 
@@ -39,7 +39,7 @@ const tenant = {
 };
 
 // Upsert: insert if not exists, update if already present.
-const result = db.Tenants.replaceOne(
+const result = choDb.Tenants.replaceOne(
   { tenantId: tenantId },
   tenant,
   { upsert: true }
@@ -54,6 +54,6 @@ if (result.upsertedCount === 1) {
 }
 
 // Verify the insert
-const saved = db.Tenants.findOne({ tenantId: tenantId });
+const saved = choDb.Tenants.findOne({ tenantId: tenantId });
 print("\nSaved document:");
 printjson(saved);
