@@ -1,0 +1,55 @@
+name: Seed Demo Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenantId:
+        description: "Tenant identifier written to every document"
+        required: true
+        default: "demo"
+      groupNumber:
+        description: "Primary group number for the main sponsor"
+        required: true
+        default: "GRP-001-2026"
+      sponsor1:
+        description: "Large-group sponsor name"
+        required: false
+        default: "Metro Employees Association"
+      sponsor2:
+        description: "Small-group sponsor name"
+        required: false
+        default: "Regional Health Cooperative"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  seed:
+    name: Seed Demo Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install mongosh
+        run: |
+          wget -qO- https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+          echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update
+          sudo apt-get install -y mongodb-mongosh
+
+      - name: Run seed script
+        env:
+          COSMOS_CONNECTION_STRING: ${{ secrets.COSMOS_DB_CONNECTION_STRING }}
+        run: |
+          mongosh "${COSMOS_CONNECTION_STRING}" scripts/setup/seed-demo-data.js \
+            --eval 'var tenantId="${{ inputs.tenantId }}", groupNumber="${{ inputs.groupNumber }}", sponsor1="${{ inputs.sponsor1 }}", sponsor2="${{ inputs.sponsor2 }}"'
