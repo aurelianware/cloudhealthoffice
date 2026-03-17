@@ -678,3 +678,16 @@ public class CreateSalesInquiryRequest
     public string Message { get; set; } = string.Empty;
     public string Source { get; set; } = "Contact Sales Page";
 }
+
+// Operating Mode
+public interface IOperatingModeService
+{
+    Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId);
+}
+
+public class OperatingModeConfiguration
+{
+    public string TenantId { get; set; } = string.Empty;
+    public Dictionary<string, string> Engines { get; set; } = new();
+    public DateTime UpdatedAt { get; set; }
+}

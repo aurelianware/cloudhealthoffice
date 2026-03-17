@@ -205,6 +205,7 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddScoped<IOperatingModeService, OperatingModeService>();
 builder.Services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 
