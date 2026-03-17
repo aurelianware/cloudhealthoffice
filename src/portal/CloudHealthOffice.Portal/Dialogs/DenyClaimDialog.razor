@@ -1,0 +1,75 @@
+@using CloudHealthOffice.Portal.Services
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" GutterBottom="true">Deny Claim</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Provide the reason for denial. This will be documented in the claim adjudication result and communicated to the provider.
+        </MudText>
+
+        <MudSelect @bind-Value="_selectedReason"
+                  Label="Select Denial Reason"
+                  Variant="Variant.Outlined"
+                  AnchorOrigin="Origin.BottomCenter"
+                  Class="mb-4">
+            <MudSelectItem Value="@("Medical necessity not established")">Medical necessity not established</MudSelectItem>
+            <MudSelectItem Value="@("Service not covered under plan")">Service not covered under plan</MudSelectItem>
+            <MudSelectItem Value="@("Exceeds plan limits")">Exceeds plan limits</MudSelectItem>
+            <MudSelectItem Value="@("Prior authorization required")">Prior authorization required</MudSelectItem>
+            <MudSelectItem Value="@("Duplicate claim")">Duplicate claim</MudSelectItem>
+            <MudSelectItem Value="@("Exceeds frequency limit")">Exceeds frequency limit</MudSelectItem>
+            <MudSelectItem Value="@("Age/gender restrictions")">Age/gender restrictions</MudSelectItem>
+            <MudSelectItem Value="@("Other - please specify")">Other - please specify</MudSelectItem>
+        </MudSelect>
+
+        @if (_selectedReason == "Other - please specify")
+        {
+            <MudTextField @bind-Value="_customReason"
+                         Label="Please specify the denial reason"
+                         Variant="Variant.Outlined"
+                         Multiline="true"
+                         Lines="3"
+                         Class="mb-4" />
+        }
+
+        <MudTextField @bind-Value="_additionalNotes"
+                     Label="Additional Notes (Optional)"
+                     Variant="Variant.Outlined"
+                     Multiline="true"
+                     Lines="3"
+                     Placeholder="Any additional context for the denial..." />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" 
+                  Variant="Variant.Filled" 
+                  OnClick="Submit"
+                  Disabled="string.IsNullOrWhiteSpace(_selectedReason)">
+            Deny Claim
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _selectedReason = string.Empty;
+    private string _customReason = string.Empty;
+    private string _additionalNotes = string.Empty;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        var reason = _selectedReason == "Other - please specify" ? _customReason : _selectedReason;
+        if (!string.IsNullOrWhiteSpace(_additionalNotes))
+        {
+            reason += $"\n\nAdditional Notes: {_additionalNotes}";
+        }
+        MudDialog.Close(DialogResult.Ok(reason));
+    }
+}

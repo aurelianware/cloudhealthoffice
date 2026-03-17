@@ -3,8 +3,10 @@ namespace CloudHealthOffice.Portal.Services;
 public interface IClaimsService
 {
     Task<List<ClaimSummary>> GetRecentClaimsAsync(int count);
+    Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request);
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
+    Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
 }
 
 public interface IEligibilityService
@@ -110,23 +112,112 @@ public interface IEmailNotificationService
 public class ClaimSummary
 {
     public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
     public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public string ClaimType { get; set; } = string.Empty; // Professional, Institutional
     public decimal TotalChargeAmount { get; set; }
+    public decimal AllowedAmount { get; set; }
+    public decimal PaidAmount { get; set; }
     public string Status { get; set; } = string.Empty;
+    public DateTime ServiceDateFrom { get; set; }
+    public DateTime ServiceDateTo { get; set; }
+    public DateTime SubmittedDate { get; set; }
+    public DateTime? AdjudicatedDate { get; set; }
     public int ProcessingTimeMs { get; set; }
+    public string? PriorAuthorizationNumber { get; set; }
+    public int LineCount { get; set; }
 }
 
 public class ClaimDetails : ClaimSummary
 {
-    public string MemberId { get; set; } = string.Empty;
-    public string ProviderId { get; set; } = string.Empty;
-    public List<ServiceLine> ServiceLines { get; set; } = new();
-    public decimal PayerAmount { get; set; }
+    public string SubscriberId { get; set; } = string.Empty;
+    public string SubscriberName { get; set; } = string.Empty;
+    public string PatientName { get; set; } = string.Empty;
+    public string PatientRelationship { get; set; } = string.Empty;
+    public string BillingProviderName { get; set; } = string.Empty;
+    public string BillingProviderNPI { get; set; } = string.Empty;
+    public string? RenderingProviderName { get; set; }
+    public string? RenderingProviderNPI { get; set; }
+    public string? FacilityName { get; set; }
+    public string? FacilityNPI { get; set; }
+    public string PlaceOfService { get; set; } = string.Empty;
+    public decimal DeductibleAmount { get; set; }
+    public decimal CoinsuranceAmount { get; set; }
+    public decimal CopayAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
-    public DateTime ServiceDate { get; set; }
-    public DateTime SubmittedDate { get; set; }
-    public DateTime? ProcessedDate { get; set; }
+    public string? ClaimNotes { get; set; }
+    public string? ReferralNumber { get; set; }
+    public DateTime ReceivedDate { get; set; }
+    public DateTime? PaidDate { get; set; }
+    public string? CheckNumber { get; set; }
+    public string? DenialReason { get; set; }
+    public List<ClaimDiagnosisCode> DiagnosisCodes { get; set; } = new();
+    public List<ClaimServiceLine> ServiceLines { get; set; } = new();
+    public ClaimAdjustmentInfo? AdjustmentInfo { get; set; }
+    public bool IsEditable { get; set; }
+    public bool CanApprove { get; set; }
+    public bool CanDeny { get; set; }
+    public bool CanReverse { get; set; }
+    public List<ClaimAudit> AuditTrail { get; set; } = new();
+}
+
+public class ClaimDiagnosisCode
+{
+    public string Code { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty; // Principal, Secondary
+    public int PointerNumber { get; set; }
+}
+
+public class ClaimServiceLine
+{
+    public int LineNumber { get; set; }
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string ProcedureDescription { get; set; } = string.Empty;
+    public List<string> Modifiers { get; set; } = new();
+    public decimal Units { get; set; }
+    public decimal ChargeAmount { get; set; }
+    public decimal AllowedAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal PatientResponsibility { get; set; }
+    public DateTime ServiceDateFrom { get; set; }
+    public DateTime ServiceDateTo { get; set; }
+    public string? RevenueCode { get; set; } // Institutional
+    public List<int> DiagnosisPointers { get; set; } = new();
+    public List<ClaimLineAdjustment> Adjustments { get; set; } = new();
+    public string? LineStatus { get; set; }
+}
+
+public class ClaimLineAdjustment
+{
+    public string GroupCode { get; set; } = string.Empty;
+    public string ReasonCode { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Description { get; set; } = string.Empty;
+}
+
+public class ClaimAdjustmentInfo
+{
+    public string AdjustmentType { get; set; } = string.Empty; // Reversal, Adjustment, Correction
+    public string? OriginalClaimId { get; set; }
+    public string? RelatedClaimId { get; set; }
+    public decimal AdjustmentAmount { get; set; }
+    public string? Reason { get; set; }
+    public DateTime? AdjustmentDate { get; set; }
+    public string? AdjustedBy { get; set; }
+}
+
+public class ClaimAudit
+{
+    public DateTime Timestamp { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string ChangedBy { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    public string? Notes { get; set; }
 }
 
 public class ServiceLine
@@ -136,6 +227,39 @@ public class ServiceLine
     public decimal ChargeAmount { get; set; }
     public decimal AllowedAmount { get; set; }
     public decimal PayerAmount { get; set; }
+}
+
+public class ClaimSearchRequest
+{
+    public string? ClaimNumber { get; set; }
+    public string? MemberId { get; set; }
+    public string? MemberName { get; set; }
+    public string? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public string? ClaimType { get; set; } // Professional, Institutional
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+    public string? Status { get; set; } // Submitted, Received, InAdjudication, Pended, Approved, Denied, Paid, Voided, PartiallyPaid
+    public string? AuthorizationNumber { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+    public string? SortBy { get; set; } = "SubmittedDate";
+    public string? SortOrder { get; set; } = "Descending";
+}
+
+public class ClaimSearchResult
+{
+    public List<ClaimSummary> Claims { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (TotalCount + PageSize - 1) / PageSize;
+    public decimal TotalChargeAmount { get; set; }
+    public decimal TotalAllowedAmount { get; set; }
+    public decimal TotalPaidAmount { get; set; }
+    public int ApprovedCount { get; set; }
+    public int DeniedCount { get; set; }
+    public int PendingCount { get; set; }
 }
 
 public class SubmitClaimRequest

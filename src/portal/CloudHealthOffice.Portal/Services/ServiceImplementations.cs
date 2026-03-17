@@ -67,10 +67,104 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims/search", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ClaimSearchResult>();
+            return result ?? new ClaimSearchResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching claims, returning mock data");
+            return GetMockSearchResults(request);
+        }
+    }
+
+    public async Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var updateRequest = new { status, notes };
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/claims/{claimId}/status", updateRequest);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating claim status for claim {ClaimId}", claimId);
+            throw;
+        }
+    }
+
+    private ClaimSearchResult GetMockSearchResults(ClaimSearchRequest request)
+    {
+        var allClaims = GetMockClaims(100);
+        var filteredClaims = allClaims.AsEnumerable();
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(request.ClaimNumber))
+            filteredClaims = filteredClaims.Where(c => c.ClaimId.Contains(request.ClaimNumber, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(request.MemberId))
+            filteredClaims = filteredClaims.Where(c => c.MemberId == request.MemberId);
+
+        if (!string.IsNullOrEmpty(request.Status))
+            filteredClaims = filteredClaims.Where(c => c.Status == request.Status);
+
+        // Apply sorting
+        if (request.SortOrder == "Ascending")
+        {
+            filteredClaims = request.SortBy switch
+            {
+                "ServiceDate" => filteredClaims.OrderBy(c => c.ServiceDateFrom),
+                "Amount" => filteredClaims.OrderBy(c => c.TotalChargeAmount),
+                "Status" => filteredClaims.OrderBy(c => c.Status),
+                _ => filteredClaims.OrderBy(c => c.SubmittedDate)
+            };
+        }
+        else
+        {
+            filteredClaims = request.SortBy switch
+            {
+                "ServiceDate" => filteredClaims.OrderByDescending(c => c.ServiceDateFrom),
+                "Amount" => filteredClaims.OrderByDescending(c => c.TotalChargeAmount),
+                "Status" => filteredClaims.OrderByDescending(c => c.Status),
+                _ => filteredClaims.OrderByDescending(c => c.SubmittedDate)
+            };
+        }
+
+        // Apply pagination
+        var claimsList = filteredClaims.ToList();
+        var totalCount = claimsList.Count;
+        var pageSize = request.PageSize;
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var skip = (pageNumber - 1) * pageSize;
+        var pageItems = claimsList.Skip(skip).Take(pageSize).ToList();
+
+        return new ClaimSearchResult
+        {
+            Claims = pageItems,
+            TotalCount = totalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalChargeAmount = claimsList.Sum(c => c.TotalChargeAmount),
+            TotalAllowedAmount = claimsList.Sum(c => c.AllowedAmount),
+            TotalPaidAmount = claimsList.Sum(c => c.PaidAmount),
+            ApprovedCount = claimsList.Count(c => c.Status == "Approved" || c.Status == "Paid" || c.Status == "PartiallyPaid"),
+            DeniedCount = claimsList.Count(c => c.Status == "Denied"),
+            PendingCount = claimsList.Count(c => c.Status == "Pended" || c.Status == "InAdjudication")
+        };
+    }
+
     private List<ClaimSummary> GetMockClaims(int count)
     {
         var random = Random.Shared;
-        var statuses = new[] { "Approved", "Approved", "Approved", "Denied", "Pending" };
+        var statuses = new[] { "Approved", "Approved", "Approved", "Denied", "Pended", "InAdjudication" };
+        var claimTypes = new[] { "Professional", "Professional", "Institutional" };
         var members = new[] 
         {
             ("MBR-2024-001", "Sarah Johnson"),
@@ -92,80 +186,233 @@ public class ClaimsService : IClaimsService
         };
 
         var claims = new List<ClaimSummary>();
-        for (int i = 1; i <= Math.Min(count, 50); i++)
+        for (int i = 1; i <= Math.Min(count, 100); i++)
         {
-            var member = members[random.Next(members.Length)];
-            var provider = providers[random.Next(providers.Length)];
-            var status = statuses[random.Next(statuses.Length)];
+            var member = members[Random.Shared.Next(members.Length)];
+            var provider = providers[Random.Shared.Next(providers.Length)];
+            var status = statuses[Random.Shared.Next(statuses.Length)];
+            var claimType = claimTypes[Random.Shared.Next(claimTypes.Length)];
+            var chargeAmount = (decimal)Random.Shared.Next(500, 50000);
+            var allowedAmount = chargeAmount * 0.85m;
+            var paidAmount = status == "Approved" || status == "Paid" ? allowedAmount * 0.8m : 0m;
+            var serviceDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 90));
             
             claims.Add(new ClaimSummary
             {
                 ClaimId = $"CLM-2026-{i:D5}",
+                ClaimNumber = $"CLM{i:D8}",
+                MemberId = member.Item1,
                 MemberName = member.Item2,
+                ProviderId = provider.Item1,
                 ProviderName = provider.Item2,
-                TotalChargeAmount = random.Next(500, 50000),
+                ClaimType = claimType,
+                TotalChargeAmount = chargeAmount,
+                AllowedAmount = allowedAmount,
+                PaidAmount = paidAmount,
                 Status = status,
-                ProcessingTimeMs = random.Next(150, 800)
+                ServiceDateFrom = serviceDate,
+                ServiceDateTo = serviceDate.AddDays(1),
+                SubmittedDate = serviceDate.AddDays(1),
+                AdjudicatedDate = status != "Submitted" && status != "Received" ? serviceDate.AddDays(3) : null,
+                ProcessingTimeMs = Random.Shared.Next(150, 800),
+                LineCount = Random.Shared.Next(1, 5)
             });
         }
 
-        return claims.OrderByDescending(c => c.ClaimId).ToList();
+        return claims.OrderByDescending(c => c.SubmittedDate).ToList();
     }
 
     private ClaimDetails GetMockClaimDetails(string claimId)
     {
         var random = new Random(claimId.GetHashCode());
-        var statuses = new[] { "Approved", "Denied", "Pending" };
+        var statuses = new[] { "Approved", "Denied", "Pended", "InAdjudication" };
+        var claimTypes = new[] { "Professional", "Institutional" };
         var status = statuses[random.Next(statuses.Length)];
+        var claimType = claimTypes[random.Next(claimTypes.Length)];
 
-        var serviceLines = new List<ServiceLine>
+        var serviceLines = new List<ClaimServiceLine>
         {
             new()
             {
+                LineNumber = 1,
                 ProcedureCode = "99213",
-                Description = "Office Visit - Established Patient, Level 3",
+                ProcedureDescription = "Office Visit - Established Patient, Level 3",
                 ChargeAmount = 150.00m,
                 AllowedAmount = 125.00m,
-                PayerAmount = 100.00m
+                PaidAmount = 100.00m,
+                PatientResponsibility = 25.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                Modifiers = new() { "76", "77" },
+                LineStatus = status,
+                DiagnosisPointers = new() { 1, 2 }
             },
             new()
             {
+                LineNumber = 2,
                 ProcedureCode = "80053",
-                Description = "Comprehensive Metabolic Panel",
+                ProcedureDescription = "Comprehensive Metabolic Panel",
                 ChargeAmount = 85.00m,
                 AllowedAmount = 75.00m,
-                PayerAmount = 60.00m
+                PaidAmount = 60.00m,
+                PatientResponsibility = 15.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                LineStatus = status,
+                DiagnosisPointers = new() { 1 },
+                Adjustments = status == "Denied" || status == "Pended" ? new()
+                {
+                    new()
+                    {
+                        GroupCode = "CO",
+                        ReasonCode = "45",
+                        Amount = -15.00m,
+                        Description = "Late filing - exceeds 90 day limit"
+                    }
+                } : new()
             },
             new()
             {
+                LineNumber = 3,
                 ProcedureCode = "85025",
-                Description = "Complete Blood Count (CBC)",
+                ProcedureDescription = "Complete Blood Count with differential",
                 ChargeAmount = 45.00m,
                 AllowedAmount = 40.00m,
-                PayerAmount = 32.00m
+                PaidAmount = 32.00m,
+                PatientResponsibility = 8.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                LineStatus = status,
+                DiagnosisPointers = new() { 1 }
+            }
+        };
+
+        var diagnosisCodes = new List<ClaimDiagnosisCode>
+        {
+            new()
+            {
+                Code = "E11.9",
+                Description = "Type 2 diabetes mellitus without complications",
+                Type = "Principal",
+                PointerNumber = 1
+            },
+            new()
+            {
+                Code = "I10",
+                Description = "Essential (primary) hypertension",
+                Type = "Secondary",
+                PointerNumber = 2
+            },
+            new()
+            {
+                Code = "Z79.4",
+                Description = "Long term (current) use of insulin",
+                Type = "Secondary",
+                PointerNumber = 3
             }
         };
 
         var totalCharge = serviceLines.Sum(sl => sl.ChargeAmount);
-        var totalPayer = status == "Approved" ? serviceLines.Sum(sl => sl.PayerAmount) : 0;
-        var patientResp = status == "Approved" ? serviceLines.Sum(sl => sl.AllowedAmount - sl.PayerAmount) : totalCharge;
+        var totalAllowed = serviceLines.Sum(sl => sl.AllowedAmount);
+        var totalPaid = status == "Approved" || status == "Paid" ? serviceLines.Sum(sl => sl.PaidAmount) : 0;
+        var patientResp = status == "Approved" || status == "Paid" ? serviceLines.Sum(sl => sl.PatientResponsibility) : totalCharge;
+
+        var auditTrail = new List<ClaimAudit>
+        {
+            new()
+            {
+                Timestamp = DateTime.Now.AddDays(-10),
+                Action = "Claim received",
+                ChangedBy = "System",
+                Notes = "EDI 837 transaction received"
+            },
+            new()
+            {
+                Timestamp = DateTime.Now.AddDays(-8),
+                Action = "Status changed",
+                ChangedBy = "system-adjudication",
+                OldValue = "Received",
+                NewValue = "InAdjudication",
+                Notes = "Automatic adjudication workflow triggered"
+            }
+        };
+
+        if (status == "Approved" || status == "Denied" || status == "Pended")
+        {
+            auditTrail.Add(new()
+            {
+                Timestamp = DateTime.Now.AddDays(-2),
+                Action = "Claim adjudicated",
+                ChangedBy = "claims-examiner-001",
+                OldValue = "InAdjudication",
+                NewValue = status,
+                Notes = status == "Approved" ? "Claim approved" : status == "Denied" ? "Claim denied - insufficient documentation" : "Sent to pending review"
+            });
+        }
 
         return new ClaimDetails
         {
             ClaimId = claimId,
+            ClaimNumber = $"CLM{int.Parse(claimId.Replace("CLM-2026-", ")):D8}",
             MemberId = "MBR-2024-001",
             MemberName = "Sarah Johnson",
+            SubscriberId = "MBR-2024-001",
+            SubscriberName = "Sarah Johnson",
+            PatientName = "Sarah Johnson",
+            PatientRelationship = "Self",
             ProviderId = "PRV-001",
             ProviderName = "Seattle Medical Center",
+            BillingProviderName = "Seattle Medical Center",
+            BillingProviderNPI = "1234567890",
+            RenderingProviderName = "Dr. James Smith",
+            RenderingProviderNPI = "1234567891",
+            FacilityName = "Seattle Medical Center Outpatient",
+            FacilityNPI = "1234567892",
+            PlaceOfService = "11 - Office",
+            ClaimType = claimType,
             TotalChargeAmount = totalCharge,
-            PayerAmount = totalPayer,
+            AllowedAmount = totalAllowed,
+            PaidAmount = totalPaid,
+            DeductibleAmount = 0.00m,
+            CoinsuranceAmount = 15.00m,
+            CopayAmount = 25.00m,
             PatientResponsibility = patientResp,
             Status = status,
             ProcessingTimeMs = random.Next(200, 600),
-            ServiceDate = DateTime.Now.AddDays(-random.Next(1, 90)),
-            SubmittedDate = DateTime.Now.AddDays(-random.Next(0, 30)),
-            ProcessedDate = status != "Pending" ? DateTime.Now.AddDays(-random.Next(0, 15)) : null,
-            ServiceLines = serviceLines
+            ServiceDateFrom = DateTime.Now.AddDays(-15),
+            ServiceDateTo = DateTime.Now.AddDays(-15),
+            SubmittedDate = DateTime.Now.AddDays(-10),
+            ReceivedDate = DateTime.Now.AddDays(-10),
+            AdjudicatedDate = status != "Submitted" && status != "Received" ? DateTime.Now.AddDays(-2) : null,
+            PaidDate = status == "Paid" ? DateTime.Now.AddDays(-1) : null,
+            CheckNumber = status == "Paid" ? "CHK123456" : null,
+            PriorAuthorizationNumber = "AUTH-2024-78901",
+            ReferralNumber = "REF-2024-5467",
+            ClaimNotes = "Routine follow-up visit for chronic disease management",
+            DenialReason = status == "Denied" ? "Service not covered" : null,
+            DiagnosisCodes = diagnosisCodes,
+            ServiceLines = serviceLines,
+            AdjustmentInfo = status switch
+            {
+                "Pended" => new()
+                {
+                    AdjustmentType = "Reversal Pending Review",
+                    Reason = "Duplicate entry detected - awaiting confirmation",
+                    AdjustmentAmount = -100.00m,
+                    AdjustmentDate = DateTime.Now.AddDays(-1),
+                    AdjustedBy = "claims-examiner-001"
+                },
+                _ => null
+            },
+            IsEditable = status == "Pended" || status == "InAdjudication",
+            CanApprove = status == "Pended" || status == "InAdjudication",
+            CanDeny = status == "Pended" || status == "InAdjudication",
+            CanReverse = status == "Approved" || status == "Paid",
+            AuditTrail = auditTrail,
+            LineCount = serviceLines.Count
         };
     }
 
