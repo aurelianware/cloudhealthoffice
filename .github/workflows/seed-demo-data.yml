@@ -6,11 +6,11 @@ on:
       tenantId:
         description: "Tenant identifier written to every document"
         required: true
-        default: "32177734-051b-4fdc-9568-cc35530191b1"
+        default: ""
       groupNumber:
         description: "Primary group number for the main sponsor"
         required: true
-        default: "GRP-HIMSS-2026"
+        default: ""
       sponsor1:
         description: "Large-group sponsor name"
         required: false
