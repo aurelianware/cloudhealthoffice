@@ -76,7 +76,7 @@ The portal calls the CHO Authorization Service API (`31f76844-b2cb-47b1-aede-f5b
 The tenant admin must also consent to the **API** app registration. The `Grant-AdminConsent.ps1` script (Option C) handles both. If using the URL method, send a second URL:
 
 ```
-https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8&redirect_uri=https://portal.cloudhealthoffice.com/signin-oidc
+https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8
 ```
 
 ## 6. Verify End-to-End
