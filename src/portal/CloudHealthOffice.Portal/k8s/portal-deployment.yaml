@@ -114,16 +114,19 @@ spec:
               name: portal-config
               key: Redis__ConnectionString
         - name: AzureAd__TenantId
+          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
               key: TenantId
         - name: AzureAd__ClientId
+          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
               key: ClientId
         - name: AzureAd__ClientSecret
+          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
