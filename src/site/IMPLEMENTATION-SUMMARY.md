@@ -237,7 +237,7 @@ az staticwebapp deploy \
 ### Platform Overview Page
 
 **Key Features:**
-- Stats grid (<1hr, $0, 82%, ∞)
+- Stats grid (<1hr, Self-Service, 82%, ∞)
 - 6 capability cards
 - Architecture overview
 - Multi-tenant architecture details

@@ -66,7 +66,7 @@ Every API required by the January 2027 deadline is production-ready today. Patie
 
 **85% Lower Cost Than Enterprise Vendors**
 
-No per-transaction fees. No per-payer licensing. No surprise professional services bills. Predictable subscription pricing from $999/month.
+No per-transaction fees. No per-payer licensing. Predictable subscription pricing from $999/month.
 
 *"We calculated $2.4M in savings over our enterprise vendor quote."*
 

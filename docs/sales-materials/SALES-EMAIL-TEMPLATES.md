@@ -124,7 +124,7 @@ I'm reaching out because Cloud Health Office can reduce your EDI platform costs 
 **Why the difference?**
 • Open-source platform (BSL 1.1) - no vendor lock-in
 • Azure-native architecture - infrastructure scales with usage
-• Self-service configuration - minimal professional services
+• Self-service configuration - deploy in under 1 hour
 • All-inclusive pricing - no per-transaction or per-payer fees
 
 I've prepared a custom ROI analysis for [Company Name] based on your approximate scale. Would you have 15 minutes this week to review it together?

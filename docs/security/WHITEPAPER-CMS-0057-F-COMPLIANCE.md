@@ -749,7 +749,7 @@ CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmo
 Open-source health IT adoption is accelerating across the industry. Per Gartner, open-source health IT grows 25% year-over-year[^Gartner2024], driven by organizations seeking:
 
 - **Transparency:** Full visibility into compliance logic and security controls
-- **Flexibility:** Customize without vendor approval or professional services fees
+- **Flexibility:** Customize without vendor approval or lengthy engagement cycles
 - **Community:** Benefit from shared innovations across 150+ contributing organizations
 - **Future-Proofing:** Adapt to regulatory changes (CMS updates, state Medicaid requirements) on your timeline
 
