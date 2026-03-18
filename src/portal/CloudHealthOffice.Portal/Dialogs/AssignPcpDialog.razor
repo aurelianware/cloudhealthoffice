@@ -77,7 +77,7 @@
                             {
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
                             }
-                            <MudText Typo="Typo.body2" Style="font-weight: @(_selectedProvider?.ProviderId == context.ProviderId ? "bold" : "normal")">
+                            <MudText Typo="Typo.body2" Style="@("font-weight: " + (_selectedProvider?.ProviderId == context.ProviderId ? "bold" : "normal"))">
                                 @context.Name
                             </MudText>
                         </div>
