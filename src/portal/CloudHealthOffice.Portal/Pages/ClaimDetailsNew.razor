@@ -611,7 +611,7 @@
         </MudTabPanel>
 
         <!-- ── Tab 3: Benefit Breakdown ──────────────────────────────── -->
-        <MudTabPanel Text="Benefit Breakdown" Icon="@Icons.Material.Filled.CalculateOutlined">
+        <MudTabPanel Text="Benefit Breakdown" Icon="@Icons.Material.Filled.Calculate">
             <div class="pt-4">
             @if (_loadingAdjudication)
             {
@@ -725,7 +725,7 @@
                                     <div>
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2">Deductible</MudText>
-                                            <MudText Typo="Typo.body2" Style="color: @(bc.DeductibleMet ? "#00ff88" : "#ffaa00");">
+                                            <MudText Typo="Typo.body2" Style="@(bc.DeductibleMet ? "color: #00ff88;" : "color: #ffaa00;")">
                                                 @(bc.DeductibleMet ? "Met ✓" : $"${bc.IndividualDeductibleBalance:N0} applied")
                                             </MudText>
                                         </div>
@@ -736,7 +736,7 @@
                                     <div>
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2">Out-of-Pocket Max</MudText>
-                                            <MudText Typo="Typo.body2" Style="color: @(bc.OopMaxMet ? "#00ff88" : "#00ffff");">
+                                            <MudText Typo="Typo.body2" Style="@(bc.OopMaxMet ? "color: #00ff88;" : "color: #00ffff;")">
                                                 @(bc.OopMaxMet ? "Met ✓" : "In Progress")
                                             </MudText>
                                         </div>

@@ -135,35 +135,35 @@
                                             <MudTh>Errors</MudTh>
                                             <MudTh>Actions</MudTh>
                                         </HeaderContent>
-                                        <RowTemplate>
-                                            <MudTd>@context.TransactionDate.ToString("MM/dd/yyyy")</MudTd>
-                                            <MudTd><span style="font-family: monospace; color: rgba(0,255,255,0.7);">@context.MemberId</span></MudTd>
-                                            <MudTd>@context.MemberName</MudTd>
+                                        <RowTemplate Context="record">
+                                            <MudTd>@record.TransactionDate.ToString("MM/dd/yyyy")</MudTd>
+                                            <MudTd><span style="font-family: monospace; color: rgba(0,255,255,0.7);">@record.MemberId</span></MudTd>
+                                            <MudTd>@record.MemberName</MudTd>
                                             <MudTd>
                                                 <MudChip T="string" Size="Size.Small"
-                                                         Color="@(context.MaintenanceTypeCode == "021" ? Color.Success : context.MaintenanceTypeCode == "024" ? Color.Error : Color.Info)">
-                                                    @(context.MaintenanceTypeCode == "021" ? "Add" : context.MaintenanceTypeCode == "024" ? "Cancel" : "Change")
+                                                         Color="@(record.MaintenanceTypeCode == "021" ? Color.Success : record.MaintenanceTypeCode == "024" ? Color.Error : Color.Info)">
+                                                    @(record.MaintenanceTypeCode == "021" ? "Add" : record.MaintenanceTypeCode == "024" ? "Cancel" : "Change")
                                                 </MudChip>
                                             </MudTd>
-                                            <MudTd><MudText Typo="Typo.caption">@context.TransactionSetPurpose</MudText></MudTd>
+                                            <MudTd><MudText Typo="Typo.caption">@record.TransactionSetPurpose</MudText></MudTd>
                                             <MudTd>
                                                 <MudChip T="string" Size="Size.Small"
-                                                         Color="@(context.Status == "Accepted" ? Color.Success : context.Status == "Rejected" ? Color.Error : Color.Warning)">
-                                                    @context.Status
+                                                         Color="@(record.Status == "Accepted" ? Color.Success : record.Status == "Rejected" ? Color.Error : Color.Warning)">
+                                                    @record.Status
                                                 </MudChip>
                                             </MudTd>
                                             <MudTd>
-                                                @if (context.Errors.Any())
+                                                @if (record.Errors.Any())
                                                 {
                                                     <MudTooltip>
                                                         <TooltipContent>
-                                                            @foreach (var err in context.Errors)
+                                                            @foreach (var err in record.Errors)
                                                             {
                                                                 <MudText Typo="Typo.caption" Class="d-block">@err</MudText>
                                                             }
                                                         </TooltipContent>
                                                         <ChildContent>
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Errors.Count error@(context.Errors.Count != 1 ? "s" : "")</MudChip>
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@record.Errors.Count error@(record.Errors.Count != 1 ? "s" : "")</MudChip>
                                                         </ChildContent>
                                                     </MudTooltip>
                                                 }
@@ -173,11 +173,11 @@
                                                 }
                                             </MudTd>
                                             <MudTd>
-                                                @if (context.Status == "Rejected" || context.Status == "Pending")
+                                                @if (record.Status == "Rejected" || record.Status == "Pending")
                                                 {
-                                                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Title="Accept" OnClick="@(() => Resolve834Record(context, "Accept"))" />
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Title="Reject" OnClick="@(() => Resolve834Record(context, "Reject"))" />
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small" Color="Color.Warning" Title="Hold" OnClick="@(() => Resolve834Record(context, "Hold"))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Title="Accept" OnClick="@(() => Resolve834Record(record, "Accept"))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Title="Reject" OnClick="@(() => Resolve834Record(record, "Reject"))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small" Color="Color.Warning" Title="Hold" OnClick="@(() => Resolve834Record(record, "Hold"))" />
                                                 }
                                             </MudTd>
                                         </RowTemplate>
