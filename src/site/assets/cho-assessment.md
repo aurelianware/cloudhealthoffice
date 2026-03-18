@@ -202,7 +202,6 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 **Traditional Vendors (Declining):**
 - Proprietary systems with vendor lock-in
 - Multi-year implementation timelines
-- Lengthy implementation timelines
 - Limited multi-payer support
 - Legacy security models
 
