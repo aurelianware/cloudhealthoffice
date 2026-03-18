@@ -1,0 +1,319 @@
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IPaymentRunService PaymentRunService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="color: #00ffff;" />
+            <MudText Typo="Typo.h6">@RunName</MudText>
+            @if (_details != null)
+            {
+                var (color, _) = GetStatusDisplay(_details.Status);
+                <MudChip T="string" Size="Size.Small" Color="@color"
+                         Style="@(_details.Status == "Running" ? "animation: pulse 1.5s infinite;" : "")">
+                    @_details.Status
+                </MudChip>
+            }
+        </div>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <div class="d-flex justify-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (_details == null)
+        {
+            <MudAlert Severity="Severity.Error">Could not load payment run details.</MudAlert>
+        }
+        else
+        {
+            <!-- Live Progress Bar (Running state) -->
+            @if (_details.Status == "Running" && _details.ClaimCount > 0)
+            {
+                var pct = (double)_details.ProcessedCount / _details.ClaimCount * 100;
+                <MudPaper Class="pa-3 mb-4" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 8px;">
+                    <div class="d-flex justify-space-between mb-1">
+                        <MudText Typo="Typo.body2">Processing claims...</MudText>
+                        <MudText Typo="Typo.body2" Style="color: #00ffff;">@_details.ProcessedCount / @_details.ClaimCount</MudText>
+                    </div>
+                    <MudProgressLinear Value="@pct" Color="Color.Primary" Rounded="true" Style="height: 8px;" />
+                </MudPaper>
+            }
+
+            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+                <!-- Summary Tab -->
+                <MudTabPanel Text="Summary" Icon="@Icons.Material.Filled.Summarize">
+                    <div class="pt-4">
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-4" Style="background: rgba(15,15,15,0.9); border: 1px solid rgba(0,255,255,0.1); border-radius: 8px;">
+                                    <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.5);" Class="mb-3">Run Details</MudText>
+                                    <div class="d-flex flex-column gap-2">
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Run ID</MudText>
+                                            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@_details.RunId</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Created</MudText>
+                                            <MudText Typo="Typo.body2">@_details.CreatedDate.ToString("MM/dd/yyyy HH:mm")</MudText>
+                                        </div>
+                                        @if (_details.StartedDate.HasValue)
+                                        {
+                                            <div class="d-flex justify-space-between">
+                                                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Started</MudText>
+                                                <MudText Typo="Typo.body2">@_details.StartedDate.Value.ToString("MM/dd/yyyy HH:mm")</MudText>
+                                            </div>
+                                        }
+                                        @if (_details.CompletedDate.HasValue)
+                                        {
+                                            <div class="d-flex justify-space-between">
+                                                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Completed</MudText>
+                                                <MudText Typo="Typo.body2">@_details.CompletedDate.Value.ToString("MM/dd/yyyy HH:mm")</MudText>
+                                            </div>
+                                        }
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Service Date Range</MudText>
+                                            <MudText Typo="Typo.body2">
+                                                @_details.ClaimServiceDateFrom.ToString("MM/dd/yyyy") — @_details.ClaimServiceDateTo.ToString("MM/dd/yyyy")
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-4" Style="background: rgba(15,15,15,0.9); border: 1px solid rgba(0,255,136,0.1); border-radius: 8px;">
+                                    <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.5);" Class="mb-3">Financial Summary</MudText>
+                                    <div class="d-flex flex-column gap-2">
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Total Claims</MudText>
+                                            <MudText Typo="Typo.body2">@_details.ClaimCount</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Approved</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: #00ff88;">@_details.ApprovedCount</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Denied</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: #ff0055;">@_details.DeniedCount</MudText>
+                                        </div>
+                                        <MudDivider Style="border-color: rgba(0,255,136,0.2);" />
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Total Billed</MudText>
+                                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@_details.TotalCharges.ToString("C2")</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Total Allowed</MudText>
+                                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@_details.TotalAllowed.ToString("C2")</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.subtitle2" Style="color: #00ff88;">Total Paid</MudText>
+                                            <MudText Typo="Typo.subtitle2" Style="color: #00ff88; font-family: monospace;">@_details.TotalAmount.ToString("C2")</MudText>
+                                        </div>
+                                        <div class="d-flex justify-space-between">
+                                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Member Responsibility</MudText>
+                                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@_details.TotalMemberResponsibility.ToString("C2")</MudText>
+                                        </div>
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (!string.IsNullOrEmpty(_details.ErrorMessage))
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mt-3">@_details.ErrorMessage</MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
+                <!-- Claims Tab -->
+                <MudTabPanel Text="@($"Claims ({_details.Claims.Count})")" Icon="@Icons.Material.Filled.Receipt">
+                    <div class="pt-4">
+                        @if (!_details.Claims.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">No claim-level detail available yet — check back after the run completes.</MudAlert>
+                        }
+                        else
+                        {
+                            <MudTable Items="_details.Claims" Dense="true" Hover="true"
+                                      Style="background: rgba(10,10,10,0.9);"
+                                      T="PaymentRunClaimItem">
+                                <HeaderContent>
+                                    <MudTh>Claim #</MudTh>
+                                    <MudTh>Member</MudTh>
+                                    <MudTh>Provider</MudTh>
+                                    <MudTh>Billed</MudTh>
+                                    <MudTh>Allowed</MudTh>
+                                    <MudTh>Paid</MudTh>
+                                    <MudTh>Member Resp.</MudTh>
+                                    <MudTh>Status</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Claim #">
+                                        <MudLink Href="@($"/claims/{context.ClaimId}")" Style="color: #00ffff; font-family: monospace; font-size: 0.8rem;">
+                                            @context.ClaimNumber
+                                        </MudLink>
+                                    </MudTd>
+                                    <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                                    <MudTd DataLabel="Provider">@context.ProviderName</MudTd>
+                                    <MudTd DataLabel="Billed">
+                                        <MudText Style="font-family: monospace; font-size: 0.8rem;">@context.ChargeAmount.ToString("C2")</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Allowed">
+                                        <MudText Style="font-family: monospace; font-size: 0.8rem;">@context.AllowedAmount.ToString("C2")</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Paid">
+                                        <MudText Style="font-family: monospace; font-size: 0.8rem; color: #00ff88; font-weight: 600;">
+                                            @context.PaidAmount.ToString("C2")
+                                        </MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Member Resp.">
+                                        <MudText Style="font-family: monospace; font-size: 0.8rem;">@context.MemberResponsibility.ToString("C2")</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Status">
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Color="@(context.PaymentStatus == "Paid" ? Color.Success : context.PaymentStatus == "Denied" ? Color.Error : Color.Warning)">
+                                            @context.PaymentStatus
+                                        </MudChip>
+                                    </MudTd>
+                                </RowTemplate>
+                                <PagerContent>
+                                    <MudTablePager />
+                                </PagerContent>
+                            </MudTable>
+                        }
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_details?.Status == "Completed")
+        {
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="DownloadEra">
+                Download ERA (835)
+            </MudButton>
+        }
+        <MudButton OnClick="@(() => MudDialog.Cancel())" Variant="Variant.Text">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string RunId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string RunName { get; set; } = string.Empty;
+
+    private PaymentRunDetails? _details;
+    private bool _loading = true;
+    private HubConnection? _hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDetails();
+        await ConnectSignalR();
+    }
+
+    private async Task LoadDetails()
+    {
+        _loading = true;
+        try
+        {
+            _details = await PaymentRunService.GetPaymentRunByIdAsync(RunId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading details: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ConnectSignalR()
+    {
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/paymentruns"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string, int, int>("ReceivePaymentRunProgress", (runId, status, processed, total) =>
+            {
+                if (runId == RunId && _details != null)
+                {
+                    _details.Status = status;
+                    _details.ProcessedCount = processed;
+                    _details.ClaimCount = total;
+                    InvokeAsync(StateHasChanged);
+                }
+            });
+
+            _hubConnection.On<string, decimal, string?>("PaymentRunCompleted", async (runId, totalAmount, _) =>
+            {
+                if (runId == RunId)
+                    await InvokeAsync(LoadDetails);
+            });
+
+            await _hubConnection.StartAsync();
+        }
+        catch { /* best-effort */ }
+    }
+
+    private async Task DownloadEra()
+    {
+        try
+        {
+            var stream = await PaymentRunService.DownloadEraForRunAsync(RunId);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            await JS.InvokeVoidAsync("downloadBase64File",
+                $"ERA_{RunId}_{DateTime.Today:yyyyMMdd}.835",
+                "application/x-edi",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading ERA: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private (Color color, string icon) GetStatusDisplay(string status) => status switch
+    {
+        "Completed"  => (Color.Success, Icons.Material.Filled.CheckCircle),
+        "Running"    => (Color.Primary, Icons.Material.Filled.Sync),
+        "Pending"    => (Color.Warning, Icons.Material.Filled.HourglassTop),
+        "Failed"     => (Color.Error, Icons.Material.Filled.Error),
+        "Cancelled"  => (Color.Default, Icons.Material.Filled.Cancel),
+        _            => (Color.Default, Icons.Material.Filled.Circle)
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+            await _hubConnection.DisposeAsync();
+    }
+}
