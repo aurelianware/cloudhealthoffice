@@ -1,0 +1,181 @@
+@using CloudHealthOffice.Portal.Services
+@inject IPaymentRunService PaymentRunService
+@inject ISponsorService SponsorService
+@inject IBenefitPlanService BenefitPlanService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" Style="vertical-align: middle;" />
+            Create Payment Run
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+            A payment run collects all approved claims within the specified criteria, calculates final payment amounts,
+            and generates an EDI 835 ERA remittance file.
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_request.RunName"
+                              Label="Run Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Run name is required"
+                              HelperText="A descriptive name for this payment run (e.g. Weekly Run 2026-03-17)" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_serviceFrom"
+                               Label="Claim Service Date From"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               HelperText="Include claims with DOS on or after this date" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_serviceTo"
+                               Label="Claim Service Date To"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               HelperText="Include claims with DOS on or before this date" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_request.SponsorId"
+                           Label="Sponsor Filter (optional)"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           HelperText="Leave blank to include all sponsors">
+                    @foreach (var s in _sponsors)
+                    {
+                        <MudSelectItem Value="@s.SponsorId">@s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_request.PlanId"
+                           Label="Benefit Plan Filter (optional)"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           HelperText="Leave blank to include all plans">
+                    @foreach (var p in _plans)
+                    {
+                        <MudSelectItem Value="@p.PlanId">@p.PlanName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Include Claim Statuses</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    @foreach (var status in _availableStatuses)
+                    {
+                        var isSelected = _selectedStatuses.Contains(status);
+                        <MudChip T="string"
+                                 Color="@(isSelected ? Color.Primary : Color.Default)"
+                                 Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                 OnClick="@(() => ToggleStatus(status))"
+                                 Style="cursor: pointer;">
+                            @status
+                        </MudChip>
+                    }
+                </div>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);" Class="mt-1">
+                    Select at least one claim status to include in this run
+                </MudText>
+            </MudItem>
+        </MudGrid>
+
+        @if (_creating)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);" Class="mt-1 text-center">
+                Queuing payment run...
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="CreateRun"
+                   Disabled="@(!IsValid() || _creating)">
+            @if (_creating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Run
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    private CreatePaymentRunRequest _request = new()
+    {
+        RunName = $"Payment Run {DateTime.Today:yyyy-MM-dd}",
+        ClaimStatuses = new List<string> { "Approved" }
+    };
+
+    private DateTime? _serviceFrom = DateTime.Today.AddDays(-7);
+    private DateTime? _serviceTo = DateTime.Today;
+    private bool _creating = false;
+
+    private List<SponsorSummary> _sponsors = new();
+    private List<BenefitPlanListItem> _plans = new();
+    private HashSet<string> _selectedStatuses = new() { "Approved" };
+
+    private readonly string[] _availableStatuses = { "Approved", "Pending Review", "Resubmitted" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sponsors = await SponsorService.SearchSponsorsAsync("");
+            _plans = await BenefitPlanService.SearchBenefitPlansAsync();
+        }
+        catch { /* non-critical, filters are optional */ }
+    }
+
+    private void ToggleStatus(string status)
+    {
+        if (_selectedStatuses.Contains(status))
+            _selectedStatuses.Remove(status);
+        else
+            _selectedStatuses.Add(status);
+    }
+
+    private bool IsValid() =>
+        !string.IsNullOrWhiteSpace(_request.RunName)
+        && _serviceFrom.HasValue
+        && _serviceTo.HasValue
+        && _serviceTo >= _serviceFrom
+        && _selectedStatuses.Any();
+
+    private async Task CreateRun()
+    {
+        if (!IsValid()) return;
+        _creating = true;
+        try
+        {
+            _request.ClaimServiceDateFrom = _serviceFrom!.Value;
+            _request.ClaimServiceDateTo = _serviceTo!.Value;
+            _request.ClaimStatuses = _selectedStatuses.ToList();
+
+            var runId = await PaymentRunService.CreatePaymentRunAsync(_request);
+            Snackbar.Add($"Payment run '{_request.RunName}' queued (ID: {runId})", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(runId));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating payment run: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

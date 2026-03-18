@@ -1,0 +1,393 @@
+@page "/payment-runs"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IPaymentRunService PaymentRunService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Payment Runs — Cloud Health Office</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Payments" Class="mr-2" Style="vertical-align: middle;" />
+    Payment Runs
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Generate, monitor, and download ERA remittance files for adjudicated claims
+</MudText>
+
+<!-- KPI Chips -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_runs.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Runs</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_totalPaid.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Paid</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_pendingCount</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending / Running</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_failedCount</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Failed</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Action Bar -->
+<div class="d-flex align-center gap-3 mb-4">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenCreateDialog">
+        New Payment Run
+    </MudButton>
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Default"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadRuns"
+               Disabled="_loading">
+        Refresh
+    </MudButton>
+    <MudSpacer />
+    @if (_hubConnected)
+    {
+        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Circle"
+                 Style="animation: pulse 2s infinite;">
+            Live Updates Active
+        </MudChip>
+    }
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<MudTable Items="_runs" Dense="true" Hover="true" SortLabel="Sort By"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;"
+          T="PaymentRunSummary">
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.RunName)">Run Name</MudTableSortLabel></MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.CreatedDate)">Created</MudTableSortLabel></MudTh>
+        <MudTh>Claims Processed</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.TotalAmount)">Total Amount</MudTableSortLabel></MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Run Name">
+            <div>
+                <MudText Typo="Typo.body2" Style="font-weight: 600; color: rgba(255,255,255,0.9);">@context.RunName</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">@context.RunId</MudText>
+            </div>
+        </MudTd>
+        <MudTd DataLabel="Status">
+            @{
+                var (color, icon) = GetStatusDisplay(context.Status);
+            }
+            <MudChip T="string" Size="Size.Small" Color="@color" Icon="@icon"
+                     Style="@(context.Status == "Running" ? "animation: pulse 1.5s infinite;" : "")">
+                @context.Status
+            </MudChip>
+            @if (!string.IsNullOrEmpty(context.ErrorMessage))
+            {
+                <MudTooltip Text="@context.ErrorMessage">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Style="color: #ff0055; margin-left: 4px;" />
+                </MudTooltip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Created">
+            <MudText Typo="Typo.body2">@context.CreatedDate.ToString("MM/dd/yyyy HH:mm")</MudText>
+            @if (context.CompletedDate.HasValue)
+            {
+                var dur = context.CompletedDate.Value - (context.StartedDate ?? context.CreatedDate);
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">
+                    Completed in @FormatDuration(dur)
+                </MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Claims">
+            @if (context.ClaimCount > 0)
+            {
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.body2">@context.ProcessedCount / @context.ClaimCount</MudText>
+                    <MudProgressLinear Value="@((double)context.ProcessedCount / context.ClaimCount * 100)"
+                                       Color="@(context.Status == "Completed" ? Color.Success : Color.Primary)"
+                                       Style="width: 60px; height: 6px; border-radius: 3px;" />
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">—</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Total Amount">
+            @if (context.TotalAmount > 0)
+            {
+                <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600; font-family: monospace;">
+                    @context.TotalAmount.ToString("C2")
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">—</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                <MudTooltip Text="View Details">
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="@(() => OpenDetailsDialog(context))" />
+                </MudTooltip>
+                @if (context.Status == "Completed")
+                {
+                    <MudTooltip Text="Download ERA (835)">
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small"
+                                       Color="Color.Success"
+                                       OnClick="@(() => DownloadEra(context))" />
+                    </MudTooltip>
+                }
+                @if (context.Status is "Pending" or "Running")
+                {
+                    <MudTooltip Text="Cancel Run">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => CancelRun(context))" />
+                    </MudTooltip>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No payment runs found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create a new payment run to generate ERA remittance files</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+
+@code {
+    private List<PaymentRunSummary> _runs = new();
+    private bool _loading = true;
+    private bool _hubConnected = false;
+    private HubConnection? _hubConnection;
+
+    private decimal _totalPaid => _runs.Where(r => r.Status == "Completed").Sum(r => r.TotalAmount);
+    private int _pendingCount => _runs.Count(r => r.Status is "Pending" or "Running");
+    private int _failedCount => _runs.Count(r => r.Status == "Failed");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRuns();
+        await ConnectSignalR();
+    }
+
+    private async Task LoadRuns()
+    {
+        _loading = true;
+        try
+        {
+            _runs = await PaymentRunService.GetPaymentRunsAsync(100);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading payment runs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ConnectSignalR()
+    {
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/paymentruns"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string, int, int>("ReceivePaymentRunProgress", (runId, status, processed, total) =>
+            {
+                var run = _runs.FirstOrDefault(r => r.RunId == runId);
+                if (run != null)
+                {
+                    run.Status = status;
+                    run.ProcessedCount = processed;
+                    run.ClaimCount = total;
+                    InvokeAsync(StateHasChanged);
+                }
+            });
+
+            _hubConnection.On<string, decimal, string?>("PaymentRunCompleted", (runId, totalAmount, _) =>
+            {
+                var run = _runs.FirstOrDefault(r => r.RunId == runId);
+                if (run != null)
+                {
+                    run.Status = "Completed";
+                    run.TotalAmount = totalAmount;
+                    run.CompletedDate = DateTime.UtcNow;
+                    InvokeAsync(() =>
+                    {
+                        Snackbar.Add($"Payment run {run.RunName} completed — {totalAmount:C2}", Severity.Success);
+                        StateHasChanged();
+                    });
+                }
+            });
+
+            _hubConnection.On<string, string>("PaymentRunFailed", (runId, errorMessage) =>
+            {
+                var run = _runs.FirstOrDefault(r => r.RunId == runId);
+                if (run != null)
+                {
+                    run.Status = "Failed";
+                    run.ErrorMessage = errorMessage;
+                    InvokeAsync(() =>
+                    {
+                        Snackbar.Add($"Payment run failed: {errorMessage}", Severity.Error);
+                        StateHasChanged();
+                    });
+                }
+            });
+
+            await _hubConnection.StartAsync();
+            _hubConnected = true;
+        }
+        catch
+        {
+            // Hub connection is best-effort
+            _hubConnected = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<CreatePaymentRunDialog>("New Payment Run",
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            await LoadRuns();
+            Snackbar.Add("Payment run created and queued for processing", Severity.Success);
+        }
+    }
+
+    private async Task OpenDetailsDialog(PaymentRunSummary run)
+    {
+        var parameters = new DialogParameters
+        {
+            ["RunId"] = run.RunId,
+            ["RunName"] = run.RunName
+        };
+        await DialogService.ShowAsync<PaymentRunDetailsDialog>($"Payment Run: {run.RunName}",
+            parameters,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraLarge, FullWidth = true });
+    }
+
+    private async Task DownloadEra(PaymentRunSummary run)
+    {
+        try
+        {
+            var stream = await PaymentRunService.DownloadEraForRunAsync(run.RunId);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            await JS.InvokeVoidAsync("downloadBase64File",
+                $"ERA_{run.RunId}_{run.CreatedDate:yyyyMMdd}.835",
+                "application/x-edi",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading ERA: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CancelRun(PaymentRunSummary run)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Cancel Payment Run",
+            $"Cancel run '{run.RunName}'? Any in-progress processing will be stopped.",
+            yesText: "Cancel Run", cancelText: "Keep Running");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await PaymentRunService.CancelPaymentRunAsync(run.RunId);
+                run.Status = "Cancelled";
+                Snackbar.Add($"Payment run '{run.RunName}' cancelled", Severity.Warning);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error cancelling run: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private (Color color, string icon) GetStatusDisplay(string status) => status switch
+    {
+        "Completed"  => (Color.Success, Icons.Material.Filled.CheckCircle),
+        "Running"    => (Color.Primary, Icons.Material.Filled.Sync),
+        "Pending"    => (Color.Warning, Icons.Material.Filled.HourglassTop),
+        "Failed"     => (Color.Error, Icons.Material.Filled.Error),
+        "Cancelled"  => (Color.Default, Icons.Material.Filled.Cancel),
+        _            => (Color.Default, Icons.Material.Filled.Circle)
+    };
+
+    private string FormatDuration(TimeSpan span)
+    {
+        if (span.TotalHours >= 1) return $"{span.Hours}h {span.Minutes}m";
+        if (span.TotalMinutes >= 1) return $"{span.Minutes}m {span.Seconds}s";
+        return $"{span.Seconds}s";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+            await _hubConnection.DisposeAsync();
+    }
+}

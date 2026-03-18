@@ -16,21 +16,26 @@
         Real-time prior authorization management • Avg decision time: &lt;2 minutes
     </MudText>
 
-    <!-- Filters & Actions Bar -->
+    <!-- Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
-            <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="_searchTerm" 
-                             Label="Search authorizations" 
-                             Placeholder="Auth ID, Member, Provider..."
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_authIdSearch"
+                             Label="Auth ID"
+                             Placeholder="Exact match"
                              Variant="Variant.Outlined"
-                             Adornment="Adornment.End" 
-                             AdornmentIcon="@Icons.Material.Filled.Search"
                              OnKeyUp="OnSearchKeyUp" />
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudSelect @bind-Value="_statusFilter" 
-                          Label="Status" 
+                <MudTextField @bind-Value="_memberIdSearch"
+                             Label="Member ID"
+                             Placeholder="Exact match"
+                             Variant="Variant.Outlined"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect @bind-Value="_statusFilter"
+                          Label="Status"
                           Variant="Variant.Outlined"
                           T="string"
                           AnchorOrigin="Origin.BottomCenter">
@@ -41,23 +46,32 @@
                     <MudSelectItem Value="@("Review Required")">Review Required</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudSelect @bind-Value="_serviceTypeFilter" 
-                          Label="Service Type" 
-                          Variant="Variant.Outlined"
-                          T="string"
-                          AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem Value="@("All")">All Services</MudSelectItem>
-                    <MudSelectItem Value="@("Surgery")">Surgery</MudSelectItem>
-                    <MudSelectItem Value="@("MRI")">MRI</MudSelectItem>
-                    <MudSelectItem Value="@("CT Scan")">CT Scan</MudSelectItem>
-                    <MudSelectItem Value="@("Physical Therapy")">Physical Therapy</MudSelectItem>
-                    <MudSelectItem Value="@("Specialist Consult")">Specialist Consult</MudSelectItem>
-                </MudSelect>
+            <MudItem xs="12" md="2">
+                <MudGrid Spacing="1">
+                    <MudItem xs="7">
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  FullWidth="true"
+                                  OnClick="SearchAuthorizations"
+                                  Disabled="_loading">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            Search
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Default"
+                                  FullWidth="true"
+                                  OnClick="ClearSearch"
+                                  Disabled="_loading">
+                            Clear
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudButton Variant="Variant.Filled" 
-                          Color="Color.Primary" 
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Secondary"
                           FullWidth="true"
                           OnClick="OpenSubmitDialog">
                     <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
@@ -65,132 +79,167 @@
                 </MudButton>
             </MudItem>
         </MudGrid>
-    </MudPaper>
 
-    <!-- Stats Cards -->
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Requests</MudText>
-                    <MudText Typo="Typo.h4">@_filteredAuthorizations.Count</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
-                    <MudText Typo="Typo.h4" Color="Color.Success">@_filteredAuthorizations.Count(a => a.Status == "Approved")</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Pending Review</MudText>
-                    <MudText Typo="Typo.h4" Color="Color.Warning">@_filteredAuthorizations.Count(a => a.Status == "Pending" || a.Status == "Review Required")</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Decision Time</MudText>
-                    <MudText Typo="Typo.h4">@GetAverageProcessingTime()</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
+        @if (_showValidationMessage)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                Please enter at least one search criterion.
+            </MudAlert>
+        }
+    </MudPaper>
 
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
     }
+    else if (_hasSearched)
+    {
+        <!-- Stats Cards -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Requests</MudText>
+                        <MudText Typo="Typo.h4">@_filteredAuthorizations.Count</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_filteredAuthorizations.Count(a => a.Status == "Approved")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Pending Review</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_filteredAuthorizations.Count(a => a.Status == "Pending" || a.Status == "Review Required")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Decision Time</MudText>
+                        <MudText Typo="Typo.h4">@GetAverageProcessingTime()</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        @if (_filteredAuthorizations.Any())
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                Showing @_filteredAuthorizations.Count authorization(s)
+            </MudText>
+
+            <!-- Authorizations Table -->
+            <MudPaper Elevation="2">
+                <MudTable Items="_filteredAuthorizations"
+                         Hover="true"
+                         Breakpoint="Breakpoint.Sm"
+                         Dense="true"
+                         Striped="true">
+                    <HeaderContent>
+                        <MudTh>Auth ID</MudTh>
+                        <MudTh>Member</MudTh>
+                        <MudTh>Provider</MudTh>
+                        <MudTh>Service Type</MudTh>
+                        <MudTh>Request Date</MudTh>
+                        <MudTh>Decision</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Auth ID">
+                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.AuthorizationId</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Member">
+                            <MudText Typo="Typo.body2">@context.MemberName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Provider">
+                            <MudText Typo="Typo.body2">@context.ProviderName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Service Type">
+                            <MudText Typo="Typo.body2">@context.ServiceType</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Request Date">
+                            <MudText Typo="Typo.body2">@context.RequestDate.ToString("MM/dd/yyyy")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Decision">
+                            <MudText Typo="Typo.body2">
+                                @if (context.DecisionDate.HasValue)
+                                {
+                                    @context.DecisionDate.Value.ToString("MM/dd/yyyy")
+                                }
+                                else
+                                {
+                                    <span style="color: var(--mud-palette-text-disabled);">Pending</span>
+                                }
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip Size="Size.Small"
+                                    Color="@GetStatusColor(context.Status)">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                          Color="Color.Primary"
+                                          Size="Size.Small"
+                                          OnClick="@(() => ViewAuthorizationDetails(context.AuthorizationId))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+        else
+        {
+            <MudPaper Class="pa-8 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.FactCheck" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No authorizations found</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your search criteria</MudText>
+            </MudPaper>
+        }
+    }
     else
     {
-        <!-- Authorizations Table -->
-        <MudPaper Elevation="2">
-            <MudTable Items="_filteredAuthorizations" 
-                     Hover="true" 
-                     Breakpoint="Breakpoint.Sm"
-                     Dense="true"
-                     Striped="true">
-                <HeaderContent>
-                    <MudTh>Auth ID</MudTh>
-                    <MudTh>Member</MudTh>
-                    <MudTh>Provider</MudTh>
-                    <MudTh>Service Type</MudTh>
-                    <MudTh>Request Date</MudTh>
-                    <MudTh>Decision</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Auth ID">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.AuthorizationId</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Member">
-                        <MudText Typo="Typo.body2">@context.MemberName</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Provider">
-                        <MudText Typo="Typo.body2">@context.ProviderName</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Service Type">
-                        <MudText Typo="Typo.body2">@context.ServiceType</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Request Date">
-                        <MudText Typo="Typo.body2">@context.RequestDate.ToString("MM/dd/yyyy")</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Decision">
-                        <MudText Typo="Typo.body2">
-                            @if (context.DecisionDate.HasValue)
-                            {
-                                @context.DecisionDate.Value.ToString("MM/dd/yyyy")
-                            }
-                            else
-                            {
-                                <span style="color: var(--mud-palette-text-disabled);">Pending</span>
-                            }
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Status">
-                        <MudChip Size="Size.Small" 
-                                Color="@GetStatusColor(context.Status)">
-                            @context.Status
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
-                                      Color="Color.Primary" 
-                                      Size="Size.Small"
-                                      OnClick="@(() => ViewAuthorizationDetails(context.AuthorizationId))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
+        <MudPaper Class="pa-8 text-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for an authorization to view details</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Enter an Auth ID or Member ID to begin</MudText>
         </MudPaper>
-
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-            Showing @_filteredAuthorizations.Count of @_allAuthorizations.Count authorization(s)
-        </MudText>
     }
 </MudContainer>
 
 @code {
     private List<AuthorizationSummary> _allAuthorizations = new();
     private List<AuthorizationSummary> _filteredAuthorizations = new();
-    private bool _loading = true;
-    private string _searchTerm = string.Empty;
+    private bool _loading = false;
+    private bool _hasSearched = false;
+    private bool _showValidationMessage = false;
+
+    private string _authIdSearch = string.Empty;
+    private string _memberIdSearch = string.Empty;
     private string _statusFilter = "All";
-    private string _serviceTypeFilter = "All";
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAuthorizations();
-    }
+    private bool HasCriteria =>
+        !string.IsNullOrWhiteSpace(_authIdSearch) ||
+        !string.IsNullOrWhiteSpace(_memberIdSearch);
 
-    private async Task LoadAuthorizations()
+    private async Task SearchAuthorizations()
     {
+        if (!HasCriteria)
+        {
+            _showValidationMessage = true;
+            return;
+        }
+
+        _showValidationMessage = false;
         _loading = true;
         StateHasChanged();
 
@@ -198,11 +247,13 @@
         {
             _allAuthorizations = await AuthorizationService.GetAuthorizationsAsync();
             ApplyFilters();
+            _hasSearched = true;
         }
-        catch (Exception ex)
+        catch
         {
             _allAuthorizations = new();
             _filteredAuthorizations = new();
+            _hasSearched = true;
         }
         finally
         {
@@ -215,38 +266,41 @@
     {
         _filteredAuthorizations = _allAuthorizations.ToList();
 
-        // Apply search filter
-        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        if (!string.IsNullOrWhiteSpace(_authIdSearch))
         {
-            var search = _searchTerm.ToLowerInvariant();
+            var id = _authIdSearch.ToLowerInvariant();
             _filteredAuthorizations = _filteredAuthorizations.Where(a =>
-                a.AuthorizationId.ToLowerInvariant().Contains(search) ||
-                a.MemberName.ToLowerInvariant().Contains(search) ||
-                a.ProviderName.ToLowerInvariant().Contains(search) ||
-                a.ServiceType.ToLowerInvariant().Contains(search)
-            ).ToList();
+                a.AuthorizationId.ToLowerInvariant().Contains(id)).ToList();
         }
 
-        // Apply status filter
+        if (!string.IsNullOrWhiteSpace(_memberIdSearch))
+        {
+            var mid = _memberIdSearch.ToLowerInvariant();
+            _filteredAuthorizations = _filteredAuthorizations.Where(a =>
+                a.MemberName.ToLowerInvariant().Contains(mid)).ToList();
+        }
+
         if (_statusFilter != "All")
         {
             _filteredAuthorizations = _filteredAuthorizations.Where(a => a.Status == _statusFilter).ToList();
         }
+    }
 
-        // Apply service type filter
-        if (_serviceTypeFilter != "All")
-        {
-            _filteredAuthorizations = _filteredAuthorizations.Where(a => a.ServiceType == _serviceTypeFilter).ToList();
-        }
+    private void ClearSearch()
+    {
+        _authIdSearch = string.Empty;
+        _memberIdSearch = string.Empty;
+        _statusFilter = "All";
+        _allAuthorizations = new();
+        _filteredAuthorizations = new();
+        _hasSearched = false;
+        _showValidationMessage = false;
     }
 
     private async Task OnSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-        {
-            ApplyFilters();
-            StateHasChanged();
-        }
+            await SearchAuthorizations();
     }
 
     private Color GetStatusColor(string status)
@@ -285,11 +339,11 @@
             { "AuthorizationId", authorizationId }
         };
 
-        var options = new DialogOptions 
-        { 
-            MaxWidth = MaxWidth.Large, 
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
             FullWidth = true,
-            CloseButton = true 
+            CloseButton = true
         };
 
         await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
@@ -297,11 +351,11 @@
 
     private async Task OpenSubmitDialog()
     {
-        var options = new DialogOptions 
-        { 
-            MaxWidth = MaxWidth.Medium, 
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
             FullWidth = true,
-            CloseButton = true 
+            CloseButton = true
         };
 
         var dialog = await DialogService.ShowAsync<SubmitAuthorizationDialog>("Submit Prior Authorization", options);
@@ -309,7 +363,8 @@
 
         if (!result.Canceled)
         {
-            await LoadAuthorizations();
+            // Re-run search to refresh results after new request
+            await SearchAuthorizations();
         }
     }
 }

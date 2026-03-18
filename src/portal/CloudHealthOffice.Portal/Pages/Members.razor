@@ -18,43 +18,77 @@
         Search and manage member information
     </MudText>
 
-    <!-- Search Bar -->
+    <!-- Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
-            <MudItem xs="12" md="8">
-                <MudTextField @bind-Value="_searchTerm" 
-                             Label="Search members" 
-                             Placeholder="Enter member ID, name, or DOB..."
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_memberIdSearch"
+                             Label="Member ID"
+                             Placeholder="Exact match"
                              Variant="Variant.Outlined"
-                             Adornment="Adornment.End" 
-                             AdornmentIcon="@Icons.Material.Filled.Search"
-                             OnAdornmentClick="SearchMembers"
-                             OnKeyUp="OnSearchKeyUp"
-                             Immediate="false" />
+                             OnKeyUp="OnSearchKeyUp" />
             </MudItem>
-            <MudItem xs="12" md="4">
-                <MudButton Variant="Variant.Filled" 
-                          Color="Color.Primary" 
-                          FullWidth="true"
-                          OnClick="SearchMembers"
-                          Disabled="_loading">
-                    <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                    Search
-                </MudButton>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_lastNameSearch"
+                             Label="Last Name"
+                             Placeholder="Starts with..."
+                             Variant="Variant.Outlined"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_dobSearch"
+                             Label="Date of Birth"
+                             Placeholder="MM/DD/YYYY"
+                             Variant="Variant.Outlined"
+                             OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudGrid Spacing="1">
+                    <MudItem xs="8">
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  FullWidth="true"
+                                  OnClick="SearchMembers"
+                                  Disabled="_loading">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            Search
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Default"
+                                  FullWidth="true"
+                                  OnClick="ClearSearch"
+                                  Disabled="_loading">
+                            Clear
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
             </MudItem>
         </MudGrid>
+
+        @if (_showValidationMessage)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                Please enter at least one search criterion.
+            </MudAlert>
+        }
     </MudPaper>
 
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
     }
-    else if (_members.Any())
+    else if (_hasSearched && _members.Any())
     {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            Showing @_members.Count member(s)
+        </MudText>
+
         <!-- Results Table -->
         <MudPaper Elevation="2">
-            <MudTable Items="_members" 
-                     Hover="true" 
+            <MudTable Items="_members"
+                     Hover="true"
                      Breakpoint="Breakpoint.Sm"
                      Dense="true"
                      Striped="true">
@@ -76,14 +110,14 @@
                         <MudText Typo="Typo.body2">@context.DateOfBirth.ToString("MM/dd/yyyy")</MudText>
                     </MudTd>
                     <MudTd DataLabel="Coverage Status">
-                        <MudChip Size="Size.Small" 
+                        <MudChip Size="Size.Small"
                                 Color="@GetStatusColor(context.CoverageStatus)">
                             @context.CoverageStatus
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Actions">
-                        <MudButton Variant="Variant.Text" 
-                                  Color="Color.Primary" 
+                        <MudButton Variant="Variant.Text"
+                                  Color="Color.Primary"
                                   Size="Size.Small"
                                   OnClick="@(() => ViewMemberDetails(context.MemberId))">
                             View Details
@@ -92,12 +126,8 @@
                 </RowTemplate>
             </MudTable>
         </MudPaper>
-
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-            Showing @_members.Count member(s)
-        </MudText>
     }
-    else if (_searched)
+    else if (_hasSearched)
     {
         <MudPaper Class="pa-8 text-center" Elevation="2">
             <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Large" Color="Color.Secondary" />
@@ -105,32 +135,56 @@
             <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your search criteria</MudText>
         </MudPaper>
     }
+    else
+    {
+        <MudPaper Class="pa-8 text-center" Elevation="1">
+            <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a member to view details</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Enter Member ID, last name, or date of birth above</MudText>
+        </MudPaper>
+    }
 </MudContainer>
 
 @code {
-    private string _searchTerm = string.Empty;
+    private string _memberIdSearch = string.Empty;
+    private string _lastNameSearch = string.Empty;
+    private string _dobSearch = string.Empty;
     private List<MemberSummary> _members = new();
     private bool _loading = false;
-    private bool _searched = false;
+    private bool _hasSearched = false;
+    private bool _showValidationMessage = false;
+
+    private bool HasCriteria =>
+        !string.IsNullOrWhiteSpace(_memberIdSearch) ||
+        !string.IsNullOrWhiteSpace(_lastNameSearch) ||
+        !string.IsNullOrWhiteSpace(_dobSearch);
 
     private async Task SearchMembers()
     {
-        if (string.IsNullOrWhiteSpace(_searchTerm))
+        if (!HasCriteria)
+        {
+            _showValidationMessage = true;
             return;
+        }
 
+        _showValidationMessage = false;
         _loading = true;
-        _searched = false;
         StateHasChanged();
 
         try
         {
-            _members = await MemberService.SearchMembersAsync(_searchTerm);
-            _searched = true;
+            // Pass the most specific criterion to the service (ID > name > DOB)
+            var term = !string.IsNullOrWhiteSpace(_memberIdSearch) ? _memberIdSearch
+                     : !string.IsNullOrWhiteSpace(_lastNameSearch) ? _lastNameSearch
+                     : _dobSearch;
+
+            _members = await MemberService.SearchMembersAsync(term);
+            _hasSearched = true;
         }
-        catch (Exception ex)
+        catch
         {
-            // Log error - could add ILogger here
             _members = new();
+            _hasSearched = true;
         }
         finally
         {
@@ -139,12 +193,20 @@
         }
     }
 
+    private void ClearSearch()
+    {
+        _memberIdSearch = string.Empty;
+        _lastNameSearch = string.Empty;
+        _dobSearch = string.Empty;
+        _members = new();
+        _hasSearched = false;
+        _showValidationMessage = false;
+    }
+
     private async Task OnSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-        {
             await SearchMembers();
-        }
     }
 
     private Color GetStatusColor(string status)
@@ -166,11 +228,11 @@
             { "MemberId", memberId }
         };
 
-        var options = new DialogOptions 
-        { 
-            MaxWidth = MaxWidth.Medium, 
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
             FullWidth = true,
-            CloseButton = true 
+            CloseButton = true
         };
 
         await DialogService.ShowAsync<MemberDetailsDialog>("Member Details", parameters, options);
