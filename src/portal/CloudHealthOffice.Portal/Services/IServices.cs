@@ -7,6 +7,7 @@ public interface IClaimsService
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
     Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
+    Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);
 }
 
 public interface IEligibilityService
@@ -18,6 +19,11 @@ public interface IMemberService
 {
     Task<List<MemberSummary>> SearchMembersAsync(string searchTerm);
     Task<MemberDetails?> GetMemberByIdAsync(string memberId);
+    Task<MemberPcp?> GetMemberPcpAsync(string memberId);
+    Task AssignPcpAsync(AssignPcpRequest request);
+    Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
+    Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
+    Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request);
 }
 
 public interface ICoverageService
@@ -58,12 +64,18 @@ public interface IBenefitPlanService
     Task<string> CreateBenefitPlanAsync(CreateBenefitPlanRequest request);
     Task UpdateBenefitPlanAsync(string planId, UpdateBenefitPlanRequest request);
     Task<List<BenefitItem>> GetAvailableBenefitsAsync();
+    Task<List<ServiceBenefitRule>> GetServiceBenefitRulesAsync(string planId);
+    Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
+    Task<AccumulatorConfiguration?> GetAccumulatorConfigAsync(string planId);
+    Task UpdateAccumulatorConfigAsync(string planId, AccumulatorConfiguration config);
 }
 
 public interface IWorkflowService
 {
     Task<List<WorkflowRun>> GetWorkflowRunsAsync(int limit = 20);
     Task<WorkflowDetails?> GetWorkflowDetailsAsync(string workflowId);
+    Task<List<WorkflowRun>> GetActiveWorkflowsAsync();
+    Task<bool> RetriggerWorkflowAsync(string workflowId);
 }
 
 public interface IMetricsService
@@ -809,6 +821,51 @@ public interface IOperatingModeService
     Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId);
 }
 
+// EDI Operations
+public interface IEdiOperationsService
+{
+    Task<List<Edi834Batch>> Get834BatchesAsync(DateTime? from = null, DateTime? to = null);
+    Task<List<Enrollment834Record>> Get834BatchRecordsAsync(string batchId);
+    Task Resolve834RecordAsync(Edi834ResolutionRequest request);
+    Task<List<ClaimAcknowledgmentSummary>> Get277CaAcknowledgmentsAsync(DateTime? from = null, DateTime? to = null);
+    Task<Stream> Download277CaAsync(string claimId);
+    Task<List<EraSummary>> GetErasAsync(DateTime? from = null, DateTime? to = null);
+    Task<Stream> DownloadEraAsync(string paymentId);
+    Task<List<EdiTransactionHistoryItem>> GetTransactionHistoryAsync(DateTime? from, DateTime? to, string? transactionType, string? partnerId, string? status, int pageNumber, int pageSize);
+}
+
+// Payment Runs
+public interface IPaymentRunService
+{
+    Task<List<PaymentRunSummary>> GetPaymentRunsAsync(int limit = 50);
+    Task<PaymentRunDetails?> GetPaymentRunByIdAsync(string runId);
+    Task<string> CreatePaymentRunAsync(CreatePaymentRunRequest request);
+    Task CancelPaymentRunAsync(string runId);
+    Task<Stream> DownloadEraForRunAsync(string runId);
+}
+
+// Premium Billing
+public interface IPremiumBillingService
+{
+    Task<List<BillingCycle>> GetBillingCyclesAsync(string? sponsorId = null, string? status = null);
+    Task<BillingCycleDetails?> GetBillingCycleByIdAsync(string cycleId);
+    Task<string> GenerateInvoiceAsync(CreateInvoiceRequest request);
+    Task<List<PremiumRate>> GetPremiumRatesAsync(string? planId = null);
+    Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate);
+    Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate);
+    Task<Stream> DownloadInvoiceAsync(string cycleId);
+}
+
+// Reporting
+public interface IReportingService
+{
+    Task<ClaimsSummaryReport> GetClaimsSummaryAsync(ReportRequest request);
+    Task<PaymentSummaryReport> GetPaymentSummaryAsync(ReportRequest request);
+    Task<EligibilityStatsReport> GetEligibilityStatsAsync(ReportRequest request);
+    Task<AuthApprovalReport> GetAuthApprovalReportAsync(ReportRequest request);
+    Task<List<ClaimsByProvider>> GetProviderPerformanceAsync(ReportRequest request);
+}
+
 public class OperatingModeConfiguration
 {
     public static readonly Dictionary<string, string> DefaultEngines = new(StringComparer.OrdinalIgnoreCase)
@@ -823,4 +880,485 @@ public class OperatingModeConfiguration
     public string TenantId { get; set; } = string.Empty;
     public Dictionary<string, string> Engines { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public DateTime? UpdatedAt { get; set; }
+}
+
+// ── PR13: Member Enrollment Operations ──────────────────────────────────────
+
+public class MemberPcp
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string NPI { get; set; } = string.Empty;
+    public string Specialty { get; set; } = string.Empty;
+    public string NetworkStatus { get; set; } = string.Empty;
+    public DateTime AssignedDate { get; set; }
+    public string? PracticeName { get; set; }
+    public string? Phone { get; set; }
+}
+
+public class CoverageHistoryEvent
+{
+    public string EventId { get; set; } = string.Empty;
+    public DateTime EventDate { get; set; }
+    public string EventType { get; set; } = string.Empty; // Enrolled, PlanChange, PcpChange, Terminated, Reinstated
+    public string Description { get; set; } = string.Empty;
+    public string? ChangedBy { get; set; }
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
+public class Enrollment834Record
+{
+    public string TransactionId { get; set; } = string.Empty;
+    public string BatchId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MaintenanceTypeCode { get; set; } = string.Empty; // 001=Change, 021=Add, 024=Cancel
+    public string MaintenanceReasonCode { get; set; } = string.Empty;
+    public string TransactionSetPurpose { get; set; } = string.Empty;
+    public DateTime TransactionDate { get; set; }
+    public string Status { get; set; } = string.Empty; // Accepted, Rejected, Pending
+    public List<string> Errors { get; set; } = new();
+    public string? RawSegmentPreview { get; set; }
+}
+
+public class AssignPcpRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class TerminateEnrollmentRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string CoverageId { get; set; } = string.Empty;
+    public DateTime TerminationDate { get; set; }
+    public string ReasonCode { get; set; } = string.Empty; // 1=Voluntary, 2=Involuntary, 3=Death, 4=Medicare, 5=Medicaid, 6=Other
+    public string? Notes { get; set; }
+}
+
+// ── PR14: EDI Transaction Operations ────────────────────────────────────────
+
+public class Edi834Batch
+{
+    public string BatchId { get; set; } = string.Empty;
+    public string TradingPartnerId { get; set; } = string.Empty;
+    public string TradingPartnerName { get; set; } = string.Empty;
+    public DateTime ReceivedDate { get; set; }
+    public int TotalRecords { get; set; }
+    public int AcceptedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public int PendingCount { get; set; }
+    public string Status { get; set; } = string.Empty; // Processing, Completed, Failed, PartiallyAccepted
+    public string? OriginalFileName { get; set; }
+}
+
+public class ClaimAcknowledgmentSummary
+{
+    public string AckId { get; set; } = string.Empty;
+    public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime GeneratedDate { get; set; }
+    public string AckStatus { get; set; } = string.Empty; // Accepted, Rejected, Pended
+    public string StatusCategoryCode { get; set; } = string.Empty;
+    public string StatusCode { get; set; } = string.Empty;
+    public string StatusDescription { get; set; } = string.Empty;
+}
+
+public class EraSummary
+{
+    public string EraId { get; set; } = string.Empty;
+    public string PaymentId { get; set; } = string.Empty;
+    public string PayerName { get; set; } = string.Empty;
+    public string PayeeNPI { get; set; } = string.Empty;
+    public string PayeeName { get; set; } = string.Empty;
+    public DateTime PaymentDate { get; set; }
+    public string PaymentMethod { get; set; } = string.Empty; // ACH, CHK
+    public string CheckNumber { get; set; } = string.Empty;
+    public decimal TotalPaymentAmount { get; set; }
+    public int ClaimCount { get; set; }
+    public string Status { get; set; } = string.Empty; // Generated, Transmitted, Acknowledged
+}
+
+public class EdiTransactionHistoryItem
+{
+    public string TransactionId { get; set; } = string.Empty;
+    public string TransactionType { get; set; } = string.Empty; // 834, 835, 277CA, 270, 271, 278
+    public DateTime TransactionDate { get; set; }
+    public string TradingPartnerId { get; set; } = string.Empty;
+    public string TradingPartnerName { get; set; } = string.Empty;
+    public string Direction { get; set; } = string.Empty; // Inbound, Outbound
+    public string Status { get; set; } = string.Empty;
+    public string? ErrorSummary { get; set; }
+    public int RecordCount { get; set; }
+}
+
+public class Edi834ResolutionRequest
+{
+    public string BatchId { get; set; } = string.Empty;
+    public string TransactionId { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty; // Accept, Reject, Hold
+    public string? Notes { get; set; }
+}
+
+// ── PR15: Payment Runs ───────────────────────────────────────────────────────
+
+public class PaymentRunSummary
+{
+    public string RunId { get; set; } = string.Empty;
+    public string RunName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty; // Pending, Running, Completed, Failed, Cancelled
+    public DateTime CreatedDate { get; set; }
+    public DateTime? StartedDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public int ClaimCount { get; set; }
+    public int ProcessedCount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? EraFileUrl { get; set; }
+}
+
+public class PaymentRunDetails : PaymentRunSummary
+{
+    public DateTime ClaimServiceDateFrom { get; set; }
+    public DateTime ClaimServiceDateTo { get; set; }
+    public string? SponsorFilter { get; set; }
+    public string? PlanFilter { get; set; }
+    public List<PaymentRunClaimItem> Claims { get; set; } = new();
+    public decimal TotalCharges { get; set; }
+    public decimal TotalAllowed { get; set; }
+    public decimal TotalMemberResponsibility { get; set; }
+    public int ApprovedCount { get; set; }
+    public int DeniedCount { get; set; }
+    public int AdjustmentCount { get; set; }
+}
+
+public class PaymentRunClaimItem
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public decimal ChargeAmount { get; set; }
+    public decimal AllowedAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal MemberResponsibility { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty; // Included, Excluded, Adjusted
+}
+
+public class CreatePaymentRunRequest
+{
+    public string RunName { get; set; } = string.Empty;
+    public DateTime ClaimServiceDateFrom { get; set; }
+    public DateTime ClaimServiceDateTo { get; set; }
+    public string? SponsorId { get; set; }
+    public string? PlanId { get; set; }
+    public List<string> ClaimStatuses { get; set; } = new() { "Approved" };
+}
+
+// ── PR15: Premium Billing ────────────────────────────────────────────────────
+
+public class BillingCycle
+{
+    public string CycleId { get; set; } = string.Empty;
+    public string SponsorId { get; set; } = string.Empty;
+    public string SponsorName { get; set; } = string.Empty;
+    public string BillingPeriod { get; set; } = string.Empty; // YYYY-MM
+    public string BillingFrequency { get; set; } = string.Empty; // Monthly, Quarterly
+    public DateTime DueDate { get; set; }
+    public decimal TotalPremium { get; set; }
+    public string Status { get; set; } = string.Empty; // Draft, Sent, Paid, Overdue, Void
+    public DateTime? PaidDate { get; set; }
+    public string? InvoiceNumber { get; set; }
+    public int MemberCount { get; set; }
+}
+
+public class BillingCycleDetails : BillingCycle
+{
+    public List<BillingLineItem> LineItems { get; set; } = new();
+    public decimal TaxAmount { get; set; }
+    public decimal AdjustmentAmount { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class BillingLineItem
+{
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string CoverageLevel { get; set; } = string.Empty; // Employee, Employee+Spouse, Family
+    public int MemberCount { get; set; }
+    public decimal UnitRate { get; set; }
+    public decimal SubTotal { get; set; }
+    public string? AgeBand { get; set; }
+}
+
+public class PremiumRate
+{
+    public string RateId { get; set; } = string.Empty;
+    public string PlanId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string CoverageLevel { get; set; } = string.Empty;
+    public string? AgeBand { get; set; }
+    public decimal Rate { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public bool IsEditing { get; set; } // UI state only
+    public decimal EditRate { get; set; } // UI edit buffer
+}
+
+public class CreateInvoiceRequest
+{
+    public string SponsorId { get; set; } = string.Empty;
+    public string BillingPeriod { get; set; } = string.Empty;
+    public DateTime DueDate { get; set; }
+    public string? Notes { get; set; }
+}
+
+// ── PR16: Enhanced Benefit Configuration ────────────────────────────────────
+
+public class ServiceBenefitRule
+{
+    public string RuleId { get; set; } = string.Empty;
+    public string ServiceCategory { get; set; } = string.Empty; // Medical, Pharmacy, Dental, Vision, MentalHealth
+    public string ServiceTypeCode { get; set; } = string.Empty;
+    public string ServiceTypeDescription { get; set; } = string.Empty;
+    public string NetworkTier { get; set; } = string.Empty; // Tier1, Tier2, OutOfNetwork
+    public decimal? Copay { get; set; }
+    public decimal? CoinsurancePercent { get; set; }
+    public bool SubjectToDeductible { get; set; }
+    public int? AnnualVisitLimit { get; set; }
+    public decimal? AnnualDollarLimit { get; set; }
+    public bool PriorAuthRequired { get; set; }
+    public string? PriorAuthThreshold { get; set; }
+    public string DeductibleAccumulatorGroup { get; set; } = "Individual";
+    public string OopAccumulatorGroup { get; set; } = "Individual";
+    public bool CrossAccumulatesWithMedical { get; set; }
+    public bool IsEditing { get; set; } // UI state
+}
+
+public class AccumulatorConfiguration
+{
+    public string ConfigId { get; set; } = string.Empty;
+    public string PlanId { get; set; } = string.Empty;
+    public decimal IndividualDeductible { get; set; }
+    public decimal FamilyDeductible { get; set; }
+    public decimal IndividualOopMax { get; set; }
+    public decimal FamilyOopMax { get; set; }
+    public bool PharmacyCrossAccumulatesDeductible { get; set; }
+    public bool PharmacyCrossAccumulatesOop { get; set; }
+    public bool DentalCrossAccumulatesOop { get; set; }
+    public string EmbeddedOrAggregate { get; set; } = "Embedded"; // Embedded, Aggregate
+}
+
+public class UpdateServiceBenefitRulesRequest
+{
+    public string PlanId { get; set; } = string.Empty;
+    public List<ServiceBenefitRule> Rules { get; set; } = new();
+    public AccumulatorConfiguration Accumulators { get; set; } = new();
+}
+
+// ── PR16: Adjudication Transparency ─────────────────────────────────────────
+
+public class NcciEditResult
+{
+    public string EditCode { get; set; } = string.Empty;
+    public string EditType { get; set; } = string.Empty; // MUE, NCCI-PTP, NCCI-MU
+    public string Description { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public string? FailureReason { get; set; }
+    public string? AffectedProcedureCode { get; set; }
+    public string? AffectedModifier { get; set; }
+    public string? ResolutionApplied { get; set; }
+}
+
+public class FeeScheduleResult
+{
+    public string ProcedureCode { get; set; } = string.Empty;
+    public string Modifier { get; set; } = string.Empty;
+    public string FeeScheduleName { get; set; } = string.Empty;
+    public decimal BilledAmount { get; set; }
+    public decimal AllowedAmount { get; set; }
+    public decimal ContractedRate { get; set; }
+    public string RateBasis { get; set; } = string.Empty; // MedicareRVU, PercentOfCharge, CaseRate
+    public decimal RateMultiplier { get; set; }
+    public string NetworkTier { get; set; } = string.Empty;
+}
+
+public class AccumulatorUpdate
+{
+    public string AccumulatorType { get; set; } = string.Empty; // IndividualDeductible, FamilyDeductible, IndividualOop, FamilyOop
+    public decimal AmountApplied { get; set; }
+    public decimal NewBalance { get; set; }
+    public decimal Limit { get; set; }
+}
+
+public class BenefitCalculationResult
+{
+    public string ServiceType { get; set; } = string.Empty;
+    public string BenefitRuleApplied { get; set; } = string.Empty;
+    public string NetworkTier { get; set; } = string.Empty;
+    public decimal AllowedAmount { get; set; }
+    public decimal DeductibleApplied { get; set; }
+    public decimal DeductibleRemaining { get; set; }
+    public decimal CopayAmount { get; set; }
+    public decimal CoinsuranceAmount { get; set; }
+    public decimal PlanPayment { get; set; }
+    public decimal MemberResponsibility { get; set; }
+    public bool DeductibleMet { get; set; }
+    public bool OopMaxMet { get; set; }
+    public decimal IndividualDeductibleBalance { get; set; }
+    public decimal IndividualDeductibleLimit { get; set; }
+    public decimal IndividualOopBalance { get; set; }
+    public decimal IndividualOopLimit { get; set; }
+    public List<AccumulatorUpdate> AccumulatorUpdates { get; set; } = new();
+}
+
+public class AdjudicationStep
+{
+    public string StepName { get; set; } = string.Empty;
+    public int StepNumber { get; set; }
+    public string Status { get; set; } = string.Empty; // Passed, Failed, Skipped, Warning
+    public DateTime? Timestamp { get; set; }
+    public int? DurationMs { get; set; }
+    public string? Summary { get; set; }
+    public string? ErrorDetail { get; set; }
+}
+
+public class AdjudicationTransparencyData
+{
+    public List<AdjudicationStep> Steps { get; set; } = new();
+    public List<NcciEditResult> NcciResults { get; set; } = new();
+    public List<FeeScheduleResult> FeeScheduleResults { get; set; } = new();
+    public BenefitCalculationResult? BenefitCalculation { get; set; }
+}
+
+// ── PR17: Workflow Extensions ────────────────────────────────────────────────
+
+public class WorkflowRunExtended : WorkflowRun
+{
+    public string WorkflowTemplate { get; set; } = string.Empty;
+    public string TriggerSource { get; set; } = string.Empty; // API, Scheduled, Manual
+    public int StepCount { get; set; }
+    public int CompletedStepCount { get; set; }
+    public List<WorkflowStepExtended> DetailedSteps { get; set; } = new();
+}
+
+public class WorkflowStepExtended : WorkflowStep
+{
+    public int? DurationMs { get; set; }
+    public string? NodeName { get; set; }
+    public string? Message { get; set; }
+    public int StepNumber { get; set; }
+}
+
+// ── PR17: Reporting DTOs ─────────────────────────────────────────────────────
+
+public class ReportRequest
+{
+    public DateTime DateFrom { get; set; }
+    public DateTime DateTo { get; set; }
+    public string? ProviderId { get; set; }
+    public string? SponsorId { get; set; }
+    public string? PlanId { get; set; }
+}
+
+public class ClaimsByDateBucket
+{
+    public DateTime Date { get; set; }
+    public int Count { get; set; }
+    public decimal TotalAmount { get; set; }
+}
+
+public class ClaimsByProvider
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string Specialty { get; set; } = string.Empty;
+    public int ClaimCount { get; set; }
+    public decimal TotalBilled { get; set; }
+    public decimal TotalPaid { get; set; }
+    public double DenialRate { get; set; }
+    public double AvgProcessingDays { get; set; }
+}
+
+public class ClaimsByDiagnosis
+{
+    public string DiagnosisCode { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int ClaimCount { get; set; }
+    public decimal TotalAmount { get; set; }
+}
+
+public class ClaimsSummaryReport
+{
+    public DateTime PeriodFrom { get; set; }
+    public DateTime PeriodTo { get; set; }
+    public int TotalClaims { get; set; }
+    public decimal TotalCharges { get; set; }
+    public decimal TotalAllowed { get; set; }
+    public decimal TotalPaid { get; set; }
+    public int ApprovedCount { get; set; }
+    public int DeniedCount { get; set; }
+    public int PendedCount { get; set; }
+    public double ApprovalRate { get; set; }
+    public decimal AvgClaimAmount { get; set; }
+    public List<ClaimsByDateBucket> DailyBreakdown { get; set; } = new();
+    public List<ClaimsByProvider> TopProviders { get; set; } = new();
+    public List<ClaimsByDiagnosis> TopDiagnoses { get; set; } = new();
+}
+
+public class EraByPeriod
+{
+    public string Period { get; set; } = string.Empty; // YYYY-MM
+    public int EraCount { get; set; }
+    public decimal TotalAmount { get; set; }
+}
+
+public class PaymentSummaryReport
+{
+    public DateTime PeriodFrom { get; set; }
+    public DateTime PeriodTo { get; set; }
+    public int EraCount { get; set; }
+    public decimal TotalEraAmount { get; set; }
+    public decimal AvgEraAmount { get; set; }
+    public List<EraByPeriod> ByPeriod { get; set; } = new();
+}
+
+public class EligibilityStatsReport
+{
+    public DateTime PeriodFrom { get; set; }
+    public DateTime PeriodTo { get; set; }
+    public int TotalRequests { get; set; }
+    public int EligibleCount { get; set; }
+    public int IneligibleCount { get; set; }
+    public double EligibilityRate { get; set; }
+    public double AvgResponseTimeMs { get; set; }
+}
+
+public class AuthByServiceType
+{
+    public string ServiceType { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public int ApprovedCount { get; set; }
+    public int DeniedCount { get; set; }
+    public double ApprovalRate { get; set; }
+    public double AvgDecisionDays { get; set; }
+}
+
+public class AuthApprovalReport
+{
+    public DateTime PeriodFrom { get; set; }
+    public DateTime PeriodTo { get; set; }
+    public int TotalRequests { get; set; }
+    public int ApprovedCount { get; set; }
+    public int DeniedCount { get; set; }
+    public int PendingCount { get; set; }
+    public double ApprovalRate { get; set; }
+    public double AvgDecisionDays { get; set; }
+    public List<AuthByServiceType> ByServiceType { get; set; } = new();
 }

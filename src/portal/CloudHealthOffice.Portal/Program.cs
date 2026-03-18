@@ -208,6 +208,10 @@ builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<IOperatingModeService, OperatingModeService>();
 builder.Services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
+builder.Services.AddScoped<IEdiOperationsService, EdiOperationsService>();
+builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
+builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
+builder.Services.AddScoped<IReportingService, ReportingService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
@@ -270,6 +274,7 @@ app.MapRazorPages();
 app.MapBlazorHub();
 app.MapHub<ClaimsHub>("/hubs/claims");
 app.MapHub<WorkflowHub>("/hubs/workflows");
+app.MapHub<PaymentRunHub>("/hubs/paymentruns");
 app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg"));
 app.MapFallbackToPage("/_Host");
 

@@ -32,3 +32,21 @@ public class WorkflowHub : Hub
         await Clients.All.SendAsync("WorkflowCompleted", workflowId, durationMs);
     }
 }
+
+public class PaymentRunHub : Hub
+{
+    public async Task SendPaymentRunProgress(string runId, string status, int processedCount, int totalCount)
+    {
+        await Clients.All.SendAsync("ReceivePaymentRunProgress", runId, status, processedCount, totalCount);
+    }
+
+    public async Task SendPaymentRunCompleted(string runId, decimal totalAmount, string? eraDownloadUrl)
+    {
+        await Clients.All.SendAsync("PaymentRunCompleted", runId, totalAmount, eraDownloadUrl);
+    }
+
+    public async Task SendPaymentRunFailed(string runId, string errorMessage)
+    {
+        await Clients.All.SendAsync("PaymentRunFailed", runId, errorMessage);
+    }
+}

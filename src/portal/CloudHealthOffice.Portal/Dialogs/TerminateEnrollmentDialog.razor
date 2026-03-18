@@ -1,0 +1,136 @@
+@using CloudHealthOffice.Portal.Services
+@inject IMemberService MemberService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #ff0055;">
+            <MudIcon Icon="@Icons.Material.Filled.PersonOff" Class="mr-2" Style="vertical-align: middle;" />
+            Terminate Enrollment
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudText Typo="Typo.body1">
+                <strong>Warning:</strong> You are about to terminate coverage for <strong>@MemberName</strong>.
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">
+                Plan: <strong>@PlanName</strong> &nbsp;|&nbsp; Coverage ID: <strong style="font-family: monospace;">@CoverageId</strong>
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">
+                This action will generate an 834 (Cancel) transaction and update the member's coverage status.
+                This action cannot be undone without re-enrollment.
+            </MudText>
+        </MudAlert>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_terminationDate"
+                               Label="Termination Effective Date"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               RequiredError="Termination date is required"
+                               HelperText="Coverage ends at end of this date" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_reasonCode"
+                           Label="Termination Reason Code"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           HelperText="Select the reason for termination">
+                    <MudSelectItem Value='@("")'>Select reason...</MudSelectItem>
+                    <MudSelectItem Value="@("1")">1 — Voluntary disenrollment (member request)</MudSelectItem>
+                    <MudSelectItem Value="@("2")">2 — Involuntary termination (non-payment)</MudSelectItem>
+                    <MudSelectItem Value="@("3")">3 — Death</MudSelectItem>
+                    <MudSelectItem Value="@("4")">4 — Medicare primary coverage obtained</MudSelectItem>
+                    <MudSelectItem Value="@("5")">5 — Medicaid primary coverage obtained</MudSelectItem>
+                    <MudSelectItem Value="@("6")">6 — Employer group contract terminated</MudSelectItem>
+                    <MudSelectItem Value="@("7")">7 — Moved out of service area</MudSelectItem>
+                    <MudSelectItem Value="@("8")">8 — Loss of eligibility (dependent age out)</MudSelectItem>
+                    <MudSelectItem Value="@("9")">9 — Other</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes"
+                              Label="Notes (optional)"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              HelperText="Additional details for audit trail" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudCheckBox @bind-Value="_confirmed" Color="Color.Error">
+                    <MudText Typo="Typo.body2">
+                        I confirm that I want to terminate enrollment for <strong>@MemberName</strong> effective
+                        <strong>@(_terminationDate?.ToString("MM/dd/yyyy") ?? "[date not selected]")</strong>.
+                        This will generate an EDI 834 maintenance transaction.
+                    </MudText>
+                </MudCheckBox>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   OnClick="TerminateEnrollment"
+                   Disabled="@(!_confirmed || string.IsNullOrEmpty(_reasonCode) || !_terminationDate.HasValue || _terminating)">
+            @if (_terminating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Terminate Enrollment
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string MemberId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string MemberName { get; set; } = string.Empty;
+
+    [Parameter]
+    public string CoverageId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string PlanName { get; set; } = string.Empty;
+
+    private DateTime? _terminationDate = DateTime.Today;
+    private string _reasonCode = string.Empty;
+    private string _notes = string.Empty;
+    private bool _confirmed = false;
+    private bool _terminating = false;
+
+    private async Task TerminateEnrollment()
+    {
+        if (!_confirmed || string.IsNullOrEmpty(_reasonCode) || !_terminationDate.HasValue) return;
+        _terminating = true;
+        try
+        {
+            await MemberService.TerminateEnrollmentAsync(new TerminateEnrollmentRequest
+            {
+                MemberId = MemberId,
+                CoverageId = CoverageId,
+                TerminationDate = _terminationDate.Value,
+                ReasonCode = _reasonCode,
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes
+            });
+            Snackbar.Add($"Enrollment for {MemberName} terminated effective {_terminationDate.Value:MM/dd/yyyy}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error terminating enrollment: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _terminating = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,815 @@
+@page "/edi-operations"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.JSInterop
+@inject IEdiOperationsService EdiService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<MudText Typo="Typo.h4" Class="mb-1" Style="font-weight: 600;">EDI Transaction Operations</MudText>
+<MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+    Manage enrollment transactions (834), claim acknowledgments (277CA), remittance advice (835), and full EDI transaction history.
+</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4"
+         @bind-ActivePanelIndex="_activeTab">
+
+    <!-- ── Tab 1: 834 Enrollment Batches ── -->
+    <MudTabPanel Text="834 Enrollment" Icon="@Icons.Material.Filled.Group">
+        <MudGrid Spacing="2" Class="mb-4" AlignItems="Center.Center">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_834From" Label="From Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_834To" Label="To Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_834StatusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value='@("")'>All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                    <MudSelectItem Value="@("PartiallyAccepted")">Partially Accepted</MudSelectItem>
+                    <MudSelectItem Value="@("Processing")">Processing</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="Load834Batches"
+                           Disabled="_loading834">
+                    @if (_loading834) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+                    Refresh
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_loading834)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="_834Batches" Dense="true" Hover="true" T="Edi834Batch"
+                      SortLabel="Sort By">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Edi834Batch,object>(x=>x.ReceivedDate)">Received</MudTableSortLabel></MudTh>
+                    <MudTh>File Name</MudTh>
+                    <MudTh>Trading Partner</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Edi834Batch,object>(x=>x.TotalRecords)">Total</MudTableSortLabel></MudTh>
+                    <MudTh>Accepted</MudTh>
+                    <MudTh>Rejected</MudTh>
+                    <MudTh>Pending</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Received">
+                        <MudText Typo="Typo.body2">@context.ReceivedDate.ToString("MM/dd/yyyy HH:mm")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="File Name">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7); font-size: 0.8em;">
+                            @(context.OriginalFileName ?? context.BatchId)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Trading Partner">
+                        <MudText Typo="Typo.body2">@context.TradingPartnerName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Total">
+                        <MudText Typo="Typo.body2">@context.TotalRecords</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Accepted">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.AcceptedCount</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Rejected">
+                        @if (context.RejectedCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.RejectedCount</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">0</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Pending">
+                        @if (context.PendingCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.PendingCount</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">0</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@Get834BatchStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@((_expandedBatchId == context.BatchId) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="@(() => ToggleBatchExpand(context.BatchId))"
+                                       Title="View Records" />
+                    </MudTd>
+                </RowTemplate>
+                <ChildRowContent>
+                    @if (_expandedBatchId == context.BatchId)
+                    {
+                        <MudTr>
+                            <td colspan="9" style="padding: 0 16px 16px 32px; background: rgba(0,255,255,0.02);">
+                                @if (_loadingBatchRecords)
+                                {
+                                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
+                                }
+                                else if (_batchRecords.Any())
+                                {
+                                    <MudText Typo="Typo.subtitle2" Class="my-2">Enrollment Records — @context.BatchId</MudText>
+                                    <MudTable Items="_batchRecords" Dense="true" T="Enrollment834Record" Class="mt-1" Elevation="0">
+                                        <HeaderContent>
+                                            <MudTh>Date</MudTh>
+                                            <MudTh>Member ID</MudTh>
+                                            <MudTh>Member Name</MudTh>
+                                            <MudTh>Transaction Type</MudTh>
+                                            <MudTh>Purpose</MudTh>
+                                            <MudTh>Status</MudTh>
+                                            <MudTh>Errors</MudTh>
+                                            <MudTh>Actions</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd>@context.TransactionDate.ToString("MM/dd/yyyy")</MudTd>
+                                            <MudTd><span style="font-family: monospace; color: rgba(0,255,255,0.7);">@context.MemberId</span></MudTd>
+                                            <MudTd>@context.MemberName</MudTd>
+                                            <MudTd>
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Color="@(context.MaintenanceTypeCode == "021" ? Color.Success : context.MaintenanceTypeCode == "024" ? Color.Error : Color.Info)">
+                                                    @(context.MaintenanceTypeCode == "021" ? "Add" : context.MaintenanceTypeCode == "024" ? "Cancel" : "Change")
+                                                </MudChip>
+                                            </MudTd>
+                                            <MudTd><MudText Typo="Typo.caption">@context.TransactionSetPurpose</MudText></MudTd>
+                                            <MudTd>
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Color="@(context.Status == "Accepted" ? Color.Success : context.Status == "Rejected" ? Color.Error : Color.Warning)">
+                                                    @context.Status
+                                                </MudChip>
+                                            </MudTd>
+                                            <MudTd>
+                                                @if (context.Errors.Any())
+                                                {
+                                                    <MudTooltip>
+                                                        <TooltipContent>
+                                                            @foreach (var err in context.Errors)
+                                                            {
+                                                                <MudText Typo="Typo.caption" Class="d-block">@err</MudText>
+                                                            }
+                                                        </TooltipContent>
+                                                        <ChildContent>
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Errors.Count error@(context.Errors.Count != 1 ? "s" : "")</MudChip>
+                                                        </ChildContent>
+                                                    </MudTooltip>
+                                                }
+                                                else
+                                                {
+                                                    <span style="color: rgba(255,255,255,0.3);">—</span>
+                                                }
+                                            </MudTd>
+                                            <MudTd>
+                                                @if (context.Status == "Rejected" || context.Status == "Pending")
+                                                {
+                                                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Title="Accept" OnClick="@(() => Resolve834Record(context, "Accept"))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Title="Reject" OnClick="@(() => Resolve834Record(context, "Reject"))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small" Color="Color.Warning" Title="Hold" OnClick="@(() => Resolve834Record(context, "Hold"))" />
+                                                }
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                            </td>
+                        </MudTr>
+                    }
+                </ChildRowContent>
+                <NoRecordsContent>
+                    <MudText>No 834 batches found for the selected date range.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- ── Tab 2: 277CA Acknowledgments ── -->
+    <MudTabPanel Text="277CA Acknowledgments" Icon="@Icons.Material.Filled.FactCheck">
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_277From" Label="From Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_277To" Label="To Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_277StatusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value='@("")'>All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Accepted")">Accepted</MudSelectItem>
+                    <MudSelectItem Value="@("Rejected")">Rejected</MudSelectItem>
+                    <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="Load277Ca"
+                           Disabled="_loading277">
+                    @if (_loading277) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+                    Refresh
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_loading277)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="@(string.IsNullOrEmpty(_277StatusFilter) ? _277Acks : _277Acks.Where(a => a.AckStatus == _277StatusFilter).ToList())"
+                      Dense="true" Hover="true" T="ClaimAcknowledgmentSummary">
+                <HeaderContent>
+                    <MudTh>Generated</MudTh>
+                    <MudTh>Claim Number</MudTh>
+                    <MudTh>Member</MudTh>
+                    <MudTh>Provider</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Category Code</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Download</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Generated">
+                        <MudText Typo="Typo.body2">@context.GeneratedDate.ToString("MM/dd/yyyy")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Claim Number">
+                        <MudLink Href="@($"/claims/{context.ClaimId}")" Style="font-family: monospace; color: rgba(0,255,255,0.9);">
+                            @context.ClaimNumber
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                    <MudTd DataLabel="Provider">@context.ProviderName</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.AckStatus == "Accepted" ? Color.Success : context.AckStatus == "Rejected" ? Color.Error : Color.Warning)">
+                            @context.AckStatus
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Category Code">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,136,0.8);">@context.StatusCategoryCode / @context.StatusCode</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Description">
+                        <MudText Typo="Typo.body2">@context.StatusDescription</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Download">
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       Title="Download 277CA EDI"
+                                       OnClick="@(() => Download277Ca(context.ClaimId, context.ClaimNumber))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No 277CA acknowledgments found.</MudText>
+                </NoRecordsContent>
+                <FooterContent>
+                    <MudTd colspan="8">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Total: @_277Acks.Count &nbsp;|&nbsp;
+                            Accepted: @_277Acks.Count(a => a.AckStatus == "Accepted") &nbsp;|&nbsp;
+                            Rejected: @_277Acks.Count(a => a.AckStatus == "Rejected") &nbsp;|&nbsp;
+                            Pended: @_277Acks.Count(a => a.AckStatus == "Pended")
+                        </MudText>
+                    </MudTd>
+                </FooterContent>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- ── Tab 3: 835 ERAs ── -->
+    <MudTabPanel Text="835 Remittance" Icon="@Icons.Material.Filled.AttachMoney">
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_835From" Label="From Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_835To" Label="To Date" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadEras"
+                           Disabled="_loading835">
+                    @if (_loading835) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+                    Refresh
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_loading835)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudPaper Elevation="1" Class="mb-3 pa-3" Style="border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.03);">
+                <MudGrid>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL ERAs</MudText>
+                        <MudText Typo="Typo.h5" Style="color: #00ff88;">@_eras.Count</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL PAYMENT AMOUNT</MudText>
+                        <MudText Typo="Typo.h5" Style="color: #00ff88;">@_eras.Sum(e => e.TotalPaymentAmount).ToString("C")</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL CLAIMS</MudText>
+                        <MudText Typo="Typo.h5" Style="color: #00ffff;">@_eras.Sum(e => e.ClaimCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="6" md="3">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">AVG ERA AMOUNT</MudText>
+                        <MudText Typo="Typo.h5" Style="color: #00ffff;">
+                            @(_eras.Any() ? (_eras.Sum(e => e.TotalPaymentAmount) / _eras.Count).ToString("C") : "$0.00")
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudTable Items="_eras" Dense="true" Hover="true" T="EraSummary">
+                <HeaderContent>
+                    <MudTh>Payment Date</MudTh>
+                    <MudTh>ERA ID</MudTh>
+                    <MudTh>Payer</MudTh>
+                    <MudTh>Payee NPI</MudTh>
+                    <MudTh>Payee Name</MudTh>
+                    <MudTh>Method</MudTh>
+                    <MudTh>Check / ACH #</MudTh>
+                    <MudTh>Total Amount</MudTh>
+                    <MudTh>Claims</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Download</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Payment Date">@context.PaymentDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="ERA ID">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7);">@context.EraId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Payer">@context.PayerName</MudTd>
+                    <MudTd DataLabel="Payee NPI">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.PayeeNPI</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Payee Name">@context.PayeeName</MudTd>
+                    <MudTd DataLabel="Method">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.PaymentMethod == "ACH" ? Color.Success : Color.Info)">@context.PaymentMethod</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Check / ACH #">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; font-size: 0.8em;">@context.CheckNumber</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Total Amount">
+                        <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600;">@context.TotalPaymentAmount.ToString("C")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Claims">@context.ClaimCount</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.Status == "Acknowledged" ? Color.Success : context.Status == "Transmitted" ? Color.Info : Color.Warning)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Download">
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       Title="Download 835 ERA"
+                                       OnClick="@(() => DownloadEra(context.PaymentId, context.EraId))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No ERA files found for the selected date range.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- ── Tab 4: Transaction History ── -->
+    <MudTabPanel Text="Transaction History" Icon="@Icons.Material.Filled.History">
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="12" md="2">
+                <MudDatePicker @bind-Date="_histFrom" Label="From" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudDatePicker @bind-Date="_histTo" Label="To" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect @bind-Value="_histTypeFilter" Label="Transaction Type" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value='@("")'>All Types</MudSelectItem>
+                    <MudSelectItem Value="@("834")">834 Enrollment</MudSelectItem>
+                    <MudSelectItem Value="@("835")">835 ERA</MudSelectItem>
+                    <MudSelectItem Value="@("277CA")">277CA Acknowledgment</MudSelectItem>
+                    <MudSelectItem Value="@("270")">270 Eligibility Request</MudSelectItem>
+                    <MudSelectItem Value="@("271")">271 Eligibility Response</MudSelectItem>
+                    <MudSelectItem Value="@("278")">278 Prior Auth</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect @bind-Value="_histStatusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value='@("")'>All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Rejected")">Rejected</MudSelectItem>
+                    <MudSelectItem Value="@("Processing")">Processing</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Search"
+                           OnClick="LoadHistory"
+                           Disabled="_loadingHistory">
+                    @if (_loadingHistory) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+                    Search
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.DownloadForOffline"
+                           OnClick="ExportHistoryCsv">
+                    Export CSV
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_loadingHistory)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="_historyItems" Dense="true" Hover="true" T="EdiTransactionHistoryItem">
+                <HeaderContent>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Transaction ID</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Direction</MudTh>
+                    <MudTh>Trading Partner</MudTh>
+                    <MudTh>Records</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Error</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Date">@context.TransactionDate.ToString("MM/dd/yyyy HH:mm")</MudTd>
+                    <MudTd DataLabel="Transaction ID">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7); font-size: 0.8em;">@context.TransactionId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Size="Size.Small" Color="@GetTxnTypeColor(context.TransactionType)">@context.TransactionType</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Direction">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Direction == "Inbound" ? Color.Info : Color.Default)">
+                            @(context.Direction == "Inbound" ? "↓ Inbound" : "↑ Outbound")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Trading Partner">@context.TradingPartnerName</MudTd>
+                    <MudTd DataLabel="Records">@context.RecordCount</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.Status == "Completed" ? Color.Success : context.Status is "Failed" or "Rejected" ? Color.Error : Color.Warning)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Error">
+                        @if (!string.IsNullOrEmpty(context.ErrorSummary))
+                        {
+                            <MudTooltip Text="@context.ErrorSummary">
+                                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" />
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No transactions found for the selected filters.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- ── Tab 5: Error Queue ── -->
+    <MudTabPanel Text="Error Queue" Icon="@Icons.Material.Filled.Warning">
+        <MudAlert Severity="Severity.Warning" Class="mb-4" Dense="true">
+            <strong>@_errorQueueItems.Count</strong> transactions require attention. Review and resolve errors to ensure complete EDI processing.
+        </MudAlert>
+
+        @if (_errorQueueItems.Any())
+        {
+            <MudTable Items="_errorQueueItems" Dense="true" Hover="true" T="EdiTransactionHistoryItem"
+                      MultiSelection="true" @bind-SelectedItems="_selectedErrors">
+                <ToolBarContent>
+                    <MudText Typo="Typo.h6">Error Queue</MudText>
+                    <MudSpacer />
+                    @if (_selectedErrors.Any())
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" Class="mr-2"
+                                   StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                   OnClick="MarkSelectedReviewed">
+                            Mark @_selectedErrors.Count Reviewed
+                        </MudButton>
+                    }
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.DownloadForOffline"
+                               OnClick="ExportErrorQueueCsv">
+                        Export CSV
+                    </MudButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Direction</MudTh>
+                    <MudTh>Trading Partner</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Error</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Date">@context.TransactionDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Size="Size.Small" Color="@GetTxnTypeColor(context.TransactionType)">@context.TransactionType</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Direction">@context.Direction</MudTd>
+                    <MudTd DataLabel="Trading Partner">@context.TradingPartnerName</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Status</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Error">
+                        <MudText Typo="Typo.body2" Color="Color.Error">@context.ErrorSummary</MudText>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No errors in queue — all transactions processed successfully.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Success">
+                <strong>No errors in queue.</strong> All EDI transactions are processing normally.
+            </MudAlert>
+        }
+    </MudTabPanel>
+
+</MudTabs>
+
+@code {
+    private int _activeTab = 0;
+
+    // 834 state
+    private DateTime? _834From = DateTime.Today.AddDays(-30);
+    private DateTime? _834To = DateTime.Today;
+    private string _834StatusFilter = string.Empty;
+    private List<Edi834Batch> _834Batches = new();
+    private bool _loading834 = false;
+    private string? _expandedBatchId;
+    private List<Enrollment834Record> _batchRecords = new();
+    private bool _loadingBatchRecords = false;
+
+    // 277CA state
+    private DateTime? _277From = DateTime.Today.AddDays(-30);
+    private DateTime? _277To = DateTime.Today;
+    private string _277StatusFilter = string.Empty;
+    private List<ClaimAcknowledgmentSummary> _277Acks = new();
+    private bool _loading277 = false;
+
+    // 835 ERA state
+    private DateTime? _835From = DateTime.Today.AddDays(-90);
+    private DateTime? _835To = DateTime.Today;
+    private List<EraSummary> _eras = new();
+    private bool _loading835 = false;
+
+    // History state
+    private DateTime? _histFrom = DateTime.Today.AddDays(-30);
+    private DateTime? _histTo = DateTime.Today;
+    private string _histTypeFilter = string.Empty;
+    private string _histStatusFilter = string.Empty;
+    private List<EdiTransactionHistoryItem> _historyItems = new();
+    private bool _loadingHistory = false;
+
+    // Error queue state
+    private List<EdiTransactionHistoryItem> _errorQueueItems = new();
+    private HashSet<EdiTransactionHistoryItem> _selectedErrors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            Load834Batches(),
+            Load277Ca(),
+            LoadEras(),
+            LoadHistory()
+        );
+    }
+
+    private async Task Load834Batches()
+    {
+        _loading834 = true;
+        try
+        {
+            _834Batches = await EdiService.Get834BatchesAsync(_834From, _834To);
+            if (!string.IsNullOrEmpty(_834StatusFilter))
+                _834Batches = _834Batches.Where(b => b.Status == _834StatusFilter).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading 834 batches: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading834 = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleBatchExpand(string batchId)
+    {
+        if (_expandedBatchId == batchId)
+        {
+            _expandedBatchId = null;
+            return;
+        }
+        _expandedBatchId = batchId;
+        _loadingBatchRecords = true;
+        StateHasChanged();
+        try
+        {
+            _batchRecords = await EdiService.Get834BatchRecordsAsync(batchId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading batch records: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingBatchRecords = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Resolve834Record(Enrollment834Record record, string action)
+    {
+        try
+        {
+            await EdiService.Resolve834RecordAsync(new Edi834ResolutionRequest
+            {
+                BatchId = record.BatchId,
+                TransactionId = record.TransactionId,
+                Action = action
+            });
+            record.Status = action == "Accept" ? "Accepted" : action == "Reject" ? "Rejected" : "Pending";
+            Snackbar.Add($"Record {record.TransactionId}: {action}ed", action == "Accept" ? Severity.Success : Severity.Warning);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error resolving record: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task Load277Ca()
+    {
+        _loading277 = true;
+        try
+        {
+            _277Acks = await EdiService.Get277CaAcknowledgmentsAsync(_277From, _277To);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading 277CA acknowledgments: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading277 = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Download277Ca(string claimId, string claimNumber)
+    {
+        try
+        {
+            var stream = await EdiService.Download277CaAsync(claimId);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadBase64File", $"277CA_{claimNumber}.edi", "application/x-edi", base64);
+            Snackbar.Add($"Downloading 277CA for claim {claimNumber}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading 277CA: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadEras()
+    {
+        _loading835 = true;
+        try
+        {
+            _eras = await EdiService.GetErasAsync(_835From, _835To);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading ERAs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading835 = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadEra(string paymentId, string eraId)
+    {
+        try
+        {
+            var stream = await EdiService.DownloadEraAsync(paymentId);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadBase64File", $"835_{eraId}.edi", "application/x-edi", base64);
+            Snackbar.Add($"Downloading 835 ERA: {eraId}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading ERA: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        _loadingHistory = true;
+        try
+        {
+            _historyItems = await EdiService.GetTransactionHistoryAsync(
+                _histFrom, _histTo,
+                string.IsNullOrEmpty(_histTypeFilter) ? null : _histTypeFilter,
+                null,
+                string.IsNullOrEmpty(_histStatusFilter) ? null : _histStatusFilter,
+                1, 100);
+            _errorQueueItems = _historyItems.Where(h => h.Status is "Failed" or "Rejected").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading transaction history: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingHistory = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportHistoryCsv()
+    {
+        var csv = "TransactionId,Type,Date,Direction,TradingPartner,Records,Status,Error\n" +
+            string.Join("\n", _historyItems.Select(h =>
+                $"{h.TransactionId},{h.TransactionType},{h.TransactionDate:yyyy-MM-dd},{h.Direction},{h.TradingPartnerName},{h.RecordCount},{h.Status},{h.ErrorSummary ?? ""}"));
+        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));
+        await JS.InvokeVoidAsync("downloadBase64File", "edi_transaction_history.csv", "text/csv", base64);
+    }
+
+    private async Task ExportErrorQueueCsv()
+    {
+        var csv = "TransactionId,Type,Date,Direction,TradingPartner,Status,Error\n" +
+            string.Join("\n", _errorQueueItems.Select(h =>
+                $"{h.TransactionId},{h.TransactionType},{h.TransactionDate:yyyy-MM-dd},{h.Direction},{h.TradingPartnerName},{h.Status},{h.ErrorSummary ?? ""}"));
+        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(csv));
+        await JS.InvokeVoidAsync("downloadBase64File", "edi_error_queue.csv", "text/csv", base64);
+    }
+
+    private void MarkSelectedReviewed()
+    {
+        foreach (var item in _selectedErrors)
+        {
+            _errorQueueItems.Remove(item);
+        }
+        _selectedErrors.Clear();
+        Snackbar.Add("Selected errors marked as reviewed", Severity.Success);
+    }
+
+    private Color Get834BatchStatusColor(string status) => status switch
+    {
+        "Completed" => Color.Success,
+        "PartiallyAccepted" => Color.Warning,
+        "Failed" => Color.Error,
+        "Processing" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetTxnTypeColor(string type) => type switch
+    {
+        "834" => Color.Info,
+        "835" => Color.Success,
+        "277CA" => Color.Primary,
+        "270" or "271" => Color.Secondary,
+        "278" => Color.Warning,
+        _ => Color.Default
+    };
+}
