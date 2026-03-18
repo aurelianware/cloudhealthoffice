@@ -1,0 +1,92 @@
+@using CloudHealthOffice.Portal.Services
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" GutterBottom="true">Initiate Claim Reversal</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            A claim reversal creates a negative adjustment to return the system to the pre-claim state. This is typically used for claims submitted in error or duplicate submissions.
+        </MudText>
+
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Once initiated, this reversal may require approval from the claims manager and will generate audit trail entries.
+        </MudAlert>
+
+        <MudSelect @bind-Value="_reversalType"
+                  Label="Reversal Type"
+                  Variant="Variant.Outlined"
+                  AnchorOrigin="Origin.BottomCenter"
+                  Class="mb-4">
+            <MudSelectItem Value="@("Full Reversal")">Full Reversal (entire claim)</MudSelectItem>
+            <MudSelectItem Value="@("Partial Reversal")">Partial Reversal (selected lines)</MudSelectItem>
+            <MudSelectItem Value="@("Duplicate Adjustment")">Duplicate Adjustment</MudSelectItem>
+        </MudSelect>
+
+        @if (_reversalType == "Partial Reversal")
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Select Lines to Reverse</MudText>
+            <MudCheckBox T="bool" @bind-Checked="_reversalAllLines" Label="Select All Lines" Class="mb-2" />
+            <!-- Lines would be populated from the claim -->
+        }
+
+        <MudTextField @bind-Value="_reversalReason"
+                     Label="Reversal Reason"
+                     Variant="Variant.Outlined"
+                     Multiline="true"
+                     Lines="3"
+                     Placeholder="Explain why this reversal is being initiated..."
+                     Class="mb-4"
+                     Required="true" />
+
+        <MudSelect @bind-Value="_reversalMethod"
+                  Label="Reversal Method"
+                  Variant="Variant.Outlined"
+                  AnchorOrigin="Origin.BottomCenter"
+                  Class="mb-4">
+            <MudSelectItem Value="@("Zero Payment")">Zero Payment Reversal (set payment to $0)</MudSelectItem>
+            <MudSelectItem Value="@("Negative Adjustment")">Negative Adjustment (issue credit)</MudSelectItem>
+        </MudSelect>
+
+        <MudCheckBox T="bool" @bind-Checked="_notifyProvider" Label="Notify Provider of Reversal" Class="mb-4" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning" 
+                  Variant="Variant.Filled" 
+                  OnClick="Submit"
+                  Disabled="string.IsNullOrWhiteSpace(_reversalReason)">
+            Initiate Reversal
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string ClaimId { get; set; } = string.Empty;
+
+    private string _reversalType = "Full Reversal";
+    private string _reversalReason = string.Empty;
+    private string _reversalMethod = "Zero Payment";
+    private bool _reversalAllLines = true;
+    private bool _notifyProvider = true;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        var reversalData = new
+        {
+            ClaimId,
+            ReversalType = _reversalType,
+            Reason = _reversalReason,
+            Method = _reversalMethod,
+            NotifyProvider = _notifyProvider
+        };
+        MudDialog.Close(DialogResult.Ok(reversalData));
+    }
+}

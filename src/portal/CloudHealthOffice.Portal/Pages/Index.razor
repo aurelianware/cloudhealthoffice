@@ -15,12 +15,10 @@
 
         if (!user.Identity?.IsAuthenticated ?? true)
         {
-            // User not authenticated, show welcome page
             Navigation.NavigateTo("/welcome");
             return;
         }
 
-        // User is authenticated via Azure AD
         // Extract Azure AD Tenant ID from claims
         var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
                          ?? user.FindFirst("tid")?.Value;
@@ -37,12 +35,20 @@
             return;
         }
 
-        // Query for subscription by Azure Tenant ID
-        var subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+        TenantSubscription? subscription;
+        try
+        {
+            subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "MongoDB error during tenant lookup for {TenantId} — redirecting to error page", azureTenantId);
+            Navigation.NavigateTo("/error");
+            return;
+        }
 
         if (subscription == null)
         {
-            // No subscription found - redirect to signup
             Logger.LogInformation("No subscription found for tenant {TenantId}, redirecting to signup", azureTenantId);
             Navigation.NavigateTo("/signup");
             return;
@@ -50,36 +56,40 @@
 
         if (subscription.IsDemo)
         {
-            // Demo tenant - redirect to demo page
             Logger.LogInformation("Demo tenant detected, redirecting to /demo");
             Navigation.NavigateTo("/demo");
             return;
         }
 
-        // Check subscription status
         if (subscription.SubscriptionStatus == "Expired" || subscription.SubscriptionStatus == "Cancelled")
         {
-            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to billing", 
+            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to billing",
                 subscription.SubscriptionStatus, azureTenantId);
             Navigation.NavigateTo("/billing");
             return;
         }
 
-        // Check if user is a member of this tenant
-        var isMember = await TenantService.IsMemberOfTenantAsync(azureTenantId, userEmail ?? "");
+        bool isMember;
+        try
+        {
+            isMember = await TenantService.IsMemberOfTenantAsync(azureTenantId, userEmail ?? "");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "MongoDB error checking membership for {Email} — redirecting to error page", userEmail);
+            Navigation.NavigateTo("/error");
+            return;
+        }
 
         if (!isMember)
         {
-            // User's organization has subscription but they're not authorized
-            Logger.LogWarning("User {Email} not authorized for tenant {TenantId}, redirecting to request access", 
+            Logger.LogWarning("User {Email} not authorized for tenant {TenantId}, redirecting to request access",
                 userEmail, azureTenantId);
             Navigation.NavigateTo("/request-access");
             return;
         }
 
-        // All checks passed - redirect to dashboard
         Logger.LogInformation("User {Email} authorized, redirecting to dashboard", userEmail);
         Navigation.NavigateTo("/dashboard");
     }
 }
-
