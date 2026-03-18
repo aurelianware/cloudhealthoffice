@@ -979,7 +979,7 @@ public class AuthorizationService : IAuthorizationService
 
     private async Task SetBearerTokenAsync()
     {
-        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Authorization.ReadWrite" };
+        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Authorization.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
@@ -2634,7 +2634,7 @@ public class AttachmentService : IAttachmentService
 
     private async Task SetBearerTokenAsync()
     {
-        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Attachments.ReadWrite" };
+        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Attachments.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
