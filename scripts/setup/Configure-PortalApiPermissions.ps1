@@ -19,7 +19,7 @@
     API app registration client ID
 
 .EXAMPLE
-    .\Configure-PortalApiPermissions.ps1 -TenantId "32177734-051b-4fdc-9568-cc35530191b1" -PortalClientId "abc123..." -ApiClientId "31f76844-b2cb-47b1-aede-f5b2b6dc59c8"
+    .\Configure-PortalApiPermissions.ps1 -TenantId "32177734-051b-4fdc-9568-cc35530191b1" -PortalClientId "abc123..." -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862"
 #>
 
 param(

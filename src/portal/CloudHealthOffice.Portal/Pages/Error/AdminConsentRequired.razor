@@ -1,5 +1,6 @@
 @page "/Error/AdminConsentRequired"
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.WebUtilities
 
 <PageTitle>Admin Consent Required - Cloud Health Office</PageTitle>
 
@@ -118,7 +119,7 @@
                         <strong>Error Code:</strong> AADSTS650052<br />
                         <strong>Tenant ID:</strong> @tenantId<br />
                         <strong>API Client ID:</strong> @apiClientId<br />
-                        <strong>API Name:</strong> Cloud Health Office API
+                        <strong>API Name:</strong> cloudhealthoffice-api
                     </MudText>
                 </MudPaper>
 
@@ -175,22 +176,37 @@
 </MudContainer>
 
 @code {
-    private string tenantId = "YOUR_TENANT_ID"; // Will be populated from config or error
-    private string apiClientId = "31f76844-b2cb-47b1-aede-f5b2b6dc59c8";
-    
+    private string tenantId = "YOUR_TENANT_ID";
+    private string apiClientId = "cfada1ac-f251-48ea-9330-39212aa4c862";
+
     private string GetAdminConsentUrl() => $"https://login.microsoftonline.com/{tenantId}/adminconsent?client_id={apiClientId}";
 
     [Inject]
     private IConfiguration Configuration { get; set; } = default!;
 
     [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
+    [Inject]
     private ISnackbar Snackbar { get; set; } = default!;
 
     protected override void OnInitialized()
     {
-        // Try to get tenant ID from configuration
-        tenantId = Configuration["AzureAd:TenantId"] ?? tenantId;
-        apiClientId = Configuration["AzureAd:ClientId"] ?? apiClientId;
+        // Extract the API client ID from DownstreamApi scopes (the resource the portal calls)
+        var scopes = Configuration["DownstreamApi:Scopes"] ?? "";
+        var scopeMatch = System.Text.RegularExpressions.Regex.Match(scopes, @"api://([0-9a-f\-]{36})/");
+        if (scopeMatch.Success)
+        {
+            apiClientId = scopeMatch.Groups[1].Value;
+        }
+
+        // Try to get tenant ID from the query string (passed by error handler)
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("tenantId", out var qsTenantId) &&
+            !string.IsNullOrEmpty(qsTenantId))
+        {
+            tenantId = qsTenantId!;
+        }
     }
 
     private void CopyToClipboard()

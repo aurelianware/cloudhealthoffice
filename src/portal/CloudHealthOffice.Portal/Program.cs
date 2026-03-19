@@ -67,30 +67,38 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
         options.Events.OnAuthenticationFailed = context =>
         {
             var error = context.Exception.Message;
-            
+
             // Check for admin consent required error (AADSTS650052)
             if (error.Contains("AADSTS650052") || error.Contains("lacks a service principal"))
             {
-                context.Response.Redirect("/Error/AdminConsentRequired");
+                var tenantId = ExtractTenantIdFromError(error);
+                var redirectUrl = BuildAdminConsentErrorUrl(tenantId);
+                context.Response.Redirect(redirectUrl);
                 context.HandleResponse();
             }
-            
+
             return Task.CompletedTask;
         };
-        
+
         // Also handle remote failure (covers more error scenarios)
         options.Events.OnRemoteFailure = context =>
         {
             var error = context.Failure?.Message ?? "";
-            
-            if (error.Contains("AADSTS650052") || 
+            var queryError = context.Request.Query["error_description"].FirstOrDefault() ?? "";
+            var combinedError = string.IsNullOrEmpty(queryError) ? error : queryError;
+
+            if (error.Contains("AADSTS650052") ||
                 error.Contains("lacks a service principal") ||
-                error.Contains("AADSTS65001")) // User/admin hasn't consented
+                error.Contains("AADSTS65001") ||
+                queryError.Contains("AADSTS650052") ||
+                queryError.Contains("AADSTS65001"))
             {
-                context.Response.Redirect("/Error/AdminConsentRequired");
+                var tenantId = ExtractTenantIdFromError(combinedError);
+                var redirectUrl = BuildAdminConsentErrorUrl(tenantId);
+                context.Response.Redirect(redirectUrl);
                 context.HandleResponse();
             }
-            
+
             return Task.CompletedTask;
         };
     })
@@ -244,6 +252,26 @@ builder.Services.AddSession(options =>
     options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
     options.Cookie.Name = ".CloudHealthOffice.Session";
 });
+
+// Helper: extract tenant ID from Azure AD error messages
+static string? ExtractTenantIdFromError(string error)
+{
+    // Pattern: "your organization '{tenant-id}'"
+    var match = System.Text.RegularExpressions.Regex.Match(
+        error, @"organization\s+'([0-9a-f\-]{36})'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    return match.Success ? match.Groups[1].Value : null;
+}
+
+// Helper: build redirect URL with tenant context for admin consent error page
+static string BuildAdminConsentErrorUrl(string? tenantId)
+{
+    var url = "/Error/AdminConsentRequired";
+    if (!string.IsNullOrEmpty(tenantId))
+    {
+        url += $"?tenantId={Uri.EscapeDataString(tenantId)}";
+    }
+    return url;
+}
 
 var app = builder.Build();
 
