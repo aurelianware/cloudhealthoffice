@@ -1,3 +1,6 @@
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace CloudHealthOffice.Portal.Services;
 
 public interface IClaimsService
@@ -757,6 +760,9 @@ public class CodeUsageStats
 
 public class TenantSubscription
 {
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string? Id { get; set; }
     public string TenantId { get; set; } = string.Empty;
     public string AzureTenantId { get; set; } = string.Empty;
     public string OrganizationName { get; set; } = string.Empty;
