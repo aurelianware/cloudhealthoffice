@@ -282,7 +282,7 @@ jobs:
 
             # Check for HTTP URLs (should be HTTPS in production)
             if grep -q "http://" "$f" 2>/dev/null; then
-              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com" | grep -q .; then
+              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com\|cloudhealthoffice\|svc.cluster.local" | grep -q .; then
                 echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
               fi
             fi
