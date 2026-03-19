@@ -223,6 +223,10 @@ builder.Services.AddScoped<IEdiOperationsService, EdiOperationsService>();
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
+builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
+builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();
+builder.Services.AddScoped<IAppealsService, AppealsService>();
+builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>

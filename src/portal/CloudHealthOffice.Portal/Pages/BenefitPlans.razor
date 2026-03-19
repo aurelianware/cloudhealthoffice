@@ -1,4 +1,6 @@
 @page "/benefit-plans"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using CloudHealthOffice.Portal.Services
 @inject IBenefitPlanService BenefitPlanService
 @inject IDialogService DialogService
