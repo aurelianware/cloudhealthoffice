@@ -1,4 +1,6 @@
 @page "/sponsors"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using CloudHealthOffice.Portal.Services
 @inject ISponsorService SponsorService
 @inject IDialogService DialogService

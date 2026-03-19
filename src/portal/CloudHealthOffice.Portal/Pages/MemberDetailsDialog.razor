@@ -30,7 +30,7 @@
                 <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Receipt"
-                           OnClick="@(() => Navigation.NavigateTo($"/claims-new?memberId={_member.MemberId}"))">
+                           OnClick="@(() => Navigation.NavigateTo($"/claims?memberId={_member.MemberId}"))">
                     View Claims
                 </MudButton>
             </div>
@@ -87,6 +87,148 @@
                             </MudItem>
                         }
                     </MudGrid>
+                </MudTabPanel>
+
+                <!-- Accumulators Tab -->
+                <MudTabPanel Text="Accumulators" Icon="@Icons.Material.Filled.BarChart">
+                    <div>
+                        @if (_loadingAccumulators)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                        }
+                        else if (_accumulators != null)
+                        {
+                            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 600;">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Size="Size.Small" Class="mr-1" />
+                                Plan Year Accumulators
+                            </MudText>
+
+                            <MudGrid Class="mb-4">
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                        <div class="d-flex justify-space-between mb-1">
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">Individual Deductible</MudText>
+                                            <MudText Typo="Typo.body2">@_accumulators.IndividualDeductibleUsed.ToString("C") of @_accumulators.IndividualDeductibleLimit.ToString("C")</MudText>
+                                        </div>
+                                        <MudProgressLinear Value="@GetPercent(_accumulators.IndividualDeductibleUsed, _accumulators.IndividualDeductibleLimit)"
+                                                           Color="@GetAccumColor(_accumulators.IndividualDeductibleUsed, _accumulators.IndividualDeductibleLimit)"
+                                                           Rounded="true" Size="Size.Medium" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@GetPercent(_accumulators.IndividualDeductibleUsed, _accumulators.IndividualDeductibleLimit).ToString("F1")% met</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                        <div class="d-flex justify-space-between mb-1">
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">Family Deductible</MudText>
+                                            <MudText Typo="Typo.body2">@_accumulators.FamilyDeductibleUsed.ToString("C") of @_accumulators.FamilyDeductibleLimit.ToString("C")</MudText>
+                                        </div>
+                                        <MudProgressLinear Value="@GetPercent(_accumulators.FamilyDeductibleUsed, _accumulators.FamilyDeductibleLimit)"
+                                                           Color="@GetAccumColor(_accumulators.FamilyDeductibleUsed, _accumulators.FamilyDeductibleLimit)"
+                                                           Rounded="true" Size="Size.Medium" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@GetPercent(_accumulators.FamilyDeductibleUsed, _accumulators.FamilyDeductibleLimit).ToString("F1")% met</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                        <div class="d-flex justify-space-between mb-1">
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">Individual Out-of-Pocket Max</MudText>
+                                            <MudText Typo="Typo.body2">@_accumulators.IndividualOopUsed.ToString("C") of @_accumulators.IndividualOopLimit.ToString("C")</MudText>
+                                        </div>
+                                        <MudProgressLinear Value="@GetPercent(_accumulators.IndividualOopUsed, _accumulators.IndividualOopLimit)"
+                                                           Color="@GetAccumColor(_accumulators.IndividualOopUsed, _accumulators.IndividualOopLimit)"
+                                                           Rounded="true" Size="Size.Medium" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@GetPercent(_accumulators.IndividualOopUsed, _accumulators.IndividualOopLimit).ToString("F1")% met</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                        <div class="d-flex justify-space-between mb-1">
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">Family Out-of-Pocket Max</MudText>
+                                            <MudText Typo="Typo.body2">@_accumulators.FamilyOopUsed.ToString("C") of @_accumulators.FamilyOopLimit.ToString("C")</MudText>
+                                        </div>
+                                        <MudProgressLinear Value="@GetPercent(_accumulators.FamilyOopUsed, _accumulators.FamilyOopLimit)"
+                                                           Color="@GetAccumColor(_accumulators.FamilyOopUsed, _accumulators.FamilyOopLimit)"
+                                                           Rounded="true" Size="Size.Medium" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@GetPercent(_accumulators.FamilyOopUsed, _accumulators.FamilyOopLimit).ToString("F1")% met</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                            </MudGrid>
+
+                            @if (_accumulators.ServiceAccumulators.Any())
+                            {
+                                <MudText Typo="Typo.subtitle1" Class="mb-3 mt-4" Style="font-weight: 600;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Checklist" Size="Size.Small" Class="mr-1" />
+                                    Service-Specific Accumulators
+                                </MudText>
+                                <MudSimpleTable Dense="true" Hover="true" Elevation="1" Class="mb-4">
+                                    <thead>
+                                        <tr>
+                                            <th>Service Type</th>
+                                            <th>Used</th>
+                                            <th>Limit</th>
+                                            <th>Remaining</th>
+                                            <th>Progress</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var svc in _accumulators.ServiceAccumulators)
+                                        {
+                                            <tr>
+                                                <td>@svc.ServiceType</td>
+                                                <td>@svc.Used @svc.UnitType</td>
+                                                <td>@svc.Limit @svc.UnitType</td>
+                                                <td>@(svc.Limit - svc.Used) @svc.UnitType</td>
+                                                <td style="min-width: 150px;">
+                                                    <MudProgressLinear Value="@GetPercent(svc.Used, svc.Limit)"
+                                                                       Color="@GetAccumColor(svc.Used, svc.Limit)"
+                                                                       Rounded="true" Size="Size.Small" />
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+
+                            @if (_accumulators.RecentActivity.Any())
+                            {
+                                <MudText Typo="Typo.subtitle1" Class="mb-3 mt-4" Style="font-weight: 600;">
+                                    <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="mr-1" />
+                                    Recent Accumulator Activity
+                                </MudText>
+                                <MudSimpleTable Dense="true" Hover="true" Elevation="1">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Claim ID</th>
+                                            <th style="text-align: right;">Deductible</th>
+                                            <th style="text-align: right;">Copay</th>
+                                            <th style="text-align: right;">Coinsurance</th>
+                                            <th style="text-align: right;">Plan Paid</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var act in _accumulators.RecentActivity)
+                                        {
+                                            <tr>
+                                                <td>@act.ServiceDate.ToString("MM/dd/yyyy")</td>
+                                                <td>
+                                                    <MudLink Href="@($"/claims/{act.ClaimId}")" Typo="Typo.body2" Style="font-family: monospace;">@act.ClaimId</MudLink>
+                                                </td>
+                                                <td style="text-align: right;">@act.DeductibleApplied.ToString("C")</td>
+                                                <td style="text-align: right;">@act.CopayApplied.ToString("C")</td>
+                                                <td style="text-align: right;">@act.CoinsuranceApplied.ToString("C")</td>
+                                                <td style="text-align: right;">@act.PlanPaid.ToString("C")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info">No accumulator data available for this member.</MudAlert>
+                        }
+                    </div>
                 </MudTabPanel>
 
                 <!-- Coverage Tab -->
@@ -407,12 +549,14 @@
     private MemberPcp? _pcp;
     private List<CoverageHistoryEvent> _coverageHistory = new();
     private List<Enrollment834Record> _transactions834 = new();
+    private MemberAccumulators? _accumulators;
 
     private bool _loading = true;
     private bool _loadingCoverage = true;
     private bool _loadingPcp = false;
     private bool _loadingHistory = false;
     private bool _loading834 = false;
+    private bool _loadingAccumulators = false;
     private int _activeTab = 0;
 
     private MudTabPanel? _pcpTab;
@@ -454,9 +598,25 @@
         }
 
         // Kick off secondary data loads in background
+        _ = LoadAccumulatorsAsync();
         _ = LoadPcpAsync();
         _ = LoadHistoryAsync();
         _ = Load834Async();
+    }
+
+    private async Task LoadAccumulatorsAsync()
+    {
+        _loadingAccumulators = true;
+        try
+        {
+            _accumulators = await MemberService.GetAccumulatorsAsync(MemberId);
+        }
+        catch { _accumulators = null; }
+        finally
+        {
+            _loadingAccumulators = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadPcpAsync()
@@ -572,6 +732,26 @@
             "Terminated" => Color.Error,
             _ => Color.Default
         };
+
+    private static double GetPercent(decimal used, decimal limit) =>
+        limit == 0 ? 0 : Math.Min(100, (double)(used / limit * 100));
+
+    private static double GetPercent(int used, int limit) =>
+        limit == 0 ? 0 : Math.Min(100, (double)used / limit * 100);
+
+    private static Color GetAccumColor(decimal used, decimal limit)
+    {
+        if (limit == 0) return Color.Default;
+        var pct = used / limit;
+        return pct >= 1m ? Color.Success : pct >= 0.9m ? Color.Warning : Color.Primary;
+    }
+
+    private static Color GetAccumColor(int used, int limit)
+    {
+        if (limit == 0) return Color.Default;
+        var pct = (double)used / limit;
+        return pct >= 1.0 ? Color.Success : pct >= 0.9 ? Color.Warning : Color.Primary;
+    }
 
     private void Close() => MudDialog.Close();
 }

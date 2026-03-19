@@ -34,7 +34,7 @@ const GROUP_NUMBER = groupNumber;
 const SPONSOR1_NAME = (typeof sponsor1 !== "undefined") ? sponsor1 : "Metro Employees Association";
 const SPONSOR2_NAME = (typeof sponsor2 !== "undefined") ? sponsor2 : "Regional Health Cooperative";
 
-const choDb = db.getSiblingDB("CloudHealthOffice");
+const choDb = db.getSiblingDB("cloudhealthoffice");
 const now = new Date();
 
 // ---------------------------------------------------------------------------

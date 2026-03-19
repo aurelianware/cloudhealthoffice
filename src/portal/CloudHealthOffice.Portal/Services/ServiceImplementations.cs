@@ -635,6 +635,50 @@ public class MemberService : IMemberService
         }
     }
 
+    public async Task<MemberAccumulators> GetAccumulatorsAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var accums = await _httpClient.GetFromJsonAsync<MemberAccumulators>($"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/accumulators");
+            return accums ?? GetMockAccumulators(memberId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching accumulators for member {MemberId}, returning mock data", memberId);
+            return GetMockAccumulators(memberId);
+        }
+    }
+
+    private static MemberAccumulators GetMockAccumulators(string memberId)
+    {
+        return new MemberAccumulators
+        {
+            IndividualDeductibleUsed = 1247.00m,
+            IndividualDeductibleLimit = 1500.00m,
+            FamilyDeductibleUsed = 1893.00m,
+            FamilyDeductibleLimit = 3000.00m,
+            IndividualOopUsed = 1842.00m,
+            IndividualOopLimit = 3000.00m,
+            FamilyOopUsed = 2764.00m,
+            FamilyOopLimit = 9000.00m,
+            ServiceAccumulators = new List<ServiceAccumulator>
+            {
+                new() { ServiceType = "Physical Therapy", Used = 12, Limit = 20, UnitType = "visits" },
+                new() { ServiceType = "Mental Health Outpatient", Used = 8, Limit = 30, UnitType = "visits" },
+                new() { ServiceType = "Skilled Nursing", Used = 0, Limit = 60, UnitType = "days" }
+            },
+            RecentActivity = new List<AccumulatorActivity>
+            {
+                new() { ClaimId = "CLM-2026-00412", ServiceDate = DateTime.Today.AddDays(-3), DeductibleApplied = 0m, CopayApplied = 30.00m, CoinsuranceApplied = 47.60m, PlanPaid = 190.40m },
+                new() { ClaimId = "CLM-2026-00398", ServiceDate = DateTime.Today.AddDays(-8), DeductibleApplied = 125.00m, CopayApplied = 0m, CoinsuranceApplied = 0m, PlanPaid = 275.00m },
+                new() { ClaimId = "CLM-2026-00371", ServiceDate = DateTime.Today.AddDays(-15), DeductibleApplied = 0m, CopayApplied = 30.00m, CoinsuranceApplied = 34.00m, PlanPaid = 136.00m },
+                new() { ClaimId = "CLM-2026-00355", ServiceDate = DateTime.Today.AddDays(-22), DeductibleApplied = 350.00m, CopayApplied = 0m, CoinsuranceApplied = 60.00m, PlanPaid = 240.00m },
+                new() { ClaimId = "CLM-2026-00340", ServiceDate = DateTime.Today.AddDays(-30), DeductibleApplied = 200.00m, CopayApplied = 30.00m, CoinsuranceApplied = 0m, PlanPaid = 420.00m }
+            }
+        };
+    }
+
     private MemberPcp GetMockPcp(string memberId)
     {
         return new MemberPcp
@@ -2519,11 +2563,13 @@ public class MetricsService : IMetricsService
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<MetricsService> _logger;
 
-    public MetricsService(HttpClient httpClient, IConfiguration configuration)
+    public MetricsService(HttpClient httpClient, IConfiguration configuration, ILogger<MetricsService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<DashboardMetrics> GetDashboardMetricsAsync()
@@ -2533,13 +2579,65 @@ public class MetricsService : IMetricsService
         return new DashboardMetrics
         {
             TotalClaims = 2847,
-            ClaimsTrend = 4.2,
-            ApprovalRate = 96.2,
+            ClaimsTrend = 0.042,
+            ApprovalRate = 0.962,
             AvgProcessingTimeMs = 340,
             TotalPayerAmount = 1_847_293.00m,
             ApprovedClaims = 2738,
             DeniedClaims = 57,
             PendingClaims = 52
+        };
+    }
+
+    public async Task<OperationalAlerts> GetOperationalAlertsAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var alerts = await _httpClient.GetFromJsonAsync<OperationalAlerts>($"{baseUrl}/metrics/operational-alerts");
+            return alerts ?? GetMockAlerts();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching operational alerts, returning mock data");
+            return GetMockAlerts();
+        }
+    }
+
+    public async Task<EdiVolumeSummary> GetTodayEdiVolumeAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var volume = await _httpClient.GetFromJsonAsync<EdiVolumeSummary>($"{baseUrl}/metrics/edi-volume/today");
+            return volume ?? GetMockEdiVolume();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching EDI volume, returning mock data");
+            return GetMockEdiVolume();
+        }
+    }
+
+    private static OperationalAlerts GetMockAlerts()
+    {
+        return new OperationalAlerts
+        {
+            WorkQueueCount = 40,
+            PendingRfais = 5,
+            AppealsDueThisWeek = 5,
+            ApproachingFilingLimit = 3
+        };
+    }
+
+    private static EdiVolumeSummary GetMockEdiVolume()
+    {
+        return new EdiVolumeSummary
+        {
+            Claims837Received = 142,
+            Era835Generated = 87,
+            Eligibility270271 = 318,
+            PriorAuth278 = 24
         };
     }
 }
@@ -4633,6 +4731,688 @@ public class ReportingService : IReportingService
             new() { ProviderId = "PRV-003", ProviderName = "West Coast Radiology", Specialty = "Radiology", ClaimCount = 156, TotalBilled = 312000m, TotalPaid = 218400m, DenialRate = 11.3, AvgProcessingDays = 2.8 },
             new() { ProviderId = "PRV-004", ProviderName = "City General Hospital", Specialty = "Hospital", ClaimCount = 89, TotalBilled = 978000m, TotalPaid = 684600m, DenialRate = 4.5, AvgProcessingDays = 4.2 },
             new() { ProviderId = "PRV-005", ProviderName = "Advanced Diagnostics Lab", Specialty = "Laboratory", ClaimCount = 421, TotalBilled = 189450m, TotalPaid = 136404m, DenialRate = 2.8, AvgProcessingDays = 0.9 }
+        };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Work Queue Service
+// ---------------------------------------------------------------------------
+
+public class WorkQueueService : IWorkQueueService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<WorkQueueService> _logger;
+
+    public WorkQueueService(HttpClient httpClient, IConfiguration configuration, ILogger<WorkQueueService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<WorkQueueSummary> GetQueueSummaryAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var summary = await _httpClient.GetFromJsonAsync<WorkQueueSummary>($"{baseUrl}/work-queue/summary");
+            return summary ?? GetMockSummary();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching work queue summary, returning mock data");
+            return GetMockSummary();
+        }
+    }
+
+    public async Task<List<WorkQueueItem>> GetQueueItemsAsync(string? queueType = null,
+        string? assignedTo = null, int limit = 100)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var url = $"{baseUrl}/work-queue/items?limit={limit}";
+            if (!string.IsNullOrEmpty(queueType)) url += $"&queueType={Uri.EscapeDataString(queueType)}";
+            if (!string.IsNullOrEmpty(assignedTo)) url += $"&assignedTo={Uri.EscapeDataString(assignedTo)}";
+            var items = await _httpClient.GetFromJsonAsync<List<WorkQueueItem>>(url);
+            return items ?? GetMockQueueItems(queueType, assignedTo, limit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching work queue items, returning mock data");
+            return GetMockQueueItems(queueType, assignedTo, limit);
+        }
+    }
+
+    public async Task AssignClaimAsync(string claimId, string assignTo)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/assign",
+                new { AssignTo = assignTo });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error assigning claim {ClaimId}, operation simulated", claimId);
+        }
+    }
+
+    public async Task OverrideAsync(string claimId, string overrideReason)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/override",
+                new { Reason = overrideReason });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error overriding claim {ClaimId}, operation simulated", claimId);
+        }
+    }
+
+    private static WorkQueueSummary GetMockSummary()
+    {
+        return new WorkQueueSummary
+        {
+            NcciEditFailures = 12,
+            MissingAuth = 8,
+            ProviderNotContracted = 6,
+            CobRequired = 5,
+            MedicalReview = 9
+        };
+    }
+
+    private static List<WorkQueueItem> GetMockQueueItems(string? queueType, string? assignedTo, int limit = 100)
+    {
+
+        var items = new List<WorkQueueItem>
+        {
+            // NCCI/MUE Edit Failures (12)
+            new() { ClaimId = "CLM-2026-04201", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today.AddDays(-9), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 9, Priority = "High", AssignedTo = "Sarah Williams", TotalCharged = 4250.00m, ProcedureCodes = new() { "29881", "29877" } },
+            new() { ClaimId = "CLM-2026-04215", MemberName = "Angela Washington", MemberId = "MBR-8202", ProviderName = "Hill Country Orthopedic Associates", ServiceDate = DateTime.Today.AddDays(-7), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 7, Priority = "Medium", AssignedTo = "Sarah Williams", TotalCharged = 3100.00m, ProcedureCodes = new() { "76856", "76857" } },
+            new() { ClaimId = "CLM-2026-04228", MemberName = "Thanh Le", MemberId = "MBR-8206", ProviderName = "James Chen, DO", ServiceDate = DateTime.Today.AddDays(-5), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 5, Priority = "Medium", AssignedTo = "James Martinez", TotalCharged = 1875.00m, ProcedureCodes = new() { "99214", "99214" } },
+            new() { ClaimId = "CLM-2026-04231", MemberName = "Robert Johnson", MemberId = "MBR-8207", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today.AddDays(-4), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 4, Priority = "Medium", AssignedTo = "Sarah Williams", TotalCharged = 2640.00m, ProcedureCodes = new() { "27447", "27447" } },
+            new() { ClaimId = "CLM-2026-04245", MemberName = "David Kim", MemberId = "MBR-8209", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today.AddDays(-3), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 3, Priority = "Medium", AssignedTo = "Priya Kapoor", TotalCharged = 1450.00m, ProcedureCodes = new() { "97140", "97530" } },
+            new() { ClaimId = "CLM-2026-04260", MemberName = "Sophia Martinez", MemberId = "MBR-8208", ProviderName = "Linda Nguyen, DPT", ServiceDate = DateTime.Today.AddDays(-2), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 2, Priority = "Low", AssignedTo = "James Martinez", TotalCharged = 680.00m, ProcedureCodes = new() { "97110", "97140" } },
+            new() { ClaimId = "CLM-2026-04268", MemberName = "William Henderson", MemberId = "MBR-8205", ProviderName = "David Patel, MD", ServiceDate = DateTime.Today.AddDays(-2), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 2, Priority = "Low", AssignedTo = "David Chen", TotalCharged = 920.00m, ProcedureCodes = new() { "71046", "71047" } },
+            new() { ClaimId = "CLM-2026-04273", MemberName = "Michael O'Brien", MemberId = "MBR-8203", ProviderName = "Karen Mitchell, MD", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 1, Priority = "Low", AssignedTo = "Sarah Williams", TotalCharged = 2100.00m, ProcedureCodes = new() { "99283", "99284" } },
+            new() { ClaimId = "CLM-2026-04280", MemberName = "Priya Sharma", MemberId = "MBR-8204", ProviderName = "James Chen, DO", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 1, Priority = "Low", AssignedTo = "Priya Kapoor", TotalCharged = 540.00m, ProcedureCodes = new() { "99213", "99213" } },
+            new() { ClaimId = "CLM-2026-04285", MemberName = "Margaret Thompson", MemberId = "MBR-8210", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today, QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 0, Priority = "Low", AssignedTo = "David Chen", TotalCharged = 375.00m, ProcedureCodes = new() { "80053", "80061" } },
+            new() { ClaimId = "CLM-2026-04289", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today, QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 0, Priority = "Low", AssignedTo = "James Martinez", TotalCharged = 1320.00m, ProcedureCodes = new() { "20610", "20611" } },
+            new() { ClaimId = "CLM-2026-04292", MemberName = "Angela Washington", MemberId = "MBR-8202", ProviderName = "Hill Country Orthopedic Associates", ServiceDate = DateTime.Today, QueueReason = "NCCI/MUE Edit Failure", QueueReasonCode = "NCCI", DaysInQueue = 0, Priority = "Low", AssignedTo = "Priya Kapoor", TotalCharged = 890.00m, ProcedureCodes = new() { "73721", "73721" } },
+
+            // Missing Prior Authorization (8)
+            new() { ClaimId = "CLM-2026-04190", MemberName = "William Henderson", MemberId = "MBR-8205", ProviderName = "Lone Star Radiology Group", ServiceDate = DateTime.Today.AddDays(-12), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 12, Priority = "High", AssignedTo = "Priya Kapoor", TotalCharged = 14500.00m, ProcedureCodes = new() { "73721" } },
+            new() { ClaimId = "CLM-2026-04198", MemberName = "Robert Johnson", MemberId = "MBR-8207", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today.AddDays(-10), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 10, Priority = "High", AssignedTo = "Sarah Williams", TotalCharged = 8750.00m, ProcedureCodes = new() { "27447" } },
+            new() { ClaimId = "CLM-2026-04220", MemberName = "Sophia Martinez", MemberId = "MBR-8208", ProviderName = "David Patel, MD", ServiceDate = DateTime.Today.AddDays(-6), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 6, Priority = "Medium", AssignedTo = "James Martinez", TotalCharged = 3200.00m, ProcedureCodes = new() { "70553" } },
+            new() { ClaimId = "CLM-2026-04237", MemberName = "Thanh Le", MemberId = "MBR-8206", ProviderName = "Karen Mitchell, MD", ServiceDate = DateTime.Today.AddDays(-4), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 4, Priority = "Medium", AssignedTo = "Priya Kapoor", TotalCharged = 2100.00m, ProcedureCodes = new() { "99223" } },
+            new() { ClaimId = "CLM-2026-04250", MemberName = "David Kim", MemberId = "MBR-8209", ProviderName = "Linda Nguyen, DPT", ServiceDate = DateTime.Today.AddDays(-3), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 3, Priority = "Medium", AssignedTo = "David Chen", TotalCharged = 960.00m, ProcedureCodes = new() { "97110" } },
+            new() { ClaimId = "CLM-2026-04263", MemberName = "Angela Washington", MemberId = "MBR-8202", ProviderName = "James Chen, DO", ServiceDate = DateTime.Today.AddDays(-2), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 2, Priority = "Low", AssignedTo = "Sarah Williams", TotalCharged = 1850.00m, ProcedureCodes = new() { "99215" } },
+            new() { ClaimId = "CLM-2026-04275", MemberName = "Michael O'Brien", MemberId = "MBR-8203", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 1, Priority = "Low", AssignedTo = "James Martinez", TotalCharged = 4300.00m, ProcedureCodes = new() { "29881" } },
+            new() { ClaimId = "CLM-2026-04288", MemberName = "Priya Sharma", MemberId = "MBR-8204", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today, QueueReason = "Missing Prior Authorization", QueueReasonCode = "AUTH", DaysInQueue = 0, Priority = "Low", AssignedTo = "Priya Kapoor", TotalCharged = 5600.00m, ProcedureCodes = new() { "27446" } },
+
+            // Provider Not Contracted (6)
+            new() { ClaimId = "CLM-2026-04185", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", ProviderName = "Austin Spine & Pain Center", ServiceDate = DateTime.Today.AddDays(-14), QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 14, Priority = "High", AssignedTo = "David Chen", TotalCharged = 18200.00m, ProcedureCodes = new() { "62323" } },
+            new() { ClaimId = "CLM-2026-04210", MemberName = "Margaret Thompson", MemberId = "MBR-8210", ProviderName = "Premier Cardiology Associates", ServiceDate = DateTime.Today.AddDays(-8), QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 8, Priority = "High", AssignedTo = "James Martinez", TotalCharged = 6400.00m, ProcedureCodes = new() { "93306" } },
+            new() { ClaimId = "CLM-2026-04233", MemberName = "Thanh Le", MemberId = "MBR-8206", ProviderName = "South Austin Dermatology", ServiceDate = DateTime.Today.AddDays(-5), QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 5, Priority = "Medium", AssignedTo = "Sarah Williams", TotalCharged = 1250.00m, ProcedureCodes = new() { "11102" } },
+            new() { ClaimId = "CLM-2026-04252", MemberName = "William Henderson", MemberId = "MBR-8205", ProviderName = "Heart of Texas ENT", ServiceDate = DateTime.Today.AddDays(-3), QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 3, Priority = "Medium", AssignedTo = "Priya Kapoor", TotalCharged = 2800.00m, ProcedureCodes = new() { "31231" } },
+            new() { ClaimId = "CLM-2026-04270", MemberName = "Sophia Martinez", MemberId = "MBR-8208", ProviderName = "Westlake Allergy & Asthma", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 1, Priority = "Low", AssignedTo = "David Chen", TotalCharged = 475.00m, ProcedureCodes = new() { "95165" } },
+            new() { ClaimId = "CLM-2026-04290", MemberName = "Robert Johnson", MemberId = "MBR-8207", ProviderName = "Capital Area Physical Therapy", ServiceDate = DateTime.Today, QueueReason = "Provider Not Contracted", QueueReasonCode = "OON", DaysInQueue = 0, Priority = "Low", AssignedTo = "James Martinez", TotalCharged = 720.00m, ProcedureCodes = new() { "97110" } },
+
+            // COB/Other Payer Required (5)
+            new() { ClaimId = "CLM-2026-04192", MemberName = "David Kim", MemberId = "MBR-8209", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today.AddDays(-11), QueueReason = "COB/Other Payer Required", QueueReasonCode = "COB", DaysInQueue = 11, Priority = "High", AssignedTo = "Priya Kapoor", TotalCharged = 7300.00m, ProcedureCodes = new() { "99215", "80053" } },
+            new() { ClaimId = "CLM-2026-04218", MemberName = "Priya Sharma", MemberId = "MBR-8204", ProviderName = "James Chen, DO", ServiceDate = DateTime.Today.AddDays(-8), QueueReason = "COB/Other Payer Required", QueueReasonCode = "COB", DaysInQueue = 8, Priority = "High", AssignedTo = "David Chen", TotalCharged = 3450.00m, ProcedureCodes = new() { "99214", "85025" } },
+            new() { ClaimId = "CLM-2026-04248", MemberName = "Angela Washington", MemberId = "MBR-8202", ProviderName = "Karen Mitchell, MD", ServiceDate = DateTime.Today.AddDays(-4), QueueReason = "COB/Other Payer Required", QueueReasonCode = "COB", DaysInQueue = 4, Priority = "Medium", AssignedTo = "Sarah Williams", TotalCharged = 2900.00m, ProcedureCodes = new() { "99283" } },
+            new() { ClaimId = "CLM-2026-04265", MemberName = "Michael O'Brien", MemberId = "MBR-8203", ProviderName = "David Patel, MD", ServiceDate = DateTime.Today.AddDays(-2), QueueReason = "COB/Other Payer Required", QueueReasonCode = "COB", DaysInQueue = 2, Priority = "Low", AssignedTo = "James Martinez", TotalCharged = 1680.00m, ProcedureCodes = new() { "71046" } },
+            new() { ClaimId = "CLM-2026-04283", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", ProviderName = "Linda Nguyen, DPT", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "COB/Other Payer Required", QueueReasonCode = "COB", DaysInQueue = 1, Priority = "Low", AssignedTo = "Priya Kapoor", TotalCharged = 440.00m, ProcedureCodes = new() { "97110" } },
+
+            // Medical Review Required (9)
+            new() { ClaimId = "CLM-2026-04188", MemberName = "William Henderson", MemberId = "MBR-8205", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today.AddDays(-13), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 13, Priority = "High", AssignedTo = "Sarah Williams", TotalCharged = 22400.00m, ProcedureCodes = new() { "27447" } },
+            new() { ClaimId = "CLM-2026-04195", MemberName = "Robert Johnson", MemberId = "MBR-8207", ProviderName = "Hill Country Orthopedic Associates", ServiceDate = DateTime.Today.AddDays(-10), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 10, Priority = "High", AssignedTo = "James Martinez", TotalCharged = 15800.00m, ProcedureCodes = new() { "29828" } },
+            new() { ClaimId = "CLM-2026-04207", MemberName = "Margaret Thompson", MemberId = "MBR-8210", ProviderName = "Karen Mitchell, MD", ServiceDate = DateTime.Today.AddDays(-8), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 8, Priority = "High", AssignedTo = "Priya Kapoor", TotalCharged = 11200.00m, ProcedureCodes = new() { "99223", "99232" } },
+            new() { ClaimId = "CLM-2026-04225", MemberName = "Sophia Martinez", MemberId = "MBR-8208", ProviderName = "Maria Santos, MD", ServiceDate = DateTime.Today.AddDays(-6), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 6, Priority = "Medium", AssignedTo = "David Chen", TotalCharged = 4800.00m, ProcedureCodes = new() { "99215", "90837" } },
+            new() { ClaimId = "CLM-2026-04240", MemberName = "Thanh Le", MemberId = "MBR-8206", ProviderName = "Lone Star Radiology Group", ServiceDate = DateTime.Today.AddDays(-4), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 4, Priority = "Medium", AssignedTo = "Sarah Williams", TotalCharged = 6700.00m, ProcedureCodes = new() { "74177" } },
+            new() { ClaimId = "CLM-2026-04255", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", ProviderName = "James Chen, DO", ServiceDate = DateTime.Today.AddDays(-3), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 3, Priority = "Medium", AssignedTo = "James Martinez", TotalCharged = 2150.00m, ProcedureCodes = new() { "99214", "90834" } },
+            new() { ClaimId = "CLM-2026-04267", MemberName = "Priya Sharma", MemberId = "MBR-8204", ProviderName = "David Patel, MD", ServiceDate = DateTime.Today.AddDays(-2), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 2, Priority = "Low", AssignedTo = "Priya Kapoor", TotalCharged = 3350.00m, ProcedureCodes = new() { "70553" } },
+            new() { ClaimId = "CLM-2026-04278", MemberName = "Angela Washington", MemberId = "MBR-8202", ProviderName = "Linda Nguyen, DPT", ServiceDate = DateTime.Today.AddDays(-1), QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 1, Priority = "Low", AssignedTo = "David Chen", TotalCharged = 580.00m, ProcedureCodes = new() { "97110", "97530" } },
+            new() { ClaimId = "CLM-2026-04291", MemberName = "Michael O'Brien", MemberId = "MBR-8203", ProviderName = "Rebecca Okafor, MD", ServiceDate = DateTime.Today, QueueReason = "Medical Review Required", QueueReasonCode = "MED", DaysInQueue = 0, Priority = "Low", AssignedTo = "Sarah Williams", TotalCharged = 1900.00m, ProcedureCodes = new() { "20610" } },
+        };
+
+        if (!string.IsNullOrEmpty(queueType))
+            items = items.Where(i => i.QueueReasonCode == queueType).ToList();
+        if (!string.IsNullOrEmpty(assignedTo) && assignedTo != "All")
+            items = items.Where(i => i.AssignedTo == assignedTo).ToList();
+
+        return items.OrderByDescending(i => i.DaysInQueue).Take(limit).ToList();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment Operations Service
+// ---------------------------------------------------------------------------
+
+public class EnrollmentOperationsService : IEnrollmentOperationsService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<EnrollmentOperationsService> _logger;
+
+    public EnrollmentOperationsService(HttpClient httpClient, IConfiguration configuration, ILogger<EnrollmentOperationsService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<EnrollmentDailySummary> GetTodaySummaryAsync()
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var summary = await _httpClient.GetFromJsonAsync<EnrollmentDailySummary>($"{baseUrl}/enrollment-ops/summary/today");
+            return summary ?? GetMockSummary();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching enrollment daily summary, returning mock data");
+            return GetMockSummary();
+        }
+    }
+
+    public async Task<List<EnrollmentFile>> GetRecentFilesAsync(int days = 7)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var files = await _httpClient.GetFromJsonAsync<List<EnrollmentFile>>($"{baseUrl}/enrollment-ops/files?days={days}");
+            return files ?? GetMockFiles();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching recent enrollment files, returning mock data");
+            return GetMockFiles();
+        }
+    }
+
+    public async Task<EnrollmentFileDetail> GetFileDetailAsync(string fileId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var detail = await _httpClient.GetFromJsonAsync<EnrollmentFileDetail>($"{baseUrl}/enrollment-ops/files/{Uri.EscapeDataString(fileId)}");
+            return detail ?? GetMockFileDetail(fileId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching enrollment file detail {FileId}, returning mock data", fileId);
+            return GetMockFileDetail(fileId);
+        }
+    }
+
+    private static EnrollmentDailySummary GetMockSummary()
+    {
+        return new EnrollmentDailySummary
+        {
+            FilesReceived = 4,
+            TotalTransactions = 347,
+            MembersAdded = 42,
+            MembersTermed = 18,
+            MembersChanged = 276,
+            ErrorCount = 11
+        };
+    }
+
+    private static List<EnrollmentFile> GetMockFiles()
+    {
+        var today = DateTime.Today;
+        return new List<EnrollmentFile>
+        {
+            new() { FileId = "834-20260318-001", FileName = "MEA_834_20260318_0600.edi", ReceivedTime = today.AddHours(6).AddMinutes(2), SponsorName = "Metro Employees Association", GroupNumber = "GRP-001-2026", TransactionCount = 185, AddedCount = 24, TermedCount = 8, ChangedCount = 149, RejectedCount = 4, Status = "Completed" },
+            new() { FileId = "834-20260318-002", FileName = "RHC_834_20260318_0615.edi", ReceivedTime = today.AddHours(6).AddMinutes(17), SponsorName = "Regional Health Cooperative", GroupNumber = "GRP-001-2026-SG", TransactionCount = 52, AddedCount = 6, TermedCount = 3, ChangedCount = 43, RejectedCount = 0, Status = "Completed" },
+            new() { FileId = "834-20260318-003", FileName = "TXE_834_20260318_0700.edi", ReceivedTime = today.AddHours(7).AddMinutes(1), SponsorName = "Texas Educators Benefit Trust", GroupNumber = "GRP-042-2026", TransactionCount = 78, AddedCount = 9, TermedCount = 5, ChangedCount = 57, RejectedCount = 7, Status = "Partial" },
+            new() { FileId = "834-20260318-004", FileName = "LSM_834_20260318_0730.edi", ReceivedTime = today.AddHours(7).AddMinutes(32), SponsorName = "Lone Star Manufacturing", GroupNumber = "GRP-087-2026", TransactionCount = 32, AddedCount = 3, TermedCount = 2, ChangedCount = 27, RejectedCount = 0, Status = "Processing" },
+            new() { FileId = "834-20260317-001", FileName = "MEA_834_20260317_0600.edi", ReceivedTime = today.AddDays(-1).AddHours(6).AddMinutes(1), SponsorName = "Metro Employees Association", GroupNumber = "GRP-001-2026", TransactionCount = 191, AddedCount = 12, TermedCount = 6, ChangedCount = 170, RejectedCount = 3, Status = "Completed" },
+            new() { FileId = "834-20260317-002", FileName = "RHC_834_20260317_0615.edi", ReceivedTime = today.AddDays(-1).AddHours(6).AddMinutes(14), SponsorName = "Regional Health Cooperative", GroupNumber = "GRP-001-2026-SG", TransactionCount = 48, AddedCount = 4, TermedCount = 1, ChangedCount = 43, RejectedCount = 0, Status = "Completed" },
+            new() { FileId = "834-20260316-001", FileName = "MEA_834_20260316_0600.edi", ReceivedTime = today.AddDays(-2).AddHours(6).AddMinutes(3), SponsorName = "Metro Employees Association", GroupNumber = "GRP-001-2026", TransactionCount = 188, AddedCount = 15, TermedCount = 9, ChangedCount = 163, RejectedCount = 1, Status = "Completed" },
+            new() { FileId = "834-20260315-001", FileName = "ACI_834_20260315_0800.edi", ReceivedTime = today.AddDays(-3).AddHours(8).AddMinutes(5), SponsorName = "Austin City Employees", GroupNumber = "GRP-055-2026", TransactionCount = 0, AddedCount = 0, TermedCount = 0, ChangedCount = 0, RejectedCount = 0, Status = "Failed" },
+        };
+    }
+
+    private static EnrollmentFileDetail GetMockFileDetail(string fileId)
+    {
+        var files = GetMockFiles();
+        var file = files.FirstOrDefault(f => f.FileId == fileId) ?? files[0];
+
+        var rejections = new List<EnrollmentRejection>();
+
+        if (fileId == "834-20260318-001" || fileId == files[0].FileId)
+        {
+            rejections = new List<EnrollmentRejection>
+            {
+                new() { MemberId = "MBR-8247", MemberName = "Garcia, Roberto", ErrorCode = "834-E003", ErrorDescription = "Invalid date of birth format — expected CCYYMMDD, received '03/14/1968'", RawSegmentReference = "DMG*D8*03/14/1968*M~" },
+                new() { MemberId = "MBR-8312", MemberName = "Petrov, Natasha", ErrorCode = "834-E007", ErrorDescription = "Subscriber not found — member ID does not match active enrollment roster", RawSegmentReference = "REF*0F*MBR-8312~INS*Y*18*001*25~" },
+                new() { MemberId = "MBR-8156", MemberName = "Williams, Andre", ErrorCode = "834-E012", ErrorDescription = "Duplicate enrollment — member already has active coverage under same plan", RawSegmentReference = "INS*Y*18*021*AI~HD*021**HLT*GOLD-PPO*EMP~" },
+                new() { MemberId = "MBR-8089", MemberName = "Chen, Mei-Lin", ErrorCode = "834-E015", ErrorDescription = "Coverage date gap — termination 02/28/2026, new effective 03/15/2026 leaves 14-day gap", RawSegmentReference = "DTP*348*D8*20260315~DTP*349*D8*20260228~" },
+            };
+        }
+        else if (fileId == "834-20260318-003")
+        {
+            rejections = new List<EnrollmentRejection>
+            {
+                new() { MemberId = "MBR-9401", MemberName = "Thompson, Dale", ErrorCode = "834-E003", ErrorDescription = "Invalid date of birth format — expected CCYYMMDD, received '1985-07-22'", RawSegmentReference = "DMG*D8*1985-07-22*M~" },
+                new() { MemberId = "MBR-9422", MemberName = "Reyes, Isabella", ErrorCode = "834-E007", ErrorDescription = "Subscriber not found — member ID does not match active enrollment roster", RawSegmentReference = "REF*0F*MBR-9422~INS*Y*18*024*01~" },
+                new() { MemberId = "MBR-9410", MemberName = "Okonkwo, Chidi", ErrorCode = "834-E012", ErrorDescription = "Duplicate enrollment — member already has active coverage under same plan", RawSegmentReference = "INS*Y*18*021*AI~HD*021**HLT*SLV-HMO*EMP~" },
+                new() { MemberId = "MBR-9388", MemberName = "Park, Sung-Ho", ErrorCode = "834-E021", ErrorDescription = "Invalid gender code — expected 'M' or 'F', received 'X' (not yet supported)", RawSegmentReference = "DMG*D8*19910404*X~" },
+                new() { MemberId = "MBR-9415", MemberName = "Davis, Tameka", ErrorCode = "834-E015", ErrorDescription = "Coverage date gap — termination 03/01/2026, new effective 03/16/2026 leaves 14-day gap", RawSegmentReference = "DTP*348*D8*20260316~DTP*349*D8*20260301~" },
+                new() { MemberId = "MBR-9430", MemberName = "Nguyen, Bao", ErrorCode = "834-E007", ErrorDescription = "Subscriber not found — member ID does not match active enrollment roster", RawSegmentReference = "REF*0F*MBR-9430~INS*N*19*021*AI~" },
+                new() { MemberId = "MBR-9405", MemberName = "Martin, Josefina", ErrorCode = "834-E030", ErrorDescription = "Invalid ZIP code — '7870' is not a valid 5-digit or 9-digit ZIP", RawSegmentReference = "N4*AUSTIN*TX*7870~" },
+            };
+        }
+        else if (fileId == "834-20260317-001")
+        {
+            rejections = new List<EnrollmentRejection>
+            {
+                new() { MemberId = "MBR-8201", MemberName = "Ramirez, Carlos", ErrorCode = "834-E015", ErrorDescription = "Coverage date gap — termination 03/10/2026, new effective 03/18/2026 leaves 7-day gap", RawSegmentReference = "DTP*348*D8*20260318~DTP*349*D8*20260310~" },
+                new() { MemberId = "MBR-8334", MemberName = "Foster, Denise", ErrorCode = "834-E003", ErrorDescription = "Invalid date of birth format — expected CCYYMMDD, received ''", RawSegmentReference = "DMG*D8**F~" },
+                new() { MemberId = "MBR-8290", MemberName = "Patel, Ravi", ErrorCode = "834-E012", ErrorDescription = "Duplicate enrollment — member already has active coverage under same plan", RawSegmentReference = "INS*Y*18*021*AI~HD*021**HLT*GOLD-PPO*EMP~" },
+            };
+        }
+
+        return new EnrollmentFileDetail
+        {
+            FileId = file.FileId,
+            FileName = file.FileName,
+            ReceivedTime = file.ReceivedTime,
+            SponsorName = file.SponsorName,
+            GroupNumber = file.GroupNumber,
+            TransactionCount = file.TransactionCount,
+            AddedCount = file.AddedCount,
+            TermedCount = file.TermedCount,
+            ChangedCount = file.ChangedCount,
+            RejectedCount = file.RejectedCount,
+            Status = file.Status,
+            Rejections = rejections
+        };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Appeals Service
+// ---------------------------------------------------------------------------
+
+public class AppealsService : IAppealsService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<AppealsService> _logger;
+
+    public AppealsService(HttpClient httpClient, IConfiguration configuration, ILogger<AppealsService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<AppealsSummary> GetSummaryAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var summary = await _httpClient.GetFromJsonAsync<AppealsSummary>($"{baseUrl}/appeals/summary");
+            return summary ?? GetMockSummary();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching appeals summary, returning mock data");
+            return GetMockSummary();
+        }
+    }
+
+    public async Task<List<AppealSummary>> SearchAppealsAsync(string? appealId = null,
+        string? memberId = null, string? originalClaimId = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var queryParts = new List<string>();
+            if (!string.IsNullOrEmpty(appealId)) queryParts.Add($"appealId={Uri.EscapeDataString(appealId)}");
+            if (!string.IsNullOrEmpty(memberId)) queryParts.Add($"memberId={Uri.EscapeDataString(memberId)}");
+            if (!string.IsNullOrEmpty(originalClaimId)) queryParts.Add($"originalClaimId={Uri.EscapeDataString(originalClaimId)}");
+            var query = string.Join("&", queryParts);
+            var results = await _httpClient.GetFromJsonAsync<List<AppealSummary>>($"{baseUrl}/appeals/search?{query}");
+            return results ?? GetMockAppeals(appealId, memberId, originalClaimId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching appeals, returning mock data");
+            return GetMockAppeals(appealId, memberId, originalClaimId);
+        }
+    }
+
+    public async Task<AppealDetails?> GetAppealByIdAsync(string appealId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AppealDetails>($"{baseUrl}/appeals/{Uri.EscapeDataString(appealId)}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching appeal {AppealId}, returning mock data", appealId);
+            return GetMockAppealDetail(appealId);
+        }
+    }
+
+    private static AppealsSummary GetMockSummary()
+    {
+        return new AppealsSummary
+        {
+            OpenAppeals = 14,
+            UrgentExpedited = 2,
+            DueThisWeek = 5,
+            OverturnedRate = 34.8
+        };
+    }
+
+    private static List<AppealSummary> GetMockAppeals(string? appealId, string? memberId, string? originalClaimId)
+    {
+        var today = DateTime.Today;
+        var all = new List<AppealSummary>
+        {
+            // Expedited — tight deadlines
+            new() { AppealId = "APL-2026-0001", MemberName = "William Henderson", MemberId = "MBR-8205", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01847", OriginalDecision = "Denied", OriginalDenialReason = "Medical necessity not established — lumbar MRI without conservative therapy trial", Status = "Under Review", IsExpedited = true, FiledDate = today.AddDays(-1), DueDate = today.AddDays(2), DaysRemaining = 2, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0002", MemberName = "Robert Johnson", MemberId = "MBR-8207", AppealType = "Authorization", OriginalDecisionId = "AUTH-2026-00007", OriginalDecision = "Denied", OriginalDenialReason = "MRI not medically necessary — insufficient clinical justification during routine physical", Status = "Under Review", IsExpedited = true, FiledDate = today.AddDays(-2), DueDate = today.AddDays(1), DaysRemaining = 1, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "At Risk" },
+
+            // Standard — various stages
+            new() { AppealId = "APL-2026-0003", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01590", OriginalDecision = "Denied", OriginalDenialReason = "Out-of-network provider without prior authorization", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-8), DueDate = today.AddDays(22), DaysRemaining = 22, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0004", MemberName = "Angela Washington", MemberId = "MBR-8202", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01622", OriginalDecision = "Denied", OriginalDenialReason = "Exceeded visit limit — 20 of 20 PT visits already utilized for plan year", Status = "Received", IsExpedited = false, FiledDate = today.AddDays(-2), DueDate = today.AddDays(28), DaysRemaining = 28, AssignedReviewer = "", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0005", MemberName = "Priya Sharma", MemberId = "MBR-8204", AppealType = "Authorization", OriginalDecisionId = "AUTH-2026-00012", OriginalDecision = "Denied", OriginalDenialReason = "Experimental / investigational — procedure not covered under plan benefits", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-15), DueDate = today.AddDays(15), DaysRemaining = 15, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0006", MemberName = "Michael O'Brien", MemberId = "MBR-8203", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01701", OriginalDecision = "Denied", OriginalDenialReason = "Duplicate claim — service already adjudicated under CLM-2026-01698", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-20), DueDate = today.AddDays(10), DaysRemaining = 10, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0007", MemberName = "Sophia Martinez", MemberId = "MBR-8208", AppealType = "Coverage", OriginalDecisionId = "COV-2026-00034", OriginalDecision = "Denied", OriginalDenialReason = "Service not covered — cosmetic procedure exclusion applies", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-22), DueDate = today.AddDays(8), DaysRemaining = 8, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0008", MemberName = "Thanh Le", MemberId = "MBR-8206", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01455", OriginalDecision = "Denied", OriginalDenialReason = "Timely filing exceeded — claim received 97 days after date of service (90-day limit)", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-25), DueDate = today.AddDays(5), DaysRemaining = 5, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0009", MemberName = "David Kim", MemberId = "MBR-8209", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01510", OriginalDecision = "Partial Denial", OriginalDenialReason = "Reimbursement reduced — billed amount exceeds usual and customary rate for region", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-26), DueDate = today.AddDays(4), DaysRemaining = 4, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "At Risk" },
+            new() { AppealId = "APL-2026-0010", MemberName = "Margaret Thompson", MemberId = "MBR-8210", AppealType = "Authorization", OriginalDecisionId = "AUTH-2026-00019", OriginalDecision = "Denied", OriginalDenialReason = "Prior authorization request submitted after service rendered", Status = "Received", IsExpedited = false, FiledDate = today.AddDays(-1), DueDate = today.AddDays(29), DaysRemaining = 29, AssignedReviewer = "", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0011", MemberName = "Carlos Ramirez", MemberId = "MBR-8201", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01388", OriginalDecision = "Denied", OriginalDenialReason = "Non-covered benefit — acupuncture services excluded under current plan", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-27), DueDate = today.AddDays(3), DaysRemaining = 3, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "At Risk" },
+
+            // Decided
+            new() { AppealId = "APL-2026-0012", MemberName = "Angela Washington", MemberId = "MBR-8202", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01290", OriginalDecision = "Denied", OriginalDenialReason = "Medical necessity not established — elective procedure", Status = "Decision Made", IsExpedited = false, FiledDate = today.AddDays(-28), DueDate = today.AddDays(2), DaysRemaining = 2, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "On Track" },
+            new() { AppealId = "APL-2026-0013", MemberName = "Robert Johnson", MemberId = "MBR-8207", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01195", OriginalDecision = "Denied", OriginalDenialReason = "Out-of-network provider without prior authorization", Status = "Decision Made", IsExpedited = false, FiledDate = today.AddDays(-30), DueDate = today, DaysRemaining = 0, AssignedReviewer = "Dr. Mark Torres", ComplianceStatus = "On Track" },
+
+            // Escalated
+            new() { AppealId = "APL-2026-0014", MemberName = "Priya Sharma", MemberId = "MBR-8204", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01102", OriginalDecision = "Denied", OriginalDenialReason = "Medical necessity not established — specialist referral required", Status = "Escalated", IsExpedited = false, FiledDate = today.AddDays(-29), DueDate = today.AddDays(1), DaysRemaining = 1, AssignedReviewer = "Medical Director", ComplianceStatus = "At Risk" },
+
+            // Withdrawn
+            new() { AppealId = "APL-2026-0015", MemberName = "Thanh Le", MemberId = "MBR-8206", AppealType = "Authorization", OriginalDecisionId = "AUTH-2026-00005", OriginalDecision = "Denied", OriginalDenialReason = "Exceeded visit limit", Status = "Withdrawn", IsExpedited = false, FiledDate = today.AddDays(-10), DueDate = today.AddDays(20), DaysRemaining = 20, AssignedReviewer = "", ComplianceStatus = "N/A" },
+
+            // Overdue
+            new() { AppealId = "APL-2026-0016", MemberName = "Michael O'Brien", MemberId = "MBR-8203", AppealType = "Claim", OriginalDecisionId = "CLM-2026-01050", OriginalDecision = "Denied", OriginalDenialReason = "Coordination of benefits — primary payer has not adjudicated", Status = "Under Review", IsExpedited = false, FiledDate = today.AddDays(-32), DueDate = today.AddDays(-2), DaysRemaining = -2, AssignedReviewer = "Dr. Sarah Williams", ComplianceStatus = "Overdue" },
+        };
+
+        // Filter
+        if (!string.IsNullOrEmpty(appealId))
+            return all.Where(a => a.AppealId.Contains(appealId, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrEmpty(memberId))
+            return all.Where(a => a.MemberId.Contains(memberId, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrEmpty(originalClaimId))
+            return all.Where(a => a.OriginalDecisionId.Contains(originalClaimId, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        return all;
+    }
+
+    private static AppealDetails? GetMockAppealDetail(string appealId)
+    {
+        var appeals = GetMockAppeals(null, null, null);
+        var match = appeals.FirstOrDefault(a => a.AppealId == appealId);
+        if (match == null) return null;
+
+        var detail = new AppealDetails
+        {
+            AppealId = match.AppealId,
+            MemberName = match.MemberName,
+            MemberId = match.MemberId,
+            AppealType = match.AppealType,
+            OriginalDecisionId = match.OriginalDecisionId,
+            OriginalDecision = match.OriginalDecision,
+            OriginalDenialReason = match.OriginalDenialReason,
+            Status = match.Status,
+            IsExpedited = match.IsExpedited,
+            FiledDate = match.FiledDate,
+            DueDate = match.DueDate,
+            DaysRemaining = match.DaysRemaining,
+            AssignedReviewer = match.AssignedReviewer,
+            ComplianceStatus = match.ComplianceStatus,
+            AppealReason = match.AppealId switch
+            {
+                "APL-2026-0001" => "Provider submitted additional clinical notes documenting 6-week conservative therapy trial including NSAIDs and physical therapy. Requests reconsideration based on updated medical records.",
+                "APL-2026-0002" => "Orthopedic specialist states MRI is essential for differential diagnosis of suspected meniscal tear. Patient has persistent pain unresponsive to conservative management.",
+                "APL-2026-0003" => "Member was seen at emergency department while traveling. Emergency exception to network requirements should apply per plan terms.",
+                "APL-2026-0012" => "Surgeon has provided peer-reviewed literature supporting medical necessity of the procedure for the patient's specific condition and BMI category.",
+                "APL-2026-0013" => "Member's employer confirmed urgent care visit was a covered emergency. Requests out-of-network emergency exception per state mandate.",
+                _ => "Member/provider disagrees with denial determination and requests reconsideration with supporting documentation."
+            },
+            Documents = new List<AppealDocument>
+            {
+                new() { DocumentId = $"DOC-{match.AppealId}-001", DocumentName = "Appeal Letter.pdf", DocumentType = "Appeal Form", UploadedDate = match.FiledDate, UploadedBy = "Provider Portal" },
+                new() { DocumentId = $"DOC-{match.AppealId}-002", DocumentName = "Clinical Notes.pdf", DocumentType = "Medical Records", UploadedDate = match.FiledDate.AddDays(1), UploadedBy = "Provider Portal" },
+            },
+            Timeline = new List<AppealTimelineEvent>
+            {
+                new() { EventDate = match.FiledDate, EventType = "Filed", Description = "Appeal received and logged", PerformedBy = "System" },
+                new() { EventDate = match.FiledDate.AddHours(2), EventType = "Acknowledged", Description = "Acknowledgment letter sent to member", PerformedBy = "System" },
+            }
+        };
+
+        if (!string.IsNullOrEmpty(match.AssignedReviewer) && match.AssignedReviewer != "Medical Director")
+        {
+            detail.Timeline.Add(new AppealTimelineEvent
+            {
+                EventDate = match.FiledDate.AddDays(1),
+                EventType = "Assigned",
+                Description = $"Assigned to {match.AssignedReviewer} for clinical review",
+                PerformedBy = "Appeals Coordinator"
+            });
+        }
+
+        if (match.Status == "Escalated")
+        {
+            detail.Timeline.Add(new AppealTimelineEvent
+            {
+                EventDate = DateTime.Today.AddDays(-2),
+                EventType = "Escalated",
+                Description = "Escalated to Medical Director — approaching regulatory deadline",
+                PerformedBy = match.AssignedReviewer
+            });
+        }
+
+        if (match.Status == "Decision Made")
+        {
+            var isOverturned = match.AppealId == "APL-2026-0013";
+            detail.FinalDecision = isOverturned ? "Overturned" : "Upheld";
+            detail.DecisionDate = match.DueDate.AddDays(-3);
+            detail.FinalDecisionNotes = isOverturned
+                ? "Original denial overturned. Emergency exception applies — out-of-network visit meets prudent layperson standard. Claim to be reprocessed at in-network benefit level."
+                : "Original denial upheld. Clinical documentation does not support medical necessity for the requested elective procedure. Member retains right to external review.";
+            detail.Timeline.Add(new AppealTimelineEvent
+            {
+                EventDate = detail.DecisionDate.Value,
+                EventType = "Decision",
+                Description = $"Decision: {detail.FinalDecision} — {(isOverturned ? "claim reprocessed" : "denial upheld")}",
+                PerformedBy = match.AssignedReviewer
+            });
+            detail.Timeline.Add(new AppealTimelineEvent
+            {
+                EventDate = detail.DecisionDate.Value.AddHours(4),
+                EventType = "Notified",
+                Description = "Decision letter sent to member and provider",
+                PerformedBy = "System"
+            });
+        }
+
+        if (match.Status == "Withdrawn")
+        {
+            detail.FinalDecision = "Withdrawn";
+            detail.DecisionDate = match.FiledDate.AddDays(5);
+            detail.FinalDecisionNotes = "Member withdrew appeal — authorization was subsequently approved through standard process.";
+            detail.Timeline.Add(new AppealTimelineEvent
+            {
+                EventDate = detail.DecisionDate.Value,
+                EventType = "Withdrawn",
+                Description = "Appeal withdrawn by member",
+                PerformedBy = "Member Portal"
+            });
+        }
+
+        return detail;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Correspondence Service
+// ---------------------------------------------------------------------------
+
+public class CorrespondenceService : ICorrespondenceService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<CorrespondenceService> _logger;
+
+    public CorrespondenceService(HttpClient httpClient, IConfiguration configuration, ILogger<CorrespondenceService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<CorrespondenceSummary> GetSummaryAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var summary = await _httpClient.GetFromJsonAsync<CorrespondenceSummary>($"{baseUrl}/correspondence/summary");
+            return summary ?? GetMockSummary();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching correspondence summary, returning mock data");
+            return GetMockSummary();
+        }
+    }
+
+    public async Task<List<CorrespondenceItem>> GetQueueAsync(string? type = null,
+        string? status = null, int limit = 50)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var url = $"{baseUrl}/correspondence/queue?limit={limit}";
+            if (!string.IsNullOrEmpty(type)) url += $"&type={Uri.EscapeDataString(type)}";
+            if (!string.IsNullOrEmpty(status)) url += $"&status={Uri.EscapeDataString(status)}";
+            var items = await _httpClient.GetFromJsonAsync<List<CorrespondenceItem>>(url);
+            return items ?? GetMockQueue(type, status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching correspondence queue, returning mock data");
+            return GetMockQueue(type, status);
+        }
+    }
+
+    public async Task<List<RfaiTrackingItem>> GetOutstandingRfaisAsync()
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var items = await _httpClient.GetFromJsonAsync<List<RfaiTrackingItem>>($"{baseUrl}/correspondence/rfais/outstanding");
+            return items ?? GetMockRfais();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching outstanding RFAIs, returning mock data");
+            return GetMockRfais();
+        }
+    }
+
+    private static CorrespondenceSummary GetMockSummary()
+    {
+        return new CorrespondenceSummary
+        {
+            PendingGeneration = 14,
+            GeneratedToday = 37,
+            SentThisWeek = 218,
+            FailedReturned = 6
+        };
+    }
+
+    private static List<CorrespondenceItem> GetMockQueue(string? type, string? status)
+    {
+        var today = DateTime.Today;
+        var items = new List<CorrespondenceItem>
+        {
+            // Adverse Determination letters
+            new() { LetterId = "LTR-2026-05001", LetterType = "Adverse Determination", RecipientName = "William Henderson", RecipientType = "Member", RelatedId = "CLM-2026-01847", GeneratedDate = today, Status = "Generated", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05002", LetterType = "Adverse Determination", RecipientName = "Robert Johnson", RecipientType = "Member", RelatedId = "AUTH-2026-00007", GeneratedDate = today, Status = "Generated", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05003", LetterType = "Adverse Determination", RecipientName = "Thanh Le", RecipientType = "Member", RelatedId = "CLM-2026-01455", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05004", LetterType = "Adverse Determination", RecipientName = "Rebecca Okafor, MD", RecipientType = "Provider", RelatedId = "AUTH-2026-00007", GeneratedDate = today, Status = "Generated", DeliveryMethod = "Fax" },
+            new() { LetterId = "LTR-2026-05005", LetterType = "Adverse Determination", RecipientName = "Sophia Martinez", RecipientType = "Member", RelatedId = "CLM-2026-01701", GeneratedDate = today.AddDays(-2), Status = "Sent", DeliveryMethod = "Portal" },
+
+            // EOB letters
+            new() { LetterId = "LTR-2026-05010", LetterType = "EOB", RecipientName = "Carlos Ramirez", RecipientType = "Member", RelatedId = "CLM-2026-01590", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Portal" },
+            new() { LetterId = "LTR-2026-05011", LetterType = "EOB", RecipientName = "Angela Washington", RecipientType = "Member", RelatedId = "CLM-2026-01622", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Portal" },
+            new() { LetterId = "LTR-2026-05012", LetterType = "EOB", RecipientName = "Priya Sharma", RecipientType = "Member", RelatedId = "CLM-2026-00398", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Email" },
+            new() { LetterId = "LTR-2026-05013", LetterType = "EOB", RecipientName = "Michael O'Brien", RecipientType = "Member", RelatedId = "CLM-2026-00371", GeneratedDate = today.AddDays(-3), Status = "Delivered", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05014", LetterType = "EOB", RecipientName = "David Kim", RecipientType = "Member", RelatedId = "CLM-2026-00355", GeneratedDate = today.AddDays(-4), Status = "Delivered", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05015", LetterType = "EOB", RecipientName = "Margaret Thompson", RecipientType = "Member", RelatedId = "CLM-2026-00340", GeneratedDate = today.AddDays(-5), Status = "Returned", DeliveryMethod = "Mail" },
+
+            // RFAI letters
+            new() { LetterId = "LTR-2026-05020", LetterType = "RFAI", RecipientName = "Maria Santos, MD", RecipientType = "Provider", RelatedId = "CLM-2026-04201", GeneratedDate = today, Status = "Queued", DeliveryMethod = "Fax" },
+            new() { LetterId = "LTR-2026-05021", LetterType = "RFAI", RecipientName = "Hill Country Orthopedic Associates", RecipientType = "Provider", RelatedId = "CLM-2026-04215", GeneratedDate = today, Status = "Queued", DeliveryMethod = "Fax" },
+            new() { LetterId = "LTR-2026-05022", LetterType = "RFAI", RecipientName = "James Chen, DO", RecipientType = "Provider", RelatedId = "CLM-2026-04228", GeneratedDate = today.AddDays(-3), Status = "Sent", DeliveryMethod = "Fax" },
+            new() { LetterId = "LTR-2026-05023", LetterType = "RFAI", RecipientName = "Rebecca Okafor, MD", RecipientType = "Provider", RelatedId = "CLM-2026-04231", GeneratedDate = today.AddDays(-12), Status = "Sent", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05024", LetterType = "RFAI", RecipientName = "Karen Mitchell, MD", RecipientType = "Provider", RelatedId = "CLM-2026-04237", GeneratedDate = today.AddDays(-28), Status = "Sent", DeliveryMethod = "Fax" },
+
+            // Welcome Letters
+            new() { LetterId = "LTR-2026-05030", LetterType = "Welcome Letter", RecipientName = "New Member Batch — MEA March 2026", RecipientType = "Member", RelatedId = "834-20260318-001", GeneratedDate = today, Status = "Queued", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05031", LetterType = "Welcome Letter", RecipientName = "New Member Batch — RHC March 2026", RecipientType = "Member", RelatedId = "834-20260318-002", GeneratedDate = today, Status = "Queued", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05032", LetterType = "Welcome Letter", RecipientName = "New Member Batch — TXE March 2026", RecipientType = "Member", RelatedId = "834-20260318-003", GeneratedDate = today, Status = "Queued", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05033", LetterType = "Welcome Letter", RecipientName = "Carlos Ramirez", RecipientType = "Member", RelatedId = "834-20260316-001", GeneratedDate = today.AddDays(-2), Status = "Sent", DeliveryMethod = "Mail" },
+
+            // Payment Notices
+            new() { LetterId = "LTR-2026-05040", LetterType = "Payment Notice", RecipientName = "Maria Santos, MD", RecipientType = "Provider", RelatedId = "PAY-2026-00112", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Email" },
+            new() { LetterId = "LTR-2026-05041", LetterType = "Payment Notice", RecipientName = "James Chen, DO", RecipientType = "Provider", RelatedId = "PAY-2026-00113", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Email" },
+            new() { LetterId = "LTR-2026-05042", LetterType = "Payment Notice", RecipientName = "Hill Country Orthopedic Associates", RecipientType = "Provider", RelatedId = "PAY-2026-00114", GeneratedDate = today.AddDays(-1), Status = "Sent", DeliveryMethod = "Portal" },
+            new() { LetterId = "LTR-2026-05043", LetterType = "Payment Notice", RecipientName = "Rebecca Okafor, MD", RecipientType = "Provider", RelatedId = "PAY-2026-00115", GeneratedDate = today.AddDays(-3), Status = "Delivered", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05044", LetterType = "Payment Notice", RecipientName = "David Patel, MD", RecipientType = "Provider", RelatedId = "PAY-2026-00116", GeneratedDate = today.AddDays(-5), Status = "Failed", DeliveryMethod = "Fax" },
+
+            // Additional queued items
+            new() { LetterId = "LTR-2026-05050", LetterType = "Adverse Determination", RecipientName = "David Kim", RecipientType = "Member", RelatedId = "CLM-2026-01510", GeneratedDate = null, Status = "Queued", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05051", LetterType = "EOB", RecipientName = "Thanh Le", RecipientType = "Member", RelatedId = "CLM-2026-00412", GeneratedDate = null, Status = "Queued", DeliveryMethod = "Portal" },
+            new() { LetterId = "LTR-2026-05052", LetterType = "Adverse Determination", RecipientName = "Margaret Thompson", RecipientType = "Member", RelatedId = "AUTH-2026-00019", GeneratedDate = null, Status = "Queued", DeliveryMethod = "Mail" },
+            new() { LetterId = "LTR-2026-05053", LetterType = "Payment Notice", RecipientName = "Linda Nguyen, DPT", RecipientType = "Provider", RelatedId = "PAY-2026-00117", GeneratedDate = null, Status = "Queued", DeliveryMethod = "Email" },
+            new() { LetterId = "LTR-2026-05054", LetterType = "EOB", RecipientName = "William Henderson", RecipientType = "Member", RelatedId = "CLM-2026-00340", GeneratedDate = today.AddDays(-6), Status = "Returned", DeliveryMethod = "Mail" },
+        };
+
+        if (!string.IsNullOrEmpty(type))
+            items = items.Where(i => i.LetterType == type).ToList();
+        if (!string.IsNullOrEmpty(status))
+            items = items.Where(i => i.Status == status).ToList();
+
+        return items;
+    }
+
+    private static List<RfaiTrackingItem> GetMockRfais()
+    {
+        var today = DateTime.Today;
+        return new List<RfaiTrackingItem>
+        {
+            new() { RfaiId = "RFAI-2026-0301", RecipientName = "Maria Santos, MD", RecipientType = "Provider", RelatedClaimId = "CLM-2026-04201", DocumentsRequested = "Operative report, anesthesia record", SentDate = today.AddDays(-3), ResponseDeadline = today.AddDays(42), DaysSinceSent = 3, DaysUntilDeadline = 42, Status = "Awaiting Response" },
+            new() { RfaiId = "RFAI-2026-0289", RecipientName = "James Chen, DO", RecipientType = "Provider", RelatedClaimId = "CLM-2026-04228", DocumentsRequested = "Office visit notes, referral documentation", SentDate = today.AddDays(-12), ResponseDeadline = today.AddDays(33), DaysSinceSent = 12, DaysUntilDeadline = 33, Status = "Awaiting Response" },
+            new() { RfaiId = "RFAI-2026-0267", RecipientName = "Rebecca Okafor, MD", RecipientType = "Provider", RelatedClaimId = "CLM-2026-04231", DocumentsRequested = "Pre-surgical evaluation, imaging results, conservative treatment history", SentDate = today.AddDays(-28), ResponseDeadline = today.AddDays(17), DaysSinceSent = 28, DaysUntilDeadline = 17, Status = "Awaiting Response" },
+            new() { RfaiId = "RFAI-2026-0248", RecipientName = "Karen Mitchell, MD", RecipientType = "Provider", RelatedClaimId = "CLM-2026-04237", DocumentsRequested = "Admission records, discharge summary", SentDate = today.AddDays(-35), ResponseDeadline = today.AddDays(10), DaysSinceSent = 35, DaysUntilDeadline = 10, Status = "Awaiting Response" },
+            new() { RfaiId = "RFAI-2026-0231", RecipientName = "Lone Star Radiology Group", RecipientType = "Provider", RelatedClaimId = "CLM-2026-04190", DocumentsRequested = "Radiology report, order from referring physician, prior authorization number", SentDate = today.AddDays(-41), ResponseDeadline = today.AddDays(4), DaysSinceSent = 41, DaysUntilDeadline = 4, Status = "Approaching Deadline" },
         };
     }
 }
