@@ -2563,11 +2563,13 @@ public class MetricsService : IMetricsService
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<MetricsService> _logger;
 
-    public MetricsService(HttpClient httpClient, IConfiguration configuration)
+    public MetricsService(HttpClient httpClient, IConfiguration configuration, ILogger<MetricsService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<DashboardMetrics> GetDashboardMetricsAsync()
@@ -2595,8 +2597,9 @@ public class MetricsService : IMetricsService
             var alerts = await _httpClient.GetFromJsonAsync<OperationalAlerts>($"{baseUrl}/metrics/operational-alerts");
             return alerts ?? GetMockAlerts();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Error fetching operational alerts, returning mock data");
             return GetMockAlerts();
         }
     }
@@ -2609,8 +2612,9 @@ public class MetricsService : IMetricsService
             var volume = await _httpClient.GetFromJsonAsync<EdiVolumeSummary>($"{baseUrl}/metrics/edi-volume/today");
             return volume ?? GetMockEdiVolume();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Error fetching EDI volume, returning mock data");
             return GetMockEdiVolume();
         }
     }
@@ -4773,12 +4777,12 @@ public class WorkQueueService : IWorkQueueService
             if (!string.IsNullOrEmpty(queueType)) url += $"&queueType={Uri.EscapeDataString(queueType)}";
             if (!string.IsNullOrEmpty(assignedTo)) url += $"&assignedTo={Uri.EscapeDataString(assignedTo)}";
             var items = await _httpClient.GetFromJsonAsync<List<WorkQueueItem>>(url);
-            return items ?? GetMockQueueItems(queueType, assignedTo);
+            return items ?? GetMockQueueItems(queueType, assignedTo, limit);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error fetching work queue items, returning mock data");
-            return GetMockQueueItems(queueType, assignedTo);
+            return GetMockQueueItems(queueType, assignedTo, limit);
         }
     }
 
@@ -4822,9 +4826,8 @@ public class WorkQueueService : IWorkQueueService
         };
     }
 
-    private static List<WorkQueueItem> GetMockQueueItems(string? queueType, string? assignedTo)
+    private static List<WorkQueueItem> GetMockQueueItems(string? queueType, string? assignedTo, int limit = 100)
     {
-        var examiners = new[] { "Sarah Williams", "James Martinez", "Priya Kapoor", "David Chen" };
 
         var items = new List<WorkQueueItem>
         {
@@ -4884,7 +4887,7 @@ public class WorkQueueService : IWorkQueueService
         if (!string.IsNullOrEmpty(assignedTo) && assignedTo != "All")
             items = items.Where(i => i.AssignedTo == assignedTo).ToList();
 
-        return items.OrderByDescending(i => i.DaysInQueue).ToList();
+        return items.OrderByDescending(i => i.DaysInQueue).Take(limit).ToList();
     }
 }
 

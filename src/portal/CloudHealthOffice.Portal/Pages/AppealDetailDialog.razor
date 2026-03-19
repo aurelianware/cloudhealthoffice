@@ -50,7 +50,17 @@
                         </MudItem>
                         <MudItem xs="12" md="4">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ORIGINAL DECISION ID</MudText>
-                            <MudLink Href="@($"/claims/{Detail.OriginalDecisionId}")" Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudLink>
+                            @{
+                                var decisionHref = GetDecisionLink(Detail.OriginalDecisionId);
+                            }
+                            @if (decisionHref != null)
+                            {
+                                <MudLink Href="@decisionHref" Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudText>
+                            }
                         </MudItem>
                         <MudItem xs="12" md="4">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ORIGINAL DECISION</MudText>
@@ -218,6 +228,13 @@
         "Withdrawn" => Color.Default,
         _ => Color.Default
     };
+
+    private static string? GetDecisionLink(string id)
+    {
+        if (id.StartsWith("CLM-")) return $"/claims/{id}";
+        if (id.StartsWith("AUTH-")) return "/authorizations";
+        return null;
+    }
 
     private void Close() => MudDialog.Close();
 }

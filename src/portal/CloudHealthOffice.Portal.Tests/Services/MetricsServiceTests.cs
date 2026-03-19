@@ -1,11 +1,13 @@
 using System.Net;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
 
 namespace CloudHealthOffice.Portal.Tests.Services;
 
 public class MetricsServiceTests
 {
+    private readonly Mock<ILogger<MetricsService>> _logger = new();
     private readonly IConfiguration _configuration;
 
     public MetricsServiceTests()
@@ -21,7 +23,7 @@ public class MetricsServiceTests
     private MetricsService CreateService(HttpClient? httpClient = null)
     {
         httpClient ??= new HttpClient(new FakeHandler(HttpStatusCode.InternalServerError));
-        return new MetricsService(httpClient, _configuration);
+        return new MetricsService(httpClient, _configuration, _logger.Object);
     }
 
     // ── Dashboard Metrics (existing, but verify decimal fix) ──
