@@ -5,6 +5,61 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - March 2026
+
+### Portal — Operations Depth
+
+**New Pages:**
+- Work Queues — claims examiner workflow with pend queue management by reason (NCCI, missing auth, provider not contracted, COB, medical review), priority tracking, and examiner assignment
+- Appeals — search-first appeal tracking with regulatory deadline monitoring (MA 30-day standard, 72-hour expedited), appeal detail dialog with full lifecycle review
+- Correspondence — outbound letter queue management (adverse determinations, EOBs, RFAIs, welcome letters) with RFAI response tracking and deadline monitoring
+- Enrollment Operations — daily 834 file processing dashboard with transaction counts, adds/terms, and rejection detail
+
+**Enhanced Pages:**
+- Dashboard — added operational alerts (work queue count, pending RFAIs, appeals due), EDI transaction volume summary, and system health indicators
+- Member Detail — added Accumulators tab with plan year deductible and OOP max progress bars, service-specific accumulator tracking, and recent claim activity affecting accumulators
+- Claims — consolidated ClaimsNew into primary Claims page with advanced search (Claim ID, Member ID, Provider, status, date range)
+- Settings — added Operating Mode tab showing per-engine Augment/Replace configuration with mode descriptions
+
+**Portal Architecture:**
+- Navigation reorganized into 6 collapsible groups (Operations, Members & Providers, Configuration, Finance, Monitoring, Admin)
+- All PHI pages changed from [AllowAnonymous] to [Authorize]
+- Search-first pattern enforced on all pages displaying member, claim, or authorization data (HIPAA minimum necessary)
+- 5 new service interfaces and implementations (WorkQueue, Appeals, Correspondence, EnrollmentOperations, OperatingMode)
+- Dashboard metrics corrected (approval rate and claims trend math)
+
+### Engine & Infrastructure
+- ClaimsScrubEngine — C# port of TypeScript validation rules with 20+ rules across 6 categories, wired into AdjudicationController
+- OperatingMode engine — per-engine, per-tenant Augment/Replace toggle with AugmentResult<T> and discrepancy logging
+- Seed scripts corrected to lowercase database name (cloudhealthoffice)
+- Tenant onboarding checklist (TENANT_ONBOARDING_CHECKLIST.md) with Azure AD multi-tenant admin consent flow documentation
+- Parameterized seed-demo-data.js (1,345 lines) for any-tenant seeding
+- Parameterized seed-tenant.js for tenant provisioning
+
+### Documentation
+- README updated with accurate platform metrics and new sections
+- Architecture diagram (SVG, Sentinel theme) replacing ASCII art
+- Adjudication pipeline diagram showing 8-stage processing with latency
+- Operating mode diagram illustrating Augment/Replace architecture
+- Channel Partners section for implementation firm distribution model
+- Adoption path rewritten to reference Operating Mode by name
+- Codebase Scale section with line-count breakdown by language
+
+### Metrics
+
+| Metric                | Previous | Current  |
+|-----------------------|----------|----------|
+| Portal pages          | 43       | 47       |
+| Calculation engines   | 7        | 9        |
+| Service interfaces    | 15       | 20       |
+| Portal Razor lines    | 14,622   | 16,279   |
+| C# application lines  | ~72,900  | ~74,800  |
+| Total code lines      | ~160,000 | ~192,000 |
+| Total lines (w/ docs) | ~240,000 | ~303,000 |
+| Automated tests       | 1,018    | 1,295    |
+
+---
+
 ## [Unreleased]
 
 ### v5.0 - Planned Q2 2026
@@ -582,6 +637,9 @@ Star ★ the repo if you believe payers deserve better than 1990s technology in 
 
 ---
 
+[4.2.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0
+[4.1.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.1.0
+[4.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0
 [3.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v3.0.0
 [2.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v2.0.0
 [1.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v1.0.0

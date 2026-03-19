@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="rgba(0,255,255,0.3)"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#00ffff" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="820" fill="#000000"/>
+
+  <!-- TOP: Your Core Admin System -->
+  <g transform="translate(600, 48)">
+    <rect x="-170" y="-28" width="340" height="56" rx="10" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.4)" stroke-width="1.5"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="16" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Your Core Admin System</text>
+    <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#b0b0b0"
+          text-anchor="middle">QNXT &#x2022; Facets &#x2022; HealthEdge &#x2022; Amisys</text>
+  </g>
+
+  <!-- Connector arrow: Core Admin to CHO -->
+  <line x1="600" y1="78" x2="600" y2="115" stroke="url(#arrowGrad)" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- MAIN: Cloud Health Office Box -->
+  <rect x="60" y="120" width="1080" height="560" rx="14" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
+
+  <!-- CHO Title -->
+  <text x="600" y="155" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Cloud Health Office</text>
+  <text x="600" y="177" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="#b0b0b0"
+        text-anchor="middle">Kubernetes-Native &#x2022; HIPAA Compliant &#x2022; Vendor-Neutral CMS-0057-F Compliance Layer</text>
+
+  <!-- Row 1: API Gateway -->
+  <g transform="translate(600, 215)">
+    <rect x="-480" y="-18" width="960" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.25)" stroke-width="1"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">API Gateway (YARP)</text>
+  </g>
+
+  <!-- Row 2: Core Services -->
+  <g transform="translate(0, 275)">
+    <g transform="translate(180, 0)">
+      <rect x="-80" y="-22" width="160" height="44" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Claims Service</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">837 / 835</text>
+    </g>
+    <g transform="translate(380, 0)">
+      <rect x="-80" y="-22" width="160" height="44" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Eligibility Service</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">270 / 271</text>
+    </g>
+    <g transform="translate(580, 0)">
+      <rect x="-80" y="-22" width="160" height="44" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#00ffff" text-anchor="middle">Auth Service</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">278</text>
+    </g>
+    <g transform="translate(790, 0)">
+      <rect x="-85" y="-22" width="170" height="44" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Benefit Engine</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">HDHP &#x2022; HSA &#x2022; COB &#x2022; NCCI</text>
+    </g>
+    <g transform="translate(1010, 0)">
+      <rect x="-80" y="-22" width="160" height="44" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Provider Service</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">NPI &#x2022; Credentialing</text>
+    </g>
+  </g>
+
+  <!-- Divider -->
+  <line x1="100" y1="320" x2="1100" y2="320" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Row 3: Argo Workflows -->
+  <text x="600" y="348" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">ARGO WORKFLOWS &#x2014; ADJUDICATION DAG</text>
+
+  <g transform="translate(0, 390)">
+    <g transform="translate(180, 0)">
+      <rect x="-68" y="-20" width="136" height="40" rx="6" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">Verify Coverage</text>
+    </g>
+    <line x1="250" y1="0" x2="305" y2="0" stroke="#00ffff" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>
+    <g transform="translate(390, 0)">
+      <rect x="-75" y="-20" width="150" height="40" rx="6" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">Validate Provider</text>
+    </g>
+    <line x1="467" y1="0" x2="515" y2="0" stroke="#00ffff" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>
+    <g transform="translate(590, 0)">
+      <rect x="-65" y="-20" width="130" height="40" rx="6" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">Get Benefits</text>
+    </g>
+    <line x1="657" y1="0" x2="715" y2="0" stroke="#00ff88" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>
+    <g transform="translate(790, 0)">
+      <rect x="-65" y="-20" width="130" height="40" rx="6" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.3)" stroke-width="1"/>
+      <text x="0" y="1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">Price Claim</text>
+    </g>
+    <line x1="857" y1="0" x2="915" y2="0" stroke="#00ff88" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead)"/>
+    <g transform="translate(990, 0)">
+      <rect x="-65" y="-20" width="130" height="40" rx="6" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.3)" stroke-width="1"/>
+      <text x="0" y="1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">Pay Claim</text>
+    </g>
+  </g>
+
+  <!-- Divider -->
+  <line x1="100" y1="430" x2="1100" y2="430" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Row 4: Argo Events -->
+  <g transform="translate(600, 460)">
+    <rect x="-480" y="-18" width="960" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
+          fill="#b0b0b0" text-anchor="middle">Argo Events &#x2014; SFTP Polling &#x2022; Kafka Triggers &#x2022; EDI Ingest</text>
+  </g>
+
+  <!-- Row 5: Parsers & Mappers -->
+  <g transform="translate(0, 515)">
+    <g transform="translate(240, 0)">
+      <rect x="-110" y="-18" width="220" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.15)" stroke-width="1"/>
+      <text x="0" y="-1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle">X12 Parsers</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">Python 3.11</text>
+    </g>
+    <g transform="translate(580, 0)">
+      <rect x="-110" y="-18" width="220" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.15)" stroke-width="1"/>
+      <text x="0" y="-1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ffff" text-anchor="middle">FHIR R4 Mappers</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">TypeScript / Node.js 20</text>
+    </g>
+    <g transform="translate(920, 0)">
+      <rect x="-110" y="-18" width="220" height="36" rx="6" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,136,0.15)" stroke-width="1"/>
+      <text x="0" y="-1" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#00ff88" text-anchor="middle">999 / 277CA Generator</text>
+      <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+            text-anchor="middle">.NET 8</text>
+    </g>
+  </g>
+
+  <!-- Divider -->
+  <line x1="100" y1="555" x2="1100" y2="555" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Row 6: Data Layer -->
+  <g transform="translate(600, 590)">
+    <rect x="-480" y="-22" width="960" height="44" rx="6" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.15)" stroke-width="1"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">MongoDB / Cosmos DB</text>
+    <text x="0" y="16" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#808080"
+          text-anchor="middle">Multi-Tenant &#x2022; Encrypted at Rest &#x2022; HIPAA BAA</text>
+  </g>
+
+  <!-- Row 7: Deployment bar -->
+  <g transform="translate(600, 650)">
+    <rect x="-480" y="-16" width="960" height="32" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#606060"
+          text-anchor="middle">Helm &#x2022; AKS / EKS / GKE &#x2022; ACR &#x2022; Argo CD &#x2022; BSL 1.1 License</text>
+  </g>
+
+  <!-- Connector arrow: CHO to Clearinghouses -->
+  <line x1="600" y1="682" x2="600" y2="720" stroke="url(#arrowGrad)" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- BOTTOM: Clearinghouse Partners -->
+  <g transform="translate(0, 760)">
+    <g transform="translate(210, 0)">
+      <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#00b4ff" text-anchor="middle">Availity</text>
+    </g>
+    <g transform="translate(450, 0)">
+      <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#ff9900" text-anchor="middle">Change Healthcare</text>
+    </g>
+    <g transform="translate(700, 0)">
+      <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#4285f4" text-anchor="middle">Optum</text>
+    </g>
+    <g transform="translate(950, 0)">
+      <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Inovalon</text>
+    </g>
+  </g>
+</svg>
