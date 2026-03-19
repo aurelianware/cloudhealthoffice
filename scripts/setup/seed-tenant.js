@@ -18,7 +18,7 @@ if (typeof tenantId === "undefined" || typeof azureTenantId === "undefined" ||
   quit(1);
 }
 
-const choDb = db.getSiblingDB("CloudHealthOffice");
+const choDb = db.getSiblingDB("cloudhealthoffice");
 
 const now = new Date();
 
