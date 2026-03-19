@@ -60,7 +60,7 @@ Save this as `Configure-PortalApiPermissions.ps1`:
     API app registration client ID
 
 .EXAMPLE
-    .\Configure-PortalApiPermissions.ps1 -TenantId "32177734-..." -PortalClientId "portal-client-id" -ApiClientId "31f76844-b2cb-47b1-aede-f5b2b6dc59c8"
+    .\Configure-PortalApiPermissions.ps1 -TenantId "32177734-..." -PortalClientId "portal-client-id" -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862"
 #>
 
 param(
@@ -194,7 +194,7 @@ Disconnect-MgGraph
 az login --tenant YOUR_TENANT_ID
 
 # Get API app details
-API_APP_ID=$(az ad app show --id 31f76844-b2cb-47b1-aede-f5b2b6dc59c8 --query id -o tsv)
+API_APP_ID=$(az ad app show --id cfada1ac-f251-48ea-9330-39212aa4c862 --query id -o tsv)
 API_SCOPE_ID=$(az ad app show --id $API_APP_ID --query "api.oauth2PermissionScopes[0].id" -o tsv)
 
 # Get portal app details
@@ -203,7 +203,7 @@ PORTAL_APP_ID=$(az ad app show --id YOUR_PORTAL_CLIENT_ID --query id -o tsv)
 # Add API permission to portal
 az ad app permission add \
   --id $PORTAL_APP_ID \
-  --api 31f76844-b2cb-47b1-aede-f5b2b6dc59c8 \
+  --api cfada1ac-f251-48ea-9330-39212aa4c862 \
   --api-permissions $API_SCOPE_ID=Scope
 
 # Grant admin consent
@@ -220,7 +220,7 @@ az ad app permission admin-consent --id $PORTAL_APP_ID
 {
   "requiredResourceAccess": [
     {
-      "resourceAppId": "31f76844-b2cb-47b1-aede-f5b2b6dc59c8",  // API Client ID
+      "resourceAppId": "cfada1ac-f251-48ea-9330-39212aa4c862",  // API Client ID
       "resourceAccess": [
         {
           "id": "user_impersonation_scope_id",  // API's exposed scope ID
@@ -238,7 +238,7 @@ The API app registration must have exposed API scopes:
 
 1. Go to API app registration
 2. Click **Expose an API**
-3. Verify **Application ID URI** is set (e.g., `api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8`)
+3. Verify **Application ID URI** is set (e.g., `api://cfada1ac-f251-48ea-9330-39212aa4c862`)
 4. Add a scope if missing:
    - **Scope name**: `user_impersonation`
    - **Who can consent**: Admins and users
