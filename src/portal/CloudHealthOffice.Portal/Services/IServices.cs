@@ -27,6 +27,39 @@ public interface IMemberService
     Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
     Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
     Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request);
+    Task<MemberAccumulators> GetAccumulatorsAsync(string memberId);
+}
+
+public class MemberAccumulators
+{
+    public decimal IndividualDeductibleUsed { get; set; }
+    public decimal IndividualDeductibleLimit { get; set; }
+    public decimal FamilyDeductibleUsed { get; set; }
+    public decimal FamilyDeductibleLimit { get; set; }
+    public decimal IndividualOopUsed { get; set; }
+    public decimal IndividualOopLimit { get; set; }
+    public decimal FamilyOopUsed { get; set; }
+    public decimal FamilyOopLimit { get; set; }
+    public List<ServiceAccumulator> ServiceAccumulators { get; set; } = new();
+    public List<AccumulatorActivity> RecentActivity { get; set; } = new();
+}
+
+public class ServiceAccumulator
+{
+    public string ServiceType { get; set; } = string.Empty;
+    public int Used { get; set; }
+    public int Limit { get; set; }
+    public string UnitType { get; set; } = "visits";
+}
+
+public class AccumulatorActivity
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+    public decimal DeductibleApplied { get; set; }
+    public decimal CopayApplied { get; set; }
+    public decimal CoinsuranceApplied { get; set; }
+    public decimal PlanPaid { get; set; }
 }
 
 public interface ICoverageService
@@ -84,6 +117,24 @@ public interface IWorkflowService
 public interface IMetricsService
 {
     Task<DashboardMetrics> GetDashboardMetricsAsync();
+    Task<OperationalAlerts> GetOperationalAlertsAsync();
+    Task<EdiVolumeSummary> GetTodayEdiVolumeAsync();
+}
+
+public class OperationalAlerts
+{
+    public int WorkQueueCount { get; set; }
+    public int PendingRfais { get; set; }
+    public int AppealsDueThisWeek { get; set; }
+    public int ApproachingFilingLimit { get; set; }
+}
+
+public class EdiVolumeSummary
+{
+    public int Claims837Received { get; set; }
+    public int Era835Generated { get; set; }
+    public int Eligibility270271 { get; set; }
+    public int PriorAuth278 { get; set; }
 }
 
 public interface IReferenceDataService
@@ -1367,4 +1418,228 @@ public class AuthApprovalReport
     public double ApprovalRate { get; set; }
     public double AvgDecisionDays { get; set; }
     public List<AuthByServiceType> ByServiceType { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Work Queue
+// ---------------------------------------------------------------------------
+
+public interface IWorkQueueService
+{
+    Task<WorkQueueSummary> GetQueueSummaryAsync();
+    Task<List<WorkQueueItem>> GetQueueItemsAsync(string? queueType = null,
+        string? assignedTo = null, int limit = 100);
+    Task AssignClaimAsync(string claimId, string assignTo);
+    Task OverrideAsync(string claimId, string overrideReason);
+}
+
+public class WorkQueueSummary
+{
+    public int NcciEditFailures { get; set; }
+    public int MissingAuth { get; set; }
+    public int ProviderNotContracted { get; set; }
+    public int CobRequired { get; set; }
+    public int MedicalReview { get; set; }
+}
+
+public class WorkQueueItem
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+    public string QueueReason { get; set; } = string.Empty;
+    public string QueueReasonCode { get; set; } = string.Empty;
+    public int DaysInQueue { get; set; }
+    public string Priority { get; set; } = "Low";
+    public string AssignedTo { get; set; } = string.Empty;
+    public decimal TotalCharged { get; set; }
+    public List<string> ProcedureCodes { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment Operations
+// ---------------------------------------------------------------------------
+
+public interface IEnrollmentOperationsService
+{
+    Task<EnrollmentDailySummary> GetTodaySummaryAsync();
+    Task<List<EnrollmentFile>> GetRecentFilesAsync(int days = 7);
+    Task<EnrollmentFileDetail> GetFileDetailAsync(string fileId);
+}
+
+public class EnrollmentDailySummary
+{
+    public int FilesReceived { get; set; }
+    public int TotalTransactions { get; set; }
+    public int MembersAdded { get; set; }
+    public int MembersTermed { get; set; }
+    public int MembersChanged { get; set; }
+    public int ErrorCount { get; set; }
+}
+
+public class EnrollmentFile
+{
+    public string FileId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public DateTime ReceivedTime { get; set; }
+    public string SponsorName { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public int AddedCount { get; set; }
+    public int TermedCount { get; set; }
+    public int ChangedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class EnrollmentFileDetail
+{
+    public string FileId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public DateTime ReceivedTime { get; set; }
+    public string SponsorName { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public int AddedCount { get; set; }
+    public int TermedCount { get; set; }
+    public int ChangedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public List<EnrollmentRejection> Rejections { get; set; } = new();
+}
+
+public class EnrollmentRejection
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string ErrorCode { get; set; } = string.Empty;
+    public string ErrorDescription { get; set; } = string.Empty;
+    public string RawSegmentReference { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Appeals
+// ---------------------------------------------------------------------------
+
+public interface IAppealsService
+{
+    Task<AppealsSummary> GetSummaryAsync();
+    Task<List<AppealSummary>> SearchAppealsAsync(string? appealId = null,
+        string? memberId = null, string? originalClaimId = null);
+    Task<AppealDetails?> GetAppealByIdAsync(string appealId);
+}
+
+public class AppealsSummary
+{
+    public int OpenAppeals { get; set; }
+    public int UrgentExpedited { get; set; }
+    public int DueThisWeek { get; set; }
+    public double OverturnedRate { get; set; }
+}
+
+public class AppealSummary
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AppealType { get; set; } = string.Empty;
+    public string OriginalDecisionId { get; set; } = string.Empty;
+    public string OriginalDecision { get; set; } = string.Empty;
+    public string OriginalDenialReason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsExpedited { get; set; }
+    public DateTime FiledDate { get; set; }
+    public DateTime DueDate { get; set; }
+    public int DaysRemaining { get; set; }
+    public string AssignedReviewer { get; set; } = string.Empty;
+    public string ComplianceStatus { get; set; } = string.Empty;
+}
+
+public class AppealDetails
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AppealType { get; set; } = string.Empty;
+    public string OriginalDecisionId { get; set; } = string.Empty;
+    public string OriginalDecision { get; set; } = string.Empty;
+    public string OriginalDenialReason { get; set; } = string.Empty;
+    public string AppealReason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsExpedited { get; set; }
+    public DateTime FiledDate { get; set; }
+    public DateTime DueDate { get; set; }
+    public int DaysRemaining { get; set; }
+    public string AssignedReviewer { get; set; } = string.Empty;
+    public string ComplianceStatus { get; set; } = string.Empty;
+    public string FinalDecision { get; set; } = string.Empty;
+    public string FinalDecisionNotes { get; set; } = string.Empty;
+    public DateTime? DecisionDate { get; set; }
+    public List<AppealDocument> Documents { get; set; } = new();
+    public List<AppealTimelineEvent> Timeline { get; set; } = new();
+}
+
+public class AppealDocument
+{
+    public string DocumentId { get; set; } = string.Empty;
+    public string DocumentName { get; set; } = string.Empty;
+    public string DocumentType { get; set; } = string.Empty;
+    public DateTime UploadedDate { get; set; }
+    public string UploadedBy { get; set; } = string.Empty;
+}
+
+public class AppealTimelineEvent
+{
+    public DateTime EventDate { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string PerformedBy { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Correspondence
+// ---------------------------------------------------------------------------
+
+public interface ICorrespondenceService
+{
+    Task<CorrespondenceSummary> GetSummaryAsync();
+    Task<List<CorrespondenceItem>> GetQueueAsync(string? type = null,
+        string? status = null, int limit = 50);
+    Task<List<RfaiTrackingItem>> GetOutstandingRfaisAsync();
+}
+
+public class CorrespondenceSummary
+{
+    public int PendingGeneration { get; set; }
+    public int GeneratedToday { get; set; }
+    public int SentThisWeek { get; set; }
+    public int FailedReturned { get; set; }
+}
+
+public class CorrespondenceItem
+{
+    public string LetterId { get; set; } = string.Empty;
+    public string LetterType { get; set; } = string.Empty;
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientType { get; set; } = string.Empty;
+    public string RelatedId { get; set; } = string.Empty;
+    public DateTime? GeneratedDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string DeliveryMethod { get; set; } = string.Empty;
+}
+
+public class RfaiTrackingItem
+{
+    public string RfaiId { get; set; } = string.Empty;
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientType { get; set; } = string.Empty;
+    public string RelatedClaimId { get; set; } = string.Empty;
+    public string DocumentsRequested { get; set; } = string.Empty;
+    public DateTime SentDate { get; set; }
+    public DateTime ResponseDeadline { get; set; }
+    public int DaysSinceSent { get; set; }
+    public int DaysUntilDeadline { get; set; }
+    public string Status { get; set; } = string.Empty;
 }

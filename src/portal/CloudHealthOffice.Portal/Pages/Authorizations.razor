@@ -1,7 +1,7 @@
 @page "/authorizations"
 @page "/demo/authorizations"
 @using Microsoft.AspNetCore.Authorization
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IDialogService DialogService
 

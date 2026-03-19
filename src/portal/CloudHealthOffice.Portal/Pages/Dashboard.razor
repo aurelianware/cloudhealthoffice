@@ -268,6 +268,104 @@
         </MudCardContent>
     </MudCard>
 
+    @* ── Action Items / Alerts ── *@
+    @if (_alerts != null)
+    {
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" GutterBottom="true">Action Items</MudText>
+                <MudStack Spacing="2">
+                    @if (_alerts.WorkQueueCount > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.WorkQueueCount</strong> claims in work queue requiring manual review</MudText>
+                                <MudButton Href="/work-queues" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">View Queue</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.PendingRfais > 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.PendingRfais</strong> outstanding RFAIs awaiting provider response</MudText>
+                                <MudButton Href="/correspondence" Variant="Variant.Text" Color="Color.Info" Size="Size.Small">View RFAIs</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.AppealsDueThisWeek > 0)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.AppealsDueThisWeek</strong> appeals due this week — regulatory deadline approaching</MudText>
+                                <MudButton Href="/appeals" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">View Appeals</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.ApproachingFilingLimit > 0)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.ApproachingFilingLimit</strong> claims approaching 365-day filing limit (&gt;330 days from DOS)</MudText>
+                                <MudButton Href="/work-queues" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">Review Claims</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @* ── EDI Transaction Volume ── *@
+    @if (_ediVolume != null)
+    {
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudText Typo="Typo.h6">Today's EDI Volume</MudText>
+                    <MudButton Href="/edi-operations" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               EndIcon="@Icons.Material.Filled.ArrowForward">View Details</MudButton>
+                </MudStack>
+                <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Receipt">
+                        837 Claims: @_ediVolume.Claims837Received
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Success" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Payments">
+                        835 ERA: @_ediVolume.Era835Generated
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.VerifiedUser">
+                        270/271 Eligibility: @_ediVolume.Eligibility270271
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Gavel">
+                        278 Prior Auth: @_ediVolume.PriorAuth278
+                    </MudChip>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @* ── System Health ── *@
+    <MudCard Elevation="0" Class="mb-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" GutterBottom="true">System Health</MudText>
+            <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap">
+                @foreach (var svc in _systemHealth)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
+                                 Color="@(svc.Value ? Color.Success : Color.Error)"
+                                 Style="@(svc.Value ? "" : "animation: pulse 1.5s infinite;")" />
+                        <MudText Typo="Typo.body2">@svc.Key</MudText>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+
 </MudContainer>
 
 @code {
@@ -275,8 +373,18 @@
     private List<ClaimSummary>? recentClaims;
     private List<AuthorizationSummary>? recentAuthorizations;
     private TenantContext? tenantContext;
+    private OperationalAlerts? _alerts;
+    private EdiVolumeSummary? _ediVolume;
     private bool _loading = true;
     private bool _metricsError;
+
+    private readonly Dictionary<string, bool> _systemHealth = new()
+    {
+        ["MongoDB"] = true,
+        ["Redis"] = true,
+        ["Argo Workflows"] = true,
+        ["FHIR API"] = true
+    };
 
     private double[] _chartData = Array.Empty<double>();
     private string[] _chartLabels = { "Approved", "Denied", "Pending" };
@@ -328,6 +436,20 @@
         {
             Logger.LogWarning(ex, "Failed to load recent authorizations");
             recentAuthorizations = new();
+        }
+
+        // Operational awareness — load in parallel, non-blocking
+        try
+        {
+            var alertsTask = MetricsService.GetOperationalAlertsAsync();
+            var ediTask = MetricsService.GetTodayEdiVolumeAsync();
+            await Task.WhenAll(alertsTask, ediTask);
+            _alerts = alertsTask.Result;
+            _ediVolume = ediTask.Result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load operational data");
         }
 
         _loading = false;

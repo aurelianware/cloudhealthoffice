@@ -1,4 +1,6 @@
 @page "/providers"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject IProviderService ProviderService
 
 <PageTitle>Providers - Cloud Health Office</PageTitle>

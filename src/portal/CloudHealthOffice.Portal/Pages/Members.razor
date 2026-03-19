@@ -2,7 +2,7 @@
 @page "/demo/members"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
 @inject IDialogService DialogService
