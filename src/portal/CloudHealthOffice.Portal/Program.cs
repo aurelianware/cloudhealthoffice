@@ -41,7 +41,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Azure AD Authentication
-var initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ') ?? Array.Empty<string>();
+// Do not include downstream API scopes in the initial sign-in request.
+// For multi-tenant apps, custom API scopes must be acquired incrementally
+// (on first API call) to avoid AADSTS1003031 at the authorization endpoint.
+var initialScopes = Array.Empty<string>();
 
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(options =>
