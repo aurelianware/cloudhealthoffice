@@ -59,7 +59,7 @@ You can also run the existing script from the admin's machine or with their cred
 ```powershell
 .\scripts\setup\Grant-AdminConsent.ps1 `
   -TenantId "TENANT_ID" `
-  -ApiClientId "31f76844-b2cb-47b1-aede-f5b2b6dc59c8" `
+  -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862" `
   -PortalClientId "54f3419d-0d69-4b06-939a-c1a260596556"
 ```
 
@@ -67,7 +67,7 @@ This creates the service principals and grants consent for both the API and Port
 
 ## 5. Downstream API Consent
 
-The portal calls the CHO Authorization Service API (`31f76844-b2cb-47b1-aede-f5b2b6dc59c8`) with these scopes:
+The portal calls the CHO Authorization Service API (`cfada1ac-f251-48ea-9330-39212aa4c862`) with these scopes:
 - `Authorization.ReadWrite`
 - `Attachments.ReadWrite`
 - `Eligibility.Query`
@@ -76,7 +76,7 @@ The portal calls the CHO Authorization Service API (`31f76844-b2cb-47b1-aede-f5b
 The tenant admin must also consent to the **API** app registration. The `Grant-AdminConsent.ps1` script (Option C) handles both. If using the URL method, send a second URL:
 
 ```
-https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+https://login.microsoftonline.com/TENANT_ID/adminconsent?client_id=cfada1ac-f251-48ea-9330-39212aa4c862
 ```
 
 ## 6. Verify End-to-End
