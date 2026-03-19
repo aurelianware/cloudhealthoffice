@@ -1,0 +1,23 @@
+@page "/error"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
+
+<PageTitle>Error - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 text-center">
+    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="Color.Error" Class="mb-4" Style="font-size: 5rem;" />
+    <MudText Typo="Typo.h5" Class="mb-2">Something went wrong</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        We were unable to load your account information. This is usually a temporary issue.
+        Please try again or contact support if the problem persists.
+    </MudText>
+    <MudStack Row="true" Justify="Justify.Center" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Navigation.NavigateTo("/", forceLoad: true))">
+            Try Again
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" Href="mailto:support@cloudhealthoffice.com">
+            Contact Support
+        </MudButton>
+    </MudStack>
+</MudContainer>

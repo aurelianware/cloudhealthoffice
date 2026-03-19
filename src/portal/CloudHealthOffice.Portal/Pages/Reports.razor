@@ -1,8 +1,612 @@
 @page "/reports"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IReportingService ReportingService
+@inject ISponsorService SponsorService
+@inject IProviderService ProviderService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
-<PageTitle>Reports - Cloud Health Office</PageTitle>
+<PageTitle>Reports & Analytics — Cloud Health Office</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Reports</MudText>
-<MudText Typo="Typo.body1" Color="Color.Secondary">
-    Reporting dashboards are coming soon.
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" Style="vertical-align: middle;" />
+    Reports & Analytics
 </MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Operational reporting, payment analytics, eligibility statistics, and provider performance
+</MudText>
+
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true">
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: Claims Summary -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <MudTabPanel Text="Claims Summary" Icon="@Icons.Material.Filled.Receipt">
+        <div class="pt-4">
+            <!-- Filter Bar -->
+            <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                <MudGrid Spacing="2" AlignItems="Center">
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker @bind-Date="_claimsFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudDatePicker @bind-Date="_claimsTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect @bind-Value="_claimsSponsorId" Label="Sponsor (optional)" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" Clearable="true">
+                            @foreach (var s in _sponsors)
+                            {
+                                <MudSelectItem Value="@s.SponsorId">@s.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   Style="height: 40px;"
+                                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   OnClick="RunClaimsSummary"
+                                   Disabled="_runningClaims">
+                            Run
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            @if (_runningClaims)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else if (_claimsSummary != null)
+            {
+                <!-- KPI Cards -->
+                <MudGrid Spacing="3" Class="mb-4">
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Claims</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_claimsSummary.TotalClaims.ToString("N0")</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Approved</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">
+                                @_claimsSummary.ApprovedCount.ToString("N0")
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">
+                                    (@(_claimsSummary.TotalClaims > 0 ? (_claimsSummary.ApprovedCount * 100.0 / _claimsSummary.TotalClaims).ToString("N1") : "0")%)
+                                </MudText>
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Denied</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_claimsSummary.DeniedCount.ToString("N0")</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Paid</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">@_claimsSummary.TotalPaid.ToString("C0")</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Daily Breakdown Chart (bar chart via data table) -->
+                @if (_claimsSummary.DailyBreakdown.Any())
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Daily Claims Volume</MudText>
+                    <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                        <MudChart ChartType="ChartType.Bar"
+                                  ChartSeries="@_claimsDailySeries"
+                                  XAxisLabels="@_claimsDailyLabels.ToArray()"
+                                  Width="100%" Height="200px"
+                                  ChartOptions="@(new ChartOptions { YAxisTicks = 5 })" />
+                    </MudPaper>
+                }
+
+                <!-- Top Providers -->
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Top Providers by Volume</MudText>
+                        <MudTable Items="_claimsSummary.TopProviders" Dense="true" T="ClaimsByProvider"
+                                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                            <HeaderContent>
+                                <MudTh>Provider</MudTh>
+                                <MudTh>Claims</MudTh>
+                                <MudTh>Paid</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>
+                                    <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: #00ffff;">@context.ProviderName</MudLink>
+                                </MudTd>
+                                <MudTd>@context.ClaimCount</MudTd>
+                                <MudTd><MudText Style="font-family: monospace; color: #00ff88;">@context.TotalPaid.ToString("C0")</MudText></MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Top Diagnoses</MudText>
+                        <MudTable Items="_claimsSummary.TopDiagnoses" Dense="true" T="ClaimsByDiagnosis"
+                                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                            <HeaderContent>
+                                <MudTh>ICD-10</MudTh>
+                                <MudTh>Description</MudTh>
+                                <MudTh>Claims</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd><MudText Style="font-family: monospace; color: #00ffff;">@context.DiagnosisCode</MudText></MudTd>
+                                <MudTd>@context.Description</MudTd>
+                                <MudTd>@context.ClaimCount</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudItem>
+                </MudGrid>
+
+                <div class="d-flex justify-end mt-3">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download"
+                               OnClick="ExportClaimsCSV">
+                        Export CSV
+                    </MudButton>
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: Payment Summary -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <MudTabPanel Text="Payment Summary" Icon="@Icons.Material.Filled.Payments">
+        <div class="pt-4">
+            <MudGrid Spacing="2" AlignItems="Center" Class="mb-4">
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_paymentFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_paymentTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Style="height: 40px;"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="RunPaymentSummary" Disabled="_runningPayment">
+                        Run
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_runningPayment)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else if (_paymentSummary != null)
+            {
+                <MudGrid Spacing="3" Class="mb-4">
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total ERAs</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_paymentSummary.EraCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Paid</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">@_paymentSummary.TotalEraAmount.ToString("C0")</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Periods</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_paymentSummary.ByPeriod.Count</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Avg ERA Amount</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">
+                                @_paymentSummary.AvgEraAmount.ToString("C0")
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                @if (_paymentSummary.ByPeriod.Any())
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Monthly ERA Distribution</MudText>
+                    <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                        <MudChart ChartType="ChartType.Bar"
+                                  ChartSeries="@_paymentMonthlySeries"
+                                  XAxisLabels="@_paymentMonthlyLabels.ToArray()"
+                                  Width="100%" Height="200px"
+                                  ChartOptions="@(new ChartOptions { YAxisTicks = 5 })" />
+                    </MudPaper>
+                }
+            }
+        </div>
+    </MudTabPanel>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- TAB 3: Eligibility Stats -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <MudTabPanel Text="Eligibility" Icon="@Icons.Material.Filled.VerifiedUser">
+        <div class="pt-4">
+            <MudGrid Spacing="2" AlignItems="Center" Class="mb-4">
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_eligFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_eligTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Style="height: 40px;"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="RunEligibilitySummary" Disabled="_runningElig">
+                        Run
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_runningElig)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else if (_eligStats != null)
+            {
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: rgba(255,255,255,0.5);">Query Totals</MudText>
+                            <div class="d-flex flex-column gap-3">
+                                @{
+                                    var ineligibleRate = _eligStats.TotalRequests > 0
+                                        ? (double)_eligStats.IneligibleCount / _eligStats.TotalRequests
+                                        : 0.0;
+                                }
+                                <div>
+                                    <div class="d-flex justify-space-between mb-1">
+                                        <MudText Typo="Typo.body2">Total Requests</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@_eligStats.TotalRequests.ToString("N0")</MudText>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="d-flex justify-space-between mb-1">
+                                        <MudText Typo="Typo.body2">Eligible Rate</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600;">@_eligStats.EligibilityRate.ToString("P1")</MudText>
+                                    </div>
+                                    <MudProgressLinear Value="@(_eligStats.EligibilityRate * 100)" Color="Color.Success" Rounded="true" Style="height: 8px;" />
+                                </div>
+                                <div>
+                                    <div class="d-flex justify-space-between mb-1">
+                                        <MudText Typo="Typo.body2">Ineligible Rate</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: #ff0055; font-weight: 600;">@ineligibleRate.ToString("P1")</MudText>
+                                    </div>
+                                    <MudProgressLinear Value="@(ineligibleRate * 100)" Color="Color.Error" Rounded="true" Style="height: 8px;" />
+                                </div>
+                                <div>
+                                    <div class="d-flex justify-space-between mb-1">
+                                        <MudText Typo="Typo.body2">Avg Response Time</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: #00ffff; font-weight: 600;">@_eligStats.AvgResponseTimeMs ms</MudText>
+                                    </div>
+                                    <MudProgressLinear Value="@Math.Min((double)_eligStats.AvgResponseTimeMs / 5, 100)" Color="Color.Info" Rounded="true" Style="height: 8px;" />
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+        </div>
+    </MudTabPanel>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- TAB 4: Prior Auth Analytics -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <MudTabPanel Text="Prior Auth" Icon="@Icons.Material.Filled.Gavel">
+        <div class="pt-4">
+            <MudGrid Spacing="2" AlignItems="Center" Class="mb-4">
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_authFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_authTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Style="height: 40px;"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="RunAuthReport" Disabled="_runningAuth">
+                        Run
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_runningAuth)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else if (_authReport != null)
+            {
+                <MudGrid Spacing="3" Class="mb-4">
+                    <MudItem xs="4">
+                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Approved</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_authReport.ApprovedCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudPaper Class="pa-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Denied</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_authReport.DeniedCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudPaper Class="pa-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_authReport.PendingCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">By Service Type</MudText>
+                <MudTable Items="_authReport.ByServiceType" Dense="true" T="AuthByServiceType"
+                          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                    <HeaderContent>
+                        <MudTh>Service Type</MudTh>
+                        <MudTh>Approved</MudTh>
+                        <MudTh>Denied</MudTh>
+                        <MudTh>Pending</MudTh>
+                        <MudTh>Approval Rate</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ServiceType</MudTd>
+                        <MudTd><MudText Style="color: #00ff88;">@context.ApprovedCount</MudText></MudTd>
+                        <MudTd><MudText Style="color: #ff0055;">@context.DeniedCount</MudText></MudTd>
+                        <MudTd><MudText Style="color: #ffaa00;">@(context.Count - context.ApprovedCount - context.DeniedCount)</MudText></MudTd>
+                        <MudTd>
+                            @{
+                                var total = context.ApprovedCount + context.DeniedCount;
+                                var rate = total > 0 ? (double)context.ApprovedCount / total * 100 : 0;
+                            }
+                            <MudProgressLinear Value="@rate" Color="@(rate >= 80 ? Color.Success : rate >= 60 ? Color.Warning : Color.Error)"
+                                               Rounded="true" Style="height: 6px; width: 80px; display: inline-block; margin-right: 6px;" />
+                            @rate.ToString("N0")%
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </div>
+    </MudTabPanel>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- TAB 5: Provider Performance -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <MudTabPanel Text="Provider Performance" Icon="@Icons.Material.Filled.LocalHospital">
+        <div class="pt-4">
+            <MudGrid Spacing="2" AlignItems="Center" Class="mb-4">
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker @bind-Date="_provFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker @bind-Date="_provTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect @bind-Value="_provSpecialty" Label="Specialty (optional)" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Clearable="true">
+                        <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
+                        <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
+                        <MudSelectItem Value="@("Cardiology")">Cardiology</MudSelectItem>
+                        <MudSelectItem Value="@("Orthopedics")">Orthopedics</MudSelectItem>
+                        <MudSelectItem Value="@("Radiology")">Radiology</MudSelectItem>
+                        <MudSelectItem Value="@("Oncology")">Oncology</MudSelectItem>
+                        <MudSelectItem Value="@("Neurology")">Neurology</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Style="height: 40px;"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="RunProviderPerformance" Disabled="_runningProviders">
+                        Run
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_runningProviders)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+            else if (_providerPerformance.Any())
+            {
+                <MudTable Items="_providerPerformance" Dense="true" Hover="true" T="ClaimsByProvider"
+                          SortLabel="Sort"
+                          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                    <HeaderContent>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.ProviderName)">Provider</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.ClaimCount)">Claims</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.TotalBilled)">Total Billed</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.TotalPaid)">Total Paid</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.DenialRate)">Approval Rate</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.AvgProcessingDays)">Avg Processing</MudTableSortLabel></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Provider">
+                            <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: #00ffff;">@context.ProviderName</MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Claims">@context.ClaimCount.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Total Billed">
+                            <MudText Style="font-family: monospace;">@context.TotalBilled.ToString("C0")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Total Paid">
+                            <MudText Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.TotalPaid.ToString("C0")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Approval Rate">
+                            <div class="d-flex align-center gap-2">
+                                <MudProgressLinear Value="@((1 - context.DenialRate) * 100)"
+                                                   Color="@((1 - context.DenialRate) >= 0.9 ? Color.Success : (1 - context.DenialRate) >= 0.7 ? Color.Warning : Color.Error)"
+                                                   Rounded="true" Style="height: 6px; width: 60px;" />
+                                <MudText Typo="Typo.caption">@((1 - context.DenialRate).ToString("P0"))</MudText>
+                            </div>
+                        </MudTd>
+                        <MudTd DataLabel="Avg Processing">@context.AvgProcessingDays.ToString("N1") days</MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            }
+        </div>
+    </MudTabPanel>
+
+</MudTabs>
+
+@code {
+    // Claims Summary
+    private DateTime? _claimsFrom = DateTime.Today.AddDays(-30);
+    private DateTime? _claimsTo = DateTime.Today;
+    private string? _claimsSponsorId;
+    private ClaimsSummaryReport? _claimsSummary;
+    private bool _runningClaims = false;
+    private List<ChartSeries> _claimsDailySeries = new();
+    private List<string> _claimsDailyLabels = new();
+
+    // Payment Summary
+    private DateTime? _paymentFrom = DateTime.Today.AddDays(-90);
+    private DateTime? _paymentTo = DateTime.Today;
+    private PaymentSummaryReport? _paymentSummary;
+    private bool _runningPayment = false;
+    private List<ChartSeries> _paymentMonthlySeries = new();
+    private List<string> _paymentMonthlyLabels = new();
+
+    // Eligibility
+    private DateTime? _eligFrom = DateTime.Today.AddDays(-30);
+    private DateTime? _eligTo = DateTime.Today;
+    private EligibilityStatsReport? _eligStats;
+    private bool _runningElig = false;
+
+    // Auth
+    private DateTime? _authFrom = DateTime.Today.AddDays(-30);
+    private DateTime? _authTo = DateTime.Today;
+    private AuthApprovalReport? _authReport;
+    private bool _runningAuth = false;
+
+    // Provider Performance
+    private DateTime? _provFrom = DateTime.Today.AddDays(-30);
+    private DateTime? _provTo = DateTime.Today;
+    private string? _provSpecialty;
+    private List<ClaimsByProvider> _providerPerformance = new();
+    private bool _runningProviders = false;
+
+    // Shared data
+    private List<SponsorSummary> _sponsors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _sponsors = await SponsorService.SearchSponsorsAsync(""); } catch { }
+    }
+
+    private ReportRequest BuildRequest(DateTime? from, DateTime? to, string? sponsorId = null) =>
+        new ReportRequest
+        {
+            DateFrom = from ?? DateTime.Today.AddDays(-30),
+            DateTo = to ?? DateTime.Today,
+            SponsorId = sponsorId,
+        };
+
+    private async Task RunClaimsSummary()
+    {
+        _runningClaims = true;
+        try
+        {
+            _claimsSummary = await ReportingService.GetClaimsSummaryAsync(BuildRequest(_claimsFrom, _claimsTo, _claimsSponsorId));
+            BuildClaimsDailyChart();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
+        }
+        finally { _runningClaims = false; }
+    }
+
+    private void BuildClaimsDailyChart()
+    {
+        if (_claimsSummary == null) return;
+        _claimsDailyLabels = _claimsSummary.DailyBreakdown.Select(d => d.Date.ToString("MM/dd")).ToList();
+        _claimsDailySeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Claims", Data = _claimsSummary.DailyBreakdown.Select(d => (double)d.Count).ToArray() },
+        };
+    }
+
+    private async Task ExportClaimsCSV()
+    {
+        if (_claimsSummary == null) return;
+        var csv = "Date,Claim Count,Total Amount\n";
+        foreach (var d in _claimsSummary.DailyBreakdown)
+            csv += $"{d.Date:yyyy-MM-dd},{d.Count},{d.TotalAmount:F2}\n";
+        await JS.InvokeVoidAsync("downloadTextFile", $"ClaimsSummary_{DateTime.Today:yyyyMMdd}.csv", csv);
+    }
+
+    private async Task RunPaymentSummary()
+    {
+        _runningPayment = true;
+        try
+        {
+            _paymentSummary = await ReportingService.GetPaymentSummaryAsync(BuildRequest(_paymentFrom, _paymentTo));
+            BuildPaymentMonthlyChart();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
+        }
+        finally { _runningPayment = false; }
+    }
+
+    private void BuildPaymentMonthlyChart()
+    {
+        if (_paymentSummary == null) return;
+        _paymentMonthlyLabels = _paymentSummary.ByPeriod.Select(e => e.Period).ToList();
+        _paymentMonthlySeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Paid ($k)", Data = _paymentSummary.ByPeriod.Select(e => (double)(e.TotalAmount / 1000)).ToArray() }
+        };
+    }
+
+    private async Task RunEligibilitySummary()
+    {
+        _runningElig = true;
+        try
+        {
+            _eligStats = await ReportingService.GetEligibilityStatsAsync(BuildRequest(_eligFrom, _eligTo));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
+        }
+        finally { _runningElig = false; }
+    }
+
+    private async Task RunAuthReport()
+    {
+        _runningAuth = true;
+        try
+        {
+            _authReport = await ReportingService.GetAuthApprovalReportAsync(BuildRequest(_authFrom, _authTo));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
+        }
+        finally { _runningAuth = false; }
+    }
+
+    private async Task RunProviderPerformance()
+    {
+        _runningProviders = true;
+        try
+        {
+            _providerPerformance = await ReportingService.GetProviderPerformanceAsync(BuildRequest(_provFrom, _provTo));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running report: {ex.Message}", Severity.Error);
+        }
+        finally { _runningProviders = false; }
+    }
+}

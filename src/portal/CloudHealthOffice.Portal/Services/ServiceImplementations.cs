@@ -67,10 +67,104 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims/search", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ClaimSearchResult>();
+            return result ?? new ClaimSearchResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching claims, returning mock data");
+            return GetMockSearchResults(request);
+        }
+    }
+
+    public async Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var updateRequest = new { status, notes };
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/claims/{claimId}/status", updateRequest);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating claim status for claim {ClaimId}", claimId);
+            throw;
+        }
+    }
+
+    private ClaimSearchResult GetMockSearchResults(ClaimSearchRequest request)
+    {
+        var allClaims = GetMockClaims(100);
+        var filteredClaims = allClaims.AsEnumerable();
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(request.ClaimNumber))
+            filteredClaims = filteredClaims.Where(c => c.ClaimId.Contains(request.ClaimNumber, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(request.MemberId))
+            filteredClaims = filteredClaims.Where(c => c.MemberId == request.MemberId);
+
+        if (!string.IsNullOrEmpty(request.Status))
+            filteredClaims = filteredClaims.Where(c => c.Status == request.Status);
+
+        // Apply sorting
+        if (request.SortOrder == "Ascending")
+        {
+            filteredClaims = request.SortBy switch
+            {
+                "ServiceDate" => filteredClaims.OrderBy(c => c.ServiceDateFrom),
+                "Amount" => filteredClaims.OrderBy(c => c.TotalChargeAmount),
+                "Status" => filteredClaims.OrderBy(c => c.Status),
+                _ => filteredClaims.OrderBy(c => c.SubmittedDate)
+            };
+        }
+        else
+        {
+            filteredClaims = request.SortBy switch
+            {
+                "ServiceDate" => filteredClaims.OrderByDescending(c => c.ServiceDateFrom),
+                "Amount" => filteredClaims.OrderByDescending(c => c.TotalChargeAmount),
+                "Status" => filteredClaims.OrderByDescending(c => c.Status),
+                _ => filteredClaims.OrderByDescending(c => c.SubmittedDate)
+            };
+        }
+
+        // Apply pagination
+        var claimsList = filteredClaims.ToList();
+        var totalCount = claimsList.Count;
+        var pageSize = request.PageSize;
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var skip = (pageNumber - 1) * pageSize;
+        var pageItems = claimsList.Skip(skip).Take(pageSize).ToList();
+
+        return new ClaimSearchResult
+        {
+            Claims = pageItems,
+            TotalCount = totalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalChargeAmount = claimsList.Sum(c => c.TotalChargeAmount),
+            TotalAllowedAmount = claimsList.Sum(c => c.AllowedAmount),
+            TotalPaidAmount = claimsList.Sum(c => c.PaidAmount),
+            ApprovedCount = claimsList.Count(c => c.Status == "Approved" || c.Status == "Paid" || c.Status == "PartiallyPaid"),
+            DeniedCount = claimsList.Count(c => c.Status == "Denied"),
+            PendingCount = claimsList.Count(c => c.Status == "Pended" || c.Status == "InAdjudication")
+        };
+    }
+
     private List<ClaimSummary> GetMockClaims(int count)
     {
         var random = Random.Shared;
-        var statuses = new[] { "Approved", "Approved", "Approved", "Denied", "Pending" };
+        var statuses = new[] { "Approved", "Approved", "Approved", "Denied", "Pended", "InAdjudication" };
+        var claimTypes = new[] { "Professional", "Professional", "Institutional" };
         var members = new[] 
         {
             ("MBR-2024-001", "Sarah Johnson"),
@@ -92,80 +186,301 @@ public class ClaimsService : IClaimsService
         };
 
         var claims = new List<ClaimSummary>();
-        for (int i = 1; i <= Math.Min(count, 50); i++)
+        for (int i = 1; i <= Math.Min(count, 100); i++)
         {
-            var member = members[random.Next(members.Length)];
-            var provider = providers[random.Next(providers.Length)];
-            var status = statuses[random.Next(statuses.Length)];
+            var member = members[Random.Shared.Next(members.Length)];
+            var provider = providers[Random.Shared.Next(providers.Length)];
+            var status = statuses[Random.Shared.Next(statuses.Length)];
+            var claimType = claimTypes[Random.Shared.Next(claimTypes.Length)];
+            var chargeAmount = (decimal)Random.Shared.Next(500, 50000);
+            var allowedAmount = chargeAmount * 0.85m;
+            var paidAmount = status == "Approved" || status == "Paid" ? allowedAmount * 0.8m : 0m;
+            var serviceDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 90));
             
             claims.Add(new ClaimSummary
             {
                 ClaimId = $"CLM-2026-{i:D5}",
+                ClaimNumber = $"CLM{i:D8}",
+                MemberId = member.Item1,
                 MemberName = member.Item2,
+                ProviderId = provider.Item1,
                 ProviderName = provider.Item2,
-                TotalChargeAmount = random.Next(500, 50000),
+                ClaimType = claimType,
+                TotalChargeAmount = chargeAmount,
+                AllowedAmount = allowedAmount,
+                PaidAmount = paidAmount,
                 Status = status,
-                ProcessingTimeMs = random.Next(150, 800)
+                ServiceDateFrom = serviceDate,
+                ServiceDateTo = serviceDate.AddDays(1),
+                SubmittedDate = serviceDate.AddDays(1),
+                AdjudicatedDate = status != "Submitted" && status != "Received" ? serviceDate.AddDays(3) : null,
+                ProcessingTimeMs = Random.Shared.Next(150, 800),
+                LineCount = Random.Shared.Next(1, 5)
             });
         }
 
-        return claims.OrderByDescending(c => c.ClaimId).ToList();
+        return claims.OrderByDescending(c => c.SubmittedDate).ToList();
     }
 
     private ClaimDetails GetMockClaimDetails(string claimId)
     {
         var random = new Random(claimId.GetHashCode());
-        var statuses = new[] { "Approved", "Denied", "Pending" };
+        var statuses = new[] { "Approved", "Denied", "Pended", "InAdjudication" };
+        var claimTypes = new[] { "Professional", "Institutional" };
         var status = statuses[random.Next(statuses.Length)];
+        var claimType = claimTypes[random.Next(claimTypes.Length)];
 
-        var serviceLines = new List<ServiceLine>
+        var serviceLines = new List<ClaimServiceLine>
         {
             new()
             {
+                LineNumber = 1,
                 ProcedureCode = "99213",
-                Description = "Office Visit - Established Patient, Level 3",
+                ProcedureDescription = "Office Visit - Established Patient, Level 3",
                 ChargeAmount = 150.00m,
                 AllowedAmount = 125.00m,
-                PayerAmount = 100.00m
+                PaidAmount = 100.00m,
+                PatientResponsibility = 25.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                Modifiers = new() { "76", "77" },
+                LineStatus = status,
+                DiagnosisPointers = new() { 1, 2 }
             },
             new()
             {
+                LineNumber = 2,
                 ProcedureCode = "80053",
-                Description = "Comprehensive Metabolic Panel",
+                ProcedureDescription = "Comprehensive Metabolic Panel",
                 ChargeAmount = 85.00m,
                 AllowedAmount = 75.00m,
-                PayerAmount = 60.00m
+                PaidAmount = 60.00m,
+                PatientResponsibility = 15.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                LineStatus = status,
+                DiagnosisPointers = new() { 1 },
+                Adjustments = status == "Denied" || status == "Pended" ? new()
+                {
+                    new()
+                    {
+                        GroupCode = "CO",
+                        ReasonCode = "45",
+                        Amount = -15.00m,
+                        Description = "Late filing - exceeds 90 day limit"
+                    }
+                } : new()
             },
             new()
             {
+                LineNumber = 3,
                 ProcedureCode = "85025",
-                Description = "Complete Blood Count (CBC)",
+                ProcedureDescription = "Complete Blood Count with differential",
                 ChargeAmount = 45.00m,
                 AllowedAmount = 40.00m,
-                PayerAmount = 32.00m
+                PaidAmount = 32.00m,
+                PatientResponsibility = 8.00m,
+                Units = 1,
+                ServiceDateFrom = DateTime.Now.AddDays(-15),
+                ServiceDateTo = DateTime.Now.AddDays(-15),
+                LineStatus = status,
+                DiagnosisPointers = new() { 1 }
+            }
+        };
+
+        var diagnosisCodes = new List<ClaimDiagnosisCode>
+        {
+            new()
+            {
+                Code = "E11.9",
+                Description = "Type 2 diabetes mellitus without complications",
+                Type = "Principal",
+                PointerNumber = 1
+            },
+            new()
+            {
+                Code = "I10",
+                Description = "Essential (primary) hypertension",
+                Type = "Secondary",
+                PointerNumber = 2
+            },
+            new()
+            {
+                Code = "Z79.4",
+                Description = "Long term (current) use of insulin",
+                Type = "Secondary",
+                PointerNumber = 3
             }
         };
 
         var totalCharge = serviceLines.Sum(sl => sl.ChargeAmount);
-        var totalPayer = status == "Approved" ? serviceLines.Sum(sl => sl.PayerAmount) : 0;
-        var patientResp = status == "Approved" ? serviceLines.Sum(sl => sl.AllowedAmount - sl.PayerAmount) : totalCharge;
+        var totalAllowed = serviceLines.Sum(sl => sl.AllowedAmount);
+        var totalPaid = status == "Approved" || status == "Paid" ? serviceLines.Sum(sl => sl.PaidAmount) : 0;
+        var patientResp = status == "Approved" || status == "Paid" ? serviceLines.Sum(sl => sl.PatientResponsibility) : totalCharge;
+
+        var auditTrail = new List<ClaimAudit>
+        {
+            new()
+            {
+                Timestamp = DateTime.Now.AddDays(-10),
+                Action = "Claim received",
+                ChangedBy = "System",
+                Notes = "EDI 837 transaction received"
+            },
+            new()
+            {
+                Timestamp = DateTime.Now.AddDays(-8),
+                Action = "Status changed",
+                ChangedBy = "system-adjudication",
+                OldValue = "Received",
+                NewValue = "InAdjudication",
+                Notes = "Automatic adjudication workflow triggered"
+            }
+        };
+
+        if (status == "Approved" || status == "Denied" || status == "Pended")
+        {
+            auditTrail.Add(new()
+            {
+                Timestamp = DateTime.Now.AddDays(-2),
+                Action = "Claim adjudicated",
+                ChangedBy = "claims-examiner-001",
+                OldValue = "InAdjudication",
+                NewValue = status,
+                Notes = status == "Approved" ? "Claim approved" : status == "Denied" ? "Claim denied - insufficient documentation" : "Sent to pending review"
+            });
+        }
+
+        var claimNum = int.Parse(claimId.Replace("CLM-2026-", ""));
 
         return new ClaimDetails
         {
             ClaimId = claimId,
+            ClaimNumber = $"CLM{claimNum:D8}",
             MemberId = "MBR-2024-001",
             MemberName = "Sarah Johnson",
+            SubscriberId = "MBR-2024-001",
+            SubscriberName = "Sarah Johnson",
+            PatientName = "Sarah Johnson",
+            PatientRelationship = "Self",
             ProviderId = "PRV-001",
             ProviderName = "Seattle Medical Center",
+            BillingProviderName = "Seattle Medical Center",
+            BillingProviderNPI = "1234567890",
+            RenderingProviderName = "Dr. James Smith",
+            RenderingProviderNPI = "1234567891",
+            FacilityName = "Seattle Medical Center Outpatient",
+            FacilityNPI = "1234567892",
+            PlaceOfService = "11 - Office",
+            ClaimType = claimType,
             TotalChargeAmount = totalCharge,
-            PayerAmount = totalPayer,
+            AllowedAmount = totalAllowed,
+            PaidAmount = totalPaid,
+            DeductibleAmount = 0.00m,
+            CoinsuranceAmount = 15.00m,
+            CopayAmount = 25.00m,
             PatientResponsibility = patientResp,
             Status = status,
             ProcessingTimeMs = random.Next(200, 600),
-            ServiceDate = DateTime.Now.AddDays(-random.Next(1, 90)),
-            SubmittedDate = DateTime.Now.AddDays(-random.Next(0, 30)),
-            ProcessedDate = status != "Pending" ? DateTime.Now.AddDays(-random.Next(0, 15)) : null,
-            ServiceLines = serviceLines
+            ServiceDateFrom = DateTime.Now.AddDays(-15),
+            ServiceDateTo = DateTime.Now.AddDays(-15),
+            SubmittedDate = DateTime.Now.AddDays(-10),
+            ReceivedDate = DateTime.Now.AddDays(-10),
+            AdjudicatedDate = status != "Submitted" && status != "Received" ? DateTime.Now.AddDays(-2) : null,
+            PaidDate = status == "Paid" ? DateTime.Now.AddDays(-1) : null,
+            CheckNumber = status == "Paid" ? "CHK123456" : null,
+            PriorAuthorizationNumber = "AUTH-2024-78901",
+            ReferralNumber = "REF-2024-5467",
+            ClaimNotes = "Routine follow-up visit for chronic disease management",
+            DenialReason = status == "Denied" ? "Service not covered" : null,
+            DiagnosisCodes = diagnosisCodes,
+            ServiceLines = serviceLines,
+            AdjustmentInfo = status switch
+            {
+                "Pended" => new()
+                {
+                    AdjustmentType = "Reversal Pending Review",
+                    Reason = "Duplicate entry detected - awaiting confirmation",
+                    AdjustmentAmount = -100.00m,
+                    AdjustmentDate = DateTime.Now.AddDays(-1),
+                    AdjustedBy = "claims-examiner-001"
+                },
+                _ => null
+            },
+            IsEditable = status == "Pended" || status == "InAdjudication",
+            CanApprove = status == "Pended" || status == "InAdjudication",
+            CanDeny = status == "Pended" || status == "InAdjudication",
+            CanReverse = status == "Approved" || status == "Paid",
+            AuditTrail = auditTrail,
+            LineCount = serviceLines.Count
+        };
+    }
+
+    public async Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AdjudicationTransparencyData>($"{baseUrl}/claims/{claimId}/adjudication-detail");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching adjudication data for claim {ClaimId}, returning mock data", claimId);
+            return GetMockAdjudicationData(claimId);
+        }
+    }
+
+    private AdjudicationTransparencyData GetMockAdjudicationData(string claimId)
+    {
+        var baseTime = DateTime.Now.AddDays(-2).AddHours(9);
+        return new AdjudicationTransparencyData
+        {
+            Steps = new List<AdjudicationStep>
+            {
+                new() { StepNumber = 1, StepName = "Validate", Status = "Passed", Timestamp = baseTime, DurationMs = 12, Summary = "All required fields present, EDI structure valid" },
+                new() { StepNumber = 2, StepName = "NCCI/MUE Edits", Status = "Passed", Timestamp = baseTime.AddMilliseconds(12), DurationMs = 48, Summary = "2 NCCI checks passed — no edit failures" },
+                new() { StepNumber = 3, StepName = "Fee Schedule", Status = "Passed", Timestamp = baseTime.AddMilliseconds(60), DurationMs = 35, Summary = "Rates resolved: Medicare RVU @ 1.05× multiplier" },
+                new() { StepNumber = 4, StepName = "Benefits", Status = "Passed", Timestamp = baseTime.AddMilliseconds(95), DurationMs = 28, Summary = "Benefit rules applied — copay $25 + 20% coinsurance" },
+                new() { StepNumber = 5, StepName = "Auth Check", Status = "Passed", Timestamp = baseTime.AddMilliseconds(123), DurationMs = 8, Summary = "Auth AUTH-2024-78901 found, units within limit" },
+                new() { StepNumber = 6, StepName = "Adjudicate", Status = "Passed", Timestamp = baseTime.AddMilliseconds(131), DurationMs = 22, Summary = "Claim approved — plan pays $192.00" },
+                new() { StepNumber = 7, StepName = "Payment Staging", Status = "Passed", Timestamp = baseTime.AddMilliseconds(153), DurationMs = 9, Summary = "Queued for payment run PMTRUN-2026-0042" }
+            },
+            NcciResults = new List<NcciEditResult>
+            {
+                new() { EditCode = "CPT-MUE-99213", EditType = "MUE", Description = "Medically Unlikely Edit — 99213 office visit", Passed = true, AffectedProcedureCode = "99213", ResolutionApplied = "Units: 1 (limit 1) — within MUE limit" },
+                new() { EditCode = "CPT-MUE-80053", EditType = "MUE", Description = "Medically Unlikely Edit — 80053 metabolic panel", Passed = true, AffectedProcedureCode = "80053", ResolutionApplied = "Units: 1 (limit 1) — within MUE limit" }
+            },
+            FeeScheduleResults = new List<FeeScheduleResult>
+            {
+                new() { ProcedureCode = "99213", Modifier = "", FeeScheduleName = "Medicare RVU 2026", BilledAmount = 150.00m, AllowedAmount = 125.00m, ContractedRate = 125.00m, RateBasis = "MedicareRVU", RateMultiplier = 1.05m, NetworkTier = "Tier1" },
+                new() { ProcedureCode = "80053", Modifier = "", FeeScheduleName = "Medicare RVU 2026", BilledAmount = 85.00m, AllowedAmount = 75.00m, ContractedRate = 75.00m, RateBasis = "MedicareRVU", RateMultiplier = 1.05m, NetworkTier = "Tier1" },
+                new() { ProcedureCode = "85025", Modifier = "", FeeScheduleName = "Medicare RVU 2026", BilledAmount = 45.00m, AllowedAmount = 40.00m, ContractedRate = 40.00m, RateBasis = "MedicareRVU", RateMultiplier = 1.05m, NetworkTier = "Tier1" }
+            },
+            BenefitCalculation = new BenefitCalculationResult
+            {
+                ServiceType = "Outpatient Office Visit",
+                BenefitRuleApplied = "Medical-Office-Tier1-Rule",
+                NetworkTier = "Tier1",
+                AllowedAmount = 240.00m,
+                DeductibleApplied = 0.00m,
+                DeductibleRemaining = 750.00m,
+                CopayAmount = 25.00m,
+                CoinsuranceAmount = 43.00m,
+                PlanPayment = 172.00m,
+                MemberResponsibility = 68.00m,
+                DeductibleMet = false,
+                OopMaxMet = false,
+                IndividualDeductibleBalance = 750.00m,
+                IndividualDeductibleLimit = 1500.00m,
+                IndividualOopBalance = 1250.00m,
+                IndividualOopLimit = 5000.00m,
+                AccumulatorUpdates = new List<AccumulatorUpdate>
+                {
+                    new() { AccumulatorType = "IndividualOop", AmountApplied = 68.00m, NewBalance = 1318.00m, Limit = 5000.00m }
+                }
+            }
         };
     }
 
@@ -246,6 +561,191 @@ public class MemberService : IMemberService
             _logger.LogWarning(ex, "Error fetching member {MemberId}, returning mock data", memberId);
             return GetMockMemberDetails(memberId);
         }
+    }
+
+    public async Task<MemberPcp?> GetMemberPcpAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<MemberPcp>($"{baseUrl}/members/{memberId}/pcp");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching PCP for member {MemberId}, returning mock data", memberId);
+            return GetMockPcp(memberId);
+        }
+    }
+
+    public async Task AssignPcpAsync(AssignPcpRequest request)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/members/{request.MemberId}/pcp", request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error assigning PCP for member {MemberId}, simulating success", request.MemberId);
+        }
+    }
+
+    public async Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var history = await _httpClient.GetFromJsonAsync<List<CoverageHistoryEvent>>($"{baseUrl}/members/{memberId}/coverage-history");
+            return history ?? new List<CoverageHistoryEvent>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching coverage history for member {MemberId}, returning mock data", memberId);
+            return GetMockCoverageHistory(memberId);
+        }
+    }
+
+    public async Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var records = await _httpClient.GetFromJsonAsync<List<Enrollment834Record>>($"{baseUrl}/members/{memberId}/834-transactions");
+            return records ?? new List<Enrollment834Record>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching 834 transactions for member {MemberId}, returning mock data", memberId);
+            return GetMock834Transactions(memberId);
+        }
+    }
+
+    public async Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request)
+    {
+        var baseUrl = _configuration["Services:MemberService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/members/{request.MemberId}/terminate", request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error terminating enrollment for member {MemberId}, simulating success", request.MemberId);
+        }
+    }
+
+    private MemberPcp GetMockPcp(string memberId)
+    {
+        return new MemberPcp
+        {
+            ProviderId = "PRV-001",
+            ProviderName = "Dr. Priya Patel",
+            NPI = "1234567890",
+            Specialty = "Family Medicine",
+            NetworkStatus = "In-Network",
+            AssignedDate = DateTime.Now.AddYears(-1),
+            PracticeName = "Seattle Medical Center",
+            Phone = "(555) 123-4567"
+        };
+    }
+
+    private List<CoverageHistoryEvent> GetMockCoverageHistory(string memberId)
+    {
+        return new List<CoverageHistoryEvent>
+        {
+            new()
+            {
+                EventId = $"EVT-{memberId}-001",
+                EventDate = DateTime.Now.AddYears(-2),
+                EventType = "Enrolled",
+                Description = "Initial enrollment in Premium Health Plan",
+                ChangedBy = "enrollment-system",
+                NewValue = "Premium Health Plan (GRP-12345)"
+            },
+            new()
+            {
+                EventId = $"EVT-{memberId}-002",
+                EventDate = DateTime.Now.AddMonths(-14),
+                EventType = "PcpChange",
+                Description = "PCP assignment changed",
+                ChangedBy = "member-portal",
+                OldValue = "Dr. Robert Kim (Family Medicine)",
+                NewValue = "Dr. Priya Patel (Family Medicine)"
+            },
+            new()
+            {
+                EventId = $"EVT-{memberId}-003",
+                EventDate = DateTime.Now.AddMonths(-6),
+                EventType = "PlanChange",
+                Description = "Annual open enrollment plan update",
+                ChangedBy = "enrollment-system",
+                OldValue = "Standard Health Plan",
+                NewValue = "Premium Health Plan"
+            },
+            new()
+            {
+                EventId = $"EVT-{memberId}-004",
+                EventDate = DateTime.Now.AddDays(-45),
+                EventType = "Enrolled",
+                Description = "Dental Plus coverage added",
+                ChangedBy = "enrollment-system",
+                NewValue = "Dental Plus (GRP-12345-D)"
+            }
+        };
+    }
+
+    private List<Enrollment834Record> GetMock834Transactions(string memberId)
+    {
+        return new List<Enrollment834Record>
+        {
+            new()
+            {
+                TransactionId = $"834-{memberId}-001",
+                BatchId = "BATCH-2024-0891",
+                MemberId = memberId,
+                MemberName = "Sarah Johnson",
+                MaintenanceTypeCode = "021",
+                MaintenanceReasonCode = "27",
+                TransactionSetPurpose = "Initial enrollment / Add subscriber",
+                TransactionDate = DateTime.Now.AddYears(-2),
+                Status = "Accepted",
+                Errors = new List<string>(),
+                RawSegmentPreview = "INS*Y*18*021*27*A*E**FT~REF*0F*MBR-2024-001~NM1*IL*1*JOHNSON*SARAH****34*123456789~"
+            },
+            new()
+            {
+                TransactionId = $"834-{memberId}-002",
+                BatchId = "BATCH-2025-0234",
+                MemberId = memberId,
+                MemberName = "Sarah Johnson",
+                MaintenanceTypeCode = "001",
+                MaintenanceReasonCode = "01",
+                TransactionSetPurpose = "Change - Plan change effective 01/01/2025",
+                TransactionDate = DateTime.Now.AddMonths(-6),
+                Status = "Accepted",
+                Errors = new List<string>(),
+                RawSegmentPreview = "INS*Y*18*001*01*A*E**FT~REF*0F*MBR-2024-001~HD*021**HLT*PREM2025*EMP~"
+            },
+            new()
+            {
+                TransactionId = $"834-{memberId}-003",
+                BatchId = "BATCH-2025-0567",
+                MemberId = memberId,
+                MemberName = "Sarah Johnson",
+                MaintenanceTypeCode = "001",
+                MaintenanceReasonCode = "25",
+                TransactionSetPurpose = "Change - Address update",
+                TransactionDate = DateTime.Now.AddDays(-30),
+                Status = "Rejected",
+                Errors = new List<string>
+                {
+                    "834-E001: Member ID MBR-2024-001 not found in active enrollment roster",
+                    "834-E014: State code 'WA' invalid for plan ID PREM2025 — plan restricted to OR only"
+                },
+                RawSegmentPreview = "INS*Y*18*001*25*A*E**FT~REF*0F*MBR-2024-001~N3*456 New St~N4*PORTLAND*OR*97201~"
+            }
+        };
     }
 
     private List<MemberSummary> GetMockMembers(string searchTerm)
@@ -479,7 +979,7 @@ public class AuthorizationService : IAuthorizationService
 
     private async Task SetBearerTokenAsync()
     {
-        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Authorization.ReadWrite" };
+        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Authorization.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
@@ -1818,6 +2318,97 @@ public class BenefitPlanService : IBenefitPlanService
     {
         public string PlanId { get; set; } = string.Empty;
     }
+
+    public async Task<List<ServiceBenefitRule>> GetServiceBenefitRulesAsync(string planId)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<ServiceBenefitRule>>($"{baseUrl}/benefit-plans/{planId}/service-rules");
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching service benefit rules for plan {PlanId}, returning mock data", planId);
+            return GetMockServiceBenefitRules(planId);
+        }
+    }
+
+    public async Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/benefit-plans/{request.PlanId}/service-rules", request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error updating service benefit rules for plan {PlanId}, simulating success", request.PlanId);
+        }
+    }
+
+    public async Task<AccumulatorConfiguration?> GetAccumulatorConfigAsync(string planId)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AccumulatorConfiguration>($"{baseUrl}/benefit-plans/{planId}/accumulators");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching accumulator config for plan {PlanId}, returning mock data", planId);
+            return GetMockAccumulatorConfig(planId);
+        }
+    }
+
+    public async Task UpdateAccumulatorConfigAsync(string planId, AccumulatorConfiguration config)
+    {
+        var baseUrl = _configuration["Services:BenefitPlanService"];
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/benefit-plans/{planId}/accumulators", config);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error updating accumulator config for plan {PlanId}, simulating success", planId);
+        }
+    }
+
+    private List<ServiceBenefitRule> GetMockServiceBenefitRules(string planId)
+    {
+        return new List<ServiceBenefitRule>
+        {
+            new() { RuleId = $"{planId}-MED-T1-001", ServiceCategory = "Medical", ServiceTypeCode = "99201-99215", ServiceTypeDescription = "Office Visit", NetworkTier = "Tier1", Copay = 25.00m, CoinsurancePercent = 20m, SubjectToDeductible = false, PriorAuthRequired = false },
+            new() { RuleId = $"{planId}-MED-T1-002", ServiceCategory = "Medical", ServiceTypeCode = "99221-99238", ServiceTypeDescription = "Inpatient Hospital", NetworkTier = "Tier1", Copay = 350.00m, CoinsurancePercent = 20m, SubjectToDeductible = true, PriorAuthRequired = true },
+            new() { RuleId = $"{planId}-MED-T2-001", ServiceCategory = "Medical", ServiceTypeCode = "99201-99215", ServiceTypeDescription = "Office Visit", NetworkTier = "Tier2", Copay = 50.00m, CoinsurancePercent = 30m, SubjectToDeductible = false, PriorAuthRequired = false },
+            new() { RuleId = $"{planId}-MED-OON-001", ServiceCategory = "Medical", ServiceTypeCode = "*", ServiceTypeDescription = "All Services (Out-of-Network)", NetworkTier = "OutOfNetwork", CoinsurancePercent = 50m, SubjectToDeductible = true, PriorAuthRequired = true },
+            new() { RuleId = $"{planId}-PHR-T1-001", ServiceCategory = "Pharmacy", ServiceTypeCode = "GENERIC", ServiceTypeDescription = "Generic Drugs (Tier 1)", NetworkTier = "Tier1", Copay = 10.00m, SubjectToDeductible = false, PriorAuthRequired = false, CrossAccumulatesWithMedical = false },
+            new() { RuleId = $"{planId}-PHR-T1-002", ServiceCategory = "Pharmacy", ServiceTypeCode = "PREFERRED-BRAND", ServiceTypeDescription = "Preferred Brand (Tier 2)", NetworkTier = "Tier1", Copay = 35.00m, SubjectToDeductible = false, PriorAuthRequired = false },
+            new() { RuleId = $"{planId}-PHR-T1-003", ServiceCategory = "Pharmacy", ServiceTypeCode = "NON-PREFERRED-BRAND", ServiceTypeDescription = "Non-Preferred Brand (Tier 3)", NetworkTier = "Tier1", Copay = 65.00m, SubjectToDeductible = false, PriorAuthRequired = true },
+            new() { RuleId = $"{planId}-MH-T1-001", ServiceCategory = "MentalHealth", ServiceTypeCode = "90791-90899", ServiceTypeDescription = "Mental Health / Behavioral Health", NetworkTier = "Tier1", Copay = 25.00m, CoinsurancePercent = 20m, SubjectToDeductible = false, AnnualVisitLimit = 52 },
+            new() { RuleId = $"{planId}-DEN-T1-001", ServiceCategory = "Dental", ServiceTypeCode = "D0100-D9999", ServiceTypeDescription = "Dental (All Services)", NetworkTier = "Tier1", CoinsurancePercent = 20m, SubjectToDeductible = false, AnnualDollarLimit = 1500m, CrossAccumulatesWithMedical = false },
+            new() { RuleId = $"{planId}-VIS-T1-001", ServiceCategory = "Vision", ServiceTypeCode = "92002-92014", ServiceTypeDescription = "Vision (Eye Exam)", NetworkTier = "Tier1", Copay = 15.00m, SubjectToDeductible = false, AnnualVisitLimit = 1, CrossAccumulatesWithMedical = false }
+        };
+    }
+
+    private AccumulatorConfiguration GetMockAccumulatorConfig(string planId)
+    {
+        return new AccumulatorConfiguration
+        {
+            ConfigId = $"{planId}-ACC",
+            PlanId = planId,
+            IndividualDeductible = 1500.00m,
+            FamilyDeductible = 3000.00m,
+            IndividualOopMax = 5000.00m,
+            FamilyOopMax = 10000.00m,
+            PharmacyCrossAccumulatesDeductible = false,
+            PharmacyCrossAccumulatesOop = true,
+            DentalCrossAccumulatesOop = false,
+            EmbeddedOrAggregate = "Embedded"
+        };
+    }
 }
 
 public class WorkflowService : IWorkflowService
@@ -1834,14 +2425,93 @@ public class WorkflowService : IWorkflowService
     public async Task<List<WorkflowRun>> GetWorkflowRunsAsync(int limit = 20)
     {
         var baseUrl = _configuration["Services:ArgoWorkflows"];
-        var workflows = await _httpClient.GetFromJsonAsync<List<WorkflowRun>>($"{baseUrl}/api/v1/workflows/cho-workflows?limit={limit}");
-        return workflows ?? new List<WorkflowRun>();
+        try
+        {
+            var workflows = await _httpClient.GetFromJsonAsync<List<WorkflowRun>>($"{baseUrl}/api/v1/workflows/cho-workflows?limit={limit}");
+            return workflows ?? new List<WorkflowRun>();
+        }
+        catch
+        {
+            return GetMockWorkflowRuns(limit);
+        }
     }
 
     public async Task<WorkflowDetails?> GetWorkflowDetailsAsync(string workflowId)
     {
         var baseUrl = _configuration["Services:ArgoWorkflows"];
-        return await _httpClient.GetFromJsonAsync<WorkflowDetails>($"{baseUrl}/api/v1/workflows/cho-workflows/{workflowId}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<WorkflowDetails>($"{baseUrl}/api/v1/workflows/cho-workflows/{workflowId}");
+        }
+        catch
+        {
+            return GetMockWorkflowDetails(workflowId);
+        }
+    }
+
+    public async Task<List<WorkflowRun>> GetActiveWorkflowsAsync()
+    {
+        var baseUrl = _configuration["Services:ArgoWorkflows"];
+        try
+        {
+            var workflows = await _httpClient.GetFromJsonAsync<List<WorkflowRun>>($"{baseUrl}/api/v1/workflows/cho-workflows?phase=Running");
+            return workflows ?? new List<WorkflowRun>();
+        }
+        catch
+        {
+            return new List<WorkflowRun>();
+        }
+    }
+
+    public async Task<bool> RetriggerWorkflowAsync(string workflowId)
+    {
+        var baseUrl = _configuration["Services:ArgoWorkflows"];
+        try
+        {
+            var response = await _httpClient.PostAsync($"{baseUrl}/api/v1/workflows/cho-workflows/{workflowId}/retry", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private List<WorkflowRun> GetMockWorkflowRuns(int limit)
+    {
+        var statuses = new[] { "Succeeded", "Succeeded", "Succeeded", "Failed", "Running" };
+        return Enumerable.Range(1, Math.Min(limit, 10)).Select(i => new WorkflowRun
+        {
+            WorkflowId = $"claims-adjudication-{DateTime.Now.AddHours(-i * 2):yyyyMMddHHmm}-{i:D4}",
+            Name = $"claims-adjudication-workflow-{i:D4}",
+            Status = statuses[(i - 1) % statuses.Length],
+            StartTime = DateTime.Now.AddHours(-i * 2),
+            FinishTime = statuses[(i - 1) % statuses.Length] != "Running" ? DateTime.Now.AddHours(-i * 2).AddMinutes(8) : null,
+            DurationSeconds = statuses[(i - 1) % statuses.Length] != "Running" ? 480 + i * 12 : 0
+        }).ToList();
+    }
+
+    private WorkflowDetails GetMockWorkflowDetails(string workflowId)
+    {
+        return new WorkflowDetails
+        {
+            WorkflowId = workflowId,
+            Name = workflowId,
+            Status = "Succeeded",
+            StartTime = DateTime.Now.AddHours(-2),
+            FinishTime = DateTime.Now.AddHours(-2).AddMinutes(8),
+            DurationSeconds = 480,
+            Steps = new List<WorkflowStep>
+            {
+                new() { Name = "validate", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(12) },
+                new() { Name = "ncci-edits", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(13), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(61) },
+                new() { Name = "fee-schedule", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(62), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(97) },
+                new() { Name = "benefits", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(98), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(126) },
+                new() { Name = "auth-check", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(127), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(135) },
+                new() { Name = "adjudicate", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(136), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(158) },
+                new() { Name = "payment-staging", Status = "Succeeded", StartTime = DateTime.Now.AddHours(-2).AddSeconds(159), FinishTime = DateTime.Now.AddHours(-2).AddSeconds(167) }
+            }
+        };
     }
 }
 
@@ -1862,14 +2532,14 @@ public class MetricsService : IMetricsService
         // For now, return sample data
         return new DashboardMetrics
         {
-            TotalClaims = 1247,
-            ClaimsTrend = 0.085,
-            ApprovalRate = 0.923,
-            AvgProcessingTimeMs = 387,
-            TotalPayerAmount = 2_847_392.50m,
-            ApprovedClaims = 1151,
-            DeniedClaims = 96,
-            PendingClaims = 23
+            TotalClaims = 2847,
+            ClaimsTrend = 4.2,
+            ApprovalRate = 96.2,
+            AvgProcessingTimeMs = 340,
+            TotalPayerAmount = 1_847_293.00m,
+            ApprovedClaims = 2738,
+            DeniedClaims = 57,
+            PendingClaims = 52
         };
     }
 }
@@ -1964,7 +2634,7 @@ public class AttachmentService : IAttachmentService
 
     private async Task SetBearerTokenAsync()
     {
-        var scopes = new[] { "api://31f76844-b2cb-47b1-aede-f5b2b6dc59c8/Attachments.ReadWrite" };
+        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Attachments.ReadWrite" };
         var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
@@ -2712,29 +3382,21 @@ public class TenantService : ITenantService
 
     public async Task<TenantSubscription?> GetSubscriptionByAzureTenantIdAsync(string azureTenantId)
     {
-        try
-        {
-            _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
+        _logger.LogInformation("Looking up subscription for Azure Tenant ID: {TenantId}", azureTenantId);
 
-            if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
-                return null;
-
-            var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-            var tenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
-
-            if (tenant != null)
-                _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})",
-                    azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
-            else
-                _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
-
-            return tenant;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error querying MongoDB for tenant {TenantId}", azureTenantId);
+        if (string.IsNullOrEmpty(azureTenantId) || azureTenantId == "common")
             return null;
-        }
+
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var tenant = await _tenantsCollection.Find(filter).FirstOrDefaultAsync();
+
+        if (tenant != null)
+            _logger.LogInformation("Found subscription for tenant {TenantId}: {OrgName} ({Status})",
+                azureTenantId, tenant.OrganizationName, tenant.SubscriptionStatus);
+        else
+            _logger.LogInformation("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
+
+        return tenant;
     }
 
     public async Task<TenantSubscription?> GetDemoTenantAsync()
@@ -3122,6 +3784,855 @@ public class SmtpEmailNotificationService : IEmailNotificationService
             Subject = $"[Cloud Health Office] We received your inquiry – {inquiry.Id}",
             Body = body,
             IsBodyHtml = false
+        };
+    }
+}
+
+public class OperatingModeService : IOperatingModeService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<OperatingModeService> _logger;
+
+    public OperatingModeService(HttpClient httpClient, IConfiguration configuration, ILogger<OperatingModeService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<OperatingModeConfiguration> GetOperatingModeAsync(string tenantId)
+    {
+        var baseUrl = _configuration["Services:TenantService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<OperatingModeConfiguration>(
+                $"{baseUrl}/v1/tenants/{tenantId}/operating-mode");
+            if (result != null)
+                return NormalizeConfiguration(result, tenantId);
+
+            return GetDefaultConfiguration(tenantId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unable to fetch operating mode for tenant {TenantId}, returning defaults", tenantId);
+            return GetDefaultConfiguration(tenantId);
+        }
+    }
+
+    private static OperatingModeConfiguration NormalizeConfiguration(OperatingModeConfiguration config, string tenantId)
+    {
+        // Merge API results onto defaults so missing engines get "replace" mode
+        var merged = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in config.Engines)
+        {
+            merged[kvp.Key] = kvp.Value;
+        }
+
+        config.TenantId = string.IsNullOrEmpty(config.TenantId) ? tenantId : config.TenantId;
+        config.Engines = merged;
+        return config;
+    }
+
+    private static OperatingModeConfiguration GetDefaultConfiguration(string tenantId)
+    {
+        return new OperatingModeConfiguration
+        {
+            TenantId = tenantId,
+            Engines = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase),
+            UpdatedAt = null
+        };
+    }
+}
+
+// ── PR14: EDI Operations Service ─────────────────────────────────────────────
+
+public class EdiOperationsService : IEdiOperationsService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<EdiOperationsService> _logger;
+
+    public EdiOperationsService(HttpClient httpClient, IConfiguration configuration, ILogger<EdiOperationsService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<Edi834Batch>> Get834BatchesAsync(DateTime? from = null, DateTime? to = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var url = $"{baseUrl}/edi/834-batches" +
+                (from.HasValue ? $"?from={from:yyyy-MM-dd}" : "") +
+                (to.HasValue ? (from.HasValue ? $"&to={to:yyyy-MM-dd}" : $"?to={to:yyyy-MM-dd}") : "");
+            var result = await _httpClient.GetFromJsonAsync<List<Edi834Batch>>(url);
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching 834 batches, returning mock data");
+            return GetMock834Batches();
+        }
+    }
+
+    public async Task<List<Enrollment834Record>> Get834BatchRecordsAsync(string batchId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<Enrollment834Record>>($"{baseUrl}/edi/834-batches/{batchId}/records");
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching 834 batch records for {BatchId}, returning mock data", batchId);
+            return GetMock834Records(batchId);
+        }
+    }
+
+    public async Task Resolve834RecordAsync(Edi834ResolutionRequest request)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/edi/834-batches/{request.BatchId}/resolve", request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error resolving 834 record, simulating success");
+        }
+    }
+
+    public async Task<List<ClaimAcknowledgmentSummary>> Get277CaAcknowledgmentsAsync(DateTime? from = null, DateTime? to = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<ClaimAcknowledgmentSummary>>($"{baseUrl}/edi/277ca");
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching 277CA acknowledgments, returning mock data");
+            return GetMock277CaAcknowledgments();
+        }
+    }
+
+    public async Task<Stream> Download277CaAsync(string claimId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetStreamAsync($"{baseUrl}/claims/{claimId}/277ca");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error downloading 277CA for claim {ClaimId}, returning mock stream", claimId);
+            var mockContent = $"ISA*00*          *00*          *ZZ*CLOUDHEALTH    *ZZ*PARTNER001     *260317*1200*^*00501*000000001*0*P*:~\nGS*FA*CLOUDHEALTH*PARTNER001*20260317*1200*1*X*005010X214~\nST*277*0001~\nBHT*0085*08*{claimId}*20260317*1200*TH~\nSE*4*0001~\nGE*1*1~\nIEA*1*000000001~";
+            return new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(mockContent));
+        }
+    }
+
+    public async Task<List<EraSummary>> GetErasAsync(DateTime? from = null, DateTime? to = null)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<EraSummary>>($"{baseUrl}/payments/eras");
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching ERAs, returning mock data");
+            return GetMockEras();
+        }
+    }
+
+    public async Task<Stream> DownloadEraAsync(string paymentId)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            return await _httpClient.GetStreamAsync($"{baseUrl}/payments/{paymentId}/835");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error downloading ERA for payment {PaymentId}, returning mock stream", paymentId);
+            var mockContent = $"ISA*00*          *00*          *ZZ*CLOUDHEALTH    *ZZ*PARTNER001     *260317*1200*^*00501*000000001*0*P*:~\nGS*HP*CLOUDHEALTH*PARTNER001*20260317*1200*1*X*005010X221A1~\nST*835*0001~\nBPR*I*15420.00*C*ACH*CCP**01*021000021*DA*98765432*20260317**01*021000021*DA*12345678~\nTRN*1*CHK-{paymentId}*1234567890~\nSE*5*0001~\nGE*1*1~\nIEA*1*000000001~";
+            return new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(mockContent));
+        }
+    }
+
+    public async Task<List<EdiTransactionHistoryItem>> GetTransactionHistoryAsync(DateTime? from, DateTime? to, string? transactionType, string? partnerId, string? status, int pageNumber, int pageSize)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var url = $"{baseUrl}/edi/history?page={pageNumber}&pageSize={pageSize}" +
+                (transactionType != null ? $"&type={transactionType}" : "") +
+                (status != null ? $"&status={status}" : "");
+            var result = await _httpClient.GetFromJsonAsync<List<EdiTransactionHistoryItem>>(url);
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching EDI transaction history, returning mock data");
+            return GetMockEdiHistory(transactionType, status, pageNumber, pageSize);
+        }
+    }
+
+    private List<Edi834Batch> GetMock834Batches()
+    {
+        return new List<Edi834Batch>
+        {
+            new() { BatchId = "BATCH-2026-0101", TradingPartnerId = "TP-001", TradingPartnerName = "Availity", ReceivedDate = DateTime.Now.AddDays(-1), TotalRecords = 245, AcceptedCount = 243, RejectedCount = 2, PendingCount = 0, Status = "PartiallyAccepted", OriginalFileName = "834_20260316_001.txt" },
+            new() { BatchId = "BATCH-2026-0098", TradingPartnerId = "TP-001", TradingPartnerName = "Availity", ReceivedDate = DateTime.Now.AddDays(-3), TotalRecords = 88, AcceptedCount = 88, RejectedCount = 0, PendingCount = 0, Status = "Completed", OriginalFileName = "834_20260314_001.txt" },
+            new() { BatchId = "BATCH-2026-0091", TradingPartnerId = "TP-002", TradingPartnerName = "Change Healthcare", ReceivedDate = DateTime.Now.AddDays(-7), TotalRecords = 512, AcceptedCount = 498, RejectedCount = 9, PendingCount = 5, Status = "PartiallyAccepted", OriginalFileName = "ENROLL_20260310_CHC_001.edi" },
+            new() { BatchId = "BATCH-2026-0085", TradingPartnerId = "TP-002", TradingPartnerName = "Change Healthcare", ReceivedDate = DateTime.Now.AddDays(-14), TotalRecords = 180, AcceptedCount = 180, RejectedCount = 0, PendingCount = 0, Status = "Completed", OriginalFileName = "ENROLL_20260303_CHC_001.edi" },
+            new() { BatchId = "BATCH-2026-0079", TradingPartnerId = "TP-003", TradingPartnerName = "Waystar", ReceivedDate = DateTime.Now.AddDays(-21), TotalRecords = 45, AcceptedCount = 35, RejectedCount = 10, PendingCount = 0, Status = "PartiallyAccepted", OriginalFileName = "waystar_834_20260224.edi" }
+        };
+    }
+
+    private List<Enrollment834Record> GetMock834Records(string batchId)
+    {
+        var records = new List<Enrollment834Record>();
+        var names = new[] { ("Sarah", "Johnson"), ("Michael", "Chen"), ("Emily", "Rodriguez"), ("David", "Thompson"), ("Jennifer", "Williams") };
+        var random = new Random(batchId.GetHashCode());
+        for (int i = 1; i <= 8; i++)
+        {
+            var name = names[random.Next(names.Length)];
+            var isRejected = i == 3 || i == 7;
+            records.Add(new Enrollment834Record
+            {
+                TransactionId = $"{batchId}-REC-{i:D3}",
+                BatchId = batchId,
+                MemberId = $"MBR-2024-00{i}",
+                MemberName = $"{name.Item1} {name.Item2}",
+                MaintenanceTypeCode = i <= 3 ? "021" : (i <= 6 ? "001" : "024"),
+                MaintenanceReasonCode = "27",
+                TransactionSetPurpose = i <= 3 ? "Add subscriber" : (i <= 6 ? "Change" : "Cancel enrollment"),
+                TransactionDate = DateTime.Now.AddDays(-random.Next(1, 5)),
+                Status = isRejected ? "Rejected" : "Accepted",
+                Errors = isRejected ? new List<string>
+                {
+                    "834-E001: Member ID not found in active enrollment roster",
+                    "834-E019: Plan code PREM2026 not valid for sponsor SPNSR10002"
+                } : new List<string>()
+            });
+        }
+        return records;
+    }
+
+    private List<ClaimAcknowledgmentSummary> GetMock277CaAcknowledgments()
+    {
+        var claims = new[] { "CLM-2026-00001", "CLM-2026-00002", "CLM-2026-00003", "CLM-2026-00005", "CLM-2026-00008" };
+        var statuses = new[] { ("Accepted", "A1", "A6", "Receipt and preliminary adjudication"), ("Accepted", "A1", "A6", "Claim received"), ("Rejected", "A3", "A7", "Claim returned to submitter"), ("Pended", "A6", "A0", "Acknowledgment pended"), ("Accepted", "A1", "A6", "Receipt confirmed") };
+        return claims.Select((claimId, i) => new ClaimAcknowledgmentSummary
+        {
+            AckId = $"ACK-2026-{i + 1:D5}",
+            ClaimId = claimId,
+            ClaimNumber = $"CLM{(i + 1):D8}",
+            MemberName = new[] { "Sarah Johnson", "Michael Chen", "Emily Rodriguez", "David Thompson", "Jennifer Williams" }[i],
+            ProviderName = new[] { "Seattle Medical Center", "Downtown Urgent Care", "West Coast Radiology", "City General Hospital", "Advanced Diagnostics Lab" }[i],
+            GeneratedDate = DateTime.Now.AddDays(-(i + 1) * 3),
+            AckStatus = statuses[i].Item1,
+            StatusCategoryCode = statuses[i].Item2,
+            StatusCode = statuses[i].Item3,
+            StatusDescription = statuses[i].Item4
+        }).ToList();
+    }
+
+    private List<EraSummary> GetMockEras()
+    {
+        return new List<EraSummary>
+        {
+            new() { EraId = "ERA-2026-0042", PaymentId = "PMT-2026-0042", PayerName = "Cloud Health Office", PayeeNPI = "1234567890", PayeeName = "Seattle Medical Center", PaymentDate = DateTime.Now.AddDays(-1), PaymentMethod = "ACH", CheckNumber = "ACH-20260316", TotalPaymentAmount = 15420.00m, ClaimCount = 18, Status = "Transmitted" },
+            new() { EraId = "ERA-2026-0038", PaymentId = "PMT-2026-0038", PayerName = "Cloud Health Office", PayeeNPI = "1234567891", PayeeName = "Downtown Urgent Care", PaymentDate = DateTime.Now.AddDays(-5), PaymentMethod = "ACH", CheckNumber = "ACH-20260312", TotalPaymentAmount = 8750.00m, ClaimCount = 12, Status = "Acknowledged" },
+            new() { EraId = "ERA-2026-0034", PaymentId = "PMT-2026-0034", PayerName = "Cloud Health Office", PayeeNPI = "1234567892", PayeeName = "West Coast Radiology", PaymentDate = DateTime.Now.AddDays(-8), PaymentMethod = "CHK", CheckNumber = "CHK-12345678", TotalPaymentAmount = 22100.00m, ClaimCount = 25, Status = "Acknowledged" },
+            new() { EraId = "ERA-2026-0029", PaymentId = "PMT-2026-0029", PayerName = "Cloud Health Office", PayeeNPI = "1234567893", PayeeName = "City General Hospital", PaymentDate = DateTime.Now.AddDays(-14), PaymentMethod = "ACH", CheckNumber = "ACH-20260303", TotalPaymentAmount = 47820.50m, ClaimCount = 41, Status = "Acknowledged" }
+        };
+    }
+
+    private List<EdiTransactionHistoryItem> GetMockEdiHistory(string? type, string? status, int page, int pageSize)
+    {
+        var types = new[] { "834", "835", "277CA", "270", "271", "278" };
+        var allItems = Enumerable.Range(1, 50).Select(i => new EdiTransactionHistoryItem
+        {
+            TransactionId = $"TXN-2026-{i:D5}",
+            TransactionType = types[(i - 1) % types.Length],
+            TransactionDate = DateTime.Now.AddDays(-i),
+            TradingPartnerId = i % 3 == 0 ? "TP-002" : "TP-001",
+            TradingPartnerName = i % 3 == 0 ? "Change Healthcare" : "Availity",
+            Direction = types[(i - 1) % types.Length] == "834" ? "Inbound" : "Outbound",
+            Status = i % 7 == 0 ? "Failed" : (i % 5 == 0 ? "Rejected" : "Completed"),
+            ErrorSummary = (i % 7 == 0) ? "Connection timeout after 30s" : null,
+            RecordCount = (i % 3 + 1) * 15
+        }).ToList();
+
+        var filtered = allItems.AsEnumerable();
+        if (!string.IsNullOrEmpty(type) && type != "All") filtered = filtered.Where(x => x.TransactionType == type);
+        if (!string.IsNullOrEmpty(status) && status != "All") filtered = filtered.Where(x => x.Status == status);
+        return filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    }
+}
+
+// ── PR15: Payment Run Service ─────────────────────────────────────────────────
+
+public class PaymentRunService : IPaymentRunService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentRunService> _logger;
+    private static readonly List<PaymentRunSummary> _mockRuns = new();
+    private static bool _mockInitialized = false;
+
+    public PaymentRunService(HttpClient httpClient, IConfiguration configuration, ILogger<PaymentRunService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+        if (!_mockInitialized) { InitMockRuns(); _mockInitialized = true; }
+    }
+
+    private void InitMockRuns()
+    {
+        _mockRuns.AddRange(new[]
+        {
+            new PaymentRunSummary { RunId = "PMTRUN-2026-0042", RunName = "March 2026 Bi-Weekly Run #2", Status = "Completed", CreatedDate = DateTime.Now.AddDays(-2), StartedDate = DateTime.Now.AddDays(-2).AddMinutes(5), CompletedDate = DateTime.Now.AddDays(-2).AddMinutes(35), CreatedBy = "admin@cloudhealthoffice.com", ClaimCount = 87, ProcessedCount = 87, TotalAmount = 142850.00m, EraFileUrl = "era/PMT-2026-0042/835" },
+            new PaymentRunSummary { RunId = "PMTRUN-2026-0038", RunName = "March 2026 Bi-Weekly Run #1", Status = "Completed", CreatedDate = DateTime.Now.AddDays(-9), StartedDate = DateTime.Now.AddDays(-9).AddMinutes(3), CompletedDate = DateTime.Now.AddDays(-9).AddMinutes(28), CreatedBy = "admin@cloudhealthoffice.com", ClaimCount = 112, ProcessedCount = 112, TotalAmount = 198450.75m, EraFileUrl = "era/PMT-2026-0038/835" },
+            new PaymentRunSummary { RunId = "PMTRUN-2026-0031", RunName = "February 2026 Final Run", Status = "Completed", CreatedDate = DateTime.Now.AddDays(-16), StartedDate = DateTime.Now.AddDays(-16).AddMinutes(2), CompletedDate = DateTime.Now.AddDays(-16).AddMinutes(42), CreatedBy = "claims@cloudhealthoffice.com", ClaimCount = 203, ProcessedCount = 203, TotalAmount = 387200.50m, EraFileUrl = "era/PMT-2026-0031/835" },
+            new PaymentRunSummary { RunId = "PMTRUN-2026-0025", RunName = "February 2026 Mid-Month Run", Status = "Failed", CreatedDate = DateTime.Now.AddDays(-23), StartedDate = DateTime.Now.AddDays(-23).AddMinutes(1), CompletedDate = null, CreatedBy = "admin@cloudhealthoffice.com", ClaimCount = 95, ProcessedCount = 42, TotalAmount = 0m, ErrorMessage = "Payment gateway timeout after processing 42 claims — rerun required" }
+        });
+    }
+
+    public async Task<List<PaymentRunSummary>> GetPaymentRunsAsync(int limit = 50)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<PaymentRunSummary>>($"{baseUrl}/payment-runs?limit={limit}");
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching payment runs, returning mock data");
+            return _mockRuns.Take(limit).ToList();
+        }
+    }
+
+    public async Task<PaymentRunDetails?> GetPaymentRunByIdAsync(string runId)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<PaymentRunDetails>($"{baseUrl}/payment-runs/{runId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching payment run {RunId}, returning mock data", runId);
+            return GetMockPaymentRunDetails(runId);
+        }
+    }
+
+    public async Task<string> CreatePaymentRunAsync(CreatePaymentRunRequest request)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/payment-runs", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CreateRunResponse>();
+            return result?.RunId ?? $"PMTRUN-2026-{DateTime.Now.Ticks % 9999:D4}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error creating payment run, returning mock ID");
+            var newId = $"PMTRUN-2026-{(_mockRuns.Count + 50):D4}";
+            _mockRuns.Insert(0, new PaymentRunSummary
+            {
+                RunId = newId,
+                RunName = request.RunName,
+                Status = "Pending",
+                CreatedDate = DateTime.Now,
+                CreatedBy = "current-user",
+                ClaimCount = 0,
+                ProcessedCount = 0,
+                TotalAmount = 0m
+            });
+            return newId;
+        }
+    }
+
+    public async Task CancelPaymentRunAsync(string runId)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            var response = await _httpClient.PostAsync($"{baseUrl}/payment-runs/{runId}/cancel", null);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error cancelling payment run {RunId}, simulating success", runId);
+            var run = _mockRuns.FirstOrDefault(r => r.RunId == runId);
+            if (run != null) run.Status = "Cancelled";
+        }
+    }
+
+    public async Task<Stream> DownloadEraForRunAsync(string runId)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            return await _httpClient.GetStreamAsync($"{baseUrl}/payment-runs/{runId}/835");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error downloading ERA for run {RunId}, returning mock stream", runId);
+            var mockContent = $"ISA*00*          *00*          *ZZ*CLOUDHEALTH    *ZZ*PARTNER001     *260317*1200*^*00501*000000001*0*P*:~\nGS*HP*CLOUDHEALTH*PARTNER001*20260317*1200*1*X*005010X221A1~\nST*835*0001~\nBPR*I*142850.00*C*ACH*CCP**01*021000021*DA*98765432*20260316**01*021000021*DA*12345678~\nTRN*1*{runId}*1234567890~\nSE*5*0001~\nGE*1*1~\nIEA*1*000000001~";
+            return new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(mockContent));
+        }
+    }
+
+    private PaymentRunDetails GetMockPaymentRunDetails(string runId)
+    {
+        var summary = _mockRuns.FirstOrDefault(r => r.RunId == runId) ?? new PaymentRunSummary { RunId = runId, RunName = "Unknown Run", Status = "Unknown", CreatedDate = DateTime.Now, CreatedBy = "system" };
+        var claims = Enumerable.Range(1, Math.Min(summary.ClaimCount > 0 ? summary.ClaimCount : 10, 25)).Select(i => new PaymentRunClaimItem
+        {
+            ClaimId = $"CLM-2026-{i:D5}",
+            ClaimNumber = $"CLM{i:D8}",
+            MemberName = new[] { "Sarah Johnson", "Michael Chen", "Emily Rodriguez", "David Thompson" }[i % 4],
+            ProviderName = new[] { "Seattle Medical Center", "Downtown Urgent Care", "West Coast Radiology", "City General Hospital" }[i % 4],
+            ChargeAmount = (i + 1) * 250.00m,
+            AllowedAmount = (i + 1) * 210.00m,
+            PaidAmount = (i + 1) * 168.00m,
+            MemberResponsibility = (i + 1) * 42.00m,
+            PaymentStatus = i % 9 == 0 ? "Excluded" : "Included"
+        }).ToList();
+
+        return new PaymentRunDetails
+        {
+            RunId = summary.RunId,
+            RunName = summary.RunName,
+            Status = summary.Status,
+            CreatedDate = summary.CreatedDate,
+            StartedDate = summary.StartedDate,
+            CompletedDate = summary.CompletedDate,
+            CreatedBy = summary.CreatedBy,
+            ClaimCount = summary.ClaimCount > 0 ? summary.ClaimCount : claims.Count,
+            ProcessedCount = summary.ProcessedCount > 0 ? summary.ProcessedCount : claims.Count,
+            TotalAmount = summary.TotalAmount > 0 ? summary.TotalAmount : claims.Sum(c => c.PaidAmount),
+            ErrorMessage = summary.ErrorMessage,
+            EraFileUrl = summary.EraFileUrl,
+            ClaimServiceDateFrom = DateTime.Now.AddDays(-30),
+            ClaimServiceDateTo = DateTime.Now.AddDays(-1),
+            TotalCharges = claims.Sum(c => c.ChargeAmount),
+            TotalAllowed = claims.Sum(c => c.AllowedAmount),
+            TotalMemberResponsibility = claims.Sum(c => c.MemberResponsibility),
+            ApprovedCount = claims.Count(c => c.PaymentStatus == "Included"),
+            DeniedCount = 0,
+            AdjustmentCount = claims.Count(c => c.PaymentStatus == "Adjusted"),
+            Claims = claims
+        };
+    }
+
+    private class CreateRunResponse { public string RunId { get; set; } = string.Empty; }
+}
+
+// ── PR15: Premium Billing Service ────────────────────────────────────────────
+
+public class PremiumBillingService : IPremiumBillingService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<PremiumBillingService> _logger;
+
+    public PremiumBillingService(HttpClient httpClient, IConfiguration configuration, ILogger<PremiumBillingService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<List<BillingCycle>> GetBillingCyclesAsync(string? sponsorId = null, string? status = null)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var url = $"{baseUrl}/billing-cycles" + (sponsorId != null ? $"?sponsorId={sponsorId}" : "");
+            var result = await _httpClient.GetFromJsonAsync<List<BillingCycle>>(url);
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching billing cycles, returning mock data");
+            return GetMockBillingCycles(sponsorId, status);
+        }
+    }
+
+    public async Task<BillingCycleDetails?> GetBillingCycleByIdAsync(string cycleId)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<BillingCycleDetails>($"{baseUrl}/billing-cycles/{cycleId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching billing cycle {CycleId}, returning mock data", cycleId);
+            return GetMockBillingCycleDetails(cycleId);
+        }
+    }
+
+    public async Task<string> GenerateInvoiceAsync(CreateInvoiceRequest request)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/billing-cycles", request);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<CreateCycleResponse>())?.CycleId ?? Guid.NewGuid().ToString("N")[..8];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating invoice, simulating success");
+            return $"CYC-{DateTime.Now:yyyyMM}-{new Random().Next(100, 999)}";
+        }
+    }
+
+    public async Task<List<PremiumRate>> GetPremiumRatesAsync(string? planId = null)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var url = $"{baseUrl}/premium-rates" + (planId != null ? $"?planId={planId}" : "");
+            var result = await _httpClient.GetFromJsonAsync<List<PremiumRate>>(url);
+            return result ?? new();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching premium rates, returning mock data");
+            return GetMockPremiumRates(planId);
+        }
+    }
+
+    public async Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/premium-rates/{rateId}", new { Rate = newRate, EffectiveDate = effectiveDate });
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error updating premium rate {RateId}, simulating success", rateId);
+        }
+    }
+
+    public async Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/billing-cycles/{cycleId}/mark-paid", new { PaidDate = paidDate });
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error marking cycle {CycleId} as paid, simulating success", cycleId);
+        }
+    }
+
+    public async Task<Stream> DownloadInvoiceAsync(string cycleId)
+    {
+        var baseUrl = _configuration["Services:BillingService"];
+        try
+        {
+            return await _httpClient.GetStreamAsync($"{baseUrl}/billing-cycles/{cycleId}/invoice");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error downloading invoice for cycle {CycleId}, returning mock stream", cycleId);
+            var mockContent = $"INVOICE\nCloud Health Office Premium Billing\nCycle ID: {cycleId}\nGenerated: {DateTime.Now:MM/dd/yyyy}\n\nThis is a mock invoice for demonstration purposes.";
+            return new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(mockContent));
+        }
+    }
+
+    private List<BillingCycle> GetMockBillingCycles(string? sponsorId, string? status)
+    {
+        var cycles = new List<BillingCycle>
+        {
+            new() { CycleId = "CYC-202603-001", SponsorId = "SPNSR10001", SponsorName = "Acme Corporation", BillingPeriod = "2026-03", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(14), TotalPremium = 48750.00m, Status = "Sent", InvoiceNumber = "INV-2026-0342", MemberCount = 125 },
+            new() { CycleId = "CYC-202603-002", SponsorId = "SPNSR10002", SponsorName = "Pacific Northwest Union", BillingPeriod = "2026-03", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(7), TotalPremium = 22180.50m, Status = "Sent", InvoiceNumber = "INV-2026-0343", MemberCount = 62 },
+            new() { CycleId = "CYC-202603-003", SponsorId = "SPNSR10003", SponsorName = "TechStart Inc", BillingPeriod = "2026-03", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(21), TotalPremium = 11200.00m, Status = "Draft", MemberCount = 28 },
+            new() { CycleId = "CYC-202602-001", SponsorId = "SPNSR10001", SponsorName = "Acme Corporation", BillingPeriod = "2026-02", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(-14), TotalPremium = 47500.00m, Status = "Paid", PaidDate = DateTime.Now.AddDays(-7), InvoiceNumber = "INV-2026-0298", MemberCount = 122 },
+            new() { CycleId = "CYC-202602-002", SponsorId = "SPNSR10002", SponsorName = "Pacific Northwest Union", BillingPeriod = "2026-02", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(-21), TotalPremium = 21600.00m, Status = "Overdue", InvoiceNumber = "INV-2026-0299", MemberCount = 60 },
+            new() { CycleId = "CYC-202601-002", SponsorId = "SPNSR10002", SponsorName = "Pacific Northwest Union", BillingPeriod = "2026-01", BillingFrequency = "Monthly", DueDate = DateTime.Now.AddDays(-51), TotalPremium = 20850.00m, Status = "Overdue", InvoiceNumber = "INV-2026-0251", MemberCount = 59 }
+        };
+
+        if (!string.IsNullOrEmpty(sponsorId)) cycles = cycles.Where(c => c.SponsorId == sponsorId).ToList();
+        if (!string.IsNullOrEmpty(status)) cycles = cycles.Where(c => c.Status == status).ToList();
+        return cycles;
+    }
+
+    private BillingCycleDetails GetMockBillingCycleDetails(string cycleId)
+    {
+        var cycle = GetMockBillingCycles(null, null).FirstOrDefault(c => c.CycleId == cycleId) ?? new BillingCycle { CycleId = cycleId, SponsorName = "Unknown", Status = "Draft" };
+        return new BillingCycleDetails
+        {
+            CycleId = cycle.CycleId,
+            SponsorId = cycle.SponsorId,
+            SponsorName = cycle.SponsorName,
+            BillingPeriod = cycle.BillingPeriod,
+            BillingFrequency = cycle.BillingFrequency,
+            DueDate = cycle.DueDate,
+            TotalPremium = cycle.TotalPremium,
+            Status = cycle.Status,
+            PaidDate = cycle.PaidDate,
+            InvoiceNumber = cycle.InvoiceNumber,
+            MemberCount = cycle.MemberCount,
+            TaxAmount = cycle.TotalPremium * 0.025m,
+            AdjustmentAmount = 0m,
+            LineItems = new List<BillingLineItem>
+            {
+                new() { PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Employee", MemberCount = 45, UnitRate = 485.00m, SubTotal = 45 * 485.00m },
+                new() { PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Employee+Spouse", MemberCount = 28, UnitRate = 920.00m, SubTotal = 28 * 920.00m },
+                new() { PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Family", MemberCount = 22, UnitRate = 1380.00m, SubTotal = 22 * 1380.00m },
+                new() { PlanId = "PLAN-HMO-001", PlanName = "HMO Standard Plan", CoverageLevel = "Employee", MemberCount = 30, UnitRate = 380.00m, SubTotal = 30 * 380.00m }
+            }
+        };
+    }
+
+    private List<PremiumRate> GetMockPremiumRates(string? planId)
+    {
+        var rates = new List<PremiumRate>
+        {
+            new() { RateId = "RATE-001", PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Employee", Rate = 485.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-002", PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Employee+Spouse", Rate = 920.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-003", PlanId = "PLAN-PPO-001", PlanName = "PPO Gold Plan", CoverageLevel = "Family", Rate = 1380.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-004", PlanId = "PLAN-HMO-001", PlanName = "HMO Standard Plan", CoverageLevel = "Employee", Rate = 380.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-005", PlanId = "PLAN-HMO-001", PlanName = "HMO Standard Plan", CoverageLevel = "Employee+Spouse", Rate = 720.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-006", PlanId = "PLAN-HMO-001", PlanName = "HMO Standard Plan", CoverageLevel = "Family", Rate = 1080.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-007", PlanId = "PLAN-HDHP-001", PlanName = "HDHP Bronze Plan", CoverageLevel = "Employee", Rate = 285.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-008", PlanId = "PLAN-HDHP-001", PlanName = "HDHP Bronze Plan", CoverageLevel = "Employee+Spouse", Rate = 540.00m, EffectiveDate = new DateTime(2026, 1, 1) },
+            new() { RateId = "RATE-009", PlanId = "PLAN-HDHP-001", PlanName = "HDHP Bronze Plan", CoverageLevel = "Family", Rate = 810.00m, EffectiveDate = new DateTime(2026, 1, 1) }
+        };
+        if (!string.IsNullOrEmpty(planId)) rates = rates.Where(r => r.PlanId == planId).ToList();
+        return rates;
+    }
+
+    private class CreateCycleResponse { public string CycleId { get; set; } = string.Empty; }
+}
+
+// ── PR17: Reporting Service ───────────────────────────────────────────────────
+
+public class ReportingService : IReportingService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<ReportingService> _logger;
+
+    public ReportingService(HttpClient httpClient, IConfiguration configuration, ILogger<ReportingService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<ClaimsSummaryReport> GetClaimsSummaryAsync(ReportRequest request)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var result = await _httpClient.PostAsJsonAsync($"{baseUrl}/reports/claims-summary", request);
+            result.EnsureSuccessStatusCode();
+            return await result.Content.ReadFromJsonAsync<ClaimsSummaryReport>() ?? GetMockClaimsSummary(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating claims summary report, returning mock data");
+            return GetMockClaimsSummary(request);
+        }
+    }
+
+    public async Task<PaymentSummaryReport> GetPaymentSummaryAsync(ReportRequest request)
+    {
+        var baseUrl = _configuration["Services:PaymentService"];
+        try
+        {
+            var result = await _httpClient.PostAsJsonAsync($"{baseUrl}/reports/payment-summary", request);
+            result.EnsureSuccessStatusCode();
+            return await result.Content.ReadFromJsonAsync<PaymentSummaryReport>() ?? GetMockPaymentSummary(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating payment summary report, returning mock data");
+            return GetMockPaymentSummary(request);
+        }
+    }
+
+    public async Task<EligibilityStatsReport> GetEligibilityStatsAsync(ReportRequest request)
+    {
+        var baseUrl = _configuration["Services:EligibilityService"];
+        try
+        {
+            var result = await _httpClient.PostAsJsonAsync($"{baseUrl}/reports/eligibility-stats", request);
+            result.EnsureSuccessStatusCode();
+            return await result.Content.ReadFromJsonAsync<EligibilityStatsReport>() ?? GetMockEligibilityStats(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating eligibility stats report, returning mock data");
+            return GetMockEligibilityStats(request);
+        }
+    }
+
+    public async Task<AuthApprovalReport> GetAuthApprovalReportAsync(ReportRequest request)
+    {
+        var baseUrl = _configuration["Services:AuthorizationService"];
+        try
+        {
+            var result = await _httpClient.PostAsJsonAsync($"{baseUrl}/reports/auth-approval", request);
+            result.EnsureSuccessStatusCode();
+            return await result.Content.ReadFromJsonAsync<AuthApprovalReport>() ?? GetMockAuthApproval(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating auth approval report, returning mock data");
+            return GetMockAuthApproval(request);
+        }
+    }
+
+    public async Task<List<ClaimsByProvider>> GetProviderPerformanceAsync(ReportRequest request)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var result = await _httpClient.PostAsJsonAsync($"{baseUrl}/reports/provider-performance", request);
+            result.EnsureSuccessStatusCode();
+            return await result.Content.ReadFromJsonAsync<List<ClaimsByProvider>>() ?? GetMockProviderPerformance();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error generating provider performance report, returning mock data");
+            return GetMockProviderPerformance();
+        }
+    }
+
+    private ClaimsSummaryReport GetMockClaimsSummary(ReportRequest req)
+    {
+        var days = (int)(req.DateTo - req.DateFrom).TotalDays;
+        var daily = Enumerable.Range(0, days > 0 ? days : 30).Select(i => new ClaimsByDateBucket
+        {
+            Date = req.DateFrom.AddDays(i),
+            Count = new Random(i).Next(8, 45),
+            TotalAmount = new Random(i).Next(8000, 60000)
+        }).ToList();
+
+        return new ClaimsSummaryReport
+        {
+            PeriodFrom = req.DateFrom,
+            PeriodTo = req.DateTo,
+            TotalClaims = daily.Sum(d => d.Count),
+            TotalCharges = daily.Sum(d => d.TotalAmount),
+            TotalAllowed = daily.Sum(d => d.TotalAmount) * 0.85m,
+            TotalPaid = daily.Sum(d => d.TotalAmount) * 0.72m,
+            ApprovedCount = (int)(daily.Sum(d => d.Count) * 0.78),
+            DeniedCount = (int)(daily.Sum(d => d.Count) * 0.12),
+            PendedCount = (int)(daily.Sum(d => d.Count) * 0.10),
+            ApprovalRate = 78.4,
+            AvgClaimAmount = 850m,
+            DailyBreakdown = daily,
+            TopProviders = new List<ClaimsByProvider>
+            {
+                new() { ProviderId = "PRV-001", ProviderName = "Seattle Medical Center", Specialty = "Multi-Specialty", ClaimCount = 287, TotalBilled = 425000m, TotalPaid = 306000m, DenialRate = 8.2, AvgProcessingDays = 2.1 },
+                new() { ProviderId = "PRV-002", ProviderName = "Downtown Urgent Care", Specialty = "Urgent Care", ClaimCount = 198, TotalBilled = 148500m, TotalPaid = 106920m, DenialRate = 5.1, AvgProcessingDays = 1.4 },
+                new() { ProviderId = "PRV-003", ProviderName = "West Coast Radiology", Specialty = "Radiology", ClaimCount = 156, TotalBilled = 312000m, TotalPaid = 218400m, DenialRate = 11.3, AvgProcessingDays = 2.8 },
+                new() { ProviderId = "PRV-004", ProviderName = "City General Hospital", Specialty = "Hospital", ClaimCount = 89, TotalBilled = 978000m, TotalPaid = 684600m, DenialRate = 4.5, AvgProcessingDays = 4.2 }
+            },
+            TopDiagnoses = new List<ClaimsByDiagnosis>
+            {
+                new() { DiagnosisCode = "E11.9", Description = "Type 2 diabetes mellitus without complications", ClaimCount = 312, TotalAmount = 478000m },
+                new() { DiagnosisCode = "I10", Description = "Essential (primary) hypertension", ClaimCount = 289, TotalAmount = 221000m },
+                new() { DiagnosisCode = "J06.9", Description = "Acute upper respiratory infection, unspecified", ClaimCount = 187, TotalAmount = 89500m },
+                new() { DiagnosisCode = "M54.5", Description = "Low back pain", ClaimCount = 164, TotalAmount = 195000m },
+                new() { DiagnosisCode = "F41.1", Description = "Generalized anxiety disorder", ClaimCount = 143, TotalAmount = 124000m }
+            }
+        };
+    }
+
+    private PaymentSummaryReport GetMockPaymentSummary(ReportRequest req)
+    {
+        return new PaymentSummaryReport
+        {
+            PeriodFrom = req.DateFrom,
+            PeriodTo = req.DateTo,
+            EraCount = 12,
+            TotalEraAmount = 1284750.25m,
+            AvgEraAmount = 107062.52m,
+            ByPeriod = new List<EraByPeriod>
+            {
+                new() { Period = "2025-10", EraCount = 2, TotalAmount = 198450m },
+                new() { Period = "2025-11", EraCount = 2, TotalAmount = 215800m },
+                new() { Period = "2025-12", EraCount = 2, TotalAmount = 232100m },
+                new() { Period = "2026-01", EraCount = 2, TotalAmount = 198200m },
+                new() { Period = "2026-02", EraCount = 2, TotalAmount = 247350m },
+                new() { Period = "2026-03", EraCount = 2, TotalAmount = 192850m }
+            }
+        };
+    }
+
+    private EligibilityStatsReport GetMockEligibilityStats(ReportRequest req)
+    {
+        return new EligibilityStatsReport
+        {
+            PeriodFrom = req.DateFrom,
+            PeriodTo = req.DateTo,
+            TotalRequests = 4821,
+            EligibleCount = 4389,
+            IneligibleCount = 432,
+            EligibilityRate = 91.0,
+            AvgResponseTimeMs = 248
+        };
+    }
+
+    private AuthApprovalReport GetMockAuthApproval(ReportRequest req)
+    {
+        return new AuthApprovalReport
+        {
+            PeriodFrom = req.DateFrom,
+            PeriodTo = req.DateTo,
+            TotalRequests = 892,
+            ApprovedCount = 754,
+            DeniedCount = 98,
+            PendingCount = 40,
+            ApprovalRate = 84.5,
+            AvgDecisionDays = 1.8,
+            ByServiceType = new List<AuthByServiceType>
+            {
+                new() { ServiceType = "Inpatient Hospitalization", Count = 187, ApprovedCount = 165, DeniedCount = 14, ApprovalRate = 88.2, AvgDecisionDays = 2.1 },
+                new() { ServiceType = "Specialty Office Visit", Count = 312, ApprovedCount = 278, DeniedCount = 28, ApprovalRate = 89.1, AvgDecisionDays = 1.2 },
+                new() { ServiceType = "Outpatient Surgery", Count = 145, ApprovedCount = 118, DeniedCount = 22, ApprovalRate = 81.4, AvgDecisionDays = 2.8 },
+                new() { ServiceType = "DME/Home Health", Count = 98, ApprovedCount = 72, DeniedCount = 18, ApprovalRate = 73.5, AvgDecisionDays = 3.2 },
+                new() { ServiceType = "Behavioral Health", Count = 150, ApprovedCount = 121, DeniedCount = 16, ApprovalRate = 80.7, AvgDecisionDays = 1.4 }
+            }
+        };
+    }
+
+    private List<ClaimsByProvider> GetMockProviderPerformance()
+    {
+        return new List<ClaimsByProvider>
+        {
+            new() { ProviderId = "PRV-001", ProviderName = "Seattle Medical Center", Specialty = "Multi-Specialty", ClaimCount = 287, TotalBilled = 425000m, TotalPaid = 306000m, DenialRate = 8.2, AvgProcessingDays = 2.1 },
+            new() { ProviderId = "PRV-002", ProviderName = "Downtown Urgent Care", Specialty = "Urgent Care", ClaimCount = 198, TotalBilled = 148500m, TotalPaid = 106920m, DenialRate = 5.1, AvgProcessingDays = 1.4 },
+            new() { ProviderId = "PRV-003", ProviderName = "West Coast Radiology", Specialty = "Radiology", ClaimCount = 156, TotalBilled = 312000m, TotalPaid = 218400m, DenialRate = 11.3, AvgProcessingDays = 2.8 },
+            new() { ProviderId = "PRV-004", ProviderName = "City General Hospital", Specialty = "Hospital", ClaimCount = 89, TotalBilled = 978000m, TotalPaid = 684600m, DenialRate = 4.5, AvgProcessingDays = 4.2 },
+            new() { ProviderId = "PRV-005", ProviderName = "Advanced Diagnostics Lab", Specialty = "Laboratory", ClaimCount = 421, TotalBilled = 189450m, TotalPaid = 136404m, DenialRate = 2.8, AvgProcessingDays = 0.9 }
         };
     }
 }

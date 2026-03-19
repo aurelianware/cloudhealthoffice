@@ -41,13 +41,19 @@ spec:
         - name: COSMOS_CONTAINER_TRADING_PARTNERS
           value: "TradingPartners"
         - name: AzureAd__ClientId
+          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
               key: ClientId
         - name: AzureAd__TenantId
-          value: "common"
+          value: ""
+          valueFrom:
+            secretKeyRef:
+              name: azure-ad-config
+              key: TenantId
         - name: AzureAd__Audience
+          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config

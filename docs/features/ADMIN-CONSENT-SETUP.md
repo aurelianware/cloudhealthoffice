@@ -10,7 +10,7 @@ This guide explains how to grant admin consent for the Cloud Health Office API a
 
 **Full Error**:
 ```
-The app is trying to access a service '31f76844-b2cb-47b1-aede-f5b2b6dc59c8' 
+The app is trying to access a service 'cfada1ac-f251-48ea-9330-39212aa4c862' 
 (Cloud Health Office API) that your organization lacks a service principal for.
 ```
 
@@ -25,11 +25,11 @@ The app is trying to access a service '31f76844-b2cb-47b1-aede-f5b2b6dc59c8'
 
 2. **Replace placeholders**:
    - `{TENANT_ID}`: Your Azure AD tenant ID (e.g., `32177734-051b-4fdc-9568-cc35530191b1`)
-   - `{API_CLIENT_ID}`: API app client ID (e.g., `31f76844-b2cb-47b1-aede-f5b2b6dc59c8`)
+   - `{API_CLIENT_ID}`: API app client ID (e.g., `cfada1ac-f251-48ea-9330-39212aa4c862`)
 
 3. **Example URL**:
    ```
-   https://login.microsoftonline.com/32177734-051b-4fdc-9568-cc35530191b1/adminconsent?client_id=31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+   https://login.microsoftonline.com/32177734-051b-4fdc-9568-cc35530191b1/adminconsent?client_id=cfada1ac-f251-48ea-9330-39212aa4c862
    ```
 
 4. **Have an Azure AD admin**:
@@ -136,7 +136,7 @@ Disconnect-MgGraph
 ```powershell
 .\Grant-CloudHealthOfficeAdminConsent.ps1 `
     -TenantId "32177734-051b-4fdc-9568-cc35530191b1" `
-    -ApiClientId "31f76844-b2cb-47b1-aede-f5b2b6dc59c8" `
+    -ApiClientId "cfada1ac-f251-48ea-9330-39212aa4c862" `
     -PortalClientId "YOUR_PORTAL_CLIENT_ID"
 ```
 
@@ -147,10 +147,10 @@ Disconnect-MgGraph
 az login --tenant 32177734-051b-4fdc-9568-cc35530191b1
 
 # Create service principal for API
-az ad sp create --id 31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+az ad sp create --id cfada1ac-f251-48ea-9330-39212aa4c862
 
 # Verify
-az ad sp show --id 31f76844-b2cb-47b1-aede-f5b2b6dc59c8
+az ad sp show --id cfada1ac-f251-48ea-9330-39212aa4c862
 ```
 
 ## Who Can Grant Admin Consent?

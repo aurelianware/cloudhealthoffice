@@ -20,7 +20,7 @@ Cloud Health Office represents the inevitable evolution of healthcare payer EDI 
 
 **Timeline Catastrophe:**
 - 6–18 months deployment cycles
-- $500k–$2M professional services costs
+- $500k–$2M implementation costs
 - Custom code per payer
 - Single-tenant architectural silos
 
@@ -202,14 +202,13 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 **Traditional Vendors (Declining):**
 - Proprietary systems with vendor lock-in
 - Multi-year implementation timelines
-- Expensive professional services dependency
 - Limited multi-payer support
 - Legacy security models
 
 **Cloud Health Office (Inevitable Evolution):**
 - Source-available, BSL 1.1 licensed
 - Sub-1-hour deployment
-- Zero professional services cost
+- Self-service onboarding and configuration
 - Unlimited multi-payer support
 - Security-first architecture
 
@@ -233,7 +232,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 **Cloud Health Office:**
 - Initial implementation: $0 (non-production use)
 - Azure infrastructure: $150k/year × 5 = $750k
-- Professional services: $0 (configuration-driven)
+- Implementation: Configuration-driven (partner services available)
 - Licensing: free for non-production (BSL 1.1)
 - **Total:** $750k
 

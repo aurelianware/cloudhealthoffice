@@ -1,0 +1,248 @@
+@using CloudHealthOffice.Portal.Services
+@inject IProviderService ProviderService
+@inject IMemberService MemberService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Class="mr-2" Style="vertical-align: middle;" />
+            Assign Primary Care Physician
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_currentPcp != null)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
+                Current PCP: <strong>@_currentPcp.ProviderName</strong> (@_currentPcp.Specialty) —
+                <MudChip T="string" Size="Size.Small" Color="@(_currentPcp.NetworkStatus == "In-Network" ? Color.Success : Color.Warning)">
+                    @_currentPcp.NetworkStatus
+                </MudChip>
+            </MudAlert>
+        }
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_searchTerm"
+                              Label="Search Providers (name, NPI, or specialty)"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnKeyDown="HandleSearchKey"
+                              HelperText="Search for a primary care provider to assign" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_specialtyFilter" Label="Filter by Specialty" Variant="Variant.Outlined">
+                    <MudSelectItem Value='@("")'>All Specialties</MudSelectItem>
+                    <MudSelectItem Value="@("Family Medicine")">Family Medicine</MudSelectItem>
+                    <MudSelectItem Value="@("Internal Medicine")">Internal Medicine</MudSelectItem>
+                    <MudSelectItem Value="@("Pediatrics")">Pediatrics</MudSelectItem>
+                    <MudSelectItem Value="@("General Practice")">General Practice</MudSelectItem>
+                    <MudSelectItem Value="@("OB/GYN")">OB/GYN</MudSelectItem>
+                    <MudSelectItem Value="@("Geriatrics")">Geriatrics</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           Style="height: 56px;"
+                           OnClick="SearchProviders"
+                           Disabled="_searching">
+                    @if (_searching)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_providers.Any())
+        {
+            <MudTable Items="_providers" Dense="true" Hover="true" Class="mt-4"
+                      SelectedItem="_selectedProvider"
+                      SelectedItemChanged="OnProviderSelected"
+                      T="ProviderListItem">
+                <HeaderContent>
+                    <MudTh>Provider Name</MudTh>
+                    <MudTh>NPI</MudTh>
+                    <MudTh>Specialty</MudTh>
+                    <MudTh>Location</MudTh>
+                    <MudTh>Network</MudTh>
+                    <MudTh>Credentialing</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Provider Name">
+                        <div class="d-flex align-center gap-2">
+                            @if (_selectedProvider?.ProviderId == context.ProviderId)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                            }
+                            <MudText Typo="Typo.body2" Style="@("font-weight: " + (_selectedProvider?.ProviderId == context.ProviderId ? "bold" : "normal"))">
+                                @context.Name
+                            </MudText>
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="NPI">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.8);">@context.NPI</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Specialty">@context.Specialty</MudTd>
+                    <MudTd DataLabel="Location">@context.City, @context.State</MudTd>
+                    <MudTd DataLabel="Network">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.NetworkStatus == "In-Network" ? Color.Success : context.NetworkStatus == "Pending" ? Color.Warning : Color.Error)">
+                            @context.NetworkStatus
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Credentialing">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.CredentialingStatus == "Active" ? Color.Success : context.CredentialingStatus == "Pending" ? Color.Warning : Color.Error)">
+                            @context.CredentialingStatus
+                        </MudChip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else if (_hasSearched && !_searching)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">No providers found matching your search criteria.</MudAlert>
+        }
+
+        @if (_selectedProvider != null)
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Assignment" Class="mr-1" Size="Size.Small" />
+                Assignment Details
+            </MudText>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_effectiveDate"
+                                   Label="Effective Date"
+                                   Variant="Variant.Outlined"
+                                   MinDate="DateTime.Today"
+                                   HelperText="Date when PCP assignment takes effect" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_reason"
+                                  Label="Reason for Change (optional)"
+                                  Variant="Variant.Outlined"
+                                  HelperText="e.g., Member request, provider left network" />
+                </MudItem>
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="AssignPcp"
+                   Disabled="@(_selectedProvider == null || _assigning || !_effectiveDate.HasValue)">
+            @if (_assigning)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Assign PCP
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string MemberId { get; set; } = string.Empty;
+
+    [Parameter]
+    public MemberPcp? CurrentPcp { get; set; }
+
+    private MemberPcp? _currentPcp;
+    private string _searchTerm = string.Empty;
+    private string _specialtyFilter = string.Empty;
+    private List<ProviderListItem> _providers = new();
+    private ProviderListItem? _selectedProvider;
+    private DateTime? _effectiveDate = DateTime.Today;
+    private string _reason = string.Empty;
+    private bool _searching = false;
+    private bool _assigning = false;
+    private bool _hasSearched = false;
+
+    protected override void OnInitialized()
+    {
+        _currentPcp = CurrentPcp;
+    }
+
+    private async Task HandleSearchKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await SearchProviders();
+    }
+
+    private async Task SearchProviders()
+    {
+        _searching = true;
+        _hasSearched = true;
+        try
+        {
+            _providers = await ProviderService.SearchProvidersAsync(
+                specialty: string.IsNullOrEmpty(_specialtyFilter) ? null : _specialtyFilter,
+                networkStatus: "In-Network",
+                searchTerm: string.IsNullOrEmpty(_searchTerm) ? null : _searchTerm);
+            // Filter to individual providers (PCPs are individual practitioners)
+            _providers = _providers.Where(p => p.PracticeType == "Individual" || p.PracticeType == "").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching providers: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnProviderSelected(ProviderListItem provider)
+    {
+        _selectedProvider = _selectedProvider?.ProviderId == provider.ProviderId ? null : provider;
+    }
+
+    private async Task AssignPcp()
+    {
+        if (_selectedProvider == null || !_effectiveDate.HasValue) return;
+        _assigning = true;
+        try
+        {
+            await MemberService.AssignPcpAsync(new AssignPcpRequest
+            {
+                MemberId = MemberId,
+                ProviderId = _selectedProvider.ProviderId,
+                EffectiveDate = _effectiveDate.Value,
+                Reason = string.IsNullOrWhiteSpace(_reason) ? null : _reason
+            });
+
+            var newPcp = new MemberPcp
+            {
+                ProviderId = _selectedProvider.ProviderId,
+                ProviderName = _selectedProvider.Name,
+                NPI = _selectedProvider.NPI,
+                Specialty = _selectedProvider.Specialty,
+                NetworkStatus = _selectedProvider.NetworkStatus,
+                AssignedDate = _effectiveDate.Value,
+                PracticeName = _selectedProvider.PracticeName
+            };
+
+            Snackbar.Add($"PCP assigned: {_selectedProvider.Name}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(newPcp));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error assigning PCP: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _assigning = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

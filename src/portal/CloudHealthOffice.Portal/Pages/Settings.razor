@@ -1,7 +1,9 @@
 @page "/settings"
 @inject HttpClient Http
 @inject IConfiguration Configuration
-@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
+@inject ITenantContextService TenantContextService
+@inject IOperatingModeService OperatingModeService
 
 <PageTitle>Settings - Cloud Health Office</PageTitle>
 
@@ -128,29 +130,105 @@
         <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Business">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">Tenant Information</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Organization and contact details (coming soon)
-                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.AdminPanelSettings">
+                    Configuration managed by your administrator. Contact support for changes to your organization details.
+                </MudAlert>
             </MudPaper>
         </MudTabPanel>
-        
+
         <!-- Users & Permissions Tab -->
         <MudTabPanel Text="Users & Permissions" Icon="@Icons.Material.Filled.People">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">User Management</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Invite users, manage roles and permissions (coming soon)
-                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.Security">
+                    User management is configured through your Azure AD tenant. Use the Azure portal to manage user access and role assignments.
+                </MudAlert>
             </MudPaper>
         </MudTabPanel>
-        
+
         <!-- Integration Tab -->
         <MudTabPanel Text="Integrations" Icon="@Icons.Material.Filled.IntegrationInstructions">
             <MudPaper Class="pa-4 mt-4">
                 <MudText Typo="Typo.h5" GutterBottom="true">API Keys & Integrations</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Manage API keys, webhooks, and external integrations (coming soon)
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Filled.IntegrationInstructions">
+                    Contact your account manager to configure API keys, webhooks, and external integrations.
+                </MudAlert>
+            </MudPaper>
+        </MudTabPanel>
+
+        <!-- Operating Mode Tab -->
+        <MudTabPanel Text="Operating Mode" Icon="@Icons.Material.Filled.Tune">
+            <MudPaper Class="pa-4 mt-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">Operating Mode Configuration</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    Controls how Cloud Health Office engines interact with your existing core admin system
                 </MudText>
+
+                @if (isLoadingOperatingMode)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else if (operatingModeConfig != null)
+                {
+                    @if (isUsingDefaults)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.Info">
+                            Operating mode configuration loaded from defaults. Contact support or your account team to customize engine modes for your tenant.
+                        </MudAlert>
+                    }
+
+                    <MudSimpleTable Hover="true" Striped="true" Dense="false" Class="mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-table-lines);">
+                        <thead>
+                            <tr>
+                                <th>Engine</th>
+                                <th>Current Mode</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var engine in operatingModeConfig.Engines)
+                            {
+                                <tr>
+                                    <td><strong>@FormatEngineName(engine.Key)</strong></td>
+                                    <td>
+                                        @if (engine.Value.Equals("augment", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <MudChip Color="Color.Warning" Size="Size.Small">Augment</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip Color="Color.Success" Size="Size.Small">Replace</MudChip>
+                                        }
+                                    </td>
+                                    <td><MudText Typo="Typo.body2">@GetEngineDescription(engine.Key, engine.Value)</MudText></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Mode Definitions</MudText>
+
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CompareArrows" NoIcon="false">
+                                <strong>Augment</strong> — Cloud Health Office runs alongside your existing system. Both results are computed and compared, but your legacy system remains authoritative.
+                            </MudAlert>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CheckCircle" NoIcon="false">
+                                <strong>Replace</strong> — Cloud Health Office is the authoritative system for this function. Your legacy system is no longer used for this engine.
+                            </MudAlert>
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-4">
+                        @if (operatingModeConfig.UpdatedAt.HasValue)
+                        {
+                            <span>Last updated: @operatingModeConfig.UpdatedAt.Value.ToString("MMM dd, yyyy 'at' h:mm tt") UTC. </span>
+                        }
+                        Operating mode changes are managed by your account team.
+                    </MudText>
+                }
             </MudPaper>
         </MudTabPanel>
     </MudTabs>
@@ -159,10 +237,13 @@
 @code {
     private SubscriptionInfo? subscription;
     private bool isLoadingSubscription = true;
+    private OperatingModeConfiguration? operatingModeConfig;
+    private bool isLoadingOperatingMode = true;
+    private bool isUsingDefaults;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadSubscriptionInfo();
+        await Task.WhenAll(LoadSubscriptionInfo(), LoadOperatingModeAsync());
     }
 
     private async Task LoadSubscriptionInfo()
@@ -222,22 +303,96 @@
         return "https://billing.stripe.com/p/login/test_123";
     }
 
-    private async Task ShowUpgradeDialog()
+    private Task ShowUpgradeDialog()
     {
         // TODO: Implement plan change dialog
-        await JSRuntime.InvokeVoidAsync("alert", "Plan change feature coming soon!");
+        Snackbar.Add("Please contact your account manager to change your plan.", Severity.Info);
+        return Task.CompletedTask;
     }
 
-    private async Task ShowCancelDialog()
+    private Task ShowCancelDialog()
     {
         // TODO: Implement cancellation dialog
-        await JSRuntime.InvokeVoidAsync("alert", "Cancellation feature coming soon!");
+        Snackbar.Add("Please contact your account manager to manage your subscription.", Severity.Info);
+        return Task.CompletedTask;
     }
 
-    private async Task UpdatePaymentMethod()
+    private Task UpdatePaymentMethod()
     {
         // TODO: Implement payment method update via Stripe Elements
-        await JSRuntime.InvokeVoidAsync("alert", "Payment method update coming soon!");
+        Snackbar.Add("Please contact your account manager to update payment details.", Severity.Info);
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadOperatingModeAsync()
+    {
+        isLoadingOperatingMode = true;
+        try
+        {
+            var tenantId = await TenantContextService.GetTenantIdAsync();
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                isUsingDefaults = true;
+                operatingModeConfig = new OperatingModeConfiguration
+                {
+                    TenantId = "unknown",
+                    Engines = new Dictionary<string, string>(OperatingModeConfiguration.DefaultEngines, StringComparer.OrdinalIgnoreCase),
+                    UpdatedAt = null
+                };
+                return;
+            }
+
+            operatingModeConfig = await OperatingModeService.GetOperatingModeAsync(tenantId);
+
+            // The service sets UpdatedAt = null when returning defaults (service unreachable).
+            // A real API response will always have a non-null UpdatedAt.
+            isUsingDefaults = !operatingModeConfig.UpdatedAt.HasValue;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load operating mode: {ex.Message}");
+            isUsingDefaults = true;
+        }
+        finally
+        {
+            isLoadingOperatingMode = false;
+        }
+    }
+
+    private static string FormatEngineName(string key) => key switch
+    {
+        "benefitCalculation" => "Benefit Calculation",
+        "rateResolution" => "Rate Resolution",
+        "ncciEdits" => "NCCI Edits",
+        "eligibilityVerification" => "Eligibility Verification",
+        "claimsAdjudication" => "Claims Adjudication",
+        _ => System.Text.RegularExpressions.Regex.Replace(key, "([a-z])([A-Z])", "$1 $2")
+    };
+
+    private static string GetEngineDescription(string key, string mode)
+    {
+        var isAugment = mode.Equals("augment", StringComparison.OrdinalIgnoreCase);
+        return key switch
+        {
+            "benefitCalculation" => isAugment
+                ? "Benefit calculations run in parallel with your legacy system for comparison."
+                : "Cloud Health Office is the sole engine computing member benefit amounts.",
+            "rateResolution" => isAugment
+                ? "Rate lookups are performed by both systems; legacy rates are authoritative."
+                : "Cloud Health Office resolves all provider and procedure rates directly.",
+            "ncciEdits" => isAugment
+                ? "NCCI compliance edits are applied by both systems; legacy edits take precedence."
+                : "Cloud Health Office applies all NCCI bundling and compliance edits.",
+            "eligibilityVerification" => isAugment
+                ? "Eligibility checks run through both systems; your existing system is the source of truth."
+                : "Cloud Health Office handles all member eligibility verification.",
+            "claimsAdjudication" => isAugment
+                ? "Claims are adjudicated by both engines; your legacy system's decisions are authoritative."
+                : "Cloud Health Office is the authoritative claims adjudication engine.",
+            _ => isAugment
+                ? "Running alongside your existing system in comparison mode."
+                : "Cloud Health Office is the authoritative system for this function."
+        };
     }
 
     private class SubscriptionInfo

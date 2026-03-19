@@ -1,8 +1,397 @@
 @page "/workflows"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IWorkflowService WorkflowService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
 
-<PageTitle>Workflows - Cloud Health Office</PageTitle>
+<PageTitle>Workflows — Cloud Health Office</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Workflows</MudText>
-<MudText Typo="Typo.body1" Color="Color.Secondary">
-    Workflow monitoring will appear here shortly.
+<div class="d-flex align-center justify-space-between mb-1">
+    <MudText Typo="Typo.h4" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-2" Style="vertical-align: middle;" />
+        Workflow Monitor
+    </MudText>
+    <div class="d-flex align-center gap-2">
+        @if (_hubConnected)
+        {
+            <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Circle"
+                     Style="animation: pulse 2s infinite;">
+                Live
+            </MudChip>
+        }
+        @if (_activeRuns.Any())
+        {
+            <MudChip T="string" Color="Color.Primary" Size="Size.Small" Icon="@Icons.Material.Filled.PlayCircle">
+                @_activeRuns.Count Active
+            </MudChip>
+        }
+    </div>
+</div>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Real-time monitoring of Argo adjudication workflows and automated processing pipelines
 </MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<MudGrid Spacing="3">
+    <!-- Left: Recent Runs Table -->
+    <MudItem xs="12" lg="7">
+        <div class="d-flex align-center justify-space-between mb-3">
+            <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8); font-weight: 600;">
+                Recent Workflow Runs
+            </MudText>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadWorkflows" Disabled="_loading">
+                Refresh
+            </MudButton>
+        </div>
+
+        <MudTable Items="_runs" Dense="true" Hover="true" T="WorkflowRun"
+                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;"
+                  @ref="_workflowTable">
+            <HeaderContent>
+                <MudTh>Workflow</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Duration</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Workflow">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">@context.WorkflowId</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetWorkflowStatusColor(context.Status)"
+                             Style="@(context.Status == "Running" ? "animation: pulse 1.5s infinite;" : "")">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Started">
+                    <MudText Typo="Typo.body2">@context.StartTime.ToString("MM/dd HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Duration">
+                    @if (context.FinishTime.HasValue)
+                    {
+                        var dur = context.FinishTime.Value - context.StartTime;
+                        <MudText Typo="Typo.body2">@FormatDuration(dur)</MudText>
+                    }
+                    else if (context.Status == "Running")
+                    {
+                        <MudText Typo="Typo.body2" Style="color: #00ffff; animation: pulse 2s infinite;">
+                            @FormatDuration(DateTime.UtcNow - context.StartTime)
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">—</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <div class="d-flex gap-1">
+                        @if (context.Status == "Failed")
+                        {
+                            <MudTooltip Text="Retry Workflow">
+                                <MudIconButton Icon="@Icons.Material.Filled.Replay"
+                                               Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => RetriggerWorkflow(context))" />
+                            </MudTooltip>
+                        }
+                        <MudTooltip Text="View Steps">
+                            <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore"
+                                           Size="Size.Small" Color="Color.Primary"
+                                           OnClick="@(() => ToggleExpand(context.WorkflowId))" />
+                        </MudTooltip>
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <ChildRowContent>
+                @if (_expandedWorkflowId == context.WorkflowId)
+                {
+                    <MudTr>
+                        <MudTd colspan="5" Style="padding: 0 16px 16px 16px; background: rgba(0,255,255,0.02);">
+                            @if (_loadingSteps)
+                            {
+                                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                            }
+                            else if (_expandedSteps.Any())
+                            {
+                                <div class="mt-2">
+                                    @foreach (var step in _expandedSteps)
+                                    {
+                                        var stepColor = step.Status switch {
+                                            "Succeeded" => "#00ff88",
+                                            "Failed" => "#ff0055",
+                                            "Running" => "#00ffff",
+                                            _ => "rgba(255,255,255,0.4)"
+                                        };
+                                        <div class="d-flex align-center gap-2 pa-2" Style="border-bottom: 1px solid rgba(0,255,255,0.05);">
+                                            <MudIcon Icon="@GetStepIcon(step.Status)" Style="@($"color: {stepColor}; font-size: 1rem;")" />
+                                            <MudText Typo="Typo.body2" Style="flex: 1;">@step.Name</MudText>
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@GetWorkflowStatusColor(step.Status)">
+                                                @step.Status
+                                            </MudChip>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);" Class="pa-2">No step detail available</MudText>
+                            }
+                        </MudTd>
+                    </MudTr>
+                }
+            </ChildRowContent>
+            <NoRecordsContent>
+                <div class="pa-8 text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountTree" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+                    <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.4);">No recent workflow runs</MudText>
+                </div>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+            </PagerContent>
+        </MudTable>
+    </MudItem>
+
+    <!-- Right: Claims Adjudication Pipeline -->
+    <MudItem xs="12" lg="5">
+        <MudText Typo="Typo.subtitle1" Style="color: rgba(255,255,255,0.8); font-weight: 600;" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Class="mr-1" Size="Size.Small" />
+            Claims Adjudication Pipeline
+        </MudText>
+
+        <MudPaper Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px; overflow: hidden;">
+            <MudTimeline TimelinePosition="TimelinePosition.Start" Class="pa-3">
+                @foreach (var step in _adjudicationSteps)
+                {
+                    <MudTimelineItem Color="@step.Color" Size="Size.Small" Variant="@(step.IsActive ? Variant.Filled : Variant.Outlined)">
+                        <ItemContent>
+                            <div class="d-flex align-center justify-space-between">
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@step.Name</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@step.Description</MudText>
+                                </div>
+                                @if (step.AvgDurationMs > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-family: monospace; font-size: 0.7rem;">
+                                        ~@step.AvgDurationMs ms
+                                    </MudChip>
+                                }
+                            </div>
+                        </ItemContent>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        </MudPaper>
+
+        <!-- Failed Alerts -->
+        @if (_failedRuns.Any())
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2" Style="color: #ff0055;">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-1" Size="Size.Small" />
+                Failed Workflows (@_failedRuns.Count)
+            </MudText>
+            <MudList T="WorkflowRun" Dense="true">
+                @foreach (var run in _failedRuns.Take(5))
+                {
+                    <MudListItem T="WorkflowRun">
+                        <div class="d-flex align-center justify-space-between pa-1" Style="border: 1px solid rgba(255,0,85,0.2); border-radius: 6px;">
+                            <div>
+                                <MudText Typo="Typo.body2" Style="color: #ff0055;">@run.Name</MudText>
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@run.StartTime.ToString("MM/dd/yyyy HH:mm")</MudText>
+                            </div>
+                            <MudTooltip Text="Retry">
+                                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => RetriggerWorkflow(run))" />
+                            </MudTooltip>
+                        </div>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudItem>
+</MudGrid>
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+
+@code {
+    private List<WorkflowRun> _runs = new();
+    private List<WorkflowRun> _activeRuns = new();
+    private List<WorkflowRun> _failedRuns = new();
+    private bool _loading = true;
+    private bool _hubConnected = false;
+    private string? _expandedWorkflowId;
+    private bool _loadingSteps = false;
+    private List<WorkflowStep> _expandedSteps = new();
+    private HubConnection? _hubConnection;
+    private MudTable<WorkflowRun>? _workflowTable;
+    private System.Threading.PeriodicTimer? _refreshTimer;
+
+    private readonly List<(string Name, string Description, Color Color, bool IsActive, int AvgDurationMs)> _adjudicationSteps = new()
+    {
+        ("Schema Validation", "837P/I structure & required fields", Color.Success, false, 45),
+        ("Eligibility Check", "Coverage active at date of service", Color.Success, false, 120),
+        ("NCCI/MUE Edits", "Procedure code combination validation", Color.Success, false, 85),
+        ("Fee Schedule Pricing", "Contracted rate resolution", Color.Success, false, 210),
+        ("Benefit Calculation", "Cost-sharing & accumulator update", Color.Success, false, 165),
+        ("Prior Auth Verification", "Authorization requirement check", Color.Warning, true, 95),
+        ("Payment Generation", "ERA 835 output & posting", Color.Default, false, 280),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWorkflows();
+        await ConnectSignalR();
+        StartAutoRefresh();
+    }
+
+    private async Task LoadWorkflows()
+    {
+        _loading = true;
+        try
+        {
+            _runs = await WorkflowService.GetWorkflowRunsAsync(50);
+            _activeRuns = _runs.Where(r => r.Status == "Running").ToList();
+            _failedRuns = _runs.Where(r => r.Status == "Failed").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading workflows: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ToggleExpand(string workflowId)
+    {
+        if (_expandedWorkflowId == workflowId)
+        {
+            _expandedWorkflowId = null;
+            _expandedSteps.Clear();
+            return;
+        }
+        _expandedWorkflowId = workflowId;
+        _expandedSteps.Clear();
+        _loadingSteps = true;
+        try
+        {
+            var details = await WorkflowService.GetWorkflowDetailsAsync(workflowId);
+            _expandedSteps = details?.Steps ?? new();
+        }
+        catch { }
+        finally
+        {
+            _loadingSteps = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetriggerWorkflow(WorkflowRun run)
+    {
+        try
+        {
+            var success = await WorkflowService.RetriggerWorkflowAsync(run.WorkflowId);
+            if (success)
+            {
+                Snackbar.Add($"Workflow '{run.Name}' retried", Severity.Success);
+                await LoadWorkflows();
+            }
+            else
+            {
+                Snackbar.Add("Retry failed — check Argo Workflows for details", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error retrying workflow: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ConnectSignalR()
+    {
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/workflows"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string, string>("ReceiveWorkflowUpdate", (workflowId, status, currentStep) =>
+            {
+                var run = _runs.FirstOrDefault(r => r.WorkflowId == workflowId);
+                if (run != null)
+                {
+                    run.Status = status;
+                    if (status == "Completed" || status == "Succeeded")
+                        _activeRuns.Remove(run);
+                    InvokeAsync(StateHasChanged);
+                }
+            });
+
+            await _hubConnection.StartAsync();
+            _hubConnected = true;
+        }
+        catch { _hubConnected = false; }
+    }
+
+    private void StartAutoRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            _refreshTimer = new System.Threading.PeriodicTimer(TimeSpan.FromSeconds(30));
+            while (await _refreshTimer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(LoadWorkflows);
+            }
+        });
+    }
+
+    private Color GetWorkflowStatusColor(string status) => status switch
+    {
+        "Succeeded" or "Completed"  => Color.Success,
+        "Running"                   => Color.Primary,
+        "Failed" or "Error"         => Color.Error,
+        "Pending"                   => Color.Warning,
+        _                           => Color.Default
+    };
+
+    private string GetStepIcon(string phase) => phase switch
+    {
+        "Succeeded" => Icons.Material.Filled.CheckCircle,
+        "Failed"    => Icons.Material.Filled.Cancel,
+        "Running"   => Icons.Material.Filled.Sync,
+        _           => Icons.Material.Filled.Circle
+    };
+
+    private string FormatDuration(TimeSpan span)
+    {
+        if (span.TotalHours >= 1) return $"{span.Hours}h {span.Minutes}m";
+        if (span.TotalMinutes >= 1) return $"{span.Minutes}m {span.Seconds}s";
+        return $"{span.Seconds}s";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        if (_hubConnection != null)
+            await _hubConnection.DisposeAsync();
+    }
+}

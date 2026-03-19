@@ -4,19 +4,23 @@ window.StripeHandler = {
     cardElement: null,
 
     initialize: function(publishableKey) {
-        //console.log('Initializing Stripe with key:', publishableKey.substring(0, 10) + '...');
-        
         // Check if Stripe is already loaded
         if (typeof Stripe === 'undefined') {
             console.error('Stripe.js not loaded');
-            return;
+            return 'Stripe.js failed to load. Please disable any ad blockers and reload the page.';
         }
 
         // Initialize Stripe only once
         if (!this.stripe) {
-            this.stripe = Stripe(publishableKey);
+            try {
+                this.stripe = Stripe(publishableKey);
+            } catch (ex) {
+                console.error('Stripe() constructor failed:', ex);
+                return 'Payment system could not be initialized: ' + ex.message;
+            }
+
             const elements = this.stripe.elements();
-            
+
             this.cardElement = elements.create('card', {
                 style: {
                     base: {
@@ -32,25 +36,21 @@ window.StripeHandler = {
             const cardElementDiv = document.getElementById('card-element');
             if (cardElementDiv) {
                 this.cardElement.mount('#card-element');
-                console.log('Card element mounted successfully');
             } else {
                 console.error('Card element div not found');
+                return 'Payment form element not found. Please reload the page.';
             }
 
             // Listen for card validation errors
             this.cardElement.on('change', function(event) {
                 const displayError = document.getElementById('card-errors');
                 if (displayError) {
-                    if (event.error) {
-                        displayError.textContent = event.error.message;
-                    } else {
-                        displayError.textContent = '';
-                    }
+                    displayError.textContent = event.error ? event.error.message : '';
                 }
             });
-        } else {
-            console.log('Stripe already initialized');
         }
+
+        return null; // null = success
     },
 
     createPaymentMethod: async function(name, email) {
