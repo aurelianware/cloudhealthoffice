@@ -1,0 +1,10 @@
+@page "/demo/claims/{ClaimId}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<ClaimDetailsNew ClaimId="@ClaimId" />
+
+@code {
+    [Parameter]
+    public string ClaimId { get; set; } = string.Empty;
+}

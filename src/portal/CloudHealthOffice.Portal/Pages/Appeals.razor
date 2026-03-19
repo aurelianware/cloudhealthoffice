@@ -116,12 +116,6 @@
                 </MudGrid>
             </MudItem>
         </MudGrid>
-        @if (_showValidation)
-        {
-            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
-                Enter at least one search criterion.
-            </MudAlert>
-        }
     </MudPaper>
 
     @* ─── Results ─── *@
@@ -285,7 +279,6 @@
     private bool _loadingSummary = true;
     private bool _loadingResults;
     private bool _hasSearched;
-    private bool _showValidation;
     private AppealsSummary? _summary;
     private List<AppealSummary> _results = new();
 
@@ -308,7 +301,6 @@
 
     private async Task SearchAppeals()
     {
-        _showValidation = false;
         _loadingResults = true;
         _hasSearched = true;
 
@@ -331,7 +323,6 @@
         _searchMemberId = null;
         _searchOriginalId = null;
         _hasSearched = false;
-        _showValidation = false;
         _results = new();
     }
 

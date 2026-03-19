@@ -87,12 +87,13 @@
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
             <MudItem xs="12" md="4">
-                <MudSelect @bind-Value="_selectedExaminer"
-                           Label="Examiner"
+                <MudSelect Value="_selectedExaminer"
+                           ValueChanged="@((string val) => { _selectedExaminer = val; ApplyFilters(); })"
+                           Label="Assigned To"
                            Variant="Variant.Outlined"
                            T="string"
                            AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem Value="@("All")">All Queues</MudSelectItem>
+                    <MudSelectItem Value="@("All")">All Examiners</MudSelectItem>
                     <MudSelectItem Value="@("Sarah Williams")">Sarah Williams (My Queue)</MudSelectItem>
                     <MudSelectItem Value="@("James Martinez")">James Martinez</MudSelectItem>
                     <MudSelectItem Value="@("Priya Kapoor")">Priya Kapoor</MudSelectItem>
@@ -100,7 +101,8 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudSelect @bind-Value="_selectedQueueFilter"
+                <MudSelect Value="_selectedQueueFilter"
+                           ValueChanged="@((string val) => { _selectedQueueFilter = val; ApplyFilters(); })"
                            Label="Queue Type"
                            Variant="Variant.Outlined"
                            T="string"

@@ -438,7 +438,14 @@
             recentAuthorizations = new();
         }
 
-        // Operational awareness — load in parallel, non-blocking
+        _loading = false;
+
+        // Operational awareness — loaded in background after main dashboard renders
+        _ = LoadOperationalDataAsync();
+    }
+
+    private async Task LoadOperationalDataAsync()
+    {
         try
         {
             var alertsTask = MetricsService.GetOperationalAlertsAsync();
@@ -451,8 +458,7 @@
         {
             Logger.LogWarning(ex, "Failed to load operational data");
         }
-
-        _loading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private Color GetApprovalRateColor()
