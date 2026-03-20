@@ -332,14 +332,6 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create MongoDB auth secret (standalone StatefulSet credentials)
-        run: |
-          kubectl create secret generic mongodb-auth \
-            --from-literal=username="${{ secrets.MONGODB_USERNAME }}" \
-            --from-literal=password="${{ secrets.MONGODB_PASSWORD }}" \
-            -n ${{ env.NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Create Cosmos DB endpoint/key secret
         run: |
           kubectl create secret generic cosmos-db-secret \
@@ -418,15 +410,9 @@ jobs:
             --timeout 5m
 
       - name: Deploy Redis (distributed cache / session store)
-        run: kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml
-
-      - name: Deploy MongoDB (DataProtection key store)
-        run: kubectl apply -f infrastructure/k8s/mongodb-deployment.yaml
-
-      - name: Wait for Redis and MongoDB to be ready
         run: |
+          kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml
           kubectl rollout status deployment/redis-dataprotection -n ${{ env.NAMESPACE }} --timeout=120s
-          kubectl rollout status statefulset/mongodb -n ${{ env.NAMESPACE }} --timeout=120s
 
       - name: Substitute ACR image in portal deployment
         run: |
