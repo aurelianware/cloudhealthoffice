@@ -1,3 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,9 +14,9 @@ metadata:
   namespace: cloudhealthoffice
   labels:
     app: tenant-service
-    version: v1
+    tier: backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: tenant-service
@@ -15,65 +24,53 @@ spec:
     metadata:
       labels:
         app: tenant-service
-        version: v1
+        tier: backend
     spec:
       containers:
       - name: tenant-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-tenant-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-tenant-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
+          protocol: TCP
         env:
         - name: ASPNETCORE_ENVIRONMENT
-          value: "Production"
-        - name: ASPNETCORE_URLS
-          value: "http://+:8080"
-        - name: CosmosDb__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: tenant-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
-              key: endpoint
-        - name: CosmosDb__Key
+              name: mongodb-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
           valueFrom:
-            secretKeyRef:
-              name: cosmos-db-secret
-              key: key
-        - name: CosmosDb__DatabaseName
-          value: "CloudHealthOffice"
-        - name: CosmosDb__TenantContainerName
-          value: "Tenants"
-        - name: Stripe__SecretKey
-          valueFrom:
-            secretKeyRef:
-              name: stripe-secret
-              key: secret-key
-              optional: true
-        - name: Stripe__WebhookSecret
-          valueFrom:
-            secretKeyRef:
-              name: stripe-secret
-              key: webhook-secret
-              optional: true
+            configMapKeyRef:
+              name: tenant-service-config
+              key: MongoDb__DatabaseName
         resources:
           requests:
             cpu: 100m
-            memory: 256Mi
+            memory: 128Mi
           limits:
             cpu: 500m
             memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /ready
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -84,10 +81,10 @@ metadata:
     app: tenant-service
 spec:
   type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 8080
-    protocol: TCP
-    name: http
   selector:
     app: tenant-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

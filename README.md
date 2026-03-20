@@ -1,8 +1,6 @@
-<div align="center">
+# Cloud Health Office
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
-
-# Cloud Health Office
 
 **The payer platform that starts where your core admin stops — and grows from there.**
 
@@ -35,11 +33,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 ## Platform
 
-<div align="center">
-
 ![Platform Overview](src/site/graphics/platform-overview.svg)
-
-</div>
 
 |Component           |Count    |Details                                                                                                    |
 |---------------------|---------|-----------------------------------------------------------------------------------------------------------|
@@ -55,6 +49,8 @@ Start with compliance. Expand into claims. Move at your own pace.
 |Lines of Code        |~192,000 |C#, TypeScript, Razor, Python, YAML, Shell, PowerShell (excludes docs)                                      |
 
 ### Services
+
+![Services Overview](docs/images/services-overview.svg)
 
 |Service                  |Purpose                                      |X12 Transactions|
 |-------------------------|---------------------------------------------|----------------|
@@ -83,6 +79,8 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 ### Calculation Engines
 
+![Calculation Engines](docs/images/calculation-engines.svg)
+
 |Engine              |Purpose                                                                                                     |
 |--------------------|------------------------------------------------------------------------------------------------------------|
 |BenefitEngine       |Cost-sharing calculation (deductible, copay, coinsurance), accumulator tracking, service category resolution|
@@ -103,11 +101,7 @@ The adjudication pipeline processes each claim through eight stages with sub-sec
 
 ### CMS-0057-F Compliance
 
-<div align="center">
-
 ![CMS-0057-F Compliance](src/site/graphics/cms-0057f-compliance.svg)
-
-</div>
 
 Cloud Health Office implements the CMS Interoperability and Prior Authorization Final Rule ahead of the January 2027 deadline.
 
@@ -173,6 +167,24 @@ docker-compose up -d
 # Verify
 curl http://localhost:5000/health
 ```
+
+### Full Development Stack
+
+To bring up the complete backend (all 11 services + MongoDB + Redis + seed data):
+
+```bash
+# Start everything
+docker compose -f docker-compose.development.yml up -d
+
+# Wait for health checks to pass
+docker compose -f docker-compose.development.yml ps
+
+# Verify seed data loaded
+docker compose -f docker-compose.development.yml exec mongodb \
+  mongosh cloudhealthoffice --eval 'db.Claims.countDocuments()'
+```
+
+Services are available at `http://localhost:5001` through `5011` (Swagger UI at `/swagger` on each). See [docker-compose.development.yml](docker-compose.development.yml) for the full port map and configuration. Copy `.env.example` to `.env` to customise credentials.
 
 Or deploy to Azure:
 

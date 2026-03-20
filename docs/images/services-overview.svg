@@ -1,0 +1,333 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="rgba(0,255,255,0.3)"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#00ffff" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="1000" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Microservices</text>
+  <text x="600" y="67" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="#b0b0b0"
+        text-anchor="middle">22 Services &#x2022; C# / .NET 8 &#x2022; Multi-Tenant &#x2022; Cosmos + MongoDB</text>
+
+  <!-- Outer container -->
+  <rect x="40" y="85" width="1120" height="890" rx="14" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
+
+  <!-- Count badge -->
+  <g transform="translate(1060, 105)">
+    <rect x="-30" y="-12" width="60" height="24" rx="12" fill="rgba(0,255,255,0.1)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+          fill="#00ffff" text-anchor="middle">22</text>
+  </g>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 1: Claims & Adjudication -->
+  <!-- ════════════════════════════════════════ -->
+  <text x="600" y="120" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">CLAIMS &amp; ADJUDICATION</text>
+
+  <!-- claims-service -->
+  <g transform="translate(200, 170)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">claims-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Claim lifecycle &amp; adjudication</text>
+    <rect x="-60" y="16" width="120" height="14" rx="3" fill="rgba(0,255,255,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ffff" text-anchor="middle">837P/I/D &#x2022; 835</text>
+  </g>
+
+  <!-- claims-scrubbing-service -->
+  <g transform="translate(500, 170)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">claims-scrubbing-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Pre-adjudication validation engine</text>
+    <rect x="-40" y="16" width="80" height="14" rx="3" fill="rgba(0,255,255,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ffff" text-anchor="middle">837 inbound</text>
+  </g>
+
+  <!-- payment-service -->
+  <g transform="translate(800, 170)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">payment-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Check / EFT generation</text>
+    <rect x="-20" y="16" width="40" height="14" rx="3" fill="rgba(0,255,255,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ffff" text-anchor="middle">835</text>
+  </g>
+
+  <!-- Connectors Row 1 -->
+  <line x1="332" y1="170" x2="368" y2="170" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+  <line x1="632" y1="170" x2="668" y2="170" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 2: EDI & Transactions -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="80" y1="225" x2="1120" y2="225" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="253" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">EDI &amp; TRANSACTIONS</text>
+
+  <!-- eligibility-service -->
+  <g transform="translate(200, 303)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">eligibility-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Real-time &amp; batch eligibility</text>
+    <rect x="-30" y="16" width="60" height="14" rx="3" fill="rgba(0,255,136,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ff88" text-anchor="middle">270/271</text>
+  </g>
+
+  <!-- authorization-service -->
+  <g transform="translate(500, 303)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">authorization-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Prior auth management</text>
+    <rect x="-15" y="16" width="30" height="14" rx="3" fill="rgba(0,255,136,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ff88" text-anchor="middle">278</text>
+  </g>
+
+  <!-- attachment-service -->
+  <g transform="translate(800, 303)">
+    <rect x="-130" y="-32" width="260" height="64" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">attachment-service</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Medical attachment, RFAI, 824 ack</text>
+    <rect x="-50" y="16" width="100" height="14" rx="3" fill="rgba(0,255,136,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ff88" text-anchor="middle">275 &#x2022; 277 &#x2022; 824</text>
+  </g>
+
+  <!-- Connectors Row 2 -->
+  <line x1="332" y1="303" x2="368" y2="303" stroke="#00ff88" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+  <line x1="632" y1="303" x2="668" y2="303" stroke="#00ff88" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- enrollment-import-service -->
+  <g transform="translate(1050, 303)">
+    <rect x="-85" y="-32" width="170" height="64" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1"/>
+    <text x="0" y="-8" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">enrollment-import</text>
+    <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">834 processing</text>
+    <rect x="-15" y="16" width="30" height="14" rx="3" fill="rgba(0,255,136,0.08)"/>
+    <text x="0" y="26" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="600"
+          fill="#00ff88" text-anchor="middle">834</text>
+  </g>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 3: Member & Provider -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="80" y1="358" x2="1120" y2="358" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="386" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">MEMBER &amp; PROVIDER</text>
+
+  <!-- member-service -->
+  <g transform="translate(170, 436)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">member-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Demographics &amp; subscriber hierarchy</text>
+  </g>
+
+  <!-- coverage-service -->
+  <g transform="translate(420, 436)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">coverage-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Member coverage &amp; accumulators</text>
+  </g>
+
+  <!-- provider-service -->
+  <g transform="translate(670, 436)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">provider-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Provider &amp; network management</text>
+  </g>
+
+  <!-- sponsor-service -->
+  <g transform="translate(920, 436)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">sponsor-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Employer group management</text>
+  </g>
+
+  <!-- Connectors Row 3 -->
+  <line x1="277" y1="436" x2="313" y2="436" stroke="#00ffff" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="527" y1="436" x2="563" y2="436" stroke="#00ffff" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="777" y1="436" x2="813" y2="436" stroke="#00ffff" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 4: Plan & Configuration -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="80" y1="490" x2="1120" y2="490" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="518" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">PLAN &amp; CONFIGURATION</text>
+
+  <!-- benefit-plan-service -->
+  <g transform="translate(200, 568)">
+    <rect x="-130" y="-30" width="260" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">benefit-plan-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Plan configuration &amp; benefit rules</text>
+  </g>
+
+  <!-- trading-partner-service -->
+  <g transform="translate(500, 568)">
+    <rect x="-130" y="-30" width="260" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">trading-partner-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Clearinghouse configuration</text>
+  </g>
+
+  <!-- reference-data-service -->
+  <g transform="translate(800, 568)">
+    <rect x="-130" y="-30" width="260" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">reference-data-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">ICD-10 &#x2022; CPT &#x2022; CARC/RARC code sets</text>
+  </g>
+
+  <!-- tenant-service -->
+  <g transform="translate(1050, 568)">
+    <rect x="-85" y="-30" width="170" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">tenant-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Multi-tenant provisioning</text>
+  </g>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 5: FHIR & Interoperability -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="80" y1="622" x2="1120" y2="622" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="650" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">FHIR &amp; INTEROPERABILITY</text>
+
+  <!-- fhir-service -->
+  <g transform="translate(250, 700)">
+    <rect x="-170" y="-30" width="340" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">fhir-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">FHIR R4 API gateway &amp; resource serving</text>
+  </g>
+
+  <!-- smart-auth-service -->
+  <g transform="translate(600, 700)">
+    <rect x="-130" y="-30" width="260" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">smart-auth-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">SMART on FHIR authorization</text>
+  </g>
+
+  <!-- encounter-service -->
+  <g transform="translate(890, 700)">
+    <rect x="-130" y="-30" width="260" height="60" rx="7" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">encounter-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0"
+          text-anchor="middle">Encounter data submission &amp; reporting</text>
+  </g>
+
+  <!-- Connectors Row 5 -->
+  <line x1="422" y1="700" x2="468" y2="700" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+  <line x1="732" y1="700" x2="758" y2="700" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Row 6: Operations & Finance -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="80" y1="752" x2="1120" y2="752" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="780" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">OPERATIONS &amp; FINANCE</text>
+
+  <!-- appeals-service -->
+  <g transform="translate(170, 830)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">appeals-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Appeal submission &amp; tracking</text>
+  </g>
+
+  <!-- rfai-service -->
+  <g transform="translate(420, 830)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">rfai-service</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Request for additional info workflows</text>
+  </g>
+
+  <!-- premium-billing-service -->
+  <g transform="translate(670, 830)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">premium-billing</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Premium billing &amp; invoicing</text>
+  </g>
+
+  <!-- risk-adjustment-service -->
+  <g transform="translate(920, 830)">
+    <rect x="-105" y="-30" width="210" height="60" rx="7" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">risk-adjustment</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">HCC risk score &amp; submission</text>
+  </g>
+
+  <!-- Connectors Row 6 -->
+  <line x1="277" y1="830" x2="313" y2="830" stroke="#00ff88" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="527" y1="830" x2="563" y2="830" stroke="#00ff88" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="777" y1="830" x2="813" y2="830" stroke="#00ff88" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+
+  <!-- ════════════════════════════════════════ -->
+  <!-- Bottom: Tech bar -->
+  <!-- ════════════════════════════════════════ -->
+  <g transform="translate(600, 940)">
+    <rect x="-480" y="-16" width="960" height="32" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#606060"
+          text-anchor="middle">C# / .NET 8 &#x2022; Cosmos DB + MongoDB &#x2022; YARP Gateway &#x2022; Kubernetes &#x2022; Multi-Tenant &#x2022; HIPAA Compliant</text>
+  </g>
+</svg>

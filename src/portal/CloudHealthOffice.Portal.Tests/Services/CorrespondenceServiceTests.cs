@@ -27,130 +27,62 @@ public class CorrespondenceServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_WhenApiFails_ReturnsMockSummary()
+    public async Task GetSummaryAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetSummaryAsync();
-
-        result.Should().NotBeNull();
-        result.PendingGeneration.Should().BeGreaterThan(0);
-        result.GeneratedToday.Should().BeGreaterThan(0);
-        result.SentThisWeek.Should().BeGreaterThan(0);
-        result.FailedReturned.Should().BeGreaterThan(0);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetQueueAsync_NoFilters_ReturnsAllMockItems()
+    public async Task GetQueueAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetQueueAsync();
-
-        result.Should().NotBeEmpty();
-        result.Count.Should().BeGreaterOrEqualTo(25);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetQueueAsync());
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetQueueAsync_MockItems_HaveRequiredFields()
+    public async Task GetQueueAsync_WithTypeFilter_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var items = await sut.GetQueueAsync();
-
-        foreach (var item in items)
-        {
-            item.LetterId.Should().StartWith("LTR-");
-            item.LetterType.Should().BeOneOf(
-                "Adverse Determination", "EOB", "RFAI", "Welcome Letter", "Payment Notice");
-            item.RecipientName.Should().NotBeNullOrEmpty();
-            item.RecipientType.Should().BeOneOf("Member", "Provider");
-            item.RelatedId.Should().NotBeNullOrEmpty();
-            item.Status.Should().BeOneOf(
-                "Queued", "Generated", "Sent", "Delivered", "Failed", "Returned");
-            item.DeliveryMethod.Should().BeOneOf("Mail", "Fax", "Portal", "Email");
-        }
-    }
-
-    [Theory]
-    [InlineData("Adverse Determination")]
-    [InlineData("EOB")]
-    [InlineData("RFAI")]
-    [InlineData("Welcome Letter")]
-    [InlineData("Payment Notice")]
-    public async Task GetQueueAsync_FilterByType_ReturnsOnlyMatchingItems(string type)
-    {
-        var sut = CreateService();
-        var items = await sut.GetQueueAsync(type: type);
-
-        items.Should().NotBeEmpty();
-        items.Should().OnlyContain(i => i.LetterType == type);
-    }
-
-    [Theory]
-    [InlineData("Queued")]
-    [InlineData("Sent")]
-    public async Task GetQueueAsync_FilterByStatus_ReturnsOnlyMatchingItems(string status)
-    {
-        var sut = CreateService();
-        var items = await sut.GetQueueAsync(status: status);
-
-        items.Should().NotBeEmpty();
-        items.Should().OnlyContain(i => i.Status == status);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetQueueAsync(type: "EOB"));
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetQueueAsync_QueuedItems_HaveNoGeneratedDate()
+    public async Task GetQueueAsync_WithStatusFilter_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var items = await sut.GetQueueAsync(status: "Queued");
-
-        items.Where(i => i.GeneratedDate == null).Should().NotBeEmpty();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetQueueAsync(status: "Queued"));
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetOutstandingRfaisAsync_WhenApiFails_ReturnsMockRfais()
+    public async Task GetOutstandingRfaisAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetOutstandingRfaisAsync();
-
-        result.Should().NotBeEmpty();
-        result.Count.Should().Be(5);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetOutstandingRfaisAsync());
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetOutstandingRfaisAsync_MockRfais_HaveRequiredFields()
+    public async Task GetSummaryAsync_ExceptionContainsServiceNameInMessage()
     {
         var sut = CreateService();
-        var rfais = await sut.GetOutstandingRfaisAsync();
-
-        foreach (var rfai in rfais)
-        {
-            rfai.RfaiId.Should().StartWith("RFAI-");
-            rfai.RecipientName.Should().NotBeNullOrEmpty();
-            rfai.RecipientType.Should().Be("Provider");
-            rfai.RelatedClaimId.Should().StartWith("CLM-");
-            rfai.DocumentsRequested.Should().NotBeNullOrEmpty();
-            rfai.DaysSinceSent.Should().BeGreaterThan(0);
-            rfai.DaysUntilDeadline.Should().BeGreaterThan(0);
-        }
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
+        ex.Message.Should().Contain("Claims Service");
     }
 
     [Fact]
-    public async Task GetOutstandingRfaisAsync_MockRfais_HaveVaryingAges()
+    public async Task GetOutstandingRfaisAsync_ExceptionWrapsInnerException()
     {
         var sut = CreateService();
-        var rfais = await sut.GetOutstandingRfaisAsync();
-        var ages = rfais.Select(r => r.DaysSinceSent).ToList();
-
-        // Should have a spread of ages (3, 12, 28, 35, 41 days per spec)
-        ages.Min().Should().BeLessThan(10);
-        ages.Max().Should().BeGreaterThan(30);
-    }
-
-    [Fact]
-    public async Task GetOutstandingRfaisAsync_IncludesApproachingDeadline()
-    {
-        var sut = CreateService();
-        var rfais = await sut.GetOutstandingRfaisAsync();
-
-        rfais.Should().Contain(r => r.Status == "Approaching Deadline");
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetOutstandingRfaisAsync());
+        ex.InnerException.Should().BeOfType<HttpRequestException>();
     }
 }
