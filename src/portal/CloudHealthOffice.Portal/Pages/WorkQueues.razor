@@ -8,6 +8,7 @@
 
 <PageTitle>Work Queues - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="claims:read,claims:work" RoleName="ClaimsExaminer">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Queue" Class="mr-2" />
@@ -214,6 +215,7 @@
         </PagerContent>
     </MudTable>
 </MudContainer>
+</PermissionGate>
 
 @code {
     private bool _loading = true;

@@ -8,6 +8,7 @@
 
 <PageTitle>Members - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="members:read" RoleName="MemberServices">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" />
@@ -143,6 +144,7 @@
         </MudPaper>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private string _memberIdSearch = string.Empty;

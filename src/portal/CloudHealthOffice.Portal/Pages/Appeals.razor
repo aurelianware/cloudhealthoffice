@@ -8,6 +8,7 @@
 
 <PageTitle>Appeals - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="appeals:read" RoleName="UMCoordinator">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Balance" Class="mr-2" />
@@ -274,6 +275,7 @@
         </MudAlert>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private bool _loadingSummary = true;
