@@ -29,7 +29,10 @@ builder.Services.AddSingleton<CosmosClient>(sp =>
 
 // Repositories and services
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
+builder.Services.AddScoped<ITenantUserRepository, TenantUserRepository>();
+builder.Services.AddScoped<ITenantRoleRepository, TenantRoleRepository>();
 builder.Services.AddScoped<ITenantService, TenantManagementService>();
+builder.Services.AddScoped<ITenantUserService, TenantUserManagementService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 
@@ -70,5 +73,20 @@ app.MapControllers();
 
 // Health check endpoints
 app.MapChoHealthChecks();
+
+// Seed standard RBAC roles on startup
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var roleRepository = scope.ServiceProvider.GetRequiredService<ITenantRoleRepository>();
+        await roleRepository.SeedStandardRolesAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Failed to seed standard roles on startup. Roles will be seeded on first API call to POST /api/v1/roles/seed");
+    }
+}
 
 app.Run();
