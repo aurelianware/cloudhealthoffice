@@ -21,7 +21,7 @@ spec:
         image: ghcr.io/aurelianware/cloudhealthoffice-trading-partner-service:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 80
+        - containerPort: 8080
           name: http
         env:
         - name: ASPNETCORE_ENVIRONMENT
