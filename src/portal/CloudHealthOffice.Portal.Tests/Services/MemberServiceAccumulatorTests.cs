@@ -27,93 +27,38 @@ public class MemberServiceAccumulatorTests
     }
 
     [Fact]
-    public async Task GetAccumulatorsAsync_WhenApiFails_ReturnsMockData()
+    public async Task GetAccumulatorsAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        result.Should().NotBeNull();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetAccumulatorsAsync("MBR-8201"));
+        ex.ServiceName.Should().Be("Member Service");
     }
 
     [Fact]
-    public async Task GetAccumulatorsAsync_MockData_HasGoldPpoLimits()
+    public async Task GetAccumulatorsAsync_ExceptionContainsServiceNameInMessage()
     {
         var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        // Gold PPO: $1,500 individual / $3,000 family deductible
-        result.IndividualDeductibleLimit.Should().Be(1500m);
-        result.FamilyDeductibleLimit.Should().Be(3000m);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetAccumulatorsAsync("MBR-8201"));
+        ex.Message.Should().Contain("Member Service");
     }
 
     [Fact]
-    public async Task GetAccumulatorsAsync_MockData_UsedDoesNotExceedLimit()
+    public async Task GetAccumulatorsAsync_ExceptionWrapsInnerException()
     {
         var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        result.IndividualDeductibleUsed.Should().BeLessOrEqualTo(result.IndividualDeductibleLimit);
-        result.FamilyDeductibleUsed.Should().BeLessOrEqualTo(result.FamilyDeductibleLimit);
-        result.IndividualOopUsed.Should().BeLessOrEqualTo(result.IndividualOopLimit);
-        result.FamilyOopUsed.Should().BeLessOrEqualTo(result.FamilyOopLimit);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetAccumulatorsAsync("MBR-8201"));
+        ex.InnerException.Should().BeOfType<HttpRequestException>();
     }
 
     [Fact]
-    public async Task GetAccumulatorsAsync_MockData_IndividualDeductible60To80Percent()
+    public async Task GetAccumulatorsAsync_DifferentMemberId_StillThrows()
     {
         var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        var pct = (double)(result.IndividualDeductibleUsed / result.IndividualDeductibleLimit);
-        pct.Should().BeInRange(0.60, 0.90,
-            "Mock data should show member ~60-80% through individual deductible");
-    }
-
-    [Fact]
-    public async Task GetAccumulatorsAsync_MockData_HasServiceAccumulators()
-    {
-        var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        result.ServiceAccumulators.Should().NotBeEmpty();
-        result.ServiceAccumulators.Should().Contain(s => s.ServiceType == "Physical Therapy");
-        result.ServiceAccumulators.Should().Contain(s => s.ServiceType == "Mental Health Outpatient");
-
-        foreach (var svc in result.ServiceAccumulators)
-        {
-            svc.Used.Should().BeLessOrEqualTo(svc.Limit);
-            svc.UnitType.Should().BeOneOf("visits", "days", "dollars");
-        }
-    }
-
-    [Fact]
-    public async Task GetAccumulatorsAsync_MockData_HasRecentActivity()
-    {
-        var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        result.RecentActivity.Should().HaveCount(5);
-        foreach (var act in result.RecentActivity)
-        {
-            act.ClaimId.Should().StartWith("CLM-");
-            act.ServiceDate.Should().BeBefore(DateTime.Today.AddDays(1));
-            // At least one cost-sharing field should be > 0
-            (act.DeductibleApplied + act.CopayApplied + act.CoinsuranceApplied + act.PlanPaid)
-                .Should().BeGreaterThan(0);
-        }
-    }
-
-    [Fact]
-    public async Task GetAccumulatorsAsync_MockData_RecentActivityIsSortedByDate()
-    {
-        var sut = CreateService();
-        var result = await sut.GetAccumulatorsAsync("MBR-8201");
-
-        // Activity should be in reverse chronological order (most recent first)
-        for (int i = 1; i < result.RecentActivity.Count; i++)
-        {
-            result.RecentActivity[i - 1].ServiceDate
-                .Should().BeOnOrAfter(result.RecentActivity[i].ServiceDate);
-        }
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetAccumulatorsAsync("MBR-9999"));
+        ex.ServiceName.Should().Be("Member Service");
     }
 }

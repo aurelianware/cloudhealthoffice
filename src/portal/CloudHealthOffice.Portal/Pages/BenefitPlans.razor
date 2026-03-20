@@ -18,6 +18,11 @@
         Design and manage benefit plan offerings for sponsors
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Filters & Actions Bar -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
@@ -179,6 +184,7 @@
     private List<BenefitPlanListItem> _allPlans = new();
     private List<BenefitPlanListItem> _filteredPlans = new();
     private bool _isLoading = true;
+    private string? _serviceError;
 
     private string _searchTerm = string.Empty;
     private string _sponsorFilter = string.Empty;
@@ -192,8 +198,23 @@
     private async Task LoadPlans()
     {
         _isLoading = true;
-        _allPlans = await BenefitPlanService.SearchBenefitPlansAsync();
-        ApplyFilters();
+        _serviceError = null;
+        try
+        {
+            _allPlans = await BenefitPlanService.SearchBenefitPlansAsync();
+            ApplyFilters();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _allPlans = new();
+            _filteredPlans = new();
+        }
+        catch
+        {
+            _allPlans = new();
+            _filteredPlans = new();
+        }
         _isLoading = false;
     }
 

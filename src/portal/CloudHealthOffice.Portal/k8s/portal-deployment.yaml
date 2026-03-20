@@ -12,6 +12,10 @@ data:
   Services__AuthorizationService: "http://authorization-service.cloudhealthoffice/api"
   Services__ProviderService: "http://provider-service.cloudhealthoffice/api"
   Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api"
+  Services__PaymentService: "http://payment-service.cloudhealthoffice/api"
+  Services__TenantService: "http://tenant-service.cloudhealthoffice/api"
+  Services__BillingService: "http://billing-service.cloudhealthoffice/api"
+  Services__RfaiService: "http://claims-service.cloudhealthoffice/api"
   Services__ArgoWorkflows: "http://argo-workflows-server.cloudhealthoffice:2746"
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
@@ -88,6 +92,26 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__BenefitPlanService
+        - name: Services__PaymentService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__PaymentService
+        - name: Services__TenantService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__TenantService
+        - name: Services__BillingService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__BillingService
+        - name: Services__RfaiService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__RfaiService
         - name: Services__ArgoWorkflows
           valueFrom:
             configMapKeyRef:
