@@ -1,22 +1,11 @@
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: enrollment-import-service
+  name: enrollment-import-service-config
   namespace: cloudhealthoffice
-  labels:
-    app: enrollment-import-service
-    tier: backend
-    component: enrollment
-spec:
-  type: ClusterIP
-  ports:
-    - port: 80
-      targetPort: 8080
-      protocol: TCP
-      name: http
-  selector:
-    app: enrollment-import-service
-
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -26,14 +15,8 @@ metadata:
   labels:
     app: enrollment-import-service
     tier: backend
-    component: enrollment
 spec:
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+  replicas: 1
   selector:
     matchLabels:
       app: enrollment-import-service
@@ -42,122 +25,66 @@ spec:
       labels:
         app: enrollment-import-service
         tier: backend
-        component: enrollment
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: enrollment-import-service
-          image: ghcr.io/aurelianware/cloudhealthoffice-enrollment-import-service:latest
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8080
-              name: http
-              protocol: TCP
-          env:
-            - name: ASPNETCORE_ENVIRONMENT
-              value: "Production"
-            - name: ASPNETCORE_URLS
-              value: "http://+:8080"
-            - name: CosmosDb__Endpoint
-              valueFrom:
-                secretKeyRef:
-                  name: cosmos-db-secret
-                  key: endpoint
-            - name: CosmosDb__Key
-              valueFrom:
-                secretKeyRef:
-                  name: cosmos-db-secret
-                  key: key
-            - name: CosmosDb__DatabaseName
-              value: "CloudHealthOffice"
-            - name: CosmosDb__MembersContainer
-              value: "Members"
-            - name: CosmosDb__CoverageContainer
-              value: "Coverage"
-            - name: CosmosDb__SponsorsContainer
-              value: "Sponsors"
-            - name: Kafka__BootstrapServers
-              valueFrom:
-                configMapKeyRef:
-                  name: kafka-config
-                  key: bootstrap-servers
-            - name: Kafka__Topic
-              value: "enrollment-import"
-          resources:
-            requests:
-              cpu: 250m
-              memory: 384Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 2
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 0
-            periodSeconds: 2
-            timeoutSeconds: 3
-            failureThreshold: 30
-      # imagePullSecrets:
-      #   - name: ghcr-secret
-      restartPolicy: Always
-      terminationGracePeriodSeconds: 30
-
+      - name: enrollment-import-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-enrollment-import-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: enrollment-import-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: enrollment-import-service-config
+              key: MongoDb__DatabaseName
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
 ---
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
+apiVersion: v1
+kind: Service
 metadata:
-  name: enrollment-import-service-hpa
+  name: enrollment-import-service
   namespace: cloudhealthoffice
+  labels:
+    app: enrollment-import-service
 spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: enrollment-import-service
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 15
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-        - type: Percent
-          value: 10
-          periodSeconds: 60
+  type: ClusterIP
+  selector:
+    app: enrollment-import-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

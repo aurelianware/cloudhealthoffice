@@ -5,18 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "ProviderDB"
-  CosmosDb__ContainerName: "Providers"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: provider-service-secrets
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  CosmosDb__Endpoint: "https://your-cosmos-account.documents.azure.com:443/"
-  CosmosDb__Key: "your-cosmos-key-here"
+  MongoDb__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -26,9 +15,8 @@ metadata:
   labels:
     app: provider-service
     tier: backend
-    component: provider-directory
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: provider-service
@@ -37,62 +25,52 @@ spec:
       labels:
         app: provider-service
         tier: backend
-        component: provider-directory
     spec:
       containers:
       - name: provider-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-provider-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-provider-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
+          protocol: TCP
         env:
-        - name: MongoDb__ConnectionString
-          value: "mongodb://admin:securepassword123@mongodb:27017"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
               name: provider-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
           valueFrom:
             configMapKeyRef:
               name: provider-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: provider-service-config
-              key: CosmosDb__ContainerName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: provider-service-secrets
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: provider-service-secrets
-              key: CosmosDb__Key
+              key: MongoDb__DatabaseName
         resources:
           requests:
             cpu: 100m
-            memory: 256Mi
+            memory: 128Mi
           limits:
             cpu: 500m
             memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -110,29 +88,3 @@ spec:
     port: 80
     targetPort: 8080
     protocol: TCP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: provider-service-hpa
-  namespace: cloudhealthoffice
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: provider-service
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80

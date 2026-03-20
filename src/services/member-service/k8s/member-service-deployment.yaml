@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: authorization-service-config
+  name: member-service-config
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
@@ -10,25 +10,25 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: authorization-service
+  name: member-service
   namespace: cloudhealthoffice
   labels:
-    app: authorization-service
+    app: member-service
     tier: backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: authorization-service
+      app: member-service
   template:
     metadata:
       labels:
-        app: authorization-service
+        app: member-service
         tier: backend
     spec:
       containers:
-      - name: authorization-service
-        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-authorization-service:latest
+      - name: member-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-member-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -38,7 +38,7 @@ spec:
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
-              name: authorization-service-config
+              name: member-service-config
               key: ASPNETCORE_ENVIRONMENT
         - name: MongoDb__ConnectionString
           valueFrom:
@@ -48,7 +48,7 @@ spec:
         - name: MongoDb__DatabaseName
           valueFrom:
             configMapKeyRef:
-              name: authorization-service-config
+              name: member-service-config
               key: MongoDb__DatabaseName
         resources:
           requests:
@@ -75,14 +75,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: authorization-service
+  name: member-service
   namespace: cloudhealthoffice
   labels:
-    app: authorization-service
+    app: member-service
 spec:
   type: ClusterIP
   selector:
-    app: authorization-service
+    app: member-service
   ports:
   - name: http
     port: 80
