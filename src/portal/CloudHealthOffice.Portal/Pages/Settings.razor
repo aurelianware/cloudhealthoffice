@@ -7,6 +7,7 @@
 
 <PageTitle>Settings - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="settings:manage" RoleName="TenantAdmin">
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
@@ -233,6 +234,7 @@
         </MudTabPanel>
     </MudTabs>
 </MudContainer>
+</PermissionGate>
 
 @code {
     private SubscriptionInfo? subscription;

@@ -11,6 +11,7 @@
 
 <PageTitle>Payment Runs — Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="payments:read" RoleName="Finance">
 <MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Payments" Class="mr-2" Style="vertical-align: middle;" />
     Payment Runs
@@ -206,6 +207,7 @@
         50% { opacity: 0.5; }
     }
 </style>
+</PermissionGate>
 
 @code {
     private List<PaymentRunSummary> _runs = new();

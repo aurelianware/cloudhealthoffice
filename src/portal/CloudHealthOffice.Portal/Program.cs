@@ -202,6 +202,9 @@ builder.Services.AddOptions<KeyManagementOptions>()
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
 
+// Register user context service for RBAC
+builder.Services.AddScoped<IUserContextService, UserContextService>();
+
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();
 builder.Services.AddScoped<ICoverageService, CoverageService>();
