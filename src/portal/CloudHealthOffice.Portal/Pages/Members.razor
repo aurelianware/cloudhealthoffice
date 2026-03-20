@@ -18,6 +18,11 @@
         Search and manage member information
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
@@ -154,6 +159,7 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private string? _serviceError;
 
     private bool HasCriteria =>
         !string.IsNullOrWhiteSpace(_memberIdSearch) ||
@@ -180,6 +186,12 @@
                      : _dobSearch;
 
             _members = await MemberService.SearchMembersAsync(term);
+            _hasSearched = true;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _members = new();
             _hasSearched = true;
         }
         catch
