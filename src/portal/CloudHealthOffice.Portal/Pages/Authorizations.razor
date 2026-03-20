@@ -6,6 +6,7 @@
 
 <PageTitle>Authorizations - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.FactCheck" Class="mr-2" />
@@ -214,6 +215,7 @@
         </MudPaper>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private List<AuthorizationSummary> _allAuthorizations = new();

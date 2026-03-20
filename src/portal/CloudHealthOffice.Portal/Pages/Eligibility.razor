@@ -7,6 +7,7 @@
 
 <PageTitle>Eligibility Verification - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="eligibility:check" RoleName="MemberServices">
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
@@ -216,6 +217,7 @@
         </MudItem>
     </MudGrid>
 </MudContainer>
+</PermissionGate>
 
 @code {
     private MudForm? _form;

@@ -8,6 +8,7 @@
 
 <PageTitle>Benefit Plans - Cloud Health Office</PageTitle>
 
+<PermissionGate>
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
@@ -172,6 +173,7 @@
         </LoadingContent>
     </MudTable>
 </MudContainer>
+</PermissionGate>
 
 @code {
     private List<BenefitPlanListItem> _allPlans = new();
