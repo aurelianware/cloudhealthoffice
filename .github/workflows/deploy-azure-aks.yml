@@ -325,12 +325,58 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create MongoDB secret (Cosmos DB MongoDB API)
+        run: |
+          kubectl create secret generic mongodb-secret \
+            --from-literal=connectionString="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Cosmos DB endpoint/key secret
+        run: |
+          kubectl create secret generic cosmos-db-secret \
+            --from-literal=endpoint="${{ secrets.COSMOS_DB_ENDPOINT }}" \
+            --from-literal=key="${{ secrets.COSMOS_DB_KEY }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Cosmos config secret (trading-partner)
+        run: |
+          kubectl create secret generic cosmos-config \
+            --from-literal=endpoint="${{ secrets.COSMOS_DB_ENDPOINT }}" \
+            --from-literal=key="${{ secrets.COSMOS_DB_KEY }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Redis secret
+        run: |
+          kubectl create secret generic redis-secret \
+            --from-literal=connectionString="${{ secrets.REDIS_CONNECTION_STRING }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Kafka secret
+        run: |
+          kubectl create secret generic kafka-secret \
+            --from-literal=saslUsername="${{ secrets.KAFKA_SASL_USERNAME }}" \
+            --from-literal=saslPassword="${{ secrets.KAFKA_SASL_PASSWORD }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Azure Storage secret
+        run: |
+          kubectl create secret generic azure-storage-secret \
+            --from-literal=connectionString="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Create Azure AD secret
         run: |
           kubectl create secret generic azure-ad-config \
             --from-literal=TenantId="${{ secrets.AZURE_AD_TENANT_ID }}" \
             --from-literal=ClientId="${{ secrets.AZURE_AD_CLIENT_ID }}" \
             --from-literal=ClientSecret="${{ secrets.AZURE_AD_CLIENT_SECRET }}" \
+            --from-literal=Audience="${{ secrets.AZURE_AD_AUDIENCE }}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
@@ -380,6 +426,7 @@ jobs:
             echo "Applying ${manifest}..."
             sed \
               -e "s|choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
+              -e "s|ghcr.io/aurelianware/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
               -e "s|:latest|:${SHA}|g" \
               "$manifest" \
               | kubectl apply -f -
