@@ -7,20 +7,31 @@
 @inject IClaimsService ClaimsService
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject ITenantContextService TenantContextService
+@inject IUserContextService UserContextService
 
 <PageTitle>Dashboard - Cloud Health Office</PageTitle>
 
+<PermissionGate>
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
 
     @* ── Top Bar: Welcome + Tenant ── *@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudStack Spacing="0">
             <MudText Typo="Typo.h4">
-                Welcome back@(tenantContext != null ? $", {tenantContext.TenantName}" : "")
+                Welcome back@(_userContext != null ? $", {_userContext.DisplayName}" : tenantContext != null ? $", {tenantContext.TenantName}" : "")
             </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                @DateTime.Now.ToString("dddd, MMMM d, yyyy")
-            </MudText>
+            @if (_userContext != null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @_userContext.PrimaryRoleDisplayName — @DateTime.Now.ToString("dddd, MMMM d, yyyy")
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @DateTime.Now.ToString("dddd, MMMM d, yyyy")
+                </MudText>
+            }
         </MudStack>
         @if (tenantContext != null)
         {
@@ -367,12 +378,14 @@
     </MudCard>
 
 </MudContainer>
+</PermissionGate>
 
 @code {
     private DashboardMetrics? metrics;
     private List<ClaimSummary>? recentClaims;
     private List<AuthorizationSummary>? recentAuthorizations;
     private TenantContext? tenantContext;
+    private UserContext? _userContext;
     private OperationalAlerts? _alerts;
     private EdiVolumeSummary? _ediVolume;
     private bool _loading = true;
@@ -398,10 +411,11 @@
         try
         {
             tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            _userContext = await UserContextService.GetCurrentUserAsync();
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to load tenant context");
+            Logger.LogWarning(ex, "Failed to load tenant/user context");
         }
 
         try

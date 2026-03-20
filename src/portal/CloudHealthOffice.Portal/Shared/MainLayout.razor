@@ -4,6 +4,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextService TenantContextService
 @inject NavigationManager Navigation
+@inject IUserContextService UserContextService
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -173,10 +174,17 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Correspondence
                         </MudNavLink>
-                        <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Settings
-                        </MudNavLink>
+                        @if (_isTenantAdmin)
+                        {
+                            <MudNavLink Href="/settings/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                User Management
+                            </MudNavLink>
+                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Settings"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Settings
+                            </MudNavLink>
+                        }
                     </MudNavGroup>
                 </Authorized>
                 <NotAuthorized>
@@ -251,13 +259,24 @@
     private bool _drawerOpen = true;
     private string? _tenantName;
     private bool _isDemo;
+    private bool _isTenantAdmin;
 
     private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
 
     protected override async Task OnInitializedAsync()
     {
-        // Load tenant context
         await LoadTenantContextAsync();
+        await LoadUserContextAsync();
+    }
+
+    private async Task LoadUserContextAsync()
+    {
+        try
+        {
+            var userContext = await UserContextService.GetCurrentUserAsync();
+            _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
+        }
+        catch { }
     }
 
     private async Task LoadTenantContextAsync()

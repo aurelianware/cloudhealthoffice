@@ -5,6 +5,7 @@
 
 <PageTitle>Providers - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="providers:read" RoleName="ProviderRelations">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h4" GutterBottom="true">Provider Network</MudText>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
@@ -247,6 +248,7 @@
 
 <ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="SearchProviders" />
 <CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="SearchProviders" />
+</PermissionGate>
 
 @code {
     private bool _loading = false;
