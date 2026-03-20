@@ -33,10 +33,11 @@ public class TenantUserRepository : ITenantUserRepository
 
     public async Task<TenantUser?> GetByEmailAsync(string tenantId, string email)
     {
+        var normalizedEmail = email.ToLowerInvariant();
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.email = @email")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.emailNormalized = @email")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@email", email);
+            .WithParameter("@email", normalizedEmail);
 
         var iterator = _container.GetItemQueryIterator<TenantUser>(query);
         var response = await iterator.ReadNextAsync();
@@ -135,6 +136,7 @@ public class TenantUserRepository : ITenantUserRepository
     {
         user.CreatedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
+        user.EmailNormalized = user.Email.ToLowerInvariant();
 
         var response = await _container.CreateItemAsync(user, new PartitionKey(user.Id));
         _logger.LogInformation("Created tenant user {Email} for tenant {TenantId}",
@@ -146,6 +148,7 @@ public class TenantUserRepository : ITenantUserRepository
     public async Task<TenantUser> UpdateAsync(TenantUser user)
     {
         user.UpdatedAt = DateTime.UtcNow;
+        user.EmailNormalized = user.Email.ToLowerInvariant();
 
         var response = await _container.ReplaceItemAsync(user, user.Id, new PartitionKey(user.Id));
         _logger.LogInformation("Updated tenant user {UserId}", SanitizeForLog(user.Id));

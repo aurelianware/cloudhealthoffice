@@ -25,6 +25,30 @@ public class TenantRole
 }
 
 /// <summary>
+/// DTO for creating a custom role
+/// </summary>
+public class CreateRoleRequest
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    public string RoleName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(1)]
+    public List<string> Permissions { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for updating a custom role
+/// </summary>
+public class UpdateRoleRequest
+{
+    public string? Description { get; set; }
+    public List<string>? Permissions { get; set; }
+}
+
+/// <summary>
 /// Provides the default roles and permissions for the RBAC system.
 /// These roles reflect actual health plan operations department structure.
 /// </summary>
@@ -192,10 +216,10 @@ public static class StandardRoles
     /// </summary>
     private static bool PermissionMatches(string granted, string required)
     {
-        if (granted == "*:*")
+        if (string.Equals(granted, "*:*", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (granted == required)
+        if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var grantedParts = granted.Split(':');
@@ -204,8 +228,10 @@ public static class StandardRoles
         if (grantedParts.Length != 2 || requiredParts.Length != 2)
             return false;
 
-        var resourceMatch = grantedParts[0] == "*" || grantedParts[0] == requiredParts[0];
-        var actionMatch = grantedParts[1] == "*" || grantedParts[1] == requiredParts[1];
+        var resourceMatch = grantedParts[0] == "*" ||
+            string.Equals(grantedParts[0], requiredParts[0], StringComparison.OrdinalIgnoreCase);
+        var actionMatch = grantedParts[1] == "*" ||
+            string.Equals(grantedParts[1], requiredParts[1], StringComparison.OrdinalIgnoreCase);
 
         return resourceMatch && actionMatch;
     }

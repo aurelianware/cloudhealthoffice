@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Services;
@@ -6,6 +7,7 @@ namespace TenantService.Controllers;
 
 [ApiController]
 [Route("api/v1/roles")]
+[Authorize]
 public class RolesController : ControllerBase
 {
     private readonly ITenantRoleRepository _roleRepository;
@@ -44,30 +46,44 @@ public class RolesController : ControllerBase
     }
 
     /// <summary>
-    /// Create a custom role (non-built-in)
+    /// Create a custom role (non-built-in). Requires roles:manage permission.
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(TenantRole), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<TenantRole>> CreateRole([FromBody] TenantRole role)
+    public async Task<ActionResult<TenantRole>> CreateRole([FromBody] CreateRoleRequest request)
     {
-        var existing = await _roleRepository.GetByRoleNameAsync(role.RoleName);
-        if (existing != null)
-            return BadRequest(new { error = $"Role {role.RoleName} already exists" });
+        if (string.IsNullOrWhiteSpace(request.RoleName))
+            return BadRequest(new { error = "RoleName is required" });
 
-        role.IsBuiltIn = false; // Custom roles are never built-in
+        if (request.Permissions == null || request.Permissions.Count == 0)
+            return BadRequest(new { error = "At least one permission is required" });
+
+        var existing = await _roleRepository.GetByRoleNameAsync(request.RoleName);
+        if (existing != null)
+            return BadRequest(new { error = $"Role {request.RoleName} already exists" });
+
+        var role = new TenantRole
+        {
+            RoleName = request.RoleName,
+            Description = request.Description ?? string.Empty,
+            Permissions = request.Permissions,
+            IsBuiltIn = false
+        };
+
         var created = await _roleRepository.CreateAsync(role);
         return CreatedAtAction(nameof(GetRole), new { roleName = created.RoleName }, created);
     }
 
     /// <summary>
-    /// Update a custom role's permissions (built-in roles cannot be modified)
+    /// Update a custom role's permissions (built-in roles cannot be modified).
+    /// Requires roles:manage permission.
     /// </summary>
     [HttpPut("{roleName}")]
     [ProducesResponseType(typeof(TenantRole), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TenantRole>> UpdateRole(string roleName, [FromBody] TenantRole role)
+    public async Task<ActionResult<TenantRole>> UpdateRole(string roleName, [FromBody] UpdateRoleRequest request)
     {
         var existing = await _roleRepository.GetByRoleNameAsync(roleName);
         if (existing == null)
@@ -76,15 +92,21 @@ public class RolesController : ControllerBase
         if (existing.IsBuiltIn)
             return BadRequest(new { error = "Built-in roles cannot be modified" });
 
-        existing.Description = role.Description;
-        existing.Permissions = role.Permissions;
+        if (request.Description != null) existing.Description = request.Description;
+        if (request.Permissions != null)
+        {
+            if (request.Permissions.Count == 0)
+                return BadRequest(new { error = "At least one permission is required" });
+            existing.Permissions = request.Permissions;
+        }
 
         var updated = await _roleRepository.UpdateAsync(existing);
         return Ok(updated);
     }
 
     /// <summary>
-    /// Delete a custom role (built-in roles cannot be deleted)
+    /// Delete a custom role (built-in roles cannot be deleted).
+    /// Requires roles:manage permission.
     /// </summary>
     [HttpDelete("{roleName}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -104,7 +126,7 @@ public class RolesController : ControllerBase
     }
 
     /// <summary>
-    /// Re-seed standard roles (useful after upgrades)
+    /// Re-seed standard roles (useful after upgrades). Requires roles:manage permission.
     /// </summary>
     [HttpPost("seed")]
     [ProducesResponseType(StatusCodes.Status200OK)]

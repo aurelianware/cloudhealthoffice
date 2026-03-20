@@ -21,6 +21,9 @@ public class TenantUser
     [EmailAddress]
     public string Email { get; set; } = string.Empty; // Azure AD UPN
 
+    [JsonPropertyName("emailNormalized")]
+    public string EmailNormalized { get; set; } = string.Empty; // Lowercase for case-insensitive lookups
+
     [JsonPropertyName("azureAdObjectId")]
     public string AzureAdObjectId { get; set; } = string.Empty; // Azure AD OID from JWT
 
