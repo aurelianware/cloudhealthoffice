@@ -95,6 +95,9 @@ jobs:
           - tenant-service
           - enrollment-import-service
           - trading-partner-service
+          - premium-billing-service
+          - appeals-service
+          - rfai-service
         include:
           # Most .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
@@ -124,6 +127,12 @@ jobs:
           - service: trading-partner-service
             build_context: '.'
           - service: reference-data-service
+            build_context: '.'
+          - service: premium-billing-service
+            build_context: '.'
+          - service: appeals-service
+            build_context: '.'
+          - service: rfai-service
             build_context: '.'
 
     steps:
@@ -362,6 +371,19 @@ jobs:
             -e "s|ghcr.io/aurelianware/cloudhealthoffice-portal:latest|${ACR}/cloudhealthoffice-portal:${SHA}|g" \
             src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml \
             | kubectl apply -f -
+
+      - name: Apply backend service manifests
+        run: |
+          ACR="${{ env.REGISTRY }}"
+          SHA="sha-${{ github.sha }}"
+          for manifest in src/services/*/k8s/*.yaml; do
+            echo "Applying ${manifest}..."
+            sed \
+              -e "s|choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-|${ACR}/cloudhealthoffice-|g" \
+              -e "s|:latest|:${SHA}|g" \
+              "$manifest" \
+              | kubectl apply -f -
+          done
 
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
         run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
