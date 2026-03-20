@@ -143,19 +143,16 @@ spec:
               name: portal-config
               key: Redis__ConnectionString
         - name: AzureAd__TenantId
-          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
               key: TenantId
         - name: AzureAd__ClientId
-          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
               key: ClientId
         - name: AzureAd__ClientSecret
-          value: ""
           valueFrom:
             secretKeyRef:
               name: azure-ad-config
@@ -192,10 +189,10 @@ spec:
               key: professional-price-id
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
             memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
             cpu: "1000m"
         startupProbe:
           httpGet:
