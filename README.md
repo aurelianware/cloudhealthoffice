@@ -174,6 +174,24 @@ docker-compose up -d
 curl http://localhost:5000/health
 ```
 
+### Full Development Stack
+
+To bring up the complete backend (all 11 services + MongoDB + Redis + seed data):
+
+```bash
+# Start everything
+docker compose -f docker-compose.development.yml up -d
+
+# Wait for health checks to pass
+docker compose -f docker-compose.development.yml ps
+
+# Verify seed data loaded
+docker compose -f docker-compose.development.yml exec mongodb \
+  mongosh cloudhealthoffice --eval 'db.Claims.countDocuments()'
+```
+
+Services are available at `http://localhost:5001` through `5011` (Swagger UI at `/swagger` on each). See [docker-compose.development.yml](docker-compose.development.yml) for the full port map and configuration. Copy `.env.example` to `.env` to customise credentials.
+
 Or deploy to Azure:
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json)
