@@ -36,6 +36,11 @@ spec:
   selector:
     matchLabels:
       app: portal
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
     metadata:
       labels:
@@ -192,18 +197,22 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "1000m"
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 5
 ---
