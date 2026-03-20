@@ -27,135 +27,61 @@ public class AppealsServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_WhenApiFails_ReturnsMockSummary()
+    public async Task GetSummaryAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetSummaryAsync();
-
-        result.Should().NotBeNull();
-        result.OpenAppeals.Should().BeGreaterThan(0);
-        result.UrgentExpedited.Should().BeGreaterThan(0);
-        result.DueThisWeek.Should().BeGreaterThan(0);
-        result.OverturnedRate.Should().BeInRange(0, 100);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_NoFilters_ReturnsAllMockAppeals()
+    public async Task SearchAppealsAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.SearchAppealsAsync();
-
-        result.Should().NotBeEmpty();
-        result.Count.Should().BeGreaterOrEqualTo(15);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.SearchAppealsAsync());
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_MockAppeals_HaveRequiredFields()
+    public async Task SearchAppealsAsync_WithFilters_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var appeals = await sut.SearchAppealsAsync();
-
-        foreach (var a in appeals)
-        {
-            a.AppealId.Should().StartWith("APL-");
-            a.MemberName.Should().NotBeNullOrEmpty();
-            a.MemberId.Should().StartWith("MBR-");
-            a.AppealType.Should().BeOneOf("Claim", "Authorization", "Coverage");
-            a.OriginalDecisionId.Should().NotBeNullOrEmpty();
-            a.Status.Should().BeOneOf("Received", "Under Review", "Decision Made", "Escalated", "Withdrawn");
-            a.ComplianceStatus.Should().BeOneOf("On Track", "At Risk", "Overdue", "N/A");
-            a.OriginalDenialReason.Should().NotBeNullOrEmpty();
-        }
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.SearchAppealsAsync(appealId: "APL-2026-0001"));
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_FilterByAppealId_ReturnsMatching()
+    public async Task SearchAppealsAsync_FilterByMemberId_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.SearchAppealsAsync(appealId: "APL-2026-0001");
-
-        result.Should().ContainSingle();
-        result[0].AppealId.Should().Be("APL-2026-0001");
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.SearchAppealsAsync(memberId: "MBR-8201"));
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_FilterByMemberId_ReturnsMatching()
+    public async Task GetAppealByIdAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.SearchAppealsAsync(memberId: "MBR-8201");
-
-        result.Should().NotBeEmpty();
-        result.Should().OnlyContain(a => a.MemberId == "MBR-8201");
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetAppealByIdAsync("APL-2026-0001"));
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_IncludesExpeditedAppeals()
+    public async Task GetSummaryAsync_ExceptionContainsServiceNameInMessage()
     {
         var sut = CreateService();
-        var appeals = await sut.SearchAppealsAsync();
-        var expedited = appeals.Where(a => a.IsExpedited).ToList();
-
-        expedited.Should().HaveCountGreaterOrEqualTo(2);
-        // Expedited appeals should have short deadlines (72 hours = ~3 days max)
-        expedited.Should().OnlyContain(a => a.DueDate <= a.FiledDate.AddDays(4));
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
+        ex.Message.Should().Contain("Claims Service");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_IncludesOverdueAppeals()
+    public async Task GetSummaryAsync_ExceptionWrapsInnerException()
     {
         var sut = CreateService();
-        var appeals = await sut.SearchAppealsAsync();
-        var overdue = appeals.Where(a => a.ComplianceStatus == "Overdue").ToList();
-
-        overdue.Should().NotBeEmpty();
-        overdue.Should().OnlyContain(a => a.DaysRemaining < 0);
-    }
-
-    [Fact]
-    public async Task GetAppealByIdAsync_WhenApiFails_ReturnsMockDetail()
-    {
-        var sut = CreateService();
-        var detail = await sut.GetAppealByIdAsync("APL-2026-0001");
-
-        detail.Should().NotBeNull();
-        detail!.AppealId.Should().Be("APL-2026-0001");
-        detail.AppealReason.Should().NotBeNullOrEmpty();
-        detail.Documents.Should().NotBeEmpty();
-        detail.Timeline.Should().NotBeEmpty();
-    }
-
-    [Fact]
-    public async Task GetAppealByIdAsync_DecidedAppeal_HasFinalDecision()
-    {
-        var sut = CreateService();
-        var detail = await sut.GetAppealByIdAsync("APL-2026-0013");
-
-        detail.Should().NotBeNull();
-        detail!.Status.Should().Be("Decision Made");
-        detail.FinalDecision.Should().Be("Overturned");
-        detail.DecisionDate.Should().NotBeNull();
-        detail.FinalDecisionNotes.Should().NotBeNullOrEmpty();
-        detail.Timeline.Should().Contain(e => e.EventType == "Decision");
-        detail.Timeline.Should().Contain(e => e.EventType == "Notified");
-    }
-
-    [Fact]
-    public async Task GetAppealByIdAsync_WithdrawnAppeal_HasWithdrawnDecision()
-    {
-        var sut = CreateService();
-        var detail = await sut.GetAppealByIdAsync("APL-2026-0015");
-
-        detail.Should().NotBeNull();
-        detail!.FinalDecision.Should().Be("Withdrawn");
-        detail.Timeline.Should().Contain(e => e.EventType == "Withdrawn");
-    }
-
-    [Fact]
-    public async Task GetAppealByIdAsync_NonexistentId_ReturnsNull()
-    {
-        var sut = CreateService();
-        var detail = await sut.GetAppealByIdAsync("APL-DOES-NOT-EXIST");
-
-        detail.Should().BeNull();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
+        ex.InnerException.Should().BeOfType<HttpRequestException>();
     }
 }
