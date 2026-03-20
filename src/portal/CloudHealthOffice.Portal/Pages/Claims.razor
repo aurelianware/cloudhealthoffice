@@ -20,6 +20,11 @@
         Search and manage professional and institutional healthcare claims
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Advanced Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudText Typo="Typo.h6" GutterBottom="true">Search Criteria</MudText>
@@ -377,6 +382,7 @@
     private bool _showValidationMessage = false;
     private bool _showAdvancedOptions = false;
     private int _currentPage = 1;
+    private string? _serviceError;
 
     protected override void OnInitialized()
     {
@@ -425,6 +431,11 @@
 
             _searchRequest.PageNumber = _currentPage;
             _searchResult = await ClaimsService.SearchClaimsAsync(_searchRequest);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _searchResult = null;
         }
         catch (Exception ex)
         {

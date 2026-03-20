@@ -47,6 +47,11 @@
         }
     </MudStack>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -390,6 +395,7 @@
     private EdiVolumeSummary? _ediVolume;
     private bool _loading = true;
     private bool _metricsError;
+    private string? _serviceError;
 
     private readonly Dictionary<string, bool> _systemHealth = new()
     {
@@ -423,6 +429,11 @@
             metrics = await MetricsService.GetDashboardMetricsAsync();
             _chartData = new double[] { metrics.ApprovedClaims, metrics.DeniedClaims, metrics.PendingClaims };
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _metricsError = true;
+        }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to load dashboard metrics");
@@ -432,6 +443,11 @@
         try
         {
             recentClaims = await ClaimsService.GetRecentClaimsAsync(10);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            recentClaims = new();
         }
         catch (Exception ex)
         {
@@ -445,6 +461,11 @@
             // to avoid fetching the full list just for the dashboard's 5 most recent.
             var allAuths = await AuthorizationService.GetAuthorizationsAsync();
             recentAuthorizations = allAuths.OrderByDescending(a => a.RequestDate).Take(5).ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            recentAuthorizations = new();
         }
         catch (Exception ex)
         {
