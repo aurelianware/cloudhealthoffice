@@ -74,37 +74,71 @@ public class UserContextService : IUserContextService
     public async Task<UserContext?> GetCurrentUserAsync()
     {
         if (_loaded) return _cachedContext;
-        _loaded = true;
 
         var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
         var principal = authState.User;
 
         if (!(principal.Identity?.IsAuthenticated ?? false))
+        {
+            _loaded = true;
             return null;
+        }
 
         var tenantContext = await _tenantContextService.GetCurrentTenantContextAsync();
         if (tenantContext == null)
+        {
+            _loaded = true;
             return null;
+        }
 
         var email = principal.FindFirst(ClaimTypes.Email)?.Value
                     ?? principal.FindFirst("preferred_username")?.Value
                     ?? principal.FindFirst("upn")?.Value;
 
         if (string.IsNullOrEmpty(email))
+        {
+            _loaded = true;
             return null;
+        }
+
+        var objectId = principal.FindFirst("oid")?.Value
+                       ?? principal.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
 
         try
         {
-            var baseUrl = _configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
-            var encodedEmail = Uri.EscapeDataString(email);
-            var response = await _httpClient.GetAsync(
-                $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users?email={encodedEmail}");
+            var baseUrl = _configuration["Services:TenantService"];
+            if (string.IsNullOrEmpty(baseUrl))
+            {
+                _logger.LogWarning("Services:TenantService configuration is missing, using TenantAdmin fallback");
+                throw new InvalidOperationException("TenantService base URL is not configured.");
+            }
+
+            HttpResponseMessage response;
+            if (!string.IsNullOrEmpty(objectId))
+            {
+                response = await _httpClient.GetAsync(
+                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users/by-oid/{Uri.EscapeDataString(objectId)}");
+            }
+            else
+            {
+                // Fallback: fetch all users and filter client-side
+                response = await _httpClient.GetAsync(
+                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users");
+            }
 
             if (response.IsSuccessStatusCode)
             {
-                var users = await response.Content.ReadFromJsonAsync<List<TenantUserDto>>();
-                var user = users?.FirstOrDefault(u =>
-                    string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
+                TenantUserDto? user;
+                if (!string.IsNullOrEmpty(objectId))
+                {
+                    user = await response.Content.ReadFromJsonAsync<TenantUserDto>();
+                }
+                else
+                {
+                    var users = await response.Content.ReadFromJsonAsync<List<TenantUserDto>>();
+                    user = users?.FirstOrDefault(u =>
+                        string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
+                }
 
                 if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
                 {
@@ -121,15 +155,16 @@ public class UserContextService : IUserContextService
                         Permissions = ExpandPermissions(user.Roles ?? new())
                     };
 
-                    _logger.LogInformation("User context loaded for {Email} with roles: {Roles}",
-                        email, string.Join(", ", _cachedContext.Roles));
+                    _logger.LogInformation("User context loaded for {RedactedEmail} with roles: {Roles}",
+                        RedactEmail(email), string.Join(", ", _cachedContext.Roles));
 
+                    _loaded = true;
                     return _cachedContext;
                 }
             }
 
-            _logger.LogWarning("No active TenantUser found for {Email} in tenant {TenantId}, using fallback",
-                email, tenantContext.TenantId);
+            _logger.LogWarning("No active TenantUser found for {RedactedEmail} in tenant {TenantId}, using fallback",
+                RedactEmail(email), tenantContext.TenantId);
         }
         catch (Exception ex)
         {
@@ -154,7 +189,15 @@ public class UserContextService : IUserContextService
             Permissions = ExpandPermissions(new List<string> { "TenantAdmin" })
         };
 
+        _loaded = true;
         return _cachedContext;
+    }
+
+    private static string RedactEmail(string email)
+    {
+        var atIndex = email.IndexOf('@');
+        if (atIndex <= 1) return "***@" + (atIndex >= 0 ? email[(atIndex + 1)..] : "***");
+        return email[0] + "***" + email[(atIndex - 1)..];
     }
 
     public bool HasPermission(string permission)

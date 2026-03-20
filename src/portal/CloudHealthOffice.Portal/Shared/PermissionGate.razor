@@ -24,8 +24,15 @@ else
     <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
             <MudText Typo="Typo.body1">
-                You don't have access to this page. Contact your administrator
-                to request the <strong>@(RoleName ?? Permission)</strong> role.
+                @if (!string.IsNullOrEmpty(RoleName) || !string.IsNullOrEmpty(Permission))
+                {
+                    @:You don't have access to this page. Contact your administrator
+                    @:to request the <strong>@(RoleName ?? Permission)</strong> role.
+                }
+                else
+                {
+                    @:You don't have access to this page. Contact your administrator to request access.
+                }
             </MudText>
         </MudAlert>
         <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
