@@ -391,7 +391,7 @@ jobs:
       - name: Rollout restart portal
         run: |
           kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
-          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=180s
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=600s
 
       - name: Deployment summary
         run: |
