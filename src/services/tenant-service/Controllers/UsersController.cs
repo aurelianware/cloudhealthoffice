@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Services;
@@ -6,6 +7,7 @@ namespace TenantService.Controllers;
 
 [ApiController]
 [Route("api/v1/tenants/{tenantId}/users")]
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly ITenantUserService _userService;
@@ -18,7 +20,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new user within a tenant
+    /// Create a new user within a tenant. Requires users:manage permission.
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(TenantUser), StatusCodes.Status201Created)]
@@ -79,7 +81,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Update user details
+    /// Update user details. Requires users:manage permission.
     /// </summary>
     [HttpPut("{userId}")]
     [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
@@ -104,7 +106,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Delete a user from a tenant
+    /// Delete a user from a tenant. Requires users:manage permission.
     /// </summary>
     [HttpDelete("{userId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -173,16 +175,17 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Lookup user by Azure AD Object ID (for SSO authentication flow)
+    /// Lookup user by Azure AD Object ID (for SSO authentication flow).
+    /// Scoped to tenant to prevent cross-tenant data leakage.
     /// </summary>
-    [HttpGet("/api/v1/users/by-oid/{azureAdObjectId}")]
+    [HttpGet("by-oid/{azureAdObjectId}")]
     [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TenantUser>> GetUserByAzureAdObjectId(string azureAdObjectId)
+    public async Task<ActionResult<TenantUser>> GetUserByAzureAdObjectId(string tenantId, string azureAdObjectId)
     {
         var user = await _userService.GetUserByAzureAdObjectIdAsync(azureAdObjectId);
-        if (user == null)
-            return NotFound(new { error = $"No user found with Azure AD Object ID {azureAdObjectId}" });
+        if (user == null || user.TenantId != tenantId)
+            return NotFound(new { error = $"No user found with Azure AD Object ID {azureAdObjectId} in tenant {tenantId}" });
 
         return Ok(user);
     }

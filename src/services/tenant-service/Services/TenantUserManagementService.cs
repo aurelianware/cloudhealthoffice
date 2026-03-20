@@ -69,7 +69,14 @@ public class TenantUserManagementService : ITenantUserService
         if (request.DisplayName != null) user.DisplayName = request.DisplayName;
         if (request.FirstName != null) user.FirstName = request.FirstName;
         if (request.LastName != null) user.LastName = request.LastName;
-        if (request.Email != null) user.Email = request.Email;
+        if (request.Email != null)
+        {
+            // Check for duplicate email within tenant (excluding current user)
+            var existingWithEmail = await _userRepository.GetByEmailAsync(tenantId, request.Email);
+            if (existingWithEmail != null && existingWithEmail.Id != userId)
+                throw new InvalidOperationException($"User with email {request.Email} already exists in tenant {tenantId}");
+            user.Email = request.Email;
+        }
         if (request.AzureAdObjectId != null) user.AzureAdObjectId = request.AzureAdObjectId;
         if (request.Department != null) user.Department = request.Department;
         if (request.SupervisorId != null) user.SupervisorId = request.SupervisorId;

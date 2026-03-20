@@ -91,8 +91,10 @@ public class TenantRoleRepository : ITenantRoleRepository
             else
             {
                 // Update permissions if the built-in role definition has changed
+                // Always enforce IsBuiltIn flag in case a custom role was created with a standard name
                 existing.Description = standardRole.Description;
                 existing.Permissions = new List<string>(standardRole.Permissions);
+                existing.IsBuiltIn = true;
                 await UpdateAsync(existing);
             }
         }
