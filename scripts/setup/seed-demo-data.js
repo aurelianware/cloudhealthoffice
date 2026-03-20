@@ -619,6 +619,7 @@ for (let c = 1; c <= 200; c++) {
   const provName = providerNameByIdx[provIdx];
 
   const claimType = selectedCpts[0].type === "Dental" ? "Dental" : (selectedCpts[0].type === "Institutional" ? "Institutional" : "Professional");
+  const facilityIdx = pick([16, 17, 18]);
   const pos = posMap[selectedCpts[0].cat] || "11";
 
   // Build service lines
@@ -658,8 +659,8 @@ for (let c = 1; c <= 200; c++) {
     billingProviderName: provName,
     renderingProviderNPI: provNpi,
     renderingProviderName: provName,
-    facilityNPI: claimType === "Institutional" ? providerNpiByIdx[pick([16, 17, 18])] : null,
-    facilityName: claimType === "Institutional" ? providerNameByIdx[pick([16, 17, 18])] : null,
+    facilityNPI: claimType === "Institutional" ? providerNpiByIdx[facilityIdx] : null,
+    facilityName: claimType === "Institutional" ? providerNameByIdx[facilityIdx] : null,
     placeOfServiceCode: pos,
     serviceDateFrom: serviceDate,
     serviceDateTo: serviceDate,
