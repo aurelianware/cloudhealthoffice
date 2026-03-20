@@ -72,6 +72,8 @@
         {
             _email = ExistingUser.Email;
             _displayName = ExistingUser.DisplayName;
+            _firstName = ExistingUser.FirstName;
+            _lastName = ExistingUser.LastName;
             _department = ExistingUser.Department;
             _selectedRoles = ExistingUser.Roles;
         }
@@ -90,6 +92,12 @@
         if (!_selectedRoles.Any())
         {
             _errorMessage = "At least one role must be selected.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            _errorMessage = "Tenant context is not available. Please refresh and try again.";
             return;
         }
 

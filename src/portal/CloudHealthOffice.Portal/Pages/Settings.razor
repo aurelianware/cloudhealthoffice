@@ -1,4 +1,6 @@
 @page "/settings"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject HttpClient Http
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
