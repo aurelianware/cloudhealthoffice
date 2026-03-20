@@ -52,6 +52,10 @@ SERVICES=(
   eligibility-service
   coverage-service
   enrollment-import-service
+  premium-billing-service
+  appeals-service
+  rfai-service
+  claims-scrubbing-service
 )
 
 info()  { echo "▸ $*"; }
