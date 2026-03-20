@@ -50,7 +50,7 @@
 </MudDialog>
 
 @code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public string? TenantId { get; set; }
     [Parameter] public UserManagement.UserListItem? ExistingUser { get; set; }
     [Parameter] public List<string> AvailableRoles { get; set; } = new();
