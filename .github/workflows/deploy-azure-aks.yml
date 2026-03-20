@@ -318,17 +318,36 @@ jobs:
           kubectl create namespace ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create Cosmos DB secret
+      - name: Create MongoDB auth secret (standalone StatefulSet credentials)
         run: |
-          kubectl create secret generic cosmosdb-secret \
-            --from-literal=connectionString="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
+          MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
+          MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
+          : "${MONGO_USER:=admin}"
+          : "${MONGO_PASS:=admin}"
+          kubectl create secret generic mongodb-auth \
+            --from-literal=username="${MONGO_USER}" \
+            --from-literal=password="${MONGO_PASS}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create MongoDB secret (Cosmos DB MongoDB API)
+      - name: Create Cosmos DB / MongoDB connection secret
         run: |
+          # Use CosmosDB if configured, otherwise fall back to standalone MongoDB
+          CONN="${{ secrets.COSMOS_DB_CONNECTION_STRING }}"
+          if [ -z "$CONN" ]; then
+            MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
+            MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
+            : "${MONGO_USER:=admin}"
+            : "${MONGO_PASS:=admin}"
+            CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.cloudhealthoffice.svc.cluster.local:27017"
+            echo "No COSMOS_DB_CONNECTION_STRING set — using standalone MongoDB"
+          fi
+          kubectl create secret generic cosmosdb-secret \
+            --from-literal=connectionString="${CONN}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret generic mongodb-secret \
-            --from-literal=connectionString="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
+            --from-literal=connectionString="${CONN}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
@@ -413,6 +432,11 @@ jobs:
         run: |
           kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml
           kubectl rollout status deployment/redis-dataprotection -n ${{ env.NAMESPACE }} --timeout=120s
+
+      - name: Deploy MongoDB (standalone fallback for DataProtection keys)
+        run: |
+          kubectl apply -f infrastructure/k8s/mongodb-deployment.yaml
+          kubectl rollout status statefulset/mongodb -n ${{ env.NAMESPACE }} --timeout=120s
 
       - name: Substitute ACR image in portal deployment
         run: |
