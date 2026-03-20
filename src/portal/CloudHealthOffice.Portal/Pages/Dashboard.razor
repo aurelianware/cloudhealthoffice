@@ -414,6 +414,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _serviceError = null;
+
         try
         {
             tenantContext = await TenantContextService.GetCurrentTenantContextAsync();

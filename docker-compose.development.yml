@@ -245,7 +245,7 @@ services:
     volumes:
       - ./scripts/setup:/scripts:ro
     command: >
-      mongosh mongodb://admin:securepassword123@mongodb:27017/cloudhealthoffice?authSource=admin
+      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
       /scripts/seed-demo-data.js
       --eval 'var tenantId="dev-tenant", groupNumber="GRP-DEV-2026"'
     restart: "no"

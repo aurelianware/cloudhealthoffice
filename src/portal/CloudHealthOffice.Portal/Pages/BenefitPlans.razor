@@ -198,6 +198,7 @@
     private async Task LoadPlans()
     {
         _isLoading = true;
+        _serviceError = null;
         try
         {
             _allPlans = await BenefitPlanService.SearchBenefitPlansAsync();

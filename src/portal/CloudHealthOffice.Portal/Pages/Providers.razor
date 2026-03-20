@@ -284,6 +284,7 @@
         }
 
         _showValidationMessage = false;
+        _serviceError = null;
         _loading = true;
         StateHasChanged();
 
@@ -321,6 +322,7 @@
         _providers = new();
         _hasSearched = false;
         _showValidationMessage = false;
+        _serviceError = null;
     }
 
     private async Task OnSearchKeyUp(KeyboardEventArgs e)
