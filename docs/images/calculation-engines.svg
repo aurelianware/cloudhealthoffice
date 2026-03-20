@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="rgba(0,255,255,0.3)"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#00ffff" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="820" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="45" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Calculation Engines</text>
+  <text x="600" y="70" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="#b0b0b0"
+        text-anchor="middle">9 Engines &#x2022; Per-Tenant Configuration &#x2022; Augment / Replace Mode</text>
+
+  <!-- Outer container -->
+  <rect x="40" y="90" width="1120" height="700" rx="14" fill="rgba(8,8,8,0.5)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
+
+  <!-- Row 1: Core Adjudication Engines label -->
+  <text x="600" y="125" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">CORE ADJUDICATION ENGINES</text>
+
+  <!-- BenefitEngine -->
+  <g transform="translate(250, 185)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">BenefitEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">Cost-sharing calculation</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Deductible &#x2022; Copay &#x2022; Coinsurance &#x2022; Accumulators</text>
+  </g>
+
+  <!-- FeeScheduleEngine -->
+  <g transform="translate(700, 185)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">FeeScheduleEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">Rate resolution &amp; allowed amount</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Contracted Fee Schedules &#x2022; Pricing</text>
+  </g>
+
+  <!-- Connector: BenefitEngine -> FeeScheduleEngine -->
+  <line x1="422" y1="185" x2="528" y2="185" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- Row 2: Edit & Validation Engines label -->
+  <line x1="80" y1="250" x2="1120" y2="250" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="280" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">EDIT &amp; VALIDATION ENGINES</text>
+
+  <!-- NcciEngine -->
+  <g transform="translate(250, 340)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">NcciEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">CCI edits &amp; modifier adjudication</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Procedure-to-Procedure &#x2022; MUE &#x2022; Modifiers</text>
+  </g>
+
+  <!-- ClaimsScrubEngine -->
+  <g transform="translate(700, 340)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">ClaimsScrubEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">Pre-adjudication validation</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">20+ Rules &#x2022; 6 Categories &#x2022; Code &amp; Data Validation</text>
+  </g>
+
+  <!-- Connector: NcciEngine -> ClaimsScrubEngine -->
+  <line x1="422" y1="340" x2="528" y2="340" stroke="#00ff88" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- Row 3: Coordination & Reporting Engines label -->
+  <line x1="80" y1="405" x2="1120" y2="405" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="435" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">COORDINATION &amp; REPORTING ENGINES</text>
+
+  <!-- CobEngine -->
+  <g transform="translate(250, 495)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">CobEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">Coordination of benefits</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Payer Order &#x2022; Primary / Secondary / Tertiary Split</text>
+  </g>
+
+  <!-- RiskAdjustmentEngine -->
+  <g transform="translate(700, 495)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">RiskAdjustmentEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">CMS-HCC risk score calculation</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">ICD-10 &#x2192; HCC Mapping &#x2022; Hierarchy Resolution</text>
+  </g>
+
+  <!-- EncounterEngine -->
+  <g transform="translate(250, 600)">
+    <rect x="-170" y="-42" width="340" height="84" rx="8" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)" stroke-width="1.5"/>
+    <text x="0" y="-16" font-family="Segoe UI, system-ui, sans-serif" font-size="15" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">EncounterEngine</text>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0"
+          text-anchor="middle">Encounter data transformation</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Batch Submission &#x2022; Medicaid / MA Reporting</text>
+  </g>
+
+  <!-- Connector: CobEngine -> RiskAdjustmentEngine -->
+  <line x1="422" y1="495" x2="528" y2="495" stroke="#00ffff" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+
+  <!-- Row 4: Platform Services label -->
+  <line x1="80" y1="665" x2="1120" y2="665" stroke="rgba(0,255,255,0.08)" stroke-width="1"/>
+  <text x="600" y="690" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+        fill="#b0b0b0" text-anchor="middle" letter-spacing="2">PLATFORM SERVICES</text>
+
+  <!-- OperatingMode -->
+  <g transform="translate(350, 740)">
+    <rect x="-230" y="-30" width="460" height="60" rx="8" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.25)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+          fill="#00ffff" text-anchor="middle" filter="url(#glow)">OperatingMode</text>
+    <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">Per-Engine, Per-Tenant Augment / Replace Toggle &#x2022; AugmentResult&lt;T&gt; Comparison</text>
+  </g>
+
+  <!-- DocumentStore -->
+  <g transform="translate(850, 740)">
+    <rect x="-230" y="-30" width="460" height="60" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.25)" stroke-width="1"/>
+    <text x="0" y="-6" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
+          fill="#00ff88" text-anchor="middle" filter="url(#glow)">DocumentStore</text>
+    <text x="0" y="14" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#808080"
+          text-anchor="middle">IDocumentStore Abstraction &#x2022; Azure Blob Storage &#x2022; InMemory Providers</text>
+  </g>
+
+  <!-- Vertical connectors from engines down to platform row -->
+  <line x1="250" y1="227" x2="250" y2="298" stroke="url(#arrowGrad)" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="700" y1="227" x2="700" y2="298" stroke="url(#arrowGrad)" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="250" y1="382" x2="250" y2="453" stroke="url(#arrowGrad)" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="700" y1="382" x2="700" y2="453" stroke="url(#arrowGrad)" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+  <line x1="250" y1="537" x2="250" y2="558" stroke="url(#arrowGrad)" stroke-width="1.5" opacity="0.2" marker-end="url(#arrowhead)"/>
+
+  <!-- Count badge -->
+  <g transform="translate(1060, 120)">
+    <rect x="-30" y="-12" width="60" height="24" rx="12" fill="rgba(0,255,255,0.1)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
+          fill="#00ffff" text-anchor="middle">9</text>
+  </g>
+</svg>
