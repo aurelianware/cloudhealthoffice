@@ -4,30 +4,36 @@ metadata:
   name: claims-scrubbing-service-config
   namespace: cloudhealthoffice
 data:
-  NODE_ENV: "production"
-  KAFKA_BOOTSTRAP_SERVERS: "kafka.cloudhealthoffice:9092"
-  KAFKA_CLIENT_ID: "claims-scrubbing-service"
-  KAFKA_CONSUMER_GROUP: "claims-scrubbers"
-  INBOUND_CLAIMS_TOPIC: "claims.inbound"
-  CLEAN_CLAIMS_TOPIC: "claims.clean"
-  FLAGGED_CLAIMS_TOPIC: "claims.flagged"
-  REJECTED_CLAIMS_TOPIC: "claims.rejected"
-  MONGODB_DATABASE: "CloudHealthOffice"
-  MONGODB_RULES_COLLECTION: "ScrubRules"
-  MONGODB_AUDIT_COLLECTION: "ScrubAudit"
-  CLAIMS_CONTAINER: "claims-archive"
-  PARALLEL_RULES: "true"
-  MAX_RULE_CONCURRENCY: "10"
-  RULE_TIMEOUT_MS: "5000"
-  CACHE_RULES: "true"
-  RULE_CACHE_TTL: "300"
-  MAX_ERRORS_FOR_REJECTION: "3"
-  MAX_WARNINGS_FOR_FLAGGING: "5"
-  ENABLE_DUPLICATE_DETECTION: "true"
-  ENABLE_MEDICAL_NECESSITY: "true"
-  ENABLE_NCCI_EDITS: "true"
-  ENABLE_AUTO_CORRECTION: "false"
-  ENABLE_REALTIME_NPI: "false"
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:8080"
+  # Kafka (C# double-underscore config key format)
+  Kafka__BootstrapServers: "kafka.cloudhealthoffice:9092"
+  Kafka__ClientId: "claims-scrubbing-service"
+  Kafka__ConsumerGroupId: "claims-scrubbers"
+  Kafka__InboundTopic: "claims.inbound"
+  Kafka__CleanClaimsTopic: "claims.clean"
+  Kafka__FlaggedClaimsTopic: "claims.flagged"
+  Kafka__RejectedClaimsTopic: "claims.rejected"
+  # MongoDB
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  # Storage
+  Storage__ContainerName: "claims-archive"
+  # Rule engine
+  RuleEngine__ParallelExecution: "true"
+  RuleEngine__MaxConcurrency: "10"
+  RuleEngine__RuleTimeoutMs: "5000"
+  RuleEngine__CacheRules: "true"
+  RuleEngine__RuleCacheTtlSeconds: "300"
+  # Thresholds
+  Thresholds__MaxErrorsForRejection: "3"
+  Thresholds__MaxWarningsForFlagging: "5"
+  Thresholds__FirstPassRateTarget: "95"
+  # Feature flags
+  Features__DuplicateDetection: "true"
+  Features__MedicalNecessityChecks: "true"
+  Features__NcciEdits: "true"
+  Features__AutoCorrection: "false"
+  Features__RealtimeNpiValidation: "false"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -53,31 +59,31 @@ spec:
         image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-claims-scrubbing-service:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 3000
+        - containerPort: 8080
           name: http
           protocol: TCP
         envFrom:
         - configMapRef:
             name: claims-scrubbing-service-config
         env:
-        - name: KAFKA_SASL_USERNAME
+        - name: Kafka__SaslUsername
           valueFrom:
             secretKeyRef:
               name: kafka-secret
               key: saslUsername
               optional: true
-        - name: KAFKA_SASL_PASSWORD
+        - name: Kafka__SaslPassword
           valueFrom:
             secretKeyRef:
               name: kafka-secret
               key: saslPassword
               optional: true
-        - name: MONGODB_CONNECTION_STRING
+        - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
               name: mongodb-secret
               key: connectionString
-        - name: STORAGE_CONNECTION_STRING
+        - name: Storage__ConnectionString
           valueFrom:
             secretKeyRef:
               name: azure-storage-secret
@@ -91,15 +97,15 @@ spec:
             memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /livez
-            port: 3000
+            path: /health/live
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /readyz
-            port: 3000
+            path: /health/ready
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
@@ -118,5 +124,5 @@ spec:
   ports:
   - name: http
     port: 80
-    targetPort: 3000
+    targetPort: 8080
     protocol: TCP
