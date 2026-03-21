@@ -652,12 +652,12 @@ export interface ClaimsScrubberConfig {
     /** Archive path pattern */
     archivePathPattern: string;
   };
-  /** Cosmos DB for rule storage and audit */
-  cosmosDb: {
-    endpoint: string;
+  /** MongoDB for rule storage and audit */
+  mongoDb: {
+    connectionString: string;
     databaseName: string;
-    rulesContainerName: string;
-    auditContainerName: string;
+    rulesCollectionName: string;
+    auditCollectionName: string;
   };
   /** Rule engine configuration */
   ruleEngine: {
@@ -770,7 +770,7 @@ export interface HealthStatus {
   timestamp: string;
   checks: {
     kafka: ComponentHealth;
-    cosmosDb: ComponentHealth;
+    mongoDb: ComponentHealth;
     storage: ComponentHealth;
     ruleEngine: ComponentHealth;
     dapr?: ComponentHealth;

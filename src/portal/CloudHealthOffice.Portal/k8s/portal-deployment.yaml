@@ -244,7 +244,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: portal
-  minReplicas: 2  # Safe with Redis-backed session + token cache
+  minReplicas: 1  # Safe with Redis-backed session + token cache
   maxReplicas: 5
   metrics:
   - type: Resource

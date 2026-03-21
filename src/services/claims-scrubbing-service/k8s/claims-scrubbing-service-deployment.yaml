@@ -12,9 +12,9 @@ data:
   CLEAN_CLAIMS_TOPIC: "claims.clean"
   FLAGGED_CLAIMS_TOPIC: "claims.flagged"
   REJECTED_CLAIMS_TOPIC: "claims.rejected"
-  COSMOS_DATABASE: "CloudHealthOffice"
-  COSMOS_RULES_CONTAINER: "ScrubRules"
-  COSMOS_AUDIT_CONTAINER: "ScrubAudit"
+  MONGODB_DATABASE: "CloudHealthOffice"
+  MONGODB_RULES_COLLECTION: "ScrubRules"
+  MONGODB_AUDIT_COLLECTION: "ScrubAudit"
   CLAIMS_CONTAINER: "claims-archive"
   PARALLEL_RULES: "true"
   MAX_RULE_CONCURRENCY: "10"
@@ -72,11 +72,11 @@ spec:
               name: kafka-secret
               key: saslPassword
               optional: true
-        - name: COSMOS_ENDPOINT
+        - name: MONGODB_CONNECTION_STRING
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
-              key: endpoint
+              name: mongodb-secret
+              key: connectionString
         - name: STORAGE_CONNECTION_STRING
           valueFrom:
             secretKeyRef:
