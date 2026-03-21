@@ -82,8 +82,20 @@ public class TenantContextService : ITenantContextService
 
             if (subscription == null)
             {
-                _logger.LogWarning("No subscription found for Azure Tenant ID: {TenantId}", azureTenantId);
-                return null;
+                _logger.LogWarning("No subscription found for Azure Tenant ID: {TenantId}, using default tenant context", azureTenantId);
+                // Fallback: use the Azure AD tenant ID directly so the portal
+                // remains functional before a subscription is formally created
+                _cachedContext = new TenantContext
+                {
+                    TenantId = azureTenantId,
+                    TenantName = userEmail?.Split('@').LastOrDefault() ?? "Cloud Health Office",
+                    AzureTenantId = azureTenantId,
+                    SubscriptionTier = "professional",
+                    SubscriptionStatus = "Active",
+                    IsDemo = false,
+                    UserEmail = userEmail
+                };
+                return _cachedContext;
             }
 
             _cachedContext = new TenantContext
@@ -104,8 +116,18 @@ public class TenantContextService : ITenantContextService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving tenant context for Azure Tenant ID: {TenantId}", azureTenantId);
-            return null;
+            _logger.LogWarning(ex, "Error retrieving tenant context for Azure Tenant ID: {TenantId}, using default", azureTenantId);
+            _cachedContext = new TenantContext
+            {
+                TenantId = azureTenantId,
+                TenantName = userEmail?.Split('@').LastOrDefault() ?? "Cloud Health Office",
+                AzureTenantId = azureTenantId,
+                SubscriptionTier = "professional",
+                SubscriptionStatus = "Active",
+                IsDemo = false,
+                UserEmail = userEmail
+            };
+            return _cachedContext;
         }
     }
 
