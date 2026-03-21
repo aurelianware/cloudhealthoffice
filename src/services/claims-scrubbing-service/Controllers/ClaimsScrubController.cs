@@ -40,7 +40,7 @@ public class ClaimsScrubController : ControllerBase
         }
 
         _logger.LogInformation("Validating claim {ClaimId} (type={ClaimType}, correlationId={CorrelationId})",
-            request.Claim.ClaimId, request.Claim.ClaimType, request.CorrelationId);
+            SanitizeForLog(request.Claim.ClaimId), SanitizeForLog(request.Claim.ClaimType), SanitizeForLog(request.CorrelationId));
 
         var response = await _scrubber.ValidateClaimAsync(request);
         return Ok(response);
@@ -62,7 +62,7 @@ public class ClaimsScrubController : ControllerBase
         }
 
         _logger.LogInformation("Validating batch of {Count} claim(s) (correlationId={CorrelationId})",
-            request.Claims.Count, request.CorrelationId);
+            request.Claims.Count, SanitizeForLog(request.CorrelationId));
 
         var response = await _scrubber.ValidateBatchAsync(request);
         return Ok(response);
@@ -93,4 +93,7 @@ public class ClaimsScrubController : ControllerBase
     {
         return Ok(_scrubber.GetMetrics());
     }
+
+    private static string? SanitizeForLog(string? value) =>
+        value?.Replace("\r", "").Replace("\n", "");
 }
