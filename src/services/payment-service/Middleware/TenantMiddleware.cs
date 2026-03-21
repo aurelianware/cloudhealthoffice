@@ -50,7 +50,7 @@ public class TenantMiddleware
         // Store in HttpContext for repository access
         context.Items["TenantId"] = tenantId;
 
-        _logger.LogDebug("Request TenantId: {TenantId}", tenantId);
+        _logger.LogDebug("Request TenantId: {TenantId}", SanitizeForLog(tenantId));
 
         await _next(context);
     }

@@ -19,6 +19,9 @@ public class AzureBlobDocumentStore : IDocumentStore
     private readonly BlobServiceClient _client;
     private readonly ILogger<AzureBlobDocumentStore> _logger;
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public AzureBlobDocumentStore(
         BlobServiceClient client,
         ILogger<AzureBlobDocumentStore> logger)
@@ -44,7 +47,7 @@ public class AzureBlobDocumentStore : IDocumentStore
 
         var sizeBytes = content.CanSeek ? content.Length : -1L;
 
-        _logger.LogDebug("Uploading blob {Container}/{BlobName}", container, blobName);
+        _logger.LogDebug("Uploading blob {Container}/{BlobName}", SanitizeForLog(container), SanitizeForLog(blobName));
         await blobClient.UploadAsync(content, options, ct);
 
         // Use actual size if stream was seekable; fall back to 0

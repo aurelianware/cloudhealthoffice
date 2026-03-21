@@ -118,7 +118,7 @@ public class SmartScopeEnforcementMiddleware
                     {
                         _logger.LogWarning(
                             "Patient binding violation — token bound to {Bound}, query param {Query}",
-                            normalizedPatient, queryPatient);
+                            SanitizeForLog(normalizedPatient), SanitizeForLog(queryPatient));
 
                         await WriteFhirError(context, 403,
                             OperationOutcome.IssueSeverity.Error,
@@ -232,6 +232,9 @@ public class SmartScopeEnforcementMiddleware
         var json = JsonSerializer.Serialize(outcome, FhirOptions);
         await context.Response.WriteAsync(json);
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private static string StripPrefix(string prefix, string value)
         => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)

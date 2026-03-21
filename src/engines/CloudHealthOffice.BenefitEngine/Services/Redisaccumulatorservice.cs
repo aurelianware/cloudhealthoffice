@@ -69,6 +69,9 @@ public class RedisAccumulatorService : IAccumulatorService
     private readonly ILogger<RedisAccumulatorService> _logger;
 
     /// <summary>
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     /// TTL for accumulator keys. Set to cover the plan year plus a grace
     /// period for late claims (run-out). 14 months covers a calendar-year
     /// plan with 2 months of run-out.
@@ -113,7 +116,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId}/{PlanYear}",
-            snapshots.Count, memberId, benefitPlanId, planYear);
+            snapshots.Count, SanitizeForLog(memberId), benefitPlanId, SanitizeForLog(planYear));
 
         return snapshots;
     }
@@ -153,7 +156,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Applied {Count} accumulator updates for claim {ClaimId} (member {MemberId})",
-            updates.Count, claimId, memberId);
+            updates.Count, SanitizeForLog(claimId), SanitizeForLog(memberId));
 
         // Fire-and-forget: write audit trail to MongoDB/Cosmos
         // This is non-blocking — adjudication doesn't wait for the audit write
@@ -172,7 +175,7 @@ public class RedisAccumulatorService : IAccumulatorService
                     _logger.LogWarning(ex,
                         "Failed to write accumulator audit for claim {ClaimId}. " +
                         "Audit trail will self-heal on next rebuild.",
-                        claimId);
+                        SanitizeForLog(claimId));
                 }
             }, ct);
         }
