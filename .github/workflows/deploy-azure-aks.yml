@@ -103,6 +103,7 @@ jobs:
           - smart-auth-service
           - risk-adjustment-service
           - encounter-service
+          - CloudHealthOffice.PricingApi
         include:
           # All .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
