@@ -155,7 +155,7 @@ public class UserContextService : IUserContextService
                         Permissions = ExpandPermissions(user.Roles ?? new())
                     };
 
-                    _logger.LogInformation("User context loaded for {RedactedEmail} with roles: {Roles}",
+                    _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
                         RedactEmail(email), string.Join(", ", _cachedContext.Roles));
 
                     _loaded = true;
@@ -163,7 +163,7 @@ public class UserContextService : IUserContextService
                 }
             }
 
-            _logger.LogWarning("No active TenantUser found for {RedactedEmail} in tenant {TenantId}, using fallback",
+            _logger.LogDebug("No active TenantUser found for {RedactedEmail} in tenant {TenantId}, using fallback",
                 RedactEmail(email), tenantContext.TenantId);
         }
         catch (Exception ex)
