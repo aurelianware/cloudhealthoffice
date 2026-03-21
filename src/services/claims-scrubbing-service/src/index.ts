@@ -49,11 +49,11 @@ function getConfig(): ClaimsScrubberConfig {
       containerName: process.env.CLAIMS_CONTAINER || 'claims-archive',
       archivePathPattern: '{claimType}/{status}/{yyyy}/{MM}/{dd}',
     },
-    cosmosDb: {
-      endpoint: process.env.COSMOS_ENDPOINT || '',
-      databaseName: process.env.COSMOS_DATABASE || 'claims-scrubbing',
-      rulesContainerName: process.env.COSMOS_RULES_CONTAINER || 'validation-rules',
-      auditContainerName: process.env.COSMOS_AUDIT_CONTAINER || 'validation-audit',
+    mongoDb: {
+      connectionString: process.env.MONGODB_CONNECTION_STRING || '',
+      databaseName: process.env.MONGODB_DATABASE || 'CloudHealthOffice',
+      rulesCollectionName: process.env.MONGODB_RULES_COLLECTION || 'ScrubRules',
+      auditCollectionName: process.env.MONGODB_AUDIT_COLLECTION || 'ScrubAudit',
     },
     ruleEngine: {
       parallelExecution: process.env.PARALLEL_RULES === 'true',
@@ -357,11 +357,11 @@ async function start(): Promise<void> {
     // Initialize service (connect to Azure resources)
     // Skip initialization in development mode without Azure resources
     const config = getConfig();
-    if (config.cosmosDb.endpoint) {
+    if (config.mongoDb.connectionString) {
       await svc.initialize();
       console.log('Claims Scrubbing Service initialized');
     } else {
-      console.log('Running in development mode (no Azure resources)');
+      console.log('Running in development mode (no database configured)');
     }
 
     server.listen(PORT, () => {
