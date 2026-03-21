@@ -76,6 +76,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 |premium-billing-service  |Premium billing and invoicing                 |—               |
 |risk-adjustment-service  |HCC risk score calculation and submission     |—               |
 |smart-auth-service       |SMART on FHIR authorization                   |—               |
+|pricing-api              |Medicare/custom fee schedule repricing       |—               |
 
 ### Calculation Engines
 
