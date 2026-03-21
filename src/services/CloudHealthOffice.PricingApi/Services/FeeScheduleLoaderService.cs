@@ -1,31 +1,37 @@
+using System.Globalization;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CsvHelper;
+using CsvHelper.Configuration;
+using CsvHelper.Configuration.Attributes;
 
 namespace CloudHealthOffice.PricingApi.Services;
 
 /// <summary>
 /// Seeds Medicare fee schedule data from CMS public data files.
-/// 
+///
 /// Data sources (CMS.gov, updated quarterly/annually):
 ///   - Physician Fee Schedule (RBRVS): https://www.cms.gov/medicare/payment/fee-schedules/physician
 ///   - OPPS (Outpatient): https://www.cms.gov/medicare/payment-systems/outpatient-pps
 ///   - MS-DRG (Inpatient): https://www.cms.gov/medicare/payment/prospective-payment-systems/acute-inpatient-pps
-/// 
-/// Download the national PFSRVF (Physician Fee Schedule Relative Value File) 
+///
+/// Download the national PFSRVF (Physician Fee Schedule Relative Value File)
 /// and place CSVs in the configured MedicareFeeSchedulePath directory.
 /// </summary>
 public interface IFeeScheduleLoaderService
 {
-    Task SeedMedicareRbrvs(string csvFilePath, int year);
-    Task SeedMedicareDrg(string csvFilePath, int year);
-    Task SeedMedicareOpps(string csvFilePath, int year);
+    Task<int> SeedMedicareRbrvs(string csvFilePath, int year);
+    Task<int> SeedMedicareDrg(string csvFilePath, int year, decimal baseRate = 6377.73m);
+    Task<int> SeedMedicareOpps(string csvFilePath, int year);
     Task SeedDemoDataAsync();
+    Task<bool> AnySchedulesExistAsync();
 }
 
 public class FeeScheduleLoaderService : IFeeScheduleLoaderService
 {
     private readonly IFeeScheduleRepository _repo;
     private readonly ILogger<FeeScheduleLoaderService> _logger;
+    private const int BatchSize = 1000;
 
     public FeeScheduleLoaderService(IFeeScheduleRepository repo, ILogger<FeeScheduleLoaderService> logger)
     {
@@ -34,23 +40,22 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
     }
 
     /// <summary>
+    /// Returns true if any fee schedules already exist in the database.
+    /// </summary>
+    public async Task<bool> AnySchedulesExistAsync()
+    {
+        var schedules = await _repo.GetAllSchedulesAsync();
+        return schedules.Count > 0;
+    }
+
+    /// <summary>
     /// Import CMS Physician Fee Schedule Relative Value File (RVU).
-    /// Expected CSV columns: HCPCS, MOD, DESCRIPTION, WORK_RVU, NON_FAC_PE_RVU, FAC_PE_RVU, 
+    /// Expected CSV columns: HCPCS, MOD, DESCRIPTION, WORK_RVU, NON_FAC_PE_RVU, FAC_PE_RVU,
     /// MP_RVU, NON_FACILITY_NA_INDICATOR, FACILITY_NA_INDICATOR, CONV_FACTOR, LOCALITY, etc.
     /// </summary>
-    public async Task SeedMedicareRbrvs(string csvFilePath, int year)
+    public async Task<int> SeedMedicareRbrvs(string csvFilePath, int year)
     {
         _logger.LogInformation("Loading Medicare RBRVS {Year} from {Path}", year, csvFilePath);
-
-        // TODO: Wire in CsvHelper to parse actual CMS PFSRVF file
-        // The actual CMS file has ~13,000 HCPCS codes × ~120 localities = ~1.5M rows
-        // For now, this is the integration point — the pattern is:
-        //
-        // using var reader = new StreamReader(csvFilePath);
-        // using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-        // var records = csv.GetRecords<MedicareRbrvsCsvRow>();
-        // var entries = records.Select(r => MapRbrvsCsvToEntry(r, year));
-        // await _repo.BulkUpsertEntriesAsync(entries);
 
         var scheduleId = $"MEDICARE_RBRVS_{year}";
         await _repo.UpsertScheduleInfoAsync(new FeeScheduleInfo
@@ -61,17 +66,98 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             Version = $"{year}.Q1",
             EffectiveDate = new DateOnly(year, 1, 1),
             TermDate = new DateOnly(year, 12, 31),
-            CodeCount = 0, // Updated after import
+            CodeCount = 0,
             Description = $"CMS Medicare Physician Fee Schedule Relative Value Units for calendar year {year}. Source: CMS.gov PFSRVF.",
             LastUpdated = DateTimeOffset.UtcNow
         });
 
-        _logger.LogInformation("Medicare RBRVS {Year} schedule registered. Load CSV data to populate entries.", year);
+        var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            HasHeaderRecord = true,
+            MissingFieldFound = null,
+            HeaderValidated = null,
+            TrimOptions = TrimOptions.Trim,
+            IgnoreBlankLines = true,
+        };
+
+        var batch = new List<FeeScheduleEntry>(BatchSize);
+        int totalCount = 0;
+
+        using var reader = new StreamReader(csvFilePath);
+        using var csv = new CsvReader(reader, csvConfig);
+        csv.Context.RegisterClassMap<RbrvsCsvRowMap>();
+
+        await foreach (var row in csv.GetRecordsAsync<RbrvsCsvRow>())
+        {
+            // Only import base codes (MOD blank or "00"), skip modifier-specific rows
+            var mod = row.Mod?.Trim() ?? "";
+            if (mod != "" && mod != "00")
+                continue;
+
+            // Skip rows where both NA indicators are set
+            var nonFacNa = (row.NonFacilityNaIndicator?.Trim() ?? "").Equals("NA", StringComparison.OrdinalIgnoreCase);
+            var facNa = (row.FacilityNaIndicator?.Trim() ?? "").Equals("NA", StringComparison.OrdinalIgnoreCase);
+            if (nonFacNa && facNa)
+                continue;
+
+            var hcpcs = row.Hcpcs?.Trim() ?? "";
+            if (string.IsNullOrEmpty(hcpcs))
+                continue;
+
+            var workRvu = ParseDecimal(row.WorkRvu);
+            var nonFacPeRvu = ParseDecimal(row.NonFacPeRvu);
+            var facPeRvu = ParseDecimal(row.FacPeRvu);
+            var mpRvu = ParseDecimal(row.MpRvu);
+            var convFactor = ParseDecimal(row.ConvFactor);
+
+            var entry = Rbrvs(scheduleId, hcpcs, row.Description?.Trim() ?? "",
+                workRvu, nonFacPeRvu, facPeRvu, mpRvu, convFactor);
+
+            // Preserve locality if present
+            if (!string.IsNullOrWhiteSpace(row.Locality))
+            {
+                entry = entry with { Locality = row.Locality.Trim() };
+            }
+
+            batch.Add(entry);
+
+            if (batch.Count >= BatchSize)
+            {
+                await _repo.BulkUpsertEntriesAsync(batch);
+                totalCount += batch.Count;
+                _logger.LogInformation("RBRVS {Year}: imported {Count} entries so far...", year, totalCount);
+                batch.Clear();
+            }
+        }
+
+        // Flush remaining
+        if (batch.Count > 0)
+        {
+            await _repo.BulkUpsertEntriesAsync(batch);
+            totalCount += batch.Count;
+        }
+
+        // Update schedule info with actual count
+        await _repo.UpsertScheduleInfoAsync(new FeeScheduleInfo
+        {
+            Id = scheduleId,
+            Name = $"Medicare Physician Fee Schedule (RBRVS) {year}",
+            Type = FeeScheduleType.MedicareRbrvs,
+            Version = $"{year}.Q1",
+            EffectiveDate = new DateOnly(year, 1, 1),
+            TermDate = new DateOnly(year, 12, 31),
+            CodeCount = totalCount,
+            Description = $"CMS Medicare Physician Fee Schedule Relative Value Units for calendar year {year}. Source: CMS.gov PFSRVF.",
+            LastUpdated = DateTimeOffset.UtcNow
+        });
+
+        _logger.LogInformation("Medicare RBRVS {Year} import complete: {Count} entries", year, totalCount);
+        return totalCount;
     }
 
-    public async Task SeedMedicareDrg(string csvFilePath, int year)
+    public async Task<int> SeedMedicareDrg(string csvFilePath, int year, decimal baseRate = 6377.73m)
     {
-        _logger.LogInformation("Loading Medicare MS-DRG {Year} from {Path}", year, csvFilePath);
+        _logger.LogInformation("Loading Medicare MS-DRG {Year} from {Path} (baseRate={BaseRate})", year, csvFilePath, baseRate);
 
         var scheduleId = $"MEDICARE_DRG_{year}";
         await _repo.UpsertScheduleInfoAsync(new FeeScheduleInfo
@@ -80,15 +166,75 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             Name = $"Medicare MS-DRG Weights {year}",
             Type = FeeScheduleType.MedicareDrg,
             Version = $"FY{year}",
-            EffectiveDate = new DateOnly(year - 1, 10, 1), // Federal fiscal year
+            EffectiveDate = new DateOnly(year - 1, 10, 1),
             TermDate = new DateOnly(year, 9, 30),
             CodeCount = 0,
             Description = $"CMS Medicare Severity Diagnosis-Related Group relative weights for FY{year}.",
             LastUpdated = DateTimeOffset.UtcNow
         });
+
+        var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            HasHeaderRecord = true,
+            MissingFieldFound = null,
+            HeaderValidated = null,
+            TrimOptions = TrimOptions.Trim,
+            IgnoreBlankLines = true,
+        };
+
+        var batch = new List<FeeScheduleEntry>(BatchSize);
+        int totalCount = 0;
+
+        using var reader = new StreamReader(csvFilePath);
+        using var csv = new CsvReader(reader, csvConfig);
+        csv.Context.RegisterClassMap<DrgCsvRowMap>();
+
+        await foreach (var row in csv.GetRecordsAsync<DrgCsvRow>())
+        {
+            var drgCode = row.DrgCode?.Trim() ?? "";
+            if (string.IsNullOrEmpty(drgCode))
+                continue;
+
+            var weight = ParseDecimal(row.Weight);
+            if (weight <= 0)
+                continue;
+
+            var entry = Drg(scheduleId, drgCode, row.Description?.Trim() ?? "", weight, baseRate);
+            batch.Add(entry);
+
+            if (batch.Count >= BatchSize)
+            {
+                await _repo.BulkUpsertEntriesAsync(batch);
+                totalCount += batch.Count;
+                _logger.LogInformation("DRG {Year}: imported {Count} entries so far...", year, totalCount);
+                batch.Clear();
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            await _repo.BulkUpsertEntriesAsync(batch);
+            totalCount += batch.Count;
+        }
+
+        await _repo.UpsertScheduleInfoAsync(new FeeScheduleInfo
+        {
+            Id = scheduleId,
+            Name = $"Medicare MS-DRG Weights {year}",
+            Type = FeeScheduleType.MedicareDrg,
+            Version = $"FY{year}",
+            EffectiveDate = new DateOnly(year - 1, 10, 1),
+            TermDate = new DateOnly(year, 9, 30),
+            CodeCount = totalCount,
+            Description = $"CMS Medicare Severity Diagnosis-Related Group relative weights for FY{year}.",
+            LastUpdated = DateTimeOffset.UtcNow
+        });
+
+        _logger.LogInformation("Medicare MS-DRG {Year} import complete: {Count} entries", year, totalCount);
+        return totalCount;
     }
 
-    public async Task SeedMedicareOpps(string csvFilePath, int year)
+    public async Task<int> SeedMedicareOpps(string csvFilePath, int year)
     {
         _logger.LogInformation("Loading Medicare OPPS {Year} from {Path}", year, csvFilePath);
 
@@ -105,6 +251,68 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             Description = $"CMS Outpatient Prospective Payment System APC rates for calendar year {year}.",
             LastUpdated = DateTimeOffset.UtcNow
         });
+
+        var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            HasHeaderRecord = true,
+            MissingFieldFound = null,
+            HeaderValidated = null,
+            TrimOptions = TrimOptions.Trim,
+            IgnoreBlankLines = true,
+        };
+
+        var batch = new List<FeeScheduleEntry>(BatchSize);
+        int totalCount = 0;
+
+        using var reader = new StreamReader(csvFilePath);
+        using var csv = new CsvReader(reader, csvConfig);
+        csv.Context.RegisterClassMap<OppsCsvRowMap>();
+
+        await foreach (var row in csv.GetRecordsAsync<OppsCsvRow>())
+        {
+            var hcpcs = row.HcpcsCode?.Trim() ?? "";
+            if (string.IsNullOrEmpty(hcpcs))
+                continue;
+
+            var paymentRate = ParseDecimal(row.PaymentRate);
+            if (paymentRate <= 0)
+                continue;
+
+            var entry = Opps(scheduleId, hcpcs, row.Description?.Trim() ?? "",
+                row.Apc?.Trim() ?? "", row.StatusIndicator?.Trim() ?? "", paymentRate);
+
+            batch.Add(entry);
+
+            if (batch.Count >= BatchSize)
+            {
+                await _repo.BulkUpsertEntriesAsync(batch);
+                totalCount += batch.Count;
+                _logger.LogInformation("OPPS {Year}: imported {Count} entries so far...", year, totalCount);
+                batch.Clear();
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            await _repo.BulkUpsertEntriesAsync(batch);
+            totalCount += batch.Count;
+        }
+
+        await _repo.UpsertScheduleInfoAsync(new FeeScheduleInfo
+        {
+            Id = scheduleId,
+            Name = $"Medicare Outpatient Prospective Payment (OPPS) {year}",
+            Type = FeeScheduleType.MedicareOpps,
+            Version = $"{year}.Q1",
+            EffectiveDate = new DateOnly(year, 1, 1),
+            TermDate = new DateOnly(year, 12, 31),
+            CodeCount = totalCount,
+            Description = $"CMS Outpatient Prospective Payment System APC rates for calendar year {year}.",
+            LastUpdated = DateTimeOffset.UtcNow
+        });
+
+        _logger.LogInformation("Medicare OPPS {Year} import complete: {Count} entries", year, totalCount);
+        return totalCount;
     }
 
     /// <summary>
@@ -271,5 +479,100 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             NonFacilityRate = Math.Round(weight * baseRate, 2),
             FacilityRate = Math.Round(weight * baseRate, 2)
         };
+    }
+
+    /// <summary>
+    /// Safely parse a decimal from a CMS CSV field that may be blank, whitespace, or contain spaces.
+    /// </summary>
+    private static decimal ParseDecimal(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return 0m;
+
+        var cleaned = value.Trim().Replace(" ", "");
+        if (string.IsNullOrEmpty(cleaned))
+            return 0m;
+
+        return decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out var result)
+            ? result
+            : 0m;
+    }
+
+    // ── CsvHelper row models and mappings ──
+
+    /// <summary>CMS PFSRVF (Physician Fee Schedule Relative Value File) row.</summary>
+    private sealed class RbrvsCsvRow
+    {
+        public string? Hcpcs { get; set; }
+        public string? Mod { get; set; }
+        public string? Description { get; set; }
+        public string? WorkRvu { get; set; }
+        public string? NonFacPeRvu { get; set; }
+        public string? FacPeRvu { get; set; }
+        public string? MpRvu { get; set; }
+        public string? ConvFactor { get; set; }
+        public string? Locality { get; set; }
+        public string? NonFacilityNaIndicator { get; set; }
+        public string? FacilityNaIndicator { get; set; }
+    }
+
+    private sealed class RbrvsCsvRowMap : ClassMap<RbrvsCsvRow>
+    {
+        public RbrvsCsvRowMap()
+        {
+            Map(m => m.Hcpcs).Name("HCPCS", "HCPCS_CD", "Hcpcs", "CPT/HCPCS", "hcpcs");
+            Map(m => m.Mod).Name("MOD", "MODIFIER", "Mod", "mod");
+            Map(m => m.Description).Name("DESCRIPTION", "SHORT_DESCRIPTION", "Description", "Short_Description", "description");
+            Map(m => m.WorkRvu).Name("WORK_RVU", "WORK RVU", "Work_RVU", "WorkRVU", "work_rvu");
+            Map(m => m.NonFacPeRvu).Name("NON_FAC_PE_RVU", "NON-FAC PE RVU", "Non_Fac_PE_RVU", "NonFacPeRvu", "non_fac_pe_rvu", "NONFAC_PE_RVU");
+            Map(m => m.FacPeRvu).Name("FAC_PE_RVU", "FAC PE RVU", "Fac_PE_RVU", "FacPeRvu", "fac_pe_rvu");
+            Map(m => m.MpRvu).Name("MP_RVU", "MAL_PRAC_RVU", "MALPRACTICE_RVU", "MP RVU", "MpRvu", "mp_rvu");
+            Map(m => m.ConvFactor).Name("CONV_FACTOR", "CF", "CONVERSION_FACTOR", "Conversion_Factor", "conv_factor");
+            Map(m => m.Locality).Name("LOCALITY", "MAC_LOCALITY", "Locality", "locality");
+            Map(m => m.NonFacilityNaIndicator).Name("NON_FACILITY_NA_INDICATOR", "Non_Facility_NA_Indicator", "NONFAC_NA_IND");
+            Map(m => m.FacilityNaIndicator).Name("FACILITY_NA_INDICATOR", "Facility_NA_Indicator", "FAC_NA_IND");
+        }
+    }
+
+    /// <summary>CMS OPPS Addendum B row.</summary>
+    private sealed class OppsCsvRow
+    {
+        public string? HcpcsCode { get; set; }
+        public string? Description { get; set; }
+        public string? Apc { get; set; }
+        public string? StatusIndicator { get; set; }
+        public string? RelativeWeight { get; set; }
+        public string? PaymentRate { get; set; }
+    }
+
+    private sealed class OppsCsvRowMap : ClassMap<OppsCsvRow>
+    {
+        public OppsCsvRowMap()
+        {
+            Map(m => m.HcpcsCode).Name("HCPCS_Code", "HCPCS Code", "CPT/HCPCS", "HCPCS", "hcpcs_code");
+            Map(m => m.Description).Name("Short_Descriptor", "Short Descriptor", "SHORT_DESCRIPTOR", "Description", "description");
+            Map(m => m.Apc).Name("APC", "APC_Code", "Apc", "apc");
+            Map(m => m.StatusIndicator).Name("SI", "Status_Indicator", "Status Indicator", "StatusIndicator", "si");
+            Map(m => m.RelativeWeight).Name("Relative_Weight", "APC Relative Weight", "Relative Weight", "relative_weight");
+            Map(m => m.PaymentRate).Name("Payment_Rate", "APC Payment Rate", "Payment Rate", "payment_rate");
+        }
+    }
+
+    /// <summary>CMS MS-DRG Table 5 row.</summary>
+    private sealed class DrgCsvRow
+    {
+        public string? DrgCode { get; set; }
+        public string? Description { get; set; }
+        public string? Weight { get; set; }
+    }
+
+    private sealed class DrgCsvRowMap : ClassMap<DrgCsvRow>
+    {
+        public DrgCsvRowMap()
+        {
+            Map(m => m.DrgCode).Name("MS-DRG", "DRG", "MS_DRG", "DRG_Code", "drg", "ms_drg");
+            Map(m => m.Description).Name("DRG_Description", "MS-DRG Title", "DRG Description", "Description", "description");
+            Map(m => m.Weight).Name("Weights", "Relative Weight", "Relative_Weight", "Weight", "weight", "weights");
+        }
     }
 }

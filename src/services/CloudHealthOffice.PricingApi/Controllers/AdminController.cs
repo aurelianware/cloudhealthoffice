@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 
@@ -20,17 +21,20 @@ public class AdminController : ControllerBase
     private readonly IMongoCollection<ApiKeyRecord> _apiKeyCollection;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AdminController> _logger;
+    private readonly IFeeScheduleLoaderService _feeScheduleLoader;
 
     public AdminController(
         IApiKeyRepository apiKeyRepo,
         IMongoDatabase database,
         IConfiguration configuration,
-        ILogger<AdminController> logger)
+        ILogger<AdminController> logger,
+        IFeeScheduleLoaderService feeScheduleLoader)
     {
         _apiKeyRepo = apiKeyRepo;
         _apiKeyCollection = database.GetCollection<ApiKeyRecord>("api_keys");
         _configuration = configuration;
         _logger = logger;
+        _feeScheduleLoader = feeScheduleLoader;
     }
 
     /// <summary>
@@ -153,6 +157,201 @@ public class AdminController : ControllerBase
         _logger.LogInformation("Admin reset monthly usage for all API keys");
 
         return Ok(new ApiResponse<object> { Data = new { message = "Monthly usage reset for all API keys." } });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Fee Schedule Upload Endpoints
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Upload a CMS Physician Fee Schedule (RBRVS/PFSRVF) CSV file.
+    /// </summary>
+    [HttpPost("fee-schedules/upload/rbrvs")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadRbrvs(IFormFile file, [FromQuery] int year = 2025)
+    {
+        var authResult = ValidateAdminSecret();
+        if (authResult is not null) return authResult;
+
+        var validationResult = ValidateCsvFile(file);
+        if (validationResult is not null) return validationResult;
+
+        var tempPath = Path.GetTempFileName();
+        try
+        {
+            await using (var stream = new FileStream(tempPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var codeCount = await _feeScheduleLoader.SeedMedicareRbrvs(tempPath, year);
+            _logger.LogInformation("Admin uploaded RBRVS {Year}: {Count} codes", year, codeCount);
+
+            return Ok(new ApiResponse<object>
+            {
+                Data = new { message = $"RBRVS {year} imported successfully.", codeCount, feeScheduleId = $"MEDICARE_RBRVS_{year}" }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import RBRVS {Year}", year);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import RBRVS CSV: {ex.Message}" }
+            });
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+                System.IO.File.Delete(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Upload a CMS OPPS Addendum B CSV file.
+    /// </summary>
+    [HttpPost("fee-schedules/upload/opps")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadOpps(IFormFile file, [FromQuery] int year = 2025)
+    {
+        var authResult = ValidateAdminSecret();
+        if (authResult is not null) return authResult;
+
+        var validationResult = ValidateCsvFile(file);
+        if (validationResult is not null) return validationResult;
+
+        var tempPath = Path.GetTempFileName();
+        try
+        {
+            await using (var stream = new FileStream(tempPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var codeCount = await _feeScheduleLoader.SeedMedicareOpps(tempPath, year);
+            _logger.LogInformation("Admin uploaded OPPS {Year}: {Count} codes", year, codeCount);
+
+            return Ok(new ApiResponse<object>
+            {
+                Data = new { message = $"OPPS {year} imported successfully.", codeCount, feeScheduleId = $"MEDICARE_OPPS_{year}" }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import OPPS {Year}", year);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import OPPS CSV: {ex.Message}" }
+            });
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+                System.IO.File.Delete(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Upload a CMS MS-DRG Table 5 CSV file.
+    /// </summary>
+    [HttpPost("fee-schedules/upload/drg")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadDrg(IFormFile file, [FromQuery] int year = 2025, [FromQuery] decimal baseRate = 6377.73m)
+    {
+        var authResult = ValidateAdminSecret();
+        if (authResult is not null) return authResult;
+
+        var validationResult = ValidateCsvFile(file);
+        if (validationResult is not null) return validationResult;
+
+        var tempPath = Path.GetTempFileName();
+        try
+        {
+            await using (var stream = new FileStream(tempPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var codeCount = await _feeScheduleLoader.SeedMedicareDrg(tempPath, year, baseRate);
+            _logger.LogInformation("Admin uploaded DRG {Year}: {Count} codes (baseRate={BaseRate})", year, codeCount, baseRate);
+
+            return Ok(new ApiResponse<object>
+            {
+                Data = new { message = $"MS-DRG FY{year} imported successfully.", codeCount, feeScheduleId = $"MEDICARE_DRG_{year}" }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import DRG {Year}", year);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import DRG CSV: {ex.Message}" }
+            });
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+                System.IO.File.Delete(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Re-seed demo fee schedule data (resets to demo environment).
+    /// </summary>
+    [HttpPost("fee-schedules/seed-demo")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SeedDemoData()
+    {
+        var authResult = ValidateAdminSecret();
+        if (authResult is not null) return authResult;
+
+        await _feeScheduleLoader.SeedDemoDataAsync();
+
+        _logger.LogInformation("Admin re-seeded demo fee schedule data");
+
+        return Ok(new ApiResponse<object>
+        {
+            Data = new { message = "Demo fee schedule data seeded successfully." }
+        });
+    }
+
+    /// <summary>
+    /// Validates that the uploaded file exists and has a .csv extension.
+    /// </summary>
+    private IActionResult? ValidateCsvFile(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Error = new ApiError { Code = "NO_FILE", Message = "A CSV file is required." }
+            });
+        }
+
+        if (!Path.GetExtension(file.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Error = new ApiError { Code = "INVALID_FILE_TYPE", Message = "File must have a .csv extension." }
+            });
+        }
+
+        return null;
     }
 
     /// <summary>
