@@ -142,6 +142,12 @@ public class UserContextService : IUserContextService
 
                 if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
                 {
+                    // If user exists but has no roles assigned, default to TenantAdmin
+                    // so the portal remains functional until roles are formally configured
+                    var roles = user.Roles is { Count: > 0 }
+                        ? user.Roles
+                        : new List<string> { "TenantAdmin" };
+
                     _cachedContext = new UserContext
                     {
                         UserId = user.Id,
@@ -150,9 +156,9 @@ public class UserContextService : IUserContextService
                         FirstName = user.FirstName,
                         LastName = user.LastName,
                         TenantId = user.TenantId,
-                        Roles = user.Roles ?? new(),
+                        Roles = roles,
                         Department = user.Department,
-                        Permissions = ExpandPermissions(user.Roles ?? new())
+                        Permissions = ExpandPermissions(roles)
                     };
 
                     _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
