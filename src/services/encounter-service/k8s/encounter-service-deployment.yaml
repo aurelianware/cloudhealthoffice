@@ -5,8 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__ContainerName: "Encounters"
+  MongoDb__DatabaseName: "CloudHealthOffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,7 +17,7 @@ metadata:
     tier: backend
     component: encounter-processing
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: encounter-service
@@ -40,34 +39,18 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: encounter-service-secret
-              key: MongoDb__ConnectionString
-              optional: true
+              name: mongodb-secret
+              key: connectionString
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
               name: encounter-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
+        - name: MongoDb__DatabaseName
           valueFrom:
             configMapKeyRef:
               name: encounter-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: encounter-service-config
-              key: CosmosDb__ContainerName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-db-secret
-              key: endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: cosmos-db-secret
-              key: key
+              key: MongoDb__DatabaseName
         resources:
           requests:
             cpu: 200m
@@ -115,7 +98,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: encounter-service
-  minReplicas: 3
+  minReplicas: 1
   maxReplicas: 20
   metrics:
   - type: Resource
