@@ -85,13 +85,6 @@ public class UserContextService : IUserContextService
             return null;
         }
 
-        var tenantContext = await _tenantContextService.GetCurrentTenantContextAsync();
-        if (tenantContext == null)
-        {
-            _loaded = true;
-            return null;
-        }
-
         var email = principal.FindFirst(ClaimTypes.Email)?.Value
                     ?? principal.FindFirst("preferred_username")?.Value
                     ?? principal.FindFirst("upn")?.Value;
@@ -100,6 +93,38 @@ public class UserContextService : IUserContextService
         {
             _loaded = true;
             return null;
+        }
+
+        var tenantContext = await _tenantContextService.GetCurrentTenantContextAsync();
+        if (tenantContext == null)
+        {
+            // Tenant context unavailable (e.g. tid claim missing or MongoDB unreachable).
+            // Grant TenantAdmin fallback so the portal remains functional for bootstrapping.
+            _logger.LogWarning("Tenant context unavailable for {RedactedEmail}, using TenantAdmin fallback", RedactEmail(email));
+
+            var fallbackName = principal.FindFirst("name")?.Value
+                               ?? principal.FindFirst(ClaimTypes.Name)?.Value
+                               ?? email;
+
+            var azureTenantId = principal.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
+                                ?? principal.FindFirst("tid")?.Value
+                                ?? "unknown";
+
+            _cachedContext = new UserContext
+            {
+                UserId = "fallback",
+                Email = email,
+                DisplayName = fallbackName,
+                FirstName = fallbackName.Split(' ').FirstOrDefault() ?? fallbackName,
+                LastName = fallbackName.Split(' ').Skip(1).FirstOrDefault() ?? "",
+                TenantId = azureTenantId,
+                Roles = new List<string> { "TenantAdmin" },
+                Department = "Administration",
+                Permissions = ExpandPermissions(new List<string> { "TenantAdmin" })
+            };
+
+            _loaded = true;
+            return _cachedContext;
         }
 
         var objectId = principal.FindFirst("oid")?.Value
