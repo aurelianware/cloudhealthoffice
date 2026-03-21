@@ -18,7 +18,7 @@ metadata:
     tier: backend
     component: risk-adjustment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: risk-adjustment-service
@@ -115,7 +115,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: risk-adjustment-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
   - type: Resource
