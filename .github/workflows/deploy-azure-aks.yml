@@ -151,6 +151,8 @@ jobs:
             build_context: '.'
           - service: encounter-service
             build_context: '.'
+          - service: CloudHealthOffice.PricingApi
+            image_name: cloudhealthoffice-pricing-api
 
     steps:
       - uses: actions/checkout@v4
@@ -175,8 +177,8 @@ jobs:
           file: ./src/services/${{ matrix.service }}/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ matrix.image_name || format('{0}-{1}', env.IMAGE_PREFIX, matrix.service) }}:latest
+            ${{ env.REGISTRY }}/${{ matrix.image_name || format('{0}-{1}', env.IMAGE_PREFIX, matrix.service) }}:sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
