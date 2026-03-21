@@ -16,6 +16,7 @@ data:
   Services__TenantService: "http://tenant-service.cloudhealthoffice/api"
   Services__BillingService: "http://billing-service.cloudhealthoffice/api"
   Services__RfaiService: "http://claims-service.cloudhealthoffice/api"
+  Services__PricingApi: "http://pricing-api.cloudhealthoffice"
   Services__ArgoWorkflows: "http://argo-workflows-server.cloudhealthoffice:2746"
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
@@ -187,6 +188,16 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: professional-price-id
+        - name: Services__PricingApi
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__PricingApi
+        - name: PricingApi__AdminSecret
+          valueFrom:
+            secretKeyRef:
+              name: pricing-api-secret
+              key: AdminSecret
         resources:
           requests:
             memory: "512Mi"
