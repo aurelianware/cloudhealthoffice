@@ -1,0 +1,256 @@
+@page "/platform/tenants"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject ITenantService TenantService
+@inject IUserContextService UserContextService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<PlatformTenants> Logger
+
+<PageTitle>Platform Tenants - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="platform:tenants" RoleName="PlatformAdmin">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <div>
+            <MudText Typo="Typo.h3" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Class="mr-2" />
+                Platform Tenants
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                View and manage all tenant organizations across the platform
+            </MudText>
+        </div>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    else
+    {
+        <!-- Summary cards -->
+        <MudGrid Class="mb-6">
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Tenants</MudText>
+                        <MudText Typo="Typo.h4">@_tenants.Count</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Active</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_tenants.Count(t => t.SubscriptionStatus == "Active")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Trial</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_tenants.Count(t => t.SubscriptionStatus == "Trial")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudCard Elevation="1">
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Suspended</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Error">@_tenants.Count(t => t.SubscriptionStatus is "Suspended" or "Cancelled")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Filters -->
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudStack Row="true" Spacing="3" Class="mb-4">
+                    <MudTextField @bind-Value="_searchTerm" Placeholder="Search by name, email, or tenant ID..."
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300" Class="flex-grow-1" />
+                    <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Clearable="true" Style="min-width: 160px;">
+                        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                        <MudSelectItem Value="@("Trial")">Trial</MudSelectItem>
+                        <MudSelectItem Value="@("Suspended")">Suspended</MudSelectItem>
+                        <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect T="string" @bind-Value="_tierFilter" Label="Tier" Clearable="true" Style="min-width: 160px;">
+                        <MudSelectItem Value="@("starter")">Starter</MudSelectItem>
+                        <MudSelectItem Value="@("professional")">Professional</MudSelectItem>
+                        <MudSelectItem Value="@("enterprise")">Enterprise</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+
+                <MudTable Items="@FilteredTenants" Dense="true" Hover="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Organization</MudTh>
+                        <MudTh>Tenant ID</MudTh>
+                        <MudTh>Tier</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Admin Emails</MudTh>
+                        <MudTh>Created</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Organization">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2"><strong>@context.OrganizationName</strong></MudText>
+                                @if (context.IsDemo)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Demo</MudChip>
+                                }
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Tenant ID">
+                            <MudText Typo="Typo.caption" Style="font-family: monospace;">@Truncate(context.AzureTenantId, 16)</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Tier">
+                            <MudChip T="string" Size="Size.Small" Color="@GetTierColor(context.Tier)" Variant="Variant.Filled">
+                                @(context.Tier ?? "—")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.SubscriptionStatus)" Variant="Variant.Filled">
+                                @context.SubscriptionStatus
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Admin Emails">
+                            @if (context.AdminEmails?.Count > 0)
+                            {
+                                <MudText Typo="Typo.caption">@string.Join(", ", context.AdminEmails)</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Created">
+                            <MudText Typo="Typo.caption">@context.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" AnchorOrigin="Origin.BottomRight">
+                                @if (context.SubscriptionStatus == "Active")
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Pause" OnClick="@(() => UpdateStatus(context, "Suspended"))">
+                                        Suspend
+                                    </MudMenuItem>
+                                }
+                                else if (context.SubscriptionStatus is "Suspended" or "Trial")
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => UpdateStatus(context, "Active"))">
+                                        Activate
+                                    </MudMenuItem>
+                                }
+                                @if (context.SubscriptionStatus != "Cancelled")
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconColor="Color.Error" OnClick="@(() => UpdateStatus(context, "Cancelled"))">
+                                        Cancel
+                                    </MudMenuItem>
+                                }
+                            </MudMenu>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center" Class="pa-8">
+                            No tenants found matching your filters.
+                        </MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private List<TenantSubscription> _tenants = new();
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string? _statusFilter;
+    private string? _tierFilter;
+
+    private IEnumerable<TenantSubscription> FilteredTenants => _tenants
+        .Where(t => string.IsNullOrEmpty(_statusFilter) || t.SubscriptionStatus == _statusFilter)
+        .Where(t => string.IsNullOrEmpty(_tierFilter) || string.Equals(t.Tier, _tierFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(t =>
+        {
+            if (string.IsNullOrEmpty(_searchTerm)) return true;
+            var term = _searchTerm.ToLowerInvariant();
+            return (t.OrganizationName?.ToLowerInvariant().Contains(term) ?? false)
+                || (t.AzureTenantId?.ToLowerInvariant().Contains(term) ?? false)
+                || (t.TenantId?.ToLowerInvariant().Contains(term) ?? false)
+                || (t.AdminEmails?.Any(e => e.ToLowerInvariant().Contains(term)) ?? false);
+        });
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _tenants = await TenantService.GetAllSubscriptionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load tenants");
+            Snackbar.Add("Failed to load tenants", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task UpdateStatus(TenantSubscription tenant, string newStatus)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            $"{newStatus} Tenant",
+            $"Are you sure you want to set {tenant.OrganizationName} to {newStatus}?",
+            yesText: "Confirm", cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        try
+        {
+            await TenantService.UpdateSubscriptionStatusAsync(tenant.AzureTenantId, newStatus);
+            tenant.SubscriptionStatus = newStatus;
+            Snackbar.Add($"{tenant.OrganizationName} set to {newStatus}", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update tenant status");
+            Snackbar.Add("Failed to update tenant status", Severity.Error);
+        }
+    }
+
+    private static Color GetStatusColor(string? status) => status switch
+    {
+        "Active" => Color.Success,
+        "Trial" => Color.Warning,
+        "Suspended" => Color.Error,
+        "Cancelled" => Color.Dark,
+        _ => Color.Default
+    };
+
+    private static Color GetTierColor(string? tier) => tier?.ToLowerInvariant() switch
+    {
+        "enterprise" => Color.Primary,
+        "professional" => Color.Info,
+        "starter" => Color.Default,
+        _ => Color.Default
+    };
+
+    private static string Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return "—";
+        return value.Length <= maxLength ? value : value[..maxLength] + "...";
+    }
+}

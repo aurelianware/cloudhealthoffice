@@ -43,6 +43,7 @@ public class UserContext
         "Finance" => "Finance",
         "ComplianceOfficer" => "Compliance Officer",
         "TenantAdmin" => "Tenant Admin",
+        "PlatformAdmin" => "Platform Admin",
         _ => PrimaryRole
     };
 }
@@ -297,6 +298,12 @@ public class UserContextService : IUserContextService
         {
             "*:*", "users:manage", "roles:manage",
             "settings:manage", "operating-mode:manage"
+        },
+        "PlatformAdmin" => new()
+        {
+            "*:*", "users:manage", "roles:manage",
+            "settings:manage", "operating-mode:manage",
+            "platform:admin", "platform:tenants", "platform:inquiries"
         },
         _ => new()
     };

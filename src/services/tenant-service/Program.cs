@@ -58,6 +58,89 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Auto-provision Cosmos DB database and containers on startup
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var cosmosClient = scope.ServiceProvider.GetRequiredService<CosmosClient>();
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+    var databaseName = config["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+
+    try
+    {
+        var dbResponse = await cosmosClient.CreateDatabaseIfNotExistsAsync(databaseName);
+        var database = dbResponse.Database;
+        logger.LogInformation("Cosmos DB database '{DatabaseName}' ensured", databaseName);
+
+        var containers = new[]
+        {
+            (Name: config["CosmosDb:TenantContainerName"] ?? "Tenants", PartitionKey: "/id"),
+            (Name: config["CosmosDb:UserContainerName"] ?? "TenantUsers", PartitionKey: "/id"),
+            (Name: config["CosmosDb:RoleContainerName"] ?? "TenantRoles", PartitionKey: "/id"),
+        };
+
+        foreach (var (name, partitionKey) in containers)
+        {
+            await database.CreateContainerIfNotExistsAsync(name, partitionKey);
+            logger.LogInformation("Cosmos DB container '{ContainerName}' ensured", name);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to auto-provision Cosmos DB containers. They may need to be created manually.");
+    }
+}
+
+// Seed the bootstrap TenantAdmin so the first user can log into the portal.
+// Other tenants self-serve via /signup; their admins manage users at /settings/users.
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var userRepo = scope.ServiceProvider.GetRequiredService<ITenantUserRepository>();
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+        var seedTenantId = config["SeedAdmin:TenantId"] ?? "32177734-051b-4fdc-9568-cc35530191b1";
+        var seedEmail = config["SeedAdmin:Email"] ?? "";
+
+        if (!string.IsNullOrEmpty(seedEmail))
+        {
+            var existing = await userRepo.GetByEmailAsync(seedTenantId, seedEmail);
+            if (existing == null)
+            {
+                var adminUser = new TenantService.Models.TenantUser
+                {
+                    TenantId = seedTenantId,
+                    Email = seedEmail,
+                    EmailNormalized = seedEmail.ToLowerInvariant(),
+                    DisplayName = config["SeedAdmin:DisplayName"] ?? seedEmail.Split('@')[0],
+                    FirstName = config["SeedAdmin:FirstName"] ?? seedEmail.Split('@')[0],
+                    LastName = config["SeedAdmin:LastName"] ?? "",
+                    Roles = new List<string> { "TenantAdmin" },
+                    Department = "Administration",
+                    Status = "Active"
+                };
+                await userRepo.CreateAsync(adminUser);
+                logger.LogInformation("Seeded admin TenantUser {Email} for tenant {TenantId}", seedEmail, seedTenantId);
+            }
+            else
+            {
+                logger.LogDebug("Admin TenantUser {Email} already exists for tenant {TenantId}", seedEmail, seedTenantId);
+            }
+        }
+        else
+        {
+            logger.LogDebug("SeedAdmin:Email not configured, skipping bootstrap seed");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to seed admin TenantUser. User will get TenantAdmin fallback role in portal.");
+    }
+}
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
