@@ -18,6 +18,11 @@
         Track and manage member and provider appeals through the regulatory lifecycle
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loadingSummary)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -281,6 +286,7 @@
     private bool _loadingSummary = true;
     private bool _loadingResults;
     private bool _hasSearched;
+    private string? _serviceError;
     private AppealsSummary? _summary;
     private List<AppealSummary> _results = new();
 
@@ -295,6 +301,14 @@
         {
             _summary = await AppealsService.GetSummaryAsync();
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Appeals service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading appeals: {ex.Message}";
+        }
         finally
         {
             _loadingSummary = false;
@@ -305,6 +319,7 @@
     {
         _loadingResults = true;
         _hasSearched = true;
+        _serviceError = null;
 
         try
         {
@@ -312,6 +327,14 @@
                 _searchAppealId?.Trim(),
                 _searchMemberId?.Trim(),
                 _searchOriginalId?.Trim());
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Appeals service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred searching appeals: {ex.Message}";
         }
         finally
         {
