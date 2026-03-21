@@ -1643,3 +1643,44 @@ public class RfaiTrackingItem
     public int DaysUntilDeadline { get; set; }
     public string Status { get; set; } = string.Empty;
 }
+
+public interface IPricingApiService
+{
+    Task<List<PricingApiKey>> GetApiKeysAsync();
+    Task<PricingApiKey> CreateApiKeyAsync(string tenantName, string contactEmail, string tier);
+    Task DeactivateApiKeyAsync(string apiKey);
+    Task ResetUsageAsync();
+    Task<List<PricingFeeScheduleInfo>> GetFeeSchedulesAsync();
+    Task<FeeScheduleUploadResult> UploadFeeScheduleAsync(string type, int year, Stream csvStream, string fileName, decimal? baseRate = null);
+    Task SeedDemoDataAsync();
+}
+
+public class PricingApiKey
+{
+    public string ApiKey { get; set; } = "";
+    public string TenantName { get; set; } = "";
+    public string ContactEmail { get; set; } = "";
+    public string Tier { get; set; } = "";
+    public int MonthlyLimit { get; set; }
+    public int CurrentMonthUsage { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class PricingFeeScheduleInfo
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string Version { get; set; } = "";
+    public int CodeCount { get; set; }
+    public string? Description { get; set; }
+    public DateTimeOffset LastUpdated { get; set; }
+}
+
+public class FeeScheduleUploadResult
+{
+    public string Message { get; set; } = "";
+    public int CodeCount { get; set; }
+    public string FeeScheduleId { get; set; } = "";
+}

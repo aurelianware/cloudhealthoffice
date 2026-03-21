@@ -2314,3 +2314,146 @@ public class CorrespondenceService : ICorrespondenceService
         }
     }
 }
+
+public class PricingApiService : IPricingApiService
+{
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<PricingApiService> _logger;
+
+    public PricingApiService(HttpClient httpClient, IConfiguration configuration, ILogger<PricingApiService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    private string BaseUrl => _configuration["Services:PricingApi"] ?? "http://pricing-api.cloudhealthoffice";
+    private string AdminSecret => _configuration["PricingApi:AdminSecret"] ?? "";
+
+    private HttpRequestMessage CreateAdminRequest(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Add("X-Admin-Secret", AdminSecret);
+        return request;
+    }
+
+    public async Task<List<PricingApiKey>> GetApiKeysAsync()
+    {
+        try
+        {
+            var request = CreateAdminRequest(HttpMethod.Get, $"{BaseUrl}/api/v1/admin/api-keys");
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var keys = await response.Content.ReadFromJsonAsync<List<PricingApiKey>>();
+            return keys ?? new();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task<PricingApiKey> CreateApiKeyAsync(string tenantName, string contactEmail, string tier)
+    {
+        try
+        {
+            var request = CreateAdminRequest(HttpMethod.Post, $"{BaseUrl}/api/v1/admin/api-keys");
+            request.Content = JsonContent.Create(new { tenantName, contactEmail, tier });
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var key = await response.Content.ReadFromJsonAsync<PricingApiKey>();
+            return key ?? new();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task DeactivateApiKeyAsync(string apiKey)
+    {
+        try
+        {
+            var request = CreateAdminRequest(HttpMethod.Delete, $"{BaseUrl}/api/v1/admin/api-keys/{Uri.EscapeDataString(apiKey)}");
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task ResetUsageAsync()
+    {
+        try
+        {
+            var request = CreateAdminRequest(HttpMethod.Post, $"{BaseUrl}/api/v1/admin/api-keys/reset-usage");
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task<List<PricingFeeScheduleInfo>> GetFeeSchedulesAsync()
+    {
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<PricingFeeScheduleInfo>>($"{BaseUrl}/api/v1/fee-schedules");
+            return result ?? new();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task<FeeScheduleUploadResult> UploadFeeScheduleAsync(string type, int year, Stream csvStream, string fileName, decimal? baseRate = null)
+    {
+        try
+        {
+            var url = $"{BaseUrl}/api/v1/admin/fee-schedules/upload/{type.ToLowerInvariant()}?year={year}";
+            if (baseRate.HasValue)
+                url += $"&baseRate={baseRate.Value}";
+
+            var request = CreateAdminRequest(HttpMethod.Post, url);
+            var content = new MultipartFormDataContent();
+            content.Add(new StreamContent(csvStream), "file", fileName);
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<FeeScheduleUploadResult>();
+            return result ?? new();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+
+    public async Task SeedDemoDataAsync()
+    {
+        try
+        {
+            var request = CreateAdminRequest(HttpMethod.Post, $"{BaseUrl}/api/v1/admin/fee-schedules/seed-demo");
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Pricing API");
+            throw new ServiceUnavailableException("Pricing API", ex);
+        }
+    }
+}
