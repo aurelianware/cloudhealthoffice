@@ -193,6 +193,42 @@ public class TenantHttpMessageHandlerTests
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
             await failingInvoker.SendAsync(request, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task SendAsync_WhenHeaderAlreadyPresent_SkipsResolution()
+    {
+        // Arrange — simulates the header set by HttpClient.DefaultRequestHeaders in MainLayout
+        var requestUri = new Uri("https://api.example.com/claims");
+        var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Add("X-Tenant-ID", "pre-set-tenant");
+
+        // Act
+        var response = await _invoker.SendAsync(request, CancellationToken.None);
+
+        // Assert — handler must NOT call ITenantContextService at all
+        _tenantContextService.Verify(x => x.GetTenantIdAsync(), Times.Never);
+        request.Headers.GetValues("X-Tenant-ID").Should().ContainSingle().Which.Should().Be("pre-set-tenant");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenAuthStateProviderThrows_DoesNotCrash()
+    {
+        // Arrange — simulates the IHttpClientFactory scope issue in Blazor Server
+        var requestUri = new Uri("https://api.example.com/claims");
+        var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+
+        _tenantContextService.Setup(x => x.GetTenantIdAsync())
+            .ThrowsAsync(new InvalidOperationException(
+                "Do not call GetAuthenticationStateAsync outside of the DI scope for a Razor component."));
+
+        // Act
+        var response = await _invoker.SendAsync(request, CancellationToken.None);
+
+        // Assert — request should proceed without the header, not throw
+        request.Headers.Should().NotContain(h => h.Key == "X-Tenant-ID");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }
 
 // Test helper: HTTP handler that always returns OK
