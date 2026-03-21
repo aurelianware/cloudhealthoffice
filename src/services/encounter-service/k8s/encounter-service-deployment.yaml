@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
       - name: encounter-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-encounter-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-encounter-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
