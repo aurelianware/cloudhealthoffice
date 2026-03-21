@@ -1252,6 +1252,25 @@ public class TenantService : ITenantService
             throw;
         }
     }
+
+    public async Task<List<TenantSubscription>> GetAllSubscriptionsAsync()
+    {
+        var tenants = await _tenantsCollection
+            .Find(Builders<TenantSubscription>.Filter.Empty)
+            .SortByDescending(t => t.CreatedAt)
+            .ToListAsync();
+        return tenants;
+    }
+
+    public async Task UpdateSubscriptionStatusAsync(string azureTenantId, string status)
+    {
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var update = Builders<TenantSubscription>.Update
+            .Set(t => t.SubscriptionStatus, status)
+            .Set(t => t.UpdatedAt, DateTime.UtcNow);
+        await _tenantsCollection.UpdateOneAsync(filter, update);
+        _logger.LogInformation("Updated subscription status for tenant {TenantId} to {Status}", azureTenantId, status);
+    }
 }
 
 public class SalesInquiryService : ISalesInquiryService

@@ -191,6 +191,24 @@
                             </MudNavLink>
                         }
                     </MudNavGroup>
+
+                    @if (_isPlatformAdmin)
+                    {
+                        <MudDivider Style="margin: 12px 0; border-color: rgba(0, 255, 255, 0.15);" />
+
+                        <!-- PLATFORM ADMIN -->
+                        <MudNavGroup Title="Platform" Icon="@Icons.Material.Filled.Cloud" Expanded="false"
+                                     Style="border-left: 3px solid rgba(0, 255, 136, 0.4); font-size: 0.85rem;">
+                            <MudNavLink Href="/platform/tenants" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Tenants
+                            </MudNavLink>
+                            <MudNavLink Href="/platform/inquiries" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Sales Inquiries
+                            </MudNavLink>
+                        </MudNavGroup>
+                    }
                 </Authorized>
                 <NotAuthorized>
                     <!-- Public Website Menu -->
@@ -265,6 +283,7 @@
     private string? _tenantName;
     private bool _isDemo;
     private bool _isTenantAdmin;
+    private bool _isPlatformAdmin;
 
     private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
 
@@ -280,6 +299,7 @@
         {
             var userContext = await UserContextService.GetCurrentUserAsync();
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
+            _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
         }
         catch { }
     }

@@ -50,6 +50,30 @@ spec:
             configMapKeyRef:
               name: tenant-service-config
               key: MongoDb__DatabaseName
+        - name: CosmosDb__Endpoint
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-db-secret
+              key: endpoint
+        - name: CosmosDb__Key
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-db-secret
+              key: key
+        - name: SeedAdmin__TenantId
+          value: "32177734-051b-4fdc-9568-cc35530191b1"
+        - name: SeedAdmin__Email
+          valueFrom:
+            secretKeyRef:
+              name: seed-admin-secret
+              key: email
+              optional: true
+        - name: SeedAdmin__DisplayName
+          valueFrom:
+            secretKeyRef:
+              name: seed-admin-secret
+              key: displayName
+              optional: true
         resources:
           requests:
             cpu: 100m

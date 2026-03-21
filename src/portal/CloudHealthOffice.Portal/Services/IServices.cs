@@ -159,6 +159,8 @@ public interface ITenantService
     Task<TenantSubscription?> GetDemoTenantAsync();
     Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
     Task<string> CreateTenantAsync(CreateTenantRequest request);
+    Task<List<TenantSubscription>> GetAllSubscriptionsAsync();
+    Task UpdateSubscriptionStatusAsync(string azureTenantId, string status);
 }
 
 public interface ISalesInquiryService

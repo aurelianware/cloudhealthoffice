@@ -439,6 +439,14 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create seed admin secret
+        run: |
+          kubectl create secret generic seed-admin-secret \
+            --from-literal=email="${{ secrets.SEED_ADMIN_EMAIL }}" \
+            --from-literal=displayName="${{ secrets.SEED_ADMIN_DISPLAY_NAME }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Apply core manifests
         run: |
           kubectl apply -f infrastructure/k8s/namespaces.yaml
