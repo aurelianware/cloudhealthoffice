@@ -15,7 +15,8 @@ public class ApiKeyMiddleware
         "/health",
         "/swagger",
         "/api/v1/fee-schedules",  // Allow browsing available schedules without auth
-        "/api/v1/admin"           // Admin endpoints use X-Admin-Secret instead of API key
+        "/api/v1/admin",          // Admin endpoints use X-Admin-Secret instead of API key
+        "/api/v1/signup"          // Public self-service signup
     ];
 
     public ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger)
