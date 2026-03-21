@@ -116,9 +116,9 @@ export class ClaimsScrubberService {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`[Initialize] Kafka connection failed (${message}), continuing without Kafka`);
-        this.kafka = undefined;
-        this.producer = undefined;
-        this.consumer = undefined;
+        this.kafka = null;
+        this.producer = null;
+        this.consumer = null;
       }
     }
 

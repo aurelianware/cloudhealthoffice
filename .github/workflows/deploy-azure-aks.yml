@@ -102,6 +102,7 @@ jobs:
           - fhir-service
           - smart-auth-service
           - risk-adjustment-service
+          - encounter-service
         include:
           # Most .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
@@ -145,6 +146,8 @@ jobs:
           - service: smart-auth-service
             build_context: '.'
           - service: risk-adjustment-service
+            build_context: '.'
+          - service: encounter-service
             build_context: '.'
 
     steps:
