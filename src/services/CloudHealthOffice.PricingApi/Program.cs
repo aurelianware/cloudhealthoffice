@@ -165,11 +165,19 @@ try
     app.MapControllers();
     app.MapHealthChecks("/health");
 
-    // ── Seed demo data on startup ──
+    // ── Seed demo data on startup (only if database is empty) ──
     using (var scope = app.Services.CreateScope())
     {
         var loader = scope.ServiceProvider.GetRequiredService<IFeeScheduleLoaderService>();
-        await loader.SeedDemoDataAsync();
+        if (!await loader.AnySchedulesExistAsync())
+        {
+            Log.Information("No fee schedules found — seeding demo data...");
+            await loader.SeedDemoDataAsync();
+        }
+        else
+        {
+            Log.Information("Fee schedules already exist — skipping demo data seeding.");
+        }
     }
 
     Log.Information("CloudHealthOffice Pricing API started on {Urls}", string.Join(", ", app.Urls));
