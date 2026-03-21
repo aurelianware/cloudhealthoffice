@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - name: risk-adjustment-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-risk-adjustment-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-risk-adjustment-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

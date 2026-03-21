@@ -36,7 +36,7 @@ metadata:
     component: fhir-layer
     compliance: cms-0057-f
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: fhir-service
@@ -47,7 +47,8 @@ spec:
     spec:
       containers:
         - name: fhir-service
-          image: ghcr.io/aurelianware/cloudhealthoffice-fhir-service:latest
+          image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-fhir-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           envFrom:
@@ -101,7 +102,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: fhir-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 6
   metrics:
     - type: Resource
