@@ -8,12 +8,12 @@
  * - Configurable validation rule engine
  * - Standard and custom rule support
  * - Kafka integration for claim routing
- * - Cosmos DB for rule storage and audit
+ * - MongoDB for rule storage and audit
  * - First-pass rate metrics tracking
  */
 
 import { Kafka, Producer, Consumer, logLevel } from 'kafkajs';
-import { CosmosClient, Container, Database } from '@azure/cosmos';
+import { MongoClient, Db, Collection } from 'mongodb';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 import { v4 as uuidv4 } from 'uuid';
@@ -43,10 +43,10 @@ export class ClaimsScrubberService {
   private kafka: Kafka | null = null;
   private producer: Producer | null = null;
   private consumer: Consumer | null = null;
-  private cosmosClient: CosmosClient | null = null;
-  private database: Database | null = null;
-  private rulesContainer: Container | null = null;
-  private auditContainer: Container | null = null;
+  private mongoClient: MongoClient | null = null;
+  private database: Db | null = null;
+  private rulesCollection: Collection | null = null;
+  private auditCollection: Collection | null = null;
   private blobServiceClient: BlobServiceClient | null = null;
   private archiveContainer: ContainerClient | null = null;
   private startTime: number;
@@ -104,14 +104,12 @@ export class ClaimsScrubberService {
       });
     }
 
-    // Initialize Cosmos DB
-    this.cosmosClient = new CosmosClient({
-      endpoint: this.config.cosmosDb.endpoint,
-      aadCredentials: credential,
-    });
-    this.database = this.cosmosClient.database(this.config.cosmosDb.databaseName);
-    this.rulesContainer = this.database.container(this.config.cosmosDb.rulesContainerName);
-    this.auditContainer = this.database.container(this.config.cosmosDb.auditContainerName);
+    // Initialize MongoDB
+    this.mongoClient = new MongoClient(this.config.mongoDb.connectionString);
+    await this.mongoClient.connect();
+    this.database = this.mongoClient.db(this.config.mongoDb.databaseName);
+    this.rulesCollection = this.database.collection(this.config.mongoDb.rulesCollectionName);
+    this.auditCollection = this.database.collection(this.config.mongoDb.auditCollectionName);
 
     // Initialize Blob Storage
     if (this.config.storage.connectionString) {
@@ -135,21 +133,18 @@ export class ClaimsScrubberService {
    * Load custom rules from Cosmos DB
    */
   private async loadCustomRules(): Promise<void> {
-    if (!this.rulesContainer) return;
+    if (!this.rulesCollection) return;
 
     try {
-      const query = {
-        query: 'SELECT * FROM c WHERE c.type = @type AND c.enabled = true',
-        parameters: [{ name: '@type', value: 'custom' }],
-      };
-
-      const { resources } = await this.rulesContainer.items.query<CustomRule>(query).fetchAll();
+      const resources = await this.rulesCollection
+        .find<CustomRule>({ type: 'custom', enabled: true })
+        .toArray();
 
       for (const rule of resources) {
         this.ruleEngine.addCustomRule(rule);
       }
 
-      console.log(`Loaded ${resources.length} custom rules from Cosmos DB`);
+      console.log(`Loaded ${resources.length} custom rules from MongoDB`);
     } catch (error) {
       console.error('Failed to load custom rules:', error);
     }
@@ -383,11 +378,10 @@ export class ClaimsScrubberService {
     result: ClaimValidationResult,
     correlationId: string
   ): Promise<void> {
-    if (!this.auditContainer) return;
+    if (!this.auditCollection) return;
 
     try {
       const auditRecord = {
-        id: uuidv4(),
         claimId: claim.claimId,
         claimType: claim.claimType,
         patientControlNumber: claim.claimHeader.patientControlNumber,
@@ -405,11 +399,11 @@ export class ClaimsScrubberService {
           .map(r => r.editCode),
         validationTimeMs: result.totalValidationTimeMs,
         correlationId,
-        timestamp: new Date().toISOString(),
-        ttl: 90 * 24 * 60 * 60, // 90 days TTL
+        timestamp: new Date(),
+        expireAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days TTL
       };
 
-      await this.auditContainer.items.create(auditRecord);
+      await this.auditCollection.insertOne(auditRecord);
     } catch (error) {
       console.error('Failed to audit claim', { claimId: claim.claimId }, error);
     }
@@ -419,9 +413,9 @@ export class ClaimsScrubberService {
    * Add a custom validation rule
    */
   async addCustomRule(rule: CustomRule): Promise<void> {
-    // Save to Cosmos DB
-    if (this.rulesContainer) {
-      await this.rulesContainer.items.create(rule);
+    // Save to MongoDB
+    if (this.rulesCollection) {
+      await this.rulesCollection.insertOne(rule);
     }
     
     // Add to in-memory rule engine
@@ -448,7 +442,7 @@ export class ClaimsScrubberService {
   async getHealth(): Promise<HealthStatus> {
     const checks: HealthStatus['checks'] = {
       kafka: await this.checkKafkaHealth(),
-      cosmosDb: await this.checkCosmosDbHealth(),
+      mongoDb: await this.checkMongoDbHealth(),
       storage: await this.checkStorageHealth(),
       ruleEngine: this.checkRuleEngineHealth(),
     };
@@ -515,19 +509,19 @@ export class ClaimsScrubberService {
   }
 
   /**
-   * Check Cosmos DB health
+   * Check MongoDB health
    */
-  private async checkCosmosDbHealth(): Promise<ComponentHealth> {
+  private async checkMongoDbHealth(): Promise<ComponentHealth> {
     const start = Date.now();
     try {
       if (!this.database) {
         return {
           status: 'unhealthy',
           lastCheck: new Date().toISOString(),
-          error: 'Cosmos DB client not initialized',
+          error: 'MongoDB client not initialized',
         };
       }
-      await this.database.read();
+      await this.database.command({ ping: 1 });
       return {
         status: 'healthy',
         latencyMs: Date.now() - start,
@@ -629,6 +623,7 @@ export class ClaimsScrubberService {
   async close(): Promise<void> {
     if (this.consumer) await this.consumer.disconnect();
     if (this.producer) await this.producer.disconnect();
+    if (this.mongoClient) await this.mongoClient.close();
   }
 }
 
