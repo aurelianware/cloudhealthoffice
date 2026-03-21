@@ -18,7 +18,7 @@ metadata:
     tier: backend
     component: encounter-processing
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: encounter-service
@@ -115,7 +115,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: encounter-service
-  minReplicas: 3
+  minReplicas: 1
   maxReplicas: 20
   metrics:
   - type: Resource
