@@ -104,9 +104,10 @@ jobs:
           - risk-adjustment-service
           - encounter-service
         include:
-          # Most .NET services need repo root as context to reach
+          # All .NET services need repo root as context to reach
           # src/services/shared/CloudHealthOffice.Infrastructure/ and/or src/engines/.
-          # Only claims-scrubbing-service (Node.js) is truly self-contained.
+          - service: claims-scrubbing-service
+            build_context: '.'
           - service: member-service
             build_context: '.'
           - service: coverage-service

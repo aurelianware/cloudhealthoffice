@@ -52,9 +52,9 @@ jobs:
           - benefit-plan-service
           - payment-service
         include:
-          # claims-scrubbing-service is Node.js — its Dockerfile uses service-local paths
+          # claims-scrubbing-service is now .NET — needs repo root for shared lib
           - service: claims-scrubbing-service
-            build_context: './src/services/claims-scrubbing-service'
+            build_context: '.'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
