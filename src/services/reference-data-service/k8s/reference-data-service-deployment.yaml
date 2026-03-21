@@ -90,7 +90,7 @@ metadata:
   name: reference-data-service
   namespace: cloudhealthoffice
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: reference-data-service
@@ -155,7 +155,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: reference-data-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
   - type: Resource
