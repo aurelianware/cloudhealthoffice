@@ -22,7 +22,12 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSingleton<CosmosClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
-    var endpoint = configuration["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint not configured");
+    var connectionString = configuration["CosmosDb:ConnectionString"];
+    if (!string.IsNullOrEmpty(connectionString))
+    {
+        return new CosmosClient(connectionString);
+    }
+    var endpoint = configuration["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint or CosmosDb:ConnectionString must be configured");
     var key = configuration["CosmosDb:Key"] ?? throw new InvalidOperationException("CosmosDb:Key not configured");
     return new CosmosClient(endpoint, key);
 });
