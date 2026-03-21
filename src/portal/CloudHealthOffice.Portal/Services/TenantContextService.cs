@@ -6,6 +6,13 @@ namespace CloudHealthOffice.Portal.Services;
 /// <summary>
 /// Service to manage tenant context for the current authenticated user.
 /// Extracts tenant information from Azure AD claims and subscription data.
+///
+/// IMPORTANT: This service depends on AuthenticationStateProvider, which is only
+/// valid inside a Blazor component DI scope. Do NOT call GetCurrentTenantContextAsync
+/// or GetTenantIdAsync from DelegatingHandlers or other infrastructure that resolves
+/// outside the Razor circuit scope. Instead, have Razor components (e.g. MainLayout)
+/// pre-resolve the tenant context and propagate the tenant ID via
+/// HttpClient.DefaultRequestHeaders["X-Tenant-ID"].
 /// </summary>
 public interface ITenantContextService
 {
