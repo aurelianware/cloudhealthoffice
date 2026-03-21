@@ -16,6 +16,11 @@
         Browse and manage medical coding standards (CPT, ICD-10, HCPCS, Revenue Codes)
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Filters Bar -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
@@ -170,6 +175,7 @@
 @code {
     private List<MedicalCode> _codes = new();
     private bool _isLoading = true;
+    private string? _serviceError;
 
     private string _codeSystemFilter = "All";
     private string _searchTerm = string.Empty;
@@ -182,9 +188,23 @@
     private async Task LoadCodes()
     {
         _isLoading = true;
-        var codeSystem = _codeSystemFilter == "All" ? null : _codeSystemFilter;
-        _codes = await ReferenceDataService.SearchCodesAsync(codeSystem, _searchTerm);
-        _isLoading = false;
+        try
+        {
+            var codeSystem = _codeSystemFilter == "All" ? null : _codeSystemFilter;
+            _codes = await ReferenceDataService.SearchCodesAsync(codeSystem, _searchTerm);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Reference data service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading reference data: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private void OnSearchKeyUp(KeyboardEventArgs e)

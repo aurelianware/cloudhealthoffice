@@ -18,6 +18,11 @@
         Claims requiring manual review or intervention
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -219,6 +224,7 @@
 
 @code {
     private bool _loading = true;
+    private string? _serviceError;
     private WorkQueueSummary? _summary;
     private List<WorkQueueItem> _allItems = new();
     private List<WorkQueueItem> _filteredItems = new();
@@ -246,6 +252,14 @@
             _summary = summaryTask.Result;
             _allItems = itemsTask.Result;
             ApplyFilters();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Work queue service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading work queues: {ex.Message}";
         }
         finally
         {
