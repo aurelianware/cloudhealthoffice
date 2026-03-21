@@ -139,60 +139,69 @@ public class UserContextService : IUserContextService
                 throw new InvalidOperationException("TenantService base URL is not configured.");
             }
 
-            HttpResponseMessage response;
+            TenantUserDto? user = null;
+
+            // Try OID lookup first (fastest, single-document query)
             if (!string.IsNullOrEmpty(objectId))
             {
-                response = await _httpClient.GetAsync(
+                var oidResponse = await _httpClient.GetAsync(
                     $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users/by-oid/{Uri.EscapeDataString(objectId)}");
-            }
-            else
-            {
-                // Fallback: fetch all users and filter client-side
-                response = await _httpClient.GetAsync(
-                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users");
+                if (oidResponse.IsSuccessStatusCode)
+                {
+                    user = await oidResponse.Content.ReadFromJsonAsync<TenantUserDto>();
+                }
             }
 
-            if (response.IsSuccessStatusCode)
+            // Fall back to email lookup if OID not found or not available
+            if (user == null)
             {
-                TenantUserDto? user;
-                if (!string.IsNullOrEmpty(objectId))
+                var emailResponse = await _httpClient.GetAsync(
+                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users");
+                if (emailResponse.IsSuccessStatusCode)
                 {
-                    user = await response.Content.ReadFromJsonAsync<TenantUserDto>();
-                }
-                else
-                {
-                    var users = await response.Content.ReadFromJsonAsync<List<TenantUserDto>>();
+                    var users = await emailResponse.Content.ReadFromJsonAsync<List<TenantUserDto>>();
                     user = users?.FirstOrDefault(u =>
                         string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
-                }
 
-                if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
-                {
-                    // If user exists but has no roles assigned, default to TenantAdmin
-                    // so the portal remains functional until roles are formally configured
-                    var roles = user.Roles is { Count: > 0 }
-                        ? user.Roles
-                        : new List<string> { "TenantAdmin" };
-
-                    _cachedContext = new UserContext
+                    // Backfill OID if we found the user by email but they had no OID
+                    if (user != null && !string.IsNullOrEmpty(objectId) && string.IsNullOrEmpty(user.AzureAdObjectId))
                     {
-                        UserId = user.Id,
-                        Email = user.Email,
-                        DisplayName = user.DisplayName,
-                        FirstName = user.FirstName,
-                        LastName = user.LastName,
-                        TenantId = user.TenantId,
-                        Roles = roles,
-                        Department = user.Department,
-                        Permissions = ExpandPermissions(roles)
-                    };
-
-                    _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
-                        RedactEmail(email), string.Join(", ", _cachedContext.Roles));
-
-                    _loaded = true;
-                    return _cachedContext;
+                        _logger.LogInformation("Backfilling Azure AD OID for user {RedactedEmail}", RedactEmail(email));
+                        try
+                        {
+                            await _httpClient.PatchAsJsonAsync(
+                                $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users/{user.Id}",
+                                new { azureAdObjectId = objectId });
+                        }
+                        catch { /* best-effort backfill */ }
+                    }
                 }
+            }
+
+            if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
+            {
+                var roles = user.Roles is { Count: > 0 }
+                    ? user.Roles
+                    : new List<string> { "TenantAdmin" };
+
+                _cachedContext = new UserContext
+                {
+                    UserId = user.Id,
+                    Email = user.Email,
+                    DisplayName = user.DisplayName,
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    TenantId = user.TenantId,
+                    Roles = roles,
+                    Department = user.Department,
+                    Permissions = ExpandPermissions(roles)
+                };
+
+                _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
+                    RedactEmail(email), string.Join(", ", _cachedContext.Roles));
+
+                _loaded = true;
+                return _cachedContext;
             }
 
             _logger.LogDebug("No active TenantUser found for {RedactedEmail} in tenant {TenantId}, using fallback",
@@ -371,6 +380,7 @@ internal class TenantUserDto
     public string DisplayName { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
+    public string AzureAdObjectId { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
     public string Department { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
