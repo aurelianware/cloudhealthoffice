@@ -1,135 +1,76 @@
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
 using TenantService.Models;
 
 namespace TenantService.Services;
 
 public class TenantUserRepository : ITenantUserRepository
 {
-    private readonly Container _container;
+    private readonly IMongoCollection<TenantUser> _collection;
     private readonly ILogger<TenantUserRepository> _logger;
 
-    public TenantUserRepository(CosmosClient cosmosClient, IConfiguration configuration, ILogger<TenantUserRepository> logger)
+    public TenantUserRepository(IMongoDatabase database, ILogger<TenantUserRepository> logger)
     {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var containerName = configuration["CosmosDb:UserContainerName"] ?? "TenantUsers";
-
-        _container = cosmosClient.GetContainer(databaseName, containerName);
+        _collection = database.GetCollection<TenantUser>("TenantUsers");
         _logger = logger;
+
+        // Ensure indexes for common queries
+        _collection.Indexes.CreateMany(new[]
+        {
+            new CreateIndexModel<TenantUser>(
+                Builders<TenantUser>.IndexKeys
+                    .Ascending(u => u.TenantId)
+                    .Ascending(u => u.EmailNormalized)),
+            new CreateIndexModel<TenantUser>(
+                Builders<TenantUser>.IndexKeys
+                    .Ascending(u => u.AzureAdObjectId))
+        });
     }
 
     public async Task<TenantUser?> GetByIdAsync(string id)
     {
-        try
-        {
-            var response = await _container.ReadItemAsync<TenantUser>(id, new PartitionKey(id));
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogWarning("TenantUser with ID {UserId} not found", SanitizeForLog(id));
-            return null;
-        }
+        return await _collection.Find(u => u.Id == id).FirstOrDefaultAsync();
     }
 
     public async Task<TenantUser?> GetByEmailAsync(string tenantId, string email)
     {
         var normalizedEmail = email.ToLowerInvariant();
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.emailNormalized = @email")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@email", normalizedEmail);
-
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var response = await iterator.ReadNextAsync();
-
-        return response.FirstOrDefault();
+        return await _collection.Find(u =>
+            u.TenantId == tenantId && u.EmailNormalized == normalizedEmail).FirstOrDefaultAsync();
     }
 
     public async Task<TenantUser?> GetByAzureAdObjectIdAsync(string azureAdObjectId)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.azureAdObjectId = @oid")
-            .WithParameter("@oid", azureAdObjectId);
-
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var response = await iterator.ReadNextAsync();
-
-        return response.FirstOrDefault();
+        return await _collection.Find(u => u.AzureAdObjectId == azureAdObjectId).FirstOrDefaultAsync();
     }
 
     public async Task<IEnumerable<TenantUser>> GetByTenantIdAsync(string tenantId)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId ORDER BY c.displayName")
-            .WithParameter("@tenantId", tenantId);
-
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var users = new List<TenantUser>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            users.AddRange(response);
-        }
-
-        return users;
+        return await _collection.Find(u => u.TenantId == tenantId)
+            .SortBy(u => u.DisplayName)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<TenantUser>> GetByRoleAsync(string tenantId, string roleName)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND ARRAY_CONTAINS(c.roles, @roleName)")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@roleName", roleName);
+        var filter = Builders<TenantUser>.Filter.And(
+            Builders<TenantUser>.Filter.Eq(u => u.TenantId, tenantId),
+            Builders<TenantUser>.Filter.AnyEq(u => u.Roles, roleName));
 
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var users = new List<TenantUser>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            users.AddRange(response);
-        }
-
-        return users;
+        return await _collection.Find(filter).ToListAsync();
     }
 
     public async Task<IEnumerable<TenantUser>> GetByDepartmentAsync(string tenantId, string department)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.department = @department ORDER BY c.displayName")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@department", department);
-
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var users = new List<TenantUser>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            users.AddRange(response);
-        }
-
-        return users;
+        return await _collection.Find(u => u.TenantId == tenantId && u.Department == department)
+            .SortBy(u => u.DisplayName)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<TenantUser>> GetBySupervisorIdAsync(string tenantId, string supervisorId)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.supervisorId = @supervisorId ORDER BY c.displayName")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@supervisorId", supervisorId);
-
-        var iterator = _container.GetItemQueryIterator<TenantUser>(query);
-        var users = new List<TenantUser>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            users.AddRange(response);
-        }
-
-        return users;
+        return await _collection.Find(u => u.TenantId == tenantId && u.SupervisorId == supervisorId)
+            .SortBy(u => u.DisplayName)
+            .ToListAsync();
     }
 
     public async Task<TenantUser> CreateAsync(TenantUser user)
@@ -138,11 +79,11 @@ public class TenantUserRepository : ITenantUserRepository
         user.UpdatedAt = DateTime.UtcNow;
         user.EmailNormalized = user.Email.ToLowerInvariant();
 
-        var response = await _container.CreateItemAsync(user, new PartitionKey(user.Id));
+        await _collection.InsertOneAsync(user);
         _logger.LogInformation("Created tenant user {Email} for tenant {TenantId}",
             SanitizeForLog(user.Email), SanitizeForLog(user.TenantId));
 
-        return response.Resource;
+        return user;
     }
 
     public async Task<TenantUser> UpdateAsync(TenantUser user)
@@ -150,29 +91,23 @@ public class TenantUserRepository : ITenantUserRepository
         user.UpdatedAt = DateTime.UtcNow;
         user.EmailNormalized = user.Email.ToLowerInvariant();
 
-        var response = await _container.ReplaceItemAsync(user, user.Id, new PartitionKey(user.Id));
+        await _collection.ReplaceOneAsync(u => u.Id == user.Id, user);
         _logger.LogInformation("Updated tenant user {UserId}", SanitizeForLog(user.Id));
 
-        return response.Resource;
+        return user;
     }
 
     public async Task DeleteAsync(string id)
     {
-        try
-        {
-            await _container.DeleteItemAsync<TenantUser>(id, new PartitionKey(id));
-            _logger.LogInformation("Deleted tenant user {UserId}", SanitizeForLog(id));
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogWarning("Attempted to delete non-existent user {UserId}", SanitizeForLog(id));
-        }
+        await _collection.DeleteOneAsync(u => u.Id == id);
+        _logger.LogInformation("Deleted tenant user {UserId}", SanitizeForLog(id));
     }
 
     public async Task<bool> ExistsAsync(string tenantId, string email)
     {
-        var user = await GetByEmailAsync(tenantId, email);
-        return user != null;
+        var normalizedEmail = email.ToLowerInvariant();
+        return await _collection.Find(u =>
+            u.TenantId == tenantId && u.EmailNormalized == normalizedEmail).AnyAsync();
     }
 
     private static string SanitizeForLog(string? value)
