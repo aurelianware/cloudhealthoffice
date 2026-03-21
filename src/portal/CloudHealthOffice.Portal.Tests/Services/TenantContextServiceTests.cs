@@ -83,7 +83,7 @@ public class TenantContextServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenSubscriptionNotFound_ReturnsNull()
+    public async Task GetCurrentTenantContextAsync_WhenSubscriptionNotFound_ReturnsFallbackContext()
     {
         // Arrange
         var azureTenantId = "azure-tenant-123";
@@ -103,8 +103,12 @@ public class TenantContextServiceTests
         // Act
         var result = await _sut.GetCurrentTenantContextAsync();
 
-        // Assert
-        result.Should().BeNull();
+        // Assert — falls back to using Azure AD tenant ID directly
+        result.Should().NotBeNull();
+        result!.TenantId.Should().Be(azureTenantId);
+        result.AzureTenantId.Should().Be(azureTenantId);
+        result.SubscriptionStatus.Should().Be("Active");
+        result.IsDemo.Should().BeFalse();
         _tenantService.Verify(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId), Times.Once);
     }
 
