@@ -202,7 +202,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     if (pathname === '/readyz') {
       const health = await getService().getHealth();
-      if (health.status === 'healthy') {
+      if (health.status === 'healthy' || health.status === 'degraded') {
         sendJson(res, 200, { status: 'ready' });
       } else {
         sendJson(res, 503, { status: 'not ready', reason: health.status });

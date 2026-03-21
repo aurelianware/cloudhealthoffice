@@ -96,12 +96,30 @@ export class ClaimsScrubberService {
         groupId: this.config.kafka.consumerGroupId 
       });
 
-      await this.producer.connect();
-      await this.consumer.connect();
-      await this.consumer.subscribe({ 
-        topic: this.config.kafka.inboundTopic, 
-        fromBeginning: false 
-      });
+      // Connect with timeout — if Kafka is unavailable, start in degraded mode
+      // rather than blocking the HTTP server from starting.
+      const KAFKA_CONNECT_TIMEOUT_MS = 10_000;
+      try {
+        await Promise.race([
+          (async () => {
+            await this.producer!.connect();
+            await this.consumer!.connect();
+            await this.consumer!.subscribe({
+              topic: this.config.kafka.inboundTopic,
+              fromBeginning: false
+            });
+          })(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Kafka connection timed out')), KAFKA_CONNECT_TIMEOUT_MS)
+          ),
+        ]);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[Initialize] Kafka connection failed (${message}), continuing without Kafka`);
+        this.kafka = undefined;
+        this.producer = undefined;
+        this.consumer = undefined;
+      }
     }
 
     // Initialize MongoDB
@@ -487,7 +505,7 @@ export class ClaimsScrubberService {
     try {
       if (!this.producer) {
         return {
-          status: 'unhealthy',
+          status: 'degraded',
           lastCheck: new Date().toISOString(),
           error: 'Kafka producer not initialized',
         };
