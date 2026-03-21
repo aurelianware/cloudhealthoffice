@@ -125,12 +125,12 @@ export class ClaimsScrubberService {
       this.archiveContainer = this.blobServiceClient.getContainerClient(this.config.storage.containerName);
     }
 
-    // Load custom rules from Cosmos DB
+    // Load custom rules from MongoDB
     await this.loadCustomRules();
   }
 
   /**
-   * Load custom rules from Cosmos DB
+   * Load custom rules from MongoDB
    */
   private async loadCustomRules(): Promise<void> {
     if (!this.rulesCollection) return;
@@ -371,7 +371,7 @@ export class ClaimsScrubberService {
   }
 
   /**
-   * Audit the validation to Cosmos DB
+   * Audit the validation to MongoDB
    */
   private async auditValidation(
     claim: X12_837_Claim,
