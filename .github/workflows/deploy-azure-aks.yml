@@ -426,6 +426,13 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create Pricing API secret
+        run: |
+          kubectl create secret generic pricing-api-secret \
+            --from-literal=AdminSecret="${{ secrets.PRICING_API_ADMIN_SECRET }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Apply core manifests
         run: |
           kubectl apply -f infrastructure/k8s/namespaces.yaml
