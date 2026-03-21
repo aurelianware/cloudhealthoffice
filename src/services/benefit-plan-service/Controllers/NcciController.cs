@@ -54,7 +54,7 @@ public class NcciController : ControllerBase
 
         _logger.LogInformation(
             "NCCI scrub: claim {ClaimId} — {Failures} failures, {PairChecks} pair checks, {MueChecks} MUE checks",
-            request.ClaimId, result.EditFailures.Count, result.NcciPairsChecked, result.MueChecked);
+            SanitizeForLog(request.ClaimId), result.EditFailures.Count, result.NcciPairsChecked, result.MueChecked);
 
         return Ok(result);
     }
@@ -133,7 +133,7 @@ public class NcciController : ControllerBase
 
         _logger.LogInformation(
             "NCCI seed for tenant {TenantId} ({Quarter}): {Pairs} pairs, {Mue} MUE entries",
-            tenantId, quarter, pairsWritten, mueWritten);
+            SanitizeForLog(tenantId), SanitizeForLog(quarter), pairsWritten, mueWritten);
 
         return Ok(new
         {
@@ -144,6 +144,9 @@ public class NcciController : ControllerBase
             seedSource = "built-in Q1 2025 baseline",
         });
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>

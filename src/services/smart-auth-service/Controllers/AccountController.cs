@@ -73,7 +73,7 @@ public class AccountController : ControllerBase
 
         if (!ValidateCredentials(username, password))
         {
-            _logger.LogWarning("Failed SMART login attempt for user: {Username}", username);
+            _logger.LogWarning("Failed SMART login attempt for user: {Username}", SanitizeForLog(username));
             return Redirect($"/account/login?returnUrl={Uri.EscapeDataString(returnUrl)}&error=invalid");
         }
 
@@ -91,7 +91,7 @@ public class AccountController : ControllerBase
             principal,
             new AuthenticationProperties { IsPersistent = false });
 
-        _logger.LogInformation("SMART login successful for user: {Username}", username);
+        _logger.LogInformation("SMART login successful for user: {Username}", SanitizeForLog(username));
 
         // Validate redirect target to prevent open redirect attacks
         return LocalRedirect(IsLocalUrl(returnUrl) ? returnUrl : "/");
@@ -119,6 +119,9 @@ public class AccountController : ControllerBase
         // TODO Sprint 3: federate via AddOpenIdConnect to Azure AD B2C
         return false;
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private bool IsLocalUrl(string url)
         => !string.IsNullOrEmpty(url)

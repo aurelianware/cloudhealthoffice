@@ -198,7 +198,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("No active coverage found for member {SubscriberId}", subscriberId);
+                _logger.LogWarning("No active coverage found for member {SubscriberId}", SanitizeForLog(subscriberId));
                 return null;
             }
 
@@ -289,7 +289,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Accumulation not found for member {SubscriberId}", subscriberId);
+                _logger.LogWarning("Accumulation not found for member {SubscriberId}", SanitizeForLog(subscriberId));
                 return (null, null);
             }
 

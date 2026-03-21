@@ -48,12 +48,12 @@ public class TenantManagementService : ITenantService
         };
 
         var created = await _repository.CreateAsync(tenant);
-        _logger.LogInformation("Created tenant {TenantId} for {OrganizationName}", tenantId, request.OrganizationName);
+        _logger.LogInformation("Created tenant {TenantId} for {OrganizationName}", SanitizeForLog(tenantId), SanitizeForLog(request.OrganizationName));
 
         // Provision SFTP access with multi-environment support
         var environments = request.Environments ?? new List<string> { "prod" };
-        _logger.LogInformation("Provisioning SFTP for tenant {TenantId} with environments: {Environments}", 
-            tenantId, string.Join(",", environments));
+        _logger.LogInformation("Provisioning SFTP for tenant {TenantId} with environments: {Environments}",
+            SanitizeForLog(tenantId), string.Join(",", environments));
         
         try
         {
@@ -143,7 +143,7 @@ public class TenantManagementService : ITenantService
         tenant.ActivatedAt = DateTime.UtcNow;
         
         await _repository.UpdateAsync(tenant);
-        _logger.LogInformation("Activated tenant {TenantId}", tenantId);
+        _logger.LogInformation("Activated tenant {TenantId}", SanitizeForLog(tenantId));
     }
 
     public async Task SuspendTenantAsync(string tenantId)
@@ -157,13 +157,13 @@ public class TenantManagementService : ITenantService
         tenant.Status = "suspended";
         
         await _repository.UpdateAsync(tenant);
-        _logger.LogWarning("Suspended tenant {TenantId}", tenantId);
+        _logger.LogWarning("Suspended tenant {TenantId}", SanitizeForLog(tenantId));
     }
 
     public async Task DeleteTenantAsync(string tenantId)
     {
         await _repository.DeleteAsync(tenantId);
-        _logger.LogWarning("Deleted tenant {TenantId}", tenantId);
+        _logger.LogWarning("Deleted tenant {TenantId}", SanitizeForLog(tenantId));
     }
 
     public async Task<ApiKeyResponse> CreateApiKeyAsync(string tenantId, CreateApiKeyRequest request)
@@ -193,7 +193,7 @@ public class TenantManagementService : ITenantService
         tenant.ApiKeys.Add(apiKeyRecord);
         await _repository.UpdateAsync(tenant);
 
-        _logger.LogInformation("Created API key {KeyId} for tenant {TenantId}", apiKeyRecord.KeyId, tenantId);
+        _logger.LogInformation("Created API key {KeyId} for tenant {TenantId}", SanitizeForLog(apiKeyRecord.KeyId), SanitizeForLog(tenantId));
 
         return new ApiKeyResponse
         {
@@ -230,7 +230,7 @@ public class TenantManagementService : ITenantService
         {
             apiKey.IsActive = false;
             await _repository.UpdateAsync(tenant);
-            _logger.LogInformation("Revoked API key {KeyId} for tenant {TenantId}", keyId, tenantId);
+            _logger.LogInformation("Revoked API key {KeyId} for tenant {TenantId}", SanitizeForLog(keyId), SanitizeForLog(tenantId));
         }
     }
 

@@ -55,7 +55,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
 
         _logger.LogDebug(
             "Fetching accumulator totals from claims-service: owner={OwnerId}, scope={Scope}, plan={PlanId}, year={Year}",
-            ownerId, scopeStr, benefitPlanId, planYear);
+            SanitizeForLog(ownerId), scopeStr, benefitPlanId, planYear);
 
         HttpResponseMessage response;
         try
@@ -67,7 +67,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
             _logger.LogWarning(ex,
                 "claims-service unavailable during accumulator rebuild for owner {OwnerId}. " +
                 "Returning empty snapshot — Redis cache will remain cold.",
-                ownerId);
+                SanitizeForLog(ownerId));
             return Array.Empty<AccumulatorSnapshot>();
         }
 
@@ -76,7 +76,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
             _logger.LogWarning(
                 "claims-service returned {Status} for accumulator-totals (owner={OwnerId}). " +
                 "Returning empty snapshot.",
-                (int)response.StatusCode, ownerId);
+                (int)response.StatusCode, SanitizeForLog(ownerId));
             return Array.Empty<AccumulatorSnapshot>();
         }
 
@@ -119,6 +119,9 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
     {
         public List<AccumulatorTotalEntryDto> Totals { get; set; } = new();
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed class AccumulatorTotalEntryDto
     {
