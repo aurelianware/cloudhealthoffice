@@ -17,6 +17,11 @@
         834 enrollment file processing status and daily operations dashboard
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -219,6 +224,7 @@
 
 @code {
     private bool _loading = true;
+    private string? _serviceError;
     private EnrollmentDailySummary? _summary;
     private List<EnrollmentFile> _files = new();
     private string? _expandedFileId;
@@ -242,6 +248,14 @@
             _files = filesTask.Result;
 
             BuildChartData();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Enrollment operations service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading enrollment operations: {ex.Message}";
         }
         finally
         {

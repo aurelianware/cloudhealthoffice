@@ -17,6 +17,11 @@
         Manage employer groups, unions, and associations
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Filters & Actions Bar -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
@@ -172,6 +177,7 @@
     private List<SponsorSummary> _allSponsors = new();
     private List<SponsorSummary> _filteredSponsors = new();
     private bool _isLoading = true;
+    private string? _serviceError;
 
     private string _searchTerm = string.Empty;
     private string _typeFilter = "All";
@@ -185,9 +191,23 @@
     private async Task LoadSponsors()
     {
         _isLoading = true;
-        _allSponsors = await SponsorService.SearchSponsorsAsync(string.Empty);
-        ApplyFilters();
-        _isLoading = false;
+        try
+        {
+            _allSponsors = await SponsorService.SearchSponsorsAsync(string.Empty);
+            ApplyFilters();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Sponsor service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading sponsors: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private void ApplyFilters()

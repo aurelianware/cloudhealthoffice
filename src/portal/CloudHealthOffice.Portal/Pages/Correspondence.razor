@@ -17,6 +17,11 @@
         Outbound letter generation, tracking, and RFAI management
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -337,6 +342,7 @@
 
 @code {
     private bool _loading = true;
+    private string? _serviceError;
     private CorrespondenceSummary? _summary;
     private List<CorrespondenceItem> _queue = new();
     private List<RfaiTrackingItem> _rfais = new();
@@ -357,6 +363,14 @@
             _queue = queueTask.Result;
             _rfais = rfaiTask.Result;
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Correspondence service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading correspondence: {ex.Message}";
+        }
         finally
         {
             _loading = false;
@@ -369,6 +383,14 @@
         try
         {
             _queue = await CorrespondenceService.GetQueueAsync(_filterType, _filterStatus);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Correspondence service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred filtering correspondence: {ex.Message}";
         }
         finally
         {
