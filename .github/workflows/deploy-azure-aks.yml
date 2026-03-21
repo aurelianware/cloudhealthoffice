@@ -11,6 +11,10 @@ on:
       - 'infrastructure/azure/aks-main.bicep'
       - '.github/workflows/deploy-azure-aks.yml'
 
+concurrency:
+  group: deploy-aks-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
   NAMESPACE: cloudhealthoffice
