@@ -50,6 +50,11 @@ spec:
             configMapKeyRef:
               name: pricing-api-config
               key: MongoDb__DatabaseName
+        - name: PricingApi__AdminSecret
+          valueFrom:
+            secretKeyRef:
+              name: pricing-api-secret
+              key: AdminSecret
         resources:
           requests:
             cpu: 100m
