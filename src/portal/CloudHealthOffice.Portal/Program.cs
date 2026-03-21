@@ -284,64 +284,10 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
     return url;
 }
 
+// Register background tenant seed so it doesn't block startup or health probes
+builder.Services.AddHostedService<TenantSeedService>();
+
 var app = builder.Build();
-
-// Auto-seed MongoDB tenant subscription so the portal doesn't redirect to /signup
-// when the database is fresh. Uses SeedTenant config section or falls back to defaults.
-using (var scope = app.Services.CreateScope())
-{
-    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("TenantSeed");
-    try
-    {
-        var mongoClient = scope.ServiceProvider.GetRequiredService<IMongoClient>();
-        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        var dbName = config["MongoDB:DatabaseName"] ?? "CloudHealthOffice";
-        var collectionName = config["MongoDB:TenantsCollection"] ?? "Tenants";
-        var db = mongoClient.GetDatabase(dbName);
-        var collection = db.GetCollection<TenantSubscription>(collectionName);
-
-        var seedAzureTenantId = config["SeedTenant:AzureTenantId"] ?? "32177734-051b-4fdc-9568-cc35530191b1";
-        var seedOrgName = config["SeedTenant:OrganizationName"] ?? "Cloud Health Office";
-        var seedAdminEmail = config["SeedTenant:AdminEmail"] ?? "";
-        var seedTier = config["SeedTenant:Tier"] ?? "professional";
-
-        var existing = await collection.Find(
-            Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, seedAzureTenantId))
-            .FirstOrDefaultAsync();
-
-        if (existing == null)
-        {
-            var adminEmails = string.IsNullOrEmpty(seedAdminEmail)
-                ? new List<string>()
-                : new List<string> { seedAdminEmail };
-
-            var subscription = new TenantSubscription
-            {
-                TenantId = seedAzureTenantId,
-                AzureTenantId = seedAzureTenantId,
-                OrganizationName = seedOrgName,
-                SubscriptionStatus = "Active",
-                Tier = seedTier,
-                IsDemo = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                AdminEmails = adminEmails
-            };
-            await collection.InsertOneAsync(subscription);
-            logger.LogInformation(
-                "Seeded tenant subscription for Azure Tenant {TenantId} ({OrgName})",
-                seedAzureTenantId, seedOrgName);
-        }
-        else
-        {
-            logger.LogDebug("Tenant subscription already exists for Azure Tenant {TenantId}", seedAzureTenantId);
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogWarning(ex, "Failed to auto-seed tenant subscription. User may be redirected to /signup until a subscription is created.");
-    }
-}
 
 // Use forwarded headers FIRST (before any other middleware)
 app.UseForwardedHeaders();
