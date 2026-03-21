@@ -503,9 +503,30 @@ jobs:
         run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
 
       - name: Rollout restart portal
+        id: portal_rollout
+        continue-on-error: true
         run: |
           kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=600s
+
+      - name: Portal pod diagnostics (on failure)
+        if: steps.portal_rollout.outcome == 'failure'
+        run: |
+          echo "=== Portal Pod Status ==="
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal -o wide
+          echo ""
+          echo "=== Portal Pod Describe ==="
+          kubectl describe pods -n ${{ env.NAMESPACE }} -l app=portal | tail -60
+          echo ""
+          echo "=== Portal Pod Logs (last 100 lines) ==="
+          kubectl logs -n ${{ env.NAMESPACE }} -l app=portal --tail=100 --all-containers=true 2>&1 || echo "No logs available"
+          echo ""
+          echo "=== Portal Pod Previous Logs (crash) ==="
+          kubectl logs -n ${{ env.NAMESPACE }} -l app=portal --previous --tail=100 --all-containers=true 2>&1 || echo "No previous logs available"
+
+      - name: Fail if portal rollout failed
+        if: steps.portal_rollout.outcome == 'failure'
+        run: exit 1
 
       - name: Deployment summary
         run: |
