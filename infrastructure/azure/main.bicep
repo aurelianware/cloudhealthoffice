@@ -27,7 +27,6 @@ param enableB2B bool = true
  
 // SFTPconnection params
 //param sftpHost string = 'sftp.example.com'
-// param sftpUsername string = 'logicapp'
 //@secure()
 //param sftpPassword string = ''          // if key-based auth, change connection param block
 
@@ -39,7 +38,6 @@ param blobAccountKey string = ''        // if empty, uses stg.listKeys().keys[0]
 // Service Bus connection string (SAS) - optional; if empty, we generate from auth rule
 @secure()
 param serviceBusConnectionString string = ''
-param appServicePlanName string = '${baseName}-plan'
 param serviceBusName string
 
 // ECS (Enhanced Claim Status) parameters
@@ -249,45 +247,6 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 
 
 // =========================
-// Logic App Standard (Plan + App)
-// =========================
-  resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: appServicePlanName
-  location: location
-  sku: {
-    name: 'WS1'
-    tier: 'WorkflowStandard'
-  }
-  kind: 'elastic'
-  properties: {
-    elasticScaleEnabled: false
-  }
-}
-
-resource la 'Microsoft.Web/sites@2022-03-01' = {
-  name: '${baseName}-la'
-  location: location
-  kind: 'functionapp,workflowapp'
-  properties: {
-    serverFarmId: plan.id
-    siteConfig: {
-      netFrameworkVersion: 'v6.0'
-      appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
-        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
-        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
-      ]
-    }
-  }
-  identity: {
-    type: 'SystemAssigned'
-  }
-}
-
-// =========================
 // ClaimRiskScorer Azure Function (Python)
 // =========================
 param enableClaimRiskScorer bool = true
@@ -438,7 +397,6 @@ module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
   name: 'ecs-api-module'
   params: {
     baseName: baseName
-    logicAppName: la.name
     appInsightsKey: insights.properties.InstrumentationKey
     appInsightsConnectionString: insights.properties.ConnectionString
     backendBaseUrl: backendBaseUrl
@@ -515,7 +473,6 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
 // =========================
 output storageAccountName string = stg.name
 output serviceBusNamespace string = sb.name
-output logicAppName string = la.name
 output appInsightsName string = insights.name
 output integrationAccountName string = effectiveIaName
 output sftpConnectionId string = connSftp.id

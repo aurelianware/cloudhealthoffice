@@ -6,7 +6,8 @@
       "name": "bicep",
       "version": "0.38.33.27573",
       "templateHash": "4476951905493689372"
-    }
+    },
+    "_WARNING": "STALE: This compiled ARM template is out of date. Regenerate with: az bicep build --file main.bicep --outfile main.json"
   },
   "parameters": {
     "location": {
