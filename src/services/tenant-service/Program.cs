@@ -80,7 +80,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var userRepo = scope.ServiceProvider.GetRequiredService<ITenantUserRepository>();
-        var seedTenantId = config["SeedAdmin:TenantId"] ?? "32177734-051b-4fdc-9568-cc35530191b1";
+        var seedTenantId = config["SeedAdmin:TenantId"] ?? "aurelianware";
         var seedEmail = config["SeedAdmin:Email"] ?? "";
 
         if (!string.IsNullOrEmpty(seedEmail))

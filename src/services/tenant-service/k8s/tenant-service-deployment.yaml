@@ -51,7 +51,7 @@ spec:
               name: tenant-service-config
               key: MongoDb__DatabaseName
         - name: SeedAdmin__TenantId
-          value: "32177734-051b-4fdc-9568-cc35530191b1"
+          value: "aurelianware"
         - name: SeedAdmin__Email
           valueFrom:
             secretKeyRef:

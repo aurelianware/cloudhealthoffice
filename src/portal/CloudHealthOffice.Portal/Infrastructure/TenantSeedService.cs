@@ -41,6 +41,7 @@ public class TenantSeedService : BackgroundService
 
             var seedAzureTenantId = _configuration["SeedTenant:AzureTenantId"]
                                     ?? "32177734-051b-4fdc-9568-cc35530191b1";
+            var seedTenantId = _configuration["SeedTenant:TenantId"] ?? "aurelianware";
             var seedOrgName = _configuration["SeedTenant:OrganizationName"] ?? "Cloud Health Office";
             var seedAdminEmail = _configuration["SeedTenant:AdminEmail"] ?? "";
             var seedTier = _configuration["SeedTenant:Tier"] ?? "professional";
@@ -57,7 +58,7 @@ public class TenantSeedService : BackgroundService
 
                 var subscription = new TenantSubscription
                 {
-                    TenantId = seedAzureTenantId,
+                    TenantId = seedTenantId,
                     AzureTenantId = seedAzureTenantId,
                     OrganizationName = seedOrgName,
                     SubscriptionStatus = "Active",
