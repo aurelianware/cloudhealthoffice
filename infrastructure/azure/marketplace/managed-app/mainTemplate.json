@@ -107,8 +107,6 @@
     "uniqueSuffix": "[uniqueString(resourceGroup().id)]",
     "storageAccountName": "[concat('cho', variables('uniqueSuffix'))]",
     "serviceBusName": "[concat(parameters('baseName'), '-sb-', variables('uniqueSuffix'))]",
-    "logicAppName": "[concat(parameters('baseName'), '-la')]",
-    "appServicePlanName": "[concat(parameters('baseName'), '-asp')]",
     "integrationAccountName": "[concat(parameters('baseName'), '-ia')]",
     "appInsightsName": "[concat(parameters('baseName'), '-ai')]",
     "logAnalyticsName": "[concat(parameters('baseName'), '-law')]",
@@ -116,7 +114,6 @@
     "cosmosDbAccountName": "[concat(parameters('baseName'), '-cosmos-', variables('uniqueSuffix'))]",
     "iaSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Free', if(equals(parameters('deploymentTier'), 'Standard'), 'Basic', 'Standard'))]",
     "storageSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Standard_LRS', if(equals(parameters('deploymentTier'), 'Standard'), 'Standard_GRS', 'Standard_RAGRS'))]",
-    "appServicePlanSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'WS1', if(equals(parameters('deploymentTier'), 'Standard'), 'WS2', 'WS3'))]",
     "cosmosDbThroughput": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 400, if(equals(parameters('deploymentTier'), 'Standard'), 800, 1600))]"
   },
   "resources": [
@@ -351,117 +348,6 @@
       }
     },
     {
-      "type": "Microsoft.Web/serverfarms",
-      "apiVersion": "2022-09-01",
-      "name": "[variables('appServicePlanName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "[variables('appServicePlanSku')]",
-        "tier": "WorkflowStandard"
-      },
-      "kind": "elastic",
-      "properties": {
-        "targetWorkerCount": 1,
-        "maximumElasticWorkerCount": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 5, if(equals(parameters('deploymentTier'), 'Standard'), 10, 20))]",
-        "elasticScaleEnabled": true,
-        "isSpot": false,
-        "reserved": true
-      },
-      "tags": {
-        "Project": "CloudHealthOffice",
-        "ManagedApp": "true"
-      }
-    },
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2022-09-01",
-      "name": "[variables('logicAppName')]",
-      "location": "[parameters('location')]",
-      "kind": "functionapp,workflowapp",
-      "identity": {
-        "type": "SystemAssigned"
-      },
-      "properties": {
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "siteConfig": {
-          "appSettings": [
-            {
-              "name": "FUNCTIONS_EXTENSION_VERSION",
-              "value": "~4"
-            },
-            {
-              "name": "FUNCTIONS_WORKER_RUNTIME",
-              "value": "node"
-            },
-            {
-              "name": "WEBSITE_NODE_DEFAULT_VERSION",
-              "value": "~18"
-            },
-            {
-              "name": "AzureWebJobsStorage",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
-            },
-            {
-              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
-            },
-            {
-              "name": "WEBSITE_CONTENTSHARE",
-              "value": "[toLower(variables('logicAppName'))]"
-            },
-            {
-              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
-              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
-            },
-            {
-              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
-            },
-            {
-              "name": "AzureFunctionsJobHost__extensionBundle__id",
-              "value": "Microsoft.Azure.Functions.ExtensionBundle.Workflows"
-            },
-            {
-              "name": "AzureFunctionsJobHost__extensionBundle__version",
-              "value": "[1.*, 2.0.0)"
-            },
-            {
-              "name": "WORKFLOWS_SUBSCRIPTION_ID",
-              "value": "[subscription().subscriptionId]"
-            },
-            {
-              "name": "WORKFLOWS_RESOURCE_GROUP_NAME",
-              "value": "[resourceGroup().name]"
-            },
-            {
-              "name": "CHO_ORGANIZATION_NAME",
-              "value": "[parameters('organizationName')]"
-            },
-            {
-              "name": "CHO_ADMIN_EMAIL",
-              "value": "[parameters('adminEmail')]"
-            },
-            {
-              "name": "CHO_DEPLOYMENT_TIER",
-              "value": "[parameters('deploymentTier')]"
-            }
-          ],
-          "use32BitWorkerProcess": false,
-          "netFrameworkVersion": "v6.0"
-        },
-        "httpsOnly": true
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
-        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
-      ],
-      "tags": {
-        "Project": "CloudHealthOffice",
-        "ManagedApp": "true"
-      }
-    },
-    {
       "condition": "[parameters('enableCosmosDb')]",
       "type": "Microsoft.DocumentDB/databaseAccounts",
       "apiVersion": "2023-11-15",
@@ -566,14 +452,6 @@
     }
   ],
   "outputs": {
-    "logicAppName": {
-      "type": "string",
-      "value": "[variables('logicAppName')]"
-    },
-    "logicAppUrl": {
-      "type": "string",
-      "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('logicAppName')), '2022-09-01').defaultHostName)]"
-    },
     "storageAccountName": {
       "type": "string",
       "value": "[variables('storageAccountName')]"
@@ -602,17 +480,13 @@
       "type": "string",
       "value": "[if(parameters('enableCosmosDb'), variables('cosmosDbAccountName'), 'Not deployed')]"
     },
-    "managedIdentityPrincipalId": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.Web/sites', variables('logicAppName')), '2022-09-01', 'Full').identity.principalId]"
-    },
     "deploymentTier": {
       "type": "string",
       "value": "[parameters('deploymentTier')]"
     },
     "nextSteps": {
       "type": "string",
-      "value": "1. Access the Logic App at the URL above to configure workflows. 2. Configure X12 schemas in the Integration Account. 3. Set up SFTP credentials in Key Vault. 4. Review the monitoring dashboard in Application Insights."
+      "value": "1. Deploy Argo Workflows to the AKS cluster. 2. Configure X12 schemas in the Integration Account. 3. Set up SFTP credentials in Key Vault. 4. Review the monitoring dashboard in Application Insights."
     }
   }
 }

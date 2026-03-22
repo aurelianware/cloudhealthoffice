@@ -1,7 +1,7 @@
 // =========================
 // Networking Module - VNet and Private DNS Zones
 // =========================
-// VNet with subnets for Logic Apps and Private Endpoints
+// VNet with subnets for Private Endpoints
 // Private DNS zones for Storage, Service Bus, and Key Vault
 // Network security for HIPAA-compliant isolation
 
@@ -13,9 +13,6 @@ param location string = resourceGroup().location
 
 @description('VNet address prefix')
 param vnetAddressPrefix string = '10.0.0.0/16'
-
-@description('Logic Apps subnet address prefix')
-param logicAppsSubnetPrefix string = '10.0.1.0/24'
 
 @description('Private Endpoints subnet address prefix')
 param privateEndpointsSubnetPrefix string = '10.0.2.0/24'
@@ -45,41 +42,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
     }
     subnets: [
       {
-        name: 'logic-apps-subnet'
-        properties: {
-          addressPrefix: logicAppsSubnetPrefix
-          delegations: [
-            {
-              name: 'delegation'
-              properties: {
-                serviceName: 'Microsoft.Web/serverFarms'
-              }
-            }
-          ]
-          serviceEndpoints: [
-            {
-              service: 'Microsoft.Storage'
-              locations: [
-                location
-              ]
-            }
-            {
-              service: 'Microsoft.ServiceBus'
-              locations: [
-                location
-              ]
-            }
-            {
-              service: 'Microsoft.KeyVault'
-              locations: [
-                location
-              ]
-            }
-          ]
-        }
-      }
-      {
-        name: 'private-endpoints-subnet'
+        name: privateEndpointsSubnetName
         properties: {
           addressPrefix: privateEndpointsSubnetPrefix
           privateEndpointNetworkPolicies: 'Disabled'
@@ -89,6 +52,8 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
     ]
   }
 }
+
+var privateEndpointsSubnetName = 'private-endpoints-subnet'
 
 // =========================
 // Private DNS Zone for Storage (blob)
@@ -162,11 +127,8 @@ output vnetId string = vnet.id
 @description('Virtual Network name')
 output vnetName string = vnet.name
 
-@description('Logic Apps subnet resource ID')
-output logicAppsSubnetId string = vnet.properties.subnets[0].id
-
 @description('Private Endpoints subnet resource ID')
-output privateEndpointsSubnetId string = vnet.properties.subnets[1].id
+output privateEndpointsSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, privateEndpointsSubnetName)
 
 @description('Storage Private DNS Zone resource ID')
 output storageDnsZoneId string = privateDnsZoneStorage.id
