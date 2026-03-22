@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
@@ -66,9 +67,11 @@ public class ClaimsController : ControllerBase
     /// </summary>
     [HttpGet("recent")]
     [ProducesResponseType(typeof(IEnumerable<Claim>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<Claim>>> GetRecentClaims([FromQuery] int count = 10)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<Claim>>> GetRecentClaims(
+        [FromQuery][Range(1, 100)] int count = 10)
     {
-        if (count > 100) count = 100;
+        _logger.LogInformation("Fetching {Count} recent claims", count);
 
         var claims = await _claimRepository.SearchAsync(
             memberId: null, providerNPI: null,
