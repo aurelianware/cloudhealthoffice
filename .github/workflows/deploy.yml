@@ -142,4 +142,3 @@ jobs:
 
           echo "sp-id=$SP_ID" >> "$GITHUB_OUTPUT"
           echo "✅ Service principal ensured: $SP_ID"
-
