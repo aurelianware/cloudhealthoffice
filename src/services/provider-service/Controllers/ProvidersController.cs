@@ -305,6 +305,78 @@ public class ProvidersController : ControllerBase
         return Ok(updated);
     }
 
+    /// <summary>
+    /// Get provider bank account / EFT disbursement info by NPI.
+    /// Used by capitation-service to look up payment details before disbursement.
+    /// </summary>
+    [HttpGet("npi/{npi}/bank-account")]
+    [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProviderBankAccount>> GetBankAccount(string npi)
+    {
+        _logger.LogInformation("Fetching bank account for provider NPI: {NPI}", SanitizeForLog(npi));
+
+        var provider = await _providerRepository.GetByNPIAsync(npi);
+        if (provider == null)
+        {
+            return NotFound($"Provider with NPI {npi} not found");
+        }
+
+        if (provider.BankAccount == null)
+        {
+            return NotFound($"No bank account on file for provider NPI {npi}");
+        }
+
+        return Ok(provider.BankAccount);
+    }
+
+    /// <summary>
+    /// Upsert provider bank account / EFT disbursement info by NPI.
+    /// Updates only the BankAccount sub-document on the existing Provider record.
+    /// </summary>
+    [HttpPut("npi/{npi}/bank-account")]
+    [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ProviderBankAccount>> UpsertBankAccount(
+        string npi,
+        [FromBody] ProviderBankAccount bankAccount)
+    {
+        _logger.LogInformation("Upserting bank account for provider NPI: {NPI}", SanitizeForLog(npi));
+
+        var provider = await _providerRepository.GetByNPIAsync(npi);
+        if (provider == null)
+        {
+            return NotFound($"Provider with NPI {npi} not found");
+        }
+
+        // Derive last-4 display fields from full values when provided
+        if (!string.IsNullOrEmpty(bankAccount.RoutingNumber))
+        {
+            bankAccount.RoutingNumberLast4 = bankAccount.RoutingNumber.Length >= 4
+                ? bankAccount.RoutingNumber[^4..]
+                : bankAccount.RoutingNumber;
+        }
+
+        if (!string.IsNullOrEmpty(bankAccount.AccountNumber))
+        {
+            bankAccount.AccountNumberLast4 = bankAccount.AccountNumber.Length >= 4
+                ? bankAccount.AccountNumber[^4..]
+                : bankAccount.AccountNumber;
+        }
+
+        provider.BankAccount = bankAccount;
+        provider.LastUpdatedDate = DateTime.UtcNow;
+
+        await _providerRepository.UpdateAsync(provider);
+
+        _logger.LogInformation(
+            "Bank account updated for provider NPI: {NPI}, method={Method}, eftEnabled={EftEnabled}",
+            SanitizeForLog(npi), bankAccount.PreferredDisbursementMethod, bankAccount.EftEnabled);
+
+        return Ok(provider.BankAccount);
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))

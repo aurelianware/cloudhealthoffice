@@ -1686,3 +1686,172 @@ public class FeeScheduleUploadResult
     public int CodeCount { get; set; }
     public string FeeScheduleId { get; set; } = "";
 }
+
+// ── Capitation Management ─────────────────────────────────────────────────
+
+public interface ICapitationService
+{
+    // Contracts
+    Task<List<CapitationContractSummary>> GetContractsAsync(string? npi = null, string? status = null, string? lob = null);
+    Task<CapitationContractSummary?> GetContractByIdAsync(string id);
+    Task<string> CreateContractAsync(CapitationContractSummary contract);
+    Task UpdateContractAsync(string id, CapitationContractSummary contract);
+    Task ActivateContractAsync(string id);
+    Task TerminateContractAsync(string id, string reason, DateTime? terminationDate = null);
+
+    // Runs
+    Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null);
+    Task<CapRunSummary?> GetRunByIdAsync(string id);
+    Task<string> CreateRunAsync(CreateCapRunRequest request);
+    Task<CapRunSummary> ExecuteRunAsync(string id);
+    Task CancelRunAsync(string id);
+
+    // Statements
+    Task<List<CapStatementSummary>> GetStatementsAsync(string? npi = null, DateTime? periodFrom = null, DateTime? periodTo = null, string? status = null);
+    Task<CapStatementSummary?> GetStatementByIdAsync(string id);
+    Task<List<CapStatementSummary>> GetStatementsByRunAsync(string runId);
+    Task<List<CapStatementSummary>> GetUnpaidStatementsAsync();
+    Task ApproveStatementAsync(string id);
+    Task VoidStatementAsync(string id, string reason);
+    Task HoldStatementAsync(string id, string reason);
+    Task<CapitationPeriodSummaryDto> GetPeriodSummaryAsync(DateTime period);
+
+    // Disbursements
+    Task<string> InitiateDisbursementAsync(string statementId, string? initiatedBy = null);
+    Task<CapDisbursementBatchResult> InitiateBatchDisbursementAsync(List<string> statementIds, string? initiatedBy = null);
+}
+
+public class CapitationContractSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string ContractNumber { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string ProviderType { get; set; } = "Individual";
+    public string ContractType { get; set; } = "PrimaryCareOnly";
+    public string LineOfBusiness { get; set; } = "Commercial";
+    public List<string> PlanIds { get; set; } = new();
+    public List<CapRateTier> RateTiers { get; set; } = new();
+    public bool RiskAdjusted { get; set; }
+    public decimal DefaultRiskScore { get; set; } = 1.0m;
+    public decimal WithholdPercentage { get; set; }
+    public decimal? IncentivePoolPercentage { get; set; }
+    public decimal? StopLossThreshold { get; set; }
+    public decimal? AggregateStopLoss { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string Status { get; set; } = "Draft";
+}
+
+public class CapRateTier
+{
+    public string TierName { get; set; } = string.Empty;
+    public int AgeFrom { get; set; }
+    public int AgeTo { get; set; }
+    public string? Gender { get; set; }
+    public string? AgeSexCategory { get; set; }
+    public decimal BasePMPM { get; set; }
+    public string? ServiceCategory { get; set; }
+}
+
+public class CapRunSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string RunNumber { get; set; } = string.Empty;
+    public DateTime CapitationPeriod { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int TotalStatements { get; set; }
+    public int TotalMemberMonths { get; set; }
+    public decimal TotalGrossCapitation { get; set; }
+    public decimal TotalWithholds { get; set; }
+    public decimal TotalNetPayable { get; set; }
+    public int TotalProviders { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTime? ExecutionStartedAt { get; set; }
+    public DateTime? ExecutionCompletedAt { get; set; }
+    public double? ExecutionDurationSeconds { get; set; }
+    public List<string> Warnings { get; set; } = new();
+    public List<string> Errors { get; set; } = new();
+}
+
+public class CreateCapRunRequest
+{
+    public DateTime CapitationPeriod { get; set; }
+    public List<string>? ProviderNPIs { get; set; }
+    public string? LineOfBusiness { get; set; }
+    public string? ContractType { get; set; }
+    public string? CreatedBy { get; set; }
+    public string? Description { get; set; }
+}
+
+public class CapStatementSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string StatementNumber { get; set; } = string.Empty;
+    public string? CapitationRunId { get; set; }
+    public string ContractId { get; set; } = string.Empty;
+    public string ContractNumber { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime CapitationPeriodStart { get; set; }
+    public DateTime CapitationPeriodEnd { get; set; }
+    public string Status { get; set; } = "Generated";
+    public int MemberMonths { get; set; }
+    public decimal GrossCapitation { get; set; }
+    public decimal WithholdAmount { get; set; }
+    public decimal TotalAdjustments { get; set; }
+    public decimal NetPayable { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public List<CapLineItem> LineItems { get; set; } = new();
+    public List<CapAdjustment> Adjustments { get; set; } = new();
+}
+
+public class CapLineItem
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string? PlanId { get; set; }
+    public int MemberAge { get; set; }
+    public string? Gender { get; set; }
+    public decimal BasePMPM { get; set; }
+    public decimal RiskScore { get; set; } = 1.0m;
+    public decimal AdjustedPMPM { get; set; }
+    public decimal ProrationFactor { get; set; } = 1.0m;
+    public decimal GrossAmount { get; set; }
+    public decimal WithholdAmount { get; set; }
+    public decimal NetAmount { get; set; }
+    public bool IsRetroactive { get; set; }
+    public string? AdjustmentReason { get; set; }
+}
+
+public class CapAdjustment
+{
+    public string Type { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? RelatedMemberId { get; set; }
+    public DateTime AdjustmentDate { get; set; }
+}
+
+public class CapitationPeriodSummaryDto
+{
+    public DateTime Period { get; set; }
+    public int TotalProviders { get; set; }
+    public int TotalMemberMonths { get; set; }
+    public decimal TotalGrossCapitation { get; set; }
+    public decimal TotalWithholds { get; set; }
+    public decimal TotalNetPayable { get; set; }
+    public Dictionary<string, decimal> ByLineOfBusiness { get; set; } = new();
+    public Dictionary<string, decimal> ByContractType { get; set; } = new();
+}
+
+public class CapDisbursementBatchResult
+{
+    public int TotalStatements { get; set; }
+    public int DisbursementsInitiated { get; set; }
+    public int Skipped { get; set; }
+    public int Errors { get; set; }
+    public decimal TotalAmount { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+}

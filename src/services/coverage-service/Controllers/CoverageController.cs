@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using CoverageService.Middleware;
 using CoverageService.Models;
+using CoverageService.Repositories;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -18,15 +19,17 @@ namespace CoverageService.Controllers;
 [Route("api/v1/coverage")]
 public class CoverageController : ControllerBase
 {
+    private readonly ICoverageRepository _coverageRepository;
+    private readonly ILogger<CoverageController> _logger;
+
     // Tenant context from middleware
     private string TenantId => HttpContext.GetTenantId();
 
-    // TODO: Replace with actual repository/service injection
-    // private readonly ICoverageRepository _coverageRepository;
-    // public CoverageController(ICoverageRepository coverageRepository)
-    // {
-    //     _coverageRepository = coverageRepository;
-    // }
+    public CoverageController(ICoverageRepository coverageRepository, ILogger<CoverageController> logger)
+    {
+        _coverageRepository = coverageRepository;
+        _logger = logger;
+    }
 
     /// <summary>
     /// Search coverage records by various criteria
@@ -392,6 +395,49 @@ public class CoverageController : ControllerBase
         };
 
         return Ok(summary);
+    }
+
+    /// <summary>
+    /// Get coverage records assigned to a specific PCP by NPI.
+    /// Used by the capitation-service to build member panel rosters.
+    /// </summary>
+    /// <param name="npi">10-digit NPI of the Primary Care Provider</param>
+    /// <param name="status">Filter by coverage status (defaults to Active)</param>
+    /// <param name="lineOfBusiness">Optional line-of-business filter</param>
+    [HttpGet("by-pcp/{npi}")]
+    [ProducesResponseType(typeof(List<Coverage>), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> GetCoverageByPcp(
+        [FromRoute][StringLength(10, MinimumLength = 10)] string npi,
+        [FromQuery] CoverageStatus? status = CoverageStatus.Active,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null)
+    {
+        if (npi.Length != 10 || !npi.All(char.IsDigit))
+        {
+            return BadRequest(new { Message = "NPI must be exactly 10 digits" });
+        }
+
+        _logger.LogInformation(
+            "Fetching coverage by PCP NPI {Npi} with status {Status} and LOB {Lob} for tenant {TenantId}",
+            SanitizeForLog(npi),
+            status,
+            lineOfBusiness,
+            SanitizeForLog(TenantId));
+
+        var coverages = await _coverageRepository.GetByPcpNpiAsync(
+            TenantId,
+            npi,
+            status,
+            lineOfBusiness);
+
+        return Ok(coverages);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

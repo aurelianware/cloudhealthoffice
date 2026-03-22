@@ -231,6 +231,7 @@ builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsSer
 builder.Services.AddScoped<IAppealsService, AppealsService>();
 builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();
 builder.Services.AddScoped<IPricingApiService, PricingApiService>();
+builder.Services.AddScoped<ICapitationService, CapitationService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
