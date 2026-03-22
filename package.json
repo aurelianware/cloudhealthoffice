@@ -26,8 +26,9 @@
     "saas",
     "multi-tenant",
     "hipaa",
-    "logic-apps",
+    "argo-workflows",
     "azure",
+    "aks",
     "generator",
     "automation",
     "x12"
