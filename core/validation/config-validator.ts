@@ -147,15 +147,6 @@ export class ConfigValidator {
       });
     }
 
-    if (config.infrastructure?.logicAppConfig && 
-        config.infrastructure.logicAppConfig.workerCount < 2 && 
-        config.infrastructure.environment === 'prod') {
-      warnings.push({
-        field: 'infrastructure.logicAppConfig.workerCount',
-        message: 'Production environment should have at least 2 workers for high availability',
-        suggestion: 'Increase workerCount to 2 or more',
-      });
-    }
   }
 }
 
