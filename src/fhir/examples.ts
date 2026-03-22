@@ -6,7 +6,7 @@
  * 
  * Examples include:
  * - Basic X12 270 to FHIR transformation
- * - Integration with Azure Logic Apps
+ * - Integration with Kubernetes/Argo Workflows
  * - Posting resources with native fetch clients
  * - Handling different member scenarios
  * - Error handling and validation
@@ -398,20 +398,20 @@ export function example_errorHandling(): void {
   }
 }
 
-// Example 9: Azure Logic Apps Integration Pattern
-export function example_azureLogicAppsIntegration(): void {
-  console.log('\n=== Example 9: Azure Logic Apps Integration Pattern ===\n');
-  
+// Example 9: Argo Workflow / Kubernetes Integration Pattern
+export function example_argoWorkflowIntegration(): void {
+  console.log('\n=== Example 9: Argo Workflow / Kubernetes Integration Pattern ===\n');
+
   console.log('Integration Flow:');
-  console.log('1. Logic App receives X12 270 from Service Bus');
-  console.log('2. Parse X12 to JSON structure');
-  console.log('3. Call TypeScript mapper function');
-  console.log('4. Store FHIR resources in Cosmos DB or FHIR server');
-  console.log('5. Queue response for X12 271 generation');
-  
-  // Simulating Logic App workflow
+  console.log('1. AKS ingress receives X12 270 request');
+  console.log('2. Argo Workflow parses X12 to JSON structure');
+  console.log('3. Prior-auth microservice calls TypeScript mapper');
+  console.log('4. Store FHIR resources in FHIR server');
+  console.log('5. Response service generates X12 271');
+
+  // Simulating Argo Workflow on AKS
   const x12Input: X12_270 = {
-    inquiryId: 'LOGICAPP-001',
+    inquiryId: 'ARGO-001',
     transactionDate: '20240115-1000',
     informationSource: {
       id: '030240928',
@@ -454,7 +454,7 @@ export function runAllExamples(): void {
   example_pharmacyEligibility();
   example_batchProcessing();
   example_errorHandling();
-  example_azureLogicAppsIntegration();
+  example_argoWorkflowIntegration();
   
   console.log('\n╔════════════════════════════════════════════════════════════════╗');
   console.log('║  All examples completed successfully!                          ║');
