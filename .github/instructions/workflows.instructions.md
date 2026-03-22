@@ -14,7 +14,7 @@ This directory contains GitHub Actions workflow files for CI/CD automation of th
 - **deploy-uat.yml**: UAT environment auto-deployment (triggers on `release/*` branches)
 
 ### Validation Workflows
-- **pr-lint.yml**: Pull request validation (YAML, Bicep, PowerShell)
+- **pr-lint.yml**: Comprehensive pull request validation (syntax, security, compliance, and site checks)
 - **sanity.yml**: Basic health checks
 - **debug-oidc.yml**: OIDC authentication debugging
 

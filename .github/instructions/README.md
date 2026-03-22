@@ -18,7 +18,7 @@ Guidance for GitHub Actions workflows including:
 - Common deployment scenarios
 
 ### [infrastructure.instructions.md](infrastructure.instructions.md)
-**Applies to**: `infra/*.bicep`
+**Applies to**: `infrastructure/azure/*.bicep`
 
 Guidance for Azure Bicep infrastructure templates including:
 - Resource configuration patterns

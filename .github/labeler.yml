@@ -5,7 +5,7 @@
 infrastructure:
   - changed-files:
       - any-glob-to-any-file:
-          - 'infra/**/*'
+          - 'infrastructure/**/*'
           - '*.bicep'
 
 # CI/CD labels
