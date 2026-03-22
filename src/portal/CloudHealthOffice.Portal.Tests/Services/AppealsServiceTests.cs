@@ -15,7 +15,7 @@ public class AppealsServiceTests
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Services:ClaimsService"] = "http://localhost:5000"
+                ["Services:AppealsService"] = "http://localhost:5000"
             })
             .Build();
     }
@@ -31,7 +31,7 @@ public class AppealsServiceTests
     {
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
-        ex.ServiceName.Should().Be("Claims Service");
+        ex.ServiceName.Should().Be("Appeals Service");
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class AppealsServiceTests
     {
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.SearchAppealsAsync());
-        ex.ServiceName.Should().Be("Claims Service");
+        ex.ServiceName.Should().Be("Appeals Service");
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class AppealsServiceTests
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.SearchAppealsAsync(appealId: "APL-2026-0001"));
-        ex.ServiceName.Should().Be("Claims Service");
+        ex.ServiceName.Should().Be("Appeals Service");
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class AppealsServiceTests
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.SearchAppealsAsync(memberId: "MBR-8201"));
-        ex.ServiceName.Should().Be("Claims Service");
+        ex.ServiceName.Should().Be("Appeals Service");
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class AppealsServiceTests
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.GetAppealByIdAsync("APL-2026-0001"));
-        ex.ServiceName.Should().Be("Claims Service");
+        ex.ServiceName.Should().Be("Appeals Service");
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class AppealsServiceTests
     {
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetSummaryAsync());
-        ex.Message.Should().Contain("Claims Service");
+        ex.Message.Should().Contain("Appeals Service");
     }
 
     [Fact]
