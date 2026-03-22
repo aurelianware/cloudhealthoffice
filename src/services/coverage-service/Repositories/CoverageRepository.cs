@@ -210,6 +210,55 @@ public class CoverageRepository : ICoverageRepository
         return results;
     }
 
+    public async Task<List<Coverage>> GetByPcpNpiAsync(
+        string tenantId,
+        string pcpNpi,
+        CoverageStatus? status = null,
+        LineOfBusiness? lineOfBusiness = null)
+    {
+        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.pcpNpi = @pcpNpi";
+        var parameters = new List<(string Name, object Value)>
+        {
+            ("@tenantId", tenantId),
+            ("@pcpNpi", pcpNpi)
+        };
+
+        if (status.HasValue)
+        {
+            queryText += " AND c.status = @status";
+            parameters.Add(("@status", (int)status.Value));
+        }
+
+        if (lineOfBusiness.HasValue)
+        {
+            queryText += " AND c.lineOfBusiness = @lineOfBusiness";
+            parameters.Add(("@lineOfBusiness", (int)lineOfBusiness.Value));
+        }
+
+        var queryDef = new QueryDefinition(queryText);
+        foreach (var (name, value) in parameters)
+        {
+            queryDef.WithParameter(name, value);
+        }
+
+        var iterator = _container.GetItemQueryIterator<Coverage>(
+            queryDef,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId)
+            });
+
+        var results = new List<Coverage>();
+
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
+        }
+
+        return results;
+    }
+
     public async Task<int> GetCountByGroupAsync(string tenantId, string groupNumber, CoverageStatus? status = null)
     {
         var queryText = "SELECT VALUE COUNT(1) FROM c WHERE c.tenantId = @tenantId AND c.groupNumber = @groupNumber";
@@ -291,6 +340,7 @@ public interface ICoverageRepository
         int pageSize = 20,
         string? continuationToken = null);
     Task<List<Coverage>> GetByGroupNumberAsync(string tenantId, string groupNumber);
+    Task<List<Coverage>> GetByPcpNpiAsync(string tenantId, string pcpNpi, CoverageStatus? status = null, LineOfBusiness? lineOfBusiness = null);
     Task<int> GetCountByGroupAsync(string tenantId, string groupNumber, CoverageStatus? status = null);
     Task<Coverage> CreateAsync(Coverage coverage);
     Task<Coverage> UpdateAsync(Coverage coverage);

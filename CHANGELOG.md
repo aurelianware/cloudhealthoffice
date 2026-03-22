@@ -5,6 +5,54 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - March 2026
+
+### Capitation Service — PMPM Provider Payments
+
+New microservice enabling per-member-per-month (PMPM) capitation payments from health plans to capitated providers. Structurally mirrors premium-billing-service (which collects premiums FROM sponsors) but pays TO providers.
+
+**New Service: `capitation-service`**
+- **CapitationContract** — provider agreements with 12-tier age-sex rate schedules, risk adjustment (HCC/RAF), quality withhold percentages, incentive pools, per-member and aggregate stop-loss thresholds
+- **CapitationRunService** — monthly batch orchestration that fetches PCP panel rosters from coverage-service, risk scores from risk-adjustment-service, calculates proration for mid-month adds/terms, applies withholds, and generates provider payment statements
+- **CapitationStatement** — provider-facing payment detail with member-level line items (base PMPM, risk score, adjusted PMPM, proration factor, gross/withhold/net), retroactive adjustments, and RecalculateTotals()
+- **CapitationDisbursementService** — EFT payment lifecycle supporting NACHA ACH credits, Stripe Connect transfers, and paper checks, with ACH return handling (R01-R29 codes) and auto-retry logic
+- **CapitationEraService** — X12 005010X221A1 835 ERA generation for capitation payments (CLP02=22, CLP06=CP, no SVC service lines, CAS CO-45 for withholds, PLB with WO/72/L6/FB adjustment codes)
+- **NachaCreditFileService** — NACHA credit file generation (transaction codes 22/32 for checking/savings credits, SEC code CCD, service class 220, entry description CAPITATION)
+- **StripeConnectService** — Stripe Transfer API integration for Connected Account payouts with webhook processing (transfer.created, transfer.reversed, payout.paid, payout.failed)
+- Dual Cosmos DB / MongoDB repositories (8 files) with tenant isolation
+- Kubernetes deployment manifest, Dockerfile, docker-compose entry (port 5012)
+
+**Supporting Service Changes:**
+- **coverage-service** — PcpNpi, PcpName, PcpAssignmentDate, PcpAssignmentMethod, PreviousPcpNpi fields on Coverage model; new PcpAssignmentMethod enum (AutoAssigned, MemberSelected, PlanDefault); `GET /api/v1/coverage/by-pcp/{npi}` endpoint for panel roster queries; compound indexes on (TenantId, PcpNpi, Status)
+- **provider-service** — ProviderBankAccount model with EFT/Stripe Connect/check disbursement support, W-9/1099 compliance fields; DisbursementMethod, BankAccountType, TaxIdType enums; `GET/PUT /api/providers/npi/{npi}/bank-account` endpoints
+
+**Portal — Capitation Management (3 new pages):**
+- Capitation Contracts — data grid with contract#/provider/type/LOB/status/tiers/withhold, inline rate tier editor, activate/terminate actions
+- Capitation Runs — create/execute runs with period selector, run list with provider count/member-months/net payable/duration, drill into statements
+- Capitation Statements — filterable list, member-level breakdown with age/gender/PMPM/risk score/proration/withhold, approve/hold/void workflows, batch "Pay Approved" disbursement
+- ICapitationService API client (16 methods), Capitation navigation group in sidebar
+
+**Seed Data:**
+- `seed-capitation.sh` — 3 demo contracts, 20 member PCP assignments, completed capitation run
+- `seed-capitation-pcp-assignments.js` — mongosh script for Coverage.PcpNpi updates
+
+**Tests: 176 new (163 unit + 13 smoke)**
+- CapitationRunService, CapitationDisbursementService, CapitationEraService (28 X12 835 tests), NachaCreditFileService, StripeConnectService, all 4 controllers, TenantMiddleware, CosmosSerializer
+- WebApplicationFactory smoke tests for full HTTP pipeline
+
+### Metrics
+
+| Metric                | Previous | Current  |
+|-----------------------|----------|----------|
+| Portal pages          | 47       | 50       |
+| Microservices         | 23       | 24       |
+| Service interfaces    | 20       | 21       |
+| C# application lines  | ~74,800  | ~86,800  |
+| Total code lines      | ~192,000 | ~204,000 |
+| Automated tests       | 797      | 973      |
+
+---
+
 ## [4.2.0] - March 2026
 
 ### Portal — Operations Depth

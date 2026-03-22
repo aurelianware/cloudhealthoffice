@@ -8,7 +8,7 @@ CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engi
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
-[![Tests](https://img.shields.io/badge/tests-1%2C295%20passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
@@ -37,16 +37,16 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 |Component           |Count    |Details                                                                                                    |
 |---------------------|---------|-----------------------------------------------------------------------------------------------------------|
-|Microservices        |23       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
+|Microservices        |24       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
 |Calculation Engines  |9        |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store        |
 |X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
 |FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
 |Argo Workflows       |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                                                    |
-|Portal Pages         |47       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
+|Portal Pages         |50       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
 |CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
 |Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
-|Automated Tests      |1,295    |C# xUnit, TypeScript Jest, Python pytest                                                                    |
-|Lines of Code        |~192,000 |C#, TypeScript, Razor, Python, YAML, Shell, PowerShell (excludes docs)                                      |
+|Automated Tests      |973      |C# xUnit, TypeScript Jest, Python pytest                                                                    |
+|Lines of Code        |~204,000 |C#, TypeScript, Razor, Python, YAML, Shell, PowerShell (excludes docs)                                      |
 
 ### Services
 
@@ -74,6 +74,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 |encounter-service        |Encounter data submission and reporting       |—               |
 |fhir-service             |FHIR R4 API gateway and resource serving      |—               |
 |premium-billing-service  |Premium billing and invoicing                 |—               |
+|capitation-service       |PMPM capitation payments to providers         |835             |
 |risk-adjustment-service  |HCC risk score calculation and submission     |—               |
 |smart-auth-service       |SMART on FHIR authorization                   |—               |
 |pricing-api              |Medicare/custom fee schedule repricing       |—               |
@@ -137,7 +138,7 @@ Cloud Health Office includes a full operations portal built with Blazor Server a
 
 **Configuration:** Benefit plan management (HMO, PPO, HDHP, Medicaid MCO) with service category cost-sharing rules. Sponsor/employer group management. Trading partner configuration. Reference data (ICD-10, CPT, HCPCS, Revenue, POS codes).
 
-**Finance:** Payment run management with 835 ERA generation and batch processing status. Premium billing with billing cycle management, sponsor invoicing, mid-month proration, aging reports, and delinquency tracking.
+**Finance:** Payment run management with 835 ERA generation and batch processing status. Premium billing with billing cycle management, sponsor invoicing, mid-month proration, aging reports, and delinquency tracking. Capitation management with provider contract administration (age-sex rate tiers, risk adjustment, quality withholds, stop-loss), monthly capitation run execution, statement review with member-level PMPM breakdowns, approve/hold/void workflows, and batch disbursement via NACHA ACH credits or Stripe Connect.
 
 **Monitoring:** Workflow monitor with real-time SignalR updates from Argo Workflows, claims adjudication pipeline timeline with per-step latency, and failed workflow retry. EDI operations center. Reports.
 
@@ -185,7 +186,7 @@ docker compose -f docker-compose.development.yml exec mongodb \
   mongosh cloudhealthoffice --eval 'db.Claims.countDocuments()'
 ```
 
-Services are available at `http://localhost:5001` through `5011` (Swagger UI at `/swagger` on each). See [docker-compose.development.yml](docker-compose.development.yml) for the full port map and configuration. Copy `.env.example` to `.env` to customise credentials.
+Services are available at `http://localhost:5001` through `5012` (Swagger UI at `/swagger` on each). See [docker-compose.development.yml](docker-compose.development.yml) for the full port map and configuration. Copy `.env.example` to `.env` to customise credentials.
 
 Or deploy to Azure:
 
@@ -196,9 +197,9 @@ Or deploy to Azure:
 ```
 cloudhealthoffice/
 ├── src/
-│   ├── services/           # 23 C# microservices
+│   ├── services/           # 24 C# microservices
 │   ├── engines/            # Calculation engines (Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter)
-│   ├── portal/             # Blazor Server portal (47 pages, MudBlazor, Entra ID multi-tenant)
+│   ├── portal/             # Blazor Server portal (50 pages, MudBlazor, Entra ID multi-tenant)
 │   ├── site/               # Marketing site (cloudhealthoffice.com)
 │   ├── fhir/               # FHIR R4 APIs and X12→FHIR mappers
 │   ├── api-docs/           # Swagger UI (api.cloudhealthoffice.com)
@@ -236,13 +237,13 @@ cloudhealthoffice/
 
 |Category         |Lines    |Breakdown                                                       |
 |-----------------|---------|----------------------------------------------------------------|
-|Application Code |127,000  |C# 74.8K, TypeScript 24.4K, Razor 18.9K, Python 6.7K, JS 2.6K |
+|Application Code |139,000  |C# 86.8K, TypeScript 24.4K, Razor 19.8K, Python 6.7K, JS 2.6K |
 |Web / UI         |9,500    |HTML/CSHTML 6.2K, CSS 3.4K                                     |
 |Infrastructure   |55,000   |YAML 27.2K, JSON 15.4K, Shell 8.3K, PowerShell 3.2K, Docker 1.3K|
 |Documentation    |111,000  |Architecture, ADRs, deployment guides, features, security, sales|
-|**Total**        |**~303,000**|                                                             |
+|**Total**        |**~315,000**|                                                             |
 
-1,295 automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
+973 automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
 Built by a solo founder with 25+ years of payer IT experience and AI-assisted development.
 
 ## Deployment Options
