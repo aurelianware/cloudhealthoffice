@@ -960,7 +960,7 @@ export function processFromClearinghouse(
  * - Attachment support via Binary resources
  * - CDS Hooks for provider-facing requirements discovery
  * - AKS microservice orchestration
- * - Clearinghouse clearinghouse integration
+ * - Clearinghouse integration
  * - Patient consent management
  * 
  * References:
@@ -1713,7 +1713,7 @@ export interface PriorAuthOrchestrationConfig {
     attachmentTopic: string;
   };
   
-  /** Clearinghouse clearinghouse configuration */
+  /** Clearinghouse configuration */
   clearinghouse: {
     /** Trading partner ID */
     tradingPartnerId: string;
@@ -1739,7 +1739,7 @@ export interface PriorAuthOrchestrationConfig {
 /**
  * Creates default orchestration configuration for AKS microservices
  *
- * @param baseUrl Base URL for AKS service endpoints (e.g., http://prior-auth-service.cho-svcs)
+ * @param baseUrl Base URL for AKS service endpoints (e.g., http://prior-auth-service.cloudhealthoffice)
  * @param environment Environment name (dev, uat, prod)
  * @returns Orchestration configuration
  */
