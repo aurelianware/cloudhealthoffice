@@ -32,7 +32,7 @@ stringData:
   # Format: username:password:uid:gid:directory
   # Password should be changed for production!
   users.conf: |
-    logicapp:changeme123:1000:1000:upload
+    cho-edi:changeme123:1000:1000:upload
     clearinghouse:changeme456:1001:1001:edi
 ---
 apiVersion: v1
@@ -155,7 +155,7 @@ spec:
   # Uncomment and configure IP whitelisting for production
   # See docs/SFTP-DNS-SETUP.md for instructions on getting IP addresses
   # loadBalancerSourceRanges:
-  #   # Logic Apps outbound IPs (get with: az logicapp show --query outboundIpAddresses)
+  #   # AKS cluster outbound IPs
   #   - 13.88.3.11/32
   #   - 13.88.3.12/32
   #   # Clearinghouse IPs (Availity example)

@@ -80,7 +80,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     echo "⏳ Wait 5-60 minutes for DNS propagation, then test:"
     echo "   dig $FQDN +short"
-    echo "   sftp logicapp@$FQDN"
+    echo "   sftp cho-edi@$FQDN"
 else
     FQDN="$SFTP_IP"
     echo "Skipping DNS configuration. Using IP: $SFTP_IP"
@@ -202,9 +202,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo ""
         echo "Test connection:"
         if [ "$FQDN" != "$SFTP_IP" ]; then
-            echo "  sftp logicapp@$FQDN"
+            echo "  sftp cho-edi@$FQDN"
         else
-            echo "  sftp logicapp@$SFTP_IP"
+            echo "  sftp cho-edi@$SFTP_IP"
         fi
     fi
 else

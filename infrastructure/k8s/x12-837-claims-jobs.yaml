@@ -34,7 +34,7 @@ spec:
               - name: SFTP_HOST
                 value: "sftp-service.cho-sftp.svc.cluster.local"
               - name: SFTP_USER
-                value: "logicapp"
+                value: "cho-edi"
               - name: SFTP_PASS
                 valueFrom:
                   secretKeyRef:
@@ -52,7 +52,7 @@ spec:
             args:
               - |
                 set -e
-                
+
                 echo "=========================================="
                 echo "X12 837P Professional Claims Upload"
                 echo "=========================================="
@@ -174,7 +174,7 @@ spec:
               - name: SFTP_HOST
                 value: "sftp-service.cho-sftp.svc.cluster.local"
               - name: SFTP_USER
-                value: "logicapp"
+                value: "cho-edi"
               - name: SFTP_PASS
                 valueFrom:
                   secretKeyRef:
@@ -213,7 +213,7 @@ spec:
               - name: SFTP_HOST
                 value: "sftp-service.cho-sftp.svc.cluster.local"
               - name: SFTP_USER
-                value: "logicapp"
+                value: "cho-edi"
               - name: SFTP_PASS
                 valueFrom:
                   secretKeyRef:
