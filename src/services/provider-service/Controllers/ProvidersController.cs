@@ -45,6 +45,7 @@ public class ProvidersController : ControllerBase
     [HttpGet("search")]
     [ProducesResponseType(typeof(IEnumerable<Provider>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Provider>>> SearchProviders(
+        [FromQuery] string? q = null,
         [FromQuery] string? name = null,
         [FromQuery] string? specialty = null,
         [FromQuery] string? zipCode = null,
@@ -60,10 +61,52 @@ public class ProvidersController : ControllerBase
             "Searching providers: name={Name}, specialty={Specialty}, zip={Zip}, state={State}, plan={Plan}, lob={LOB}",
             SanitizeForLog(name), SanitizeForLog(specialty), SanitizeForLog(zipCode), SanitizeForLog(state), SanitizeForLog(planId), lineOfBusiness);
 
+        // Support 'q' as alias for 'name' (portal autocomplete uses q=)
+        var searchName = name ?? q;
+
         var providers = await _providerRepository.SearchAsync(
-            name, specialty, zipCode, state, planId, lineOfBusiness, providerType, acceptingNewPatients, page, pageSize);
+            searchName, specialty, zipCode, state, planId, lineOfBusiness, providerType, acceptingNewPatients, page, pageSize);
 
         return Ok(providers);
+    }
+
+    /// <summary>
+    /// List providers with filters (alternative to search — used by portal grid)
+    /// </summary>
+    [HttpGet("list")]
+    [ProducesResponseType(typeof(IEnumerable<Provider>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<Provider>>> ListProviders(
+        [FromQuery] string? specialty = null,
+        [FromQuery] string? state = null,
+        [FromQuery] ProviderType? providerType = null,
+        [FromQuery] bool? acceptingNewPatients = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var providers = await _providerRepository.SearchAsync(
+            null, specialty, null, state, null, null, providerType, acceptingNewPatients, page, pageSize);
+        return Ok(providers);
+    }
+
+    /// <summary>
+    /// Get list of distinct provider specialties (for filter dropdowns)
+    /// </summary>
+    [HttpGet("specialties")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public ActionResult<List<string>> GetSpecialties()
+    {
+        // Common NUCC taxonomy specialties for dropdown
+        var specialties = new List<string>
+        {
+            "Internal Medicine", "Family Medicine", "Pediatrics",
+            "Cardiology", "Orthopedics", "Dermatology",
+            "Obstetrics & Gynecology", "Psychiatry", "Neurology",
+            "General Surgery", "Emergency Medicine", "Radiology",
+            "Anesthesiology", "Ophthalmology", "Pathology",
+            "Oncology", "Endocrinology", "Gastroenterology",
+            "Pulmonology", "Nephrology"
+        };
+        return Ok(specialties);
     }
 
     /// <summary>
