@@ -2233,7 +2233,7 @@ public class AppealsService : IAppealsService
 
     public async Task<AppealsSummary> GetSummaryAsync()
     {
-        var baseUrl = _configuration["Services:ClaimsService"];
+        var baseUrl = _configuration["Services:AppealsService"];
         try
         {
             var summary = await _httpClient.GetFromJsonAsync<AppealsSummary>($"{baseUrl}/appeals/summary");
@@ -2249,7 +2249,7 @@ public class AppealsService : IAppealsService
     public async Task<List<AppealSummary>> SearchAppealsAsync(string? appealId = null,
         string? memberId = null, string? originalClaimId = null)
     {
-        var baseUrl = _configuration["Services:ClaimsService"];
+        var baseUrl = _configuration["Services:AppealsService"];
         try
         {
             var queryParts = new List<string>();
@@ -2262,22 +2262,22 @@ public class AppealsService : IAppealsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
+            throw new ServiceUnavailableException("Appeals Service", ex);
         }
     }
 
     public async Task<AppealDetails?> GetAppealByIdAsync(string appealId)
     {
-        var baseUrl = _configuration["Services:ClaimsService"];
+        var baseUrl = _configuration["Services:AppealsService"];
         try
         {
             return await _httpClient.GetFromJsonAsync<AppealDetails>($"{baseUrl}/appeals/{Uri.EscapeDataString(appealId)}");
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
+            throw new ServiceUnavailableException("Appeals Service", ex);
         }
     }
 }
