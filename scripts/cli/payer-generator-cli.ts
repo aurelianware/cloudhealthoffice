@@ -54,7 +54,7 @@ const program = new Command();
 
 program
   .name('payer-generator')
-  .description('Generate Logic App deployments from payer configuration')
+  .description('Generate Argo Workflow deployments from payer configuration')
   .version('1.0.0');
 
 /**
@@ -101,8 +101,8 @@ program
           console.log(`  ${enabled ? '✅' : '❌'} ${module}`);
         });
         console.log('\nWould generate:');
-        console.log('  - Logic App workflows');
-        console.log('  - Bicep infrastructure templates');
+        console.log('  - Argo Workflow manifests');
+        console.log('  - AKS infrastructure templates');
         console.log('  - Documentation (DEPLOYMENT.md, CONFIGURATION.md, TESTING.md)');
         console.log('  - JSON schemas');
         console.log('  - Deployment package');
@@ -360,7 +360,7 @@ program
         console.log(`  1. Generate deployment artifacts (1 min)`);
         console.log(`  2. Deploy Azure infrastructure (3-5 min)`);
         console.log(`  3. Configure FHIR endpoints (1-2 min)`);
-        console.log(`  4. Deploy Logic App workflows (2-3 min)`);
+        console.log(`  4. Deploy Argo Workflows to AKS (2-3 min)`);
         console.log(`  5. Run compliance validation (1 min)`);
         console.log(`\nEstimated Total Time: <10 minutes`);
         return;
@@ -416,9 +416,9 @@ program
 
       console.log(chalk.cyan('\n🔍 Step 4/5: FHIR Endpoint Configuration\n'));
       console.log(chalk.green('Configure your FHIR endpoints:'));
-      console.log(chalk.cyan(`  - Patient Access: https://<logic-app>.azurewebsites.net/api/patient`));
-      console.log(chalk.cyan(`  - Prior Auth: https://<logic-app>.azurewebsites.net/api/prior-auth`));
-      console.log(chalk.cyan(`  - Claims: https://<logic-app>.azurewebsites.net/api/claim`));
+      console.log(chalk.cyan(`  - Patient Access: https://<aks-ingress>/api/patient`));
+      console.log(chalk.cyan(`  - Prior Auth: https://<aks-ingress>/api/prior-auth`));
+      console.log(chalk.cyan(`  - Claims: https://<aks-ingress>/api/claim`));
 
       console.log(chalk.cyan('\n✅ Step 5/5: Timeline Monitoring\n'));
       console.log(chalk.green('Monitor CMS-0057-F timeline compliance:'));

@@ -72,11 +72,6 @@ describe('ConfigValidator', () => {
             topics: [],
             queues: []
           },
-          logicAppConfig: {
-            sku: 'WS1',
-            workerCount: 1,
-            alwaysOn: true
-          },
           keyVaultConfig: {
             sku: 'standard',
             enableSoftDelete: true,
@@ -154,7 +149,6 @@ describe('ConfigValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -192,11 +186,6 @@ describe('ConfigValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: {
-            sku: 'WS1',
-            workerCount: 1, // Low worker count for prod
-            alwaysOn: true
-          },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -246,7 +235,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -288,7 +276,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -329,7 +316,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -381,7 +367,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -426,7 +411,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -466,7 +450,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -506,7 +489,6 @@ describe('ConfigValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -561,7 +543,6 @@ describe('DeploymentValidator - Additional Coverage', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -646,7 +627,6 @@ describe('DeploymentValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -717,7 +697,6 @@ describe('DeploymentValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -756,7 +735,6 @@ describe('DeploymentValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
@@ -809,7 +787,6 @@ describe('DeploymentValidator', () => {
           tags: {},
           storageConfig: { sku: 'Standard_LRS', containers: [], lifecycleRules: [] },
           serviceBusConfig: { sku: 'Standard', topics: [], queues: [] },
-          logicAppConfig: { sku: 'WS1', workerCount: 1, alwaysOn: true },
           keyVaultConfig: { sku: 'standard', enableSoftDelete: true, softDeleteRetentionDays: 90 }
         },
         monitoring: {
