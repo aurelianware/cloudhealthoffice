@@ -237,7 +237,7 @@ Creates configuration for AKS microservices.
 
 ```typescript
 const config = createOrchestrationConfig(
-  'http://prior-auth-service.cho-svcs',
+  'http://prior-auth-service.cloudhealthoffice',
   'prod'
 );
 ```
@@ -323,31 +323,33 @@ interface PriorAuthSLA {
 ### Example 1: Basic Prior Auth Submission
 
 ```typescript
-import { 
+import {
   mapX12278ToFHIRPriorAuth,
-  validatePriorAuthRequest
+  validatePriorAuthRequest,
+  createOrchestrationConfig
 } from './prior-auth-api';
 
 async function submitPriorAuth(x12Request) {
+  const config = createOrchestrationConfig(
+    'http://prior-auth-service.cloudhealthoffice', 'prod'
+  );
+
   // Validate
   const validation = validatePriorAuthRequest(x12Request);
   if (!validation.valid) {
     throw new Error(`Invalid request: ${validation.errors.join(', ')}`);
   }
-  
+
   // Map to FHIR
   const fhirClaim = mapX12278ToFHIRPriorAuth(x12Request);
-  
+
   // Submit to AKS prior-auth service
-  const response = await fetch(
-    'http://prior-auth-service.cho-svcs/api/prior-auth/submit',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/fhir+json' },
-      body: JSON.stringify(fhirClaim)
-    }
-  );
-  
+  const response = await fetch(config.endpoints.submitRequest, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/fhir+json' },
+    body: JSON.stringify(fhirClaim)
+  });
+
   return await response.json();
 }
 ```
@@ -452,19 +454,19 @@ async function submitAttachment(authNumber, pdfData, patientId) {
     'clinical-notes'
   );
   
-  // Submit to documentation endpoint
-  const response = await fetch(
-    'http://prior-auth-service.cho-svcs/api/prior-auth/documentation',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        authorizationNumber: authNumber,
-        binary,
-        documentReference: docRef
-      })
-    }
+  // Submit to documentation endpoint using config
+  const config = createOrchestrationConfig(
+    'http://prior-auth-service.cloudhealthoffice', 'prod'
   );
+  const response = await fetch(config.endpoints.submitDocumentation, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authorizationNumber: authNumber,
+      binary,
+      documentReference: docRef
+    })
+  });
   
   return await response.json();
 }
@@ -523,12 +525,12 @@ describe('Prior Authorization API', () => {
 
 ## Integration with AKS Microservices
 
-### Message Bus Configuration
+### Service Bus Configuration
 
 ```typescript
 const config = createOrchestrationConfig(baseUrl, 'prod');
 
-// Message topics
+// Service Bus topics
 // - prior-auth-requests-prod
 // - prior-auth-responses-prod
 // - prior-auth-attachments-prod
@@ -538,7 +540,7 @@ const config = createOrchestrationConfig(baseUrl, 'prod');
 
 ```
 AKS Ingress → Validate → Map to FHIR → Encode X12 →
-  → Publish to Message Bus → Process → Return Response
+  → Publish to Service Bus → Process → Return Response
 ```
 
 ### Argo Workflow Steps
