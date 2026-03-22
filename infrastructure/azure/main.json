@@ -7,7 +7,7 @@
       "version": "0.38.33.27573",
       "templateHash": "4476951905493689372"
     },
-    "_WARNING": "STALE: This compiled ARM template is out of date. Regenerate with: az bicep build --file main.bicep --outfile main.json"
+    "_WARNING": "STALE — DO NOT USE FOR DEPLOYMENTS. This compiled ARM template is out of date and still contains Logic App resources that have been removed from main.bicep. Regenerate with: az bicep build --file main.bicep --outfile main.json"
   },
   "parameters": {
     "location": {

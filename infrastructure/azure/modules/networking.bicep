@@ -42,7 +42,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
     }
     subnets: [
       {
-        name: 'private-endpoints-subnet'
+        name: privateEndpointsSubnetName
         properties: {
           addressPrefix: privateEndpointsSubnetPrefix
           privateEndpointNetworkPolicies: 'Disabled'
@@ -52,6 +52,8 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
     ]
   }
 }
+
+var privateEndpointsSubnetName = 'private-endpoints-subnet'
 
 // =========================
 // Private DNS Zone for Storage (blob)
@@ -126,7 +128,7 @@ output vnetId string = vnet.id
 output vnetName string = vnet.name
 
 @description('Private Endpoints subnet resource ID')
-output privateEndpointsSubnetId string = vnet.properties.subnets[0].id
+output privateEndpointsSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, privateEndpointsSubnetName)
 
 @description('Storage Private DNS Zone resource ID')
 output storageDnsZoneId string = privateDnsZoneStorage.id

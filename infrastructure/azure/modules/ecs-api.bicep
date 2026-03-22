@@ -22,11 +22,17 @@ param backendApiToken string = ''
 @description('Enable ECS workflow deployment')
 param enableEcs bool = true
 
+@description('Kubernetes namespace where ECS service is deployed')
+param aksNamespace string = 'default'
+
+@description('Kubernetes cluster DNS suffix')
+param aksClusterDnsSuffix string = 'svc.cluster.local'
+
 // =========================
 // Variables
 // =========================
 var ecsWorkflowName = 'ecs_summary_search'
-var aksServiceHost = '${baseName}-ecs-svc.default.svc.cluster.local'
+var aksServiceHost = '${baseName}-ecs-svc.${aksNamespace}.${aksClusterDnsSuffix}'
 
 // =========================
 // Outputs - ECS Configuration Settings
@@ -64,15 +70,18 @@ output ecsMonitoringConfig object = {
 }
 
 // ECS API endpoint information (AKS Argo Workflows)
+// NOTE: These are internal cluster DNS names, only resolvable from within the AKS cluster.
+// For external access, configure an ingress controller and use the ingress hostname instead.
 output ecsEndpointInfo object = {
   workflowName: ecsWorkflowName
   triggerName: 'HTTP_ECS_Summary_Search_Request'
   endpointPath: '/api/${ecsWorkflowName}/triggers/HTTP_ECS_Summary_Search_Request/invoke'
   baseUrl: 'http://${aksServiceHost}'
   fullUrl: 'http://${aksServiceHost}/api/${ecsWorkflowName}/triggers/HTTP_ECS_Summary_Search_Request/invoke'
+  isInternalOnly: true
 }
 
-// ECS workflow parameters (for Logic App configuration)
+// ECS workflow parameters (for AKS/Argo Workflows configuration)
 // Note: Secure parameters should reference Key Vault
 output ecsWorkflowParameters object = {
   backend_base_url: {
