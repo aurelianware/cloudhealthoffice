@@ -507,22 +507,38 @@ jobs:
         continue-on-error: true
         run: |
           kubectl rollout restart deployment/portal -n ${{ env.NAMESPACE }}
-          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=600s
+          kubectl rollout status deployment/portal -n ${{ env.NAMESPACE }} --timeout=900s
 
-      - name: Portal pod diagnostics (on failure)
+      - name: Diagnose portal rollout failure
         if: steps.portal_rollout.outcome == 'failure'
         run: |
           echo "=== Portal Pod Status ==="
           kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal -o wide
+
           echo ""
           echo "=== Portal Pod Describe ==="
-          kubectl describe pods -n ${{ env.NAMESPACE }} -l app=portal | tail -60
+          for pod in $(kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal --no-headers -o custom-columns=":metadata.name"); do
+            echo "--- $pod ---"
+            kubectl describe pod "$pod" -n ${{ env.NAMESPACE }}
+          done
+
           echo ""
           echo "=== Portal Pod Logs (last 100 lines) ==="
-          kubectl logs -n ${{ env.NAMESPACE }} -l app=portal --tail=100 --all-containers=true 2>&1 || echo "No logs available"
+          for pod in $(kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal --no-headers -o custom-columns=":metadata.name"); do
+            echo "--- $pod ---"
+            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --tail=100 || true
+            echo "--- Previous container logs (if any) ---"
+            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --previous --tail=50 || true
+          done
+
           echo ""
-          echo "=== Portal Pod Previous Logs (crash) ==="
-          kubectl logs -n ${{ env.NAMESPACE }} -l app=portal --previous --tail=100 --all-containers=true 2>&1 || echo "No previous logs available"
+          echo "=== ReplicaSet Events ==="
+          kubectl get rs -n ${{ env.NAMESPACE }} -l app=portal -o wide
+          kubectl describe rs -n ${{ env.NAMESPACE }} -l app=portal | tail -30
+
+          echo ""
+          echo "=== Deployment Events ==="
+          kubectl describe deployment/portal -n ${{ env.NAMESPACE }} | grep -A 20 "Events:"
 
       - name: Fail if portal rollout failed
         if: steps.portal_rollout.outcome == 'failure'
