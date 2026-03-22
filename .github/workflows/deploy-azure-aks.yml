@@ -517,18 +517,19 @@ jobs:
 
           echo ""
           echo "=== Portal Pod Describe ==="
-          for pod in $(kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal --no-headers -o custom-columns=":metadata.name"); do
+          PORTAL_PODS=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal --no-headers -o custom-columns=":metadata.name")
+          for pod in $PORTAL_PODS; do
             echo "--- $pod ---"
             kubectl describe pod "$pod" -n ${{ env.NAMESPACE }}
           done
 
           echo ""
           echo "=== Portal Pod Logs (last 100 lines) ==="
-          for pod in $(kubectl get pods -n ${{ env.NAMESPACE }} -l app=portal --no-headers -o custom-columns=":metadata.name"); do
+          for pod in $PORTAL_PODS; do
             echo "--- $pod ---"
-            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --tail=100 || true
+            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --all-containers=true --tail=100 --timestamps || true
             echo "--- Previous container logs (if any) ---"
-            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --previous --tail=50 || true
+            kubectl logs "$pod" -n ${{ env.NAMESPACE }} --all-containers=true --previous --tail=50 --timestamps || true
           done
 
           echo ""
@@ -538,7 +539,7 @@ jobs:
 
           echo ""
           echo "=== Deployment Events ==="
-          kubectl describe deployment/portal -n ${{ env.NAMESPACE }} | grep -A 20 "Events:"
+          kubectl describe deployment/portal -n ${{ env.NAMESPACE }} | grep -A 20 "Events:" || true
 
       - name: Fail if portal rollout failed
         if: steps.portal_rollout.outcome == 'failure'
