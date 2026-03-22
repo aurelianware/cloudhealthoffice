@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Services;
@@ -7,7 +6,6 @@ namespace TenantService.Controllers;
 
 [ApiController]
 [Route("api/v1/roles")]
-[Authorize]
 public class RolesController : ControllerBase
 {
     private readonly ITenantRoleRepository _roleRepository;
