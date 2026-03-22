@@ -218,6 +218,11 @@ public class Provider
     public string? TerminationReason { get; set; }
 
     /// <summary>
+    /// Bank account / EFT disbursement information for capitation payments
+    /// </summary>
+    public ProviderBankAccount? BankAccount { get; set; }
+
+    /// <summary>
     /// Audit: Record creation timestamp
     /// </summary>
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
@@ -468,4 +473,125 @@ public enum LineOfBusiness
     Exchange = 4,
     TRICARE = 5,
     VA = 6
+}
+
+/// <summary>
+/// Provider bank account / EFT disbursement information.
+/// Mirrors SponsorBankAccount from premium-billing-service but for the credit (payment) side.
+/// Used by capitation-service to disburse NACHA credits or Stripe Connect payouts.
+/// </summary>
+public class ProviderBankAccount
+{
+    /// <summary>
+    /// Whether EFT disbursement is enabled for this provider
+    /// </summary>
+    public bool EftEnabled { get; set; }
+
+    /// <summary>
+    /// Preferred disbursement method
+    /// </summary>
+    public DisbursementMethod PreferredDisbursementMethod { get; set; } = DisbursementMethod.Check;
+
+    /// <summary>
+    /// Bank routing number (9-digit ABA — stored in vault, passed through for NACHA generation)
+    /// </summary>
+    [StringLength(9)]
+    public string? RoutingNumber { get; set; }
+
+    /// <summary>
+    /// Bank account number (stored in vault)
+    /// </summary>
+    [StringLength(34)]
+    public string? AccountNumber { get; set; }
+
+    /// <summary>
+    /// Account type
+    /// </summary>
+    public BankAccountType AccountType { get; set; } = BankAccountType.Checking;
+
+    /// <summary>
+    /// Name on the bank account
+    /// </summary>
+    [StringLength(200)]
+    public string? AccountHolderName { get; set; }
+
+    /// <summary>
+    /// Stripe Connect account ID (acct_xxx) for Stripe payouts
+    /// </summary>
+    [StringLength(100)]
+    public string? StripeConnectedAccountId { get; set; }
+
+    /// <summary>
+    /// Last 4 digits of routing number (for display)
+    /// </summary>
+    [StringLength(4)]
+    public string? RoutingNumberLast4 { get; set; }
+
+    /// <summary>
+    /// Last 4 digits of account number (for display)
+    /// </summary>
+    [StringLength(4)]
+    public string? AccountNumberLast4 { get; set; }
+
+    /// <summary>
+    /// Whether a W-9 is on file (required for 1099 compliance)
+    /// </summary>
+    public bool W9OnFile { get; set; }
+
+    /// <summary>
+    /// Tax ID for 1099 reporting (EIN or SSN)
+    /// </summary>
+    [StringLength(20)]
+    public string? TaxId { get; set; }
+
+    /// <summary>
+    /// Type of Tax ID on file
+    /// </summary>
+    public TaxIdType? TaxIdType { get; set; }
+}
+
+/// <summary>
+/// Disbursement method for provider payments
+/// </summary>
+public enum DisbursementMethod
+{
+    /// <summary>
+    /// NACHA ACH credit (bank file submission)
+    /// </summary>
+    NachaCredit = 1,
+
+    /// <summary>
+    /// Stripe Connect payout
+    /// </summary>
+    StripeConnect = 2,
+
+    /// <summary>
+    /// Paper check
+    /// </summary>
+    Check = 3
+}
+
+/// <summary>
+/// Bank account type
+/// </summary>
+public enum BankAccountType
+{
+    Checking = 1,
+    Savings = 2
+}
+
+/// <summary>
+/// Tax identification number type for 1099 reporting
+/// </summary>
+public enum TaxIdType
+{
+    /// <summary>
+    /// Employer Identification Number (organizations)
+    /// </summary>
+    EIN = 1,
+
+    /// <summary>
+    /// Social Security Number (individuals)
+    /// </summary>
+    SSN = 2
 }

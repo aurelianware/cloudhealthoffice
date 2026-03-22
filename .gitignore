@@ -64,3 +64,4 @@ obj/
 /*.bak
 /tmp_*
 *.DS_Store
+src/services/capitation-service/CapitationService.Tests/TestResults/
