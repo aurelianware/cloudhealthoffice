@@ -155,7 +155,7 @@ spec:
   # Uncomment and configure IP whitelisting for production
   # See docs/SFTP-DNS-SETUP.md for instructions on getting IP addresses
   # loadBalancerSourceRanges:
-  #   # AKS cluster outbound IPs
+  #   # Allowed client source IPs to the public SFTP endpoint
   #   - 13.88.3.11/32
   #   - 13.88.3.12/32
   #   # Clearinghouse IPs (Availity example)
