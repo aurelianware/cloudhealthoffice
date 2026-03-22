@@ -15,4 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.ClaimsScrubEngine\CloudHealthOffice.ClaimsScrubEngine.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
 </Project>
