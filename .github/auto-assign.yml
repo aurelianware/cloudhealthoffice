@@ -69,18 +69,19 @@ useReviewGroups: true
 # When files matching these patterns are changed, the corresponding group is assigned
 filterReviewerGroups:
   workflows-team:
-    - "*.json"
+    - "infrastructure/argo-workflows/**/*.yaml"
+    - "infrastructure/argo-workflows/**/*.yml"
 
   infra-team:
-    - "infra/**/*"
+    - "infrastructure/**/*"
     - "*.bicep"
     - ".github/workflows/**/*"
   
   security-team:
     - "SECURITY.md"
     - "**/security/**/*"
-    - "infra/**/*"
-  
+    - "infrastructure/**/*"
+
   docs-team:
     - "**/*.md"
     - "docs/**/*"
@@ -91,7 +92,7 @@ useAssigneeGroups: true
 # Filter assignee groups by file patterns
 filterAssigneeGroups:
   infra-team:
-    - "infra/**/*"
+    - "infrastructure/**/*"
     - ".github/workflows/**/*"
 
 # Skip assigning reviewers when PR author is in the list

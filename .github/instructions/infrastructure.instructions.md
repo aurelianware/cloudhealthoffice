@@ -1,6 +1,6 @@
 # Infrastructure (Bicep) Instructions
 
-**Applies to**: `infra/*.bicep`
+**Applies to**: `infrastructure/azure/*.bicep`
 
 ## Overview
 
@@ -8,7 +8,7 @@ Infrastructure as Code (IaC) using Azure Bicep for deploying HIPAA-compliant inf
 
 ## Main Templates
 
-### infra/main.bicep
+### infrastructure/azure/main.bicep
 Primary infrastructure template that deploys:
 - **Azure Data Lake Storage Gen2**: Hierarchical namespace enabled for HIPAA attachments
 - **Service Bus Namespace**: Standard tier with three topics
@@ -64,18 +64,18 @@ param location string = 'eastus'
 ### Local Validation
 ```bash
 # Compile Bicep to ARM template
-az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/arm.json
 
 # Validate deployment (without deploying)
 az deployment group validate \
   --resource-group <rg-name> \
-  --template-file infra/main.bicep \
+  --template-file infrastructure/azure/main.bicep \
   --parameters baseName=test-name
 
 # Preview changes (What-If)
 az deployment group what-if \
   --resource-group <rg-name> \
-  --template-file infra/main.bicep \
+  --template-file infrastructure/azure/main.bicep \
   --parameters baseName=prod-name \
   --no-pretty-print
 ```
@@ -96,7 +96,7 @@ az group create -n payer-attachments-rg -l eastus
 # Deploy infrastructure
 az deployment group create \
   -g payer-attachments-rg \
-  -f infra/main.bicep \
+  -f infrastructure/azure/main.bicep \
   -p baseName=payer-attachments
 ```
 
