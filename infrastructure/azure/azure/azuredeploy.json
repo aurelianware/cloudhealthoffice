@@ -2,7 +2,7 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "description": "Cloud Health Office - Azure-native HIPAA EDI Integration Platform. Deploy in <5 minutes for rapid sandbox testing.",
+    "description": "DEPRECATED: This legacy ARM template is superseded by infrastructure/azure/main.bicep. Use main.bicep for all new deployments. Workflows now run on AKS with Argo Workflows.",
     "author": "Aurelianware",
     "github": "https://github.com/aurelianware/cloudhealthoffice"
   },
@@ -86,8 +86,6 @@
   "variables": {
     "storageAccountName": "[concat('cho', uniqueString(resourceGroup().id))]",
     "serviceBusName": "[concat(parameters('baseName'), '-sb-', uniqueString(resourceGroup().id))]",
-    "logicAppName": "[concat(parameters('baseName'), '-la')]",
-    "appServicePlanName": "[concat(parameters('baseName'), '-asp')]",
     "integrationAccountName": "[concat(parameters('baseName'), '-ia')]",
     "appInsightsName": "[concat(parameters('baseName'), '-ai')]",
     "logAnalyticsName": "[concat(parameters('baseName'), '-law')]",
@@ -246,111 +244,8 @@
         "Environment": "[parameters('deploymentEnvironment')]"
       }
     },
-    {
-      "type": "Microsoft.Web/serverfarms",
-      "apiVersion": "2022-09-01",
-      "name": "[variables('appServicePlanName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "WS1",
-        "tier": "WorkflowStandard"
-      },
-      "kind": "elastic",
-      "properties": {
-        "targetWorkerCount": 1,
-        "maximumElasticWorkerCount": 20,
-        "elasticScaleEnabled": true,
-        "isSpot": false,
-        "reserved": true
-      },
-      "tags": {
-        "Project": "CloudHealthOffice",
-        "Environment": "[parameters('deploymentEnvironment')]"
-      }
-    },
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2022-09-01",
-      "name": "[variables('logicAppName')]",
-      "location": "[parameters('location')]",
-      "kind": "functionapp,workflowapp",
-      "identity": {
-        "type": "SystemAssigned"
-      },
-      "properties": {
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "siteConfig": {
-          "appSettings": [
-            {
-              "name": "FUNCTIONS_EXTENSION_VERSION",
-              "value": "~4"
-            },
-            {
-              "name": "FUNCTIONS_WORKER_RUNTIME",
-              "value": "node"
-            },
-            {
-              "name": "WEBSITE_NODE_DEFAULT_VERSION",
-              "value": "~18"
-            },
-            {
-              "name": "AzureWebJobsStorage",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
-            },
-            {
-              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
-              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
-            },
-            {
-              "name": "WEBSITE_CONTENTSHARE",
-              "value": "[toLower(variables('logicAppName'))]"
-            },
-            {
-              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
-              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
-            },
-            {
-              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
-            },
-            {
-              "name": "AzureFunctionsJobHost__extensionBundle__id",
-              "value": "Microsoft.Azure.Functions.ExtensionBundle.Workflows"
-            },
-            {
-              "name": "AzureFunctionsJobHost__extensionBundle__version",
-              "value": "[1.*, 2.0.0)"
-            },
-            {
-              "name": "WORKFLOWS_SUBSCRIPTION_ID",
-              "value": "[subscription().subscriptionId]"
-            },
-            {
-              "name": "WORKFLOWS_RESOURCE_GROUP_NAME",
-              "value": "[resourceGroup().name]"
-            }
-          ],
-          "use32BitWorkerProcess": false,
-          "netFrameworkVersion": "v6.0"
-        },
-        "httpsOnly": true
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
-        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
-      ],
-      "tags": {
-        "Project": "CloudHealthOffice",
-        "Environment": "[parameters('deploymentEnvironment')]"
-      }
-    }
   ],
   "outputs": {
-    "logicAppName": {
-      "type": "string",
-      "value": "[variables('logicAppName')]"
-    },
     "storageAccountName": {
       "type": "string",
       "value": "[variables('storageAccountName')]"
@@ -369,7 +264,7 @@
     },
     "nextSteps": {
       "type": "string",
-      "value": "1. Clone workflows: git clone https://github.com/aurelianware/cloudhealthoffice && cd cloudhealthoffice && npm install && npm run build\n2. Deploy workflows: ./deploy-workflows.ps1 -ResourceGroup [your-rg] -LogicAppName [logic-app-name]\n3. Configure X12 schemas: ./configure-x12-agreements.ps1\n4. Test: ./test-workflows.ps1 -TestInbound275"
+      "value": "1. Clone repo: git clone https://github.com/aurelianware/cloudhealthoffice && cd cloudhealthoffice && npm install && npm run build\n2. Deploy Argo Workflows to AKS cluster\n3. Configure X12 schemas: ./configure-x12-agreements.ps1\n4. Test: ./test-workflows.ps1 -TestInbound275"
     }
   }
 }
