@@ -109,15 +109,15 @@ public class StripeConnectService : IStripeConnectService
             var transfer = await _stripeClient.CreateTransferAsync(options);
 
             _logger.LogInformation(
-                "Created Stripe Transfer {TransferId} to {ConnectedAccountId} for statement {StatementNumber}, amount ${Amount:N2}",
-                transfer.Id, stripeConnectedAccountId, statementNumber, amount);
+                "Created Stripe Transfer {TransferId} for statement {StatementNumber}, amount ${Amount:N2}",
+                transfer.Id, statementNumber, amount);
 
             return MapToResult(transfer);
         }
         catch (StripeException ex)
         {
-            _logger.LogError(ex, "Stripe Transfer failed for statement {StatementNumber} to account {AccountId}",
-                statementNumber, stripeConnectedAccountId);
+            _logger.LogError(ex, "Stripe Transfer failed for statement {StatementNumber}",
+                statementNumber);
             return new StripeTransferResult
             {
                 Status = "failed",

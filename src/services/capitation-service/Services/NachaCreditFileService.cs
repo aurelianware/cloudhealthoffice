@@ -197,8 +197,8 @@ public class NachaCreditFileService : INachaCreditFileService
             "220",                                                        // Service Class Code (220 = credits only)
             entryCount.ToString("000000"),                                // Entry/Addenda Count
             (entryHash % 10000000000).ToString("0000000000"),             // Entry Hash
-            FormatAmount(totalCreditAmount, 12),                          // Total Debit Amount in Batch (credits from originator = debits)
-            FormatAmount(0, 12),                                          // Total Credit Amount in Batch
+            FormatAmount(0, 12),                                          // Total Debit Amount in Batch
+            FormatAmount(totalCreditAmount, 12),                          // Total Credit Amount in Batch
             FormatField(options.CompanyId, 10),                           // Company Identification
             new string(' ', 19),                                          // Message Authentication Code
             new string(' ', 6),                                           // Reserved
@@ -219,8 +219,8 @@ public class NachaCreditFileService : INachaCreditFileService
             blockCount.ToString("000000"),                                // Block Count
             entryCount.ToString("00000000"),                              // Entry/Addenda Count
             (entryHash % 10000000000).ToString("0000000000"),             // Entry Hash
-            FormatAmount(totalCreditAmount, 12),                          // Total Debit Amount in File
-            FormatAmount(0, 12),                                          // Total Credit Amount in File
+            FormatAmount(0, 12),                                          // Total Debit Amount in File
+            FormatAmount(totalCreditAmount, 12),                          // Total Credit Amount in File
             new string(' ', 39)                                           // Reserved
         );
     }

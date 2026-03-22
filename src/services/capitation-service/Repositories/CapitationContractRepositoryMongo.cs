@@ -128,7 +128,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         contract.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(contract);
         _logger.LogInformation("Created capitation contract {ContractNumber} for provider {NPI}",
-            contract.ContractNumber, contract.ProviderNPI);
+            SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
         return contract;
     }
 
@@ -139,7 +139,14 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
             Builders<CapitationContract>.Filter.Eq(x => x.Id, contract.Id),
             Builders<CapitationContract>.Filter.Eq(x => x.TenantId, contract.TenantId));
         await _collection.ReplaceOneAsync(filter, contract);
-        _logger.LogInformation("Updated capitation contract {ContractNumber}", contract.ContractNumber);
+        _logger.LogInformation("Updated capitation contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
         return contract;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -31,8 +31,13 @@ public class CapitationDisbursementRepository : ICapitationDisbursementRepositor
         _httpContextAccessor = httpContextAccessor;
     }
 
-    private string GetTenantId() =>
-        _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString() ?? "default";
+    private string GetTenantId()
+    {
+        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
+        if (string.IsNullOrEmpty(tenantId))
+            throw new InvalidOperationException("TenantId not found in request context");
+        return tenantId;
+    }
 
     public async Task<CapitationDisbursement?> GetByIdAsync(string id)
     {

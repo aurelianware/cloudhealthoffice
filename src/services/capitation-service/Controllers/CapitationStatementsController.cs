@@ -53,8 +53,16 @@ public class CapitationStatementsController : ControllerBase
             return Ok(statements);
         }
 
-        // Default: return all for period range (via provider NPI with no NPI filter — requires repo support)
-        // Fall back to status-based query
+        // Period-only queries without NPI or status are not supported
+        if (periodFrom.HasValue || periodTo.HasValue)
+        {
+            return BadRequest(new
+            {
+                error = "When filtering by period range, at least one of 'npi' or 'status' must be provided."
+            });
+        }
+
+        // No filters: return Generated statements as default view
         var all = await _statementRepository.GetByStatusAsync(CapitationStatementStatus.Generated);
         return Ok(all);
     }

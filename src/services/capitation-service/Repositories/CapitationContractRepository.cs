@@ -165,7 +165,7 @@ public class CapitationContractRepository : ICapitationContractRepository
         contract.LastUpdatedAt = DateTime.UtcNow;
         var response = await _container.CreateItemAsync(contract, new PartitionKey(contract.TenantId));
         _logger.LogInformation("Created capitation contract {ContractNumber} for provider {NPI}",
-            contract.ContractNumber, contract.ProviderNPI);
+            SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
         return response.Resource;
     }
 
@@ -173,7 +173,7 @@ public class CapitationContractRepository : ICapitationContractRepository
     {
         contract.LastUpdatedAt = DateTime.UtcNow;
         var response = await _container.ReplaceItemAsync(contract, contract.Id, new PartitionKey(contract.TenantId));
-        _logger.LogInformation("Updated capitation contract {ContractNumber}", contract.ContractNumber);
+        _logger.LogInformation("Updated capitation contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
         return response.Resource;
     }
 
@@ -187,5 +187,12 @@ public class CapitationContractRepository : ICapitationContractRepository
             results.AddRange(response);
         }
         return results;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

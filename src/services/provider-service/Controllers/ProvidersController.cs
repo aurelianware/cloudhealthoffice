@@ -307,7 +307,10 @@ public class ProvidersController : ControllerBase
 
     /// <summary>
     /// Get provider bank account / EFT disbursement info by NPI.
-    /// Used by capitation-service to look up payment details before disbursement.
+    /// Returns only masked display fields (last-4 digits) — full account numbers
+    /// are never exposed via this endpoint. Used by capitation-service for
+    /// disbursement method selection; full credentials are fetched server-side
+    /// only during NACHA file generation.
     /// </summary>
     [HttpGet("npi/{npi}/bank-account")]
     [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
@@ -327,7 +330,22 @@ public class ProvidersController : ControllerBase
             return NotFound($"No bank account on file for provider NPI {npi}");
         }
 
-        return Ok(provider.BankAccount);
+        // Return masked copy — strip full account/routing/tax numbers
+        var masked = new ProviderBankAccount
+        {
+            EftEnabled = provider.BankAccount.EftEnabled,
+            PreferredDisbursementMethod = provider.BankAccount.PreferredDisbursementMethod,
+            AccountType = provider.BankAccount.AccountType,
+            AccountHolderName = provider.BankAccount.AccountHolderName,
+            StripeConnectedAccountId = provider.BankAccount.StripeConnectedAccountId,
+            RoutingNumberLast4 = provider.BankAccount.RoutingNumberLast4,
+            AccountNumberLast4 = provider.BankAccount.AccountNumberLast4,
+            W9OnFile = provider.BankAccount.W9OnFile,
+            TaxIdType = provider.BankAccount.TaxIdType,
+            // RoutingNumber, AccountNumber, TaxId intentionally omitted
+        };
+
+        return Ok(masked);
     }
 
     /// <summary>
