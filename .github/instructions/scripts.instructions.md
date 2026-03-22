@@ -10,10 +10,9 @@ PowerShell scripts for repository management, deployment automation, and workflo
 
 ### Repository Management
 - **bootstrap_repo.ps1**: Creates new repository from template
-- **fix_repo_structure.ps1**: Normalizes repo structure to Logic Apps deployment layout
+- **fix_repo_structure.ps1**: Normalizes repo structure to expected deployment layout
 
 ### Deployment Scripts
-- **deploy-workflows.ps1**: Deploys Logic App workflows
 - **deploy-new-integration-account.ps1**: Creates and configures Integration Account
 - **deploy-api-connections.json.ps1**: Deploys API connection configurations
 
@@ -23,7 +22,7 @@ PowerShell scripts for repository management, deployment automation, and workflo
 - **configure-hipaa-trading-partners.ps1**: Configures HIPAA-specific partner settings
 
 ### Testing Scripts
-- **test-workflows.ps1**: Comprehensive workflow testing framework
+- **test-workflows.ps1**: Comprehensive testing framework
 
 ## Best Practices
 
@@ -85,8 +84,8 @@ $ErrorActionPreference = "Stop"
 ## Key Scripts
 
 ### fix_repo_structure.ps1
-**Purpose**: Ensures repository structure matches Logic Apps deployment requirements  
-**Usage**: `pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."`  
+**Purpose**: Ensures repository structure matches expected deployment requirements
+**Usage**: `pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."`
 **Timing**: <1 second (set timeout: 30+ seconds)
 
 **When to Run**:
@@ -96,7 +95,7 @@ $ErrorActionPreference = "Stop"
 - As pre-commit validation
 
 ### test-workflows.ps1
-**Purpose**: Comprehensive testing framework for Logic App workflows  
+**Purpose**: Comprehensive testing framework for workflows
 **Usage Examples**:
 ```powershell
 # Test inbound 275 processing
@@ -120,13 +119,6 @@ pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppNa
 **Purpose**: Creates new repository from template  
 **Usage**: For creating new Cloud Health Office deployments  
 **Note**: Typically used once during initial setup
-
-### deploy-workflows.ps1
-**Purpose**: Deploys Logic App workflows to Azure  
-**Prerequisites**:
-- Azure CLI authenticated
-- Valid resource group and Logic App
-- workflows.zip package created
 
 ## Validation
 
@@ -203,26 +195,6 @@ az login
 
 # Set subscription
 az account set --subscription "subscription-id"
-```
-
-### Resource Operations
-```powershell
-# Get Logic App details
-$logicApp = az webapp show `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName | ConvertFrom-Json
-
-# Deploy workflows
-az webapp deploy `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName `
-  --src-path workflows.zip `
-  --type zip
-
-# Restart Logic App
-az webapp restart `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName
 ```
 
 ## Testing Workflows
