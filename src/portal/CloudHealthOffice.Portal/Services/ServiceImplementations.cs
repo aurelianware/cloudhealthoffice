@@ -2241,8 +2241,8 @@ public class AppealsService : IAppealsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
+            throw new ServiceUnavailableException("Appeals Service", ex);
         }
     }
 

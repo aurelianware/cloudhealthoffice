@@ -195,6 +195,11 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__PricingApi
+        - name: Services__AppealsService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__AppealsService
         - name: Services__CapitationService
           valueFrom:
             configMapKeyRef:
