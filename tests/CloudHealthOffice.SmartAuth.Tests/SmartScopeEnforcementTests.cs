@@ -249,9 +249,15 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // Remove the real JwtBearer registration
-            var descriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider));
+            // Remove all existing auth registrations to avoid "Scheme already exists: Bearer"
+            var authDescriptors = services
+                .Where(d => d.ServiceType == typeof(Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider)
+                         || d.ServiceType.FullName?.Contains("JwtBearer") == true
+                         || d.ServiceType.FullName?.Contains("Authentication") == true
+                            && d.ServiceType.FullName?.Contains("IAuthenticationService") == false)
+                .ToList();
+            foreach (var d in authDescriptors)
+                services.Remove(d);
 
             // Override authentication to use our test key
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
