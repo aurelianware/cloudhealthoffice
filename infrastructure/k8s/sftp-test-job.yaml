@@ -38,6 +38,23 @@ spec:
       containers:
       - name: sftp-test
         image: alpine:latest
+        env:
+          - name: SFTP_HOST
+            value: "sftp-service.cho-sftp.svc.cluster.local"
+          - name: SFTP_PORT
+            value: "22"
+          - name: SFTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: sftp-credentials
+                key: username
+                optional: true
+          - name: SFTP_PASS
+            valueFrom:
+              secretKeyRef:
+                name: sftp-credentials
+                key: password
+                optional: true
         command: ["/bin/sh"]
         args:
           - -c
@@ -53,11 +70,13 @@ spec:
             echo "📦 Installing dependencies..."
             apk add --no-cache sshpass openssh-client coreutils
             
-            # SFTP connection details
-            SFTP_HOST="sftp-service.cho-sftp.svc.cluster.local"
-            SFTP_PORT=22
-            SFTP_USER="cho-edi"
-            SFTP_PASS="sJ8p8WAsE4Es6PgMbUACErOs"  # Updated password from earlier
+            # SFTP connection details (sourced from environment variables)
+            # Validate SFTP credentials are available
+            if [ -z "${SFTP_PASS}" ]; then
+              echo "❌ SFTP_PASS not set. Create the sftp-credentials secret:"
+              echo "   kubectl create secret generic sftp-credentials --from-literal=password='YOUR_PASSWORD' --from-literal=username='cho-edi' -n cho-workflows"
+              exit 1
+            fi
             
             TEST_FILE="test-278-$(date +%s).x12"
             
