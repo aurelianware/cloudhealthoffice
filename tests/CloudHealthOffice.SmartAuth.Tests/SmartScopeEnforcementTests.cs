@@ -249,31 +249,22 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // Remove all existing auth registrations to avoid "Scheme already exists: Bearer"
-            var authDescriptors = services
-                .Where(d => d.ServiceType == typeof(Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider)
-                         || d.ServiceType.FullName?.Contains("JwtBearer") == true
-                         || d.ServiceType.FullName?.Contains("Authentication") == true
-                            && d.ServiceType.FullName?.Contains("IAuthenticationService") == false)
-                .ToList();
-            foreach (var d in authDescriptors)
-                services.Remove(d);
-
-            // Override authentication to use our test key
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
+            // Override JWT Bearer validation parameters via PostConfigure
+            // instead of removing and re-adding the auth scheme (which causes
+            // "Scheme already exists: Bearer" when the host registers it first).
+            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                options.RequireHttpsMetadata = false;
+                options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    options.RequireHttpsMetadata = false;
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidIssuer = _issuer,
-                        ValidateAudience = true,
-                        ValidAudience = "fhir-api",
-                        ValidateLifetime = true,
-                        IssuerSigningKey = _signingKey
-                    };
-                });
+                    ValidateIssuer = true,
+                    ValidIssuer = _issuer,
+                    ValidateAudience = true,
+                    ValidAudience = "fhir-api",
+                    ValidateLifetime = true,
+                    IssuerSigningKey = _signingKey
+                };
+            });
         });
 
         builder.UseEnvironment("Development");
