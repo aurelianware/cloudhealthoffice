@@ -64,14 +64,14 @@ if [ "$SFTP_IP" = "pending" ] || [ -z "$SFTP_IP" ]; then
     echo ""
     echo "For local testing, use port forwarding:"
     echo "   kubectl port-forward -n cho-sftp svc/sftp-service 2222:22"
-    echo "   sftp -P 2222 logicapp@localhost"
+    echo "   sftp -P 2222 cho-edi@localhost"
 else
     echo "🌐 SFTP Server Address: sftp://$SFTP_IP:$SFTP_PORT"
     echo ""
     echo "📋 Default Credentials:"
-    echo "   Username: logicapp"
+    echo "   Username: cho-edi"
     echo "   Password: changeme123"
-    echo "   Directory: /home/logicapp/upload"
+    echo "   Directory: /home/cho-edi/upload"
     echo ""
     echo "   Username: clearinghouse"
     echo "   Password: changeme456"
@@ -90,9 +90,9 @@ if [ "$SFTP_IP" = "pending" ] || [ -z "$SFTP_IP" ]; then
     echo "   kubectl port-forward -n cho-sftp svc/sftp-service 2222:22"
     echo ""
     echo "   # Then connect:"
-    echo "   sftp -P 2222 logicapp@localhost"
+    echo "   sftp -P 2222 cho-edi@localhost"
 else
-    echo "   sftp -P $SFTP_PORT logicapp@$SFTP_IP"
+    echo "   sftp -P $SFTP_PORT cho-edi@$SFTP_IP"
 fi
 
 echo ""

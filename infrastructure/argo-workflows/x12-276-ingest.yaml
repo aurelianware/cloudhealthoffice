@@ -230,7 +230,7 @@ spec:
             # In production, call trading-partner-service API
             # For now, use default SFTP server
             export SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
-            export SFTP_USER="${SFTP_USER:-logicapp}"
+            export SFTP_USER="${SFTP_USER:-cho-edi}"
             export SFTP_PASSWORD="${SFTP_PASSWORD}"
             
             echo "Connecting to SFTP: $SFTP_HOST"
@@ -423,7 +423,7 @@ spec:
             pip install paramiko
             
             SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
-            SFTP_USER="${SFTP_USER:-logicapp}"
+            SFTP_USER="${SFTP_USER:-cho-edi}"
             SFTP_PASS="${SFTP_PASSWORD}"
             REMOTE_DIR="{{inputs.parameters.sftp-folder}}"
             LOCAL_DIR="/data/output"

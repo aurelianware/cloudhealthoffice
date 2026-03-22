@@ -59,7 +59,7 @@ spec:
               - name: SFTP_PORT
                 value: "22"
               - name: SFTP_USER
-                value: "logicapp"
+                value: "cho-edi"
               - name: SFTP_PASS
                 valueFrom:
                   secretKeyRef:
@@ -270,7 +270,7 @@ metadata:
 type: Opaque
 stringData:
   password: "changeme"  # UPDATE THIS IN PRODUCTION!
-  username: "logicapp"
+  username: "cho-edi"
 ---
 # Optional: ConfigMap for clearinghouse-specific settings
 apiVersion: v1

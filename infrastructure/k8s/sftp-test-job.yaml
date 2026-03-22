@@ -56,7 +56,7 @@ spec:
             # SFTP connection details
             SFTP_HOST="sftp-service.cho-sftp.svc.cluster.local"
             SFTP_PORT=22
-            SFTP_USER="logicapp"
+            SFTP_USER="cho-edi"
             SFTP_PASS="sJ8p8WAsE4Es6PgMbUACErOs"  # Updated password from earlier
             
             TEST_FILE="test-278-$(date +%s).x12"
@@ -104,7 +104,7 @@ spec:
             echo "Remote path: /upload/278/${TEST_FILE}"
             echo ""
             
-            # Upload file (using relative paths - SFTP chroots to /home/logicapp)
+            # Upload file (using relative paths - SFTP chroots to /home/cho-edi)
             sshpass -p "${SFTP_PASS}" sftp -o StrictHostKeyChecking=no -P ${SFTP_PORT} ${SFTP_USER}@${SFTP_HOST} <<SFTP_UPLOAD
             cd upload
             -mkdir 278
