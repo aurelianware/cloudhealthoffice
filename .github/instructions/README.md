@@ -18,22 +18,13 @@ Guidance for GitHub Actions workflows including:
 - Common deployment scenarios
 
 ### [infrastructure.instructions.md](infrastructure.instructions.md)
-**Applies to**: `infra/*.bicep`, `attachments_logicapps_package/*.bicep`
+**Applies to**: `infra/*.bicep`
 
 Guidance for Azure Bicep infrastructure templates including:
 - Resource configuration patterns
 - Validation and deployment processes
 - Expected warnings and troubleshooting
 - HIPAA compliance requirements
-
-### [logicapps.instructions.md](logicapps.instructions.md)
-**Applies to**: `logicapps/workflows/*/workflow.json`
-
-Guidance for Logic Apps workflow definitions including:
-- Workflow structure requirements (all must be Stateful)
-- X12 EDI transaction processing (275, 277, 278)
-- Integration Account setup
-- Testing and troubleshooting
 
 ### [scripts.instructions.md](scripts.instructions.md)
 **Applies to**: `*.ps1` files in repository root and `scripts/` directory

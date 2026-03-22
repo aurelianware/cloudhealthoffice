@@ -28,7 +28,7 @@ body:
       label: Affected Component
       description: Which component of Cloud Health Office is affected?
       options:
-        - Logic Apps Workflows (ingest275, ingest278, rfai277, replay278)
+        - Argo Workflows (x12-275-ingest, x12-276-ingest, x12-278-ingest, x12-277-claim-status, x12-277-rfai)
         - Infrastructure (Bicep/ARM)
         - Service Bus Messaging
         - Data Lake Storage

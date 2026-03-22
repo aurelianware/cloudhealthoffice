@@ -36,28 +36,28 @@ skipKeywords:
 # Filter reviewers based on changed files
 # Group reviewers by area of expertise
 reviewGroups:
-  # Core Logic Apps maintainers
+  # Argo Workflows maintainers
   workflows-team:
     - # Add workflow specialists here
-  
+
   # Infrastructure maintainers
   infra-team:
     - # Add infrastructure specialists here
-  
+
   # Security reviewers
   security-team:
     - # Add security specialists here
-  
+
   # Documentation reviewers
   docs-team:
     - # Add documentation specialists here
 
 # Assign specific teams based on file patterns
 assigneeGroups:
-  # Core Logic Apps maintainers
+  # Argo Workflows maintainers
   workflows-team:
     - # Add workflow specialists here
-  
+
   # Infrastructure maintainers
   infra-team:
     - # Add infrastructure specialists here
@@ -69,9 +69,8 @@ useReviewGroups: true
 # When files matching these patterns are changed, the corresponding group is assigned
 filterReviewerGroups:
   workflows-team:
-    - "logicapps/**/*"
     - "*.json"
-  
+
   infra-team:
     - "infra/**/*"
     - "*.bicep"
@@ -91,9 +90,6 @@ useAssigneeGroups: true
 
 # Filter assignee groups by file patterns
 filterAssigneeGroups:
-  workflows-team:
-    - "logicapps/**/*"
-  
   infra-team:
     - "infra/**/*"
     - ".github/workflows/**/*"

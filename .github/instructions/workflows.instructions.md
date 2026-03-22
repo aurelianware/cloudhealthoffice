@@ -4,7 +4,7 @@
 
 ## Overview
 
-This directory contains GitHub Actions workflow files for CI/CD automation of the Cloud Health Office Logic Apps solution.
+This directory contains GitHub Actions workflow files for CI/CD automation of the Cloud Health Office solution.
 
 ## Workflow Files
 
@@ -14,7 +14,7 @@ This directory contains GitHub Actions workflow files for CI/CD automation of th
 - **deploy-uat.yml**: UAT environment auto-deployment (triggers on `release/*` branches)
 
 ### Validation Workflows
-- **pr-lint.yml**: Pull request validation (JSON, YAML, Bicep, PowerShell)
+- **pr-lint.yml**: Pull request validation (YAML, Bicep, PowerShell)
 - **sanity.yml**: Basic health checks
 - **debug-oidc.yml**: OIDC authentication debugging
 
@@ -44,14 +44,11 @@ Each deployment workflow should:
 2. Authenticate with Azure using OIDC
 3. Run Bicep validation and ARM What-If analysis
 4. Deploy infrastructure via Bicep
-5. Package and deploy Logic App workflows (ZIP)
-6. Restart Logic App
-7. Run health checks and report status
+5. Run health checks and report status
 
 ### Common Pitfalls
 - **Don't cancel deployments**: Set adequate timeouts (30+ minutes)
 - **Bicep warnings**: "use-parent-property" warnings for Service Bus topics are expected and safe
-- **ZIP structure**: Ensure workflows.zip contains `workflows/` as top-level directory
 - **Parallel deployments**: Avoid deploying to same environment concurrently
 
 ### Lint Command

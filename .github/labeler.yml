@@ -1,34 +1,11 @@
 # Configuration for actions/labeler
 # Automatically labels PRs based on changed files
 
-# Workflow labels
-workflows:
-  - changed-files:
-      - any-glob-to-any-file: 'logicapps/workflows/**/*'
-
-# Logic Apps specific workflows
-logic-apps/ingest275:
-  - changed-files:
-      - any-glob-to-any-file: 'logicapps/workflows/ingest275/**/*'
-
-logic-apps/ingest278:
-  - changed-files:
-      - any-glob-to-any-file: 'logicapps/workflows/ingest278/**/*'
-
-logic-apps/rfai277:
-  - changed-files:
-      - any-glob-to-any-file: 'logicapps/workflows/rfai277/**/*'
-
-logic-apps/replay278:
-  - changed-files:
-      - any-glob-to-any-file: 'logicapps/workflows/replay278/**/*'
-
 # Infrastructure labels
 infrastructure:
   - changed-files:
       - any-glob-to-any-file:
           - 'infra/**/*'
-          - 'attachments_logicapps_package/**/*'
           - '*.bicep'
 
 # CI/CD labels
