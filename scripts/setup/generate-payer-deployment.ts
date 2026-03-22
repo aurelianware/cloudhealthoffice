@@ -1,6 +1,9 @@
 /**
  * Main Payer Deployment Generator
- * Generates Logic App workflows, infrastructure, and documentation from payer configuration
+ * Generates Argo Workflow manifests, infrastructure, and documentation from payer configuration
+ *
+ * NOTE: Logic App workflow generation has been removed. Orchestration is now handled
+ * by Argo Workflows on AKS. See infrastructure/argo-workflows/ for workflow templates.
  */
 
 import * as fs from 'fs';
@@ -308,8 +311,8 @@ This deployment package was generated for **${config.payerName}** (${config.paye
 
 - Azure CLI (version 2.40.0 or higher)
 - Azure subscription with appropriate permissions
-- Logic Apps Standard runtime
-- PowerShell 7+ (for Windows deployments)
+- AKS cluster with Argo Workflows installed
+- kubectl configured for AKS cluster
 
 ## Deployment Steps
 
@@ -332,21 +335,15 @@ ${config.appeals?.authentication.keyVaultSecretName ? `- \`${config.appeals.auth
 ${config.ecs?.authentication.keyVaultSecretName ? `- \`${config.ecs.authentication.keyVaultSecretName}\`: ECS API credentials` : ''}
 ${config.attachments?.sftpConfig.keyVaultSecretName ? `- \`${config.attachments.sftpConfig.keyVaultSecretName}\`: SFTP private key` : ''}
 
-### 4. Deploy Workflows
+### 4. Deploy Argo Workflows
 
 \`\`\`bash
-cd workflows
-zip -r workflows.zip ./*
-az webapp deploy \\
-  --resource-group ${config.infrastructure.resourceNamePrefix}-rg \\
-  --name ${config.infrastructure.resourceNamePrefix}-la \\
-  --src-path workflows.zip \\
-  --type zip
+kubectl apply -f workflows/ -n edi-workflows
 \`\`\`
 
 ### 5. Verify Deployment
 
-Check that all workflows are enabled and running in the Azure Portal.
+Check that all workflows are running via the Argo Workflows UI or \`argo list -n edi-workflows\`.
 
 ## Enabled Modules
 
@@ -456,9 +453,7 @@ ${config.attachments?.enabled ? `
 - **Resource Name Prefix**: ${config.infrastructure.resourceNamePrefix}
 - **Location**: ${config.infrastructure.location}
 - **Environment**: ${config.infrastructure.environment}
-- **Logic App SKU**: ${config.infrastructure.logicAppConfig.sku}
-- **Worker Count**: ${config.infrastructure.logicAppConfig.workerCount}
-- **Always On**: ${config.infrastructure.logicAppConfig.alwaysOn}
+- **Orchestration**: Argo Workflows on AKS
 
 ## Tags
 

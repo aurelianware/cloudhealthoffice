@@ -290,11 +290,6 @@
         }
       ]
     },
-    "logicAppConfig": {
-      "sku": "WS1",
-      "workerCount": 3,
-      "alwaysOn": true
-    },
     "keyVaultConfig": {
       "sku": "premium",
       "enableSoftDelete": true,
