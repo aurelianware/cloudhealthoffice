@@ -45,7 +45,7 @@ spec:
       - name: sftp-port
         value: "22"
       - name: sftp-username
-        value: "logicapp"
+        value: "cho-edi"
       - name: test-filename
         value: "test-278-{{ workflow.uid }}.x12"
   

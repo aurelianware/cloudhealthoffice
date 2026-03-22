@@ -15,14 +15,14 @@
       "value": "REPLACE_WITH_K8S_LOADBALANCER_IP"
     },
     "sftpUsername": {
-      "value": "logicapp"
+      "value": "cho-edi"
     },
     "sftpPassword": {
       "reference": {
         "keyVault": {
           "id": "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/YOUR_KEYVAULT_NAME"
         },
-        "secretName": "sftp-logicapp-password"
+        "secretName": "sftp-cho-edi-password"
       }
     },
     "storageSku": {
