@@ -49,7 +49,7 @@ function generateHtmlPage(title, content, filename) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="${title} - Cloud Health Office platform assessment and technical analysis">
-  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Azure Logic Apps, payer integration, platform assessment">
+  <meta name="keywords" content="healthcare EDI, HIPAA compliance, Argo Workflows, Kubernetes, AKS, payer integration, platform assessment">
   <title>${escapeHtml(title)} - Cloud Health Office</title>
   <!-- Privacy-friendly analytics by Plausible -->
   <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
