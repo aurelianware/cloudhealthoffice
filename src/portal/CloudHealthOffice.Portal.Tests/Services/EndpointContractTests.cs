@@ -26,7 +26,11 @@ public class EndpointContractTests
     /// </summary>
     private class RecordingHandler : HttpMessageHandler
     {
-        public List<string> RecordedUrls { get; } = new();
+        /// <summary>Full absolute URI including host, path, and query string</summary>
+        public List<string> RecordedFullUrls { get; } = new();
+        /// <summary>Path + query only (for assertions that don't care about host)</summary>
+        public List<string> RecordedPaths { get; } = new();
+
         private readonly HttpStatusCode _responseCode;
         private readonly string _responseBody;
 
@@ -39,7 +43,8 @@ public class EndpointContractTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            RecordedUrls.Add(request.RequestUri?.PathAndQuery ?? "");
+            RecordedFullUrls.Add(request.RequestUri?.AbsoluteUri ?? "");
+            RecordedPaths.Add(request.RequestUri?.PathAndQuery ?? "");
             return Task.FromResult(new HttpResponseMessage(_responseCode)
             {
                 Content = new StringContent(_responseBody, System.Text.Encoding.UTF8, "application/json")
@@ -77,7 +82,7 @@ public class EndpointContractTests
 
         await sut.GetRecentClaimsAsync(5);
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/claims/recent?count=5");
     }
 
@@ -92,7 +97,7 @@ public class EndpointContractTests
 
         await sut.SearchClaimsAsync(new ClaimSearchRequest { MemberId = "MEM001" });
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().StartWith("/api/claims/search");
     }
 
@@ -107,7 +112,7 @@ public class EndpointContractTests
 
         await sut.GetClaimByIdAsync("CLM-001");
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/claims/CLM-001");
     }
 
@@ -122,10 +127,12 @@ public class EndpointContractTests
             new HttpClient(handler) { BaseAddress = new Uri("http://member-service") },
             config, Mock.Of<ILogger<MemberService>>());
 
-        await sut.SearchMembersAsync("Smith");
+        // Use URL-unsafe characters to verify encoding
+        await sut.SearchMembersAsync("O'Brien & Sons");
 
-        handler.RecordedUrls.Should().ContainSingle()
-            .Which.Should().StartWith("/api/v1/members/search?q=Smith");
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().StartWith("/api/v1/members/search?q=O")
+            .And.Subject.Should().NotContain("&Sons", "ampersand should be URL-encoded");
     }
 
     [Fact]
@@ -139,7 +146,7 @@ public class EndpointContractTests
 
         await sut.GetMemberByIdAsync("MEM-001");
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/v1/members/MEM-001");
     }
 
@@ -154,7 +161,7 @@ public class EndpointContractTests
 
         await sut.GetAccumulatorsAsync("MEM-001");
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/v1/members/MEM-001/accumulators");
     }
 
@@ -169,7 +176,7 @@ public class EndpointContractTests
 
         await sut.GetMemberPcpAsync("MEM-001");
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/v1/members/MEM-001/pcp");
     }
 
@@ -186,7 +193,7 @@ public class EndpointContractTests
 
         await sut.GetSummaryAsync();
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/appeals/summary");
     }
 
@@ -201,7 +208,7 @@ public class EndpointContractTests
 
         await sut.SearchAppealsAsync(memberId: "MEM-001");
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Contain("/api/appeals/search")
             .And.Contain("memberId=MEM-001");
     }
@@ -217,9 +224,9 @@ public class EndpointContractTests
 
         await sut.GetSummaryAsync();
 
-        // Verify the URL uses appeals-service, NOT claims-service
-        handler.RecordedUrls.Should().ContainSingle()
-            .Which.Should().NotContain("claims");
+        // Verify the full URL uses appeals-service host, NOT claims-service
+        handler.RecordedFullUrls.Should().ContainSingle()
+            .Which.Should().StartWith("http://appeals-service/");
     }
 
     // ── Provider Service Contracts ────────────────────────────────
@@ -233,10 +240,12 @@ public class EndpointContractTests
             new HttpClient(handler) { BaseAddress = new Uri("http://provider-service") },
             config, Mock.Of<ILogger<ProviderService>>());
 
-        await sut.SearchProvidersAsync("Chen");
+        // Use URL-unsafe characters to verify encoding
+        await sut.SearchProvidersAsync("Chen & Associates");
 
-        handler.RecordedUrls.Should().ContainSingle()
-            .Which.Should().StartWith("/api/providers/search?q=Chen");
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().StartWith("/api/providers/search?q=")
+            .And.Subject.Should().NotContain("& A", "ampersand should be URL-encoded");
     }
 
     // ── Capitation Service Contracts ──────────────────────────────
@@ -252,7 +261,7 @@ public class EndpointContractTests
 
         await sut.GetContractsAsync();
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().StartWith("/api/v1/capitation/contracts");
     }
 
@@ -267,7 +276,7 @@ public class EndpointContractTests
 
         await sut.GetRunsAsync();
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().StartWith("/api/v1/capitation/runs");
     }
 
@@ -282,7 +291,7 @@ public class EndpointContractTests
 
         await sut.GetUnpaidStatementsAsync();
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/v1/capitation/statements/unpaid");
     }
 
@@ -299,7 +308,7 @@ public class EndpointContractTests
 
         await sut.GetQueueSummaryAsync();
 
-        handler.RecordedUrls.Should().ContainSingle()
+        handler.RecordedPaths.Should().ContainSingle()
             .Which.Should().Be("/api/work-queue/summary");
     }
 
@@ -314,7 +323,8 @@ public class EndpointContractTests
 
         await sut.GetQueueItemsAsync(limit: 50);
 
-        handler.RecordedUrls.Should().ContainSingle()
-            .Which.Should().StartWith("/api/work-queue/items");
+        handler.RecordedPaths.Should().ContainSingle()
+            .Which.Should().StartWith("/api/work-queue/items")
+            .And.Subject.Should().Contain("limit=50");
     }
 }
