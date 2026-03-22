@@ -1100,6 +1100,7 @@ public class TenantService : ITenantService
 {
     private readonly IMongoCollection<TenantSubscription> _tenantsCollection;
     private readonly IMongoCollection<BsonDocument> _membersCollection;
+    private readonly IMongoCollection<BsonDocument> _tenantUsersCollection;
     private readonly ILogger<TenantService> _logger;
 
     public TenantService(IMongoClient mongoClient, IConfiguration configuration, ILogger<TenantService> logger)
@@ -1109,6 +1110,7 @@ public class TenantService : ITenantService
         var db = mongoClient.GetDatabase(databaseName);
         _tenantsCollection = db.GetCollection<TenantSubscription>(
             configuration["MongoDB:TenantsCollection"] ?? "Tenants");
+        _tenantUsersCollection = db.GetCollection<BsonDocument>("TenantUsers");
         _membersCollection = db.GetCollection<BsonDocument>(
             configuration["MongoDB:MembersCollection"] ?? "Members");
     }
@@ -1198,6 +1200,19 @@ public class TenantService : ITenantService
                 return true;
             }
 
+            // Check TenantUsers collection (RBAC users managed by tenant-service)
+            var tenantUserFilter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("tenantId", tenant.TenantId),
+                Builders<BsonDocument>.Filter.Eq("emailNormalized", userEmail.ToLowerInvariant()),
+                Builders<BsonDocument>.Filter.Eq("status", "Active"));
+            var tenantUserCount = await _tenantUsersCollection.CountDocumentsAsync(tenantUserFilter);
+            if (tenantUserCount > 0)
+            {
+                _logger.LogInformation("User {Email} found in TenantUsers for tenant {TenantId}", userEmail, azureTenantId);
+                return true;
+            }
+
+            // Check Members collection (legacy member records)
             var filter = Builders<BsonDocument>.Filter.And(
                 Builders<BsonDocument>.Filter.Eq("tenantId", tenant.TenantId),
                 Builders<BsonDocument>.Filter.Eq("email", userEmail.ToLowerInvariant()));
