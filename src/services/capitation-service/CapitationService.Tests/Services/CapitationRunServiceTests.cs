@@ -535,6 +535,341 @@ public class CapitationRunServiceTests
             .WithMessage("*not found*");
     }
 
+    [Fact]
+    public async Task GetRunsAsync_DelegatesToRepo()
+    {
+        var runs = new List<CapitationRun> { CreatePendingRun() };
+        _runRepo.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null))
+            .ReturnsAsync(runs);
+
+        var result = await _service.GetRunsAsync(new DateTime(2026, 1, 1), new DateTime(2026, 12, 31));
+
+        result.Should().HaveCount(1);
+    }
+
+    #endregion
+
+    #region GetCapitationSummaryAsync
+
+    [Fact]
+    public async Task GetCapitationSummaryAsync_ReturnsCorrectTotals()
+    {
+        var stmts = new List<CapitationStatement>
+        {
+            new() { ProviderNPI = "111", ContractId = "c1", MemberMonths = 5, GrossCapitation = 500, WithholdAmount = 50, NetPayable = 450 },
+            new() { ProviderNPI = "222", ContractId = "c2", MemberMonths = 3, GrossCapitation = 300, WithholdAmount = 30, NetPayable = 270 }
+        };
+        _statementRepo.Setup(r => r.GetByProviderNpiAsync(It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>()))
+            .ReturnsAsync(stmts);
+
+        var contracts = new List<CapitationContract>
+        {
+            new() { Id = "c1", LineOfBusiness = LineOfBusiness.Commercial, ContractType = ContractType.PrimaryCareOnly },
+            new() { Id = "c2", LineOfBusiness = LineOfBusiness.Medicaid, ContractType = ContractType.GlobalCapitation }
+        };
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null)).ReturnsAsync(contracts);
+
+        var summary = await _service.GetCapitationSummaryAsync(new DateTime(2026, 3, 15));
+
+        summary.Period.Should().Be(new DateTime(2026, 3, 1));
+        summary.TotalProviders.Should().Be(2);
+        summary.TotalMemberMonths.Should().Be(8);
+        summary.TotalGrossCapitation.Should().Be(800);
+        summary.TotalNetPayable.Should().Be(720);
+        summary.ByLineOfBusiness.Should().ContainKey("Commercial");
+        summary.ByLineOfBusiness.Should().ContainKey("Medicaid");
+        summary.ByContractType.Should().ContainKey("PrimaryCareOnly");
+        summary.ByContractType.Should().ContainKey("GlobalCapitation");
+    }
+
+    #endregion
+
+    #region ExecuteRunAsync — criteria filters and edge cases
+
+    [Fact]
+    public async Task ExecuteRunAsync_WithNpiFilter_OnlyIncludesMatchingContracts()
+    {
+        var run = CreatePendingRun();
+        run.Criteria.ProviderNPIs = new List<string> { "2222222222" };
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract1 = CreateContract("1111111111", "Dr. Alpha");
+        var contract2 = CreateContract("2222222222", "Dr. Beta");
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract1, contract2 });
+
+        SetupCoverageServiceResponse("2222222222", new List<CapitationCoverageDto>
+        {
+            CreateCoverage("MEM001", pcpNpi: "2222222222")
+        });
+        SetupRiskScoreServiceResponse();
+
+        var result = await _service.ExecuteRunAsync("run-1");
+
+        result.TotalStatements.Should().Be(1);
+        result.TotalProviders.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WithPlanFilter_OnlyIncludesMatchingContracts()
+    {
+        var run = CreatePendingRun();
+        run.Criteria.PlanIds = new List<string> { "PLAN-SPECIAL" };
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract1 = CreateContract("1111111111");
+        contract1.PlanIds = new List<string> { "PLAN-HMO" };
+        var contract2 = CreateContract("2222222222");
+        contract2.PlanIds = new List<string> { "PLAN-SPECIAL" };
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract1, contract2 });
+
+        SetupCoverageServiceResponse("2222222222", new List<CapitationCoverageDto>
+        {
+            CreateCoverage("MEM001", pcpNpi: "2222222222")
+        });
+        SetupRiskScoreServiceResponse();
+
+        var result = await _service.ExecuteRunAsync("run-1");
+
+        result.TotalStatements.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_FatalError_SetsFailedStatus()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        _runRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationRun>()))
+            .ReturnsAsync((CapitationRun r) => r);
+
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ThrowsAsync(new Exception("Database connection lost"));
+
+        var result = await _service.ExecuteRunAsync("run-1");
+
+        result.Status.Should().Be(CapitationRunStatus.Failed);
+        result.Errors.Should().ContainSingle().Which.Should().Contain("Database connection lost");
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_WithRetroAdjustment_AddsPcpChangeAdjustment()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract("1234567890", "Dr. Chen", basePmpm: 50, withholdPct: 0);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        // Member reassigned FROM this provider TO another
+        var coverage = CreateCoverage("MEM-RETRO", pcpNpi: "9999999999");
+        coverage.PreviousPcpNpi = "1234567890"; // Was with Dr. Chen
+        coverage.PcpNpi = "9999999999";         // Now with someone else
+
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { coverage });
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement.Should().NotBeNull();
+        savedStatement!.Adjustments.Should().Contain(a =>
+            a.Type == CapitationAdjustmentType.RetroDisenrollment &&
+            a.RelatedMemberId == "MEM-RETRO");
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_CoverageOutsidePeriod_Excluded()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(basePmpm: 50, withholdPct: 0);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        // One active, one terminated before period, one future
+        var coverages = new List<CapitationCoverageDto>
+        {
+            CreateCoverage("MEM-ACTIVE"),
+            CreateCoverage("MEM-TERM", terminationDate: new DateTime(2026, 2, 15)),  // Before March
+            CreateCoverage("MEM-FUTURE", effectiveDate: new DateTime(2026, 4, 1))    // After March
+        };
+        SetupCoverageServiceResponse("1234567890", coverages);
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement.Should().NotBeNull();
+        savedStatement!.LineItems.Should().ContainSingle(); // Only MEM-ACTIVE
+        savedStatement.LineItems[0].MemberId.Should().Be("MEM-ACTIVE");
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_ContractWithPlanFilter_FiltersCoverages()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(basePmpm: 50, withholdPct: 0);
+        contract.PlanIds = new List<string> { "PLAN-HMO-001" };
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        var coverages = new List<CapitationCoverageDto>
+        {
+            CreateCoverage("MEM-HMO"),   // PlanId defaults to PLAN-HMO-001
+            CreateCoverage("MEM-PPO")
+        };
+        coverages[1].PlanId = "PLAN-PPO-001"; // Different plan
+        SetupCoverageServiceResponse("1234567890", coverages);
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement!.LineItems.Should().ContainSingle();
+        savedStatement.LineItems[0].MemberId.Should().Be("MEM-HMO");
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_InfantMember_ResolvesCorrectTier()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(withholdPct: 0);
+        // Add infant tier
+        contract.RateTiers.Insert(0, new CapitationRateTier
+        {
+            TierName = "Infant", AgeFrom = 0, AgeTo = 1,
+            AgeSexCategory = AgeSexCategory.Infant_0_1, BasePMPM = 60.00m
+        });
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        var infant = CreateCoverage("MEM-BABY", dob: new DateTime(2025, 10, 1), gender: "M"); // 5 months old
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { infant });
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement!.LineItems[0].BasePMPM.Should().Be(60.00m);
+        savedStatement.LineItems[0].AgeSexCategory.Should().Be(AgeSexCategory.Infant_0_1);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_SeniorMember_ResolvesCorrectTier()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(withholdPct: 0);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        var senior = CreateCoverage("MEM-SENIOR", dob: new DateTime(1950, 6, 1), gender: "F"); // 75 years old
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { senior });
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        var item = savedStatement!.LineItems[0];
+        item.AgeSexCategory.Should().Be(AgeSexCategory.Senior_65Plus);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_UnknownGenderAdult_DefaultsToMaleTier()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(basePmpm: 50, withholdPct: 0);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        var member = CreateCoverage("MEM-UNK", gender: "U"); // Unknown gender, age 28
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { member });
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement!.LineItems[0].AgeSexCategory.Should().Be(AgeSexCategory.AdultMale_18_34);
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_MidAgeRanges_ResolvesCorrectly()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(withholdPct: 0);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+
+        // Ages covering multiple brackets: 15 (adolescent), 40 (adult 35-44), 50 (45-54), 60 (55-64)
+        var coverages = new List<CapitationCoverageDto>
+        {
+            CreateCoverage("MEM-TEEN", dob: new DateTime(2011, 1, 1), gender: "F"),  // 15
+            CreateCoverage("MEM-40M", dob: new DateTime(1986, 1, 1), gender: "M"),   // 40
+            CreateCoverage("MEM-50F", dob: new DateTime(1976, 1, 1), gender: "F"),   // 50
+            CreateCoverage("MEM-60M", dob: new DateTime(1966, 1, 1), gender: "M"),   // 60
+        };
+        SetupCoverageServiceResponse("1234567890", coverages);
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        savedStatement!.LineItems.Should().HaveCount(4);
+        savedStatement.LineItems.Should().Contain(i => i.AgeSexCategory == AgeSexCategory.Adolescent_12_17);
+        savedStatement.LineItems.Should().Contain(i => i.AgeSexCategory == AgeSexCategory.AdultMale_35_44);
+        savedStatement.LineItems.Should().Contain(i => i.AgeSexCategory == AgeSexCategory.AdultFemale_45_54);
+        savedStatement.LineItems.Should().Contain(i => i.AgeSexCategory == AgeSexCategory.AdultMale_55_64);
+    }
+
     #endregion
 }
 

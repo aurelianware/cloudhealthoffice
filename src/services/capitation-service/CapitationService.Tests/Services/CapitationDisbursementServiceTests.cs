@@ -681,5 +681,157 @@ public class CapitationDisbursementServiceTests
         result.ErrorMessage.Should().Be("Account not connected");
     }
 
+    [Fact]
+    public async Task InitiateDisbursementAsync_CheckMethod_MarksSubmitted()
+    {
+        var statement = CreateApprovedStatement();
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(statement);
+        _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
+            .ReturnsAsync((CapitationStatement s) => s);
+        SetupProviderBankAccountResponse(new ProviderBankAccountDto
+        {
+            EftEnabled = true,
+            PreferredDisbursementMethod = "Check",
+            RoutingNumberLast4 = "0019",
+            AccountNumberLast4 = "4321"
+        });
+        _disbursementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+
+        var result = await _service.InitiateDisbursementAsync(new InitiateDisbursementRequest
+        {
+            StatementId = "stmt-1",
+            Method = DisbursementMethod.Check
+        });
+
+        result.Method.Should().Be(DisbursementMethod.Check);
+        result.Status.Should().Be(DisbursementStatus.Submitted);
+        result.SubmittedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task InitiateBatchDisbursementAsync_WithCapitationRunId_IncludesRunStatements()
+    {
+        var run = new CapitationRun { Id = "run-1", StatementIds = new List<string> { "stmt-from-run" } };
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+
+        var statement = CreateApprovedStatement("stmt-from-run");
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-from-run")).ReturnsAsync(statement);
+        _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
+            .ReturnsAsync((CapitationStatement s) => s);
+        SetupProviderBankAccountResponse(new ProviderBankAccountDto
+        {
+            EftEnabled = true,
+            PreferredDisbursementMethod = "NachaCredit",
+            RoutingNumber = "091000019",
+            AccountNumber = "123456789",
+            RoutingNumberLast4 = "0019",
+            AccountNumberLast4 = "6789"
+        });
+        _disbursementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _nachaService.Setup(s => s.GenerateNachaCreditFile(
+                It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
+            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+
+        var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
+        {
+            CapitationRunId = "run-1",
+            InitiatedBy = "admin"
+        });
+
+        result.DisbursementsInitiated.Should().Be(1);
+        result.TotalStatements.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task InitiateBatchDisbursementAsync_SkipsNonApproved()
+    {
+        var stmt1 = CreateApprovedStatement("stmt-ok");
+        var stmt2 = CreateApprovedStatement("stmt-gen");
+        stmt2.Status = CapitationStatementStatus.Generated; // Not approved
+
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-ok")).ReturnsAsync(stmt1);
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-gen")).ReturnsAsync(stmt2);
+        _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
+            .ReturnsAsync((CapitationStatement s) => s);
+        SetupProviderBankAccountResponse(new ProviderBankAccountDto
+        {
+            EftEnabled = true, PreferredDisbursementMethod = "NachaCredit",
+            RoutingNumber = "091000019", AccountNumber = "123456789",
+            RoutingNumberLast4 = "0019", AccountNumberLast4 = "6789"
+        });
+        _disbursementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _nachaService.Setup(s => s.GenerateNachaCreditFile(
+                It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
+            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+
+        var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
+        {
+            StatementIds = new List<string> { "stmt-ok", "stmt-gen" }
+        });
+
+        result.DisbursementsInitiated.Should().Be(1);
+        result.Skipped.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SettleDisbursementAsync_CheckMethod_SetsCheckNumber()
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "disb-1", StatementId = "stmt-1",
+            Status = DisbursementStatus.Submitted, Amount = 5000,
+            Method = DisbursementMethod.Check, CheckNumber = "CHK-99999"
+        };
+        _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+
+        var statement = CreateApprovedStatement();
+        statement.Status = CapitationStatementStatus.PaymentInitiated;
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(statement);
+        CapitationStatement? saved = null;
+        _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => saved = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.SettleDisbursementAsync("disb-1");
+
+        saved!.CheckNumber.Should().Be("CHK-99999");
+        saved.Status.Should().Be(CapitationStatementStatus.Paid);
+    }
+
+    [Fact]
+    public async Task ProcessReturnAsync_NonRetryableCode_DoesNotFlagRetry()
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "disb-1", StatementId = "stmt-1",
+            Status = DisbursementStatus.Submitted, Amount = 5000,
+            RetryCount = 0, MaxRetries = 2
+        };
+        _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(CreateApprovedStatement());
+        _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        var result = await _service.ProcessReturnAsync(new ProcessReturnRequest
+        {
+            DisbursementId = "disb-1",
+            ReturnCode = "R02" // Account closed — non-retryable
+        });
+
+        result.ReturnCode.Should().Be("R02");
+        result.ReturnReason.Should().Be("Account Closed");
+    }
+
     #endregion
 }

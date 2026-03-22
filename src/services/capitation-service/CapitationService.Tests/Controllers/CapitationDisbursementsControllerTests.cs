@@ -227,4 +227,20 @@ public class CapitationDisbursementsControllerTests
     }
 
     #endregion
+
+    #region BatchDisbursement error path
+
+    [Fact]
+    public async Task InitiateBatchDisbursement_InvalidState_ReturnsBadRequest()
+    {
+        _disbursementService.Setup(s => s.InitiateBatchDisbursementAsync(It.IsAny<InitiateBatchDisbursementRequest>()))
+            .ThrowsAsync(new InvalidOperationException("Run not found"));
+
+        var result = await _controller.InitiateBatchDisbursement(
+            new InitiateBatchDisbursementRequest { CapitationRunId = "missing" });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    #endregion
 }

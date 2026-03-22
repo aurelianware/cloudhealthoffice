@@ -228,4 +228,66 @@ public class CapitationStatementsControllerTests
     }
 
     #endregion
+
+    #region SearchStatements additional paths
+
+    [Fact]
+    public async Task SearchStatements_ByStatus_ReturnsOk()
+    {
+        var statements = new List<CapitationStatement> { CreateStatement() };
+        _statementRepo.Setup(r => r.GetByStatusAsync(CapitationStatementStatus.Approved))
+            .ReturnsAsync(statements);
+
+        var result = await _controller.SearchStatements(status: CapitationStatementStatus.Approved);
+
+        var ok = result.Result as OkObjectResult;
+        ok.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SearchStatements_PeriodOnlyWithoutNpiOrStatus_Returns400()
+    {
+        var result = await _controller.SearchStatements(
+            periodFrom: new DateTime(2026, 3, 1),
+            periodTo: new DateTime(2026, 3, 31));
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task SearchStatements_NoFilters_ReturnsGeneratedStatements()
+    {
+        var statements = new List<CapitationStatement> { CreateStatement() };
+        _statementRepo.Setup(r => r.GetByStatusAsync(CapitationStatementStatus.Generated))
+            .ReturnsAsync(statements);
+
+        var result = await _controller.SearchStatements();
+
+        var ok = result.Result as OkObjectResult;
+        ok.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task HoldStatement_InvalidState_ReturnsBadRequest()
+    {
+        _runService.Setup(s => s.HoldStatementAsync("stmt-1", "reason"))
+            .ThrowsAsync(new InvalidOperationException("Cannot hold Paid"));
+
+        var result = await _controller.HoldStatement("stmt-1", new ReasonRequest { Reason = "reason" });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task VoidStatement_InvalidState_ReturnsBadRequest()
+    {
+        _runService.Setup(s => s.VoidStatementAsync("stmt-1", "reason"))
+            .ThrowsAsync(new InvalidOperationException("Cannot void Paid"));
+
+        var result = await _controller.VoidStatement("stmt-1", new ReasonRequest { Reason = "reason" });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    #endregion
 }
