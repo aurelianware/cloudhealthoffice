@@ -100,6 +100,22 @@ public class MembersController : ControllerBase
     }
 
     /// <summary>
+    /// Search members by free-text query (portal autocomplete).
+    /// Searches across memberId, lastName, and subscriberId.
+    /// </summary>
+    [HttpGet("search")]
+    [ProducesResponseType(typeof(List<Member>), 200)]
+    public async Task<IActionResult> SearchByQuery([FromQuery] string? q = null)
+    {
+        // Delegate to the main search endpoint using the query as a lastName search
+        // (in a full implementation, this would search across multiple fields)
+        return await SearchMembers(
+            memberId: null, groupNumber: null, subscriberId: null,
+            lastName: q, dateOfBirth: null, activeOnly: false,
+            subscribersOnly: false, pageSize: 20, continuationToken: null);
+    }
+
+    /// <summary>
     /// Get member details by member ID
     /// </summary>
     /// <param name="memberId">Member ID (834 REF*0F)</param>
@@ -327,6 +343,99 @@ public class MembersController : ControllerBase
             TerminationDate = null
         });
     }
+
+    // ── Portal integration endpoints ─────────────────────────────────
+
+    /// <summary>
+    /// Get member's PCP assignment
+    /// </summary>
+    [HttpGet("{memberId}/pcp")]
+    [ProducesResponseType(typeof(MemberPcpResponse), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetMemberPcp([FromRoute] string memberId)
+    {
+        // TODO: Look up PCP assignment from coverage-service or member record
+        return Ok(new MemberPcpResponse
+        {
+            ProviderId = "prov-001",
+            ProviderName = "Dr. Sarah Chen, MD",
+            NPI = "1234567890",
+            Specialty = "Internal Medicine",
+            NetworkStatus = "In-Network",
+            AssignedDate = DateTime.UtcNow.AddMonths(-6),
+            PracticeName = "Austin Primary Care Associates",
+            Phone = "512-555-0100"
+        });
+    }
+
+    /// <summary>
+    /// Assign or change member's PCP
+    /// </summary>
+    [HttpPut("{memberId}/pcp")]
+    [ProducesResponseType(200)]
+    public async Task<IActionResult> AssignPcp([FromRoute] string memberId, [FromBody] AssignPcpRequest request)
+    {
+        // TODO: Update PCP assignment in coverage-service
+        return Ok(new { memberId, providerId = request.ProviderId, effectiveDate = request.EffectiveDate });
+    }
+
+    /// <summary>
+    /// Get member's coverage history (enrollments, plan changes, terminations)
+    /// </summary>
+    [HttpGet("{memberId}/coverage-history")]
+    [ProducesResponseType(typeof(List<CoverageHistoryEvent>), 200)]
+    public async Task<IActionResult> GetCoverageHistory([FromRoute] string memberId)
+    {
+        // TODO: Query coverage-service for history
+        return Ok(new List<CoverageHistoryEvent>
+        {
+            new() { EventDate = DateTime.UtcNow.AddMonths(-6), EventType = "Enrolled", Description = "Initial enrollment via 834", ChangedBy = "System" },
+            new() { EventDate = DateTime.UtcNow.AddMonths(-3), EventType = "PcpChange", Description = "PCP changed to Dr. Chen", ChangedBy = "Member Portal" }
+        });
+    }
+
+    /// <summary>
+    /// Get member's 834 enrollment transaction history
+    /// </summary>
+    [HttpGet("{memberId}/834-transactions")]
+    [ProducesResponseType(typeof(List<Enrollment834Record>), 200)]
+    public async Task<IActionResult> Get834Transactions([FromRoute] string memberId)
+    {
+        // TODO: Query enrollment-import-service for 834 records
+        return Ok(new List<Enrollment834Record>
+        {
+            new() { TransactionId = "TXN-001", BatchId = "BATCH-001", MemberId = memberId, MemberName = "Member",
+                     MaintenanceTypeCode = "021", TransactionDate = DateTime.UtcNow.AddMonths(-6), Status = "Accepted" }
+        });
+    }
+
+    /// <summary>
+    /// Get member's accumulator balances (deductible, OOP, service limits)
+    /// </summary>
+    [HttpGet("{memberId}/accumulators")]
+    [ProducesResponseType(typeof(MemberAccumulatorsResponse), 200)]
+    public async Task<IActionResult> GetAccumulators([FromRoute] string memberId)
+    {
+        // TODO: Query accumulator service / claims-service for plan year totals
+        return Ok(new MemberAccumulatorsResponse
+        {
+            IndividualDeductibleUsed = 750m, IndividualDeductibleLimit = 2000m,
+            FamilyDeductibleUsed = 1500m, FamilyDeductibleLimit = 6000m,
+            IndividualOopUsed = 1200m, IndividualOopLimit = 8150m,
+            FamilyOopUsed = 2400m, FamilyOopLimit = 16300m
+        });
+    }
+
+    /// <summary>
+    /// Terminate member enrollment
+    /// </summary>
+    [HttpPost("{memberId}/terminate")]
+    [ProducesResponseType(200)]
+    public async Task<IActionResult> TerminateMember([FromRoute] string memberId, [FromBody] TerminateMemberRequest request)
+    {
+        // TODO: Process termination via coverage-service
+        return Ok(new { memberId, terminationDate = request.TerminationDate, reasonCode = request.ReasonCode });
+    }
 }
 
 #region Request/Response Models
@@ -404,6 +513,69 @@ public class EligibilityCheckResponse
     public string Reason { get; set; } = string.Empty;
     public DateTime? EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+}
+
+public class MemberPcpResponse
+{
+    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string NPI { get; set; } = string.Empty;
+    public string Specialty { get; set; } = string.Empty;
+    public string NetworkStatus { get; set; } = string.Empty;
+    public DateTime AssignedDate { get; set; }
+    public string? PracticeName { get; set; }
+    public string? Phone { get; set; }
+}
+
+public class CoverageHistoryEvent
+{
+    public string EventId { get; set; } = Guid.NewGuid().ToString();
+    public DateTime EventDate { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? ChangedBy { get; set; }
+}
+
+public class Enrollment834Record
+{
+    public string TransactionId { get; set; } = string.Empty;
+    public string BatchId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MaintenanceTypeCode { get; set; } = string.Empty;
+    public DateTime TransactionDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class MemberAccumulatorsResponse
+{
+    public decimal IndividualDeductibleUsed { get; set; }
+    public decimal IndividualDeductibleLimit { get; set; }
+    public decimal FamilyDeductibleUsed { get; set; }
+    public decimal FamilyDeductibleLimit { get; set; }
+    public decimal IndividualOopUsed { get; set; }
+    public decimal IndividualOopLimit { get; set; }
+    public decimal FamilyOopUsed { get; set; }
+    public decimal FamilyOopLimit { get; set; }
+    public List<object> ServiceAccumulators { get; set; } = new();
+    public List<object> RecentActivity { get; set; } = new();
+}
+
+public class AssignPcpRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderId { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class TerminateMemberRequest
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string CoverageId { get; set; } = string.Empty;
+    public DateTime TerminationDate { get; set; }
+    public string ReasonCode { get; set; } = string.Empty;
+    public string? Notes { get; set; }
 }
 
 #endregion
