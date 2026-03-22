@@ -192,21 +192,18 @@ await fhirClient.create({ resource: patient });
 await fhirClient.create({ resource: eligibility });
 ```
 
-## Azure Logic Apps Integration
+## Kubernetes / AKS Integration
 
 ```typescript
-// In Azure Function or Logic App custom action
+// In AKS containerized microservice
 export async function processEligibilityInquiry(x12Data: X12_270) {
   // Map to FHIR
   const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
-  
-  // Store in Cosmos DB with FHIR API
-  await cosmosClient.database('fhir').container('Patient')
-    .items.create(patient);
-  
-  await cosmosClient.database('fhir').container('CoverageEligibilityRequest')
-    .items.create(eligibility);
-  
+
+  // Store in FHIR server
+  await fhirClient.create({ resource: patient });
+  await fhirClient.create({ resource: eligibility });
+
   return {
     patientId: patient.id,
     eligibilityId: eligibility.id

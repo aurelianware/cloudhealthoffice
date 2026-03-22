@@ -5,7 +5,7 @@
  * 
  * Key Features:
  * - FHIR R4 endpoints for prior authorization workflows
- * - Azure Logic Apps orchestration integration
+ * - AKS containerized microservice orchestration
  * - Da Vinci CRD (Coverage Requirements Discovery) IG support
  * - Da Vinci DTR (Documentation Templates & Rules) IG support
  * - Da Vinci PAS (Prior Authorization Support) IG support
@@ -959,7 +959,7 @@ export function processFromClearinghouse(
  * - 72-hour SLA decision tracking
  * - Attachment support via Binary resources
  * - CDS Hooks for provider-facing requirements discovery
- * - Azure Logic Apps orchestration
+ * - AKS microservice orchestration
  * - Clearinghouse clearinghouse integration
  * - Patient consent management
  * 
@@ -1687,11 +1687,11 @@ function getQuantityUnit(quantityType?: 'UN' | 'DY' | 'VS' | 'MJ'): string {
 }
 
 /**
- * Orchestration configuration for Azure Logic Apps
+ * Orchestration configuration for AKS microservices
  * Defines workflow endpoints and integration patterns
  */
 export interface PriorAuthOrchestrationConfig {
-  /** Logic App endpoints */
+  /** AKS service endpoints */
   endpoints: {
     /** Submit new prior authorization request */
     submitRequest: string;
@@ -1737,9 +1737,9 @@ export interface PriorAuthOrchestrationConfig {
 }
 
 /**
- * Creates default orchestration configuration for Azure Logic Apps
- * 
- * @param baseUrl Base URL for Logic App endpoints
+ * Creates default orchestration configuration for AKS microservices
+ *
+ * @param baseUrl Base URL for AKS service endpoints (e.g., http://prior-auth-service.cho-svcs)
  * @param environment Environment name (dev, uat, prod)
  * @returns Orchestration configuration
  */
