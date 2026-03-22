@@ -340,7 +340,7 @@ spec:
             apk add --no-cache openssh-client sshpass
             
             SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
-            SFTP_USER="${SFTP_USER:-logicapp}"
+            SFTP_USER="${SFTP_USER:-cho-edi}"
             SFTP_PASS="${SFTP_PASSWORD}"
             
             echo "Uploading 277 to SFTP: {{inputs.parameters.sftp-folder}}"
