@@ -138,7 +138,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: last(split(appInsightsId, '/'))
 }
 
-// Outputs for use in Logic App configuration
+// Outputs for use in AKS service configuration
 output payerAppealStatusUpdatesTopicName string = payerAppealStatusUpdatesTopic.name
 output clearinghousePushSubscriptionName string = clearinghousePushSubscription.name
 output appealsContainerName string = 'appeals'
@@ -147,7 +147,7 @@ output authorizationApiEndpointSecretUri string = authorizationApiEndpointSecret
 output serviceBusConnectionString string = listKeys(serviceBusNamespace.id, serviceBusNamespace.apiVersion).primaryConnectionString
 output storageAccountConnectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${listKeys(storageAccount.id, storageAccount.apiVersion).keys[0].value};EndpointSuffix=${az.environment().suffixes.storage}'
 
-// Configuration outputs for Logic Apps
+// Configuration outputs for AKS Argo Workflows
 output appealConfiguration object = {
   payerId: payerId
   clearinghouseApiEndpoint: clearinghouseApiEndpoint
