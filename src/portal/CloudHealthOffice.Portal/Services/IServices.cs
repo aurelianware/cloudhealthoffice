@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -159,6 +160,8 @@ public interface ITenantService
     Task<TenantSubscription?> GetDemoTenantAsync();
     Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
     Task<string> CreateTenantAsync(CreateTenantRequest request);
+    Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request);
+    Task DeleteTenantAsync(string azureTenantId);
     Task<List<TenantSubscription>> GetAllSubscriptionsAsync();
     Task UpdateSubscriptionStatusAsync(string azureTenantId, string status);
 }
@@ -828,19 +831,53 @@ public class TenantSubscription
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<string> AdminEmails { get; set; } = new();
+    public string? Notes { get; set; }
 }
 
 public class CreateTenantRequest
 {
-    public string AzureTenantId { get; set; } = string.Empty;
+    [Required]
+    [StringLength(300)]
     public string OrganizationName { get; set; } = string.Empty;
+
+    [Required]
+    public string AzureTenantId { get; set; } = string.Empty;
+
+    [Required]
+    public string Tier { get; set; } = "starter";
+
     public string TenantDisplayName { get; set; } = string.Empty;
-    public string Tier { get; set; } = string.Empty;
+
+    public string SubscriptionStatus { get; set; } = "Trial";
+
     public string AdminEmail { get; set; } = string.Empty;
+
+    public List<string> AdminEmails { get; set; } = new();
+
+    public bool IsDemo { get; set; }
+
+    public string? Notes { get; set; }
+
     public string? StripePaymentMethodId { get; set; }
     public string? StripeCustomerId { get; set; }
     public string? StripeSubscriptionId { get; set; }
     public List<string> EnabledModules { get; set; } = new();
+}
+
+public class UpdateTenantRequest
+{
+    [StringLength(300)]
+    public string? OrganizationName { get; set; }
+
+    public string? Tier { get; set; }
+
+    public string? SubscriptionStatus { get; set; }
+
+    public List<string>? AdminEmails { get; set; }
+
+    public bool? IsDemo { get; set; }
+
+    public string? Notes { get; set; }
 }
 
 public class SalesInquiry
