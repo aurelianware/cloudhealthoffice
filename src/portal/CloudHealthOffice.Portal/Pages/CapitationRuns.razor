@@ -197,8 +197,6 @@ else
     private bool _loading = true;
     private string? _serviceError;
 
-    private DateTime? _newRunPeriod = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-
     protected override async Task OnInitializedAsync() => await LoadData();
 
     protected override async Task OnParametersSetAsync() => await LoadData();
@@ -234,16 +232,11 @@ else
 
     private async Task OpenCreateRunDialog()
     {
-        var result = await DialogService.ShowMessageBox("New Capitation Run",
-            $"Create a new capitation run for {_newRunPeriod:MMMM yyyy}?", "Create", "Cancel");
-        if (result != true) return;
-        try
-        {
-            var id = await CapitationService.CreateRunAsync(new CreateCapRunRequest { CapitationPeriod = _newRunPeriod!.Value, CreatedBy = "portal-user" });
-            Snackbar.Add("Capitation run created", Severity.Success);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CloudHealthOffice.Portal.Dialogs.CreateCapitationRunDialog>("New Capitation Run", options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
             await LoadRuns();
-        }
-        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
     }
 
     private async Task ExecuteRun(CapRunSummary run)
