@@ -1242,15 +1242,14 @@ public class TenantService : ITenantService
                 TenantId = tenantId,
                 AzureTenantId = request.AzureTenantId,
                 OrganizationName = request.OrganizationName,
-                SubscriptionStatus = "Trial",
+                SubscriptionStatus = request.SubscriptionStatus,
                 Tier = request.Tier,
-                IsDemo = false,
-                StripeCustomerId = request.StripeCustomerId,
-                StripeSubscriptionId = request.StripeSubscriptionId,
-                TrialEndsAt = now.AddDays(14),
+                IsDemo = request.IsDemo,
+                TrialEndsAt = request.SubscriptionStatus == "Trial" ? now.AddDays(14) : null,
                 CreatedAt = now,
                 UpdatedAt = now,
-                AdminEmails = new List<string> { request.AdminEmail }
+                AdminEmails = request.AdminEmails,
+                Notes = request.Notes
             };
 
             _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} (Azure: {AzureTenantId})",
@@ -1266,6 +1265,29 @@ public class TenantService : ITenantService
             _logger.LogError(ex, "Failed to create tenant for organization {OrgName}", request.OrganizationName);
             throw;
         }
+    }
+
+    public async Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request)
+    {
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var update = Builders<TenantSubscription>.Update
+            .Set(t => t.OrganizationName, request.OrganizationName)
+            .Set(t => t.AzureTenantId, request.AzureTenantId)
+            .Set(t => t.Tier, request.Tier)
+            .Set(t => t.SubscriptionStatus, request.SubscriptionStatus)
+            .Set(t => t.AdminEmails, request.AdminEmails)
+            .Set(t => t.IsDemo, request.IsDemo)
+            .Set(t => t.Notes, request.Notes)
+            .Set(t => t.UpdatedAt, DateTime.UtcNow);
+        await _tenantsCollection.UpdateOneAsync(filter, update);
+        _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
+    }
+
+    public async Task DeleteTenantAsync(string azureTenantId)
+    {
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        await _tenantsCollection.DeleteOneAsync(filter);
+        _logger.LogInformation("Deleted tenant {AzureTenantId}", azureTenantId);
     }
 
     public async Task<List<TenantSubscription>> GetAllSubscriptionsAsync()
