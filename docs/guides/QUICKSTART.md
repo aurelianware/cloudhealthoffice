@@ -107,7 +107,7 @@ The Azure Deploy button creates a self-hosted environment:
 - ✅ **Argo Workflows** - Cloud-native workflow engine
 - ✅ **Azure Storage Gen2** - HIPAA-compliant data lake
 - ✅ **Service Bus Namespace** - Event-driven messaging
-- ✅ **Integration Account** (Free tier) - X12 EDI processing
+- ✅ **C# X12 Services** - X12 EDI parsing and encoding (runs on AKS)
 - ✅ **Cosmos DB** - Multi-tenant data isolation
 - ✅ **Application Insights** - Monitoring and telemetry
 
@@ -161,13 +161,11 @@ kubectl get pods -n cloudhealthoffice
 
 ### Step 3: Configure X12 Integration (Optional)
 
-If using X12 EDI processing with Azure Integration Account:
+X12 EDI parsing is handled by C# microservices running on AKS (no Azure Integration Account needed). Configuration is via Kubernetes ConfigMaps:
 
-```powershell
-# Upload X12 schemas to Integration Account
-./configure-x12-agreements.ps1 `
-  -ResourceGroup "your-resource-group" `
-  -IntegrationAccountName "your-ia-name"
+```bash
+# Apply X12 configuration
+kubectl apply -f infrastructure/argo-workflows/config/x12-settings.yaml -n cloudhealthoffice
 ```
 
 **Note**: The SaaS platform includes pre-configured X12 processing.
@@ -207,7 +205,7 @@ Then automatically generate your deployment package!
 
 **Features:**
 - 30+ Handlebars template helpers for customization
-- Complete workflow.json generation for Logic Apps
+- Complete Argo workflow YAML generation
 - Bicep infrastructure templates with parameters
 - Payer-specific documentation auto-generated
 - Validated with 23-test comprehensive suite
@@ -352,7 +350,7 @@ node dist/scripts/utils/generate-837-claims.js 837I 5 ./test-data
 # Comprehensive health check with report
 ./scripts/test-e2e.ps1 `
   -ResourceGroup "your-rg" `
-  -LogicAppName "your-la" `
+  -AksCluster "your-aks" `
   -ServiceBusNamespace "your-sb" `
   -ReportPath "./health-report.json"
 ```
@@ -374,8 +372,8 @@ Key metrics to monitor:
 ### View Logs
 
 ```bash
-# Recent Logic App logs
-az webapp log tail --resource-group your-rg --name your-logic-app
+# Recent Argo workflow logs
+kubectl logs -n cho-workflows -l workflows.argoproj.io/workflow --tail=100
 
 # Service Bus metrics
 az monitor metrics list \
@@ -425,9 +423,9 @@ Before production deployment:
 
 ### Common Issues
 
-**Issue**: Logic App workflows not visible after deployment
+**Issue**: Argo workflows not visible after deployment
 
-**Solution**: Wait 1-2 minutes for workflows to initialize, then refresh portal
+**Solution**: Wait 1-2 minutes for workflow pods to initialize, then check with `kubectl get workflows -n cho-workflows`
 
 ---
 
@@ -443,8 +441,8 @@ Before production deployment:
 **Issue**: X12 decode fails
 
 **Solution**:
-1. Verify X12 schemas uploaded to Integration Account
-2. Check trading partner agreements configured correctly
+1. Verify the C# X12 service pod is running (`kubectl get pods -n cloudhealthoffice -l app=x12-parser`)
+2. Check X12 configuration in ConfigMap
 3. Validate EDI file format (ISA/GS segments)
 
 ---
@@ -468,7 +466,7 @@ Before production deployment:
 After successful deployment:
 
 1. **Configure Trading Partners**: Set up clearinghouse credentials and X12 agreements
-2. **Enable Production Features**: Upgrade to Standard Integration Account for production workloads
+2. **Enable Production Features**: Scale AKS node pools and configure production Argo workflow parameters
 3. **Set Up CI/CD**: Configure GitHub Actions for automated deployments
 4. **Customize Workflows**: Extend templates for payer-specific requirements
 5. **Train Your Team**: Review HIPAA compliance and operational procedures

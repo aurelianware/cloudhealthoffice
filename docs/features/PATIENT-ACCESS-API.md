@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # Patient Access API
 
 The **PatientAccessApi** Logic App implements CMS-0057-F patient access requirements by exposing FHIR R4 search/read endpoints backed by Cosmos DB. SMART-on-FHIR authentication is enforced with Azure AD B2C and all responses comply with US Core where applicable.

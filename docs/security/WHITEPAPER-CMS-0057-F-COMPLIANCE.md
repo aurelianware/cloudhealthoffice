@@ -279,7 +279,7 @@ package "CloudHealthOffice Platform" {
 }
 
 package "Azure Infrastructure" {
-  [Logic Apps Standard] as LogicApps
+  [AKS + Argo Workflows] as ArgoWorkflows
   [Azure AD / OAuth 2.0] as Auth
   [Key Vault] as KV
   [Application Insights] as AppInsights
@@ -309,10 +309,10 @@ DaVinci --> ProviderAPI
 DaVinci --> P2PAPI
 DaVinci --> PriorAuthAPI
 
-LogicApps --> Mapper
+ArgoWorkflows --> Mapper
 Auth --> PatientAPI
-KV --> LogicApps
-AppInsights --> LogicApps
+KV --> ArgoWorkflows
+AppInsights --> ArgoWorkflows
 
 PatientAPI --> PatientApps
 ProviderAPI --> EHRs
@@ -357,7 +357,7 @@ CloudHealthOffice enables compliance achievement in 90 days or less:
 #### Phase 2: Development and Integration (Weeks 3-8)
 
 - Azure infrastructure deployment via Bicep templates
-- Logic Apps workflow configuration
+- Argo Workflows configuration on AKS
 - claims adjudication systems API integration
 - FHIR endpoint deployment
 - Security controls implementation
@@ -485,7 +485,7 @@ The TCO and ROI calculations above are based on the following key assumptions:
 - **CMS Fine Avoidance:** $1M+ annually in avoided penalties for non-compliance with CMS-0057-F requirements[^CMS2023]
 - **Staff Reallocation:** Legacy FTEs can be redeployed to higher-value activities rather than terminated
 - **Transaction Volume:** Calculations assume 500,000+ annual EDI transactions (scalable for larger volumes)
-- **Azure Consumption:** Based on Azure Logic Apps Standard tier with moderate usage patterns
+- **Azure Consumption:** Based on AKS cluster with Argo Workflows and moderate usage patterns
 - **Discount Rate:** 10% for NPV calculations, reflecting typical healthcare IT cost of capital
 
 #### Sensitivity Analysis
@@ -816,7 +816,7 @@ The January 2027 deadline is not a threat. With CloudHealthOffice, it's an oppor
 
 [^USCDI]: United States Core Data for Interoperability (USCDI) v2. Office of the National Coordinator for Health IT (ONC), 2022. https://www.healthit.gov/isa/united-states-core-data-interoperability-uscdi
 
-[^Azure2024]: Azure Logic Apps Standard Pricing and SLA. Microsoft Azure, 2024. https://azure.microsoft.com/en-us/pricing/details/logic-apps/
+[^Azure2024]: Azure Kubernetes Service (AKS) Pricing and SLA. Microsoft Azure, 2024. https://azure.microsoft.com/en-us/pricing/details/kubernetes-service/
 
 [^HIPAA2024]: HIPAA Security Rule Technical Safeguards. U.S. Department of Health and Human Services, 2024. https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html
 

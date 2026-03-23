@@ -220,7 +220,7 @@ Welcome to Cloud Health Office Platform! We're thrilled to partner with [Company
 
 **Your Implementation Team:**
 - **Project Manager:** [Name] - [Email] - Overall coordination
-- **Technical Lead:** [Name] - [Email] - Azure/Logic Apps integration
+- **Technical Lead:** [Name] - [Email] - Azure/AKS integration
 - **Backend Integration:** [Name] - [Email] - Claims system API integration
 - **Support:** support@hipaa-attachments.com - 24/7 assistance
 

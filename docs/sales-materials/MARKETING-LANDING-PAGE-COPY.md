@@ -238,7 +238,7 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 |-------|-------------|
 | **HIPAA Compliant** | Addresses key HIPAA technical safeguards (§164.312) |
 | **SOC 2 Type II** | [PLACEHOLDER: Certification in progress] |
-| **Azure Native** | Built on Azure Logic Apps, Key Vault, Service Bus |
+| **Azure Native** | Built on AKS with Argo Workflows, Key Vault, Service Bus |
 | **Open Source** | BSL 1.1 license, full source transparency |
 | **Da Vinci Conformant** | PDex, PAS, CRD, DTR implementation guides |
 | **US Core 3.1.1** | FHIR patient profile conformance |

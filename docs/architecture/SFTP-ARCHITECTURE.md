@@ -9,9 +9,9 @@
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐        ┌──────────────────┐        ┌─────────────────┐
-│  Clearinghouse   │        │  Kubernetes      │        │  Azure Logic    │
-│  (Availity,      │◄──────►│  SFTP Server     │◄──────►│  Apps           │
-│  Change HC, etc) │  SSH   │  (atmoz/sftp)    │  API   │  (Workflows)    │
+│  Clearinghouse   │        │  Kubernetes      │        │  Argo Workflows │
+│  (Availity,      │◄──────►│  SFTP Server     │◄──────►│  on AKS         │
+│  Change HC, etc) │  SSH   │  (atmoz/sftp)    │  API   │  (DAG Steps)    │
 └──────────────────┘        └──────────────────┘        └─────────────────┘
                                      │
                                      │ PersistentVolume
@@ -28,35 +28,35 @@
 
 ```
 ┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌──────────────┐
-│ Service Bus │───►│ Logic App    │───►│ SFTP        │───►│ Clearinghouse│
-│ (edi-278)   │    │ Workflow     │    │ Upload      │    │              │
+│ Service Bus │───►│ Argo DAG     │───►│ SFTP        │───►│ Clearinghouse│
+│ (edi-278)   │    │ Step         │    │ Upload      │    │              │
 └─────────────┘    └──────────────┘    └─────────────┘    └──────────────┘
                           │
-                          ▼ encode X12
+                          ▼ generate X12
                    ┌──────────────┐
-                   │ Integration  │
-                   │ Account      │
-                   │ (X12 Schema) │
+                   │ C# X12       │
+                   │ Service      │
+                   │ (EDI gen)    │
                    └──────────────┘
 
-File Path: /home/logicapp/upload/278/PA_2024020412345.x12
+File Path: /home/argoworkflow/upload/278/PA_2024020412345.x12
 ```
 
 ### Inbound (Clearinghouse → Payer)
 
 ```
 ┌──────────────┐    ┌─────────────┐    ┌──────────────┐    ┌─────────────┐
-│ Clearinghouse│───►│ SFTP        │───►│ Logic App    │───►│ Service Bus │
-│              │    │ Download    │    │ Polling      │    │ (edi-277)   │
+│ Clearinghouse│───►│ SFTP        │───►│ Argo DAG     │───►│ Service Bus │
+│              │    │ Download    │    │ Step         │    │ (edi-277)   │
 └──────────────┘    └─────────────┘    └──────────────┘    └─────────────┘
                                                │
-                                               ▼ decode X12
+                                               ▼ parse X12
                                         ┌──────────────┐
-                                        │ Integration  │
-                                        │ Account      │
+                                        │ C# X12       │
+                                        │ Service      │
                                         └──────────────┘
 
-File Path: /home/logicapp/download/277/STATUS_*.x12
+File Path: /home/argoworkflow/download/277/STATUS_*.x12
 ```
 
 ## Kubernetes Resource Topology
@@ -81,7 +81,7 @@ Namespace: cho-sftp
 │
 ├── Secret: sftp-users
 │   └── users.conf (base64)
-│       ├── logicapp:password:1000:100:upload
+│       ├── argoworkflow:password:1000:100:upload
 │       └── clearinghouse:password:1001:101:edi
 │
 ├── Secret: ssh-host-keys
@@ -105,7 +105,7 @@ Namespace: cho-sftp
 ```
 /home/
 │
-├── logicapp/ (UID: 1000)
+├── argoworkflow/ (UID: 1000)
 │   ├── upload/              # Outbound to clearinghouses
 │   │   ├── 275/             # Prior auth attachments
 │   │   │   └── PA_20240204_12345.x12
@@ -168,39 +168,37 @@ Namespace: cho-sftp
                    └─────────────────────────┘
 ```
 
-## Azure Logic Apps Connection
+## Argo Workflows SFTP Connection
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Azure Resource Group: rg-hipaa-logic-apps                             │
+│  AKS Cluster: cho-aks / Namespace: argo                                │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐ │
-│  │  API Connection: cho-sftp                                        │ │
-│  │  Type: Microsoft.Web/connections                                 │ │
-│  │  Connector: sftpwithssh                                          │ │
+│  │  Kubernetes Secret: cho-sftp-credentials                         │ │
 │  │                                                                  │ │
-│  │  Parameters:                                                     │ │
+│  │  Data:                                                           │ │
 │  │    hostName: 52.168.45.123                                       │ │
 │  │    portNumber: 22                                                │ │
-│  │    userName: logicapp                                            │ │
-│  │    password: <from Key Vault>                                    │ │
-│  │    acceptAnySshHostKey: true (dev) / false (prod)                │ │
+│  │    userName: argoworkflow                                        │ │
+│  │    password: <from Azure Key Vault via CSI driver>               │ │
 │  │    sshHostKeyFingerprint: SHA256:... (prod only)                 │ │
 │  └──────────────────────────────────────────────────────────────────┘ │
 │                            │                                            │
-│                            │ referenced by                              │
+│                            │ mounted by                                 │
 │                            ▼                                            │
 │  ┌──────────────────────────────────────────────────────────────────┐ │
-│  │  Logic App Workflow: 278-review-request                          │ │
+│  │  Argo Workflow: 278-review-request                               │ │
+│  │  (infrastructure/argo-workflows/)                                │ │
 │  │                                                                  │ │
-│  │  Trigger: Service Bus Topic (edi-278)                            │ │
+│  │  Trigger: Service Bus Topic (edi-278) via Argo Events            │ │
 │  │     ↓                                                            │ │
-│  │  Action: X12 Encode (Integration Account)                        │ │
+│  │  DAG Step: Generate X12 (C# service)                             │ │
 │  │     ↓                                                            │ │
-│  │  Action: SFTP - Upload file                                      │ │
-│  │     Path: /upload/278/@{workflow().run.id}.x12                   │ │
-│  │     Connection: cho-sftp                                         │ │
+│  │  DAG Step: SFTP Upload file                                      │ │
+│  │     Path: /upload/278/{{workflow.uid}}.x12                       │ │
+│  │     Credentials: cho-sftp-credentials secret                     │ │
 │  └──────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
 └────────────────────────────────────────────────────────────────────────┘
@@ -229,7 +227,7 @@ Namespace: cho-sftp
 │ Layer 3: File System Isolation                                          │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ ▪ Chrooted directories per user                                         │
-│ ▪ UID/GID separation (logicapp=1000, clearinghouse=1001)                │
+│ ▪ UID/GID separation (argoworkflow=1000, clearinghouse=1001)            │
 │ ▪ Linux file permissions (700 directories, 600 files)                   │
 └─────────────────────────────────────────────────────────────────────────┘
 
@@ -263,12 +261,12 @@ Namespace: cho-sftp
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Azure Monitor (Logic Apps)                                              │
+│ Prometheus / Grafana (Argo Workflows)                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ customEvents                                                             │
-│ | where name in ("SFTP_Upload_Success", "SFTP_Upload_Failed")           │
-│ | summarize Count=count() by name, bin(timestamp, 1h)                   │
-│ | render timechart                                                       │
+│ argo_workflows_count{status="Succeeded"}                                │
+│ argo_workflows_count{status="Failed"}                                   │
+│ Custom metrics: sftp_upload_success_total, sftp_upload_failed_total      │
+│ Grafana dashboard: SFTP Transfer Metrics                                │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -329,7 +327,7 @@ Namespace: cho-sftp
 │  Region Failure (manual):                                         │
 │  ▪ Deploy to secondary region                                     │
 │  ▪ Restore from geo-replicated snapshot                           │
-│  ▪ Update DNS / LoadBalancer IP in Logic Apps                     │
+│  ▪ Update DNS / LoadBalancer IP in Argo workflow config           │
 │  ▪ RTO: ~15 minutes (assuming automation)                         │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
@@ -341,4 +339,4 @@ Namespace: cho-sftp
 - **[SFTP Quick Start](./SFTP-QUICKSTART.md)** - 5-minute deployment reference
 - **[Kubernetes Deployment](../k8s/sftp-server-deployment.yaml)** - Complete manifest
 - **[Deployment Scripts](../scripts/deploy-sftp-server.sh)** - Automated setup
-- **[Connection Config](../scripts/configure-sftp-connection.sh)** - Logic Apps integration
+- **[Connection Config](../scripts/configure-sftp-connection.sh)** - Argo Workflows SFTP integration
