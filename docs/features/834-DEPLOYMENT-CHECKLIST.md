@@ -11,9 +11,9 @@
   - [ ] Cosmos DB primary key retrieved
 
 - [ ] **Kubernetes Secrets**
-  - [ ] `cosmos-db-secret` created in `cloudhealthoffice` namespace
+  - [ ] `database-secret` created in `cloudhealthoffice` namespace
     ```bash
-    kubectl create secret generic cosmos-db-secret \
+    kubectl create secret generic database-secret \
       --namespace cloudhealthoffice \
       --from-literal=endpoint="<cosmos-endpoint>" \
       --from-literal=key="<cosmos-key>"
@@ -334,7 +334,7 @@
 
 - [ ] Verify Cosmos DB secret
   ```bash
-  kubectl get secret cosmos-db-secret -n cloudhealthoffice -o yaml
+  kubectl get secret database-secret -n cloudhealthoffice -o yaml
   ```
 
 - [ ] Test Cosmos DB endpoint manually

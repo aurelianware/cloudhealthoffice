@@ -116,10 +116,10 @@ CosmosDb__ContainerName: Claims
 
 ## Kubernetes Secrets
 
-The Cosmos DB credentials are stored in Kubernetes secret `cosmos-db-secret` in the `cloudhealthoffice` namespace:
+The Cosmos DB credentials are stored in Kubernetes secret `database-secret` in the `cloudhealthoffice` namespace:
 
 ```bash
-kubectl create secret generic cosmos-db-secret \
+kubectl create secret generic database-secret \
   --from-literal=endpoint='https://cloudhealthoffice-cosmos.documents.azure.com:443/' \
   --from-literal=key='<primary-key>' \
   -n cloudhealthoffice

@@ -341,21 +341,9 @@ jobs:
           kubectl create namespace ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create MongoDB auth secret (standalone StatefulSet credentials)
+      - name: Create database secret (MongoDB or CosmosDB)
         run: |
-          MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
-          MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
-          : "${MONGO_USER:=admin}"
-          : "${MONGO_PASS:=admin}"
-          kubectl create secret generic mongodb-auth \
-            --from-literal=username="${MONGO_USER}" \
-            --from-literal=password="${MONGO_PASS}" \
-            -n ${{ env.NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create Cosmos DB / MongoDB connection secret
-        run: |
-          # Use CosmosDB if configured, otherwise fall back to standalone MongoDB
+          # Build connection string: use CosmosDB if configured, otherwise standalone MongoDB
           CONN="${{ secrets.COSMOS_DB_CONNECTION_STRING }}"
           if [ -z "$CONN" ]; then
             MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
@@ -365,28 +353,27 @@ jobs:
             CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.cloudhealthoffice.svc.cluster.local:27017"
             echo "No COSMOS_DB_CONNECTION_STRING set — using standalone MongoDB"
           fi
-          kubectl create secret generic cosmosdb-secret \
+
+          # CosmosDB endpoint/key: leave empty when using standalone MongoDB
+          ENDPOINT="${{ secrets.COSMOS_DB_ENDPOINT }}"
+          KEY="${{ secrets.COSMOS_DB_KEY }}"
+
+          kubectl create secret generic database-secret \
             --from-literal=connectionString="${CONN}" \
-            -n ${{ env.NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret generic mongodb-secret \
-            --from-literal=connectionString="${CONN}" \
+            --from-literal=endpoint="${ENDPOINT}" \
+            --from-literal=key="${KEY}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create Cosmos DB endpoint/key secret
+      - name: Create MongoDB auth secret (standalone StatefulSet credentials)
         run: |
-          kubectl create secret generic cosmos-db-secret \
-            --from-literal=endpoint="${{ secrets.COSMOS_DB_ENDPOINT }}" \
-            --from-literal=key="${{ secrets.COSMOS_DB_KEY }}" \
-            -n ${{ env.NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create Cosmos config secret (trading-partner)
-        run: |
-          kubectl create secret generic cosmos-config \
-            --from-literal=endpoint="${{ secrets.COSMOS_DB_ENDPOINT }}" \
-            --from-literal=key="${{ secrets.COSMOS_DB_KEY }}" \
+          MONGO_USER="${{ secrets.MONGODB_USERNAME }}"
+          MONGO_PASS="${{ secrets.MONGODB_PASSWORD }}"
+          : "${MONGO_USER:=admin}"
+          : "${MONGO_PASS:=admin}"
+          kubectl create secret generic mongodb-auth \
+            --from-literal=username="${MONGO_USER}" \
+            --from-literal=password="${MONGO_PASS}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 

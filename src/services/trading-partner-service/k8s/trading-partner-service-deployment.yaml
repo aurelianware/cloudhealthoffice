@@ -29,12 +29,12 @@ spec:
         - name: COSMOS_ENDPOINT
           valueFrom:
             secretKeyRef:
-              name: cosmos-config
+              name: database-secret
               key: endpoint
         - name: COSMOS_KEY
           valueFrom:
             secretKeyRef:
-              name: cosmos-config
+              name: database-secret
               key: key
         - name: COSMOS_DATABASE
           value: "CloudHealthOffice"
