@@ -36,7 +36,7 @@
   "author": "Aurelianware",
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/identity": "^4.13.0",
+    "@azure/identity": "^4.13.1",
     "@azure/openai": "^2.0.0",
     "@azure/service-bus": "^7.9.5",
     "@azure/storage-blob": "^12.29.1",
