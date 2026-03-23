@@ -36,6 +36,26 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://portal.cloudhealthoffice.com/apis</loc>
+    <lastmod>2026-03-23</lastmod>
+    <priority>1.0</priority>
+  </url>  
+  <url>
+    <loc>https://api.cloudhealthoffice.com/?spec=patient-access</loc>
+    <lastmod>2026-03-23</lastmod>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://api.cloudhealthoffice.com/?spec=patient-access</loc>
+    <lastmod>2026-03-23</lastmod>
+    <priority>1.0</priority>
+  </url>    
+  <url>
+    <loc>https://github.com/aurelianware/cloudhealthoffice</loc>
+    <lastmod>2026-03-23</lastmod>
+    <priority>1.0</priority>
+  </url>   
+  <url>
     <loc>https://github.com/aurelianware/cloudhealthoffice</loc>
     <lastmod>2026-03-23</lastmod>
     <priority>1.0</priority>
