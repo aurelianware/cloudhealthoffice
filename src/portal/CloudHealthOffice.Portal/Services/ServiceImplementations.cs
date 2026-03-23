@@ -1270,15 +1270,24 @@ public class TenantService : ITenantService
     public async Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request)
     {
         var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var update = Builders<TenantSubscription>.Update
-            .Set(t => t.OrganizationName, request.OrganizationName)
-            .Set(t => t.AzureTenantId, request.AzureTenantId)
-            .Set(t => t.Tier, request.Tier)
-            .Set(t => t.SubscriptionStatus, request.SubscriptionStatus)
-            .Set(t => t.AdminEmails, request.AdminEmails)
-            .Set(t => t.IsDemo, request.IsDemo)
-            .Set(t => t.Notes, request.Notes)
-            .Set(t => t.UpdatedAt, DateTime.UtcNow);
+        var updates = new List<UpdateDefinition<TenantSubscription>>
+        {
+            Builders<TenantSubscription>.Update.Set(t => t.UpdatedAt, DateTime.UtcNow)
+        };
+
+        if (request.OrganizationName != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.OrganizationName, request.OrganizationName));
+        if (request.Tier != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Tier, request.Tier));
+        if (request.SubscriptionStatus != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.SubscriptionStatus, request.SubscriptionStatus));
+        if (request.AdminEmails != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.AdminEmails, request.AdminEmails));
+        if (request.IsDemo.HasValue)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.IsDemo, request.IsDemo.Value));
+        updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Notes, request.Notes));
+
+        var update = Builders<TenantSubscription>.Update.Combine(updates);
         await _tenantsCollection.UpdateOneAsync(filter, update);
         _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
     }

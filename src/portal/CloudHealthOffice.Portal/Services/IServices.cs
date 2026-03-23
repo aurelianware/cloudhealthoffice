@@ -857,21 +857,16 @@ public class CreateTenantRequest
 
 public class UpdateTenantRequest
 {
-    [Required]
     [StringLength(300)]
-    public string OrganizationName { get; set; } = string.Empty;
+    public string? OrganizationName { get; set; }
 
-    [Required]
-    public string AzureTenantId { get; set; } = string.Empty;
+    public string? Tier { get; set; }
 
-    [Required]
-    public string Tier { get; set; } = "starter";
+    public string? SubscriptionStatus { get; set; }
 
-    public string SubscriptionStatus { get; set; } = "Trial";
+    public List<string>? AdminEmails { get; set; }
 
-    public List<string> AdminEmails { get; set; } = new();
-
-    public bool IsDemo { get; set; }
+    public bool? IsDemo { get; set; }
 
     public string? Notes { get; set; }
 }

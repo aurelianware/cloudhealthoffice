@@ -47,7 +47,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
             @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-            @(IsEdit ? "Save Changes" : "Add Tenant")
+            @(IsEdit ? "Save Changes" : "Create Tenant")
         </MudButton>
     </DialogActions>
 </MudDialog>
