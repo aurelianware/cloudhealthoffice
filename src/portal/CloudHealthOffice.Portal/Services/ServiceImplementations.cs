@@ -1237,6 +1237,11 @@ public class TenantService : ITenantService
             var tenantId = $"tenant-{Guid.NewGuid():N}";
             var now = DateTime.UtcNow;
 
+            // Merge AdminEmail (from signup) into AdminEmails list
+            var adminEmails = request.AdminEmails ?? new List<string>();
+            if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
+                adminEmails.Add(request.AdminEmail);
+
             var tenant = new TenantSubscription
             {
                 TenantId = tenantId,
@@ -1245,10 +1250,12 @@ public class TenantService : ITenantService
                 SubscriptionStatus = request.SubscriptionStatus,
                 Tier = request.Tier,
                 IsDemo = request.IsDemo,
+                StripeCustomerId = request.StripeCustomerId,
+                StripeSubscriptionId = request.StripeSubscriptionId,
                 TrialEndsAt = request.SubscriptionStatus == "Trial" ? now.AddDays(14) : null,
                 CreatedAt = now,
                 UpdatedAt = now,
-                AdminEmails = request.AdminEmails,
+                AdminEmails = adminEmails,
                 Notes = request.Notes
             };
 
@@ -1288,14 +1295,18 @@ public class TenantService : ITenantService
         updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Notes, request.Notes));
 
         var update = Builders<TenantSubscription>.Update.Combine(updates);
-        await _tenantsCollection.UpdateOneAsync(filter, update);
+        var result = await _tenantsCollection.UpdateOneAsync(filter, update);
+        if (result.MatchedCount == 0)
+            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
         _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
     }
 
     public async Task DeleteTenantAsync(string azureTenantId)
     {
         var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        await _tenantsCollection.DeleteOneAsync(filter);
+        var result = await _tenantsCollection.DeleteOneAsync(filter);
+        if (result.DeletedCount == 0)
+            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
         _logger.LogInformation("Deleted tenant {AzureTenantId}", azureTenantId);
     }
 
