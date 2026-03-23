@@ -1758,8 +1758,10 @@ public class CapRunSummary
 {
     public string Id { get; set; } = string.Empty;
     public string RunNumber { get; set; } = string.Empty;
+    public string RunType { get; set; } = "Monthly";
     public DateTime CapitationPeriod { get; set; }
     public string Status { get; set; } = "Pending";
+    public string? LineOfBusiness { get; set; }
     public int TotalStatements { get; set; }
     public int TotalMemberMonths { get; set; }
     public decimal TotalGrossCapitation { get; set; }
@@ -1777,9 +1779,10 @@ public class CapRunSummary
 
 public class CreateCapRunRequest
 {
+    public string RunType { get; set; } = "Monthly";
     public DateTime CapitationPeriod { get; set; }
-    public List<string>? ProviderNPIs { get; set; }
     public string? LineOfBusiness { get; set; }
+    public string? ProviderNPI { get; set; }
     public string? ContractType { get; set; }
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }

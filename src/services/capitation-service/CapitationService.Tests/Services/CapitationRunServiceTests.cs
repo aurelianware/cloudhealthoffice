@@ -40,9 +40,10 @@ public class CapitationRunServiceTests
     {
         Id = id,
         RunNumber = "CAPRUN-2026-03-ABCD",
+        RunType = CapitationRunType.Monthly,
         CapitationPeriod = TestPeriod,
         Status = CapitationRunStatus.Pending,
-        Criteria = new CapitationRunCriteria()
+        Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial }
     };
 
     private static CapitationContract CreateContract(
@@ -135,7 +136,7 @@ public class CapitationRunServiceTests
 
         var contract1 = CreateContract("1111111111", "Dr. Alpha");
         var contract2 = CreateContract("2222222222", "Dr. Beta");
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract1, contract2 });
 
         // Each PCP has 2 members
@@ -178,7 +179,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(basePmpm: 100.00m, withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         // Member enrolled mid-month on March 16 (16 covered days out of 31)
@@ -211,7 +212,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(basePmpm: 50.00m, withholdPct: 0, riskAdjusted: true);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto>
@@ -243,7 +244,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(basePmpm: 100.00m, withholdPct: 0.10m);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto>
@@ -279,7 +280,7 @@ public class CapitationRunServiceTests
 
         var contract = CreateContract(basePmpm: 80.00m, withholdPct: 0, riskAdjusted: true);
         contract.DefaultRiskScore = 1.0m;
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto>
@@ -311,7 +312,7 @@ public class CapitationRunServiceTests
 
         var failContract = CreateContract("1111111111", "Dr. Fail");
         var okContract = CreateContract("2222222222", "Dr. OK");
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { failContract, okContract });
 
         // Both NPIs return members
@@ -514,14 +515,56 @@ public class CapitationRunServiceTests
 
         await _service.CreateRunAsync(new CreateCapitationRunRequest
         {
+            RunType = CapitationRunType.Monthly,
             CapitationPeriod = new DateTime(2026, 3, 15), // Mid-month
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
             CreatedBy = "admin"
         }, "admin");
 
         savedRun.Should().NotBeNull();
         savedRun!.CapitationPeriod.Day.Should().Be(1); // Normalized to first
         savedRun.RunNumber.Should().StartWith("CAPRUN-2026-03-");
+        savedRun.RunType.Should().Be(CapitationRunType.Monthly);
         savedRun.Status.Should().Be(CapitationRunStatus.Pending);
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_MonthlyWithoutLob_ThrowsArgumentException()
+    {
+        var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1)
+        }, "admin");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*LineOfBusiness*");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_AdHocWithoutNpi_ThrowsArgumentException()
+    {
+        var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.AdHocProvider,
+            CapitationPeriod = new DateTime(2026, 3, 1)
+        }, "admin");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*ProviderNPI*");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_RetroWithoutOriginalPeriod_ThrowsArgumentException()
+    {
+        var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.RetroAdjustment,
+            CapitationPeriod = new DateTime(2026, 3, 1)
+        }, "admin");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*OriginalPeriod*");
     }
 
     [Fact]
@@ -567,7 +610,7 @@ public class CapitationRunServiceTests
             new() { Id = "c1", LineOfBusiness = LineOfBusiness.Commercial, ContractType = ContractType.PrimaryCareOnly },
             new() { Id = "c2", LineOfBusiness = LineOfBusiness.Medicaid, ContractType = ContractType.GlobalCapitation }
         };
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null)).ReturnsAsync(contracts);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null)).ReturnsAsync(contracts);
 
         var summary = await _service.GetCapitationSummaryAsync(new DateTime(2026, 3, 15));
 
@@ -587,16 +630,21 @@ public class CapitationRunServiceTests
     #region ExecuteRunAsync — criteria filters and edge cases
 
     [Fact]
-    public async Task ExecuteRunAsync_WithNpiFilter_OnlyIncludesMatchingContracts()
+    public async Task ExecuteRunAsync_AdHocProviderRun_OnlyIncludesMatchingContract()
     {
         var run = CreatePendingRun();
-        run.Criteria.ProviderNPIs = new List<string> { "2222222222" };
+        run.RunType = CapitationRunType.AdHocProvider;
+        run.Criteria = new CapitationRunCriteria
+        {
+            ProviderNPI = "2222222222",
+            LineOfBusiness = LineOfBusiness.Commercial
+        };
         _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
         SetupDefaultRepos();
 
         var contract1 = CreateContract("1111111111", "Dr. Alpha");
         var contract2 = CreateContract("2222222222", "Dr. Beta");
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract1, contract2 });
 
         SetupCoverageServiceResponse("2222222222", new List<CapitationCoverageDto>
@@ -612,23 +660,20 @@ public class CapitationRunServiceTests
     }
 
     [Fact]
-    public async Task ExecuteRunAsync_WithPlanFilter_OnlyIncludesMatchingContracts()
+    public async Task ExecuteRunAsync_WithContractTypeFilter_OnlyIncludesMatchingContracts()
     {
         var run = CreatePendingRun();
-        run.Criteria.PlanIds = new List<string> { "PLAN-SPECIAL" };
+        run.Criteria.ContractType = ContractType.PrimaryCareOnly;
         _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
         SetupDefaultRepos();
 
-        var contract1 = CreateContract("1111111111");
-        contract1.PlanIds = new List<string> { "PLAN-HMO" };
-        var contract2 = CreateContract("2222222222");
-        contract2.PlanIds = new List<string> { "PLAN-SPECIAL" };
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
-            .ReturnsAsync(new List<CapitationContract> { contract1, contract2 });
+        var contract = CreateContract("1111111111");
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, ContractType.PrimaryCareOnly))
+            .ReturnsAsync(new List<CapitationContract> { contract });
 
-        SetupCoverageServiceResponse("2222222222", new List<CapitationCoverageDto>
+        SetupCoverageServiceResponse("1111111111", new List<CapitationCoverageDto>
         {
-            CreateCoverage("MEM001", pcpNpi: "2222222222")
+            CreateCoverage("MEM001", pcpNpi: "1111111111")
         });
         SetupRiskScoreServiceResponse();
 
@@ -645,7 +690,7 @@ public class CapitationRunServiceTests
         _runRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationRun>()))
             .ReturnsAsync((CapitationRun r) => r);
 
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ThrowsAsync(new Exception("Database connection lost"));
 
         var result = await _service.ExecuteRunAsync("run-1");
@@ -662,7 +707,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract("1234567890", "Dr. Chen", basePmpm: 50, withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         // Member reassigned FROM this provider TO another
@@ -694,7 +739,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(basePmpm: 50, withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         // One active, one terminated before period, one future
@@ -728,7 +773,7 @@ public class CapitationRunServiceTests
 
         var contract = CreateContract(basePmpm: 50, withholdPct: 0);
         contract.PlanIds = new List<string> { "PLAN-HMO-001" };
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         var coverages = new List<CapitationCoverageDto>
@@ -765,7 +810,7 @@ public class CapitationRunServiceTests
             TierName = "Infant", AgeFrom = 0, AgeTo = 1,
             AgeSexCategory = AgeSexCategory.Infant_0_1, BasePMPM = 60.00m
         });
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         var infant = CreateCoverage("MEM-BABY", dob: new DateTime(2025, 10, 1), gender: "M"); // 5 months old
@@ -791,7 +836,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         var senior = CreateCoverage("MEM-SENIOR", dob: new DateTime(1950, 6, 1), gender: "F"); // 75 years old
@@ -817,7 +862,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(basePmpm: 50, withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         var member = CreateCoverage("MEM-UNK", gender: "U"); // Unknown gender, age 28
@@ -842,7 +887,7 @@ public class CapitationRunServiceTests
         SetupDefaultRepos();
 
         var contract = CreateContract(withholdPct: 0);
-        _contractRepo.Setup(r => r.GetActiveContractsAsync(null, null))
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
             .ReturnsAsync(new List<CapitationContract> { contract });
 
         // Ages covering multiple brackets: 15 (adolescent), 40 (adult 35-44), 50 (45-54), 60 (55-64)
