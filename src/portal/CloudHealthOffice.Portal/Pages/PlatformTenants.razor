@@ -143,6 +143,7 @@
                                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="@(() => ShowEditTenantDialog(context))">
                                     Edit
                                 </MudMenuItem>
+                                <MudDivider />
                                 @if (context.SubscriptionStatus == "Active")
                                 {
                                     <MudMenuItem Icon="@Icons.Material.Filled.Pause" OnClick="@(() => UpdateStatus(context, "Suspended"))">
@@ -161,9 +162,13 @@
                                         Cancel
                                     </MudMenuItem>
                                 }
-                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="@(() => DeleteTenant(context))">
-                                    Delete
-                                </MudMenuItem>
+                                @if (context.SubscriptionStatus != "Active" && context.AzureTenantId != _currentUserTenantId)
+                                {
+                                    <MudDivider />
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="@(() => DeleteTenant(context))">
+                                        Delete
+                                    </MudMenuItem>
+                                }
                             </MudMenu>
                         </MudTd>
                     </RowTemplate>
@@ -188,6 +193,7 @@
     private string _searchTerm = "";
     private string? _statusFilter;
     private string? _tierFilter;
+    private string? _currentUserTenantId;
 
     private IEnumerable<TenantSubscription> FilteredTenants => _tenants
         .Where(t => string.IsNullOrEmpty(_statusFilter) || t.SubscriptionStatus == _statusFilter)
@@ -206,6 +212,8 @@
     {
         try
         {
+            var userContext = await UserContextService.GetCurrentUserAsync();
+            _currentUserTenantId = userContext?.TenantId;
             _tenants = await TenantService.GetAllSubscriptionsAsync();
         }
         catch (Exception ex)
@@ -273,7 +281,6 @@
                 var request = new UpdateTenantRequest
                 {
                     OrganizationName = data.OrganizationName,
-                    AzureTenantId = data.AzureTenantId,
                     Tier = data.Tier,
                     SubscriptionStatus = data.SubscriptionStatus,
                     AdminEmails = data.AdminEmails,
@@ -295,24 +302,41 @@
 
     private async Task DeleteTenant(TenantSubscription tenant)
     {
-        var confirm = await DialogService.ShowMessageBox(
-            "Delete Tenant",
-            $"Are you sure you want to permanently delete {tenant.OrganizationName}? This action cannot be undone.",
-            yesText: "Delete", cancelText: "Cancel");
-
-        if (confirm != true) return;
-
-        try
+        if (tenant.SubscriptionStatus == "Active")
         {
-            await TenantService.DeleteTenantAsync(tenant.AzureTenantId);
-            _tenants = await TenantService.GetAllSubscriptionsAsync();
-            Snackbar.Add($"Tenant {tenant.OrganizationName} deleted successfully", Severity.Success);
-            StateHasChanged();
+            Snackbar.Add("Active tenants must be cancelled before they can be deleted.", Severity.Warning);
+            return;
         }
-        catch (Exception ex)
+
+        if (tenant.AzureTenantId == _currentUserTenantId)
         {
-            Logger.LogError(ex, "Failed to delete tenant");
-            Snackbar.Add("Failed to delete tenant", Severity.Error);
+            Snackbar.Add("Cannot delete your own tenant.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "OrganizationName", tenant.OrganizationName }
+        };
+
+        var dialog = await DialogService.ShowAsync<DeleteTenantDialog>("Delete Tenant", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await TenantService.DeleteTenantAsync(tenant.AzureTenantId);
+                _tenants = await TenantService.GetAllSubscriptionsAsync();
+                Snackbar.Add($"Tenant {tenant.OrganizationName} deleted successfully", Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to delete tenant");
+                Snackbar.Add("Failed to delete tenant", Severity.Error);
+            }
         }
     }
 
