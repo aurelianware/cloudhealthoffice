@@ -37,6 +37,12 @@ public class CapitationRun
     public CapitationRunType RunType { get; set; } = CapitationRunType.Monthly;
 
     /// <summary>
+    /// Line of business this run covers (denormalized from Criteria for display/filtering)
+    /// </summary>
+    [Required]
+    public LineOfBusiness LineOfBusiness { get; set; }
+
+    /// <summary>
     /// Description of the capitation run
     /// </summary>
     public string? Description { get; set; }
@@ -136,29 +142,31 @@ public class CapitationRun
 }
 
 /// <summary>
-/// Filter criteria for a capitation run. Structured around LOB as the primary axis,
-/// reflecting how health plans actually execute capitation: monthly by LOB, with
-/// optional ad-hoc provider runs, retro adjustments, and withhold releases.
+/// Criteria for a capitation run. LineOfBusiness is always required.
+/// Additional fields are required or optional depending on RunType.
 /// </summary>
 public class CapitationRunCriteria
 {
     /// <summary>
-    /// Line of business for this run. Required for Monthly runs (the primary organizing axis).
-    /// Optional for AdHocProvider and RetroAdjustment runs (if omitted, processes across all LOBs
-    /// for the specified provider). Required for WithholdRelease runs.
+    /// Line of business for this capitation run (REQUIRED for all run types).
+    /// Capitation runs are always scoped to a single LOB because rate structures,
+    /// provider networks, and approval workflows differ by LOB.
     /// </summary>
-    public LineOfBusiness? LineOfBusiness { get; set; }
+    [Required]
+    public LineOfBusiness LineOfBusiness { get; set; }
 
     /// <summary>
-    /// Single provider NPI for ad-hoc runs. Required for AdHocProvider runs.
-    /// Optional for RetroAdjustment and WithholdRelease runs to scope to a single provider.
-    /// Must be null/empty for Monthly runs (which process all active providers in the LOB).
+    /// Specific provider NPI for ad-hoc runs (REQUIRED for AdHocProvider type,
+    /// ignored for other run types). When set, the run generates statements for
+    /// only this provider's active contract(s) in the specified LOB.
     /// </summary>
+    [StringLength(10, MinimumLength = 10)]
     public string? ProviderNPI { get; set; }
 
     /// <summary>
-    /// Filter by contract type within the LOB. Optional — if omitted, includes all
-    /// contract types (GlobalCapitation, ProfessionalOnly, etc.) for the LOB.
+    /// Optional: filter by contract type (e.g., run Professional cap separately
+    /// from Global cap when they have different approval workflows).
+    /// When null, includes all contract types in the LOB.
     /// </summary>
     public ContractType? ContractType { get; set; }
 

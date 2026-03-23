@@ -345,26 +345,67 @@ info "Total: 20 members assigned across 3 providers"
 # ---------------------------------------------------------------------------
 banner "Step 4: Create & Execute Capitation Run"
 
-RUN_DATA=$(cat <<ENDJSON
+# --- Run 1: Medicaid Monthly ---
+RUN1_DATA=$(cat <<ENDJSON
 {
+  "runType": "Monthly",
   "capitationPeriod": "${PERIOD_START}T00:00:00Z",
-  "criteria": {},
-  "createdBy": "seed-script",
-  "description": "Demo capitation run for $(date -d "${PERIOD_START}" '+%B %Y' 2>/dev/null || date -j -f '%Y-%m-%d' "${PERIOD_START}" '+%B %Y' 2>/dev/null || echo "${PERIOD_START}")"
+  "criteria": {
+    "lineOfBusiness": "Medicaid"
+  },
+  "createdBy": "seed-script"
 }
 ENDJSON
 )
 
-response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs" "$RUN_DATA")
+response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs" "$RUN1_DATA")
 parse_response "$response"
 
 if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
   RUN_ID=$(echo "$BODY" | jq -r '.id // empty')
   RUN_NUMBER=$(echo "$BODY" | jq -r '.runNumber // empty')
-  info "Created capitation run: ${RUN_NUMBER} (ID: ${RUN_ID})"
+  info "Created Medicaid monthly run: ${RUN_NUMBER} (ID: ${RUN_ID})"
 
-  # Execute the run
-  echo -e "  ${YELLOW}⏳ Executing run (generating statements)...${RESET}"
+  echo -e "  ${YELLOW}⏳ Executing Medicaid run...${RESET}"
+  response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs/${RUN_ID}/execute" '{}')
+  parse_response "$response"
+
+  if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+    STATUS=$(echo "$BODY" | jq -r '.status // empty')
+    TOTAL_STMTS=$(echo "$BODY" | jq -r '.totalStatements // 0')
+    TOTAL_NET=$(echo "$BODY" | jq -r '.totalNetPayable // 0')
+    TOTAL_PROVIDERS=$(echo "$BODY" | jq -r '.totalProviders // 0')
+    info "Run ${STATUS}: ${TOTAL_STMTS} statements, ${TOTAL_PROVIDERS} providers, \$${TOTAL_NET} net"
+  else
+    error "Medicaid run execution failed (HTTP ${HTTP_CODE})"
+  fi
+else
+  error "Failed to create Medicaid run (HTTP ${HTTP_CODE})"
+fi
+RUN1_ID="${RUN_ID:-}"
+
+# --- Run 2: Commercial Monthly ---
+RUN2_DATA=$(cat <<ENDJSON
+{
+  "runType": "Monthly",
+  "capitationPeriod": "${PERIOD_START}T00:00:00Z",
+  "criteria": {
+    "lineOfBusiness": "Commercial"
+  },
+  "createdBy": "seed-script"
+}
+ENDJSON
+)
+
+response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs" "$RUN2_DATA")
+parse_response "$response"
+
+if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+  RUN_ID=$(echo "$BODY" | jq -r '.id // empty')
+  RUN_NUMBER=$(echo "$BODY" | jq -r '.runNumber // empty')
+  info "Created Commercial monthly run: ${RUN_NUMBER} (ID: ${RUN_ID})"
+
+  echo -e "  ${YELLOW}⏳ Executing Commercial run...${RESET}"
   response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs/${RUN_ID}/execute" '{}')
   parse_response "$response"
 
@@ -389,12 +430,38 @@ if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
       warn "${WARNINGS} warning(s) during execution"
     fi
   else
-    error "Run execution failed (HTTP ${HTTP_CODE})"
-    echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
+    error "Commercial run execution failed (HTTP ${HTTP_CODE})"
   fi
 else
-  error "Failed to create capitation run (HTTP ${HTTP_CODE})"
-  echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
+  error "Failed to create Commercial run (HTTP ${HTTP_CODE})"
+fi
+RUN2_ID="${RUN_ID:-}"
+
+# --- Run 3: Ad-hoc provider run (Dr. Sarah Chen) ---
+RUN3_DATA=$(cat <<ENDJSON
+{
+  "runType": "AdHocProvider",
+  "capitationPeriod": "${PERIOD_START}T00:00:00Z",
+  "criteria": {
+    "lineOfBusiness": "Commercial",
+    "providerNPI": "1234567890"
+  },
+  "createdBy": "seed-script",
+  "description": "Ad-hoc run for Dr. Sarah Chen — mid-month contract activation"
+}
+ENDJSON
+)
+
+response=$(api_post "${CAPITATION_URL}/api/v1/capitation/runs" "$RUN3_DATA")
+parse_response "$response"
+
+if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+  RUN3_ID=$(echo "$BODY" | jq -r '.id // empty')
+  RUN3_NUMBER=$(echo "$BODY" | jq -r '.runNumber // empty')
+  info "Created Ad-hoc provider run: ${RUN3_NUMBER} (ID: ${RUN3_ID})"
+  detail "Provider: Dr. Sarah Chen (NPI: 1234567890)"
+else
+  error "Failed to create ad-hoc provider run (HTTP ${HTTP_CODE})"
 fi
 
 # ---------------------------------------------------------------------------
@@ -402,28 +469,29 @@ fi
 # ---------------------------------------------------------------------------
 banner "Step 5: Approve Generated Statements"
 
-if [[ -n "${RUN_ID:-}" ]]; then
-  response=$(api_get "${CAPITATION_URL}/api/v1/capitation/runs/${RUN_ID}/statements")
-  parse_response "$response"
+APPROVED_COUNT=0
+for run_id in "${RUN1_ID:-}" "${RUN2_ID:-}"; do
+  if [[ -n "$run_id" ]]; then
+    response=$(api_get "${CAPITATION_URL}/api/v1/capitation/runs/${run_id}/statements")
+    parse_response "$response"
 
-  if [[ "$HTTP_CODE" == "200" ]]; then
-    STMT_IDS=$(echo "$BODY" | jq -r '.[].id // empty')
-    APPROVED_COUNT=0
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      STMT_IDS=$(echo "$BODY" | jq -r '.[].id // empty')
 
-    for sid in $STMT_IDS; do
-      response=$(api_put "${CAPITATION_URL}/api/v1/capitation/statements/${sid}/approve" '{}')
-      parse_response "$response"
-      if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
-        STMT_NUM=$(echo "$BODY" | jq -r '.statementNumber // empty')
-        STMT_NET=$(echo "$BODY" | jq -r '.netPayable // 0')
-        info "Approved: ${STMT_NUM} — \$${STMT_NET}"
-        APPROVED_COUNT=$((APPROVED_COUNT + 1))
-      fi
-    done
-
-    info "${APPROVED_COUNT} statements approved and ready for payment"
+      for sid in $STMT_IDS; do
+        response=$(api_put "${CAPITATION_URL}/api/v1/capitation/statements/${sid}/approve" '{}')
+        parse_response "$response"
+        if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+          STMT_NUM=$(echo "$BODY" | jq -r '.statementNumber // empty')
+          STMT_NET=$(echo "$BODY" | jq -r '.netPayable // 0')
+          info "Approved: ${STMT_NUM} — \$${STMT_NET}"
+          APPROVED_COUNT=$((APPROVED_COUNT + 1))
+        fi
+      done
+    fi
   fi
-fi
+done
+info "${APPROVED_COUNT} statements approved and ready for payment"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -436,9 +504,11 @@ echo -e "    2. Valley Medical Group — Global/Medicaid        — 12 tiers —
 echo -e "    3. Dr. James Park      — BehavioralHealth/Comm  —  4 tiers —  5% withhold"
 echo ""
 echo -e "  ${BOLD}Members:${RESET}         20 assigned across 3 providers"
-echo -e "  ${BOLD}Capitation Run:${RESET}  ${RUN_NUMBER:-N/A} (${STATUS:-N/A})"
-echo -e "  ${BOLD}Statements:${RESET}      ${TOTAL_STMTS:-0} generated and approved"
-echo -e "  ${BOLD}Net Payable:${RESET}     \$${TOTAL_NET:-0}"
+echo -e "  ${BOLD}Capitation Runs:${RESET}"
+echo -e "    1. Medicaid Monthly  (Run 1)"
+echo -e "    2. Commercial Monthly (Run 2)"
+echo -e "    3. Ad-hoc Dr. Chen   (Run 3 — pending)"
+echo -e "  ${BOLD}Statements:${RESET}      ${APPROVED_COUNT:-0} generated and approved"
 echo ""
 echo -e "  ${GREEN}Portal:${RESET} Visit /capitation/contracts, /capitation/runs, /capitation/statements"
 echo ""
