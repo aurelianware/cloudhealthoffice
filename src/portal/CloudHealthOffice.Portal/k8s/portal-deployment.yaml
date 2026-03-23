@@ -137,7 +137,7 @@ spec:
         - name: MongoDB__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: cosmosdb-secret
+              name: database-secret
               key: connectionString
         - name: MongoDB__DatabaseName
           valueFrom:

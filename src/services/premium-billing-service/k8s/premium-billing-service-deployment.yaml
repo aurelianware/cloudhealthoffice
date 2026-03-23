@@ -45,18 +45,18 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: mongodb-secret
+              name: database-secret
               key: connectionString
               optional: true
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: endpoint
         - name: CosmosDb__Key
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: key
         - name: CosmosDb__DatabaseName
           valueFrom:
