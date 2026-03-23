@@ -255,6 +255,103 @@ services:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
+  appeals-service:
+    build:
+      context: .
+      dockerfile: src/services/appeals-service/Dockerfile
+    ports:
+      - "5013:8080"
+    environment:
+      <<: *common-env
+      ClaimsService__BaseUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  attachment-service:
+    build:
+      context: .
+      dockerfile: src/services/attachment-service/Dockerfile
+    ports:
+      - "5014:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  sponsor-service:
+    build:
+      context: .
+      dockerfile: src/services/sponsor-service/Dockerfile
+    ports:
+      - "5015:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  reference-data-service:
+    build:
+      context: .
+      dockerfile: src/services/reference-data-service/Dockerfile
+    ports:
+      - "5016:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  pricing-api:
+    build:
+      context: .
+      dockerfile: src/services/CloudHealthOffice.PricingApi/Dockerfile
+    ports:
+      - "5017:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  premium-billing-service:
+    build:
+      context: .
+      dockerfile: src/services/premium-billing-service/Dockerfile
+    ports:
+      - "5018:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  rfai-service:
+    build:
+      context: .
+      dockerfile: src/services/rfai-service/Dockerfile
+    ports:
+      - "5019:8080"
+    environment:
+      <<: *common-env
+      ClaimsService__BaseUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
   # ---------------------------------------------------------------------------
   # Seed Data (runs once, then exits)
   # ---------------------------------------------------------------------------

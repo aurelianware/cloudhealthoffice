@@ -45,12 +45,12 @@ spec:
         - name: CosmosDb__AccountEndpoint
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: endpoint
         - name: CosmosDb__AccountKey
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: key
         - name: CosmosDb__DatabaseName
           valueFrom:
