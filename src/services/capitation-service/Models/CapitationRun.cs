@@ -31,6 +31,12 @@ public class CapitationRun
     public string RunNumber { get; set; } = string.Empty;
 
     /// <summary>
+    /// Type of capitation run (Monthly, AdHocProvider, RetroAdjustment, WithholdRelease)
+    /// </summary>
+    [Required]
+    public CapitationRunType RunType { get; set; } = CapitationRunType.Monthly;
+
+    /// <summary>
     /// Description of the capitation run
     /// </summary>
     public string? Description { get; set; }
@@ -130,29 +136,73 @@ public class CapitationRun
 }
 
 /// <summary>
-/// Filter criteria for a capitation run
+/// Filter criteria for a capitation run. Structured around LOB as the primary axis,
+/// reflecting how health plans actually execute capitation: monthly by LOB, with
+/// optional ad-hoc provider runs, retro adjustments, and withhold releases.
 /// </summary>
 public class CapitationRunCriteria
 {
     /// <summary>
-    /// Specific provider NPIs to include (empty = all active capitated providers)
-    /// </summary>
-    public List<string> ProviderNPIs { get; set; } = new();
-
-    /// <summary>
-    /// Filter by line of business
+    /// Line of business for this run. Required for Monthly runs (the primary organizing axis).
+    /// Optional for AdHocProvider and RetroAdjustment runs (if omitted, processes across all LOBs
+    /// for the specified provider). Required for WithholdRelease runs.
     /// </summary>
     public LineOfBusiness? LineOfBusiness { get; set; }
 
     /// <summary>
-    /// Filter by contract type
+    /// Single provider NPI for ad-hoc runs. Required for AdHocProvider runs.
+    /// Optional for RetroAdjustment and WithholdRelease runs to scope to a single provider.
+    /// Must be null/empty for Monthly runs (which process all active providers in the LOB).
+    /// </summary>
+    public string? ProviderNPI { get; set; }
+
+    /// <summary>
+    /// Filter by contract type within the LOB. Optional — if omitted, includes all
+    /// contract types (GlobalCapitation, ProfessionalOnly, etc.) for the LOB.
     /// </summary>
     public ContractType? ContractType { get; set; }
 
     /// <summary>
-    /// Filter by specific plan IDs
+    /// Original capitation period being adjusted. Required for RetroAdjustment runs
+    /// to identify which prior period to reprocess. Must be null for other run types.
     /// </summary>
-    public List<string> PlanIds { get; set; } = new();
+    public DateTime? OriginalPeriod { get; set; }
+}
+
+/// <summary>
+/// Type of capitation run — determines processing behavior and criteria requirements.
+/// </summary>
+public enum CapitationRunType
+{
+    /// <summary>
+    /// Standard monthly capitation run. Generates statements for all active capitated
+    /// providers in the specified LOB for the capitation period. This is the primary
+    /// production run type (~90% of all runs).
+    /// </summary>
+    Monthly = 1,
+
+    /// <summary>
+    /// Ad-hoc run for a specific provider. Used when a provider was missed in the
+    /// monthly run, a new contract was activated mid-month, or a correction is needed.
+    /// Requires ProviderNPI to be set.
+    /// </summary>
+    AdHocProvider = 2,
+
+    /// <summary>
+    /// Retroactive adjustment run for a prior period. Reprocesses a previous capitation
+    /// period to account for retroactive enrollment/disenrollment changes (e.g., retro
+    /// 834 transactions), risk score updates, or rate corrections. Generates adjustment
+    /// statements showing the delta from the original run.
+    /// </summary>
+    RetroAdjustment = 3,
+
+    /// <summary>
+    /// Quality withhold release run. Releases previously withheld funds to providers
+    /// who met quality/performance metrics (HEDIS, STARS, value-based care targets).
+    /// Typically run quarterly or annually. Generates withhold release adjustment
+    /// statements, not new capitation statements.
+    /// </summary>
+    WithholdRelease = 4
 }
 
 /// <summary>
@@ -191,6 +241,12 @@ public enum CapitationRunStatus
 /// </summary>
 public class CreateCapitationRunRequest
 {
+    /// <summary>
+    /// Type of capitation run
+    /// </summary>
+    [Required]
+    public CapitationRunType RunType { get; set; } = CapitationRunType.Monthly;
+
     /// <summary>
     /// Capitation period (first of month)
     /// </summary>

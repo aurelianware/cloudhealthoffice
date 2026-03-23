@@ -46,12 +46,16 @@ public class CapitationRunService : ICapitationRunService
 
     public async Task<CapitationRun> CreateRunAsync(CreateCapitationRunRequest request, string? createdBy)
     {
+        // Validate run type + criteria consistency
+        ValidateRunCriteria(request.RunType, request.Criteria);
+
         // Normalize capitation period to first of month
         var period = new DateTime(request.CapitationPeriod.Year, request.CapitationPeriod.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
         var run = new CapitationRun
         {
             RunNumber = $"CAPRUN-{period:yyyy-MM}-{Guid.NewGuid().ToString()[..4].ToUpperInvariant()}",
+            RunType = request.RunType,
             CapitationPeriod = period,
             Description = request.Description,
             Criteria = request.Criteria,
@@ -60,6 +64,43 @@ public class CapitationRunService : ICapitationRunService
         };
 
         return await _runRepository.CreateAsync(run);
+    }
+
+    private static void ValidateRunCriteria(CapitationRunType runType, CapitationRunCriteria criteria)
+    {
+        switch (runType)
+        {
+            case CapitationRunType.Monthly:
+                if (criteria.LineOfBusiness == null)
+                    throw new ArgumentException("Monthly capitation runs require a LineOfBusiness");
+                if (!string.IsNullOrEmpty(criteria.ProviderNPI))
+                    throw new ArgumentException("Monthly runs process all providers in the LOB; ProviderNPI must not be set");
+                if (criteria.OriginalPeriod.HasValue)
+                    throw new ArgumentException("OriginalPeriod is only valid for RetroAdjustment runs");
+                break;
+
+            case CapitationRunType.AdHocProvider:
+                if (string.IsNullOrEmpty(criteria.ProviderNPI))
+                    throw new ArgumentException("AdHocProvider runs require a ProviderNPI");
+                if (criteria.OriginalPeriod.HasValue)
+                    throw new ArgumentException("OriginalPeriod is only valid for RetroAdjustment runs");
+                break;
+
+            case CapitationRunType.RetroAdjustment:
+                if (criteria.OriginalPeriod == null)
+                    throw new ArgumentException("RetroAdjustment runs require an OriginalPeriod");
+                break;
+
+            case CapitationRunType.WithholdRelease:
+                if (criteria.LineOfBusiness == null)
+                    throw new ArgumentException("WithholdRelease runs require a LineOfBusiness");
+                if (criteria.OriginalPeriod.HasValue)
+                    throw new ArgumentException("OriginalPeriod is only valid for RetroAdjustment runs");
+                break;
+
+            default:
+                throw new ArgumentException($"Unknown run type: {runType}");
+        }
     }
 
     public async Task<CapitationRun> ExecuteRunAsync(string runId)
@@ -85,13 +126,9 @@ public class CapitationRunService : ICapitationRunService
             var contracts = (await _contractRepository.GetActiveContractsAsync(
                 run.Criteria.LineOfBusiness, run.Criteria.ContractType)).ToList();
 
-            // Apply NPI filter if specified
-            if (run.Criteria.ProviderNPIs.Count > 0)
-                contracts = contracts.Where(c => run.Criteria.ProviderNPIs.Contains(c.ProviderNPI)).ToList();
-
-            // Apply plan filter if specified
-            if (run.Criteria.PlanIds.Count > 0)
-                contracts = contracts.Where(c => c.PlanIds.Intersect(run.Criteria.PlanIds).Any()).ToList();
+            // Apply single-provider filter for AdHocProvider, or optional provider scoping
+            if (!string.IsNullOrEmpty(run.Criteria.ProviderNPI))
+                contracts = contracts.Where(c => c.ProviderNPI == run.Criteria.ProviderNPI).ToList();
 
             _logger.LogInformation("Found {Count} active capitation contracts for run {RunNumber}",
                 contracts.Count, run.RunNumber);
