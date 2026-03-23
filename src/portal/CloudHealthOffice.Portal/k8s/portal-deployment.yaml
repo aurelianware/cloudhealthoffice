@@ -19,6 +19,9 @@ data:
   Services__PricingApi: "http://pricing-api.cloudhealthoffice"
   Services__AppealsService: "http://appeals-service.cloudhealthoffice/api"
   Services__CapitationService: "http://capitation-service.cloudhealthoffice/api"
+  Services__AttachmentService: "http://attachment-service.cloudhealthoffice/api"
+  Services__SponsorService: "http://sponsor-service.cloudhealthoffice/api/v1"
+  Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice/api/ReferenceData"
   Services__ArgoWorkflows: "http://argo-workflows-server.cloudhealthoffice:2746"
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
@@ -134,7 +137,7 @@ spec:
         - name: MongoDB__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: cosmosdb-secret
+              name: database-secret
               key: connectionString
         - name: MongoDB__DatabaseName
           valueFrom:
@@ -206,6 +209,21 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__CapitationService
+        - name: Services__AttachmentService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__AttachmentService
+        - name: Services__SponsorService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__SponsorService
+        - name: Services__ReferenceDataService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__ReferenceDataService
         - name: PricingApi__AdminSecret
           valueFrom:
             secretKeyRef:

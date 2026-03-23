@@ -81,7 +81,7 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: mongodb-secret
+              name: database-secret
               key: connectionString
         - name: Storage__ConnectionString
           valueFrom:
