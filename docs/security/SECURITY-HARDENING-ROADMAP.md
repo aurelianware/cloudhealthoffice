@@ -353,7 +353,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 **Week 1 (Jan 13-17):**
 - [ ] Enable Microsoft Defender for Cloud (formerly Azure Security Center)
 - [ ] Enable enhanced security features:
-  - Defender for Servers (Logic Apps)
+  - Defender for Containers (AKS)
   - Defender for Storage
   - Defender for Key Vault
   - Defender for Resource Manager
@@ -388,7 +388,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 - **Regulatory Compliance:** HIPAA, SOC 2, Azure Security Benchmark dashboards
 - **Vulnerability Assessment:** Integrated vulnerability scanning for all resources
 - **Threat Protection:** Real-time threat detection with ML-based analytics
-- **Just-in-Time VM Access:** Reduce attack surface for management ports (N/A for Logic Apps)
+- **Just-in-Time VM Access:** Reduce attack surface for management ports (N/A for AKS managed nodes)
 - **Adaptive Application Controls:** Whitelist approved applications (N/A for PaaS)
 - **File Integrity Monitoring:** Detect unauthorized changes to critical files
 - **Security Alerts:** Centralized view of all security events
@@ -463,7 +463,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 | Storage accounts should use customer-managed key for encryption | Audit | CMK usage (optional) |
 | Azure Key Vault should have soft delete enabled | Deny | Data recovery |
 | Azure Key Vault should have purge protection enabled | Deny | Prevent permanent deletion |
-| Logic Apps should use managed identity | Audit | No connection strings |
+| AKS pods should use workload identity | Audit | No connection strings |
 | Diagnostic logs should be enabled | DeployIfNotExists | Audit logging |
 | HTTPS-only should be enabled for web apps | Deny | Encryption in transit |
 | Minimum TLS version should be 1.2 | Deny | Strong encryption |
@@ -524,13 +524,13 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
   - Mass file downloads
 - [ ] Create custom analytics rules for Cloud Health Office:
   - PHI access patterns
-  - Logic App workflow failures
+  - Argo Workflow failures
   - Integration Account configuration changes
   - SFTP connection anomalies
 - [ ] Configure alert severity and priority
 
 **Week 5 (Apr 28 - May 2):**
-- [ ] Configure automation playbooks (Logic Apps):
+- [ ] Configure automation playbooks (Argo Workflows on AKS):
   - Auto-disable compromised user accounts
   - Send Teams/email notifications for high-severity incidents
   - Create ServiceNow tickets for incidents
@@ -659,7 +659,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 **Week 2 (May 19-23):**
 - [ ] Implement additional backup mechanisms:
   - Daily Infrastructure as Code snapshots (Bicep templates)
-  - Daily Logic App workflow exports
+  - Daily Argo Workflow definition exports
   - Weekly Key Vault secret exports (encrypted)
   - Monthly full system configuration export
 - [ ] Store backups in secondary region (geo-replication)
@@ -687,7 +687,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 |----------|-------------|--------|-----|-----|
 | Azure region outage | Low | High | 4 hours | 15 minutes |
 | Storage account deletion | Very Low | High | 2 hours | 0 (soft delete recovery) |
-| Logic App misconfiguration | Medium | Medium | 1 hour | 0 (IaC redeployment) |
+| Argo Workflow misconfiguration | Medium | Medium | 1 hour | 0 (IaC redeployment) |
 | Key Vault deletion | Very Low | Critical | 2 hours | 0 (soft delete recovery) |
 | Ransomware attack | Low | Critical | 4 hours | 15 minutes |
 
@@ -797,7 +797,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 
 **Objectives:**
 - Protect replay278 HTTP endpoint from OWASP Top 10 attacks
-- Block malicious traffic before it reaches Logic App
+- Block malicious traffic before it reaches AKS ingress
 - Provide DDoS protection
 - Centralized security policy management
 
@@ -805,7 +805,7 @@ This roadmap outlines prioritized security enhancements for Cloud Health Office 
 
 **Week 1 (Jul 7-11):**
 - [ ] Deploy Azure Application Gateway with WAF
-- [ ] Configure backend pool (Logic App endpoint)
+- [ ] Configure backend pool (AKS ingress endpoint)
 - [ ] Configure HTTP/HTTPS listeners
 - [ ] Configure routing rules
 - [ ] Test connectivity

@@ -172,7 +172,7 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 #### 275 Attachments
 - ✅ SFTP polling from clearinghouses (Clearinghouse, Change Healthcare)
-- ✅ X12 decode via Integration Account
+- ✅ X12 decode via C# X12 service
 - ✅ Metadata extraction (claim, member, provider)
 - ✅ Data Lake archival with date partitioning (`yyyy/MM/dd`)
 - ✅ claims backend API correlation (link attachment to claim)
@@ -234,7 +234,7 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Interactive Wizard** | Guided configuration typically in under 5 minutes, based on testing | ✅ Complete |
-| **Workflow Generation** | Automatic Logic App workflow.json creation | ✅ Complete |
+| **Workflow Generation** | Automatic Argo workflow YAML creation | ✅ Complete |
 | **Infrastructure Templates** | Bicep templates with parameters | ✅ Complete |
 | **Documentation** | Auto-generated deployment guides | ✅ Complete |
 | **Schema Generation** | JSON validation schemas | ✅ Complete |
@@ -259,12 +259,12 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 ```
 generated/{PAYER_ID}/
-├── workflows/                    # Logic App workflows
-│   ├── ingest275/workflow.json
-│   ├── ingest278/workflow.json
-│   ├── replay278/workflow.json
-│   ├── rfai277/workflow.json
-│   └── ecs_summary_search/workflow.json
+├── workflows/                    # Argo workflow manifests
+│   ├── ingest275.yaml
+│   ├── ingest278.yaml
+│   ├── replay278.yaml
+│   ├── rfai277.yaml
+│   └── ecs_summary_search.yaml
 ├── infrastructure/               # Azure infrastructure
 │   ├── main.bicep               # Bicep template
 │   ├── parameters.json          # Deployment parameters
@@ -620,7 +620,7 @@ Features:
 
 Features:
 - Virtual Network (10.0.0.0/16)
-- Logic Apps subnet with delegation
+- AKS subnet with delegation
 - Private Endpoints subnet
 - Private DNS zones (Storage, Service Bus, Key Vault)
 - Service endpoints for all PHI services
@@ -731,7 +731,7 @@ Features:
 - ✅ Communication/notification strategy
 - ✅ Emergency hotfix procedures (30-minute SLA)
 - ✅ Rollback automation (UAT) and procedures (PROD)
-- ✅ Health checks (Logic Apps, Storage, Service Bus, Application Insights)
+- ✅ Health checks (AKS/Argo Workflows, Storage, Service Bus, Application Insights)
 - ✅ Metrics & reporting (success rate, approval times, rollback incidents)
 
 ### Approval Checklist
@@ -782,14 +782,14 @@ Comprehensive health checks:
 ```powershell
 ./scripts/test-e2e.ps1 `
   -ResourceGroup "my-rg" `
-  -LogicAppName "my-la" `
+  -AksCluster "my-aks" `
   -ServiceBusNamespace "my-sb" `
   -ReportPath "./health-report.json"
 ```
 
 Validates:
 - Infrastructure existence
-- Logic App health
+- Argo Workflow health
 - Service Bus configuration
 - Storage account verification
 - Workflow deployment status

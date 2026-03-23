@@ -5,11 +5,11 @@ This document provides a quick reference for the complete deployment workflow, m
 ## 📋 Overview
 
 The Cloud Health Office deployment uses a comprehensive automated workflow that:
-1. Validates infrastructure templates and workflow definitions
+1. Validates infrastructure templates and Argo Workflow YAML manifests
 2. Compiles Bicep to ARM templates
 3. Performs What-If analysis for safety
-4. Deploys Azure infrastructure
-5. Deploys Logic App workflows
+4. Deploys Azure infrastructure (AKS, Storage, Service Bus)
+5. Deploys microservices and Argo Workflows to AKS
 6. Performs health checks
 7. Provides rollback on failure
 
@@ -22,8 +22,8 @@ The Cloud Health Office deployment uses a comprehensive automated workflow that:
 │ 1. GitHub Secrets/Variables Setup (One-time)                │
 │    → See: GITHUB-ACTIONS-SETUP.md                           │
 │                                                               │
-│ 2. Workflow JSON Validation                                  │
-│    → Validates: definition, kind, parameters keys            │
+│ 2. Argo Workflow YAML Validation                             │
+│    → Validates: YAML syntax, kubectl dry-run                 │
 │    → See: DEPLOYMENT.md § Pre-Deployment Validation          │
 │                                                               │
 │ 3. Bicep Template Validation                                 │
@@ -46,29 +46,25 @@ The Cloud Health Office deployment uses a comprehensive automated workflow that:
 │    → Creates/ensures: Resource group exists                  │
 │                                                               │
 │ 7. Infrastructure Deployment                                 │
-│    → Deploys: Storage, Service Bus, Logic App, App Insights  │
+│    → Deploys: Storage, Service Bus, AKS, App Insights        │
 │    → Time: ~5-10 minutes                                     │
 │    → See: DEPLOYMENT.md § ARM Template Deployment            │
 │                                                               │
-│ 8. Integration Account Setup                                 │
-│    → Configures: X12 schemas, trading partners, agreements   │
+│ 8. Kubernetes Secrets/ConfigMaps Setup                        │
+│    → Configures: Service endpoints, credentials              │
 │    → See: DEPLOYMENT.md § Post-Deployment Configuration      │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                   Workflow Deployment                        │
 ├─────────────────────────────────────────────────────────────┤
-│ 9. Package Logic App Workflows                               │
-│    → Creates: workflows.zip (6 workflows)                    │
-│    → Structure: workflows/{workflow-name}/workflow.json      │
-│    → See: DEPLOYMENT.md § Logic App Workflow Deployment      │
+│ 9. Deploy Argo Workflow Manifests                             │
+│    → Applies: YAML manifests from infrastructure/argo-workflows/ │
+│    → Command: kubectl apply -f infrastructure/argo-workflows/ │
+│    → See: DEPLOYMENT.md § Argo Workflow Deployment           │
 │                                                               │
-│ 10. Deploy Workflow Package                                  │
-│     → Uploads: workflows.zip to Logic App                    │
-│     → Time: ~1-2 minutes                                     │
-│                                                               │
-│ 11. Restart Logic App                                        │
-│     → Ensures: New workflows are loaded                      │
+│ 10. Verify Argo Workflow Templates                           │
+│     → Checks: argo template list -n cloudhealthoffice        │
 │     → Time: ~30 seconds                                      │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -76,8 +72,8 @@ The Cloud Health Office deployment uses a comprehensive automated workflow that:
 │                   Verification Phase                         │
 ├─────────────────────────────────────────────────────────────┤
 │ 12. Post-Deployment Health Checks                            │
-│     → Verifies: Logic App running                            │
-│     → Checks: Workflows enabled                              │
+│     → Verifies: AKS pods running                             │
+│     → Checks: Argo workflows available                       │
 │     → Validates: Infrastructure resources                    │
 │     → See: DEPLOYMENT.md § Verification and Testing          │
 │                                                               │
@@ -106,7 +102,7 @@ The Cloud Health Office deployment uses a comprehensive automated workflow that:
 | **Bicep Compilation** | DEPLOYMENT.md | Bicep Compilation and ARM Deployment |
 | **ARM What-If** | DEPLOYMENT.md | ARM What-If Analysis |
 | **Deploy Infrastructure** | DEPLOYMENT.md | ARM Template Deployment |
-| **Deploy Workflows** | DEPLOYMENT.md | Logic App Workflow Deployment |
+| **Deploy Workflows** | DEPLOYMENT.md | Argo Workflow Deployment |
 | **Post-Configuration** | DEPLOYMENT.md | Post-Deployment Configuration |
 | **Verify Deployment** | DEPLOYMENT.md | Verification and Testing |
 | **Rollback** | DEPLOYMENT.md | Rollback Procedures |
@@ -124,13 +120,13 @@ The Cloud Health Office deployment uses a comprehensive automated workflow that:
 - **File**: `.github/workflows/deploy-uat.yml`
 - **Trigger**: Automatic on push to `release/*` branches
 - **Environment**: UAT
-- **Jobs**: validate → deploy-infrastructure → deploy-logic-apps → healthcheck
+- **Jobs**: validate → deploy-infrastructure → deploy-aks-workloads → healthcheck
 
 ### DEV Deployment
 - **File**: `.github/workflows/deploy-dev.yml`
 - **Trigger**: Manual or push to `main/*` branches
 - **Environment**: DEV
-- **Jobs**: validate → deploy-infrastructure → deploy-logic-apps → healthcheck
+- **Jobs**: validate → deploy-infrastructure → deploy-aks-workloads → healthcheck
 
 ## ⚙️ Required GitHub Secrets
 
@@ -156,9 +152,8 @@ secrets:
 variables:
   AZURE_RG_NAME:              # Resource group name
   AZURE_LOCATION:             # Azure region (e.g., eastus)
-  AZURE_CONNECTOR_LOCATION:   # API connector region
   BASE_NAME:                  # Resource name prefix
-  IA_NAME:                    # Integration Account name
+  AKS_CLUSTER_NAME:           # AKS cluster name
   SERVICE_BUS_NAME:           # Service Bus namespace name
   STORAGE_SKU:                # Storage account SKU
 ```
@@ -189,8 +184,8 @@ gh variable set BASE_NAME --body "cloud-health-office-prod"
 # Validate Bicep templates
 az bicep build --file infra/main.bicep --outfile /tmp/arm.json
 
-# Validate workflow JSON files
-find logicapps/workflows -name "workflow.json" -exec jq . {} \;
+# Validate Argo workflow YAML manifests
+kubectl apply --dry-run=client -f infrastructure/argo-workflows/
 
 # Run repository structure check
 pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
@@ -279,11 +274,10 @@ az deployment group show \
 | **OIDC Auth** | 10 sec | 40 sec |
 | **What-If Analysis** | 20 sec | 1 min |
 | **Infrastructure Deploy** | 5-10 min | 6-11 min |
-| **Integration Account Setup** | 1-2 min | 7-13 min |
-| **Workflow Package** | 10 sec | 7-13 min |
-| **Workflow Deploy** | 1-2 min | 8-15 min |
-| **Health Checks** | 30 sec | 8-16 min |
-| **Total** | **8-16 minutes** | |
+| **K8s Secrets/ConfigMaps** | 10 sec | 7-11 min |
+| **Argo Workflow Deploy** | 10 sec | 7-11 min |
+| **Health Checks** | 30 sec | 7-12 min |
+| **Total** | **7-12 minutes** | |
 
 ## ❌ Common Issues and Solutions
 
@@ -306,24 +300,24 @@ az deployment group show \
 3. Review error messages for missing properties
 4. See: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#troubleshooting)
 
-### Issue: Workflow Deployment Failed
+### Issue: Argo Workflow Deployment Failed
 
-**Error**: `Could not deploy workflows.zip`
-
-**Solution**:
-1. Verify ZIP structure: `unzip -l workflows.zip`
-2. Check Logic App is running
-3. Restart Logic App and retry
-4. See: [DEPLOYMENT.md § Logic App Workflow Deployment](DEPLOYMENT.md#logic-app-workflow-deployment)
-
-### Issue: Workflows Not Triggering
-
-**Error**: No runs showing in Logic App
+**Error**: `kubectl apply` fails or CRD not found
 
 **Solution**:
-1. Check API connections are authenticated
-2. Verify SFTP credentials and path
-3. Enable workflow manually in portal
+1. Verify YAML syntax: `kubectl apply --dry-run=client -f infrastructure/argo-workflows/`
+2. Ensure Argo CRDs are installed: `kubectl get crd | grep argoproj`
+3. Check AKS cluster connectivity: `kubectl get nodes`
+4. See: [DEPLOYMENT.md § Argo Workflow Deployment](DEPLOYMENT.md#argo-workflow-deployment)
+
+### Issue: Argo Workflows Not Triggering
+
+**Error**: No workflow runs appearing
+
+**Solution**:
+1. Check Argo event sources/sensors: `kubectl get eventsource,sensor -n cloudhealthoffice`
+2. Verify Kubernetes secrets are configured
+3. Check Argo controller logs: `kubectl logs -n argo -l app=workflow-controller`
 4. Check Application Insights for errors
 5. See: [DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#troubleshooting)
 
@@ -331,8 +325,8 @@ az deployment group show \
 
 | Scenario | Command | Time | Risk |
 |----------|---------|------|------|
-| **Workflow Issue** | Redeploy previous workflows.zip | 2-3 min | Low |
-| **Single Workflow** | Disable in portal | <1 min | None |
+| **Workflow Issue** | Reapply previous Argo YAML manifests | <1 min | Low |
+| **Single Workflow** | Suspend via `argo suspend` | <1 min | None |
 | **Infrastructure** | Redeploy previous Bicep | 5-10 min | Low |
 | **Complete Failure** | Full ARM rollback | 10-15 min | Medium |
 
@@ -355,13 +349,10 @@ az deployment group show \
 
 ### Infrastructure
 - `infra/main.bicep` - Main infrastructure template
-- `logicapps/workflows/*/workflow.json` - Logic App workflow definitions
+- `infrastructure/argo-workflows/*.yaml` - Argo Workflow DAG definitions
 
 ### Scripts
 - `fix_repo_structure.ps1` - Repository structure normalization
-- `test-workflows.ps1` - Workflow testing framework
-- `configure-hipaa-trading-partners.ps1` - Trading partner setup
-- `configure-x12-agreements.ps1` - X12 agreement configuration
 
 ## 🆘 Getting Help
 

@@ -139,7 +139,7 @@ The `main` branch has the following protection rules enforced:
 
 #### Required Status Checks
 All checks must pass before merging:
-- ✅ **JSON Workflow Validation**: Validates all `workflow.json` files
+- ✅ **Argo Workflow Validation**: Validates all Argo workflow YAML manifests
 - ✅ **Bicep Compilation**: Ensures infrastructure templates compile
 - ✅ **YAML Linting** (actionlint): Validates GitHub Actions workflows
 - ✅ **YAML Linting** (yamllint): Validates YAML formatting
@@ -182,7 +182,7 @@ Feature and bugfix branches have minimal restrictions:
 6. ✅ Code review completed with focus on:
    - Security (no credentials, proper encryption)
    - HIPAA compliance
-   - Logic Apps workflow validity
+   - Argo workflow manifest validity
    - Infrastructure changes reviewed
    - Documentation updated
 
@@ -208,7 +208,7 @@ Feature and bugfix branches have minimal restrictions:
 **After Merge:**
 - Auto-deploys to UAT
 - Monitor UAT deployment and testing
-- Verify workflows in UAT environment
+- Verify Argo workflows in UAT environment
 
 ### Merging Features to Main (Alternative)
 
@@ -264,7 +264,7 @@ Update all claims backend API calls accordingly.
 
 Use scope to specify the component affected:
 
-- `workflows` - Logic Apps workflows
+- `workflows` - Argo workflow manifests
 - `infra` - Bicep infrastructure
 - `ci` - GitHub Actions
 - `scripts` - PowerShell scripts
@@ -391,8 +391,8 @@ git push origin release/v1.2.0
 Push to release/v1.2.0 branch triggers automatic UAT deployment:
 - Validates JSON, Bicep, YAML, PowerShell
 - Deploys infrastructure via Bicep
-- Deploys Logic App workflows
-- Restarts Logic App
+- Deploys Argo workflow manifests
+- Rolls out updated AKS deployments
 ```
 
 #### 3. UAT Testing
@@ -556,7 +556,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 
 #### MAJOR Version (X.0.0)
 Increment when making **incompatible API changes** or **breaking changes**:
-- Changed Integration Account schema requirements
+- Changed X12 EDI service schema requirements
 - Modified Service Bus topic structure
 - Changed claims backend API integration contract
 - Removed or renamed workflow parameters
@@ -572,7 +572,7 @@ new naming convention. Update all workflow subscriptions.
 
 #### MINOR Version (0.X.0)
 Increment when adding **functionality in a backward-compatible manner**:
-- New Logic App workflow added
+- New Argo workflow template added
 - New API endpoint or integration
 - New optional workflow parameters
 - Enhanced monitoring or logging
@@ -638,10 +638,10 @@ Does the change break existing functionality?
 All PRs automatically run validation checks:
 
 #### pr-lint.yml Workflow
-- ✅ **JSON Validation**: All `workflow.json` files
-  - Valid JSON syntax
-  - Required keys: `definition`, `kind`, `parameters`
-  - Stateful/Stateless verification
+- ✅ **Argo Workflow Validation**: All workflow YAML manifests
+  - Valid YAML syntax
+  - Required fields: DAG definition, templates, parameters
+  - Argo lint check
   
 - ✅ **Bicep Compilation**: All `.bicep` files
   - Syntax validation
@@ -685,7 +685,7 @@ All PRs automatically run validation checks:
 Each deployment includes:
 1. **Validation**: JSON, Bicep, YAML, PowerShell checks
 2. **Infrastructure**: ARM What-If analysis, Bicep deployment
-3. **Application**: Logic App workflows package and deploy
+3. **Application**: Argo workflow manifests and AKS deployments
 4. **Verification**: Health checks and status validation
 5. **Notification**: Deployment summary and status
 

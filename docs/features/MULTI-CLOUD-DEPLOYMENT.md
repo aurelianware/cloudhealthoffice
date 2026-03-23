@@ -1,90 +1,36 @@
 # Multi-Cloud Deployment Guide
 
-Cloud Health Office supports **two deployment architectures** to meet different organizational needs:
+Cloud Health Office runs on **Argo Workflows on AKS** as its orchestration platform. The Kubernetes-native architecture supports deployment to any cloud provider:
 
-1. **Azure-Native (Logic Apps)** - Fastest deployment, Azure-specific
-2. **Cloud-Agnostic (Kubernetes/AKS)** - Multi-cloud portability, greater infrastructure control
+- **Azure AKS** - Primary deployment target
+- **AWS EKS** - Supported via standard Kubernetes manifests
+- **Google GKE** - Supported via standard Kubernetes manifests
+- **Self-managed Kubernetes** - On-prem or custom clusters
 
-This guide helps you choose the right architecture and provides deployment instructions for each.
+> **History:** CHO originally used Azure Logic Apps for orchestration. That runtime has been retired -- see [ADR-004](../adr/004-remove-logic-apps.md) for details.
 
-## Architecture Comparison
+## Architecture Overview
 
-| Capability | Azure Logic Apps | Kubernetes (AKS/EKS/GKE) |
-|------------|------------------|--------------------------|
-| **Deployment Time** | <5 minutes | 15-30 minutes |
-| **Cloud Portability** | Azure only | Any cloud (Azure, AWS, GCP) |
-| **Infrastructure Control** | Managed (PaaS) | Full control |
-| **Scaling** | Automatic | Configurable (HPA/VPA) |
-| **Secret Management** | Azure Key Vault | HashiCorp Vault / Cloud KMS |
-| **Maintenance** | Low | Higher |
-| **Cost Model** | Pay-per-execution | Cluster-based |
-| **Best For** | Rapid deployment, Azure-first | Multi-cloud, existing K8s |
+| Component | Technology |
+|-----------|-----------|
+| **Workflow Orchestration** | Argo Workflows on Kubernetes |
+| **Event Triggers** | Argo Events |
+| **Message Streaming** | Apache Kafka |
+| **File Transfer** | Custom SFTP container |
+| **X12 EDI Processing** | C# microservices |
+| **Storage** | S3-compatible (MinIO/Azure Blob/AWS S3) |
+| **Secret Management** | Kubernetes Secrets, HashiCorp Vault, or cloud KMS |
 
-## Quick Start Decision Tree
-
-```
-Are you running in Azure only?
-├── Yes → Do you have an existing Kubernetes cluster?
-│         ├── Yes → Consider Kubernetes deployment for consistency
-│         └── No → Use Azure Logic Apps (fastest, lowest maintenance)
-└── No → Use Kubernetes deployment for cloud portability
-```
-
----
-
-## Option 1: Azure-Native Deployment (Logic Apps)
-
-### Deploy with One Click
-
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Fazuredeploy.json)
-
-### What Gets Deployed
-
-- **Logic App Standard** (WS1) - Workflow runtime
-- **Azure Storage Gen2** - HIPAA-compliant data lake
-- **Service Bus Namespace** - Event-driven messaging
-- **Integration Account** - X12 EDI processing
-- **Application Insights** - Monitoring and telemetry
-- **Log Analytics Workspace** - Centralized logging
-
-### Post-Deployment Steps
-
-```bash
-# Clone repository
-git clone https://github.com/aurelianware/cloudhealthoffice.git
-cd cloudhealthoffice
-
-# Install dependencies and build
-npm install && npm run build
-
-# Deploy workflows
-./deploy-workflows.ps1 -ResourceGroup "your-rg" -LogicAppName "your-la"
-```
-
-**Full Documentation**: [QUICKSTART.md](../QUICKSTART.md) | [DEPLOYMENT.md](../DEPLOYMENT.md)
-
----
-
-## Option 2: Kubernetes Deployment (AKS/EKS/GKE)
-
-The Kubernetes deployment provides cloud-agnostic infrastructure using:
-
-- **Argo Workflows** - Workflow orchestration (replaces Logic Apps)
-- **Argo Events** - Event-driven triggers
-- **Apache Kafka** - Message streaming (replaces Service Bus)
-- **S3-Compatible Storage** - MinIO or AWS S3 (replaces Azure Blob)
-- **HashiCorp Vault** - Secrets management (optional, for cloud independence)
-
-### Prerequisites
+## Prerequisites
 
 - Kubernetes cluster (AKS, EKS, GKE, or self-managed)
 - Helm 3.x installed
 - kubectl configured for your cluster
 - Sufficient total cluster resources: 8+ vCPUs and 16+ GB RAM minimum across all nodes (recommended: 3 nodes with 4 vCPUs, 8 GB RAM each)
 
-### Deployment Steps
+## Deployment Steps
 
-#### 1. Add Helm Repositories
+### 1. Add Helm Repositories
 
 ```bash
 # Add required Helm repositories
@@ -94,13 +40,13 @@ helm repo add hashicorp https://helm.releases.hashicorp.com
 helm repo update
 ```
 
-#### 2. Create Namespace
+### 2. Create Namespace
 
 ```bash
 kubectl create namespace cloudhealthoffice
 ```
 
-#### 3. Deploy with Helm
+### 3. Deploy with Helm
 
 ```bash
 cd helm/cloudhealthoffice
@@ -119,7 +65,7 @@ helm install cloudhealthoffice . \
   --set storage.endpoint="s3.amazonaws.com"
 ```
 
-#### 4. Configure Secrets
+### 4. Configure Secrets
 
 ```bash
 # Create SFTP credentials secret
@@ -136,7 +82,14 @@ kubectl create secret generic claims-backend-api-secret \
   --from-literal=baseUrl=https://backend.api.example.com
 ```
 
-#### 5. Verify Deployment
+### 5. Deploy Argo Workflow Manifests
+
+```bash
+# Deploy workflow templates from infrastructure/argo-workflows/
+kubectl apply -f infrastructure/argo-workflows/
+```
+
+### 6. Verify Deployment
 
 ```bash
 # Check pod status
@@ -150,9 +103,9 @@ kubectl port-forward svc/argo-server -n cloudhealthoffice 2746:2746
 # Open: https://localhost:2746
 ```
 
-### Cloud-Specific Configurations
+## Cloud-Specific Configurations
 
-#### Azure Kubernetes Service (AKS)
+### Azure Kubernetes Service (AKS)
 
 ```bash
 # Create AKS cluster with recommended settings
@@ -171,7 +124,7 @@ az aks get-credentials \
   --name cloudhealthoffice-aks
 ```
 
-#### Amazon EKS
+### Amazon EKS
 
 ```bash
 # Create EKS cluster (using eksctl)
@@ -184,7 +137,7 @@ eksctl create cluster \
   --managed
 ```
 
-#### Google GKE
+### Google GKE
 
 ```bash
 # Create GKE cluster
@@ -205,7 +158,7 @@ Cloud Health Office supports multiple secrets management approaches for flexibil
 
 | Cloud | Service | Configuration |
 |-------|---------|---------------|
-| Azure | Azure Key Vault | Default for Logic Apps deployment |
+| Azure | Azure Key Vault | `--set vault.type=azure-keyvault` |
 | AWS | AWS Secrets Manager | `--set vault.type=aws-secrets-manager` |
 | GCP | Google Secret Manager | `--set vault.type=gcp-secret-manager` |
 
@@ -249,7 +202,7 @@ global:
 
 server:
   enabled: true
-  
+
   # HA Configuration
   ha:
     enabled: true
@@ -270,7 +223,7 @@ server:
           path = "/vault/data"
         }
         service_registration "kubernetes" {}
-  
+
   # Resource limits
   resources:
     requests:
@@ -279,13 +232,13 @@ server:
     limits:
       memory: 512Mi
       cpu: 500m
-  
+
   # Persistent storage
   dataStorage:
     enabled: true
     size: 10Gi
     storageClass: null  # Use default storage class
-  
+
   # Audit logging (HIPAA requirement)
   auditStorage:
     enabled: true
@@ -422,39 +375,23 @@ spec:
 
 ---
 
-## Migration Path: Logic Apps → Kubernetes
-
-If you start with Azure Logic Apps and later need multi-cloud:
-
-1. **Export Workflows**: Logic App workflows are JSON-based
-2. **Convert to Argo**: Map Logic Apps actions to Argo Workflow steps
-3. **Migrate Secrets**: Export from Key Vault, import to HashiCorp Vault
-4. **Update Connections**: Replace Azure connectors with Kubernetes services
-5. **Test Thoroughly**: Run parallel deployments during migration
-
-**Migration Tools**: See `/migration` directory for conversion scripts.
-
----
-
 ## Security Considerations
 
 ### HIPAA Compliance Checklist
 
-Both deployment options support HIPAA compliance:
-
-| Control | Logic Apps | Kubernetes |
-|---------|-----------|------------|
-| Encryption at Rest | ✅ Azure SSE | ✅ etcd encryption |
-| Encryption in Transit | ✅ TLS 1.2+ | ✅ mTLS with Istio |
-| Access Control | ✅ Azure RBAC | ✅ K8s RBAC + Vault |
-| Audit Logging | ✅ App Insights | ✅ Vault + Prometheus |
-| Network Isolation | ✅ Private Endpoints | ✅ Network Policies |
-| Secret Management | ✅ Key Vault | ✅ Vault |
-| Data Retention | ✅ Lifecycle policies | ✅ Retention policies |
+| Control | Implementation |
+|---------|---------------|
+| Encryption at Rest | etcd encryption, storage-level encryption |
+| Encryption in Transit | mTLS with Istio / TLS 1.2+ |
+| Access Control | Kubernetes RBAC + Vault policies |
+| Audit Logging | Vault audit + Prometheus + Argo workflow logs |
+| Network Isolation | Kubernetes Network Policies |
+| Secret Management | HashiCorp Vault or cloud KMS |
+| Data Retention | Configurable retention policies |
 
 ### Production Hardening
 
-For production deployments, regardless of architecture:
+For production deployments:
 
 ```bash
 # Enable network policies
@@ -471,13 +408,13 @@ kubectl apply -f k8s/audit-policies/
 
 ## Support and Resources
 
-- **Azure Logic Apps Issues**: [TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
+- **Argo Workflows Docs**: https://argo-workflows.readthedocs.io/
 - **Kubernetes Issues**: [k8s/TROUBLESHOOTING.md](../k8s/TROUBLESHOOTING.md)
 - **HashiCorp Vault Docs**: https://developer.hashicorp.com/vault/docs
 - **Community Support**: [GitHub Discussions](https://github.com/aurelianware/cloudhealthoffice/discussions)
 
 ---
 
-**Cloud Health Office** – Deploy Anywhere, Process Everywhere
+**Cloud Health Office** -- Deploy Anywhere, Process Everywhere
 
 *Open Source | Multi-Cloud | Production-Grade | HIPAA-Compliant*

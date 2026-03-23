@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # HIPAA X12 275/277/278 Agreements Configuration Guide
 # Clearinghouse ↔ Health Plan (Health Plan) / claims backend System
 

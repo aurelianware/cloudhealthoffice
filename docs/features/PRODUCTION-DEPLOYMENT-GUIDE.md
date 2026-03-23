@@ -155,7 +155,7 @@ The deployment includes these stages:
 4. **Deploy** (15-30 minutes)
    - Retrieve secrets (Key Vault → GitHub Secrets → defaults)
    - Deploy infrastructure via Bicep
-   - Package and deploy Logic App workflows
+   - Deploy Argo Workflow manifests to AKS
    - Deploy Static Web App
    - Run health checks
 
@@ -361,10 +361,10 @@ After deployment, configure the Static Web App in Azure Portal:
 | `cloudhealthoffice-deploy-kv` | Key Vault | Deployment secrets storage |
 | `stagingXXXXXXXX` | Storage Account | HIPAA attachments (ADLS Gen2) |
 | `cloudhealthoffice-sb` | Service Bus | EDI transaction messaging |
-| `cloudhealthoffice-la` | Logic App Standard | EDI workflow processing |
+| AKS cluster (`cho-aks`) | Azure Kubernetes Service | Argo Workflows EDI orchestration |
 | `cloudhealthoffice-swa` | Static Web App | Portal frontend |
 | `cloudhealthoffice-ai` | Application Insights | Monitoring and telemetry |
-| `prod-integration-account` | Integration Account | X12 schemas/agreements |
+| C# EDI microservices (on AKS) | Kubernetes Deployments | X12 EDI parsing/generation |
 
 ## Troubleshooting
 
@@ -445,9 +445,9 @@ retries.
 
 The workflow automatically performs health checks:
 
-1. **Logic App Status**: Verifies app is in "Running" state
-2. **Workflow Count**: Checks for 4 workflows (ingest275, ingest278,
-   replay278, rfai277)
+1. **AKS Cluster Health**: Verifies cluster nodes are Ready
+2. **Argo Workflow Templates**: Checks for workflow templates (ingest275, ingest278,
+   replay278, rfai277) in `infrastructure/argo-workflows/`
 3. **Application Insights**: Verifies telemetry connection
 4. **Storage Account**: Confirms ADLS Gen2 storage exists
 5. **Service Bus**: Validates namespace and topics exist
@@ -459,8 +459,9 @@ The workflow automatically performs health checks:
 RG_NAME="rg-cloudhealthoffice-prod"
 BASE_NAME="cloudhealthoffice"
 
-# Check Logic App
-az webapp show -g "$RG_NAME" -n "${BASE_NAME}-la" --query "state" -o tsv
+# Check AKS cluster and Argo Workflows
+kubectl get nodes
+kubectl get workflows -n cloudhealthoffice
 
 # Check Static Web App
 az staticwebapp show -n "${BASE_NAME}-swa" -g "$RG_NAME" \
@@ -602,6 +603,6 @@ Service principal only has required roles:
 ### Escalation
 
 - Infrastructure issues: DevOps team
-- Logic App workflows: Application team
+- Argo Workflows / AKS: Application team
 - Security concerns: Security team
 - HIPAA compliance: Compliance officer

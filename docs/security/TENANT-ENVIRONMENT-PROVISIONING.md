@@ -314,8 +314,8 @@ POST /api/v1/tenants/{tenantId}/environments/preprod/promote
 - [ ] Add "Add Trading Partner" form with environment selection
 - [ ] Update SFTP credentials display to show environment paths
 
-### Phase 4: Logic Apps Updates (Week 3)
-- [ ] Add `environment` parameter to all workflows
+### Phase 4: Argo Workflows Updates (Week 3)
+- [ ] Add `environment` parameter to all Argo Workflow definitions
 - [ ] Update SFTP paths to include environment: `/{tenantId}/{environment}/{partnerId}/inbound/{transactionType}`
 - [ ] Update Cosmos DB queries to filter by environment partition
 

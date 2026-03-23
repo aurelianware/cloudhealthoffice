@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the comprehensive enhancements made to the GitHub Actions deployment pipeline for the Cloud Health Office Logic Apps solution.
+This document describes the comprehensive enhancements made to the GitHub Actions deployment pipeline for the Cloud Health Office AKS/Argo Workflows solution.
 
 ## Changes Summary
 
@@ -57,7 +57,7 @@ Added two new Service Bus topics for enhanced functionality:
 ### 4. Production Deployment Enhancements (deploy.yml)
 
 #### Post-Deployment Health Checks
-- **Logic App status verification**: Ensures app is in Running state
+- **AKS workload status verification**: Ensures app is in Running state
 - **Workflow listing**: Attempts to list deployed workflows
 - **Application Insights check**: Verifies monitoring is configured
 - **Storage Account validation**: Checks provisioning state
@@ -68,7 +68,7 @@ Added two new Service Bus topics for enhanced functionality:
 - **Automatic trigger**: Activates on deployment failure
 - **Diagnostic gathering**:
   - Lists failed deployment operations
-  - Downloads Logic App logs
+  - Downloads AKS workload logs
   - Queries Application Insights for errors
 - **Rollback guidance**: Provides manual remediation steps
 - **Safety warnings**: Alerts about partial deployments
@@ -77,12 +77,12 @@ Added two new Service Bus topics for enhanced functionality:
 - **Resource inventory**: Lists all deployed resources
 - **Workflow documentation**: Shows all 4 workflows
 - **Next steps guidance**: Provides post-deployment checklist
-- **Quick access**: Includes Logic App URL
+- **Quick access**: Includes AKS workload URL
 
 ### 5. DEV Environment Enhancements (deploy-dev.yml)
 
 #### Enhanced Features
-- **Comprehensive health checks**: Infrastructure and Logic App validation
+- **Comprehensive health checks**: Infrastructure and AKS workload validation
 - **Rollback job**: Separate job for failure handling
 - **Diagnostic collection**: Captures deployment state on failure
 - **Enhanced summaries**: Detailed deployment information
@@ -140,14 +140,12 @@ All deployment workflows use OIDC authentication correctly:
    - Bicep template deployment
    - Infrastructure verification
 
-3. **Logic Apps Deployment**
-   - Workflow ZIP packaging
-   - ZIP deployment to Logic App
-   - App restart
-   - Health verification
+3. **AKS workloads Deployment**
+   - Argo Workflow YAML manifest deployment via kubectl
+   - AKS pod health verification
 
 4. **Health Checks**
-   - Logic App status
+   - AKS workload status
    - Storage Account status
    - Service Bus status
    - Application Insights status
@@ -177,7 +175,7 @@ jobs:
 jobs:
   - validate: Pre-deployment validation
   - deploy-infrastructure: Azure resources
-  - deploy-logic-apps: Workflows deployment
+  - deploy-aks-workloads: Workflows deployment
   - healthcheck: Post-deployment verification
   - rollback: Failure handling (conditional)
 ```
@@ -198,7 +196,7 @@ All changes have been validated with comprehensive tests:
 - ✅ CodeQL security scanning
 - ✅ PowerShell Script Analyzer
 - ✅ ARM What-If analysis
-- ✅ Logic App packaging & deployment
+- ✅ AKS workload packaging & deployment
 - ✅ Post-deployment health checks
 - ✅ Rollback procedures
 - ✅ Comprehensive error logging
@@ -215,10 +213,10 @@ All changes have been validated with comprehensive tests:
    - Validate Bicep template
    - Run ARM What-If analysis
    - Deploy infrastructure
-   - Configure Integration Account
+   - Configure K8s Secrets/ConfigMaps
    - Package workflows
    - Deploy workflows
-   - Restart Logic App
+   - Restart AKS workload
    - Run health checks
    - (On failure) Execute rollback
 
@@ -235,7 +233,7 @@ All changes have been validated with comprehensive tests:
 ## Monitoring and Troubleshooting
 
 ### Health Check Components
-- **Logic App State**: Verifies Running state
+- **AKS workload State**: Verifies Running state
 - **Workflows**: Lists deployed workflows
 - **Application Insights**: Confirms monitoring setup
 - **Storage Account**: Checks provisioning state
@@ -244,14 +242,14 @@ All changes have been validated with comprehensive tests:
 ### Failure Diagnostics
 - **Deployment Operations**: Lists failed operations
 - **Error Messages**: Captures detailed error information
-- **Log Downloads**: Retrieves Logic App logs
+- **Log Downloads**: Retrieves AKS workload logs
 - **Application Insights Queries**: Checks recent errors
 - **Resource State**: Shows current resource status
 
 ### Rollback Guidance
 Manual rollback steps provided on failure:
 1. Review deployment errors
-2. Check Logic App configuration
+2. Check AKS workload configuration
 3. Verify API connections
 4. Review Application Insights
 5. Validate resource state before retry
@@ -265,7 +263,7 @@ Manual rollback steps provided on failure:
 
 ### Authentication
 - **OIDC**: Federated identity without stored credentials
-- **Managed Identity**: Logic App uses system-assigned identity
+- **Managed Identity**: AKS workload uses system-assigned identity
 - **Least Privilege**: Minimal permissions for operations
 
 ### Compliance
@@ -291,7 +289,7 @@ Potential improvements for consideration:
 - Performance benchmarking
 - Automated rollback (not just diagnostic)
 - Blue-green deployment strategy
-- Canary deployment for Logic Apps
+- Canary deployment for AKS workloads
 - Automated security compliance checks
 
 ## Conclusion

@@ -74,14 +74,14 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 
 **Why:** TenantMiddleware is copy-pasted into every service. A shared library ensures consistency, reduces bugs, and accelerates new service development.
 
-### 1D. Remove Legacy Logic Apps *(P3)*
+### 1D. Remove Legacy Logic Apps *(P3)* -- COMPLETE
 
-- [ ] Delete `infrastructure/logicapps/` (21 JSON files)
-- [ ] Delete `src/logicapps/` if present
-- [ ] Update any documentation references
-- [ ] Create ADR: `docs/adr/004-remove-logic-apps.md`
+- [x] Delete `infrastructure/logicapps/` (21 JSON files)
+- [x] Delete `src/logicapps/` if present
+- [x] Update any documentation references
+- [x] Create ADR: `docs/adr/004-remove-logic-apps.md`
 
-**Why:** Repo hygiene. Logic Apps were replaced by Argo Workflows + C# microservices. Their presence confuses evaluation.
+**Why:** Repo hygiene. Logic Apps were replaced by Argo Workflows on AKS + C# microservices. See [ADR-004](../adr/004-remove-logic-apps.md).
 
 ### 1E. Health Checks Across All Services *(P2)*
 
@@ -217,7 +217,7 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 |[001](../adr/001-argo-vs-airflow.md)|Argo Workflows over Airflow               |Accepted|
 |[002](../adr/002-kafka-vs-nats.md)  |Kafka over NATS                           |Accepted|
 |[003](../adr/003-pyx12-library.md)  |pyx12 for X12 parsing                     |Accepted|
-|004 (planned)                       |Remove Azure Logic Apps                   |Pending |
+|[004](../adr/004-remove-logic-apps.md)|Remove Azure Logic Apps                   |Accepted|
 |005 (planned)                       |Converge TypeScript → C# (FHIR, scrubbing)|Pending |
 |006 (planned)                       |Augment/Replace operating mode pattern    |Pending |
 

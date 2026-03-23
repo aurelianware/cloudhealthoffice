@@ -30,7 +30,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 #### `infra/modules/networking.bicep` (178 lines)
 **VNet and Private DNS infrastructure**
 - Virtual Network (10.0.0.0/16)
-- Logic Apps subnet (10.0.1.0/24) with delegation
+- AKS workload subnet (10.0.1.0/24) with delegation
 - Private Endpoints subnet (10.0.2.0/24)
 - Service endpoints for Storage, ServiceBus, KeyVault
 - Private DNS zones for:
@@ -109,8 +109,8 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Azure Key Vault Secret Migration (6-phase procedure)
 - Deployment scripts for Key Vault infrastructure
 - Secret migration commands with examples
-- Logic App RBAC configuration
-- Workflow update procedures (@keyvault() expressions)
+- AKS Workload Identity RBAC configuration
+- Kubernetes secrets/ConfigMap update procedures (via Secrets Store CSI Driver)
 - Automated secret rotation scripts
 - Monitoring and compliance queries
 - Troubleshooting guides
@@ -162,7 +162,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - RBAC authorization configured
 - Soft delete (90 days) + purge protection enabled
 - Private endpoint network isolation
-- Managed identity access for Logic Apps
+- Managed identity access for AKS workloads (via Workload Identity)
 
 **Benefits:**
 - ✅ Eliminates hardcoded secrets in code
@@ -187,7 +187,7 @@ This implementation delivers **comprehensive runtime security controls** to achi
 - Private endpoints for Storage, Service Bus, Key Vault
 - Private DNS zones for name resolution
 - Public access disabled on all PHI resources
-- Logic App VNet integration enabled
+- AKS cluster VNet integration enabled
 
 **Benefits:**
 - ✅ Zero public internet exposure for PHI
@@ -380,7 +380,7 @@ az deployment group create \
 ### Automated Validation
 
 ✅ **Bicep Compilation**: All 4 modules compile successfully
-✅ **JSON Validation**: All 6 Logic App workflows valid
+✅ **YAML Validation**: All Argo Workflow definitions valid
 ✅ **Code Review**: No issues identified
 ✅ **Security Scanning (CodeQL)**: No vulnerabilities detected
 
@@ -390,8 +390,8 @@ az deployment group create \
 # Verify private endpoints
 az network private-endpoint list -g "$RG_NAME" --query "[].{Name:name, State:provisioningState}" -o table
 
-# Verify VNet integration
-az webapp vnet-integration list -g "$RG_NAME" --name "$LOGIC_APP_NAME" -o table
+# Verify AKS VNet integration
+az aks show -g "$RG_NAME" --name "$AKS_CLUSTER_NAME" --query "agentPoolProfiles[0].vnetSubnetId" -o tsv
 
 # Verify Key Vault configuration
 az keyvault show --name "$KV_NAME" --query "{SKU:properties.sku.name, RBAC:properties.enableRbacAuthorization}"

@@ -51,7 +51,7 @@ AZURE_SUBSCRIPTION_ID    - Reuses PROD credentials
 **RBAC Roles Assigned:**
 - Contributor (for infrastructure deployment)
 - Key Vault Secrets User (for retrieving runtime secrets from Key Vault)
-- Storage Blob Data Contributor (for Logic Apps deployment)
+- Storage Blob Data Contributor (for AKS/Argo Workflows deployment)
 
 ---
 
@@ -66,7 +66,7 @@ SFTP_USERNAME     → Migrate to Key Vault as: sftp-username
 SFTP_PASSWORD     → Migrate to Key Vault as: sftp-password
 ```
 
-**Current Usage:** PROD deployment workflow (`deploy.yml`) for configuring Logic Apps SFTP API connection
+**Current Usage:** PROD deployment workflow (`deploy.yml`) for configuring AKS/Argo Workflows SFTP integration via Kubernetes secrets
 
 **Security Benefit:**
 - ✅ Audit logging (who accessed, when)
@@ -223,7 +223,7 @@ PROD: cloud-health-office-prod-deploy-kv
 **RBAC Access:**
 - Service Principal (GitHub Actions): `Key Vault Secrets User` role
 - DevOps team: `Key Vault Administrator` role
-- Logic Apps Managed Identity: `Key Vault Secrets User` role (for runtime access)
+- AKS Workload Identity: `Key Vault Secrets User` role (for runtime access via pod-level managed identity)
 
 ---
 

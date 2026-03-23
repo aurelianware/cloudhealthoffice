@@ -4,7 +4,7 @@
 
 Production-grade SFTP configuration with:
 - **Custom DNS name** (e.g., `sftp.cloudhealthoffice.com`)
-- **IP whitelisting** for clearinghouses and Logic Apps
+- **IP whitelisting** for clearinghouses and AKS/Argo Workflows
 - **SSL/TLS certificate** (optional, for FTPS)
 
 ---
@@ -16,7 +16,7 @@ Production-grade SFTP configuration with:
 ```bash
 # Create DNS zone
 az network dns zone create \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --name cloudhealthoffice.com
 
 # Get the LoadBalancer IP
@@ -25,20 +25,20 @@ echo "SFTP IP: $SFTP_IP"
 
 # Create A record
 az network dns record-set a add-record \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --zone-name cloudhealthoffice.com \
   --record-set-name sftp \
   --ipv4-address $SFTP_IP
 
 # Verify DNS record
 az network dns record-set a show \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --zone-name cloudhealthoffice.com \
   --name sftp
 
 # Get nameservers to configure at registrar
 az network dns zone show \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --name cloudhealthoffice.com \
   --query nameServers -o table
 ```
@@ -76,24 +76,22 @@ sftp logicapp@sftp.cloudhealthoffice.com
 
 ### Gather Required IP Addresses
 
-#### 1. Logic Apps Outbound IPs
+#### 1. AKS Cluster Outbound IPs
 
 ```bash
-# Get Logic App resource
-LOGIC_APP_NAME="cho-prod-logic-app"
-RESOURCE_GROUP="rg-hipaa-logic-apps"
+# Get AKS cluster resource
+AKS_CLUSTER_NAME="cho-prod-aks"
+RESOURCE_GROUP="rg-hipaa-aks"
 
-# Get outbound IP addresses
-az logicapp show \
-  --name $LOGIC_APP_NAME \
+# Get outbound IP addresses (AKS load balancer)
+az aks show \
+  --name $AKS_CLUSTER_NAME \
   --resource-group $RESOURCE_GROUP \
-  --query outboundIpAddresses -o tsv
+  --query "networkProfile.loadBalancerProfile.effectiveOutboundIPs[].id" -o tsv
 
-# Example output:
-# 13.88.3.11
-# 13.88.3.12
-# 13.88.3.13
-# 13.88.3.14
+# Or get the public IP directly
+az network public-ip list --resource-group MC_${RESOURCE_GROUP}_${AKS_CLUSTER_NAME}_westus2 \
+  --query "[].ipAddress" -o tsv
 ```
 
 #### 2. Clearinghouse IP Addresses
@@ -150,7 +148,7 @@ spec:
   type: LoadBalancer
   # ADD THESE LINES:
   loadBalancerSourceRanges:
-    # Logic Apps outbound IPs
+    # AKS cluster outbound IPs
     - 13.88.3.11/32
     - 13.88.3.12/32
     - 13.88.3.13/32
@@ -247,7 +245,7 @@ For UAT:
 
 ```bash
 az deployment group create \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --template-file infra/main.bicep \
   --parameters \
     sftpHost="sftp.cloudhealthoffice.com" \
@@ -269,11 +267,11 @@ metadata:
   name: sftp-service
   namespace: cho-sftp
   annotations:
-    service.beta.kubernetes.io/azure-load-balancer-resource-group: "rg-hipaa-logic-apps"
+    service.beta.kubernetes.io/azure-load-balancer-resource-group: "rg-hipaa-aks"
 spec:
   type: LoadBalancer
   loadBalancerSourceRanges:
-    # Logic Apps outbound IPs (update with actual values)
+    # AKS cluster outbound IPs (update with actual values)
     - 13.88.3.11/32
     - 13.88.3.12/32
     - 13.88.3.13/32
@@ -314,7 +312,7 @@ kubectl apply -f k8s/sftp-server-deployment.yaml
 - [ ] Updated all documentation with DNS name
 
 ### IP Whitelisting
-- [ ] Logic Apps outbound IPs identified
+- [ ] AKS cluster outbound IPs identified
 - [ ] Clearinghouse IP ranges documented
 - [ ] `loadBalancerSourceRanges` configured in Kubernetes
 - [ ] Tested connection from allowed IP
@@ -324,7 +322,7 @@ kubectl apply -f k8s/sftp-server-deployment.yaml
 ### Infrastructure
 - [ ] Bicep parameters updated with DNS name
 - [ ] API connection reconfigured with DNS name
-- [ ] Logic Apps tested end-to-end
+- [ ] Argo Workflows tested end-to-end
 - [ ] Monitoring alerts configured for connection failures
 
 ### Documentation
@@ -343,14 +341,13 @@ kubectl apply -f k8s/sftp-server-deployment.yaml
 #!/bin/bash
 # test-sftp-access.sh
 
-# Test from Logic Apps region
-az logicapp show \
-  --name cho-prod-logic-app \
-  --resource-group rg-hipaa-logic-apps \
-  --query outboundIpAddresses -o tsv | while read ip; do
-  echo "Testing from Logic App IP: $ip"
-  # Note: Can't actually test from Logic App IP directly
-  # Use Logic App test action instead
+# Test from AKS cluster region
+az aks show \
+  --name cho-prod-aks \
+  --resource-group rg-hipaa-aks \
+  --query "networkProfile.loadBalancerProfile.effectiveOutboundIPs[].id" -o tsv | while read ip_id; do
+  echo "AKS outbound IP resource: $ip_id"
+  # Note: Test connectivity from within an Argo Workflow pod
 done
 
 # Test DNS resolution
@@ -376,8 +373,8 @@ fi
 # Create alert for connection failures
 az monitor metrics alert create \
   --name sftp-connection-failures \
-  --resource-group rg-hipaa-logic-apps \
-  --scopes "/subscriptions/.../resourceGroups/rg-hipaa-logic-apps/providers/Microsoft.Web/connections/cho-sftp" \
+  --resource-group rg-hipaa-aks \
+  --scopes "/subscriptions/.../resourceGroups/rg-hipaa-aks/providers/Microsoft.Web/connections/cho-sftp" \
   --condition "count > 5" \
   --window-size 5m \
   --evaluation-frequency 1m \
@@ -393,7 +390,7 @@ az monitor metrics alert create \
 ```bash
 # Check DNS record
 az network dns record-set a show \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --zone-name cloudhealthoffice.com \
   --name sftp
 
@@ -423,25 +420,25 @@ kubectl get svc sftp-service -n cho-sftp -o yaml | grep -A 20 loadBalancerSource
 **Check Azure NSG rules (if using internal LB):**
 ```bash
 az network nsg rule list \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --nsg-name your-nsg-name \
   --output table
 ```
 
-### Logic Apps Can't Connect After DNS Change
+### Argo Workflows Can't Connect After DNS Change
 
 1. **Test API connection:**
    ```bash
    az resource invoke-action \
-     --resource-group rg-hipaa-logic-apps \
+     --resource-group rg-hipaa-aks \
      --resource-type Microsoft.Web/connections \
      --name cho-sftp \
      --action testConnection \
      --api-version 2016-06-01
    ```
 
-2. **Verify Logic Apps can resolve DNS:**
-   - Logic Apps use Azure DNS by default
+2. **Verify AKS pods can resolve DNS:**
+   - AKS uses CoreDNS and Azure DNS by default
    - Check if custom DNS is configured in VNet
 
 3. **Re-authorize connection:**

@@ -130,7 +130,7 @@ Comprehensive smoke tests to validate repository health.
 ### What It Tests
 
 1. **Repository Structure**: Required directories and files
-2. **Logic Apps Workflows**: All 4 workflow JSON files
+2. **Argo Workflows**: Workflow YAML manifests
 3. **Bicep Templates**: Compilation and syntax
 4. **Service Bus Configuration**: Topic definitions
 5. **X12 Schemas**: Schema file presence
@@ -158,7 +158,7 @@ Comprehensive linting and validation for pull requests.
 
 ### What It Checks
 
-1. **JSON Validation**: Logic App workflow files
+1. **YAML Validation**: Argo workflow manifests
 2. **GitHub Actions Lint**: actionlint
 3. **YAML Lint**: yamllint
 4. **Bicep Validation**: Template compilation
@@ -189,9 +189,9 @@ Create this script to run all validations locally:
 
 echo "Running comprehensive validation..."
 
-# JSON validation
-echo "1. Validating JSON workflows..."
-find logicapps/workflows -name "workflow.json" -exec jq . {} \; > /dev/null
+# YAML validation
+echo "1. Validating Argo workflow manifests..."
+find infrastructure/argo-workflows -name "*.yaml" -exec kubectl apply --dry-run=client -f {} \; > /dev/null
 
 # Bicep validation
 echo "2. Validating Bicep templates..."
@@ -219,8 +219,8 @@ echo "✅ All validations complete!"
 ### Individual Checks
 
 ```bash
-# JSON only
-find logicapps/workflows -name "workflow.json" -exec jq . {} \;
+# YAML only
+find infrastructure/argo-workflows -name "*.yaml" -exec kubectl apply --dry-run=client -f {} \;
 
 # Bicep only
 az bicep build --file infra/main.bicep --outfile /tmp/arm.json
@@ -279,7 +279,7 @@ pwsh -File scripts/scan-for-phi-pii.ps1 -Path . -Exclude ".git"
 
 3. **Scan before pushing sensitive code**
    ```powershell
-   pwsh -File scripts/scan-for-phi-pii.ps1 -Path logicapps/ -FailOnWarning
+   pwsh -File scripts/scan-for-phi-pii.ps1 -Path infrastructure/argo-workflows/ -FailOnWarning
    ```
 
 4. **Use strict mode for critical files**
