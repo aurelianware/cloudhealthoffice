@@ -1237,20 +1237,26 @@ public class TenantService : ITenantService
             var tenantId = $"tenant-{Guid.NewGuid():N}";
             var now = DateTime.UtcNow;
 
+            // Merge AdminEmail (from signup) into AdminEmails list
+            var adminEmails = request.AdminEmails ?? new List<string>();
+            if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
+                adminEmails.Add(request.AdminEmail);
+
             var tenant = new TenantSubscription
             {
                 TenantId = tenantId,
                 AzureTenantId = request.AzureTenantId,
                 OrganizationName = request.OrganizationName,
-                SubscriptionStatus = "Trial",
+                SubscriptionStatus = request.SubscriptionStatus,
                 Tier = request.Tier,
-                IsDemo = false,
+                IsDemo = request.IsDemo,
                 StripeCustomerId = request.StripeCustomerId,
                 StripeSubscriptionId = request.StripeSubscriptionId,
-                TrialEndsAt = now.AddDays(14),
+                TrialEndsAt = request.SubscriptionStatus == "Trial" ? now.AddDays(14) : null,
                 CreatedAt = now,
                 UpdatedAt = now,
-                AdminEmails = new List<string> { request.AdminEmail }
+                AdminEmails = adminEmails,
+                Notes = request.Notes
             };
 
             _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} (Azure: {AzureTenantId})",
@@ -1266,6 +1272,42 @@ public class TenantService : ITenantService
             _logger.LogError(ex, "Failed to create tenant for organization {OrgName}", request.OrganizationName);
             throw;
         }
+    }
+
+    public async Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request)
+    {
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var updates = new List<UpdateDefinition<TenantSubscription>>
+        {
+            Builders<TenantSubscription>.Update.Set(t => t.UpdatedAt, DateTime.UtcNow)
+        };
+
+        if (request.OrganizationName != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.OrganizationName, request.OrganizationName));
+        if (request.Tier != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Tier, request.Tier));
+        if (request.SubscriptionStatus != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.SubscriptionStatus, request.SubscriptionStatus));
+        if (request.AdminEmails != null)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.AdminEmails, request.AdminEmails));
+        if (request.IsDemo.HasValue)
+            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.IsDemo, request.IsDemo.Value));
+        updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Notes, request.Notes));
+
+        var update = Builders<TenantSubscription>.Update.Combine(updates);
+        var result = await _tenantsCollection.UpdateOneAsync(filter, update);
+        if (result.MatchedCount == 0)
+            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+        _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
+    }
+
+    public async Task DeleteTenantAsync(string azureTenantId)
+    {
+        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
+        var result = await _tenantsCollection.DeleteOneAsync(filter);
+        if (result.DeletedCount == 0)
+            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+        _logger.LogInformation("Deleted tenant {AzureTenantId}", azureTenantId);
     }
 
     public async Task<List<TenantSubscription>> GetAllSubscriptionsAsync()
