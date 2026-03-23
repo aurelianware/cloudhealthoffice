@@ -6,7 +6,7 @@ namespace CapitationService.Repositories;
 public interface ICapitationRunRepository
 {
     Task<CapitationRun?> GetByIdAsync(string id);
-    Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null);
+    Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null, LineOfBusiness? lineOfBusiness = null);
     Task<IEnumerable<CapitationRun>> GetByStatusAsync(CapitationRunStatus status);
     Task<CapitationRun> CreateAsync(CapitationRun run);
     Task<CapitationRun> UpdateAsync(CapitationRun run);
@@ -52,7 +52,7 @@ public class CapitationRunRepository : ICapitationRunRepository
         }
     }
 
-    public async Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null)
+    public async Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null, LineOfBusiness? lineOfBusiness = null)
     {
         var tenantId = GetTenantId();
         var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
@@ -72,6 +72,11 @@ public class CapitationRunRepository : ICapitationRunRepository
         {
             queryText += " AND c.status = @status";
             parameters.Add(("@status", status.Value.ToString()));
+        }
+        if (lineOfBusiness.HasValue)
+        {
+            queryText += " AND c.lineOfBusiness = @lineOfBusiness";
+            parameters.Add(("@lineOfBusiness", lineOfBusiness.Value.ToString()));
         }
 
         queryText += " ORDER BY c.createdAt DESC";
