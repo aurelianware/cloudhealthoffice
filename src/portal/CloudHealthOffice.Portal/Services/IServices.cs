@@ -1737,7 +1737,7 @@ public interface ICapitationService
     Task TerminateContractAsync(string id, string reason, DateTime? terminationDate = null);
 
     // Runs
-    Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null);
+    Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null, string? lineOfBusiness = null);
     Task<CapRunSummary?> GetRunByIdAsync(string id);
     Task<string> CreateRunAsync(CreateCapRunRequest request);
     Task<CapRunSummary> ExecuteRunAsync(string id);
@@ -1799,6 +1799,8 @@ public class CapRunSummary
     public DateTime CapitationPeriod { get; set; }
     public string Status { get; set; } = "Pending";
     public string? LineOfBusiness { get; set; }
+    public string? Description { get; set; }
+    public CapRunCriteriaSummary? Criteria { get; set; }
     public int TotalStatements { get; set; }
     public int TotalMemberMonths { get; set; }
     public decimal TotalGrossCapitation { get; set; }
@@ -1814,16 +1816,29 @@ public class CapRunSummary
     public List<string> Errors { get; set; } = new();
 }
 
-public class CreateCapRunRequest
+public class CapRunCriteriaSummary
 {
-    public string RunType { get; set; } = "Monthly";
-    public DateTime CapitationPeriod { get; set; }
     public string? LineOfBusiness { get; set; }
     public string? ProviderNPI { get; set; }
     public string? ContractType { get; set; }
     public DateTime? OriginalPeriod { get; set; }
+}
+
+public class CreateCapRunRequest
+{
+    public string RunType { get; set; } = "Monthly";
+    public DateTime CapitationPeriod { get; set; }
+    public CreateCapRunCriteria Criteria { get; set; } = new();
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }
+}
+
+public class CreateCapRunCriteria
+{
+    public string LineOfBusiness { get; set; } = "Commercial";
+    public string? ProviderNPI { get; set; }
+    public string? ContractType { get; set; }
+    public DateTime? OriginalPeriod { get; set; }
 }
 
 public class CapStatementSummary

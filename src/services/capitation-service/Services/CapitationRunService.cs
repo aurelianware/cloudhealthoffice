@@ -9,7 +9,7 @@ public interface ICapitationRunService
     Task<CapitationRun> CreateRunAsync(CreateCapitationRunRequest request, string? createdBy);
     Task<CapitationRun> ExecuteRunAsync(string runId);
     Task<CapitationRun> GetRunAsync(string runId);
-    Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to);
+    Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to, LineOfBusiness? lineOfBusiness = null);
     Task CancelRunAsync(string runId);
     Task<CapitationStatement> ApproveStatementAsync(string statementId);
     Task<CapitationStatement> VoidStatementAsync(string statementId, string reason);
@@ -44,6 +44,19 @@ public class CapitationRunService : ICapitationRunService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Maps LineOfBusiness enum values to 3-character abbreviations for RunNumber formatting.
+    /// </summary>
+    private static readonly Dictionary<LineOfBusiness, string> LobAbbreviations = new()
+    {
+        [LineOfBusiness.Commercial] = "COM",
+        [LineOfBusiness.Medicare] = "MCR",
+        [LineOfBusiness.Medicaid] = "MCD",
+        [LineOfBusiness.Exchange] = "EXC",
+        [LineOfBusiness.TRICARE] = "TRI",
+        [LineOfBusiness.VA] = "VA"
+    };
+
     public async Task<CapitationRun> CreateRunAsync(CreateCapitationRunRequest request, string? createdBy)
     {
         // Validate run type + criteria consistency
@@ -52,12 +65,15 @@ public class CapitationRunService : ICapitationRunService
         // Normalize capitation period to first of month
         var period = new DateTime(request.CapitationPeriod.Year, request.CapitationPeriod.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
+        var lobAbbrev = LobAbbreviations.GetValueOrDefault(request.Criteria.LineOfBusiness, "UNK");
+
         var run = new CapitationRun
         {
-            RunNumber = $"CAPRUN-{period:yyyy-MM}-{Guid.NewGuid().ToString()[..4].ToUpperInvariant()}",
+            RunNumber = $"CAPRUN-{lobAbbrev}-{period:yyyy-MM}-{Guid.NewGuid().ToString()[..4].ToUpperInvariant()}",
             RunType = request.RunType,
+            LineOfBusiness = request.Criteria.LineOfBusiness,
             CapitationPeriod = period,
-            Description = request.Description,
+            Description = request.Description ?? GenerateDefaultDescription(request.RunType, request.Criteria, period),
             Criteria = request.Criteria,
             CreatedBy = createdBy,
             Status = CapitationRunStatus.Pending
@@ -66,13 +82,28 @@ public class CapitationRunService : ICapitationRunService
         return await _runRepository.CreateAsync(run);
     }
 
+    private static string GenerateDefaultDescription(CapitationRunType runType, CapitationRunCriteria criteria, DateTime period)
+    {
+        var lob = criteria.LineOfBusiness.ToString();
+        return runType switch
+        {
+            CapitationRunType.Monthly => $"Monthly {lob} capitation for {period:MMMM yyyy}",
+            CapitationRunType.AdHocProvider => $"Ad-hoc {lob} capitation for provider {criteria.ProviderNPI}, {period:MMMM yyyy}",
+            CapitationRunType.RetroAdjustment => $"Retro adjustment — {lob} {period:MMMM yyyy}",
+            CapitationRunType.WithholdRelease => $"Withhold release — {lob} {period:MMMM yyyy}",
+            _ => $"Capitation run for {period:MMMM yyyy}"
+        };
+    }
+
     private static void ValidateRunCriteria(CapitationRunType runType, CapitationRunCriteria criteria)
     {
+        // LineOfBusiness is always required — capitation runs are scoped to a single LOB
+        if (!Enum.IsDefined(typeof(LineOfBusiness), criteria.LineOfBusiness))
+            throw new ArgumentException("A valid LineOfBusiness is required for all capitation runs");
+
         switch (runType)
         {
             case CapitationRunType.Monthly:
-                if (criteria.LineOfBusiness == null)
-                    throw new ArgumentException("Monthly capitation runs require a LineOfBusiness");
                 if (!string.IsNullOrEmpty(criteria.ProviderNPI))
                     throw new ArgumentException("Monthly runs process all providers in the LOB; ProviderNPI must not be set");
                 if (criteria.OriginalPeriod.HasValue)
@@ -92,8 +123,6 @@ public class CapitationRunService : ICapitationRunService
                 break;
 
             case CapitationRunType.WithholdRelease:
-                if (criteria.LineOfBusiness == null)
-                    throw new ArgumentException("WithholdRelease runs require a LineOfBusiness");
                 if (criteria.OriginalPeriod.HasValue)
                     throw new ArgumentException("OriginalPeriod is only valid for RetroAdjustment runs");
                 break;
@@ -129,6 +158,13 @@ public class CapitationRunService : ICapitationRunService
             // Apply single-provider filter for AdHocProvider, or optional provider scoping
             if (!string.IsNullOrEmpty(run.Criteria.ProviderNPI))
                 contracts = contracts.Where(c => c.ProviderNPI == run.Criteria.ProviderNPI).ToList();
+
+            if (contracts.Count == 0)
+            {
+                run.Warnings.Add($"No active capitation contracts found for {run.Criteria.LineOfBusiness}" +
+                    (!string.IsNullOrEmpty(run.Criteria.ProviderNPI) ? $", provider {run.Criteria.ProviderNPI}" : "") +
+                    (run.Criteria.ContractType.HasValue ? $", contract type {run.Criteria.ContractType}" : ""));
+            }
 
             _logger.LogInformation("Found {Count} active capitation contracts for run {RunNumber}",
                 contracts.Count, run.RunNumber);
@@ -198,9 +234,9 @@ public class CapitationRunService : ICapitationRunService
             ?? throw new InvalidOperationException($"Capitation run {runId} not found");
     }
 
-    public async Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to)
+    public async Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to, LineOfBusiness? lineOfBusiness = null)
     {
-        return await _runRepository.SearchAsync(from, to);
+        return await _runRepository.SearchAsync(from, to, lineOfBusiness: lineOfBusiness);
     }
 
     public async Task CancelRunAsync(string runId)

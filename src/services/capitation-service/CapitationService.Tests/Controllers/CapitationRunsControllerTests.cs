@@ -116,10 +116,10 @@ public class CapitationRunsControllerTests
     {
         var runs = new List<CapitationRun>
         {
-            new() { RunNumber = "CAPRUN-2026-03-AAAA" },
-            new() { RunNumber = "CAPRUN-2026-02-BBBB" }
+            new() { RunNumber = "CAPRUN-COM-2026-03-AAAA" },
+            new() { RunNumber = "CAPRUN-MCD-2026-02-BBBB" }
         };
-        _runService.Setup(s => s.GetRunsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>()))
+        _runService.Setup(s => s.GetRunsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null))
             .ReturnsAsync(runs);
 
         var result = await _controller.GetRuns(null, null);
@@ -127,6 +127,24 @@ public class CapitationRunsControllerTests
         var ok = result.Result as OkObjectResult;
         ok.Should().NotBeNull();
         (ok!.Value as IEnumerable<CapitationRun>)!.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetRuns_WithLobFilter_PassesLobToService()
+    {
+        var runs = new List<CapitationRun>
+        {
+            new() { RunNumber = "CAPRUN-MCD-2026-03-AAAA", LineOfBusiness = LineOfBusiness.Medicaid }
+        };
+        _runService.Setup(s => s.GetRunsAsync(null, null, LineOfBusiness.Medicaid))
+            .ReturnsAsync(runs);
+
+        var result = await _controller.GetRuns(null, null, LineOfBusiness.Medicaid);
+
+        var ok = result.Result as OkObjectResult;
+        ok.Should().NotBeNull();
+        (ok!.Value as IEnumerable<CapitationRun>)!.Should().HaveCount(1);
+        _runService.Verify(s => s.GetRunsAsync(null, null, LineOfBusiness.Medicaid), Times.Once);
     }
 
     [Fact]
