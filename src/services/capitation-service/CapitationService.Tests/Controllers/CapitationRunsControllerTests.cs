@@ -39,7 +39,9 @@ public class CapitationRunsControllerTests
 
         var result = await _controller.CreateRun(new CreateCapitationRunRequest
         {
+            RunType = CapitationRunType.Monthly,
             CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
             CreatedBy = "admin"
         });
 
@@ -47,6 +49,23 @@ public class CapitationRunsControllerTests
         created.Should().NotBeNull();
         created!.StatusCode.Should().Be(201);
         (created.Value as CapitationRun)!.RunNumber.Should().Be("CAPRUN-2026-03-ABCD");
+    }
+
+    [Fact]
+    public async Task CreateRun_InvalidCriteria_ReturnsBadRequest()
+    {
+        _runService.Setup(s => s.CreateRunAsync(It.IsAny<CreateCapitationRunRequest>(), It.IsAny<string>()))
+            .ThrowsAsync(new ArgumentException("Monthly capitation runs require a LineOfBusiness"));
+
+        var result = await _controller.CreateRun(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            CreatedBy = "admin"
+        });
+
+        var bad = result.Result as BadRequestObjectResult;
+        bad.Should().NotBeNull();
     }
 
     [Fact]
