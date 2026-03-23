@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IUserContextService UserContextService
 @inject HttpClient HttpClient
+@inject ISnackbar Snackbar
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -18,22 +19,73 @@
         <MudText Typo="Typo.h6" Class="appbar-title">
             Cloud Health Office
         </MudText>
-        
+
         <MudSpacer />
-        
-        @if (!string.IsNullOrEmpty(_tenantName))
+
+        @* Tenant Switcher / Badge *@
+        @if (_availableTenants.Count > 1)
         {
-            <MudChip T="string" 
-                     Color="@(_isDemo ? Color.Warning : Color.Primary)" 
-                     Variant="Variant.Outlined" 
-                     Size="Size.Small" 
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudChip T="string"
+                             Color="@GetCurrentTenantChipColor()"
+                             Variant="Variant.Outlined"
+                             Size="Size.Small"
+                             Style="@GetCurrentTenantChipStyle() cursor: pointer;">
+                        @_tenantName
+                        @if (_isDemo) { <text> (Demo)</text> }
+                        @if (_isImpersonating) { <text> [Impersonating]</text> }
+                        <MudIcon Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" Class="ml-1" />
+                    </MudChip>
+                </ActivatorContent>
+                <ChildContent>
+                    @foreach (var tenant in _availableTenants)
+                    {
+                        <MudMenuItem OnClick="@(() => SwitchToTenant(tenant))">
+                            <div class="d-flex align-center gap-2">
+                                @if (tenant.AzureTenantId == _currentAzureTenantId)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                             Color="Color.Success" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" />
+                                }
+                                <div>
+                                    <MudText Typo="Typo.body2">@tenant.OrganizationName</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @tenant.Tier
+                                        @if (tenant.IsDemo) { <text> · Demo</text> }
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </ChildContent>
+            </MudMenu>
+        }
+        else if (!string.IsNullOrEmpty(_tenantName))
+        {
+            @* Single tenant — static badge *@
+            <MudChip T="string"
+                     Color="@(_isDemo ? Color.Warning : Color.Primary)"
+                     Variant="Variant.Outlined"
+                     Size="Size.Small"
                      Style="@(_isDemo ? "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);" : "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);")">
                 @_tenantName @(_isDemo ? "(Demo)" : "")
             </MudChip>
         }
-        
+        else if (_tenantLoadComplete && string.IsNullOrEmpty(_tenantName))
+        {
+            @* No tenant access *@
+            <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">
+                No tenant access
+            </MudChip>
+        }
+
         <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Style="margin-left: 12px;" />
-        
+
         <AuthorizeView>
             <Authorized>
                 <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
@@ -53,14 +105,14 @@
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
-    
+
     <MudDrawer @bind-Open="_drawerOpen" Elevation="3" Style="border-right: 1px solid rgba(0, 255, 255, 0.2);">
         <div style="padding: 24px 16px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
             <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.1em;">
                 Navigation
             </MudText>
         </div>
-        
+
         <MudNavMenu Style="padding-top: 8px;">
             <AuthorizeView>
                 <Authorized>
@@ -244,7 +296,7 @@
                                 Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                         Live Demo
                     </MudNavLink>
-                    
+
                     <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
 
                     <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Login"
@@ -271,7 +323,7 @@
                 </NotAuthorized>
             </AuthorizeView>
         </MudNavMenu>
-        
+
         <!-- Footer branding in drawer -->
         <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; border-top: 1px solid rgba(0, 255, 255, 0.2); text-align: center;">
             <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.4);">
@@ -282,7 +334,7 @@
             </MudText>
         </div>
     </MudDrawer>
-    
+
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
             @Body
@@ -293,9 +345,13 @@
 @code {
     private bool _drawerOpen = true;
     private string? _tenantName;
+    private string? _currentAzureTenantId;
     private bool _isDemo;
+    private bool _isImpersonating;
     private bool _isTenantAdmin;
     private bool _isPlatformAdmin;
+    private bool _tenantLoadComplete;
+    private List<TenantSubscription> _availableTenants = new();
 
     private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
 
@@ -312,8 +368,31 @@
             var userContext = await UserContextService.GetCurrentUserAsync();
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
             _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
+
+            // If platform admin, load all tenants for the switcher
+            if (_isPlatformAdmin)
+            {
+                try
+                {
+                    var allTenants = await GetAllTenantsForPlatformAdmin();
+                    if (allTenants.Count > _availableTenants.Count)
+                    {
+                        _availableTenants = allTenants;
+                        StateHasChanged();
+                    }
+                }
+                catch { }
+            }
         }
         catch { }
+    }
+
+    private async Task<List<TenantSubscription>> GetAllTenantsForPlatformAdmin()
+    {
+        // Platform admins can see all tenants via the available tenants list
+        // merged with any they have direct access to
+        var availableTenants = await TenantContextService.GetAvailableTenantsAsync();
+        return availableTenants;
     }
 
     private async Task LoadTenantContextAsync()
@@ -325,6 +404,8 @@
             {
                 _tenantName = tenantContext.TenantName;
                 _isDemo = tenantContext.IsDemo;
+                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _isImpersonating = TenantContextService.IsImpersonating;
 
                 // Set X-Tenant-ID on the shared HttpClient so the
                 // TenantHttpMessageHandler does not need to call
@@ -332,6 +413,9 @@
                 // inside a Razor component DI scope).
                 HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
                 HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
+
+                // Load available tenants for the switcher
+                _availableTenants = await TenantContextService.GetAvailableTenantsAsync();
 
                 StateHasChanged();
             }
@@ -341,6 +425,58 @@
             // Log error but don't crash the layout
             Console.Error.WriteLine($"Error loading tenant context: {ex.Message}");
         }
+        finally
+        {
+            _tenantLoadComplete = true;
+        }
+    }
+
+    private async Task SwitchToTenant(TenantSubscription tenant)
+    {
+        if (tenant.AzureTenantId == _currentAzureTenantId)
+            return; // Already on this tenant
+
+        var success = await TenantContextService.SwitchTenantAsync(tenant.AzureTenantId);
+        if (success)
+        {
+            var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            if (tenantContext != null)
+            {
+                _tenantName = tenantContext.TenantName;
+                _isDemo = tenantContext.IsDemo;
+                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _isImpersonating = TenantContextService.IsImpersonating;
+
+                // Update the X-Tenant-ID header for all subsequent API calls
+                HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
+                HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
+            }
+
+            Snackbar.Add($"Switched to {tenant.OrganizationName}", Severity.Success);
+
+            // Navigate to dashboard to reload data for the new tenant
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add("Failed to switch tenant. You may not have access.", Severity.Error);
+        }
+    }
+
+    private Color GetCurrentTenantChipColor()
+    {
+        if (_isImpersonating) return Color.Warning;
+        if (_isDemo) return Color.Warning;
+        return Color.Primary;
+    }
+
+    private string GetCurrentTenantChipStyle()
+    {
+        if (_isImpersonating)
+            return "border: 1px solid rgba(255, 170, 0, 0.8); background: rgba(255, 170, 0, 0.15);";
+        if (_isDemo)
+            return "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);";
+        return "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);";
     }
 
     private void Logout()
@@ -356,39 +492,39 @@
         {
             // Core brand colors
             Primary = "#00ffff",           // Cyan - primary actions
-            Secondary = "#00ff88",         // Neon green - secondary elements  
+            Secondary = "#00ff88",         // Neon green - secondary elements
             Tertiary = "#00ddbb",          // Teal - tertiary accent
-            
+
             // Backgrounds - absolute black
             Background = "#000000",
             BackgroundGrey = "#0a0a0a",
             Surface = "#0f0f0f",
             DrawerBackground = "#000000",
             AppbarBackground = "#000000",
-            
+
             // Text - high contrast white
             TextPrimary = "#ffffff",
             TextSecondary = "rgba(255, 255, 255, 0.7)",
             TextDisabled = "rgba(255, 255, 255, 0.38)",
-            
+
             // Semantic colors - neon palette
             Success = "#00ff88",           // Neon green
             Error = "#ff0055",             // Neon red/pink
             Warning = "#ffaa00",           // Neon orange
             Info = "#00ffff",              // Cyan
-            
+
             // Borders and dividers
             Divider = "rgba(0, 255, 255, 0.2)",
             DividerLight = "rgba(0, 255, 255, 0.1)",
-            
+
             // Actions and overlays
             ActionDefault = "rgba(0, 255, 255, 0.54)",
             ActionDisabled = "rgba(255, 255, 255, 0.26)",
             ActionDisabledBackground = "rgba(255, 255, 255, 0.12)",
-            
+
             // Hover effects - neon glow
             HoverOpacity = 0.15,
-            
+
             // Lines
             LinesDefault = "rgba(0, 255, 255, 0.2)",
             LinesInputs = "rgba(0, 255, 255, 0.3)"

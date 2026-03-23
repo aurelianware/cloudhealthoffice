@@ -6,6 +6,8 @@
 @inject IUserContextService UserContextService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject ITenantContextService TenantContextService
+@inject NavigationManager Navigation
 @inject ILogger<PlatformTenants> Logger
 
 <PageTitle>Platform Tenants - Cloud Health Office</PageTitle>
@@ -140,6 +142,10 @@
                         </MudTd>
                         <MudTd DataLabel="Actions">
                             <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" AnchorOrigin="Origin.BottomRight">
+                                <MudMenuItem Icon="@Icons.Material.Filled.SwapHoriz" OnClick="@(() => SwitchToTenant(context))">
+                                    Switch to Tenant
+                                </MudMenuItem>
+                                <MudDivider />
                                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="@(() => ShowEditTenantDialog(context))">
                                     Edit
                                 </MudMenuItem>
@@ -379,6 +385,27 @@
         "starter" => Color.Default,
         _ => Color.Default
     };
+
+    private async Task SwitchToTenant(TenantSubscription tenant)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Switch to Tenant",
+            $"Switch to {tenant.OrganizationName}? You will be viewing this tenant's data as a platform admin.",
+            yesText: "Switch", cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        var success = await TenantContextService.SwitchTenantAsync(tenant.AzureTenantId);
+        if (success)
+        {
+            Snackbar.Add($"Switched to {tenant.OrganizationName}", Severity.Success);
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add("Failed to switch tenant", Severity.Error);
+        }
+    }
 
     private static string Truncate(string? value, int maxLength)
     {
