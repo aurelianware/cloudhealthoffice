@@ -31,7 +31,7 @@
                              Color="@GetCurrentTenantChipColor()"
                              Variant="Variant.Outlined"
                              Size="Size.Small"
-                             Style="@GetCurrentTenantChipStyle() cursor: pointer;">
+                             Style="@(GetCurrentTenantChipStyle() + " cursor: pointer;")">
                         @_tenantName
                         @if (_isDemo) { <text> (Demo)</text> }
                         @if (_isImpersonating) { <text> [Impersonating]</text> }
