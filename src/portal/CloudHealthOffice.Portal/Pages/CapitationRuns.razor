@@ -78,6 +78,8 @@
               Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<CapRunSummary,object>(x=>x.RunNumber)">Run Number</MudTableSortLabel></MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>LOB</MudTh>
             <MudTh>Period</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Providers</MudTh>
@@ -91,6 +93,10 @@
                 <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/runs/" + context.Id))"
                            Style="font-family: monospace; color: #00ffff;">@context.RunNumber</MudButton>
             </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetRunTypeColor(context.RunType)">@context.RunType</MudChip>
+            </MudTd>
+            <MudTd DataLabel="LOB">@(context.LineOfBusiness ?? "—")</MudTd>
             <MudTd DataLabel="Period">@context.CapitationPeriod.ToString("MMM yyyy")</MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Size="Size.Small" Color="@GetRunStatusColor(context.Status)"
@@ -127,6 +133,11 @@ else
         <MudPaper Class="pa-4 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
             <div class="d-flex align-center gap-3 mb-3">
                 <MudText Typo="Typo.h5" Style="font-family: monospace; color: #00ffff;">@_selectedRun.RunNumber</MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetRunTypeColor(_selectedRun.RunType)">@_selectedRun.RunType</MudChip>
+                @if (!string.IsNullOrEmpty(_selectedRun.LineOfBusiness))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@_selectedRun.LineOfBusiness</MudChip>
+                }
                 <MudChip T="string" Size="Size.Small" Color="@GetRunStatusColor(_selectedRun.Status)">@_selectedRun.Status</MudChip>
             </div>
             <MudGrid>
@@ -186,8 +197,6 @@ else
     private bool _loading = true;
     private string? _serviceError;
 
-    private DateTime? _newRunPeriod = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-
     protected override async Task OnInitializedAsync() => await LoadData();
 
     protected override async Task OnParametersSetAsync() => await LoadData();
@@ -223,16 +232,11 @@ else
 
     private async Task OpenCreateRunDialog()
     {
-        var result = await DialogService.ShowMessageBox("New Capitation Run",
-            $"Create a new capitation run for {_newRunPeriod:MMMM yyyy}?", "Create", "Cancel");
-        if (result != true) return;
-        try
-        {
-            var id = await CapitationService.CreateRunAsync(new CreateCapRunRequest { CapitationPeriod = _newRunPeriod!.Value, CreatedBy = "portal-user" });
-            Snackbar.Add("Capitation run created", Severity.Success);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CloudHealthOffice.Portal.Dialogs.CreateCapitationRunDialog>("New Capitation Run", options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
             await LoadRuns();
-        }
-        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
     }
 
     private async Task ExecuteRun(CapRunSummary run)
@@ -260,6 +264,13 @@ else
         try { await CapitationService.ApproveStatementAsync(stmt.Id); Snackbar.Add("Statement approved", Severity.Success); await LoadData(); }
         catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
     }
+
+    private static Color GetRunTypeColor(string runType) => runType switch
+    {
+        "Monthly" => Color.Primary, "AdHocProvider" => Color.Info,
+        "RetroAdjustment" => Color.Warning, "WithholdRelease" => Color.Success,
+        _ => Color.Default
+    };
 
     private static Color GetRunStatusColor(string status) => status switch
     {

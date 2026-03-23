@@ -56,9 +56,10 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         Id = id,
         TenantId = "smoke-test-tenant",
         RunNumber = "CAPRUN-2026-03-SMKE",
+        RunType = CapitationRunType.Monthly,
         CapitationPeriod = new DateTime(2026, 3, 1),
         Status = status,
-        Criteria = new CapitationRunCriteria(),
+        Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
         CreatedBy = "smoke-test"
     };
 
@@ -67,6 +68,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         Id = "run-smoke-done",
         TenantId = "smoke-test-tenant",
         RunNumber = "CAPRUN-2026-03-DONE",
+        RunType = CapitationRunType.Monthly,
         CapitationPeriod = new DateTime(2026, 3, 1),
         Status = CapitationRunStatus.Completed,
         TotalStatements = 1,
@@ -140,7 +142,9 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         // Step 1: Create run
         var createResponse = await _client.PostAsJsonAsync("/api/v1/capitation/runs", new
         {
+            runType = 1, // Monthly
             capitationPeriod = "2026-03-01T00:00:00Z",
+            criteria = new { lineOfBusiness = 0 }, // Commercial
             createdBy = "smoke-test"
         });
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);

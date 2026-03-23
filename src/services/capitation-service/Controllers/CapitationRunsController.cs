@@ -32,11 +32,18 @@ public class CapitationRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationRun>> CreateRun([FromBody] CreateCapitationRunRequest request)
     {
-        _logger.LogInformation("Creating capitation run for period {Period}", request.CapitationPeriod);
+        _logger.LogInformation("Creating {RunType} capitation run for period {Period}",
+            request.RunType, request.CapitationPeriod);
 
-        var run = await _runService.CreateRunAsync(request, request.CreatedBy);
-
-        return CreatedAtAction(nameof(GetRunById), new { id = run.Id }, run);
+        try
+        {
+            var run = await _runService.CreateRunAsync(request, request.CreatedBy);
+            return CreatedAtAction(nameof(GetRunById), new { id = run.Id }, run);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
