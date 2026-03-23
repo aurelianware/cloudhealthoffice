@@ -1784,6 +1784,7 @@ public class CreateCapRunRequest
     public string? LineOfBusiness { get; set; }
     public string? ProviderNPI { get; set; }
     public string? ContractType { get; set; }
+    public DateTime? OriginalPeriod { get; set; }
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }
 }
