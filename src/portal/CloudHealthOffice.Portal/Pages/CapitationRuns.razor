@@ -68,9 +68,9 @@
     <div class="d-flex align-center gap-3 mb-4 flex-wrap">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                    OnClick="OpenCreateRunDialog">New Capitation Run</MudButton>
-        <MudSelect @bind-Value="_filterLob" Label="LOB" Variant="Variant.Outlined" Dense="true"
+        <MudSelect T="string" Value="_filterLob" Label="LOB" Variant="Variant.Outlined" Dense="true"
                    Clearable="true" Style="max-width: 180px;" Margin="Margin.Dense"
-                   ValueChanged="@((string? _) => LoadRuns())">
+                   ValueChanged="@((string? v) => { _filterLob = v; LoadRuns(); })">
             <MudSelectItem Value="@((string?)null)">All LOBs</MudSelectItem>
             <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
             <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
