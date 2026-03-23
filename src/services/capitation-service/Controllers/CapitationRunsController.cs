@@ -94,9 +94,10 @@ public class CapitationRunsController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<CapitationRun>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<CapitationRun>>> GetRuns(
         [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to)
+        [FromQuery] DateTime? to,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null)
     {
-        var runs = await _runService.GetRunsAsync(from, to);
+        var runs = await _runService.GetRunsAsync(from, to, lineOfBusiness);
         return Ok(runs);
     }
 

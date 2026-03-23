@@ -523,18 +523,20 @@ public class CapitationRunServiceTests
 
         savedRun.Should().NotBeNull();
         savedRun!.CapitationPeriod.Day.Should().Be(1); // Normalized to first
-        savedRun.RunNumber.Should().StartWith("CAPRUN-2026-03-");
+        savedRun.RunNumber.Should().StartWith("CAPRUN-COM-2026-03-");
         savedRun.RunType.Should().Be(CapitationRunType.Monthly);
+        savedRun.LineOfBusiness.Should().Be(LineOfBusiness.Commercial);
         savedRun.Status.Should().Be(CapitationRunStatus.Pending);
     }
 
     [Fact]
-    public async Task CreateRunAsync_MonthlyWithoutLob_ThrowsArgumentException()
+    public async Task CreateRunAsync_WithoutValidLob_ThrowsArgumentException()
     {
         var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
         {
             RunType = CapitationRunType.Monthly,
-            CapitationPeriod = new DateTime(2026, 3, 1)
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = (LineOfBusiness)999 }
         }, "admin");
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -547,7 +549,8 @@ public class CapitationRunServiceTests
         var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
         {
             RunType = CapitationRunType.AdHocProvider,
-            CapitationPeriod = new DateTime(2026, 3, 1)
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial }
         }, "admin");
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -560,7 +563,8 @@ public class CapitationRunServiceTests
         var act = () => _service.CreateRunAsync(new CreateCapitationRunRequest
         {
             RunType = CapitationRunType.RetroAdjustment,
-            CapitationPeriod = new DateTime(2026, 3, 1)
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial }
         }, "admin");
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -582,12 +586,183 @@ public class CapitationRunServiceTests
     public async Task GetRunsAsync_DelegatesToRepo()
     {
         var runs = new List<CapitationRun> { CreatePendingRun() };
-        _runRepo.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null))
+        _runRepo.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null))
             .ReturnsAsync(runs);
 
         var result = await _service.GetRunsAsync(new DateTime(2026, 1, 1), new DateTime(2026, 12, 31));
 
         result.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task GetRunsAsync_WithLobFilter_PassesLobToRepo()
+    {
+        var runs = new List<CapitationRun> { CreatePendingRun() };
+        _runRepo.Setup(r => r.SearchAsync(null, null, null, LineOfBusiness.Medicaid))
+            .ReturnsAsync(runs);
+
+        var result = await _service.GetRunsAsync(null, null, LineOfBusiness.Medicaid);
+
+        result.Should().HaveCount(1);
+        _runRepo.Verify(r => r.SearchAsync(null, null, null, LineOfBusiness.Medicaid), Times.Once);
+    }
+
+    #endregion
+
+    #region CreateRunAsync — RunNumber, Description, Denormalized Fields
+
+    [Fact]
+    public async Task CreateRunAsync_GeneratesRunNumberWithLobAbbreviation()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Medicaid }
+        }, "admin");
+
+        savedRun!.RunNumber.Should().StartWith("CAPRUN-MCD-2026-03-");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_MedicareRunNumber_UsesMcrAbbreviation()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Medicare }
+        }, "admin");
+
+        savedRun!.RunNumber.Should().StartWith("CAPRUN-MCR-2026-03-");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_AutoGeneratesDescription_Monthly()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial }
+            // Description intentionally omitted
+        }, "admin");
+
+        savedRun!.Description.Should().Be("Monthly Commercial capitation for March 2026");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_AutoGeneratesDescription_AdHocProvider()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.AdHocProvider,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Medicaid, ProviderNPI = "1234567890" }
+        }, "admin");
+
+        savedRun!.Description.Should().Be("Ad-hoc Medicaid capitation for provider 1234567890, March 2026");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_ExplicitDescription_PreservesIt()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
+            Description = "Custom description for testing"
+        }, "admin");
+
+        savedRun!.Description.Should().Be("Custom description for testing");
+    }
+
+    [Fact]
+    public async Task CreateRunAsync_SetsDenormalizedLineOfBusiness()
+    {
+        CapitationRun? savedRun = null;
+        _runRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationRun>()))
+            .Callback<CapitationRun>(r => savedRun = r)
+            .ReturnsAsync((CapitationRun r) => r);
+
+        await _service.CreateRunAsync(new CreateCapitationRunRequest
+        {
+            RunType = CapitationRunType.Monthly,
+            CapitationPeriod = new DateTime(2026, 3, 1),
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Medicare }
+        }, "admin");
+
+        savedRun!.LineOfBusiness.Should().Be(LineOfBusiness.Medicare);
+    }
+
+    #endregion
+
+    #region ExecuteRunAsync — No Contracts Warning
+
+    [Fact]
+    public async Task ExecuteRunAsync_NoMatchingContracts_AddsWarning()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
+            .ReturnsAsync(new List<CapitationContract>());
+
+        var result = await _service.ExecuteRunAsync("run-1");
+
+        result.Status.Should().Be(CapitationRunStatus.Completed);
+        result.TotalStatements.Should().Be(0);
+        result.Warnings.Should().ContainSingle();
+        result.Warnings[0].Should().Contain("Commercial");
+    }
+
+    [Fact]
+    public async Task ExecuteRunAsync_AdHocNoContracts_WarningIncludesNpi()
+    {
+        var run = CreatePendingRun();
+        run.RunType = CapitationRunType.AdHocProvider;
+        run.Criteria = new CapitationRunCriteria
+        {
+            LineOfBusiness = LineOfBusiness.Commercial,
+            ProviderNPI = "9999999999"
+        };
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(LineOfBusiness.Commercial, null))
+            .ReturnsAsync(new List<CapitationContract>());
+
+        var result = await _service.ExecuteRunAsync("run-1");
+
+        result.Warnings.Should().ContainSingle();
+        result.Warnings[0].Should().Contain("9999999999");
     }
 
     #endregion

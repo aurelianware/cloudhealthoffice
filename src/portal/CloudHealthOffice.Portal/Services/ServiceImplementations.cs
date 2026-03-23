@@ -2616,13 +2616,14 @@ public class CapitationService : ICapitationService
     }
 
     // Runs
-    public async Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null)
+    public async Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null, string? lineOfBusiness = null)
     {
         try
         {
             var qs = new List<string>();
             if (from.HasValue) qs.Add($"from={from.Value:O}");
             if (to.HasValue) qs.Add($"to={to.Value:O}");
+            if (!string.IsNullOrEmpty(lineOfBusiness)) qs.Add($"lineOfBusiness={lineOfBusiness}");
             var query = qs.Count > 0 ? "?" + string.Join("&", qs) : "";
             return await _httpClient.GetFromJsonAsync<List<CapRunSummary>>($"{BaseUrl}/v1/capitation/runs{query}") ?? new();
         }
