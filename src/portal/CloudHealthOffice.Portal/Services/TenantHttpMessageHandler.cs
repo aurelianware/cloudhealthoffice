@@ -29,32 +29,32 @@ public class TenantHttpMessageHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        // Always read current tenant context to support dynamic tenant switching.
-        // MainLayout updates DefaultRequestHeaders on switch, but per-request
-        // resolution via ITenantContextService ensures correctness.
+        // If the header was already set (e.g. via HttpClient.DefaultRequestHeaders
+        // in MainLayout), skip dynamic resolution entirely.
+        if (request.Headers.Contains("X-Tenant-ID"))
+        {
+            return await base.SendAsync(request, cancellationToken);
+        }
+
+        // Dynamically resolve the tenant ID via ITenantContextService.
         try
         {
-            var tenantContext = await _tenantContextService.GetCurrentTenantContextAsync();
-            if (tenantContext?.TenantId != null)
+            var tenantId = await _tenantContextService.GetTenantIdAsync();
+            if (!string.IsNullOrEmpty(tenantId))
             {
-                request.Headers.Remove("X-Tenant-ID");
-                request.Headers.Add("X-Tenant-ID", tenantContext.TenantId);
-                return await base.SendAsync(request, cancellationToken);
+                request.Headers.Add("X-Tenant-ID", tenantId);
+            }
+            else
+            {
+                _logger.LogWarning("No tenant ID available for request to {RequestUri}", request.RequestUri);
             }
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("GetAuthenticationStateAsync"))
         {
-            // Outside Blazor circuit scope — fall through to check DefaultRequestHeaders
+            // Outside Blazor circuit scope — let the request proceed without the header
             _logger.LogDebug(
                 "Cannot resolve tenant context outside Razor scope for {RequestUri}, using pre-set header if available",
                 request.RequestUri);
-        }
-
-        // Fallback: if dynamic resolution failed (e.g. outside circuit scope),
-        // let the pre-set DefaultRequestHeaders pass through
-        if (!request.Headers.Contains("X-Tenant-ID"))
-        {
-            _logger.LogWarning("No tenant ID available for request to {RequestUri}", request.RequestUri);
         }
 
         return await base.SendAsync(request, cancellationToken);
