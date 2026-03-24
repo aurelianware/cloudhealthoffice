@@ -1,12 +1,19 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+WORKDIR /repo
 
-COPY *.csproj ./
-RUN dotnet restore
+# Copy csproj and restore (preserves layer caching)
+COPY src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj src/services/CloudHealthOffice.PricingApi/
+RUN dotnet restore src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj
 
-COPY . .
-RUN dotnet publish -c Release -o /app --no-restore
+# Copy source code and build
+COPY src/services/CloudHealthOffice.PricingApi/ src/services/CloudHealthOffice.PricingApi/
+RUN dotnet build src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj -c Release --no-restore
 
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
+
+# Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
@@ -14,13 +21,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Labels for container registry
 LABEL org.opencontainers.image.title="CloudHealthOffice Pricing API"
 LABEL org.opencontainers.image.description="Vendor-neutral claims repricing API"
 LABEL org.opencontainers.image.vendor="Aurelianware, Inc."
 LABEL org.opencontainers.image.source="https://github.com/aurelianware/cloudhealthoffice"
 
-COPY --from=build /app .
+COPY --from=publish /app/publish .
 
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production

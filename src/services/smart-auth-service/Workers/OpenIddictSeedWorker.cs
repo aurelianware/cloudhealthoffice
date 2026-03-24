@@ -23,9 +23,25 @@ public class OpenIddictSeedWorker : IHostedService
 
     public async Task StartAsync(CancellationToken ct)
     {
-        await using var scope = _sp.CreateAsyncScope();
-        await SeedScopesAsync(scope, ct);
-        await SeedClientsAsync(scope, ct);
+        // Retry with backoff — MongoDB may not be DNS-resolvable immediately in Docker
+        const int maxRetries = 5;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                await using var scope = _sp.CreateAsyncScope();
+                await SeedScopesAsync(scope, ct);
+                await SeedClientsAsync(scope, ct);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxRetries && !ct.IsCancellationRequested)
+            {
+                var delay = TimeSpan.FromSeconds(attempt * 5);
+                _logger.LogWarning(ex, "OpenIddict seed attempt {Attempt}/{Max} failed — retrying in {Delay}s",
+                    attempt, maxRetries, delay.TotalSeconds);
+                await Task.Delay(delay, ct);
+            }
+        }
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;

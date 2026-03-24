@@ -181,7 +181,7 @@ public record FeeScheduleInfo
 
 public record FeeScheduleEntry
 {
-    public string? Id { get; init; }
+    public string Id { get; init; } = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
     public required string FeeScheduleId { get; init; }
     public required string ProcedureCode { get; init; }
     public string? Description { get; init; }
