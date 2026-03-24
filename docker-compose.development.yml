@@ -21,8 +21,21 @@
 #   Enrollment-import service:  http://localhost:5010
 #   FHIR service:               http://localhost:5011
 #   Capitation service:         http://localhost:5012
+#   Appeals service:            http://localhost:5013
+#   Attachment service:         http://localhost:5014
+#   Sponsor service:            http://localhost:5015
+#   Reference-data service:     http://localhost:5016
+#   Pricing API:                http://localhost:5017
+#   Premium-billing service:    http://localhost:5018
+#   RFAI service:               http://localhost:5019
+#   Claims-scrubbing service:   http://localhost:5020
+#   Encounter service:          http://localhost:5021
+#   Risk-adjustment service:    http://localhost:5022
+#   Smart-auth service:         http://localhost:5023
+#   Trading-partner service:    http://localhost:5024
 #   MongoDB:                    localhost:27017
 #   Redis:                      localhost:6379
+#   PostgreSQL:                 localhost:5432
 
 x-mongo-env: &mongo-env
   MongoDb__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
@@ -66,6 +79,22 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: cho
+      POSTGRES_PASSWORD: chodevpass
+      POSTGRES_DB: referencedata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cho -d referencedata"]
+      interval: 5s
+      timeout: 5s
       retries: 10
 
   # ---------------------------------------------------------------------------
@@ -305,8 +334,11 @@ services:
       - "5016:8080"
     environment:
       <<: *common-env
+      ConnectionString__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=chodevpass
     depends_on:
       mongodb:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
@@ -331,8 +363,14 @@ services:
       - "5018:8080"
     environment:
       <<: *common-env
+      CoverageService__BaseUrl: http://coverage-service:8080
+      SponsorService__BaseUrl: http://sponsor-service:8080
     depends_on:
       mongodb:
+        condition: service_healthy
+      coverage-service:
+        condition: service_healthy
+      sponsor-service:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
@@ -349,6 +387,71 @@ services:
       mongodb:
         condition: service_healthy
       claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  claims-scrubbing-service:
+    build:
+      context: .
+      dockerfile: src/services/claims-scrubbing-service/Dockerfile
+    ports:
+      - "5020:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  encounter-service:
+    build:
+      context: .
+      dockerfile: src/services/encounter-service/Dockerfile
+    ports:
+      - "5021:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  risk-adjustment-service:
+    build:
+      context: .
+      dockerfile: src/services/risk-adjustment-service/Dockerfile
+    ports:
+      - "5022:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  smart-auth-service:
+    build:
+      context: .
+      dockerfile: src/services/smart-auth-service/Dockerfile
+    ports:
+      - "5023:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  trading-partner-service:
+    build:
+      context: .
+      dockerfile: src/services/trading-partner-service/Dockerfile
+    ports:
+      - "5024:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
@@ -384,3 +487,4 @@ services:
 
 volumes:
   mongo-data:
+  postgres-data:
