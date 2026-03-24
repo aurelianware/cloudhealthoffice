@@ -56,6 +56,27 @@ public class AccumulatorTotalEntry
 }
 
 /// <summary>
+/// Portal claim search request body (POST /api/claims/search)
+/// </summary>
+public class ClaimSearchBody
+{
+    public string? ClaimNumber { get; set; }
+    public string? MemberId { get; set; }
+    public string? MemberName { get; set; }
+    public string? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public string? ClaimType { get; set; }
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+    public string? Status { get; set; }
+    public string? AuthorizationNumber { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 25;
+    public string? SortBy { get; set; }
+    public string? SortOrder { get; set; }
+}
+
+/// <summary>
 /// Claims summary statistics
 /// </summary>
 public class ClaimsSummary
