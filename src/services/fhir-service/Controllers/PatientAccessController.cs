@@ -24,19 +24,6 @@ public class PatientAccessController : FhirControllerBase
         _dataProvider = dataProvider;
     }
 
-    /// <summary>GET /fhir/r4/Patient/{id} — read a single Patient (lightweight FHIR)</summary>
-    [HttpGet("Patient/{id}")]
-    [Produces("application/fhir+json")]
-    public async Task<IActionResult> GetPatient(string id, CancellationToken ct)
-    {
-        var member = await _dataProvider.GetMemberAsync(id, ct);
-        if (member is null)
-            return FhirNotFound("Patient", id);
-
-        var patient = PatientAccessMapper.MapMemberToPatient(member);
-        return Ok(patient);
-    }
-
     /// <summary>GET /fhir/r4/Coverage?patient={id} — search Coverage by patient</summary>
     [HttpGet("Coverage")]
     [Produces("application/fhir+json")]
