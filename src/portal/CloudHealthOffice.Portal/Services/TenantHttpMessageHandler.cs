@@ -9,9 +9,8 @@ namespace CloudHealthOffice.Portal.Services;
 /// Razor component DI scope.  This handler acts as a safety-net: it checks whether
 /// the header was already set and only attempts dynamic resolution as a fallback.
 ///
-/// Dynamic resolution can fail when IHttpClientFactory resolves this handler in its
-/// own DI scope (separate from the Blazor circuit), because
-/// AuthenticationStateProvider is only valid inside a Razor component scope.
+/// After a tenant switch, MainLayout updates the DefaultRequestHeaders so all
+/// subsequent requests use the new tenant ID automatically.
 /// </summary>
 public class TenantHttpMessageHandler : DelegatingHandler
 {
@@ -31,22 +30,19 @@ public class TenantHttpMessageHandler : DelegatingHandler
         CancellationToken cancellationToken)
     {
         // If the header was already set (e.g. via HttpClient.DefaultRequestHeaders
-        // from MainLayout), skip resolution entirely.
+        // in MainLayout), skip dynamic resolution entirely.
         if (request.Headers.Contains("X-Tenant-ID"))
         {
             return await base.SendAsync(request, cancellationToken);
         }
 
-        // Fallback: try to resolve from ITenantContextService.  This may fail when
-        // the handler runs outside the Blazor circuit DI scope.
+        // Dynamically resolve the tenant ID via ITenantContextService.
         try
         {
             var tenantId = await _tenantContextService.GetTenantIdAsync();
-
             if (!string.IsNullOrEmpty(tenantId))
             {
                 request.Headers.Add("X-Tenant-ID", tenantId);
-                _logger.LogDebug("Added X-Tenant-ID header: {TenantId} for {RequestUri}", tenantId, request.RequestUri);
             }
             else
             {
@@ -55,9 +51,9 @@ public class TenantHttpMessageHandler : DelegatingHandler
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("GetAuthenticationStateAsync"))
         {
-            _logger.LogWarning(
-                "Cannot resolve tenant ID outside Razor component scope for {RequestUri}. " +
-                "Ensure MainLayout sets X-Tenant-ID on HttpClient.DefaultRequestHeaders.",
+            // Outside Blazor circuit scope — let the request proceed without the header
+            _logger.LogDebug(
+                "Cannot resolve tenant context outside Razor scope for {RequestUri}, using pre-set header if available",
                 request.RequestUri);
         }
 

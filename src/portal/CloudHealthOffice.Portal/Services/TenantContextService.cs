@@ -21,6 +21,24 @@ public interface ITenantContextService
     string? TenantId { get; }
     string? TenantName { get; }
     bool IsDemo { get; }
+
+    /// <summary>
+    /// Get all tenants the current user has access to (by Azure AD membership,
+    /// guest access, or admin email association)
+    /// </summary>
+    Task<List<TenantSubscription>> GetAvailableTenantsAsync();
+
+    /// <summary>
+    /// Switch the current session to a different tenant. The user must have
+    /// access to the target tenant (verified by GetAvailableTenantsAsync).
+    /// </summary>
+    Task<bool> SwitchTenantAsync(string azureTenantId);
+
+    /// <summary>
+    /// Whether the current user is impersonating a tenant they don't directly belong to.
+    /// Only applicable for platform admins.
+    /// </summary>
+    bool IsImpersonating { get; }
 }
 
 public class TenantContextService : ITenantContextService
@@ -29,10 +47,14 @@ public class TenantContextService : ITenantContextService
     private readonly ITenantService _tenantService;
     private readonly ILogger<TenantContextService> _logger;
     private TenantContext? _cachedContext;
+    private List<TenantSubscription>? _cachedAvailableTenants;
+    private string? _homeTenantId; // Original Azure AD tenant ID from claims — never changes after first resolution
+    private bool _isImpersonating;
 
     public string? TenantId => _cachedContext?.TenantId;
     public string? TenantName => _cachedContext?.TenantName;
     public bool IsDemo => _cachedContext?.IsDemo ?? false;
+    public bool IsImpersonating => _isImpersonating;
 
     public TenantContextService(
         AuthenticationStateProvider authenticationStateProvider,
@@ -64,7 +86,7 @@ public class TenantContextService : ITenantContextService
         // Extract Azure AD Tenant ID from claims
         var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
                          ?? user.FindFirst("tid")?.Value;
-        
+
         var userEmail = user.FindFirst(ClaimTypes.Email)?.Value
                      ?? user.FindFirst("preferred_username")?.Value
                      ?? user.FindFirst("upn")?.Value;
@@ -75,43 +97,70 @@ public class TenantContextService : ITenantContextService
             return null;
         }
 
+        // Cache the original home tenant ID from claims — this never changes,
+        // even after SwitchTenantAsync updates _cachedContext.AzureTenantId.
+        _homeTenantId ??= azureTenantId;
+
         try
         {
-            // Query subscription by Azure Tenant ID
+            // Step 1: Query subscription by Azure Tenant ID (home tenant match)
             var subscription = await _tenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
 
-            if (subscription == null)
+            if (subscription != null)
             {
-                _logger.LogWarning("No subscription found for Azure Tenant ID: {TenantId}, using default tenant context", azureTenantId);
-                // Fallback: use the Azure AD tenant ID directly so the portal
-                // remains functional before a subscription is formally created
-                _cachedContext = new TenantContext
-                {
-                    TenantId = azureTenantId,
-                    TenantName = userEmail?.Split('@').LastOrDefault() ?? "Cloud Health Office",
-                    AzureTenantId = azureTenantId,
-                    SubscriptionTier = "professional",
-                    SubscriptionStatus = "Active",
-                    IsDemo = false,
-                    UserEmail = userEmail
-                };
+                _cachedContext = BuildTenantContext(subscription, azureTenantId, userEmail);
+                _logger.LogInformation("Tenant context resolved via home tenant: {TenantName} ({TenantId})",
+                    _cachedContext.TenantName, _cachedContext.TenantId);
                 return _cachedContext;
             }
 
+            // Step 2: Home tenant didn't match — guest user scenario
+            // Check if user's email appears in any tenant's admin emails or user list
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                _logger.LogInformation(
+                    "No subscription for home tenant {HomeTenantId}, checking email-based tenant resolution for {Email}",
+                    azureTenantId, userEmail);
+
+                var userTenants = await _tenantService.GetTenantsForUserAsync(userEmail);
+
+                if (userTenants.Count == 1)
+                {
+                    // Exactly one match — auto-resolve
+                    subscription = userTenants[0];
+                    _cachedContext = BuildTenantContext(subscription, subscription.AzureTenantId, userEmail);
+                    _logger.LogInformation(
+                        "Guest user {Email} auto-resolved to tenant: {TenantName} ({TenantId})",
+                        userEmail, _cachedContext.TenantName, _cachedContext.TenantId);
+                    return _cachedContext;
+                }
+
+                if (userTenants.Count > 1)
+                {
+                    // Multiple matches — cache the list, default to first
+                    _cachedAvailableTenants = userTenants;
+                    subscription = userTenants[0];
+                    _cachedContext = BuildTenantContext(subscription, subscription.AzureTenantId, userEmail);
+                    _logger.LogInformation(
+                        "Guest user {Email} has access to {Count} tenants, defaulting to: {TenantName}",
+                        userEmail, userTenants.Count, _cachedContext.TenantName);
+                    return _cachedContext;
+                }
+            }
+
+            _logger.LogWarning("No subscription found for Azure Tenant ID: {TenantId}, using default tenant context", azureTenantId);
+            // Fallback: use the Azure AD tenant ID directly so the portal
+            // remains functional before a subscription is formally created
             _cachedContext = new TenantContext
             {
-                TenantId = subscription.TenantId ?? azureTenantId,
-                TenantName = subscription.OrganizationName ?? "Unknown Tenant",
+                TenantId = azureTenantId,
+                TenantName = userEmail?.Split('@').LastOrDefault() ?? "Cloud Health Office",
                 AzureTenantId = azureTenantId,
-                SubscriptionTier = subscription.Tier ?? "starter",
-                SubscriptionStatus = subscription.SubscriptionStatus ?? "Unknown",
-                IsDemo = subscription.IsDemo,
+                SubscriptionTier = "professional",
+                SubscriptionStatus = "Active",
+                IsDemo = false,
                 UserEmail = userEmail
             };
-
-            _logger.LogInformation("Tenant context resolved: {TenantName} ({TenantId})", 
-                _cachedContext.TenantName, _cachedContext.TenantId);
-
             return _cachedContext;
         }
         catch (Exception ex)
@@ -136,6 +185,120 @@ public class TenantContextService : ITenantContextService
         var context = await GetCurrentTenantContextAsync();
         return context?.TenantId;
     }
+
+    public async Task<List<TenantSubscription>> GetAvailableTenantsAsync()
+    {
+        // Return cached list if available
+        if (_cachedAvailableTenants != null)
+            return _cachedAvailableTenants;
+
+        // Ensure current context is resolved first
+        var currentContext = await GetCurrentTenantContextAsync();
+        if (currentContext == null)
+            return new List<TenantSubscription>();
+
+        var userEmail = currentContext.UserEmail;
+        if (string.IsNullOrEmpty(userEmail))
+            return new List<TenantSubscription>();
+
+        try
+        {
+            // Get tenants the user has access to via email/admin association
+            var userTenants = await _tenantService.GetTenantsForUserAsync(userEmail);
+
+            // Also include the home tenant match if it exists and isn't already in the list.
+            // Use _homeTenantId (cached from original claims) rather than currentContext.AzureTenantId,
+            // which may reflect a switched-to tenant after SwitchTenantAsync.
+            var homeTenantSubscription = _homeTenantId != null
+                ? await _tenantService.GetSubscriptionByAzureTenantIdAsync(_homeTenantId)
+                : null;
+            if (homeTenantSubscription != null &&
+                !userTenants.Any(t => t.AzureTenantId == homeTenantSubscription.AzureTenantId))
+            {
+                userTenants.Insert(0, homeTenantSubscription);
+            }
+
+            _cachedAvailableTenants = userTenants;
+            return _cachedAvailableTenants;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting available tenants for user {Email}", userEmail);
+            return new List<TenantSubscription>();
+        }
+    }
+
+    public async Task<bool> SwitchTenantAsync(string azureTenantId)
+    {
+        try
+        {
+            // Verify the user has access to this tenant
+            var availableTenants = await GetAvailableTenantsAsync();
+            var targetTenant = availableTenants.FirstOrDefault(t => t.AzureTenantId == azureTenantId);
+
+            if (targetTenant == null)
+            {
+                // For platform admins, allow switching to any tenant (impersonation)
+                var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+                var isPlatformAdmin = user.IsInRole("PlatformAdmin") ||
+                    user.Claims.Any(c => c.Type == "permissions" && c.Value.Contains("platform:admin"));
+
+                if (isPlatformAdmin)
+                {
+                    targetTenant = await _tenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+                    if (targetTenant == null)
+                    {
+                        _logger.LogWarning("Platform admin attempted to switch to non-existent tenant {TenantId}", azureTenantId);
+                        return false;
+                    }
+                    _isImpersonating = true;
+                    _logger.LogWarning(
+                        "Platform admin {Email} switched to tenant {OrgName} ({AzureTenantId})",
+                        _cachedContext?.UserEmail, targetTenant.OrganizationName, azureTenantId);
+                }
+                else
+                {
+                    _logger.LogWarning("User attempted to switch to unauthorized tenant {TenantId}", azureTenantId);
+                    return false;
+                }
+            }
+            else
+            {
+                // Switching to an authorized tenant the user has explicit membership in
+                // — this is NOT impersonation, even if it's not their home tenant
+                _isImpersonating = false;
+            }
+
+            var userEmail = _cachedContext?.UserEmail;
+            _cachedContext = BuildTenantContext(targetTenant, targetTenant.AzureTenantId, userEmail);
+
+            _logger.LogInformation("Switched tenant context to: {TenantName} ({TenantId})",
+                _cachedContext.TenantName, _cachedContext.TenantId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error switching to tenant {TenantId}", azureTenantId);
+            return false;
+        }
+    }
+
+    private static TenantContext BuildTenantContext(TenantSubscription subscription, string azureTenantId, string? userEmail)
+    {
+        return new TenantContext
+        {
+            TenantId = subscription.TenantId ?? azureTenantId,
+            TenantName = subscription.OrganizationName ?? "Unknown Tenant",
+            AzureTenantId = azureTenantId,
+            SubscriptionTier = subscription.Tier ?? "starter",
+            SubscriptionStatus = subscription.SubscriptionStatus ?? "Unknown",
+            IsDemo = subscription.IsDemo,
+            UserEmail = userEmail
+        };
+    }
+
 }
 
 public class TenantContext
