@@ -15,6 +15,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - '.github/workflows/test-dotnet.yml'
   workflow_dispatch:
 
 jobs:
@@ -38,17 +39,24 @@ jobs:
           echo "Discovering .NET test projects"
           echo "=========================================="
 
-          TEST_PROJECTS=$(find src tests -name '*.Tests.csproj' -o -name '*.E2E.csproj' | sort)
-          PROJECT_COUNT=$(echo "$TEST_PROJECTS" | wc -l)
+          # Discover unit/integration test projects (exclude E2E tests that require Docker services)
+          mapfile -t TEST_PROJECTS < <(find src tests -name '*.Tests.csproj' | sort)
+          PROJECT_COUNT=${#TEST_PROJECTS[@]}
+
+          if [ "$PROJECT_COUNT" -eq 0 ]; then
+            echo "No .NET test projects (*.Tests.csproj) found in src or tests; failing workflow." >&2
+            exit 1
+          fi
+
           echo "Found $PROJECT_COUNT test projects:"
-          echo "$TEST_PROJECTS"
+          printf '%s\n' "${TEST_PROJECTS[@]}"
           echo ""
 
           FAILED=0
           PASSED=0
           SKIPPED=0
 
-          for PROJECT in $TEST_PROJECTS; do
+          for PROJECT in "${TEST_PROJECTS[@]}"; do
             PROJECT_NAME=$(basename "$PROJECT" .csproj)
             echo ""
             echo "=========================================="
@@ -57,8 +65,8 @@ jobs:
 
             # Restore and build
             if ! dotnet restore "$PROJECT" 2>&1; then
-              echo "⚠️  Restore failed for $PROJECT_NAME — skipping"
-              SKIPPED=$((SKIPPED + 1))
+              echo "::error::Restore failed for $PROJECT_NAME. Tests were not run for this project."
+              FAILED=$((FAILED + 1))
               continue
             fi
 
