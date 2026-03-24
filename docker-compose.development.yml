@@ -33,6 +33,7 @@
 #   Risk-adjustment service:    http://localhost:5022
 #   Smart-auth service:         http://localhost:5023
 #   Trading-partner service:    http://localhost:5024
+#   Portal:                     https://localhost:5025
 #   MongoDB:                    localhost:27017
 #   Redis:                      localhost:6379
 #   PostgreSQL:                 localhost:5432
@@ -350,10 +351,17 @@ services:
       - "5017:8080"
     environment:
       <<: *common-env
+      PricingApi__MongoConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      PricingApi__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
     depends_on:
       mongodb:
         condition: service_healthy
-    healthcheck: *service-healthcheck
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   premium-billing-service:
     build:
@@ -454,6 +462,62 @@ services:
       mongodb:
         condition: service_healthy
     healthcheck: *service-healthcheck
+
+  # ---------------------------------------------------------------------------
+  # Portal
+  # ---------------------------------------------------------------------------
+  portal:
+    build:
+      context: .
+      dockerfile: src/portal/CloudHealthOffice.Portal/Dockerfile
+    ports:
+      - "5025:8443"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://+:8443;http://+:8080
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/dev-cert.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: devpassword
+      AzureAd__Instance: https://login.microsoftonline.com/
+      AzureAd__TenantId: common
+      AzureAd__ClientId: ${AzureAd_ClientId:-54f3419d-0d69-4b06-939a-c1a260596556}
+      AzureAd__ClientSecret: ${AzureAd_ClientSecret:-}
+      AzureAd__CallbackPath: /signin-oidc
+      AzureAd__SignedOutCallbackPath: /signout-callback-oidc
+      Services__ClaimsService: http://claims-service:8080/api
+      Services__BenefitPlanService: http://benefit-plan-service:8080/api
+      Services__MemberService: http://member-service:8080/api
+      Services__ProviderService: http://provider-service:8080/api
+      Services__AuthorizationService: http://authorization-service:8080/api
+      Services__PaymentService: http://payment-service:8080/api
+      Services__EligibilityService: http://eligibility-service:8080/api
+      Services__TenantService: http://tenant-service:8080/api
+      Services__CoverageService: http://coverage-service:8080/api
+      Services__RfaiService: http://rfai-service:8080/api
+      Services__AppealsService: http://appeals-service:8080/api
+      Services__AttachmentService: http://attachment-service:8080/api
+      Services__SponsorService: http://sponsor-service:8080/api/v1
+      Services__ReferenceDataService: http://reference-data-service:8080/api/ReferenceData
+      Services__CapitationService: http://capitation-service:8080/api
+      Services__PricingApi: http://pricing-api:8080
+      Services__BillingService: http://premium-billing-service:8080/api
+      MongoDB__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      MongoDB__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
+      Redis__ConnectionString: redis:6379
+    volumes:
+      - ./.certs:/https:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fk https://localhost:8443/health || curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   # ---------------------------------------------------------------------------
   # Seed Data (runs once, then exits)

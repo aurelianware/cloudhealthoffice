@@ -814,6 +814,7 @@ public class CodeUsageStats
     public decimal TotalBilledAmount { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class TenantSubscription
 {
     [BsonId]

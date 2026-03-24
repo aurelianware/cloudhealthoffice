@@ -145,6 +145,25 @@ public class ClaimsController : ControllerBase
         return Ok(claims);
     }
 
+    /// <summary>Search claims via POST body (portal search form).</summary>
+    [HttpPost("search")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SearchClaimsPost([FromBody] ClaimSearchBody body)
+    {
+        ClaimStatus? status = null;
+        if (!string.IsNullOrEmpty(body.Status) && Enum.TryParse<ClaimStatus>(body.Status, true, out var parsed))
+            status = parsed;
+
+        var claims = await _claimRepository.SearchAsync(
+            body.MemberId, body.ProviderId,
+            body.ServiceDateFrom, body.ServiceDateTo,
+            status, null,
+            body.PageNumber, body.PageSize);
+
+        var list = claims.ToList();
+        return Ok(new { claims = list, totalCount = list.Count, page = body.PageNumber, pageSize = body.PageSize });
+    }
+
     /// <summary>
     /// Update claim status (277 claim status update)
     /// </summary>

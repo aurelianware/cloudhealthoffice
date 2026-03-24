@@ -36,7 +36,7 @@ public class CapitationRunRepositoryMongo : ICapitationRunRepository
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
-    public async Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null)
+    public async Task<IEnumerable<CapitationRun>> SearchAsync(DateTime? from = null, DateTime? to = null, CapitationRunStatus? status = null, LineOfBusiness? lineOfBusiness = null)
     {
         var tenantId = GetTenantId();
         var filters = new List<FilterDefinition<CapitationRun>>
@@ -50,6 +50,8 @@ public class CapitationRunRepositoryMongo : ICapitationRunRepository
             filters.Add(Builders<CapitationRun>.Filter.Lte(x => x.CapitationPeriod, to.Value));
         if (status.HasValue)
             filters.Add(Builders<CapitationRun>.Filter.Eq(x => x.Status, status.Value));
+        if (lineOfBusiness.HasValue)
+            filters.Add(Builders<CapitationRun>.Filter.Eq(x => x.LineOfBusiness, lineOfBusiness.Value));
 
         return await _collection
             .Find(Builders<CapitationRun>.Filter.And(filters))

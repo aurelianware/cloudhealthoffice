@@ -104,6 +104,31 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Partial update of user details (e.g. backfill Azure AD OID).
+    /// </summary>
+    [HttpPatch("{userId}")]
+    [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<TenantUser>> PatchUser(
+        string tenantId, string userId, [FromBody] UpdateTenantUserRequest request)
+    {
+        try
+        {
+            var user = await _userService.UpdateUserAsync(tenantId, userId, request);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Delete a user from a tenant. Requires users:manage permission.
     /// </summary>
     [HttpDelete("{userId}")]

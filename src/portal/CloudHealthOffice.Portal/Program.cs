@@ -50,7 +50,14 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(options =>
     {
         builder.Configuration.Bind("AzureAd", options);
-        
+
+        // Use 'query' response mode so the callback is a GET (not cross-origin POST)
+        // This avoids SameSite cookie issues in local development
+        if (builder.Environment.IsDevelopment())
+        {
+            options.ResponseMode = "query";
+        }
+
         // Force HTTPS for redirect URIs when behind reverse proxy
         options.Events.OnRedirectToIdentityProvider = context =>
         {
@@ -112,7 +119,7 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
+    options.Cookie.SameSite = SameSiteMode.None;
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.Name = ".CloudHealthOffice.Auth";
@@ -190,14 +197,22 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 // than registering IXmlRepository in DI — AddDataProtection's internal setup does not
 // reliably pick up a separately-registered IXmlRepository singleton.
 builder.Services.AddDataProtection()
-    .SetApplicationName("CloudHealthOffice.Portal");
-builder.Services.AddOptions<KeyManagementOptions>()
-    .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
-    {
-        options.XmlRepository = new MongoDbXmlRepository(
-            mongoClient,
-            loggerFactory.CreateLogger<MongoDbXmlRepository>());
-    });
+    .SetApplicationName("CloudHealthOffice.Portal")
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CloudHealthOffice", "DataProtection-Keys")));
+
+if (!builder.Environment.IsDevelopment())
+{
+    // In production, persist keys to MongoDB so all replicas share the same key ring
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
+        {
+            options.XmlRepository = new MongoDbXmlRepository(
+                mongoClient,
+                loggerFactory.CreateLogger<MongoDbXmlRepository>());
+        });
+}
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
@@ -261,7 +276,7 @@ builder.Services.AddSession(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
+    options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.Name = ".CloudHealthOffice.Session";
 });
 

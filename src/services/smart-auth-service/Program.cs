@@ -163,11 +163,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+
+// Health checks before auth so they're accessible without a token
+app.MapChoHealthChecks();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.MapControllers();
-app.MapChoHealthChecks();
 
 app.Run();
 

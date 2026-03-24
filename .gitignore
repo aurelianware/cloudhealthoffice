@@ -43,6 +43,9 @@ local.settings.json
 .env.*
 !.env.example
 
+# Dev certificates
+.certs/
+
 # OS generated files
 .DS_Store
 Thumbs.db

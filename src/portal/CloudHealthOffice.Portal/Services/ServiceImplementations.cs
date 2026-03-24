@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.Net.Mail;
 using System.Net;
+using System.Text.Json;
 using Microsoft.Identity.Web;
 using MongoDB.Driver;
 using MongoDB.Bson;
@@ -169,7 +170,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var members = await _httpClient.GetFromJsonAsync<List<MemberSummary>>($"{baseUrl}/members/search?q={searchTerm}");
+            var members = await _httpClient.GetFromJsonAsync<List<MemberSummary>>($"{baseUrl}/v1/members/search?q={searchTerm}");
             return members ?? new List<MemberSummary>();
         }
         catch (HttpRequestException ex)
@@ -184,7 +185,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<MemberDetails>($"{baseUrl}/members/{memberId}");
+            return await _httpClient.GetFromJsonAsync<MemberDetails>($"{baseUrl}/v1/members/{memberId}");
         }
         catch (HttpRequestException ex)
         {
@@ -198,7 +199,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<MemberPcp>($"{baseUrl}/members/{memberId}/pcp");
+            return await _httpClient.GetFromJsonAsync<MemberPcp>($"{baseUrl}/v1/members/{memberId}/pcp");
         }
         catch (HttpRequestException ex)
         {
@@ -212,7 +213,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/members/{request.MemberId}/pcp", request);
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/members/{request.MemberId}/pcp", request);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -227,7 +228,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var history = await _httpClient.GetFromJsonAsync<List<CoverageHistoryEvent>>($"{baseUrl}/members/{memberId}/coverage-history");
+            var history = await _httpClient.GetFromJsonAsync<List<CoverageHistoryEvent>>($"{baseUrl}/v1/members/{memberId}/coverage-history");
             return history ?? new List<CoverageHistoryEvent>();
         }
         catch (HttpRequestException ex)
@@ -242,7 +243,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var records = await _httpClient.GetFromJsonAsync<List<Enrollment834Record>>($"{baseUrl}/members/{memberId}/834-transactions");
+            var records = await _httpClient.GetFromJsonAsync<List<Enrollment834Record>>($"{baseUrl}/v1/members/{memberId}/834-transactions");
             return records ?? new List<Enrollment834Record>();
         }
         catch (HttpRequestException ex)
@@ -257,7 +258,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/members/{request.MemberId}/terminate", request);
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/members/{request.MemberId}/terminate", request);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -272,7 +273,7 @@ public class MemberService : IMemberService
         var baseUrl = _configuration["Services:MemberService"];
         try
         {
-            var accums = await _httpClient.GetFromJsonAsync<MemberAccumulators>($"{baseUrl}/members/{Uri.EscapeDataString(memberId)}/accumulators");
+            var accums = await _httpClient.GetFromJsonAsync<MemberAccumulators>($"{baseUrl}/v1/members/{Uri.EscapeDataString(memberId)}/accumulators");
             return accums ?? new MemberAccumulators();
         }
         catch (HttpRequestException ex)
@@ -301,7 +302,7 @@ public class CoverageService : ICoverageService
         var baseUrl = _configuration["Services:CoverageService"];
         try
         {
-            var coverage = await _httpClient.GetFromJsonAsync<List<Coverage>>($"{baseUrl}/coverage/member/{memberId}");
+            var coverage = await _httpClient.GetFromJsonAsync<List<Coverage>>($"{baseUrl}/v1/coverage/member/{memberId}");
             return coverage ?? new List<Coverage>();
         }
         catch (HttpRequestException ex)
@@ -524,7 +525,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var plans = await _httpClient.GetFromJsonAsync<List<BenefitPlan>>($"{baseUrl}/benefit-plans");
+            var plans = await _httpClient.GetFromJsonAsync<List<BenefitPlan>>($"{baseUrl}/v1/plans");
             return plans ?? new List<BenefitPlan>();
         }
         catch (HttpRequestException ex)
@@ -539,11 +540,11 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var query = $"{baseUrl}/benefit-plans/search?";
+            var query = $"{baseUrl}/v1/plans?";
             if (!string.IsNullOrEmpty(sponsorId))
-                query += $"sponsorId={sponsorId}&";
+                query += $"payer={sponsorId}&";
             if (!string.IsNullOrEmpty(productType))
-                query += $"productType={productType}";
+                query += $"planType={productType}";
 
             var plans = await _httpClient.GetFromJsonAsync<List<BenefitPlanListItem>>(query);
             return plans ?? new List<BenefitPlanListItem>();
@@ -560,7 +561,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<BenefitPlanDetails>($"{baseUrl}/benefit-plans/{planId}");
+            return await _httpClient.GetFromJsonAsync<BenefitPlanDetails>($"{baseUrl}/v1/plans/{planId}");
         }
         catch (HttpRequestException ex)
         {
@@ -574,7 +575,29 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/benefit-plans", request);
+            // Map portal fields to service model fields
+            var payload = new
+            {
+                tenantId = "placeholder",  // overwritten by service from X-Tenant-ID header
+                planId = $"PLAN-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+                planName = request.PlanName,
+                payer = request.SponsorId,
+                planType = request.ProductType,
+                metalLevel = request.MetalTier,
+                network = request.Network,
+                effectiveDate = request.EffectiveDate == default ? DateTime.UtcNow : request.EffectiveDate,
+                planYear = request.PlanYear,
+                costSharing = new
+                {
+                    individualDeductible = request.IndividualDeductible,
+                    familyDeductible = request.FamilyDeductible,
+                    individualOutOfPocketMax = request.IndividualOOPMax,
+                    familyOutOfPocketMax = request.FamilyOOPMax,
+                    coinsurance = request.Coinsurance,
+                    monthlyPremium = request.MonthlyPremium
+                }
+            };
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/plans", payload);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<CreateBenefitPlanResponse>();
             return result?.PlanId ?? string.Empty;
@@ -591,7 +614,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/benefit-plans/{planId}", request);
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/plans/{planId}", request);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -606,7 +629,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var benefits = await _httpClient.GetFromJsonAsync<List<BenefitItem>>($"{baseUrl}/benefits");
+            var benefits = await _httpClient.GetFromJsonAsync<List<BenefitItem>>($"{baseUrl}/v1/plans/benefits");
             return benefits ?? new List<BenefitItem>();
         }
         catch (HttpRequestException ex)
@@ -621,7 +644,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var result = await _httpClient.GetFromJsonAsync<List<ServiceBenefitRule>>($"{baseUrl}/benefit-plans/{planId}/service-rules");
+            var result = await _httpClient.GetFromJsonAsync<List<ServiceBenefitRule>>($"{baseUrl}/v1/plans/{planId}/service-rules");
             return result ?? new();
         }
         catch (HttpRequestException ex)
@@ -636,7 +659,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/benefit-plans/{request.PlanId}/service-rules", request);
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/plans/{request.PlanId}/service-rules", request);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -651,7 +674,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<AccumulatorConfiguration>($"{baseUrl}/benefit-plans/{planId}/accumulators");
+            return await _httpClient.GetFromJsonAsync<AccumulatorConfiguration>($"{baseUrl}/v1/plans/{planId}/accumulators");
         }
         catch (HttpRequestException ex)
         {
@@ -665,7 +688,7 @@ public class BenefitPlanService : IBenefitPlanService
         var baseUrl = _configuration["Services:BenefitPlanService"];
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/benefit-plans/{planId}/accumulators", config);
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/plans/{planId}/accumulators", config);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -763,21 +786,46 @@ public class MetricsService : IMetricsService
         _logger = logger;
     }
 
-    // TEMPORARY: Replace when Prometheus is deployed.
     public async Task<DashboardMetrics> GetDashboardMetricsAsync()
     {
-        // TODO: Query Prometheus for real metrics
-        return new DashboardMetrics
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
         {
-            TotalClaims = 2847,
-            ClaimsTrend = 0.042,
-            ApprovalRate = 0.962,
-            AvgProcessingTimeMs = 340,
-            TotalPayerAmount = 1_847_293.00m,
-            ApprovedClaims = 2738,
-            DeniedClaims = 57,
-            PendingClaims = 52
-        };
+            var summary = await _httpClient.GetFromJsonAsync<ClaimsSummaryResponse>($"{baseUrl}/claims/summary");
+            if (summary == null) return new DashboardMetrics();
+
+            var total = summary.TotalClaims;
+            return new DashboardMetrics
+            {
+                TotalClaims = total,
+                ClaimsTrend = 0,
+                ApprovalRate = total > 0 ? (double)summary.ApprovedClaims / total : 0,
+                AvgProcessingTimeMs = (int)summary.AverageProcessingDays * 24 * 60,
+                TotalPayerAmount = summary.TotalPaidAmount,
+                ApprovedClaims = summary.ApprovedClaims,
+                DeniedClaims = summary.DeniedClaims,
+                PendingClaims = summary.PendedClaims
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching dashboard metrics from claims service");
+            return new DashboardMetrics();
+        }
+    }
+
+    private class ClaimsSummaryResponse
+    {
+        public int TotalClaims { get; set; }
+        public int ApprovedClaims { get; set; }
+        public int DeniedClaims { get; set; }
+        public int PendedClaims { get; set; }
+        public int PaidClaims { get; set; }
+        public decimal TotalChargeAmount { get; set; }
+        public decimal TotalAllowedAmount { get; set; }
+        public decimal TotalPaidAmount { get; set; }
+        public decimal AverageProcessingDays { get; set; }
+        public decimal ApprovalRate { get; set; }
     }
 
     // TEMPORARY: Replace when Prometheus is deployed.
@@ -812,29 +860,9 @@ public class MetricsService : IMetricsService
         }
     }
 
-    // TEMPORARY: Replace when Prometheus is deployed.
-    private static OperationalAlerts GetDefaultAlerts()
-    {
-        return new OperationalAlerts
-        {
-            WorkQueueCount = 40,
-            PendingRfais = 5,
-            AppealsDueThisWeek = 5,
-            ApproachingFilingLimit = 3
-        };
-    }
+    private static OperationalAlerts GetDefaultAlerts() => new();
 
-    // TEMPORARY: Replace when Prometheus is deployed.
-    private static EdiVolumeSummary GetDefaultEdiVolume()
-    {
-        return new EdiVolumeSummary
-        {
-            Claims837Received = 142,
-            Era835Generated = 87,
-            Eligibility270271 = 318,
-            PriorAuth278 = 24
-        };
-    }
+    private static EdiVolumeSummary GetDefaultEdiVolume() => new();
 }
 
 public class AttachmentService : IAttachmentService
@@ -956,8 +984,13 @@ public class SponsorService : ISponsorService
         var baseUrl = _configuration["Services:SponsorService"];
         try
         {
-            var sponsors = await _httpClient.GetFromJsonAsync<List<SponsorSummary>>($"{baseUrl}/sponsors?search={searchTerm}");
-            return sponsors ?? new List<SponsorSummary>();
+            var response = await _httpClient.GetFromJsonAsync<JsonElement>($"{baseUrl}/sponsors?search={searchTerm}");
+            if (response.TryGetProperty("sponsors", out var sponsorsArray))
+            {
+                return sponsorsArray.Deserialize<List<SponsorSummary>>() ?? new();
+            }
+            // Fallback: if the response is a plain array
+            return response.Deserialize<List<SponsorSummary>>() ?? new();
         }
         catch (HttpRequestException ex)
         {
@@ -985,10 +1018,26 @@ public class SponsorService : ISponsorService
         var baseUrl = _configuration["Services:SponsorService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/sponsors", request);
+            var payload = new
+            {
+                groupNumber = $"GRP-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+                employerName = request.Name,
+                taxId = request.TaxId,
+                address = request.AddressLine1,
+                city = request.City,
+                state = request.State,
+                zipCode = request.ZipCode,
+                contactName = request.ContactName,
+                contactPhone = request.ContactPhone,
+                contactEmail = request.ContactEmail,
+                effectiveDate = request.ContractStartDate == default ? DateTime.UtcNow : request.ContractStartDate,
+                status = 1, // Active
+                lineOfBusiness = 1 // Commercial
+            };
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/sponsors", payload);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<CreateSponsorResponse>();
-            return result?.SponsorId ?? string.Empty;
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+            return result.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "";
         }
         catch (HttpRequestException ex)
         {
@@ -1812,7 +1861,7 @@ public class PaymentRunService : IPaymentRunService
         var baseUrl = _configuration["Services:PaymentService"];
         try
         {
-            var result = await _httpClient.GetFromJsonAsync<List<PaymentRunSummary>>($"{baseUrl}/payment-runs?limit={limit}");
+            var result = await _httpClient.GetFromJsonAsync<List<PaymentRunSummary>>($"{baseUrl}/paymentruns?limit={limit}");
             return result ?? new();
         }
         catch (HttpRequestException ex)
@@ -1827,7 +1876,7 @@ public class PaymentRunService : IPaymentRunService
         var baseUrl = _configuration["Services:PaymentService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<PaymentRunDetails>($"{baseUrl}/payment-runs/{runId}");
+            return await _httpClient.GetFromJsonAsync<PaymentRunDetails>($"{baseUrl}/paymentruns/{runId}");
         }
         catch (HttpRequestException ex)
         {
@@ -1841,7 +1890,7 @@ public class PaymentRunService : IPaymentRunService
         var baseUrl = _configuration["Services:PaymentService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/payment-runs", request);
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/paymentruns", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<CreateRunResponse>();
             return result?.RunId ?? string.Empty;
@@ -1858,7 +1907,7 @@ public class PaymentRunService : IPaymentRunService
         var baseUrl = _configuration["Services:PaymentService"];
         try
         {
-            var response = await _httpClient.PostAsync($"{baseUrl}/payment-runs/{runId}/cancel", null);
+            var response = await _httpClient.PostAsync($"{baseUrl}/paymentruns/{runId}/cancel", null);
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -1873,7 +1922,7 @@ public class PaymentRunService : IPaymentRunService
         var baseUrl = _configuration["Services:PaymentService"];
         try
         {
-            return await _httpClient.GetStreamAsync($"{baseUrl}/payment-runs/{runId}/835");
+            return await _httpClient.GetStreamAsync($"{baseUrl}/paymentruns/{runId}/835");
         }
         catch (HttpRequestException ex)
         {
@@ -1905,7 +1954,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var url = $"{baseUrl}/billing-cycles" + (sponsorId != null ? $"?sponsorId={sponsorId}" : "");
+            var url = $"{baseUrl}/v1/billing-runs" + (sponsorId != null ? $"?sponsorId={sponsorId}" : "");
             var result = await _httpClient.GetFromJsonAsync<List<BillingCycle>>(url);
             return result ?? new();
         }
@@ -1921,7 +1970,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<BillingCycleDetails>($"{baseUrl}/billing-cycles/{cycleId}");
+            return await _httpClient.GetFromJsonAsync<BillingCycleDetails>($"{baseUrl}/v1/billing-runs/{cycleId}");
         }
         catch (HttpRequestException ex)
         {
@@ -1935,7 +1984,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/billing-cycles", request);
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs", request);
             response.EnsureSuccessStatusCode();
             return (await response.Content.ReadFromJsonAsync<CreateCycleResponse>())?.CycleId ?? string.Empty;
         }
@@ -1951,7 +2000,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var url = $"{baseUrl}/premium-rates" + (planId != null ? $"?planId={planId}" : "");
+            var url = $"{baseUrl}/v1/premium-invoices" + (planId != null ? $"?planId={planId}" : "");
             var result = await _httpClient.GetFromJsonAsync<List<PremiumRate>>(url);
             return result ?? new();
         }
@@ -1967,7 +2016,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/premium-rates/{rateId}", new { Rate = newRate, EffectiveDate = effectiveDate });
+            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/premium-invoices/{rateId}", new { Rate = newRate, EffectiveDate = effectiveDate });
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -1982,7 +2031,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/billing-cycles/{cycleId}/mark-paid", new { PaidDate = paidDate });
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs/{cycleId}/mark-paid", new { PaidDate = paidDate });
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -1997,7 +2046,7 @@ public class PremiumBillingService : IPremiumBillingService
         var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            return await _httpClient.GetStreamAsync($"{baseUrl}/billing-cycles/{cycleId}/invoice");
+            return await _httpClient.GetStreamAsync($"{baseUrl}/v1/billing-runs/{cycleId}/invoice");
         }
         catch (HttpRequestException ex)
         {
@@ -2131,7 +2180,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var summary = await _httpClient.GetFromJsonAsync<WorkQueueSummary>($"{baseUrl}/work-queue/summary");
+            var summary = await _httpClient.GetFromJsonAsync<WorkQueueSummary>($"{baseUrl}/claims/work-queue/summary");
             return summary ?? new WorkQueueSummary();
         }
         catch (HttpRequestException ex)
@@ -2147,7 +2196,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var url = $"{baseUrl}/work-queue/items?limit={limit}";
+            var url = $"{baseUrl}/claims/work-queue/items?limit={limit}";
             if (!string.IsNullOrEmpty(queueType)) url += $"&queueType={Uri.EscapeDataString(queueType)}";
             if (!string.IsNullOrEmpty(assignedTo)) url += $"&assignedTo={Uri.EscapeDataString(assignedTo)}";
             var items = await _httpClient.GetFromJsonAsync<List<WorkQueueItem>>(url);
@@ -2165,7 +2214,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/assign",
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims/work-queue/{Uri.EscapeDataString(claimId)}/assign",
                 new { AssignTo = assignTo });
             response.EnsureSuccessStatusCode();
         }
@@ -2181,7 +2230,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/override",
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims/work-queue/{Uri.EscapeDataString(claimId)}/override",
                 new { Reason = overrideReason });
             response.EnsureSuccessStatusCode();
         }
@@ -2299,7 +2348,7 @@ public class AppealsService : IAppealsService
             if (!string.IsNullOrEmpty(memberId)) queryParts.Add($"memberId={Uri.EscapeDataString(memberId)}");
             if (!string.IsNullOrEmpty(originalClaimId)) queryParts.Add($"originalClaimId={Uri.EscapeDataString(originalClaimId)}");
             var query = string.Join("&", queryParts);
-            var results = await _httpClient.GetFromJsonAsync<List<AppealSummary>>($"{baseUrl}/appeals/search?{query}");
+            var results = await _httpClient.GetFromJsonAsync<List<AppealSummary>>($"{baseUrl}/appeals?{query}");
             return results ?? new();
         }
         catch (HttpRequestException ex)
