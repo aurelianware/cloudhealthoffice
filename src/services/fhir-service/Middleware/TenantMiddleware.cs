@@ -44,6 +44,7 @@ public class TenantMiddleware
         || path.StartsWithSegments("/ready")
         || path.StartsWithSegments("/live")
         || path.StartsWithSegments("/fhir/r4/metadata")
+        || path.StartsWithSegments("/fhir/r4/.well-known")
         || path.StartsWithSegments("/swagger");
 
     private static string? ExtractTenantId(HttpContext context)
