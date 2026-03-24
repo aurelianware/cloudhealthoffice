@@ -48,6 +48,7 @@ public class TenantContextService : ITenantContextService
     private readonly ILogger<TenantContextService> _logger;
     private TenantContext? _cachedContext;
     private List<TenantSubscription>? _cachedAvailableTenants;
+    private string? _homeTenantId; // Original Azure AD tenant ID from claims — never changes after first resolution
     private bool _isImpersonating;
 
     public string? TenantId => _cachedContext?.TenantId;
@@ -95,6 +96,10 @@ public class TenantContextService : ITenantContextService
             _logger.LogWarning("Unable to extract tenant ID from user claims");
             return null;
         }
+
+        // Cache the original home tenant ID from claims — this never changes,
+        // even after SwitchTenantAsync updates _cachedContext.AzureTenantId.
+        _homeTenantId ??= azureTenantId;
 
         try
         {
@@ -201,8 +206,12 @@ public class TenantContextService : ITenantContextService
             // Get tenants the user has access to via email/admin association
             var userTenants = await _tenantService.GetTenantsForUserAsync(userEmail);
 
-            // Also include the home tenant match if it exists and isn't already in the list
-            var homeTenantSubscription = await _tenantService.GetSubscriptionByAzureTenantIdAsync(currentContext.AzureTenantId);
+            // Also include the home tenant match if it exists and isn't already in the list.
+            // Use _homeTenantId (cached from original claims) rather than currentContext.AzureTenantId,
+            // which may reflect a switched-to tenant after SwitchTenantAsync.
+            var homeTenantSubscription = _homeTenantId != null
+                ? await _tenantService.GetSubscriptionByAzureTenantIdAsync(_homeTenantId)
+                : null;
             if (homeTenantSubscription != null &&
                 !userTenants.Any(t => t.AzureTenantId == homeTenantSubscription.AzureTenantId))
             {
@@ -256,9 +265,9 @@ public class TenantContextService : ITenantContextService
             }
             else
             {
-                // Switching to an authorized tenant — check if it's the user's home tenant
-                var currentHomeTenantId = await GetHomeTenantIdFromClaims();
-                _isImpersonating = targetTenant.AzureTenantId != currentHomeTenantId;
+                // Switching to an authorized tenant the user has explicit membership in
+                // — this is NOT impersonation, even if it's not their home tenant
+                _isImpersonating = false;
             }
 
             var userEmail = _cachedContext?.UserEmail;
@@ -290,19 +299,6 @@ public class TenantContextService : ITenantContextService
         };
     }
 
-    private async Task<string?> GetHomeTenantIdFromClaims()
-    {
-        try
-        {
-            var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
-            return authState.User.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
-                ?? authState.User.FindFirst("tid")?.Value;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }
 
 public class TenantContext
