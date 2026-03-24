@@ -119,7 +119,7 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
         var resp = await client.PostAsync("/account/login?returnUrl=%2F", form);
 
         resp.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        resp.Headers.Location!.Query.Should().Contain("error=invalid");
+        resp.Headers.Location!.ToString().Should().Contain("error=invalid");
     }
 
     // ── EHR launch: context registration ─────────────────────────────────────
