@@ -515,12 +515,13 @@ public class CapitationRunServiceTests
         await _service.CreateRunAsync(new CreateCapitationRunRequest
         {
             CapitationPeriod = new DateTime(2026, 3, 15), // Mid-month
-            CreatedBy = "admin"
+            CreatedBy = "admin",
+            Criteria = new CapitationRunCriteria { LineOfBusiness = LineOfBusiness.Commercial }
         }, "admin");
 
         savedRun.Should().NotBeNull();
         savedRun!.CapitationPeriod.Day.Should().Be(1); // Normalized to first
-        savedRun.RunNumber.Should().StartWith("CAPRUN-2026-03-");
+        savedRun.RunNumber.Should().StartWith("CAPRUN-COM-2026-03-");
         savedRun.Status.Should().Be(CapitationRunStatus.Pending);
     }
 
@@ -539,7 +540,7 @@ public class CapitationRunServiceTests
     public async Task GetRunsAsync_DelegatesToRepo()
     {
         var runs = new List<CapitationRun> { CreatePendingRun() };
-        _runRepo.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null))
+        _runRepo.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), (CapitationRunStatus?)null, (LineOfBusiness?)null))
             .ReturnsAsync(runs);
 
         var result = await _service.GetRunsAsync(new DateTime(2026, 1, 1), new DateTime(2026, 12, 31));
