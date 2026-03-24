@@ -297,7 +297,8 @@ jobs:
             az containerapp ingress update \
               --name "${{ env.ACA_SITE_NAME }}" \
               --resource-group "${{ env.RESOURCE_GROUP }}" \
-              --target-port 8080
+              --target-port 8080 \
+              --allow-insecure false
           fi
 
       - name: Get site URL
