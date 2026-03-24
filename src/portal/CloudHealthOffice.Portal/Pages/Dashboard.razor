@@ -8,6 +8,7 @@
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject ITenantContextService TenantContextService
 @inject IUserContextService UserContextService
+@inject IConfiguration Configuration
 
 <PageTitle>Dashboard - Cloud Health Office</PageTitle>
 
@@ -397,12 +398,15 @@
     private bool _metricsError;
     private string? _serviceError;
 
-    private readonly Dictionary<string, bool> _systemHealth = new()
+    private Dictionary<string, bool> _systemHealth = new()
     {
-        ["MongoDB"] = true,
-        ["Redis"] = true,
-        ["Argo Workflows"] = true,
-        ["FHIR API"] = true
+        ["Claims"] = false,
+        ["Members"] = false,
+        ["Providers"] = false,
+        ["Eligibility"] = false,
+        ["Payments"] = false,
+        ["Benefits"] = false,
+        ["FHIR"] = false
     };
 
     private double[] _chartData = Array.Empty<double>();
@@ -487,7 +491,8 @@
         {
             var alertsTask = MetricsService.GetOperationalAlertsAsync();
             var ediTask = MetricsService.GetTodayEdiVolumeAsync();
-            await Task.WhenAll(alertsTask, ediTask);
+            var healthTask = CheckSystemHealthAsync();
+            await Task.WhenAll(alertsTask, ediTask, healthTask);
             _alerts = alertsTask.Result;
             _ediVolume = ediTask.Result;
         }
@@ -496,6 +501,39 @@
             Logger.LogWarning(ex, "Failed to load operational data");
         }
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckSystemHealthAsync()
+    {
+        var config = Configuration;
+        var checks = new Dictionary<string, string>
+        {
+            ["Claims"] = config["Services:ClaimsService"]?.Replace("/api", "") ?? "",
+            ["Members"] = config["Services:MemberService"]?.Replace("/api", "") ?? "",
+            ["Providers"] = config["Services:ProviderService"]?.Replace("/api", "") ?? "",
+            ["Eligibility"] = config["Services:EligibilityService"]?.Replace("/api", "") ?? "",
+            ["Payments"] = config["Services:PaymentService"]?.Replace("/api", "") ?? "",
+            ["Benefits"] = config["Services:BenefitPlanService"]?.Replace("/api", "") ?? "",
+            ["FHIR"] = config["Services:ClaimsService"]?.Replace("5001", "5011").Replace("/api", "") ?? ""
+        };
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        var tasks = checks.Select(async kv =>
+        {
+            try
+            {
+                var response = await client.GetAsync($"{kv.Value}/health/live");
+                return (kv.Key, Healthy: response.IsSuccessStatusCode);
+            }
+            catch
+            {
+                return (kv.Key, Healthy: false);
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        foreach (var (name, healthy) in results)
+            _systemHealth[name] = healthy;
     }
 
     private Color GetApprovalRateColor()

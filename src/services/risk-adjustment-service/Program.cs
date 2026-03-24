@@ -79,9 +79,9 @@ else
 }
 
 // HCC Risk Adjustment Engine
-builder.Services.AddSingleton<IcdToHccMapper>();
-builder.Services.AddSingleton<HccHierarchyResolver>();
-builder.Services.AddSingleton<RiskScoreCalculator>();
+builder.Services.AddSingleton<IIcdToHccMapper, IcdToHccMapper>();
+builder.Services.AddSingleton<IHccHierarchyResolver, HccHierarchyResolver>();
+builder.Services.AddSingleton<IRiskScoreCalculator, RiskScoreCalculator>();
 builder.Services.AddSingleton<CloudHealthOffice.RiskAdjustmentEngine.Services.RiskAdjustmentEngine>();
 
 // HTTP context accessor (for tenant middleware)
