@@ -17,13 +17,15 @@ namespace CloudHealthOffice.FhirService.Tests;
 /// </summary>
 public class FhirTestWebAppFactory : WebApplicationFactory<Program>
 {
+    // Keep the raw RSA so we can dispose it alongside the factory.
+    private readonly RSA _rsa;
     private readonly RsaSecurityKey _signingKey;
     private readonly string _issuer = "https://auth.test.local";
 
     public FhirTestWebAppFactory()
     {
-        var rsa = RSA.Create(2048);
-        _signingKey = new RsaSecurityKey(rsa);
+        _rsa = RSA.Create(2048);
+        _signingKey = new RsaSecurityKey(_rsa);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -35,6 +37,14 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             // "Scheme already exists: Bearer" when the host registers it first).
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {
+                // Disable OIDC discovery entirely so the test host never makes network
+                // calls to the real issuer (https://auth.cloudhealthoffice.com).
+                // Authority must be cleared before nulling ConfigurationManager because
+                // the lazy getter recreates it from Authority if Authority is still set.
+                options.Authority = null;
+                options.MetadataAddress = null!;
+                options.ConfigurationManager = null;
+
                 options.RequireHttpsMetadata = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
@@ -49,6 +59,13 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
         });
 
         builder.UseEnvironment("Development");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _rsa.Dispose();
+        base.Dispose(disposing);
     }
 
     /// <summary>
