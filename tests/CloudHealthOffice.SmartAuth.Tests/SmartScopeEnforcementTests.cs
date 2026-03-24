@@ -281,7 +281,8 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
         {
             new(JwtRegisteredClaimNames.Sub, subject),
             new("scope", scopes),
-            new(JwtRegisteredClaimNames.Aud, "fhir-api")
+            new(JwtRegisteredClaimNames.Aud, "fhir-api"),
+            new("tenant_id", "test-tenant")
         };
 
         if (patientId != null)
