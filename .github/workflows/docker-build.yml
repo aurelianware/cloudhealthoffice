@@ -136,7 +136,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./src/portal/CloudHealthOffice.Portal
+          context: .
           file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

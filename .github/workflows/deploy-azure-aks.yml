@@ -53,7 +53,7 @@ jobs:
       - name: Build and push portal
         uses: docker/build-push-action@v5
         with:
-          context: ./src/portal/CloudHealthOffice.Portal
+          context: .
           file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
           push: true
           tags: |
