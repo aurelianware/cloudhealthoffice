@@ -664,6 +664,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         using var client = CreateClientWithTenant();
         var request = new NcciScrubRequest
         {
+            TenantId = TenantId,
             ClaimId = "CLM-NCCI-01",
             ClaimType = "837P",
             ServiceLines =
