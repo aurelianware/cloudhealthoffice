@@ -156,6 +156,7 @@ jobs:
           - service: encounter-service
             build_context: '.'
           - service: CloudHealthOffice.PricingApi
+            build_context: '.'
             image_name: cloudhealthoffice-pricing-api
 
     steps:
