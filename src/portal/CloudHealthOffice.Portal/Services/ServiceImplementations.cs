@@ -1377,6 +1377,53 @@ public class TenantService : ITenantService
         await _tenantsCollection.UpdateOneAsync(filter, update);
         _logger.LogInformation("Updated subscription status for tenant {TenantId} to {Status}", azureTenantId, status);
     }
+
+    public async Task<List<TenantSubscription>> GetTenantsForUserAsync(string userEmail)
+    {
+        if (string.IsNullOrEmpty(userEmail))
+            return new List<TenantSubscription>();
+
+        try
+        {
+            _logger.LogInformation("Finding tenants for user {Email}", userEmail);
+            var emailLower = userEmail.ToLowerInvariant();
+
+            // Find all tenants where the user's email appears in adminEmails
+            var adminFilter = Builders<TenantSubscription>.Filter.AnyIn(
+                t => t.AdminEmails, new[] { userEmail, emailLower });
+            var tenantsByAdmin = await _tenantsCollection.Find(adminFilter).ToListAsync();
+
+            // Also check TenantUsers collection for tenants the user has a role in
+            var tenantUserFilter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("emailNormalized", emailLower),
+                Builders<BsonDocument>.Filter.Eq("status", "Active"));
+            var tenantUsers = await _tenantUsersCollection.Find(tenantUserFilter).ToListAsync();
+
+            var additionalTenantIds = tenantUsers
+                .Select(tu => tu.GetValue("tenantId", "").AsString)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToHashSet();
+
+            // Fetch any additional tenants found via TenantUsers that weren't in admin results
+            var existingTenantIds = tenantsByAdmin.Select(t => t.TenantId).ToHashSet();
+            var missingTenantIds = additionalTenantIds.Except(existingTenantIds).ToList();
+
+            if (missingTenantIds.Count > 0)
+            {
+                var tenantIdFilter = Builders<TenantSubscription>.Filter.In(t => t.TenantId, missingTenantIds);
+                var additionalTenants = await _tenantsCollection.Find(tenantIdFilter).ToListAsync();
+                tenantsByAdmin.AddRange(additionalTenants);
+            }
+
+            _logger.LogInformation("Found {Count} tenants for user {Email}", tenantsByAdmin.Count, userEmail);
+            return tenantsByAdmin;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error finding tenants for user {Email}", userEmail);
+            return new List<TenantSubscription>();
+        }
+    }
 }
 
 public class SalesInquiryService : ISalesInquiryService
