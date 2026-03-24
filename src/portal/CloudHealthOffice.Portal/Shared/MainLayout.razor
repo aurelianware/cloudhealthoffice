@@ -7,6 +7,7 @@
 @inject IUserContextService UserContextService
 @inject HttpClient HttpClient
 @inject ISnackbar Snackbar
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -369,30 +370,29 @@
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
             _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
 
-            // If platform admin, load all tenants for the switcher
+            // If platform admin, reload the tenant list (may include more tenants
+            // than the initial load found via email-based resolution)
             if (_isPlatformAdmin)
             {
                 try
                 {
-                    var allTenants = await GetAllTenantsForPlatformAdmin();
-                    if (allTenants.Count > _availableTenants.Count)
+                    var adminTenants = await TenantContextService.GetAvailableTenantsAsync();
+                    if (adminTenants.Count > _availableTenants.Count)
                     {
-                        _availableTenants = allTenants;
+                        _availableTenants = adminTenants;
                         StateHasChanged();
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to load platform admin tenant list");
+                }
             }
         }
-        catch { }
-    }
-
-    private async Task<List<TenantSubscription>> GetAllTenantsForPlatformAdmin()
-    {
-        // Platform admins can see all tenants via the available tenants list
-        // merged with any they have direct access to
-        var availableTenants = await TenantContextService.GetAvailableTenantsAsync();
-        return availableTenants;
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load user context");
+        }
     }
 
     private async Task LoadTenantContextAsync()
