@@ -38,6 +38,11 @@ local.settings.json
 /generated/*
 !/generated/examples/
 
+# Environment secrets
+.env
+.env.*
+!.env.example
+
 # OS generated files
 .DS_Store
 Thumbs.db
