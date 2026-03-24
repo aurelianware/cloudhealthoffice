@@ -283,17 +283,22 @@ jobs:
             "${{ env.ACA_SITE_NAME }}" \
             "${{ env.RESOURCE_GROUP }}"
 
-      - name: Ensure ingress target port is 8080
+      - name: Ensure ingress target port is 8080 and HTTPS-only
         run: |
           CURRENT_PORT=$(az containerapp show \
             --name "${{ env.ACA_SITE_NAME }}" \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --query "properties.configuration.ingress.targetPort" -o tsv || echo "")
 
-          if [ "$CURRENT_PORT" = "8080" ]; then
-            echo "Ingress target port is already 8080; no update required."
+          CURRENT_ALLOW_INSECURE=$(az containerapp show \
+            --name "${{ env.ACA_SITE_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.allowInsecure" -o tsv || echo "")
+
+          if [ "$CURRENT_PORT" = "8080" ] && [ "$CURRENT_ALLOW_INSECURE" = "false" ]; then
+            echo "Ingress already configured: port 8080, HTTPS-only. No update required."
           else
-            echo "Ingress target port is '${CURRENT_PORT:-unknown}', updating to 8080..."
+            echo "Updating ingress (port: '${CURRENT_PORT:-unknown}' -> 8080, allowInsecure: '${CURRENT_ALLOW_INSECURE:-unknown}' -> false)..."
             az containerapp ingress update \
               --name "${{ env.ACA_SITE_NAME }}" \
               --resource-group "${{ env.RESOURCE_GROUP }}" \
