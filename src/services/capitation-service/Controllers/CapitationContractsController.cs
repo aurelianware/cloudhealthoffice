@@ -21,14 +21,15 @@ public class CapitationContractsController : ControllerBase
     }
 
     /// <summary>
-    /// Search capitation contracts with optional filters
+    /// Search capitation rate configs (alias: /api/v1/capitation/rate-configs)
     /// </summary>
     [HttpGet]
+    [HttpGet("/api/v1/capitation/rate-configs")]
     [ProducesResponseType(typeof(IEnumerable<CapitationContract>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<CapitationContract>>> SearchContracts(
         [FromQuery] string? npi = null,
         [FromQuery] LineOfBusiness? lob = null,
-        [FromQuery] CapitationContractStatus? status = null,
+        [FromQuery] CapitationRateConfigStatus? status = null,
         [FromQuery] ContractType? type = null,
         [FromQuery] string? planId = null,
         [FromQuery] int page = 1,
@@ -59,16 +60,33 @@ public class CapitationContractsController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new capitation contract
+    /// Get all rate configs for a given parent ProviderContract
+    /// </summary>
+    [HttpGet("{id}/rate-configs")]
+    [ProducesResponseType(typeof(IEnumerable<CapitationContract>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<CapitationContract>>> GetRateConfigsByContractId(string id)
+    {
+        var results = await _contractRepository.SearchAsync(
+            providerNpi: null, lob: null, type: null, status: null, page: 1, pageSize: 1000);
+        var filtered = results.Where(c => c.ContractId == id).ToList();
+        return Ok(filtered);
+    }
+
+    /// <summary>
+    /// Create a new capitation rate config
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(CapitationContract), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationContract>> CreateContract([FromBody] CapitationContract contract)
     {
-        _logger.LogInformation("Creating capitation contract for provider {NPI}", SanitizeForLog(contract.ProviderNPI));
+        if (string.IsNullOrEmpty(contract.ContractId))
+            return BadRequest(new { error = "ContractId is required — must reference a parent ProviderContract" });
 
-        contract.Status = CapitationContractStatus.Draft;
+        _logger.LogInformation("Creating capitation rate config for contract {ContractId}, provider {NPI}",
+            contract.ContractId, SanitizeForLog(contract.ProviderNPI));
+
+        contract.Status = CapitationRateConfigStatus.Draft;
         var created = await _contractRepository.CreateAsync(contract);
 
         return CreatedAtAction(nameof(GetContractById), new { id = created.Id }, created);
@@ -107,10 +125,10 @@ public class CapitationContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { error = $"Contract {id} not found" });
 
-        if (contract.Status != CapitationContractStatus.Draft && contract.Status != CapitationContractStatus.Suspended)
+        if (contract.Status != CapitationRateConfigStatus.Draft && contract.Status != CapitationRateConfigStatus.Suspended)
             return BadRequest(new { error = $"Can only activate Draft or Suspended contracts, current: {contract.Status}" });
 
-        contract.Status = CapitationContractStatus.Active;
+        contract.Status = CapitationRateConfigStatus.Active;
         _logger.LogInformation("Activated capitation contract {ContractNumber}", contract.ContractNumber);
 
         var updated = await _contractRepository.UpdateAsync(contract);
@@ -129,10 +147,10 @@ public class CapitationContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { error = $"Contract {id} not found" });
 
-        if (contract.Status == CapitationContractStatus.Terminated)
+        if (contract.Status == CapitationRateConfigStatus.Terminated)
             return BadRequest(new { error = "Contract is already terminated" });
 
-        contract.Status = CapitationContractStatus.Terminated;
+        contract.Status = CapitationRateConfigStatus.Terminated;
         contract.TerminationDate = request.TerminationDate ?? DateTime.UtcNow;
         _logger.LogInformation("Terminated capitation contract {ContractNumber}: {Reason}",
             contract.ContractNumber, SanitizeForLog(request.Reason));
