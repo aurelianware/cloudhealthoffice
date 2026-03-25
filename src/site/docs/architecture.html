@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture — Cloud Health Office Documentation</title>
+  <meta name="description" content="Cloud Health Office platform architecture. Multi-tenant SaaS, Kubernetes-native with Argo Workflows, 10 microservices, 9 calculation engines, configuration-driven deployment for healthcare payers." />
+  <meta name="keywords" content="healthcare payer platform architecture, Kubernetes healthcare, multi-tenant claims processing, Argo Workflows EDI, FHIR R4 architecture, healthcare microservices, claims adjudication pipeline" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/architecture" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/architecture" />
+  <meta property="og:title" content="Architecture — Cloud Health Office" />
+  <meta property="og:description" content="Multi-tenant SaaS platform architecture with Kubernetes, Argo Workflows, and configuration-driven deployment." />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Cloud Health Office Platform Architecture","description":"Multi-tenant SaaS architecture for healthcare payer integration. Kubernetes-native with Argo Workflows.","url":"https://cloudhealthoffice.com/docs/architecture","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Architecture","item":"https://cloudhealthoffice.com/docs/architecture"}]}}
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/cms-0057f-compliance">CMS Compliance</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/login" style="color:#00ffff;font-weight:bold;">Sign In</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture" class="active">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#overview">Overview</a></li><li><a href="#platform">Platform Components</a></li><li><a href="#adjudication">Claims Adjudication</a></li><li><a href="#multi-tenant">Multi-Tenant Design</a></li><li><a href="#infrastructure">Infrastructure</a></li><li><a href="#security">HIPAA Security</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Architecture</span></div>
+
+        <h1>Architecture</h1>
+        <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for unlimited health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 23 microservices, 9 calculation engines, 5 FHIR R4 APIs, and multi-cloud deployment" />
+          <figcaption>Platform overview — 23 microservices, 9 engines, 5 parsers, 5 FHIR APIs, 17 Argo Workflows</figcaption>
+        </figure>
+
+        <h2 id="overview">Overview</h2>
+        <p>The platform runs on Kubernetes (AKS, EKS, or GKE) with Argo Workflows for orchestration. All payer-specific logic is defined in configuration files — no custom code per tenant. New payers can be onboarded in under 1 hour through the interactive CLI wizard or self-service portal.</p>
+
+        <h3>Key Design Objectives</h3>
+        <table>
+          <thead><tr><th>Principle</th><th>Implementation</th></tr></thead>
+          <tbody>
+            <tr><td>Multi-Tenant SaaS</td><td>Single codebase serves unlimited payers with per-tenant isolation via <code>X-Tenant-ID</code> header routing</td></tr>
+            <tr><td>Zero-Code Onboarding</td><td>Add new payers through configuration — less than 1 hour to production</td></tr>
+            <tr><td>Backend Agnostic</td><td>Works with any claims admin system (QNXT, Facets, HealthEdge, Epic, custom) via <code>ICoreAdminAdapter</code> pattern</td></tr>
+            <tr><td>Cloud Agnostic</td><td>Deploy to Azure, AWS, GCP, or on-premises with Kubernetes and Helm charts</td></tr>
+            <tr><td>Standards-Based</td><td>X12 EDI (270/275/277/278/834/835/837), FHIR R4, Da Vinci IGs, HL7, USCDI</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="platform">Platform Components</h2>
+
+        <h3>Microservices (10)</h3>
+        <p>Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, and Claims Scrubbing. Each service owns its domain data and communicates via Azure Service Bus messaging.</p>
+
+        <h3>Calculation Engines (9)</h3>
+        <p>Benefit Engine (HDHP/HSA, aggregate family accumulators, DRG inpatient), Fee Schedule Engine (DRG lookup, Medicaid cross-schedule, multiple procedure ranking), NCCI Engine, COB Engine, Risk Adjustment Engine, Encounter Engine, Claims Scrub Engine, Capitation Engine, and Operating Mode Engine.</p>
+
+        <h3>X12 Parsers (6)</h3>
+        <p>837 Claims, 835 Remittance, 834 Enrollment, 276/277 Claim Status, 278 Prior Auth, and X12 Encoder. All written in C# (.NET 8) with zero external dependencies.</p>
+
+        <h2 id="adjudication">Claims Adjudication Pipeline</h2>
+        <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to real-time adjudication with full benefit calculation, completing in under 500ms end-to-end.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/claims-adjudication-flow.svg" alt="837 claims adjudication pipeline showing 10-step flow from SFTP ingestion through Kafka, claims service API, benefit engine, to approved or denied outcome" />
+          <figcaption>10-step claims adjudication flow — SFTP ingestion through Argo Workflows to real-time adjudication</figcaption>
+        </figure>
+
+        <h3>Pipeline Steps</h3>
+        <p>The pipeline executes: get claim, validate codes, verify coverage, validate provider, check prior auth, get benefits, apply NCCI/MUE edits, calculate allowed amount, calculate cost-sharing (copay/coinsurance/deductible), and update claim status. Each step is individually testable and observable.</p>
+
+        <h2 id="multi-tenant">Multi-Tenant Design</h2>
+        <p>Every API request carries an <code>X-Tenant-ID</code> header that determines data isolation, configuration routing, and audit logging. The configuration-driven approach means no code changes are required to onboard new payers — only a JSON configuration file defining clearinghouse mappings, benefit rules, and EDI trading partner details.</p>
+        <p>The <strong>Config-to-Workflow Generator</strong> takes a payer's configuration file and generates complete Argo Workflow YAML and Bicep infrastructure definitions, enabling automated environment provisioning.</p>
+
+        <h2 id="infrastructure">Infrastructure</h2>
+        <table>
+          <thead><tr><th>Component</th><th>Technology</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Orchestration</td><td>Argo Workflows</td><td>Kubernetes-native DAG workflow execution</td></tr>
+            <tr><td>Event Triggers</td><td>Argo Events</td><td>SFTP, webhook, and schedule-based triggers</td></tr>
+            <tr><td>Messaging</td><td>Azure Service Bus / Kafka</td><td>Async inter-service communication</td></tr>
+            <tr><td>Storage</td><td>Azure Storage Gen2</td><td>HIPAA-compliant EDI file data lake</td></tr>
+            <tr><td>Secrets</td><td>Key Vault / HashiCorp Vault</td><td>Secrets management, automated rotation</td></tr>
+            <tr><td>Monitoring</td><td>Prometheus + Grafana, App Insights</td><td>Metrics, dashboards, PHI-safe logging</td></tr>
+            <tr><td>Database</td><td>MongoDB / Cosmos DB</td><td>Document store with tenant partitioning</td></tr>
+            <tr><td>Cache</td><td>Redis</td><td>Accumulator service, session cache</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="security">HIPAA Security</h2>
+        <p>The platform addresses HIPAA technical safeguards with private endpoints for complete network isolation of PHI, PHI masking in Application Insights using DCR-based redaction, customer-managed encryption keys (BYOK), 7-year data lifecycle management with automated tiering, and 18 automated CI/CD tests to prevent PHI exposure in logs and telemetry.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Full architecture document</div>
+          <p>For the complete 1,100+ line architecture specification including data flow diagrams, ADRs, and SFTP multi-tenant design, see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">ARCHITECTURE.md</a> on GitHub.</p>
+        </div>
+
+        <div class="docs-pager">
+          <a href="/docs/compliance"><div class="pager-label">&larr; Previous</div><div class="pager-title">CMS-0057-F Compliance</div></a>
+          <a href="/docs/api" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">API Reference</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer>
+  <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
+</body>
+</html>
