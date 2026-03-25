@@ -86,12 +86,14 @@ app.UseCors("AllowAll");
 // JWT validation must run before SMART scope enforcement
 app.UseAuthentication();
 
-// TenantMiddleware: extracts CHO tenant context from JWT or header
-app.UseMiddleware<TenantMiddleware>();
-
-// SmartScopeEnforcementMiddleware: enforces SMART scopes and patient binding
-// Runs after authentication so User.Claims are populated
+// SmartScopeEnforcementMiddleware: enforces SMART scopes and patient binding.
+// Must run before TenantMiddleware so that unauthenticated requests receive a
+// FHIR OperationOutcome 401 (not a plain-JSON tenant error).
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
+
+// TenantMiddleware: extracts CHO tenant context from JWT claim or header.
+// Runs after scope enforcement so context.User is already validated.
+app.UseMiddleware<TenantMiddleware>();
 
 app.UseAuthorization();
 app.MapControllers();

@@ -159,6 +159,17 @@ public class CapitationRunService : ICapitationRunService
             if (!string.IsNullOrEmpty(run.Criteria.ProviderNPI))
                 contracts = contracts.Where(c => c.ProviderNPI == run.Criteria.ProviderNPI).ToList();
 
+            // Filter by ProviderNPIs list when set (multi-provider scoping)
+            if (run.Criteria.ProviderNPIs?.Count > 0)
+                contracts = contracts.Where(c => run.Criteria.ProviderNPIs.Contains(c.ProviderNPI)).ToList();
+
+            // Filter by PlanIds when set — include only contracts that cover at least one matching plan
+            if (run.Criteria.PlanIds?.Count > 0)
+            {
+                var planIdsSet = new HashSet<string>(run.Criteria.PlanIds);
+                contracts = contracts.Where(c => c.PlanIds.Any(p => planIdsSet.Contains(p))).ToList();
+            }
+
             if (contracts.Count == 0)
             {
                 run.Warnings.Add($"No active capitation contracts found for {run.Criteria.LineOfBusiness}" +

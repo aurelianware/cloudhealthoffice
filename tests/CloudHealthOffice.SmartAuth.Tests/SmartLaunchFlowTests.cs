@@ -25,24 +25,16 @@ namespace CloudHealthOffice.SmartAuth.Tests;
 ///   2. GET /connect/authorize?launch=... → resolves context → issues code
 ///   3. POST /connect/token → token with patient + encounter claims
 /// </summary>
-public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAuthService.Program>>
+public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
 {
-    private readonly WebApplicationFactory<SmartAuthService.Program> _factory;
+    private readonly SmartAuthTestFixture _fixture;
 
-    public SmartLaunchFlowTests(WebApplicationFactory<SmartAuthService.Program> factory)
+    public SmartLaunchFlowTests(SmartAuthTestFixture fixture)
     {
-        _factory = factory.WithWebHostBuilder(b =>
-        {
-            b.UseEnvironment("Development");
-            b.ConfigureServices(s =>
-            {
-                // No MongoDB in tests — OpenIddict uses in-memory stores
-                // (no-op: the seed worker gracefully handles missing scope manager in dev)
-            });
-        });
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(
+    private HttpClient CreateClient() => _fixture.Factory.CreateClient(
         new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -127,7 +119,7 @@ public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAut
         var resp = await client.PostAsync("/account/login?returnUrl=%2F", form);
 
         resp.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        resp.Headers.Location!.Query.Should().Contain("error=invalid");
+        resp.Headers.Location!.ToString().Should().Contain("error=invalid");
     }
 
     // ── EHR launch: context registration ─────────────────────────────────────
@@ -177,7 +169,7 @@ public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAut
     [Fact]
     public async Task LaunchContextStore_RegisterAndConsume_Works()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
         var token = await store.RegisterAsync(new RegisterLaunchRequest
@@ -198,7 +190,7 @@ public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAut
     [Fact]
     public async Task LaunchContextStore_ConsumeIsSingleUse()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
         var token = await store.RegisterAsync(new RegisterLaunchRequest
@@ -217,7 +209,7 @@ public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAut
     [Fact]
     public async Task LaunchContextStore_PeekDoesNotConsume()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
         var token = await store.RegisterAsync(new RegisterLaunchRequest
@@ -236,7 +228,7 @@ public class SmartLaunchFlowTests : IClassFixture<WebApplicationFactory<SmartAut
     [Fact]
     public async Task LaunchContextStore_UnknownToken_ReturnsNull()
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
         var result = await store.ConsumeAsync("nonexistent-token-xyz");
