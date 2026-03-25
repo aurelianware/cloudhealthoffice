@@ -1,0 +1,445 @@
+@page "/correspondence"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject ICorrespondenceService CorrespondenceService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Correspondence - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Mail" Class="mr-2" />
+        Correspondence
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Outbound letter generation, tracking, and RFAI management
+    </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* ─── Summary Cards ─── *@
+    @if (_summary != null)
+    {
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Color="Color.Warning" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Warning">@_summary.PendingGeneration</MudText>
+                        <MudText Typo="Typo.caption">Pending Generation</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Queued, not yet created</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.TaskAlt" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_summary.GeneratedToday</MudText>
+                        <MudText Typo="Typo.caption">Generated Today</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Ready to send</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.Send" Color="Color.Success" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Success">@_summary.SentThisWeek</MudText>
+                        <MudText Typo="Typo.caption">Sent This Week</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Error">@_summary.FailedReturned</MudText>
+                        <MudText Typo="Typo.caption">Failed / Returned</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+
+    @* ─── Letter Queue ─── *@
+    <MudText Typo="Typo.h5" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.ListAlt" Size="Size.Small" Class="mr-1" />
+        Letter Queue
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudSelect @bind-Value="_filterType"
+                           Label="Letter Type"
+                           Variant="Variant.Outlined"
+                           T="string"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@((string?)null)">All Types</MudSelectItem>
+                    <MudSelectItem Value="@("Adverse Determination")">Adverse Determination</MudSelectItem>
+                    <MudSelectItem Value="@("EOB")">EOB</MudSelectItem>
+                    <MudSelectItem Value="@("RFAI")">RFAI</MudSelectItem>
+                    <MudSelectItem Value="@("Welcome Letter")">Welcome Letter</MudSelectItem>
+                    <MudSelectItem Value="@("Payment Notice")">Payment Notice</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect @bind-Value="_filterStatus"
+                           Label="Status"
+                           Variant="Variant.Outlined"
+                           T="string"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@((string?)null)">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Queued")">Queued</MudSelectItem>
+                    <MudSelectItem Value="@("Generated")">Generated</MudSelectItem>
+                    <MudSelectItem Value="@("Sent")">Sent</MudSelectItem>
+                    <MudSelectItem Value="@("Delivered")">Delivered</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Returned")">Returned</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="ApplyFilters"
+                           Disabled="_loading"
+                           Class="mr-2">
+                    <MudIcon Icon="@Icons.Material.Filled.FilterList" Class="mr-1" />
+                    Filter
+                </MudButton>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="align-self-center">
+                    @_queue.Count item(s)
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudTable Items="@_queue"
+              Hover="true"
+              Striped="true"
+              Dense="true"
+              Elevation="2"
+              Loading="_loading"
+              LoadingProgressColor="Color.Primary"
+              SortLabel="Sort By">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<CorrespondenceItem, object>(x => x.LetterId)">Letter ID</MudTableSortLabel></MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<CorrespondenceItem, object>(x => x.RecipientName)">Recipient</MudTableSortLabel></MudTh>
+            <MudTh>Related To</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<CorrespondenceItem, object>(x => x.GeneratedDate ?? DateTime.MinValue)">Generated</MudTableSortLabel></MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Delivery</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Letter ID">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.LetterId</MudText>
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(context.LetterType)" Variant="Variant.Outlined">
+                    @context.LetterType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Recipient">
+                <MudText Typo="Typo.body2">@context.RecipientName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.RecipientType</MudText>
+            </MudTd>
+            <MudTd DataLabel="Related To">
+                <MudLink Href="@GetRelatedLink(context.RelatedId)" Typo="Typo.body2" Style="font-family: monospace;">
+                    @context.RelatedId
+                </MudLink>
+            </MudTd>
+            <MudTd DataLabel="Generated">
+                @if (context.GeneratedDate.HasValue)
+                {
+                    @context.GeneratedDate.Value.ToString("MM/dd/yyyy")
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style: italic;">Pending</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)" Variant="Variant.Filled">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Delivery">
+                <div class="d-flex align-center gap-1">
+                    <MudIcon Icon="@GetDeliveryIcon(context.DeliveryMethod)" Size="Size.Small" Color="Color.Secondary" />
+                    <MudText Typo="Typo.body2">@context.DeliveryMethod</MudText>
+                </div>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-8">
+                No correspondence items match the selected filters.
+            </MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+        </PagerContent>
+    </MudTable>
+
+    @* ─── RFAI Tracking ─── *@
+    <MudText Typo="Typo.h5" Class="mb-3 mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.FindInPage" Size="Size.Small" Class="mr-1" />
+        Outstanding RFAI Tracking
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Requests for Additional Information sent to providers — responses typically due within 45 days
+    </MudText>
+
+    <MudTable Items="@_rfais"
+              Hover="true"
+              Striped="true"
+              Dense="true"
+              Elevation="2"
+              Loading="_loading"
+              LoadingProgressColor="Color.Primary"
+              SortLabel="Sort By">
+        <HeaderContent>
+            <MudTh>RFAI ID</MudTh>
+            <MudTh>Provider</MudTh>
+            <MudTh>Related Claim</MudTh>
+            <MudTh>Documents Requested</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<RfaiTrackingItem, object>(x => x.DaysSinceSent)">Days Since Sent</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<RfaiTrackingItem, object>(x => x.DaysUntilDeadline)">Days to Deadline</MudTableSortLabel></MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="RFAI ID">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.RfaiId</MudText>
+            </MudTd>
+            <MudTd DataLabel="Provider">@context.RecipientName</MudTd>
+            <MudTd DataLabel="Related Claim">
+                <MudLink Href="@($"/claims/{context.RelatedClaimId}")" Typo="Typo.body2" Style="font-family: monospace;">
+                    @context.RelatedClaimId
+                </MudLink>
+            </MudTd>
+            <MudTd DataLabel="Documents">
+                <MudText Typo="Typo.body2" Style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    @context.DocumentsRequested
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Days Since Sent">@context.DaysSinceSent</MudTd>
+            <MudTd DataLabel="Days to Deadline">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;"
+                         Color="@(context.DaysUntilDeadline <= 5 ? Color.Error : context.DaysUntilDeadline <= 14 ? Color.Warning : Color.Default)">
+                    @context.DaysUntilDeadline
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(context.Status == "Approaching Deadline" ? Color.Error : Color.Warning)"
+                         Variant="Variant.Filled">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Success"
+                           Size="Size.Small"
+                           OnClick="@(() => OnResponseReceived(context))">
+                    Response Received
+                </MudButton>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-2" />
+                No outstanding RFAIs — all responses received!
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @* ─── Letter Templates ─── *@
+    <MudText Typo="Typo.h5" Class="mb-3 mt-8">
+        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-1" />
+        Letter Templates
+    </MudText>
+
+    <MudSimpleTable Dense="true" Hover="true" Elevation="2">
+        <thead>
+            <tr>
+                <th>Template Name</th>
+                <th>Letter Type</th>
+                <th>Last Updated</th>
+                <th>Regulatory Basis</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" Color="Color.Error" />
+                        Adverse Determination — Claim Denial
+                    </div>
+                </td>
+                <td>Adverse Determination</td>
+                <td>02/15/2026</td>
+                <td>42 CFR 422.568 (MA); 29 CFR 2560.503-1 (ERISA)</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" Color="Color.Error" />
+                        Adverse Determination — Auth Denial
+                    </div>
+                </td>
+                <td>Adverse Determination</td>
+                <td>02/15/2026</td>
+                <td>42 CFR 422.572 (MA); 42 CFR 438.404 (Medicaid)</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.FindInPage" Size="Size.Small" Color="Color.Warning" />
+                        RFAI — Missing Documentation
+                    </div>
+                </td>
+                <td>RFAI</td>
+                <td>01/20/2026</td>
+                <td>Plan document — 45-day response window</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Summarize" Size="Size.Small" Color="Color.Primary" />
+                        EOB — Monthly Statement
+                    </div>
+                </td>
+                <td>EOB</td>
+                <td>01/10/2026</td>
+                <td>ERISA 29 USC 1133; state prompt-pay requirements</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Payments" Size="Size.Small" Color="Color.Success" />
+                        Provider Payment Remittance
+                    </div>
+                </td>
+                <td>Payment Notice</td>
+                <td>03/01/2026</td>
+                <td>HIPAA 835 companion; state prompt-pay statutes</td>
+            </tr>
+        </tbody>
+    </MudSimpleTable>
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private string? _serviceError;
+    private CorrespondenceSummary? _summary;
+    private List<CorrespondenceItem> _queue = new();
+    private List<RfaiTrackingItem> _rfais = new();
+    private string? _filterType;
+    private string? _filterStatus;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            var summaryTask = CorrespondenceService.GetSummaryAsync();
+            var queueTask = CorrespondenceService.GetQueueAsync();
+            var rfaiTask = CorrespondenceService.GetOutstandingRfaisAsync();
+            await Task.WhenAll(summaryTask, queueTask, rfaiTask);
+
+            _summary = summaryTask.Result;
+            _queue = queueTask.Result;
+            _rfais = rfaiTask.Result;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Correspondence service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading correspondence: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        _loading = true;
+        try
+        {
+            _queue = await CorrespondenceService.GetQueueAsync(_filterType, _filterStatus);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Correspondence service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred filtering correspondence: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnResponseReceived(RfaiTrackingItem rfai)
+    {
+        _rfais.Remove(rfai);
+        Snackbar.Add($"Response recorded for {rfai.RfaiId} — claim {rfai.RelatedClaimId} returned to processing queue", Severity.Success);
+    }
+
+    private static string GetRelatedLink(string relatedId)
+    {
+        if (relatedId.StartsWith("CLM-")) return $"/claims/{relatedId}";
+        if (relatedId.StartsWith("AUTH-")) return $"/authorizations";
+        if (relatedId.StartsWith("834-")) return "/enrollment-ops";
+        if (relatedId.StartsWith("PAY-")) return "/payment-runs";
+        return "#";
+    }
+
+    private static Color GetTypeColor(string letterType) => letterType switch
+    {
+        "Adverse Determination" => Color.Error,
+        "EOB" => Color.Primary,
+        "RFAI" => Color.Warning,
+        "Welcome Letter" => Color.Success,
+        "Payment Notice" => Color.Info,
+        _ => Color.Default
+    };
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Queued" => Color.Default,
+        "Generated" => Color.Info,
+        "Sent" => Color.Primary,
+        "Delivered" => Color.Success,
+        "Failed" => Color.Error,
+        "Returned" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string GetDeliveryIcon(string method) => method switch
+    {
+        "Mail" => Icons.Material.Filled.LocalPostOffice,
+        "Fax" => Icons.Material.Filled.Fax,
+        "Portal" => Icons.Material.Filled.Language,
+        "Email" => Icons.Material.Filled.Email,
+        _ => Icons.Material.Filled.QuestionMark
+    };
+}

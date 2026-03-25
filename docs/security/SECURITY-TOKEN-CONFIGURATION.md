@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explains how to securely configure the `CLAIMS_BACKEND_API_TOKEN` parameter in Logic App workflows using Azure Key Vault references or Managed Identity, eliminating the need to store secrets in workflow JSON files or deployment configurations.
+This guide explains how to securely configure the `CLAIMS_BACKEND_API_TOKEN` parameter in Argo Workflows on AKS using Azure Key Vault references (via Secrets Store CSI Driver) or Kubernetes Workload Identity, eliminating the need to store secrets in workflow YAML files or deployment configurations.
 
 ## ⚠️ Security Requirements
 
@@ -37,7 +37,7 @@ This guide explains how to securely configure the `CLAIMS_BACKEND_API_TOKEN` par
 
 ### Method 1: Azure Key Vault Reference (Recommended)
 
-This method stores the token in Azure Key Vault and references it from Logic App application settings.
+This method stores the token in Azure Key Vault and syncs it to Kubernetes secrets via the Secrets Store CSI Driver.
 
 #### Step 1: Store Secret in Key Vault
 
@@ -56,14 +56,14 @@ az keyvault secret show \
 # Output: https://your-keyvault-name.vault.azure.net/secrets/claims-backend-api-token/abc123...
 ```
 
-#### Step 2: Grant Logic App Access to Key Vault
+#### Step 2: Grant AKS Workload Identity Access to Key Vault
 
 ```bash
-# Get the Logic App's managed identity principal ID
-PRINCIPAL_ID=$(az webapp identity show \
-  --name "your-logic-app-name" \
+# Get the AKS cluster's kubelet managed identity principal ID
+PRINCIPAL_ID=$(az aks show \
+  --name "your-aks-cluster-name" \
   --resource-group "your-resource-group" \
-  --query principalId -o tsv)
+  --query "identityProfile.kubeletidentity.objectId" -o tsv)
 
 # Grant Key Vault Secrets User role
 az role assignment create \
@@ -72,73 +72,86 @@ az role assignment create \
   --scope "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RG/providers/Microsoft.KeyVault/vaults/YOUR_KEYVAULT"
 ```
 
-#### Step 3: Configure Logic App Application Setting
+#### Step 3: Configure Kubernetes Secret via Secrets Store CSI Driver
 
 ```bash
-# Set the application setting with Key Vault reference
-az webapp config appsettings set \
-  --name "your-logic-app-name" \
-  --resource-group "your-resource-group" \
-  --settings CLAIMS_BACKEND_API_TOKEN="@Microsoft.KeyVault(SecretUri=https://your-keyvault-name.vault.azure.net/secrets/claims-backend-api-token)"
+# Create a SecretProviderClass to sync the Key Vault secret into a K8s secret
+kubectl apply -f - <<EOF
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: claims-backend-token
+  namespace: argo
+spec:
+  provider: azure
+  parameters:
+    keyvaultName: "your-keyvault-name"
+    objects: |
+      array:
+        - |
+          objectName: claims-backend-api-token
+          objectType: secret
+    tenantId: "your-tenant-id"
+  secretObjects:
+    - secretName: claims-backend-api-token
+      type: Opaque
+      data:
+        - objectName: claims-backend-api-token
+          key: token
+EOF
 ```
 
-#### Step 4: Update Workflow Parameters
+#### Step 4: Reference Secret in Argo Workflow Steps
 
-When deploying workflows, ensure the parameter references the app setting:
+When deploying Argo Workflows, reference the Kubernetes secret in workflow step environment variables:
 
-```json
-{
-  "definition": {
-    "$schema": "...",
-    "parameters": {
-      "CLAIMS_BACKEND_API_TOKEN": {
-        "type": "SecureString"
-      }
-    }
-  },
-  "parameters": {
-    "CLAIMS_BACKEND_API_TOKEN": {
-      "value": "@appsetting('CLAIMS_BACKEND_API_TOKEN')"
-    }
-  }
-}
+```yaml
+# In the Argo Workflow template
+containers:
+  - name: call-claims-backend
+    env:
+      - name: CLAIMS_BACKEND_API_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: claims-backend-api-token
+            key: token
 ```
 
-### Method 2: Managed Identity with Dynamic Token Acquisition
+### Method 2: Workload Identity with Dynamic Token Acquisition
 
-For even greater security, use Azure Managed Identity to obtain tokens dynamically at runtime without storing them.
+For even greater security, use Azure Workload Identity (pod-level managed identity) to obtain tokens dynamically at runtime without storing them.
 
 #### Step 1: Configure claims backend API to Accept Azure AD Tokens
 
 Work with your claims backend API provider to configure Azure AD authentication.
 
-#### Step 2: Modify Workflow to Use Managed Identity
+#### Step 2: Configure AKS Workload Identity Federation
 
-Update the HTTP action in your workflow to use Managed Identity authentication:
+Enable Workload Identity on the AKS cluster and configure a federated credential for the service account used by Argo Workflow pods:
 
-```json
-{
-  "Call_CLAIMS_BACKEND_API": {
-    "type": "Http",
-    "inputs": {
-      "method": "POST",
-      "uri": "@{parameters('backend_base_url')}/api/endpoint",
-      "authentication": {
-        "type": "ManagedServiceIdentity",
-        "audience": "https://your-claims-backend-api.com"
-      },
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body": { ... }
-    }
-  }
-}
+```bash
+# Enable Workload Identity on AKS (if not already enabled)
+az aks update \
+  --resource-group "your-resource-group" \
+  --name "your-aks-cluster" \
+  --enable-oidc-issuer \
+  --enable-workload-identity
+
+# Create a Kubernetes service account annotated with the Azure identity
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-claims-sa
+  namespace: argo
+  annotations:
+    azure.workload.identity/client-id: "your-azure-ad-app-client-id"
+EOF
 ```
 
 ## Affected Workflows
 
-The following workflows have been updated to use `CLAIMS_BACKEND_API_TOKEN` (SecureString):
+The following Argo Workflow steps have been updated to use `CLAIMS_BACKEND_API_TOKEN` (via Kubernetes secret):
 
 1. **ingest275** - 275 attachment ingestion (1 API call)
    - Action: `Call_Claims_Backend_Claim_Linkage_API`
@@ -159,59 +172,49 @@ The following workflows have been updated to use `CLAIMS_BACKEND_API_TOKEN` (Sec
 
 ## Deployment via GitHub Actions
 
-### Update Workflow YAML
+### Update Deployment Workflow YAML
 
-Ensure your GitHub Actions deployment workflow includes the app setting configuration:
+Ensure your GitHub Actions deployment workflow deploys the SecretProviderClass and syncs secrets to Kubernetes:
 
 ```yaml
-- name: Configure Logic App Application Settings
+- name: Deploy Secrets Store CSI Driver Configuration
   run: |
-    az webapp config appsettings set \
-      --name "${{ vars.LOGIC_APP_NAME }}" \
-      --resource-group "${{ vars.RESOURCE_GROUP }}" \
-      --settings \
-        CLAIMS_BACKEND_API_TOKEN="@Microsoft.KeyVault(SecretUri=${{ secrets.KEYVAULT_claims backend_TOKEN_URI }})"
+    kubectl apply -f infra/k8s/secret-provider-claims-backend.yaml -n argo
 ```
 
 ### Required GitHub Secrets
 
 Add these secrets to your GitHub repository:
 
-- `KEYVAULT_claims backend_TOKEN_URI`: The full Key Vault secret URI
-  - Example: `https://your-keyvault.vault.azure.net/secrets/claims-backend-api-token`
+- `AZURE_CLIENT_ID`: The Azure AD app client ID used for Workload Identity
+- Key Vault secret URI is referenced in the SecretProviderClass YAML, not as a GitHub secret
 
 ## Verification
 
-### Check Application Settings
+### Check Kubernetes Secret
 
 ```bash
-# Verify the app setting is configured correctly
-az webapp config appsettings list \
-  --name "your-logic-app-name" \
-  --resource-group "your-resource-group" \
-  --query "[?name=='CLAIMS_BACKEND_API_TOKEN'].{Name:name, Value:value}" -o table
-```
+# Verify the Kubernetes secret is synced from Key Vault
+kubectl get secret claims-backend-api-token -n argo -o jsonpath='{.data.token}' | base64 -d | head -c 5
+# Should show the first 5 characters of the token (for verification only)
 
-Expected output:
-```
-Name              Value
-----------------  ------------------------------------------------------------------
-CLAIMS_BACKEND_API_TOKEN    @Microsoft.KeyVault(SecretUri=https://your-keyvault...
+# Verify the SecretProviderClass is deployed
+kubectl get secretproviderclass claims-backend-token -n argo
 ```
 
 ### Test Workflow Execution
 
-1. Trigger a workflow manually or via normal process
+1. Trigger an Argo Workflow manually or via normal process
 2. Check Application Insights for successful API calls
-3. Verify no token values appear in logs (should show `[REDACTED]` or similar)
+3. Verify no token values appear in pod logs (should show `[REDACTED]` or similar)
 
 ## Troubleshooting
 
 ### Error: "Key Vault operation failed"
 
-**Cause**: Logic App's managed identity doesn't have permission to read the secret.
+**Cause**: AKS workload identity doesn't have permission to read the secret.
 
-**Solution**: Grant the Key Vault Secrets User role:
+**Solution**: Grant the Key Vault Secrets User role to the AKS kubelet identity:
 ```bash
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
@@ -219,17 +222,17 @@ az role assignment create \
   --scope "/subscriptions/.../Microsoft.KeyVault/vaults/YOUR_KEYVAULT"
 ```
 
-### Error: "Parameter 'CLAIMS_BACKEND_API_TOKEN' not found"
+### Error: "Secret not found in pod environment"
 
-**Cause**: The workflow parameter is not properly configured.
+**Cause**: The Kubernetes secret is not properly synced from Key Vault via Secrets Store CSI Driver.
 
-**Solution**: Ensure the workflow parameters.json includes:
-```json
-{
-  "CLAIMS_BACKEND_API_TOKEN": {
-    "value": "@appsetting('CLAIMS_BACKEND_API_TOKEN')"
-  }
-}
+**Solution**: Verify the SecretProviderClass and ensure a pod with the CSI volume has been started:
+```bash
+# Check SecretProviderClass status
+kubectl describe secretproviderclass claims-backend-token -n argo
+
+# Ensure the CSI driver pod is running
+kubectl get pods -n kube-system -l app=secrets-store-csi-driver
 ```
 
 ### Error: "401 Unauthorized" from claims backend API
@@ -249,11 +252,11 @@ az keyvault secret set \
 ### 1. Token Rotation
 - Rotate claims backend API tokens regularly (recommended: every 90 days)
 - Update the Key Vault secret value
-- Logic App automatically picks up the new value on next workflow run
+- Secrets Store CSI Driver automatically syncs the new value (based on rotation poll interval)
 
 ### 2. Access Control
 - Use Azure RBAC to limit who can read Key Vault secrets
-- Grant minimum necessary permissions to Logic App managed identity
+- Grant minimum necessary permissions to AKS workload identity
 - Use separate Key Vaults for DEV/UAT/PROD environments
 
 ### 3. Audit and Monitoring

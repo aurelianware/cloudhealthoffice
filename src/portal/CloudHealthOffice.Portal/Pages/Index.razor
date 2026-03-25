@@ -2,10 +2,12 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using CloudHealthOffice.Portal.Services
 @using System.Security.Claims
+@using Microsoft.Extensions.Hosting
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ITenantService TenantService
 @inject ILogger<Index> Logger
+@inject IWebHostEnvironment HostEnvironment
 
 @code {
     protected override async Task OnInitializedAsync()
@@ -49,9 +51,34 @@
 
         if (subscription == null)
         {
-            Logger.LogInformation("No subscription found for tenant {TenantId}, redirecting to signup", azureTenantId);
-            Navigation.NavigateTo("/signup");
-            return;
+            // Auto-provision tenant in Development so local dev doesn't hit signup wall
+            if (HostEnvironment.IsDevelopment())
+            {
+                Logger.LogInformation("Dev mode: auto-provisioning subscription for Azure Tenant {TenantId}", azureTenantId);
+                try
+                {
+                    await TenantService.CreateTenantAsync(new CreateTenantRequest
+                    {
+                        AzureTenantId = azureTenantId,
+                        OrganizationName = userEmail?.Split('@').LastOrDefault() ?? "Dev Tenant",
+                        AdminEmail = userEmail ?? "",
+                        Tier = "enterprise",
+                        IsDemo = false
+                    });
+                    subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to auto-provision tenant");
+                }
+            }
+
+            if (subscription == null)
+            {
+                Logger.LogInformation("No subscription found for tenant {TenantId}, redirecting to signup", azureTenantId);
+                Navigation.NavigateTo("/signup");
+                return;
+            }
         }
 
         if (subscription.IsDemo)

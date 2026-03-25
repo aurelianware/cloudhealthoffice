@@ -24,8 +24,8 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
-  - url: https://{environment}-logic-la.azurewebsites.net/api/ecs_summary_search
-    description: Logic App endpoint
+  - url: https://{environment}-ecs.cloudhealthoffice.com/api/ecs_summary_search
+    description: AKS service endpoint
     variables:
       environment:
         default: prod

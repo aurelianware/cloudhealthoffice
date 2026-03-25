@@ -177,7 +177,7 @@ npm run generate -- interactive --output my-config.json --generate
 | Feature | Description |
 |---------|-------------|
 | **Interactive Wizard** | Guided configuration in < 5 minutes |
-| **Config-to-Workflow Generator** | Automatic Logic App generation |
+| **Config-to-Workflow Generator** | Automatic Argo Workflow generation |
 | **FHIR R4 APIs** | Native X12 ↔ FHIR transformation |
 | **ValueAdds277** | 60+ enhanced claim status fields |
 | **Security Hardening** | HSM-backed keys, private endpoints, PHI masking |

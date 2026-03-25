@@ -1,82 +1,200 @@
 @page "/claims"
-@page "/demo/claims"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject IClaimsService ClaimsService
+@inject IProviderService ProviderService
+@inject IMemberService MemberService
 @inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
 
 <PageTitle>Claims - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="claims:read,claims:work" RoleName="ClaimsExaminer">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
         Claims Management
     </MudText>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        Search, filter, and manage healthcare claims
+        Search and manage professional and institutional healthcare claims
     </MudText>
 
-    <!-- Search Form -->
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    <!-- Advanced Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">Search Criteria</MudText>
+
         <MudGrid>
+            <!-- First Row: Basic Search Fields -->
             <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="_claimIdSearch"
-                             Label="Claim ID"
+                <MudTextField @bind-Value="_searchRequest.ClaimNumber"
+                             Label="Claim Number"
                              Placeholder="Exact match"
                              Variant="Variant.Outlined"
-                             OnKeyUp="OnSearchKeyUp" />
+                             ClearButton="true" />
             </MudItem>
             <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="_memberIdSearch"
-                             Label="Member ID"
-                             Placeholder="Exact match"
-                             Variant="Variant.Outlined"
-                             OnKeyUp="OnSearchKeyUp" />
+                <MudAutocomplete T="MemberSummary"
+                               @bind-Value="_selectedMember"
+                               SearchFunc="SearchMembers"
+                               Label="Member"
+                               Placeholder="Search by name or ID"
+                               ToStringFunc="@(m => m == null ? null : $"{m.FirstName} {m.LastName} ({m.MemberId})")"
+                               Variant="Variant.Outlined"
+                               ResetValueOnEmptyText="true"
+                               AnchorOrigin="Origin.BottomCenter"
+                               MaxItems="10">
+                    <ItemTemplate>
+                        <div>
+                            <MudText Typo="Typo.body2">@context.FirstName @context.LastName</MudText>
+                            <MudText Typo="Typo.caption">ID: @context.MemberId | DOB: @context.DateOfBirth.ToString("MM/dd/yyyy")</MudText>
+                        </div>
+                    </ItemTemplate>
+                </MudAutocomplete>
             </MudItem>
-            <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_providerNameSearch"
-                             Label="Provider Name"
-                             Placeholder="Contains..."
-                             Variant="Variant.Outlined"
-                             OnKeyUp="OnSearchKeyUp" />
+            <MudItem xs="12" md="3">
+                <MudAutocomplete T="ProviderSummary"
+                               @bind-Value="_selectedProvider"
+                               SearchFunc="SearchProviders"
+                               Label="Provider (NPI or Name)"
+                               Placeholder="Search by NPI or name"
+                               ToStringFunc="@(p => p == null ? null : $"{p.Name} ({p.NPI})")"
+                               Variant="Variant.Outlined"
+                               ResetValueOnEmptyText="true"
+                               AnchorOrigin="Origin.BottomCenter"
+                               MaxItems="10">
+                    <ItemTemplate>
+                        <div>
+                            <MudText Typo="Typo.body2">@context.Name</MudText>
+                            <MudText Typo="Typo.caption">NPI: @context.NPI | @context.Specialty</MudText>
+                        </div>
+                    </ItemTemplate>
+                </MudAutocomplete>
             </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchRequest.AuthorizationNumber"
+                             Label="Authorization Number"
+                             Placeholder="Prior Auth #"
+                             Variant="Variant.Outlined"
+                             ClearButton="true" />
+            </MudItem>
+        </MudGrid>
+
+        <!-- Second Row: Filters -->
+        <MudGrid Class="mt-2">
             <MudItem xs="12" md="2">
-                <MudSelect @bind-Value="_statusFilter"
-                          Label="Status"
+                <MudSelect @bind-Value="_searchRequest.ClaimType"
+                          Label="Claim Type"
                           Variant="Variant.Outlined"
                           T="string"
-                          AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem Value="@("All")">All Statuses</MudSelectItem>
-                    <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
-                    <MudSelectItem Value="@("Denied")">Denied</MudSelectItem>
-                    <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                          AnchorOrigin="Origin.BottomCenter"
+                          Clearable="true">
+                    <MudSelectItem Value="@("Professional")">Professional (837P)</MudSelectItem>
+                    <MudSelectItem Value="@("Institutional")">Institutional (837I)</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
+                <MudSelect @bind-Value="_searchRequest.Status"
+                          Label="Status"
+                          Variant="Variant.Outlined"
+                          T="string"
+                          AnchorOrigin="Origin.BottomCenter"
+                          Clearable="true">
+                    <MudSelectItem Value="@("Submitted")">Submitted</MudSelectItem>
+                    <MudSelectItem Value="@("Received")">Received</MudSelectItem>
+                    <MudSelectItem Value="@("InAdjudication")">In Adjudication</MudSelectItem>
+                    <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
+                    <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
+                    <MudSelectItem Value="@("Denied")">Denied</MudSelectItem>
+                    <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
+                    <MudSelectItem Value="@("PartiallyPaid")">Partially Paid</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudDateRangePicker @bind-DateRange="_serviceDateRange"
+                                   Label="Service Date Range"
+                                   Class="w-100"
+                                   Variant="Variant.Outlined">
+                </MudDateRangePicker>
+            </MudItem>
+            <MudItem xs="12" md="4">
                 <MudGrid Spacing="1">
-                    <MudItem xs="7">
+                    <MudItem xs="4">
                         <MudButton Variant="Variant.Filled"
                                   Color="Color.Primary"
                                   FullWidth="true"
-                                  OnClick="SearchClaims"
-                                  Disabled="_loading">
+                                  OnClick="PerformSearch"
+                                  Disabled="_loading"
+                                  Class="h-100">
                             <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
                             Search
                         </MudButton>
                     </MudItem>
-                    <MudItem xs="5">
+                    <MudItem xs="4">
                         <MudButton Variant="Variant.Outlined"
                                   Color="Color.Default"
                                   FullWidth="true"
                                   OnClick="ClearSearch"
-                                  Disabled="_loading">
+                                  Disabled="_loading"
+                                  Class="h-100">
                             Clear
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Info"
+                                  FullWidth="true"
+                                  OnClick="ToggleAdvancedOptions"
+                                  Class="h-100">
+                            <MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Small" />
                         </MudButton>
                     </MudItem>
                 </MudGrid>
             </MudItem>
         </MudGrid>
+
+        <!-- Advanced Options (Hidden by default) -->
+        @if (_showAdvancedOptions)
+        {
+            <MudExpansionPanel Text="Advanced Search Options" Class="mt-4" DefaultExpanded="true">
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudSelect @bind-Value="_searchRequest.SortBy"
+                                  Label="Sort By"
+                                  Variant="Variant.Outlined"
+                                  T="string"
+                                  AnchorOrigin="Origin.BottomCenter">
+                            <MudSelectItem Value="@("SubmittedDate")">Submitted Date</MudSelectItem>
+                            <MudSelectItem Value="@("ServiceDate")">Service Date</MudSelectItem>
+                            <MudSelectItem Value="@("Amount")">Amount</MudSelectItem>
+                            <MudSelectItem Value="@("Status")">Status</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect @bind-Value="_searchRequest.SortOrder"
+                                  Label="Sort Order"
+                                  Variant="Variant.Outlined"
+                                  T="string"
+                                  AnchorOrigin="Origin.BottomCenter">
+                            <MudSelectItem Value="@("Descending")">Descending</MudSelectItem>
+                            <MudSelectItem Value="@("Ascending")">Ascending</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField @bind-Value="_searchRequest.PageSize"
+                                        Label="Items Per Page"
+                                        Min="10"
+                                        Max="100"
+                                        Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
+        }
 
         @if (_showValidationMessage)
         {
@@ -90,159 +208,239 @@
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
     }
-    else if (_hasSearched)
+    else if (_hasSearched && _searchResult != null)
     {
-        <!-- Stats Cards -->
+        <!-- Summary Statistics -->
         <MudGrid Class="mb-4">
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" sm="6" md="2">
                 <MudCard Elevation="1">
                     <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Claims</MudText>
-                        <MudText Typo="Typo.h4">@_filteredClaims.Count</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Results</MudText>
+                        <MudText Typo="Typo.h5">@_searchResult.TotalCount</MudText>
+                        <MudText Typo="Typo.caption">@_searchResult.PageNumber of @_searchResult.TotalPages</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Charges</MudText>
+                        <MudText Typo="Typo.h5">@_searchResult.TotalChargeAmount.ToString("C0")</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
                 <MudCard Elevation="1">
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Success">@_filteredClaims.Count(c => c.Status == "Approved")</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Success">@_searchResult.ApprovedCount</MudText>
+                        <MudText Typo="Typo.caption">@_searchResult.TotalPaidAmount.ToString("C0")</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Pending</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Warning">@_searchResult.PendingCount</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
                 <MudCard Elevation="1">
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Denied</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Error">@_filteredClaims.Count(c => c.Status == "Denied")</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="1">
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Amount</MudText>
-                        <MudText Typo="Typo.h4">@_filteredClaims.Sum(c => c.TotalChargeAmount).ToString("C0")</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Error">@_searchResult.DeniedCount</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
         </MudGrid>
 
-        @if (_filteredClaims.Any())
-        {
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-                Showing @_filteredClaims.Count claim(s)
-            </MudText>
-
-            <!-- Claims Table -->
-            <MudPaper Elevation="2">
-                <MudTable Items="_filteredClaims"
+        <!-- Claims Table -->
+        <MudPaper Elevation="2">
+            @if (_searchResult.Claims.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="ma-4">
+                    No claims found matching your search criteria. Try adjusting your filters.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@_searchResult.Claims"
                          Hover="true"
                          Breakpoint="Breakpoint.Sm"
                          Dense="true"
                          Striped="true"
-                         @bind-SelectedItem="_selectedClaim"
-                         OnRowClick="@((TableRowClickEventArgs<ClaimSummary> args) => ViewClaimDetails(args.Item.ClaimId))">
+                         Class="w-100">
                     <HeaderContent>
-                        <MudTh>Claim ID</MudTh>
+                        <MudTh>Claim #</MudTh>
                         <MudTh>Member</MudTh>
                         <MudTh>Provider</MudTh>
-                        <MudTh>Amount</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Service Date</MudTh>
+                        <MudTh>Charge Amt</MudTh>
+                        <MudTh>Allowed Amt</MudTh>
+                        <MudTh>Paid Amt</MudTh>
                         <MudTh>Status</MudTh>
-                        <MudTh>Processing Time</MudTh>
+                        <MudTh>Days</MudTh>
                         <MudTh>Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Claim ID">
-                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ClaimId</MudText>
+                        <MudTd DataLabel="Claim #">
+                            <MudButton Variant="Variant.Text"
+                                      Color="Color.Primary"
+                                      Size="Size.Small"
+                                      OnClick="@(() => ViewClaimDetails(context.ClaimId))">
+                                @context.ClaimNumber
+                            </MudButton>
                         </MudTd>
                         <MudTd DataLabel="Member">
                             <MudText Typo="Typo.body2">@context.MemberName</MudText>
+                            <MudText Typo="Typo.caption">ID: @context.MemberId</MudText>
                         </MudTd>
                         <MudTd DataLabel="Provider">
                             <MudText Typo="Typo.body2">@context.ProviderName</MudText>
+                            <MudText Typo="Typo.caption">@context.ProviderId</MudText>
                         </MudTd>
-                        <MudTd DataLabel="Amount">
-                            <MudText Typo="Typo.body2">@context.TotalChargeAmount.ToString("C")</MudText>
+                        <MudTd DataLabel="Type">
+                            <MudChip Size="Size.Small"
+                                    Variant="Variant.Outlined"
+                                    Color="@(context.ClaimType == "Professional" ? Color.Info : Color.Warning)">
+                                @context.ClaimType?.Substring(0, 1)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Service Date">
+                            <MudText Typo="Typo.body2">@context.ServiceDateFrom.ToString("MM/dd/yyyy")</MudText>
+                            @if (context.ServiceDateTo != context.ServiceDateFrom)
+                            {
+                                <MudText Typo="Typo.caption">to @context.ServiceDateTo.ToString("MM/dd/yyyy")</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Charge Amt">
+                            <MudText Typo="Typo.body2" Style="text-align: right;">@context.TotalChargeAmount.ToString("C0")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Allowed Amt">
+                            <MudText Typo="Typo.body2" Style="text-align: right;">@context.AllowedAmount.ToString("C0")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Paid Amt">
+                            <MudText Typo="Typo.body2" Style="text-align: right; font-weight: 600;">@context.PaidAmount.ToString("C0")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Status">
                             <MudChip Size="Size.Small"
-                                    Color="@GetStatusColor(context.Status)">
+                                    Color="@GetStatusColor(context.Status)"
+                                    Variant="Variant.Filled">
                                 @context.Status
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Processing Time">
-                            <MudText Typo="Typo.body2">@context.ProcessingTimeMs ms</MudText>
+                        <MudTd DataLabel="Days">
+                            <MudText Typo="Typo.body2">
+                                @((int)(DateTime.Now - context.SubmittedDate).TotalDays) days
+                            </MudText>
                         </MudTd>
                         <MudTd DataLabel="Actions">
-                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
-                                          Color="Color.Primary"
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
                                           Size="Size.Small"
-                                          OnClick="@(() => ViewClaimDetails(context.ClaimId))" />
+                                          OnClick="@(() => ViewClaimDetails(context.ClaimId))"
+                                          Title="View Details" />
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
-            </MudPaper>
-        }
-        else
+            }
+        </MudPaper>
+
+        <!-- Pagination -->
+        @if (_searchResult.TotalPages > 1)
         {
-            <MudPaper Class="pa-8 text-center" Elevation="2">
-                <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Color="Color.Secondary" />
-                <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">No claims found</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">Try adjusting your search criteria</MudText>
+            <MudPaper Class="pa-4 mt-4" Elevation="0">
+                <MudPagination Count="@_searchResult.TotalPages"
+                              Selected="_currentPage"
+                              SelectedChanged="PageChanged"
+                              Disabled="_loading" />
             </MudPaper>
         }
     }
-    else
+    else if (_hasSearched && _searchResult == null)
     {
-        <MudPaper Class="pa-8 text-center" Elevation="1">
-            <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Size="Size.Large" Color="Color.Secondary" />
-            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">Search for a claim to view details</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">Enter a Claim ID or Member ID to begin</MudText>
-        </MudPaper>
+        <MudAlert Severity="Severity.Error">
+            Failed to load search results. Please try again.
+        </MudAlert>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
-    private List<ClaimSummary> _allClaims = new();
-    private List<ClaimSummary> _filteredClaims = new();
-    private ClaimSummary? _selectedClaim;
+    private ClaimSearchRequest _searchRequest = new();
+    private ClaimSearchResult? _searchResult;
+    private List<MemberSummary> _memberSearchResults = new();
+    private List<ProviderSummary> _providerSearchResults = new();
+    private MemberSummary? _selectedMember;
+    private ProviderSummary? _selectedProvider;
+    private DateRange? _serviceDateRange = null;
+
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private bool _showAdvancedOptions = false;
+    private int _currentPage = 1;
+    private string? _serviceError;
 
-    private string _claimIdSearch = string.Empty;
-    private string _memberIdSearch = string.Empty;
-    private string _providerNameSearch = string.Empty;
-    private string _statusFilter = "All";
-
-    private bool HasCriteria =>
-        !string.IsNullOrWhiteSpace(_claimIdSearch) ||
-        !string.IsNullOrWhiteSpace(_memberIdSearch);
-
-    private async Task SearchClaims()
+    protected override void OnInitialized()
     {
-        if (!HasCriteria)
+        _searchRequest.PageSize = 25;
+    }
+
+    private async Task PerformSearch()
+    {
+        _showValidationMessage = false;
+
+        // Validate at least one search criterion
+        if (string.IsNullOrWhiteSpace(_searchRequest.ClaimNumber)
+            && _selectedMember == null
+            && _selectedProvider == null
+            && string.IsNullOrWhiteSpace(_searchRequest.ClaimType)
+            && string.IsNullOrWhiteSpace(_searchRequest.Status)
+            && _serviceDateRange?.Start == null)
         {
             _showValidationMessage = true;
             return;
         }
 
-        _showValidationMessage = false;
         _loading = true;
-        StateHasChanged();
+        _hasSearched = true;
+        _currentPage = 1;
 
         try
         {
-            _allClaims = await ClaimsService.GetRecentClaimsAsync(100);
-            ApplyFilters();
-            _hasSearched = true;
+            // Populate member and provider IDs from selected items
+            if (_selectedMember != null)
+            {
+                _searchRequest.MemberId = _selectedMember.MemberId;
+            }
+
+            if (_selectedProvider != null)
+            {
+                _searchRequest.ProviderId = _selectedProvider.ProviderId;
+            }
+
+            // Populate date range
+            if (_serviceDateRange?.Start.HasValue == true)
+            {
+                _searchRequest.ServiceDateFrom = _serviceDateRange.Start.Value;
+                _searchRequest.ServiceDateTo = _serviceDateRange.End ?? DateTime.Now;
+            }
+
+            _searchRequest.PageNumber = _currentPage;
+            _searchResult = await ClaimsService.SearchClaimsAsync(_searchRequest);
         }
-        catch
+        catch (ServiceUnavailableException ex)
         {
-            _allClaims = new();
-            _filteredClaims = new();
-            _hasSearched = true;
+            _serviceError = ex.Message;
+            _searchResult = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching claims: {ex.Message}", Severity.Error);
+            _searchResult = null;
         }
         finally
         {
@@ -251,68 +449,77 @@
         }
     }
 
-    private void ApplyFilters()
-    {
-        _filteredClaims = _allClaims.ToList();
-
-        if (!string.IsNullOrWhiteSpace(_claimIdSearch))
-        {
-            var id = _claimIdSearch.ToLowerInvariant();
-            _filteredClaims = _filteredClaims.Where(c =>
-                c.ClaimId.ToLowerInvariant().Contains(id)).ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(_memberIdSearch))
-        {
-            var mid = _memberIdSearch.ToLowerInvariant();
-            _filteredClaims = _filteredClaims.Where(c =>
-                c.MemberName.ToLowerInvariant().Contains(mid)).ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(_providerNameSearch))
-        {
-            var prov = _providerNameSearch.ToLowerInvariant();
-            _filteredClaims = _filteredClaims.Where(c =>
-                c.ProviderName.ToLowerInvariant().Contains(prov)).ToList();
-        }
-
-        if (_statusFilter != "All")
-        {
-            _filteredClaims = _filteredClaims.Where(c => c.Status == _statusFilter).ToList();
-        }
-    }
-
     private void ClearSearch()
     {
-        _claimIdSearch = string.Empty;
-        _memberIdSearch = string.Empty;
-        _providerNameSearch = string.Empty;
-        _statusFilter = "All";
-        _allClaims = new();
-        _filteredClaims = new();
+        _searchRequest = new()
+        {
+            PageSize = 25,
+            SortBy = "SubmittedDate",
+            SortOrder = "Descending"
+        };
+        _selectedMember = null;
+        _selectedProvider = null;
+        _serviceDateRange = null;
+        _searchResult = null;
         _hasSearched = false;
+        _currentPage = 1;
         _showValidationMessage = false;
     }
 
-    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    private void ToggleAdvancedOptions()
     {
-        if (e.Key == "Enter")
-            await SearchClaims();
+        _showAdvancedOptions = !_showAdvancedOptions;
     }
 
-    private Color GetStatusColor(string status)
+    private async Task<IEnumerable<MemberSummary>> SearchMembers(string value)
     {
-        return status switch
+        if (string.IsNullOrWhiteSpace(value))
+            return new List<MemberSummary>();
+
+        try
         {
-            "Approved" => Color.Success,
-            "Denied" => Color.Error,
-            "Pending" => Color.Warning,
-            _ => Color.Info
-        };
+            return await MemberService.SearchMembersAsync(value);
+        }
+        catch
+        {
+            return new List<MemberSummary>();
+        }
+    }
+
+    private async Task<IEnumerable<ProviderSummary>> SearchProviders(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return new List<ProviderSummary>();
+
+        try
+        {
+            return await ProviderService.SearchProvidersAsync(value);
+        }
+        catch
+        {
+            return new List<ProviderSummary>();
+        }
+    }
+
+    private async Task PageChanged(int page)
+    {
+        _currentPage = page;
+        _searchRequest.PageNumber = page;
+        await PerformSearch();
     }
 
     private void ViewClaimDetails(string claimId)
     {
         NavigationManager.NavigateTo($"/claims/{claimId}");
     }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Approved" or "Paid" or "PartiallyPaid" => Color.Success,
+        "Denied" => Color.Error,
+        "Pended" => Color.Warning,
+        "InAdjudication" or "Received" => Color.Info,
+        "Submitted" => Color.Default,
+        _ => Color.Default
+    };
 }

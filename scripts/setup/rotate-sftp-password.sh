@@ -8,11 +8,11 @@ echo ""
 # Configuration
 NAMESPACE="cho-sftp"
 SECRET_NAME="sftp-users"
-USERNAME="${1:-logicapp}"
+USERNAME="${1:-cho-edi}"
 
 if [ -z "$USERNAME" ]; then
   echo "Usage: $0 <username>"
-  echo "Example: $0 logicapp"
+  echo "Example: $0 cho-edi"
   exit 1
 fi
 

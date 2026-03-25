@@ -6,9 +6,6 @@
 @description('Base name for ECS resources')
 param baseName string
 
-@description('Logic App name (parent resource)')
-param logicAppName string
-
 @description('Application Insights instrumentation key')
 param appInsightsKey string
 
@@ -25,16 +22,23 @@ param backendApiToken string = ''
 @description('Enable ECS workflow deployment')
 param enableEcs bool = true
 
+@description('Kubernetes namespace where ECS service is deployed')
+param aksNamespace string = 'default'
+
+@description('Kubernetes cluster DNS suffix')
+param aksClusterDnsSuffix string = 'svc.cluster.local'
+
 // =========================
 // Variables
 // =========================
 var ecsWorkflowName = 'ecs_summary_search'
+var aksServiceHost = '${baseName}-ecs-svc.${aksNamespace}.${aksClusterDnsSuffix}'
 
 // =========================
 // Outputs - ECS Configuration Settings
 // =========================
 
-// ECS workflow configuration to be used in Logic App settings
+// ECS workflow configuration for AKS-hosted Argo Workflows
 output ecsWorkflowConfig object = {
   workflowName: ecsWorkflowName
   backendBaseUrl: backendBaseUrl
@@ -65,16 +69,19 @@ output ecsMonitoringConfig object = {
   logSearchResults: true
 }
 
-// ECS API endpoint information
+// ECS API endpoint information (AKS Argo Workflows)
+// NOTE: These are internal cluster DNS names, only resolvable from within the AKS cluster.
+// For external access, configure an ingress controller and use the ingress hostname instead.
 output ecsEndpointInfo object = {
   workflowName: ecsWorkflowName
   triggerName: 'HTTP_ECS_Summary_Search_Request'
   endpointPath: '/api/${ecsWorkflowName}/triggers/HTTP_ECS_Summary_Search_Request/invoke'
-  baseUrl: 'https://${logicAppName}.azurewebsites.net'
-  fullUrl: 'https://${logicAppName}.azurewebsites.net/api/${ecsWorkflowName}/triggers/HTTP_ECS_Summary_Search_Request/invoke'
+  baseUrl: 'http://${aksServiceHost}'
+  fullUrl: 'http://${aksServiceHost}/api/${ecsWorkflowName}/triggers/HTTP_ECS_Summary_Search_Request/invoke'
+  isInternalOnly: true
 }
 
-// ECS workflow parameters (for Logic App configuration)
+// ECS workflow parameters (for AKS/Argo Workflows configuration)
 // Note: Secure parameters should reference Key Vault
 output ecsWorkflowParameters object = {
   backend_base_url: {
@@ -97,28 +104,16 @@ output ecsTags object = {
 // Notes
 // =========================
 // This module provides configuration outputs for the ECS Summary Search workflow.
-// The actual workflow deployment happens via the workflows.zip package deployment.
-// 
+// Workflows now run on AKS with Argo Workflows instead of Azure Logic Apps.
+//
 // Usage in main.bicep:
 //   module ecs 'modules/ecs-api.bicep' = {
 //     name: 'ecs-api-module'
 //     params: {
 //       baseName: baseName
-//       location: location
-//       logicAppName: la.name
 //       appInsightsKey: insights.properties.InstrumentationKey
 //       appInsightsConnectionString: insights.properties.ConnectionString
 //       backendBaseUrl: backendBaseUrl
 //       backendApiToken: backendApiToken
-//     }
-//   }
-//
-// Then add ECS app settings to Logic App:
-//   resource laAppSettings 'Microsoft.Web/sites/config@2022-03-01' = {
-//     parent: la
-//     name: 'appsettings'
-//     properties: {
-//       ...existingSettings
-//       ...array_to_object(ecs.outputs.ecsAppSettings)
 //     }
 //   }

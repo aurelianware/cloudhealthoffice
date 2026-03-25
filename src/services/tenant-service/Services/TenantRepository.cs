@@ -1,80 +1,40 @@
-using Microsoft.Azure.Cosmos;
+using MongoDB.Driver;
 using TenantService.Models;
 
 namespace TenantService.Services;
 
 public class TenantRepository : ITenantRepository
 {
-    private readonly Container _container;
+    private readonly IMongoCollection<Tenant> _collection;
     private readonly ILogger<TenantRepository> _logger;
 
-    public TenantRepository(CosmosClient cosmosClient, IConfiguration configuration, ILogger<TenantRepository> logger)
+    public TenantRepository(IMongoDatabase database, ILogger<TenantRepository> logger)
     {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var containerName = configuration["CosmosDb:TenantContainerName"] ?? "Tenants";
-
-        _container = cosmosClient.GetContainer(databaseName, containerName);
+        _collection = database.GetCollection<Tenant>("Tenants");
         _logger = logger;
     }
 
     public async Task<Tenant?> GetByIdAsync(string id)
     {
-        try
-        {
-            var response = await _container.ReadItemAsync<Tenant>(id, new PartitionKey(id));
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            _logger.LogWarning("Tenant with ID {TenantId} not found", SanitizeForLog(id));
-            return null;
-        }
+        return await _collection.Find(t => t.Id == id).FirstOrDefaultAsync();
     }
 
     public async Task<Tenant?> GetByTenantIdAsync(string tenantId)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.tenantId = @tenantId")
-            .WithParameter("@tenantId", tenantId);
-
-        var iterator = _container.GetItemQueryIterator<Tenant>(query);
-        var response = await iterator.ReadNextAsync();
-
-        return response.FirstOrDefault();
+        return await _collection.Find(t => t.TenantId == tenantId).FirstOrDefaultAsync();
     }
 
     public async Task<IEnumerable<Tenant>> GetAllAsync(int pageSize = 100, string? continuationToken = null)
     {
-        var query = new QueryDefinition("SELECT * FROM c ORDER BY c.createdAt DESC");
-        var requestOptions = new QueryRequestOptions { MaxItemCount = pageSize };
-
-        var iterator = _container.GetItemQueryIterator<Tenant>(query, continuationToken, requestOptions);
-        var tenants = new List<Tenant>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            tenants.AddRange(response);
-            break; // Only get first page for now
-        }
-
-        return tenants;
+        return await _collection.Find(_ => true)
+            .SortByDescending(t => t.CreatedAt)
+            .Limit(pageSize)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<Tenant>> GetByStatusAsync(string status)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.status = @status")
-            .WithParameter("@status", status);
-
-        var iterator = _container.GetItemQueryIterator<Tenant>(query);
-        var tenants = new List<Tenant>();
-
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            tenants.AddRange(response);
-        }
-
-        return tenants;
+        return await _collection.Find(t => t.Status == status).ToListAsync();
     }
 
     public async Task<Tenant> CreateAsync(Tenant tenant)
@@ -82,20 +42,21 @@ public class TenantRepository : ITenantRepository
         tenant.CreatedAt = DateTime.UtcNow;
         tenant.UpdatedAt = DateTime.UtcNow;
 
-        var response = await _container.CreateItemAsync(tenant, new PartitionKey(tenant.Id));
-        _logger.LogInformation("Created tenant {TenantId} ({TenantName})", SanitizeForLog(tenant.TenantId), SanitizeForLog(tenant.TenantName));
-        
-        return response.Resource;
+        await _collection.InsertOneAsync(tenant);
+        _logger.LogInformation("Created tenant {TenantId} ({TenantName})",
+            SanitizeForLog(tenant.TenantId), SanitizeForLog(tenant.TenantName));
+
+        return tenant;
     }
 
     public async Task<Tenant> UpdateAsync(Tenant tenant)
     {
         tenant.UpdatedAt = DateTime.UtcNow;
 
-        var response = await _container.ReplaceItemAsync(tenant, tenant.Id, new PartitionKey(tenant.Id));
+        await _collection.ReplaceOneAsync(t => t.Id == tenant.Id, tenant);
         _logger.LogInformation("Updated tenant {TenantId}", SanitizeForLog(tenant.TenantId));
-        
-        return response.Resource;
+
+        return tenant;
     }
 
     public async Task DeleteAsync(string tenantId)
@@ -103,36 +64,23 @@ public class TenantRepository : ITenantRepository
         var tenant = await GetByTenantIdAsync(tenantId);
         if (tenant != null)
         {
-            await _container.DeleteItemAsync<Tenant>(tenant.Id, new PartitionKey(tenant.Id));
+            await _collection.DeleteOneAsync(t => t.Id == tenant.Id);
             _logger.LogInformation("Deleted tenant {TenantId}", SanitizeForLog(tenantId));
         }
     }
 
     public async Task<bool> ExistsAsync(string tenantId)
     {
-        var tenant = await GetByTenantIdAsync(tenantId);
-        return tenant != null;
+        return await _collection.Find(t => t.TenantId == tenantId).AnyAsync();
     }
 
     public async Task<Tenant?> GetByApiKeyHashAsync(string keyHash)
     {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE ARRAY_CONTAINS(c.apiKeys, {'keyHash': @keyHash}, true)")
-            .WithParameter("@keyHash", keyHash);
+        var filter = Builders<Tenant>.Filter.ElemMatch(
+            t => t.ApiKeys,
+            k => k.KeyHash == keyHash && k.IsActive);
 
-        var iterator = _container.GetItemQueryIterator<Tenant>(query);
-        
-        while (iterator.HasMoreResults)
-        {
-            var response = await iterator.ReadNextAsync();
-            var tenant = response.FirstOrDefault(t => 
-                t.ApiKeys.Any(k => k.KeyHash == keyHash && k.IsActive));
-            
-            if (tenant != null)
-                return tenant;
-        }
-
-        return null;
+        return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
     private static string SanitizeForLog(string? value)

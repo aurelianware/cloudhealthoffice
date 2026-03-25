@@ -106,9 +106,10 @@
       "retryDelayMs": 5000
     },
     "integration": {
-      "logicApps": {
+      "argoWorkflows": {
         "enabled": true,
-        "workflowName": "rfai277",
+        "workflowTemplateName": "rfai277",
+        "namespace": "edi-workflows",
         "autoResolveEnabled": false
       },
       "serviceBus": {

@@ -47,16 +47,17 @@ All HIPAA technical safeguard requirements are addressed:
 │                         Azure Virtual Network                    │
 │                                                                   │
 │  ┌──────────────────────────┐    ┌──────────────────────────┐  │
-│  │  Logic Apps Subnet       │    │  Private Endpoints        │  │
+│  │  AKS Workload Subnet     │    │  Private Endpoints        │  │
 │  │  (10.0.1.0/24)          │    │  Subnet (10.0.2.0/24)    │  │
 │  │                          │    │                          │  │
 │  │  ┌────────────────────┐ │    │  ┌────────────────────┐ │  │
-│  │  │ Logic App Standard │ │    │  │ Storage PE (blob)  │ │  │
-│  │  │ - ingest275        │ │    │  │ Service Bus PE     │ │  │
-│  │  │ - ingest278        │ │    │  │ Key Vault PE       │ │  │
-│  │  │ - replay278        │ │    │  └────────────────────┘ │  │
-│  │  │ - rfai277          │ │    │                          │  │
-│  │  │ - process_appeals  │ │    └──────────────────────────┘  │
+│  │  │ AKS + Argo         │ │    │  │ Storage PE (blob)  │ │  │
+│  │  │  Workflows         │ │    │  │ Service Bus PE     │ │  │
+│  │  │ - ingest275        │ │    │  │ Key Vault PE       │ │  │
+│  │  │ - ingest278        │ │    │  └────────────────────┘ │  │
+│  │  │ - replay278        │ │    │                          │  │
+│  │  │ - rfai277          │ │    └──────────────────────────┘  │
+│  │  │ - process_appeals  │ │                                  │
 │  │  │ - process_auth     │ │                                  │
 │  │  └────────────────────┘ │                                  │
 │  └──────────────────────────┘                                  │
@@ -92,8 +93,8 @@ All HIPAA technical safeguard requirements are addressed:
 | Zone | Components | Access Level | PHI Present |
 |------|------------|--------------|-------------|
 | **External** | Clearinghouse SFTP, claims backend API | Public (encrypted) | Yes |
-| **DMZ** | Logic App HTTP endpoint | Azure AD auth required | No (validation only) |
-| **Private Network** | Logic Apps, Storage, Service Bus, Key Vault | Private endpoints only | Yes |
+| **DMZ** | AKS ingress HTTP endpoint | Azure AD auth required | No (validation only) |
+| **Private Network** | AKS/Argo Workflows, Storage, Service Bus, Key Vault | Private endpoints only | Yes |
 | **Management** | Azure Portal, Azure CLI | Azure AD + MFA | Read-only access |
 
 ## Azure Key Vault Integration
@@ -195,9 +196,9 @@ az keyvault secret set \
   --value "<secure-client-secret>"
 ```
 
-#### Referencing Secrets in Logic Apps
+#### Referencing Secrets in Argo Workflows on AKS
 
-Logic App workflows can reference Key Vault secrets using the `@keyvault()` expression:
+Argo Workflow steps can reference Key Vault secrets via Kubernetes secrets synced by the Azure Key Vault Provider for Secrets Store CSI Driver:
 
 ```json
 {
@@ -219,15 +220,15 @@ Logic App workflows can reference Key Vault secrets using the `@keyvault()` expr
 
 #### Required Role Assignments
 
-Grant Logic App managed identity access to Key Vault secrets:
+Grant AKS workload identity access to Key Vault secrets:
 
 ```bash
-# Get Logic App managed identity principal ID
-LOGIC_APP_NAME="hipaa-attachments-prod-la"
-PRINCIPAL_ID=$(az webapp identity show \
+# Get AKS workload identity (pod-level managed identity) principal ID
+AKS_CLUSTER_NAME="cho-aks-prod"
+PRINCIPAL_ID=$(az aks show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --query principalId -o tsv)
+  --name "$AKS_CLUSTER_NAME" \
+  --query "identityProfile.kubeletidentity.objectId" -o tsv)
 
 # Assign "Key Vault Secrets User" role
 az role assignment create \
@@ -246,7 +247,7 @@ az role assignment list \
 
 | Role | Permissions | Use Case |
 |------|-------------|----------|
-| **Key Vault Secrets User** | Read secret values | Logic App workflows reading secrets |
+| **Key Vault Secrets User** | Read secret values | AKS workload identity reading secrets for Argo Workflows |
 | **Key Vault Secrets Officer** | CRUD on secrets | Automated secret rotation scripts |
 | **Key Vault Administrator** | Full control | Emergency access, manual configuration |
 | **Key Vault Crypto Service Encryption User** | Use keys for encryption | Storage account CMK |
@@ -294,7 +295,7 @@ chmod +x rotate-secrets.sh
 
 1. Generate new secret value (use strong random generator)
 2. Add new secret to Key Vault with version
-3. Test new secret with Logic App workflow
+3. Test new secret with Argo Workflow execution
 4. Update external system (SFTP, claims backend) with new secret
 5. Verify all workflows succeed with new secret
 6. Archive old secret version (soft delete retains for 90 days)
@@ -351,7 +352,7 @@ AzureDiagnostics
 AzureDiagnostics
 | where ResourceType == "VAULTS"
 | where OperationName == "SecretGet"
-| where identity_claim_appid_g == "<logic-app-appid>"
+| where identity_claim_appid_g == "<aks-workload-identity-appid>"
 | summarize Count=count() by SecretName=id_s, bin(TimeGenerated, 1h)
 | order by TimeGenerated desc
 ```
@@ -397,8 +398,8 @@ Private endpoints provide network isolation by routing traffic through Azure's p
 
 ```
 Virtual Network: 10.0.0.0/16
-├── logic-apps-subnet: 10.0.1.0/24
-│   ├── Delegation: Microsoft.Web/serverFarms
+├── aks-workload-subnet: 10.0.1.0/24
+│   ├── Delegation: Microsoft.ContainerService/managedClusters
 │   └── Service Endpoints: Storage, ServiceBus, KeyVault
 └── private-endpoints-subnet: 10.0.2.0/24
     ├── Private Endpoint: Storage (blob)
@@ -410,7 +411,7 @@ Virtual Network: 10.0.0.0/16
 
 | Subnet | Address Range | Purpose | Delegation | Service Endpoints |
 |--------|---------------|---------|------------|-------------------|
-| `logic-apps-subnet` | 10.0.1.0/24 (251 IPs) | Logic App Standard VNet integration | Microsoft.Web/serverFarms | Storage, ServiceBus, KeyVault |
+| `aks-workload-subnet` | 10.0.1.0/24 (251 IPs) | AKS cluster VNet integration for Argo Workflows | Microsoft.ContainerService/managedClusters | Storage, ServiceBus, KeyVault |
 | `private-endpoints-subnet` | 10.0.2.0/24 (251 IPs) | Private endpoint network interfaces | None | None (uses private link) |
 
 ### Private DNS Zones
@@ -435,7 +436,7 @@ az deployment group create \
   --parameters vnetName="${baseName}-vnet" \
                 location="eastus" \
                 vnetAddressPrefix="10.0.0.0/16" \
-                logicAppsSubnetPrefix="10.0.1.0/24" \
+                aksWorkloadSubnetPrefix="10.0.1.0/24" \
                 privateEndpointsSubnetPrefix="10.0.2.0/24"
 ```
 
@@ -486,28 +487,22 @@ az deployment group create \
                 keyVaultDnsZoneId="$KEY_VAULT_DNS_ZONE_ID"
 ```
 
-#### Enable Logic App VNet Integration
+#### Enable AKS VNet Integration
 
 ```bash
-# Get Logic Apps subnet ID
-LOGIC_SUBNET_ID=$(az network vnet subnet show \
+# The AKS cluster is deployed into the aks-workload-subnet during cluster creation.
+# Verify AKS VNet integration:
+az aks show \
+  --resource-group "$RG_NAME" \
+  --name "$AKS_CLUSTER_NAME" \
+  --query "agentPoolProfiles[0].vnetSubnetId" -o tsv
+
+# Verify the subnet is correctly configured
+az network vnet subnet show \
   --resource-group "$RG_NAME" \
   --vnet-name "${baseName}-vnet" \
-  --name "logic-apps-subnet" \
-  --query id -o tsv)
-
-# Enable VNet integration for Logic App
-az webapp vnet-integration add \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --vnet "${baseName}-vnet" \
-  --subnet "logic-apps-subnet"
-
-# Verify VNet integration
-az webapp vnet-integration list \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --output table
+  --name "aks-workload-subnet" \
+  --query "{addressPrefix:addressPrefix, delegations:delegations[0].serviceName}" -o json
 ```
 
 ### Disable Public Access
@@ -575,15 +570,16 @@ nslookup ${KV_NAME}.vault.azure.net
 # Should resolve to 10.0.2.x (private IP)
 ```
 
-#### Test Logic App Connectivity
+#### Test AKS/Argo Workflow Connectivity
 
 ```bash
-# Trigger ingest275 workflow (upload file to SFTP)
-# Check workflow run history - should succeed via private endpoint
+# Trigger an Argo Workflow and verify it succeeds via private endpoints
+# Check workflow status:
+kubectl -n argo get workflows --sort-by=.metadata.creationTimestamp
 
 # Check Application Insights for network calls
 az monitor app-insights query \
-  --app "${LOGIC_APP_NAME%-la}-ai" \
+  --app "${AKS_CLUSTER_NAME}-ai" \
   --resource-group "$RG_NAME" \
   --analytics-query "dependencies | where timestamp > ago(1h) | project timestamp, name, target, resultCode | order by timestamp desc" \
   --output table
@@ -591,14 +587,14 @@ az monitor app-insights query \
 
 ### Troubleshooting
 
-#### Issue: Logic App cannot reach private endpoints
+#### Issue: AKS pods cannot reach private endpoints
 
 **Solutions:**
-1. Verify VNet integration is configured correctly
-2. Check subnet delegation is set to `Microsoft.Web/serverFarms`
-3. Ensure service endpoints are enabled on Logic Apps subnet
+1. Verify AKS cluster is deployed into the correct VNet subnet
+2. Check subnet delegation is set to `Microsoft.ContainerService/managedClusters`
+3. Ensure service endpoints are enabled on AKS workload subnet
 4. Verify private DNS zones are linked to VNet
-5. Check NSG rules allow outbound traffic
+5. Check NSG rules allow outbound traffic from AKS pods
 
 ```bash
 # Verify VNet integration
@@ -739,9 +735,9 @@ az monitor data-collection rule create \
 
 ### Application-Level Masking
 
-#### Logic App Custom Logging
+#### Argo Workflow Custom Logging
 
-Add masking function to workflows before logging:
+Add masking logic to workflow steps before logging:
 
 ```json
 {
@@ -840,16 +836,12 @@ The replay278 HTTP endpoint requires Azure AD authentication to prevent unauthor
 #### Enable Authentication
 
 ```bash
-# Enable Azure AD authentication for Logic App
-az webapp auth update \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --enabled true \
-  --action LoginWithAzureActiveDirectory \
-  --aad-allowed-token-audiences "https://${LOGIC_APP_NAME}.azurewebsites.net" \
-  --aad-client-id "<app-registration-client-id>" \
-  --aad-client-secret "<app-registration-secret>" \
-  --aad-token-issuer-url "https://sts.windows.net/{tenant-id}/"
+# Enable Azure AD authentication for AKS ingress (via NGINX ingress + oauth2-proxy or Azure AD Workload Identity)
+# Configure the AKS ingress controller to validate Azure AD JWT tokens:
+kubectl apply -f infra/k8s/oauth2-proxy.yaml
+
+# Verify the oauth2-proxy is running and protecting the endpoint
+kubectl get pods -n ingress -l app=oauth2-proxy
 ```
 
 #### Create App Registration
@@ -1386,37 +1378,37 @@ az keyvault secret set --vault-name "${BASE_NAME}-kv" --name "claims-backend-api
 #### 4. Configure RBAC
 
 ```bash
-# Grant Logic App access to Key Vault
-LOGIC_APP_NAME="${BASE_NAME}-la"
-PRINCIPAL_ID=$(az webapp identity show --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME" --query principalId -o tsv)
+# Grant AKS workload identity access to Key Vault
+AKS_CLUSTER_NAME="${BASE_NAME}-aks"
+PRINCIPAL_ID=$(az aks show --resource-group "$RG_NAME" --name "$AKS_CLUSTER_NAME" --query "identityProfile.kubeletidentity.objectId" -o tsv)
 
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
   --role "Key Vault Secrets User" \
   --scope "/subscriptions/{sub}/resourceGroups/$RG_NAME/providers/Microsoft.KeyVault/vaults/${BASE_NAME}-kv"
 
-# Grant Logic App access to Storage
+# Grant AKS workload identity access to Storage
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
   --role "Storage Blob Data Contributor" \
   --scope "/subscriptions/{sub}/resourceGroups/$RG_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_NAME"
 
-# Grant Logic App access to Service Bus
+# Grant AKS workload identity access to Service Bus
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
   --role "Azure Service Bus Data Sender" \
   --scope "/subscriptions/{sub}/resourceGroups/$RG_NAME/providers/Microsoft.ServiceBus/namespaces/${BASE_NAME}-svc"
 ```
 
-#### 5. Enable VNet Integration
+#### 5. Verify AKS VNet Integration
 
 ```bash
-# Enable VNet integration for Logic App
-az webapp vnet-integration add \
+# AKS cluster is deployed into the VNet subnet at creation time.
+# Verify AKS VNet integration:
+az aks show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --vnet "${BASE_NAME}-vnet" \
-  --subnet "logic-apps-subnet"
+  --name "$AKS_CLUSTER_NAME" \
+  --query "agentPoolProfiles[0].vnetSubnetId" -o tsv
 ```
 
 #### 6. Disable Public Access

@@ -81,7 +81,7 @@ public class LaunchContextController : ControllerBase
 
         _logger.LogInformation(
             "EHR launch registered — client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}",
-            request.ClientId, request.PatientId, request.EncounterId);
+            SanitizeForLog(request.ClientId), SanitizeForLog(request.PatientId), SanitizeForLog(request.EncounterId));
 
         var fhirBase = _config["SmartAuth:FhirBaseUrl"] ?? string.Empty;
 
@@ -92,4 +92,7 @@ public class LaunchContextController : ControllerBase
             iss = fhirBase
         });
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

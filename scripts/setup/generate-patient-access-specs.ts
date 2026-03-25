@@ -53,12 +53,12 @@ function generateCapabilityStatement(): CapabilityStatement {
     date: new Date().toISOString(),
     kind: 'instance',
     software: {
-      name: 'PatientAccessApi Logic App',
+      name: 'PatientAccessApi',
       version: '1.0.0'
     },
     implementation: {
-      description: 'CMS-0057-F Patient Access API implemented as Azure Logic App',
-      url: 'https://example.azurelogicapps.net/patient-access'
+      description: 'CMS-0057-F Patient Access API on AKS',
+      url: 'https://edi.aks-ingress.example.com/patient-access'
     },
     fhirVersion: '4.0.1',
     format: ['json'],
@@ -99,9 +99,9 @@ function buildOpenApiYaml(): string {
 info:
   title: CMS-0057-F Patient Access API
   version: 1.0.0
-  description: FHIR R4 Patient Access API served by Azure Logic App
+  description: FHIR R4 Patient Access API served by AKS
 servers:
-  - url: https://example.azurelogicapps.net
+  - url: https://edi.aks-ingress.example.com
 paths:
   /Patient:
     get:

@@ -430,11 +430,6 @@ export class InteractiveWizard {
           },
         ],
       },
-      logicAppConfig: {
-        sku: answers.environment === 'prod' ? 'WS2' : 'WS1',
-        workerCount: 1,
-        alwaysOn: true,
-      },
       keyVaultConfig: {
         sku: 'standard' as 'standard' | 'premium',
         enableSoftDelete: true,

@@ -8,7 +8,7 @@ This deployment package was generated for **State Medicaid MCO** (MCO001) on 202
 
 - Azure CLI (version 2.40.0 or higher)
 - Azure subscription with appropriate permissions
-- Logic Apps Standard runtime
+- AKS cluster with Argo Workflows controller
 - PowerShell 7+ (for Windows deployments)
 
 ## Deployment Steps

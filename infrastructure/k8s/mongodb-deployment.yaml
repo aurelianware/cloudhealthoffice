@@ -32,12 +32,12 @@ spec:
         - name: MONGO_INITDB_ROOT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: mongodb-secret
+              name: mongodb-auth
               key: username
         - name: MONGO_INITDB_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mongodb-secret
+              name: mongodb-auth
               key: password
         volumeMounts:
         - name: mongodb-data
@@ -66,12 +66,5 @@ spec:
   selector:
     app: mongodb
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mongodb-secret
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  username: admin
-  password: securepassword123
+# mongodb-auth Secret is created by CI/CD from GitHub Secrets.
+# Do NOT hardcode credentials here.

@@ -104,7 +104,7 @@ The Cloud Health Office Platform is an Azure-native, configuration-driven soluti
 - **Secure Storage:** Encryption at rest (AES-256), encryption in transit (TLS 1.2+)
 
 #### 2. X12 Processing
-- **Integration Account:** Azure Integration Account for X12 encoding/decoding
+- **X12 EDI Services:** C# X12 EDI microservices for encoding/decoding
 - **Schema Validation:** Validates 275/277/278 message structure against X12 schemas
 - **Metadata Extraction:** Extracts claim number, member ID, provider NPI, attachment metadata
 - **Error Handling:** Comprehensive error detection with dead-letter queue for failed messages
@@ -132,7 +132,7 @@ The Cloud Health Office Platform is an Azure-native, configuration-driven soluti
 #### Infrastructure Security
 - **Premium Key Vault:** HSM-backed keys (FIPS 140-2 Level 2) for secret management
 - **Private Endpoints:** Zero public internet exposure for PHI resources
-- **VNet Integration:** Network isolation for Logic Apps compute
+- **VNet Integration:** Network isolation for AKS compute
 - **PHI Masking:** Automated redaction in Application Insights logs
 
 #### Compliance Certifications
@@ -191,15 +191,15 @@ We will integrate the platform with your [Claims System Name] using the followin
 
 **Activities:**
 - Azure infrastructure deployment (Bicep templates)
-- Logic Apps workflow configuration
-- Integration Account setup (X12 schemas)
+- Argo Workflow DAG configuration
+- X12 EDI service deployment
 - Claims system API integration development
 - Security controls implementation (Key Vault, private endpoints)
 - Application Insights configuration
 
 **Deliverables:**
 - Deployed Azure infrastructure (DEV environment)
-- Configured Logic Apps workflows
+- Configured Argo Workflow DAGs
 - Integrated claims system connector
 - Security documentation
 - Testing plan
@@ -277,7 +277,7 @@ We will integrate the platform with your [Claims System Name] using the followin
 |------|-------------|------|
 | **Platform License** | Annual subscription for [X] attachments/month | **$10,000** |
 | **Implementation Services** | 90-day implementation (discovery, development, testing, training) | **$15,000** |
-| **Azure Infrastructure** | Estimated monthly Azure costs (Logic Apps, Storage, Service Bus, etc.) | **$500/month** |
+| **Azure Infrastructure** | Estimated monthly Azure costs (AKS, Argo Workflows, Storage, Service Bus, etc.) | **$500/month** |
 | **Total Year 1** | Platform + Implementation + Infrastructure (12 months) | **$31,000** |
 
 ### Year 2+ Ongoing Costs
@@ -443,8 +443,8 @@ We guarantee the ROI outlined in this proposal. If [Customer Organization Name] 
 
 ### What's Included
 ✅ Azure infrastructure deployment (Bicep templates)
-✅ Logic Apps workflow configuration
-✅ Integration Account with X12 schemas
+✅ Argo Workflow DAG configuration on AKS
+✅ C# X12 EDI services for schema validation
 ✅ Claims system API integration
 ✅ Application Insights monitoring
 ✅ Premium Key Vault with security controls

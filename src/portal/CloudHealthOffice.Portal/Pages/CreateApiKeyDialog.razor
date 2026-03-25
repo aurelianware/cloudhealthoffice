@@ -1,0 +1,80 @@
+@using CloudHealthOffice.Portal.Services
+@inject IPricingApiService PricingApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-2" />
+            Create API Key
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="TenantName" Label="Tenant Name" Required="true"
+                      RequiredError="Tenant name is required" Class="mb-3" Variant="Variant.Outlined" />
+        <MudTextField @bind-Value="ContactEmail" Label="Contact Email" Required="true"
+                      RequiredError="Contact email is required" InputType="InputType.Email"
+                      Class="mb-3" Variant="Variant.Outlined" />
+        <MudSelect @bind-Value="Tier" Label="Tier" T="string" Class="mb-3" Variant="Variant.Outlined"
+                   AnchorOrigin="Origin.BottomCenter">
+            <MudSelectItem Value="@("Free")">Free</MudSelectItem>
+            <MudSelectItem Value="@("Starter")">Starter</MudSelectItem>
+            <MudSelectItem Value="@("Professional")">Professional</MudSelectItem>
+            <MudSelectItem Value="@("Enterprise")">Enterprise</MudSelectItem>
+        </MudSelect>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Create Key
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string TenantName { get; set; } = "";
+    [Parameter] public string ContactEmail { get; set; } = "";
+    [Parameter] public string Tier { get; set; } = "Free";
+
+    private bool _saving;
+    private string? _errorMessage;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(TenantName) || string.IsNullOrWhiteSpace(ContactEmail))
+        {
+            _errorMessage = "Tenant name and contact email are required.";
+            return;
+        }
+
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            var key = await PricingApiService.CreateApiKeyAsync(TenantName, ContactEmail, Tier);
+            MudDialog.Close(DialogResult.Ok(key));
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error creating API key: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+}

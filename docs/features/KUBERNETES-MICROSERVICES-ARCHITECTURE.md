@@ -531,7 +531,7 @@ PUT    /api/v1/settings                 # Update settings
 | Azure Key Vault | ~$5 |
 | **Total** | **~$1,022/month** |
 
-*(Replaces Static Web App ~$50 + separate Logic Apps ~$300)*
+*(Replaces Static Web App ~$50 + former Logic Apps ~$300)*
 
 ---
 

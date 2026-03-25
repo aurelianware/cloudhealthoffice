@@ -121,8 +121,8 @@ deploy.yml (Production Deployment)
     └─ deploy
         ├─ Azure Login (OIDC)
         ├─ Deploy Infrastructure (Bicep)
-        ├─ Configure Integration Account
-        ├─ Deploy Logic App Workflows
+        ├─ Configure K8s Secrets/ConfigMaps
+        ├─ Deploy Argo Workflows to AKS
         └─ Health Checks
 ```
 

@@ -19,7 +19,7 @@ This module provides a comprehensive TypeScript API for implementing CMS Prior A
 ✅ **SLA Tracking**: 72-hour urgent / 7-day standard timelines  
 ✅ **Attachments**: FHIR Binary and DocumentReference support  
 ✅ **Consent**: HIPAA-compliant patient consent management  
-✅ **Orchestration**: Azure Logic Apps integration patterns
+✅ **Orchestration**: AKS microservice integration patterns
 
 ---
 
@@ -82,7 +82,7 @@ const fhirClaim = mapX12278ToFHIRPriorAuth(x12Request);
 const sla = calculatePriorAuthSLA('urgent', new Date().toISOString());
 console.log(`Decision due by: ${sla.decisionDueBy}`);
 
-// 5. Submit to payer (via Azure Logic Apps)
+// 5. Submit to payer (via AKS prior-auth service)
 const response = await submitPriorAuth(fhirClaim);
 ```
 
@@ -233,11 +233,11 @@ if (!result.valid) {
 
 **`createOrchestrationConfig(baseUrl, env): PriorAuthOrchestrationConfig`**
 
-Creates configuration for Azure Logic Apps.
+Creates configuration for AKS microservices.
 
 ```typescript
 const config = createOrchestrationConfig(
-  'https://yourapp.azurewebsites.net',
+  'http://prior-auth-service.cloudhealthoffice',
   'prod'
 );
 ```
@@ -323,31 +323,33 @@ interface PriorAuthSLA {
 ### Example 1: Basic Prior Auth Submission
 
 ```typescript
-import { 
+import {
   mapX12278ToFHIRPriorAuth,
-  validatePriorAuthRequest
+  validatePriorAuthRequest,
+  createOrchestrationConfig
 } from './prior-auth-api';
 
 async function submitPriorAuth(x12Request) {
+  const config = createOrchestrationConfig(
+    'http://prior-auth-service.cloudhealthoffice', 'prod'
+  );
+
   // Validate
   const validation = validatePriorAuthRequest(x12Request);
   if (!validation.valid) {
     throw new Error(`Invalid request: ${validation.errors.join(', ')}`);
   }
-  
+
   // Map to FHIR
   const fhirClaim = mapX12278ToFHIRPriorAuth(x12Request);
-  
-  // Submit to Logic App
-  const response = await fetch(
-    'https://yourapp.azurewebsites.net/api/prior-auth/submit',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/fhir+json' },
-      body: JSON.stringify(fhirClaim)
-    }
-  );
-  
+
+  // Submit to AKS prior-auth service
+  const response = await fetch(config.endpoints.submitRequest, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/fhir+json' },
+    body: JSON.stringify(fhirClaim)
+  });
+
   return await response.json();
 }
 ```
@@ -452,19 +454,19 @@ async function submitAttachment(authNumber, pdfData, patientId) {
     'clinical-notes'
   );
   
-  // Submit to documentation endpoint
-  const response = await fetch(
-    'https://yourapp.azurewebsites.net/api/prior-auth/documentation',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        authorizationNumber: authNumber,
-        binary,
-        documentReference: docRef
-      })
-    }
+  // Submit to documentation endpoint using config
+  const config = createOrchestrationConfig(
+    'http://prior-auth-service.cloudhealthoffice', 'prod'
   );
+  const response = await fetch(config.endpoints.submitDocumentation, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authorizationNumber: authNumber,
+      binary,
+      documentReference: docRef
+    })
+  });
   
   return await response.json();
 }
@@ -521,7 +523,7 @@ describe('Prior Authorization API', () => {
 
 ---
 
-## Integration with Azure Logic Apps
+## Integration with AKS Microservices
 
 ### Service Bus Configuration
 
@@ -537,16 +539,16 @@ const config = createOrchestrationConfig(baseUrl, 'prod');
 ### Workflow Pattern
 
 ```
-HTTP POST → Validate → Map to FHIR → Encode X12 → 
+AKS Ingress → Validate → Map to FHIR → Encode X12 →
   → Publish to Service Bus → Process → Return Response
 ```
 
-### Example Logic App Workflow
+### Argo Workflow Steps
 
-1. **HTTP Trigger**: Receive FHIR Claim
+1. **Ingress**: Receive FHIR Claim via AKS service
 2. **Validate**: Check required fields
 3. **Transform**: FHIR → X12 278
-4. **Encode**: Use Integration Account
+4. **Encode**: X12 encoding service
 5. **Archive**: Store in Data Lake
 6. **Submit**: POST to the clearinghouse or payer
 7. **Track SLA**: Store in database
@@ -569,7 +571,7 @@ HTTP POST → Validate → Map to FHIR → Encode X12 →
 - **Horizontal scaling**: Stateless design supports multiple instances
 - **Service Bus**: Handles high throughput (1000+ msg/sec)
 - **Data Lake**: Unlimited storage for archives
-- **Logic Apps**: Auto-scales based on load
+- **AKS**: Auto-scales based on load via HPA
 
 ---
 

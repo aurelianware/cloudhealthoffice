@@ -4,7 +4,7 @@ This document provides a comprehensive overview of the Cloud Health Office multi
 
 ## Table of Contents
 - [Overview](#overview)
-- [Deployment Options](#deployment-options)
+- [Deployment Architecture](#deployment-architecture)
 - [Platform Architecture](#platform-architecture)
 - [High-Level Architecture](#high-level-architecture)
 - [Component Details](#component-details)
@@ -22,9 +22,11 @@ This document provides a comprehensive overview of the Cloud Health Office multi
 
 Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that processes healthcare EDI transactions for unlimited health plans. The platform supports claims, eligibility, attachments, authorizations, appeals, and claim status through configuration-driven deployment.
 
-**Two deployment architectures are supported:**
-1. **Azure Logic Apps** - Fastest deployment, Azure-native managed services
-2. **Kubernetes** - Multi-cloud (AKS, EKS, GKE), greater infrastructure control
+**Deployment architecture:**
+
+- **Kubernetes (AKS)** with **Argo Workflows** for orchestration — multi-cloud capable (AKS, EKS, GKE), greater infrastructure control
+
+> **Note:** The platform previously supported Azure Logic Apps as an orchestration layer. That option has been removed in favor of Argo Workflows on AKS. See [ADR 004](../adr/004-remove-logic-apps.md) for the rationale.
 
 ### Key Objectives
 - **Multi-Tenant SaaS**: Single codebase serves unlimited payers with per-tenant isolation
@@ -38,86 +40,43 @@ Cloud Health Office is a **cloud-native multi-tenant SaaS platform** that proces
 - **Standards-Based**: X12 EDI integration with the clearinghouse and other clearinghouses
 - **SaaS-Ready**: Marketplace-ready with billing integration and customer portal (roadmap)
 
-## Deployment Options
+## Deployment Architecture
 
-Cloud Health Office supports two primary deployment architectures:
-
-### Option 1: Azure Logic Apps (Fastest)
-
-Best for: Azure-first organizations, rapid deployment, minimal infrastructure management.
+Cloud Health Office runs on **AKS (Azure Kubernetes Service)** with **Argo Workflows** for orchestration.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              Azure Logic Apps Architecture                   │
+│              Kubernetes Architecture (AKS)                    │
+│         (Also deployable to EKS / GKE / On-Premises)         │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
-│  │  Logic App  │     │   Service   │     │    Azure    │   │
-│  │  Standard   │────▶│    Bus      │────▶│   Storage   │   │
-│  │  (Workflows)│     │  (Messaging)│     │  (Data Lake)│   │
+│  │    Argo     │     │   Azure     │     │   Azure     │   │
+│  │  Workflows  │────▶│  Service Bus│────▶│   Storage   │   │
+│  │(Orchestration)    │ (Messaging) │     │  (Data Lake)│   │
 │  └─────────────┘     └─────────────┘     └─────────────┘   │
 │         │                                       │           │
 │         ▼                                       ▼           │
 │  ┌─────────────┐                        ┌─────────────┐   │
-│  │ Integration │                        │    Azure    │   │
-│  │   Account   │                        │  Key Vault  │   │
-│  │   (X12 EDI) │                        │  (Secrets)  │   │
-│  └─────────────┘                        └─────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Key Components:**
-- Azure Logic Apps Standard (WS1 SKU)
-- Azure Service Bus (Standard tier)
-- Azure Storage Gen2 (Data Lake)
-- Azure Integration Account (X12 EDI)
-- Azure Key Vault (Secrets management)
-- Application Insights (Monitoring)
-
-### Option 2: Kubernetes (Multi-Cloud)
-
-Best for: Multi-cloud strategy, existing Kubernetes infrastructure, greater control.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              Kubernetes Architecture                         │
-│         (AKS / EKS / GKE / On-Premises)                     │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
-│  │    Argo     │     │   Apache    │     │  S3/MinIO   │   │
-│  │  Workflows  │────▶│   Kafka     │────▶│  (Storage)  │   │
-│  │(Orchestration)    │ (Messaging) │     │             │   │
-│  └─────────────┘     └─────────────┘     └─────────────┘   │
-│         │                                       │           │
-│         ▼                                       ▼           │
-│  ┌─────────────┐                        ┌─────────────┐   │
-│  │    Argo     │                        │  HashiCorp  │   │
-│  │   Events    │                        │   Vault     │   │
+│  │    Argo     │                        │    Azure    │   │
+│  │   Events    │                        │  Key Vault  │   │
 │  │ (Triggers)  │                        │  (Secrets)  │   │
 │  └─────────────┘                        └─────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Key Components:**
-- Argo Workflows (replaces Logic Apps)
+
+- Argo Workflows (workflow orchestration, DAG steps)
 - Argo Events (event-driven triggers)
-- Apache Kafka (replaces Service Bus) with Strimzi operator
-- S3/MinIO (replaces Azure Storage)
-- HashiCorp Vault (replaces Key Vault, optional)
-- Prometheus/Grafana (replaces Application Insights)
+- Azure Service Bus (messaging)
+- Azure Storage Gen2 (Data Lake)
+- Azure Key Vault / Kubernetes Secrets (secrets management)
+- Prometheus/Grafana + Application Insights (monitoring)
 - **10 microservices** (Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing)
 - **6 utility containers** (x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor)
+- X12 EDI parsing/generation handled in C# services (no Integration Account required)
 
-### Architecture Comparison
-
-| Component | Azure Logic Apps | Kubernetes |
-|-----------|-----------------|------------|
-| **Workflow Engine** | Logic Apps Standard | Argo Workflows |
-| **Event Triggers** | Built-in connectors | Argo Events |
-| **Messaging** | Azure Service Bus | Apache Kafka |
-| **Storage** | Azure Storage Gen2 | S3 / MinIO |
-| **Secrets** | Azure Key Vault | HashiCorp Vault |
-| **Monitoring** | Application Insights | Prometheus/Grafana |
-| **X12 Processing** | Integration Account | Custom containers |
+**Workflow manifests:** `infrastructure/argo-workflows/` (YAML DAG definitions)
 
 **See [Multi-Cloud Deployment Guide](./docs/MULTI-CLOUD-DEPLOYMENT.md) for detailed deployment instructions.**
 
@@ -155,18 +114,18 @@ The platform uses a **unified configuration schema** to support multiple payers 
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │           Config-to-Workflow Generator                       │
-│  (Generates Logic App workflows, Bicep infrastructure)       │
+│  (Generates Argo workflow YAML, Bicep infrastructure)        │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │           Payer-Specific Deployment Package                  │
-│  (Workflows, infrastructure, API connections, docs)          │
+│  (Argo DAG manifests, infrastructure, K8s secrets, docs)     │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│           Azure Logic Apps Standard                          │
+│           Argo Workflows on AKS                              │
 │  (Multi-tenant execution with config-based routing)          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -182,7 +141,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 
 2. **Config-to-Workflow Generator** (`docs/CONFIG-TO-WORKFLOW-GENERATOR.md`)
    - Reads payer configuration files
-   - Generates Logic App workflow.json files
+   - Generates Argo workflow YAML manifests (in `infrastructure/argo-workflows/`)
    - Creates Bicep infrastructure templates
    - Produces deployment scripts and documentation
 
@@ -192,9 +151,9 @@ The platform uses a **unified configuration schema** to support multiple payers 
    - Real-time validation and schema compliance
 
 4. **Multi-Tenant Runtime**
-   - Single Logic Apps instance
+   - Argo Workflows on AKS
    - Config-based tenant isolation
-   - Payer-specific parameters injected at runtime
+   - Payer-specific parameters injected at runtime via Kubernetes Secrets/ConfigMaps
    - Shared infrastructure, isolated data and configuration
 
 ## High-Level Architecture
@@ -206,14 +165,14 @@ The platform uses a **unified configuration schema** to support multiple payers 
 └─────────────────────────────────────────────────────────────────┘
 
 ┌──────────────┐         ┌──────────────────────────────────┐
-│   Clearinghouse   │ SFTP    │     Logic Apps Standard          │
+│   Clearinghouse   │ SFTP    │     Argo Workflows on AKS         │
 │   (275/278)  │────────▶│  ┌────────────────────────────┐  │
-│              │         │  │  ingest275 Workflow        │  │
+│              │         │  │  ingest275 DAG Step        │  │
 └──────────────┘         │  │  (SFTP Trigger)            │  │
                          │  └────────────┬───────────────┘  │
 ┌──────────────┐         │               │                  │
 │    claims backend      │◀────────│  ┌────────────▼───────────────┐  │
-│     API      │  HTTP   │  │  Decode X12 275            │  │
+│     API      │  HTTP   │  │  Parse X12 275 (C# svc)    │  │
 │              │         │  │  Extract Metadata          │  │
 └──────────────┘         │  │  Archive to Data Lake      │  │
                          │  └────────────┬───────────────┘  │
@@ -224,7 +183,7 @@ The platform uses a **unified configuration schema** to support multiple payers 
 │              │         │  └────────────────────────────┘  │
 └──────────────┘         │                                  │
                          │  ┌────────────────────────────┐  │
-┌──────────────┐         │  │  rfai277 Workflow          │  │
+┌──────────────┐         │  │  rfai277 DAG Step          │  │
 │   Clearinghouse   │◀────────│  │  (Service Bus Trigger)     │  │
 │   (277)      │  SFTP   │  │  ▲                         │  │
 │              │         │  └──┼─────────────────────────┘  │
@@ -237,20 +196,20 @@ The platform uses a **unified configuration schema** to support multiple payers 
 └──────────────┘         │  └────────────────────────────┘  │
                          │                                  │
 ┌──────────────┐         │  ┌────────────────────────────┐  │
-│ Integration  │         │  │  ingest278 Workflow        │  │
-│  Account     │◀───────▶│  │  (SFTP Trigger)            │  │
-│ (X12 EDI)    │         │  └────────────┬───────────────┘  │
+│ C# X12       │         │  │  ingest278 DAG Step        │  │
+│ Services     │◀───────▶│  │  (SFTP Trigger)            │  │
+│ (EDI parse)  │         │  └────────────┬───────────────┘  │
 └──────────────┘         │               │                  │
                          │  ┌────────────▼───────────────┐  │
-┌──────────────┐         │  │  replay278 Workflow        │  │
+┌──────────────┐         │  │  replay278 DAG Step        │  │
 │   HTTP       │────────▶│  │  (HTTP Trigger)            │  │
 │  Client      │  POST   │  │  Queue to edi-278 topic    │  │
 └──────────────┘         │  └────────────────────────────┘  │
                          │                                  │
 ┌──────────────┐         │  ┌────────────────────────────┐  │
-│ Application  │         │  │  Monitoring & Logging      │  │
-│  Insights    │◀────────│  │  • Workflow runs           │  │
-│              │         │  │  • Performance metrics     │  │
+│ Prometheus / │         │  │  Monitoring & Logging      │  │
+│ Grafana +    │◀────────│  │  • Workflow runs           │  │
+│ App Insights │         │  │  • Performance metrics     │  │
 └──────────────┘         │  │  • Error tracking          │  │
                          │  └────────────────────────────┘  │
                          └──────────────────────────────────┘
@@ -258,27 +217,26 @@ The platform uses a **unified configuration schema** to support multiple payers 
 
 ## Component Details
 
-### Logic App Standard (WS1 SKU)
+### Argo Workflows on AKS
 
-**Resource Name:** `{baseName}-la` (e.g., `hipaa-attachments-la`)
-
-**Purpose:** Hosts and executes the stateful workflows that orchestrate the attachment processing pipeline.
+**Purpose:** Hosts and executes the DAG-based workflows that orchestrate the attachment processing pipeline. Workflow manifests live in `infrastructure/argo-workflows/`.
 
 **Key Features:**
-- **Stateful Workflows**: All workflows maintain state for reliable processing
-- **Managed Identity**: System-assigned identity for secure Azure resource access
-- **Built-in Connectors**: SFTP, Blob Storage, Service Bus, Integration Account
+
+- **DAG Workflows**: Multi-step directed acyclic graphs for reliable processing
+- **Kubernetes-Native**: Runs as pods on AKS with Workload Identity for secure Azure resource access
+- **Service Integration**: SFTP, Blob Storage, Service Bus accessed via C# microservices
 - **Retry Policies**: Configurable retry logic for transient failures
-- **Application Insights Integration**: Automatic telemetry and logging
+- **Observability**: Prometheus/Grafana + Application Insights for telemetry and logging
 
 **Configuration:**
-- SKU: WS1 (Logic Apps Standard - Workflow Standard 1)
-- Runtime: ~4.0
-- Platform: Windows
-- Always On: Enabled
-- HTTPS Only: Enabled
 
-### Workflows
+- Argo Workflows controller deployed via Helm chart
+- Workflow templates defined in YAML (infrastructure/argo-workflows/)
+- Secrets managed via Kubernetes Secrets and Azure Key Vault (CSI driver)
+- Argo Events for event-driven triggers (Service Bus, SFTP polling)
+
+### Workflows (Argo DAG Steps)
 
 #### 1. ingest275 - Attachment Ingestion (275)
 
@@ -294,8 +252,8 @@ SFTP New File Event
   ├─▶ Store Raw File in Data Lake
   │   Path: hipaa-attachments/raw/275/{yyyy}/{MM}/{dd}/
   │
-  ├─▶ Decode X12 275 Message
-  │   (Integration Account)
+  ├─▶ Parse X12 275 Message
+  │   (C# X12 service)
   │
   ├─▶ Extract Metadata
   │   • Claim Number
@@ -315,14 +273,15 @@ SFTP New File Event
       (After successful processing)
 ```
 
-**Key Actions:**
-- `SFTP_New_or_Updated_File` - Trigger on new .edi files
-- `Get_file_content` - Read file content
-- `Store_Raw_in_Blob` - Archive to Data Lake
-- `Decode_X12_275` - X12 decoding via Integration Account
-- `Extract_Metadata` - Parse decoded JSON
-- `Call_Claims_Backend_Claim_Linkage_API` - Link attachment to claim
-- `Publish_to_Service_Bus` - Queue for downstream processing
+**Key DAG Steps:**
+
+- `sftp-fetch` - Trigger on new .edi files
+- `get-file-content` - Read file content
+- `store-raw-in-blob` - Archive to Data Lake
+- `parse-x12-275` - X12 parsing via C# service
+- `extract-metadata` - Parse decoded JSON
+- `call-claims-backend` - Link attachment to claim
+- `publish-to-service-bus` - Queue for downstream processing
 
 **Parameters:**
 ```json
@@ -348,8 +307,8 @@ Service Bus Message Received
   ├─▶ Parse RFAI Request
   │   Extract: claimId, status, attachmentRef
   │
-  ├─▶ Encode X12 277 Message
-  │   (Integration Account)
+  ├─▶ Generate X12 277 Message
+  │   (C# X12 service)
   │   Sender: Health Plan ({config.payerId})
   │   Receiver: Clearinghouse (030240928)
   │
@@ -363,12 +322,13 @@ Service Bus Message Received
       POST /api/claims/attachments/status
 ```
 
-**Key Actions:**
-- Service Bus trigger on `rfai-requests` topic
-- `Encode_X12_277` - X12 encoding via Integration Account
-- `Send_to_SFTP` - Upload to the clearinghouse
-- `Archive_Sent` - Store in Data Lake
-- `Update_claims backend` - Confirm delivery
+**Key DAG Steps:**
+
+- Service Bus trigger on `rfai-requests` topic (via Argo Events)
+- `generate-x12-277` - X12 generation via C# service
+- `send-to-sftp` - Upload to the clearinghouse
+- `archive-sent` - Store in Data Lake
+- `update-claims-backend` - Confirm delivery
 
 **Parameters:**
 ```json
@@ -394,8 +354,8 @@ SFTP New File Event
   ├─▶ Store Raw File in Data Lake
   │   Path: hipaa-attachments/raw/278/{yyyy}/{MM}/{dd}/
   │
-  ├─▶ Decode X12 278 Message
-  │   (Integration Account)
+  ├─▶ Parse X12 278 Message
+  │   (C# X12 service)
   │
   ├─▶ Extract Review Information
   │   • Service Request
@@ -570,12 +530,9 @@ hipaa-attachments/
 - **Duplicate Detection:** 10-minute window
 - **Sessions:** Disabled (not required)
 
-### Integration Account
+### X12 EDI Processing (C# Services)
 
-**Resource Name:** `{baseName}-ia`  
-**SKU:** Standard
-
-**Purpose:** X12 EDI encoding/decoding and trading partner management
+**Purpose:** X12 EDI parsing/generation handled by C# microservices running as AKS pods. No Azure Integration Account required.
 
 **Components:**
 
@@ -718,11 +675,11 @@ traces
        │ 3. File stored
        ▼
 ┌─────────────────────────┐
-│  Integration Account    │
-│  Decode X12 275         │
-│  Agreement: Clearinghouse→Health Plan
+│  C# X12 Service         │
+│  Parse X12 275           │
+│  (Clearinghouse→Health Plan)
 └──────┬──────────────────┘
-       │ 4. Decoded JSON
+       │ 4. Parsed JSON
        ▼
 ┌─────────────────────────┐
 │  Extract Metadata       │
@@ -781,9 +738,9 @@ traces
        │ 3. Parse RFAI request
        ▼
 ┌─────────────────────────┐
-│  Integration Account    │
-│  Encode X12 277         │
-│  Agreement: Health Plan→Clearinghouse│
+│  C# X12 Service         │
+│  Generate X12 277        │
+│  (Health Plan→Clearinghouse)│
 └──────┬──────────────────┘
        │ 4. X12 277 created
        ▼
@@ -838,7 +795,7 @@ traces
        │ 3. Decode X12 278
        ▼
 ┌─────────────────────────┐
-│  Integration Account    │
+│  C# X12 Service         │
 │  X12_005010X217_278     │
 └──────┬──────────────────┘
        │ 4. Extract review data
@@ -944,7 +901,7 @@ Response:
 
 ### 3. X12 EDI Processing
 
-**Provider:** Azure Integration Account  
+**Provider:** C# microservices on AKS (no Azure Integration Account required)
 **Standard:** ANSI ASC X12
 
 **Supported Transactions:**
@@ -969,13 +926,15 @@ GS Header:
 ```
 
 **Validation:**
-- Schema compliance (XSD validation)
-- Trading partner agreement match
+
+- Schema compliance (XSD validation in C# services)
+- Trading partner configuration match
 - Segment order and cardinality
 - Code set validation
 - Date/time format validation
 
 **Error Handling:**
+
 - Schema validation failures logged
 - TA1 technical acknowledgments generated
 - 997 functional acknowledgments sent
@@ -983,21 +942,24 @@ GS Header:
 
 ## Design Decisions
 
-### Why Logic Apps Standard?
+### Why Argo Workflows on AKS?
 
-**Decision:** Use Logic Apps Standard (vs Consumption)
+**Decision:** Use Argo Workflows on AKS (migrated from Logic Apps Standard; see [ADR 004](../adr/004-remove-logic-apps.md))
 
 **Rationale:**
-1. **Stateful Workflows**: Required for reliable multi-step processing
-2. **VNET Integration**: Future requirement for private endpoints
-3. **Cost Predictability**: Fixed SKU cost vs per-execution
-4. **Performance**: Better throughput for high-volume scenarios
-5. **Local Development**: VS Code integration for testing
+
+1. **DAG Workflows**: Required for reliable multi-step processing with explicit dependency graphs
+2. **Kubernetes-Native**: Runs alongside microservices on AKS, no separate orchestration platform needed
+3. **Multi-Cloud Portable**: Same workflow manifests deploy to AKS, EKS, GKE, or on-premises
+4. **X12 in C#**: EDI parsing/generation in C# services eliminates Azure Integration Account dependency
+5. **Cost Efficiency**: No per-execution billing; uses existing AKS compute
+6. **Local Development**: Argo CLI + Minikube for local testing
 
 **Trade-offs:**
-- Higher base cost ($200-300/month)
-- More complex deployment
-- Additional management overhead
+
+- Requires Kubernetes expertise to operate
+- Self-managed workflow engine (vs Azure-managed Logic Apps)
+- Must handle observability via Prometheus/Grafana
 
 ### Why Data Lake Gen2?
 
@@ -1029,16 +991,17 @@ GS Header:
 
 ### Why Separate Workflows?
 
-**Decision:** Separate workflows for 275, 277, 278, and replay
+**Decision:** Separate Argo workflow templates for 275, 277, 278, and replay
 
 **Rationale:**
-1. **Single Responsibility**: Each workflow has one clear purpose
-2. **Independent Scaling**: Scale workflows based on load
-3. **Easier Debugging**: Isolate issues to specific workflow
-4. **Deployment Flexibility**: Deploy/update workflows independently
+
+1. **Single Responsibility**: Each workflow template has one clear purpose
+2. **Independent Scaling**: Scale workflow pods based on load
+3. **Easier Debugging**: Isolate issues to specific DAG
+4. **Deployment Flexibility**: Deploy/update workflow manifests independently
 5. **Monitoring**: Clear metrics per transaction type
 
-**Alternative Considered:** Single monolithic workflow  
+**Alternative Considered:** Single monolithic workflow
 **Why Rejected:** Complex, harder to maintain and troubleshoot
 
 ### Why Retry Policies?
@@ -1072,13 +1035,14 @@ GS Header:
 
 ### Access Control
 
-**Managed Identity:**
-- Logic App uses system-assigned managed identity
+**Workload Identity:**
+
+- AKS pods use Workload Identity (federated credentials) for secure Azure resource access
 - No connection strings or keys stored in code
 - RBAC role assignments:
   - Storage Blob Data Contributor
   - Azure Service Bus Data Sender
-  - Integration Account Contributor
+- Kubernetes Secrets managed via Azure Key Vault CSI driver
 
 **Network Security:**
 - HTTPS only for all endpoints
@@ -1129,10 +1093,11 @@ GS Header:
 
 ### Current Capacity
 
-**Logic Apps:**
-- Concurrent runs: 25 (WS1 SKU)
+**Argo Workflows (AKS):**
+
+- Concurrent workflow pods: scales with AKS node pool
 - Typical duration: 5-15 seconds per 275
-- Throughput: ~100-150 messages/minute
+- Throughput: scales horizontally with pod count
 
 **Service Bus:**
 - Max message size: 256 KB
@@ -1147,11 +1112,13 @@ GS Header:
 ### Scaling Strategies
 
 **Vertical Scaling:**
-- Upgrade Logic App SKU (WS1 → WS2 → WS3)
+
+- Upgrade AKS node pool VM SKU
 - Increase Service Bus tier (Standard → Premium)
 
 **Horizontal Scaling:**
-- Multiple Logic App instances (scale-out)
+
+- AKS node pool auto-scaling + Argo parallelism settings
 - Service Bus partitioning for topics
 - Geo-redundant storage accounts
 

@@ -1,4 +1,6 @@
 @page "/trading-partners"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @using MudBlazor
 @inject HttpClient Http
 @inject ISnackbar Snackbar

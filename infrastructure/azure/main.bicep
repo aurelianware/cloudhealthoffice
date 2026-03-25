@@ -24,10 +24,12 @@ param iaName string //= 'prod-integration-account'
 
 // Toggle B2B (X12) managed connection
 param enableB2B bool = true
+
+// Toggle managed API connections (legacy Logic App connectors, not needed for AKS-only deployments)
+param enableManagedApiConnections bool = false
  
 // SFTPconnection params
 //param sftpHost string = 'sftp.example.com'
-// param sftpUsername string = 'logicapp'
 //@secure()
 //param sftpPassword string = ''          // if key-based auth, change connection param block
 
@@ -39,7 +41,6 @@ param blobAccountKey string = ''        // if empty, uses stg.listKeys().keys[0]
 // Service Bus connection string (SAS) - optional; if empty, we generate from auth rule
 @secure()
 param serviceBusConnectionString string = ''
-param appServicePlanName string = '${baseName}-plan'
 param serviceBusName string
 
 // ECS (Enhanced Claim Status) parameters
@@ -249,45 +250,6 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 
 
 // =========================
-// Logic App Standard (Plan + App)
-// =========================
-  resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: appServicePlanName
-  location: location
-  sku: {
-    name: 'WS1'
-    tier: 'WorkflowStandard'
-  }
-  kind: 'elastic'
-  properties: {
-    elasticScaleEnabled: false
-  }
-}
-
-resource la 'Microsoft.Web/sites@2022-03-01' = {
-  name: '${baseName}-la'
-  location: location
-  kind: 'functionapp,workflowapp'
-  properties: {
-    serverFarmId: plan.id
-    siteConfig: {
-      netFrameworkVersion: 'v6.0'
-      appSettings: [
-        { name: 'AzureWebJobsStorage', value: 'DefaultEndpointsProtocol=https;AccountName=${stg.name};AccountKey=${stg.listKeys().keys[0].value};EndpointSuffix=core.windows.net' }
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
-        { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: insights.properties.InstrumentationKey }
-        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
-      ]
-    }
-  }
-  identity: {
-    type: 'SystemAssigned'
-  }
-}
-
-// =========================
 // ClaimRiskScorer Azure Function (Python)
 // =========================
 param enableClaimRiskScorer bool = true
@@ -362,9 +324,10 @@ resource iaNew 'Microsoft.Logic/integrationAccounts@2019-05-01' = if (!useExisti
 
 // =========================
 // Managed API Connections (2016-06-01) in connectorLocation
-// Names MUST match connections.json in repo
+// These are legacy Logic App connectors — only deployed when enableManagedApiConnections is true.
+// Not needed for AKS-only deployments using Argo Workflows.
 // =========================
-resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
+resource connSftp 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections) {
   name: '${baseName}-sftp'
   location: connectorLocation
   properties: {
@@ -376,14 +339,11 @@ resource connSftp 'Microsoft.Web/connections@2016-06-01' = {
       hostName: sftpHost
       username: sftpUsername
       password: sftpPassword
-      // Optional hardening:
-      // acceptAnySshHostKey: true
-      // sshHostKeyFingerprint: 'SHA256:...'
     }
   }
 }
 
-resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
+resource connBlob 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections) {
   name: 'azureblob'
   location: connectorLocation
   properties: {
@@ -398,7 +358,7 @@ resource connBlob 'Microsoft.Web/connections@2016-06-01' = {
   }
 }
 
-resource connSb 'Microsoft.Web/connections@2016-06-01' = {
+resource connSb 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections) {
   name: 'servicebus'
   location: connectorLocation
   properties: {
@@ -414,17 +374,15 @@ resource connSb 'Microsoft.Web/connections@2016-06-01' = {
 
 var iaResourceId = resourceId('Microsoft.Logic/integrationAccounts', effectiveIaName)
 
-resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableB2B) {
+resource connIa 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections && enableB2B) {
   name: 'integrationaccount'
   location: connectorLocation
   properties: {
     displayName: 'integrationaccount'
     api: {
-      
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'x12')
     }
     parameterValues: {
-      // Managed X12 needs the IA ARM ID as a STRING. No SAS/Callback URL.
       integrationAccountId: iaResourceId
     }
   }
@@ -438,7 +396,6 @@ module ecs 'modules/ecs-api.bicep' = if (enableEcs) {
   name: 'ecs-api-module'
   params: {
     baseName: baseName
-    logicAppName: la.name
     appInsightsKey: insights.properties.InstrumentationKey
     appInsightsConnectionString: insights.properties.ConnectionString
     backendBaseUrl: backendBaseUrl
@@ -475,8 +432,8 @@ module cosmosDb 'modules/cosmos-db.bicep' = if (enableCosmosDb) {
   }
 }
 
-// Cosmos DB managed API connection
-resource connCosmosDb 'Microsoft.Web/connections@2016-06-01' = if (enableCosmosDb) {
+// Cosmos DB managed API connection (legacy Logic App connector)
+resource connCosmosDb 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections && enableCosmosDb) {
   name: 'documentdb'
   location: connectorLocation
   properties: {
@@ -515,13 +472,12 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
 // =========================
 output storageAccountName string = stg.name
 output serviceBusNamespace string = sb.name
-output logicAppName string = la.name
 output appInsightsName string = insights.name
 output integrationAccountName string = effectiveIaName
-output sftpConnectionId string = connSftp.id
-output blobConnectionId string = connBlob.id
-output serviceBusConnectionId string = connSb.id
-output integrationAccountConnectionId string = enableB2B ? connIa.id : 'disabled'
+output sftpConnectionId string = enableManagedApiConnections ? connSftp.id : 'disabled'
+output blobConnectionId string = enableManagedApiConnections ? connBlob.id : 'disabled'
+output serviceBusConnectionId string = enableManagedApiConnections ? connSb.id : 'disabled'
+output integrationAccountConnectionId string = enableManagedApiConnections && enableB2B ? connIa.id : 'disabled'
 output ecsEndpointUrl string = enableEcs && ecs != null ? ecs.outputs.ecsEndpointInfo.fullUrl : 'disabled'
 output ecsWorkflowName string = enableEcs && ecs != null ? ecs.outputs.ecsWorkflowConfig.workflowName : 'disabled'
 output staticWebAppName string = staticWebApp.name
@@ -544,7 +500,7 @@ output cosmosDbEndpoint string = enableCosmosDb ? cosmosDb.outputs.cosmosAccount
 output cosmosDbDatabaseName string = enableCosmosDb ? cosmosDb.outputs.cosmosDatabaseName : 'disabled'
 output priorAuthContainerName string = enableCosmosDb ? cosmosDb.outputs.priorAuthContainerName : 'disabled'
 output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs.providerDirectoryContainerName : 'disabled'
-output cosmosDbConnectionId string = enableCosmosDb ? connCosmosDb.id : 'disabled'
+output cosmosDbConnectionId string = enableManagedApiConnections && enableCosmosDb ? connCosmosDb.id : 'disabled'
 
 // ClaimRiskScorer outputs
 output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'

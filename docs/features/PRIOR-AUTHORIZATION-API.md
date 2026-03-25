@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # Prior Authorization API - CMS-0057-F Compliance Guide
 
 **Cloud Health Office** - HIPAA-compliant Prior Authorization API with Da Vinci Implementation Guides

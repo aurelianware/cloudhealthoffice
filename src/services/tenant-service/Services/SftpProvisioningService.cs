@@ -52,8 +52,8 @@ public class SftpProvisioningService : ISftpProvisioningService
         try
         {
             _logger.LogInformation(
-                "Provisioning SFTP for tenant {TenantId} with environments: {Environments}", 
-                tenantId, 
+                "Provisioning SFTP for tenant {TenantId} with environments: {Environments}",
+                SanitizeForLog(tenantId),
                 string.Join(",", environments));
 
             // Build script path
@@ -137,6 +137,9 @@ public class SftpProvisioningService : ISftpProvisioningService
             return result;
         }
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private async Task<ProcessExecutionResult> ExecuteScriptAsync(string scriptPath, IEnumerable<string> arguments)
     {

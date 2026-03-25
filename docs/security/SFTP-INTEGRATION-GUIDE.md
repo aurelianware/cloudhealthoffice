@@ -7,7 +7,7 @@ Cloud Health Office now includes a Kubernetes-hosted SFTP server for EDI file ex
 ## Architecture
 
 ```
-Clearinghouse → SFTP Server (K8s) → Logic Apps → Service Bus → Processing Pipeline
+Clearinghouse → SFTP Server (K8s) → Argo Workflows (AKS) → Service Bus → Processing Pipeline
               ↑
               └── atmoz/sftp container with persistent storage
 ```
@@ -38,7 +38,7 @@ NAME            TYPE           EXTERNAL-IP      PORT(S)        AGE
 sftp-service    LoadBalancer   52.168.45.123    22:32022/TCP   2m
 ```
 
-### 3. Configure Logic Apps Connection
+### 3. Configure Argo Workflows SFTP Connection
 
 ```bash
 ./scripts/configure-sftp-connection.sh
@@ -48,7 +48,7 @@ This will:
 - Auto-detect SFTP IP from Kubernetes
 - Prompt for Azure resource details
 - Create/update the `sftpwithssh` API connection
-- Output the connection ID for Logic Apps
+- Output the connection details for Argo Workflows
 
 ### 4. Update Infrastructure Parameters
 
@@ -92,7 +92,7 @@ sftp logicapp@52.168.45.123
 
 # Test from Azure
 az resource invoke-action \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --resource-type Microsoft.Web/connections \
   --name cho-sftp \
   --action testConnection \
@@ -154,7 +154,7 @@ spec:
   loadBalancerSourceRanges:
     - 52.1.2.0/24    # Availity IPs
     - 52.10.20.0/24  # Change Healthcare IPs
-    - 52.30.40.0/24  # Logic Apps outbound IPs
+    - 52.30.40.0/24  # AKS cluster outbound IPs
 ```
 
 **Option 2**: Internal LoadBalancer (private IP)
@@ -166,7 +166,7 @@ metadata:
     service.beta.kubernetes.io/azure-load-balancer-internal: "true"
 ```
 
-Then use VNet peering or VPN to connect Logic Apps.
+Then use VNet peering or VPN to connect AKS/Argo Workflows.
 
 ## Directory Structure
 
@@ -190,7 +190,7 @@ Then use VNet peering or VPN to connect Logic Apps.
     └── outbound/
 ```
 
-## Logic Apps Integration
+## Argo Workflows Integration
 
 ### Workflow Example: Upload 275 to Clearinghouse
 
@@ -215,7 +215,7 @@ Then use VNet peering or VPN to connect Logic Apps.
 }
 ```
 
-### Connection Parameters in Logic Apps
+### Connection Parameters in Argo Workflows
 
 ```json
 {
@@ -325,7 +325,7 @@ kubectl exec -n cho-sftp deployment/sftp-server -- \
 - [ ] Configured Azure Monitor alerts for pod restarts
 - [ ] Documented clearinghouse IP addresses
 - [ ] Tested failover scenario (pod restart)
-- [ ] Verified Logic Apps can read/write files
+- [ ] Verified Argo Workflow pods can read/write files
 - [ ] Set up file retention/cleanup job
 
 ## Next Steps
@@ -333,7 +333,7 @@ kubectl exec -n cho-sftp deployment/sftp-server -- \
 1. **Deploy**: `./scripts/deploy-sftp-server.sh`
 2. **Configure**: `./scripts/configure-sftp-connection.sh`
 3. **Secure**: Change passwords, pin SSH keys
-4. **Test**: Upload sample EDI file via Logic Apps
+4. **Test**: Upload sample EDI file via Argo Workflows
 5. **Monitor**: Set up alerts in Azure Monitor
 
 ---

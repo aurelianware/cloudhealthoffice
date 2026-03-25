@@ -1,0 +1,77 @@
+@using CloudHealthOffice.Portal.Services
+@inject IUserContextService UserContextService
+
+@*
+    Renders child content only if the current user has the required permission.
+    If not, shows a MudAlert with an access-denied message.
+
+    Usage:
+      <PermissionGate Permission="claims:read" RoleName="ClaimsExaminer">
+          <MudText>Authorized content here</MudText>
+      </PermissionGate>
+*@
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+else if (_hasAccess)
+{
+    @ChildContent
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+            <MudText Typo="Typo.body1">
+                @if (!string.IsNullOrEmpty(RoleName) || !string.IsNullOrEmpty(Permission))
+                {
+                    @:You don't have access to this page. Contact your administrator
+                    @:to request the <strong>@(RoleName ?? Permission)</strong> role.
+                }
+                else
+                {
+                    @:You don't have access to this page. Contact your administrator to request access.
+                }
+            </MudText>
+        </MudAlert>
+        <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.ArrowBack">
+            Back to Dashboard
+        </MudButton>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// The permission required to access the content (e.g. "claims:read").
+    /// Supports comma-separated list — user needs ANY of the listed permissions.
+    /// </summary>
+    [Parameter] public string Permission { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Human-friendly role name shown in the access-denied message.
+    /// </summary>
+    [Parameter] public string? RoleName { get; set; }
+
+    private bool _loading = true;
+    private bool _hasAccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userContext = await UserContextService.GetCurrentUserAsync();
+        if (userContext != null && !string.IsNullOrEmpty(Permission))
+        {
+            var permissions = Permission.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            _hasAccess = permissions.Any(p => UserContextService.HasPermission(p));
+        }
+        else if (userContext != null && string.IsNullOrEmpty(Permission))
+        {
+            // No permission specified — any authenticated user with a role can access
+            _hasAccess = userContext.Roles.Count > 0;
+        }
+        _loading = false;
+    }
+}

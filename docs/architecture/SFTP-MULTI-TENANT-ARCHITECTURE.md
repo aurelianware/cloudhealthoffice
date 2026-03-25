@@ -7,7 +7,7 @@ Cloud Health Office's SFTP service must provide **complete tenant isolation** to
 ## Current Issues ⚠️
 
 The existing SFTP deployment has:
-- ❌ Shared credentials (`logicapp`, `clearinghouse`)
+- ❌ Shared credentials (`argoworkflow`, `clearinghouse`)
 - ❌ No tenant isolation
 - ❌ No chroot jails
 - ❌ Single namespace for all files
@@ -356,7 +356,7 @@ done
 
 ### Phase 1: Parallel Deployment (Weeks 1-2)
 - Deploy new multi-tenant SFTP alongside existing
-- Keep `logicapp` user for internal testing
+- Keep `argoworkflow` user for internal testing
 - No production traffic yet
 
 ### Phase 2: Tenant Provisioning (Weeks 3-4)
@@ -365,13 +365,13 @@ done
 - Test connectivity individually
 
 ### Phase 3: Cutover (Week 5)
-- Update Logic Apps to use tenant-specific credentials
+- Update Argo Workflows to use tenant-specific credentials
 - Update Argo Workflows to read from tenant directories
 - Monitor for any access issues
 
 ### Phase 4: Decommission Old SFTP (Week 6)
 - Archive old SFTP data
-- Remove `logicapp`/`clearinghouse` shared accounts
+- Remove `argoworkflow`/`clearinghouse` shared accounts
 - Full multi-tenant operation
 
 ## Cost Implications
@@ -434,7 +434,7 @@ done
 2. **Deploy multi-tenant SFTP to staging**
 3. **Provision 2-3 pilot tenants**
 4. **Validate isolation thoroughly**
-5. **Update Logic Apps for tenant-specific paths**
+5. **Update Argo Workflows for tenant-specific paths**
 6. **Roll out to production incrementally**
 
 ## References

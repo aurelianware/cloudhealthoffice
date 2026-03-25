@@ -66,7 +66,7 @@ Cloud Health Office offers a **60-day pilot program** designed to demonstrate th
 |------|-------|------------|--------------|
 | **1** | Discovery | Kickoff call, requirements gathering, access provisioning | Project plan, environment assessment |
 | **2** | Planning | Architecture review, trading partner coordination, security review | Integration design, security checklist |
-| **3** | Deployment | Azure infrastructure, Logic Apps deployment, storage setup | Running environment, monitoring configured |
+| **3** | Deployment | Azure infrastructure, AKS/Argo Workflows deployment, storage setup | Running environment, monitoring configured |
 | **4** | Integration | Backend connections, clearinghouse setup, FHIR API activation | End-to-end connectivity validated |
 | **5** | Testing | Sample transactions, validation workflows, error handling | Test results, compliance report |
 | **6** | Training | Admin training, operations training, documentation handoff | Trained team, operational runbooks |

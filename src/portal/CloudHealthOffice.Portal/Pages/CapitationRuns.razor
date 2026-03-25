@@ -1,0 +1,334 @@
+@page "/capitation/runs"
+@page "/capitation/runs/{RunId}"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject ICapitationService CapitationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Capitation Runs — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="billing:read,payments:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mr-2" Style="vertical-align: middle;" />
+    Capitation Runs
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Generate monthly PMPM capitation statements for all capitated providers
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+@if (string.IsNullOrEmpty(RunId))
+{
+    <!-- ═══ LIST VIEW ═══ -->
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="color: #00ffff; font-size: 2rem;" />
+                <div>
+                    <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@FilteredRuns.Count()</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Runs</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ff88; font-size: 2rem;" />
+                <div>
+                    <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@FilteredRuns.Sum(r => r.TotalNetPayable).ToString("C0")</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Net Payable</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.People" Style="color: #ffaa00; font-size: 2rem;" />
+                <div>
+                    <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@FilteredRuns.Sum(r => r.TotalMemberMonths)</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member-Months</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+                <div>
+                    <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@FilteredRuns.Count(r => r.Status == "Failed")</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Failed</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <div class="d-flex align-center gap-3 mb-4 flex-wrap">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateRunDialog">New Capitation Run</MudButton>
+        <MudSelect T="string" Value="_filterLob" Label="LOB" Variant="Variant.Outlined" Dense="true"
+                   Clearable="true" Style="max-width: 180px;" Margin="Margin.Dense"
+                   ValueChanged="@((string? v) => { _filterLob = v; LoadRuns(); })">
+            <MudSelectItem Value="@((string?)null)">All LOBs</MudSelectItem>
+            <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+            <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+            <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+            <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+            <MudSelectItem Value="@("TRICARE")">TRICARE</MudSelectItem>
+            <MudSelectItem Value="@("VA")">VA</MudSelectItem>
+        </MudSelect>
+        <MudSelect @bind-Value="_filterRunType" Label="Run Type" Variant="Variant.Outlined" Dense="true"
+                   Clearable="true" Style="max-width: 180px;" Margin="Margin.Dense">
+            <MudSelectItem Value="@((string?)null)">All Types</MudSelectItem>
+            <MudSelectItem Value="@("Monthly")">Monthly</MudSelectItem>
+            <MudSelectItem Value="@("AdHocProvider")">Ad-Hoc Provider</MudSelectItem>
+            <MudSelectItem Value="@("RetroAdjustment")">Retro Adjustment</MudSelectItem>
+            <MudSelectItem Value="@("WithholdRelease")">Withhold Release</MudSelectItem>
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="LoadRuns" Disabled="_loading">Refresh</MudButton>
+    </div>
+
+    @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" /> }
+
+    <MudTable Items="FilteredRuns" Dense="true" Hover="true" T="CapRunSummary"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<CapRunSummary,object>(x=>x.RunNumber)">Run Number</MudTableSortLabel></MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>LOB</MudTh>
+            <MudTh>Period</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Providers</MudTh>
+            <MudTh>Member-Months</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<CapRunSummary,object>(x=>x.TotalNetPayable)">Net Payable</MudTableSortLabel></MudTh>
+            <MudTh>Duration</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Run Number">
+                <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/runs/" + context.Id))"
+                           Style="font-family: monospace; color: #00ffff;">@context.RunNumber</MudButton>
+                @if (context.Criteria?.ProviderNPI != null)
+                {
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">NPI: @context.Criteria.ProviderNPI</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetRunTypeColor(context.RunType)">@context.RunType</MudChip>
+            </MudTd>
+            <MudTd DataLabel="LOB">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetLobColor(context.LineOfBusiness)">@(context.LineOfBusiness ?? "—")</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Period">@context.CapitationPeriod.ToString("MMM yyyy")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetRunStatusColor(context.Status)"
+                         Style="@(context.Status == "Running" ? "animation: pulse 1.5s infinite;" : "")">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Providers">@context.TotalProviders</MudTd>
+            <MudTd DataLabel="Member-Months">@context.TotalMemberMonths.ToString("N0")</MudTd>
+            <MudTd DataLabel="Net Payable">
+                <MudText Style="font-family: monospace; color: #00ff88;">@context.TotalNetPayable.ToString("C2")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Duration">
+                @if (context.ExecutionDurationSeconds.HasValue) { <text>@context.ExecutionDurationSeconds.Value.ToString("F1")s</text> }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                @if (context.Status == "Pending")
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="() => ExecuteRun(context)">Execute</MudButton>
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => CancelRun(context)" Title="Cancel" />
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+else
+{
+    <!-- ═══ RUN DETAIL VIEW ═══ -->
+    @if (_selectedRun != null)
+    {
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="@(() => Navigation.NavigateTo("/capitation/runs"))" Class="mb-3">Back to Runs</MudButton>
+
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <div class="d-flex align-center gap-3 mb-3 flex-wrap">
+                <MudText Typo="Typo.h5" Style="font-family: monospace; color: #00ffff;">@_selectedRun.RunNumber</MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetRunTypeColor(_selectedRun.RunType)">@_selectedRun.RunType</MudChip>
+                @if (!string.IsNullOrEmpty(_selectedRun.LineOfBusiness))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetLobColor(_selectedRun.LineOfBusiness)">@_selectedRun.LineOfBusiness</MudChip>
+                }
+                <MudChip T="string" Size="Size.Small" Color="@GetRunStatusColor(_selectedRun.Status)">@_selectedRun.Status</MudChip>
+                @if (_selectedRun.Criteria?.ProviderNPI != null)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">NPI: @_selectedRun.Criteria.ProviderNPI</MudChip>
+                }
+            </div>
+            @if (!string.IsNullOrEmpty(_selectedRun.Description))
+            {
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-3">@_selectedRun.Description</MudText>
+            }
+            <MudGrid>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Period</MudText><MudText>@_selectedRun.CapitationPeriod.ToString("MMM yyyy")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Providers</MudText><MudText>@_selectedRun.TotalProviders</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member-Months</MudText><MudText>@_selectedRun.TotalMemberMonths.ToString("N0")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Gross</MudText><MudText Style="color: #00ff88;">@_selectedRun.TotalGrossCapitation.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Withholds</MudText><MudText Style="color: #ffaa00;">@_selectedRun.TotalWithholds.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Net Payable</MudText><MudText Style="color: #00ffff; font-weight: 700;">@_selectedRun.TotalNetPayable.ToString("C2")</MudText></MudItem>
+            </MudGrid>
+            @if (_selectedRun.Warnings.Any())
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3">@_selectedRun.Warnings.Count warning(s) during execution</MudAlert>
+            }
+        </MudPaper>
+
+        <MudText Typo="Typo.h6" Class="mb-2">Statements (@_runStatements.Count)</MudText>
+        <MudTable Items="_runStatements" Dense="true" Hover="true" T="CapStatementSummary"
+                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <HeaderContent>
+                <MudTh>Statement #</MudTh>
+                <MudTh>Provider</MudTh>
+                <MudTh>Members</MudTh>
+                <MudTh>Gross</MudTh>
+                <MudTh>Withhold</MudTh>
+                <MudTh>Net Payable</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd><MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/statements/" + context.Id))"
+                                  Style="font-family: monospace; color: #00ffff; font-size: 0.85rem;">@context.StatementNumber</MudButton></MudTd>
+                <MudTd>
+                    <MudText Typo="Typo.body2">@context.ProviderName</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.ProviderNPI</MudText>
+                </MudTd>
+                <MudTd>@context.MemberMonths</MudTd>
+                <MudTd Style="font-family: monospace;">@context.GrossCapitation.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: #ffaa00;">@context.WithholdAmount.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.NetPayable.ToString("C2")</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@GetStatementStatusColor(context.Status)">@context.Status</MudChip></MudTd>
+                <MudTd>
+                    @if (context.Status is "Generated") { <MudButton Size="Size.Small" Color="Color.Success" OnClick="() => ApproveStatement(context)">Approve</MudButton> }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+</PermissionGate>
+
+@code {
+    [Parameter] public string? RunId { get; set; }
+
+    private List<CapRunSummary> _runs = new();
+    private CapRunSummary? _selectedRun;
+    private List<CapStatementSummary> _runStatements = new();
+    private bool _loading = true;
+    private string? _serviceError;
+    private string? _filterLob;
+    private string? _filterRunType;
+
+    private IEnumerable<CapRunSummary> FilteredRuns => _runs
+        .Where(r => string.IsNullOrEmpty(_filterRunType) || r.RunType == _filterRunType);
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    protected override async Task OnParametersSetAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            if (!string.IsNullOrEmpty(RunId))
+            {
+                _selectedRun = await CapitationService.GetRunByIdAsync(RunId);
+                if (_selectedRun != null) _runStatements = await CapitationService.GetStatementsByRunAsync(RunId);
+            }
+            else
+            {
+                _selectedRun = null;
+                await LoadRuns();
+                return; // LoadRuns sets _loading = false
+            }
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadRuns()
+    {
+        _loading = true;
+        try { _runs = await CapitationService.GetRunsAsync(lineOfBusiness: _filterLob); }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task OpenCreateRunDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CloudHealthOffice.Portal.Dialogs.CreateCapitationRunDialog>("New Capitation Run", options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+            await LoadRuns();
+    }
+
+    private async Task ExecuteRun(CapRunSummary run)
+    {
+        var result = await DialogService.ShowMessageBox("Execute Capitation Run",
+            $"Execute run {run.RunNumber} for {run.CapitationPeriod:MMMM yyyy}? This will generate statements for all active contracts.", "Execute", "Cancel");
+        if (result != true) return;
+        try
+        {
+            var executed = await CapitationService.ExecuteRunAsync(run.Id);
+            Snackbar.Add($"Run completed: {executed.TotalStatements} statements, {executed.TotalNetPayable:C2} net", Severity.Success);
+            await LoadRuns();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task CancelRun(CapRunSummary run)
+    {
+        try { await CapitationService.CancelRunAsync(run.Id); Snackbar.Add("Run cancelled", Severity.Warning); await LoadRuns(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ApproveStatement(CapStatementSummary stmt)
+    {
+        try { await CapitationService.ApproveStatementAsync(stmt.Id); Snackbar.Add("Statement approved", Severity.Success); await LoadData(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetLobColor(string? lob) => lob switch
+    {
+        "Commercial" => Color.Primary, "Medicare" => Color.Info,
+        "Medicaid" => Color.Success, "Exchange" => Color.Warning,
+        "TRICARE" => Color.Secondary, "VA" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private static Color GetRunTypeColor(string runType) => runType switch
+    {
+        "Monthly" => Color.Primary, "AdHocProvider" => Color.Info,
+        "RetroAdjustment" => Color.Warning, "WithholdRelease" => Color.Success,
+        _ => Color.Default
+    };
+
+    private static Color GetRunStatusColor(string status) => status switch
+    {
+        "Completed" => Color.Success, "Running" => Color.Primary,
+        "Pending" => Color.Warning, "Failed" => Color.Error,
+        "Cancelled" => Color.Default, _ => Color.Default
+    };
+
+    private static Color GetStatementStatusColor(string status) => status switch
+    {
+        "Paid" => Color.Success, "Approved" => Color.Info,
+        "PaymentInitiated" => Color.Primary, "Generated" => Color.Warning,
+        "OnHold" => Color.Default, "Voided" => Color.Error, _ => Color.Default
+    };
+}

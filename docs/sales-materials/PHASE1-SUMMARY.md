@@ -180,14 +180,14 @@ This phase delivered complete sales, marketing, and customer onboarding material
 - Azure infrastructure deployment (DEV)
 - Key Vault configuration
 - API connections setup
-- Integration Account configuration
+- X12 EDI service configuration
 - X12 schemas upload
 - Trading partners setup
 
 #### Integration Development (Weeks 5-7)
 - Backend API integration
 - Custom connector development
-- Logic App workflow updates
+- Argo Workflow DAG updates
 - Workflow deployment
 - Configuration refinement
 
@@ -245,12 +245,12 @@ This phase delivered complete sales, marketing, and customer onboarding material
 - DEV environment Azure infrastructure
 - Key Vault configuration
 - API connections
-- Integration Account
+- X12 EDI services
 - Monitoring setup
 
 #### Week 5-7: Integration Development
 - Backend integration
-- Logic App workflows
+- Argo Workflow DAGs
 - Workflow deployment
 - Configuration updates
 - Code review & documentation
@@ -359,7 +359,7 @@ This phase delivered complete sales, marketing, and customer onboarding material
 
 3. **Technical:**
    - [ ] Prepare demo environment (Azure subscription)
-   - [ ] Deploy Logic Apps for demonstration
+   - [ ] Deploy AKS with Argo Workflows for demonstration
    - [ ] Load sample data for demo
 
 4. **Legal:**
@@ -447,7 +447,7 @@ This phase delivered complete sales, marketing, and customer onboarding material
 
 ### External Resources
 - [HIPAA Compliance Guide](https://www.hhs.gov/hipaa/index.html)
-- [Azure Logic Apps Documentation](https://learn.microsoft.com/en-us/azure/logic-apps/)
+- [Argo Workflows Documentation](https://argoproj.github.io/argo-workflows/)
 - [X12 EDI Standards](https://x12.org/)
 - [Clearinghouse Developer Portal](https://www.clearinghouse.com/)
 

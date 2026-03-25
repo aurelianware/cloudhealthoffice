@@ -42,9 +42,9 @@ read -p "Connection Name [cho-sftp]: " CONNECTION_NAME
 CONNECTION_NAME=${CONNECTION_NAME:-cho-sftp}
 
 echo ""
-echo "SFTP Credentials (from k8s/sftp-server-deployment.yaml):"
-read -p "Username [logicapp]: " SFTP_USER
-SFTP_USER=${SFTP_USER:-logicapp}
+echo "SFTP Credentials (from infrastructure/k8s/sftp-server-deployment.yaml):"
+read -p "Username [cho-edi]: " SFTP_USER
+SFTP_USER=${SFTP_USER:-cho-edi}
 
 read -sp "Password [changeme123]: " SFTP_PASS
 SFTP_PASS=${SFTP_PASS:-changeme123}

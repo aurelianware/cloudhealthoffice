@@ -7,20 +7,32 @@
 @inject IClaimsService ClaimsService
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject ITenantContextService TenantContextService
+@inject IUserContextService UserContextService
+@inject IConfiguration Configuration
 
 <PageTitle>Dashboard - Cloud Health Office</PageTitle>
 
+<PermissionGate>
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
 
     @* ── Top Bar: Welcome + Tenant ── *@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudStack Spacing="0">
             <MudText Typo="Typo.h4">
-                Welcome back@(tenantContext != null ? $", {tenantContext.TenantName}" : "")
+                Welcome back@(_userContext != null ? $", {_userContext.DisplayName}" : tenantContext != null ? $", {tenantContext.TenantName}" : "")
             </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                @DateTime.Now.ToString("dddd, MMMM d, yyyy")
-            </MudText>
+            @if (_userContext != null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @_userContext.PrimaryRoleDisplayName — @DateTime.Now.ToString("dddd, MMMM d, yyyy")
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @DateTime.Now.ToString("dddd, MMMM d, yyyy")
+                </MudText>
+            }
         </MudStack>
         @if (tenantContext != null)
         {
@@ -35,6 +47,11 @@
             </MudChip>
         }
     </MudStack>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     @if (_loading)
     {
@@ -268,15 +285,129 @@
         </MudCardContent>
     </MudCard>
 
+    @* ── Action Items / Alerts ── *@
+    @if (_alerts != null)
+    {
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" GutterBottom="true">Action Items</MudText>
+                <MudStack Spacing="2">
+                    @if (_alerts.WorkQueueCount > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.WorkQueueCount</strong> claims in work queue requiring manual review</MudText>
+                                <MudButton Href="/work-queues" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">View Queue</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.PendingRfais > 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.PendingRfais</strong> outstanding RFAIs awaiting provider response</MudText>
+                                <MudButton Href="/correspondence" Variant="Variant.Text" Color="Color.Info" Size="Size.Small">View RFAIs</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.AppealsDueThisWeek > 0)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.AppealsDueThisWeek</strong> appeals due this week — regulatory deadline approaching</MudText>
+                                <MudButton Href="/appeals" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">View Appeals</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                    @if (_alerts.ApproachingFilingLimit > 0)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" NoIcon="false">
+                            <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                <MudText Typo="Typo.body2"><strong>@_alerts.ApproachingFilingLimit</strong> claims approaching 365-day filing limit (&gt;330 days from DOS)</MudText>
+                                <MudButton Href="/work-queues" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">Review Claims</MudButton>
+                            </div>
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @* ── EDI Transaction Volume ── *@
+    @if (_ediVolume != null)
+    {
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudText Typo="Typo.h6">Today's EDI Volume</MudText>
+                    <MudButton Href="/edi-operations" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               EndIcon="@Icons.Material.Filled.ArrowForward">View Details</MudButton>
+                </MudStack>
+                <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Receipt">
+                        837 Claims: @_ediVolume.Claims837Received
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Success" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Payments">
+                        835 ERA: @_ediVolume.Era835Generated
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.VerifiedUser">
+                        270/271 Eligibility: @_ediVolume.Eligibility270271
+                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Medium"
+                             Icon="@Icons.Material.Filled.Gavel">
+                        278 Prior Auth: @_ediVolume.PriorAuth278
+                    </MudChip>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @* ── System Health ── *@
+    <MudCard Elevation="0" Class="mb-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" GutterBottom="true">System Health</MudText>
+            <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap">
+                @foreach (var svc in _systemHealth)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
+                                 Color="@(svc.Value ? Color.Success : Color.Error)"
+                                 Style="@(svc.Value ? "" : "animation: pulse 1.5s infinite;")" />
+                        <MudText Typo="Typo.body2">@svc.Key</MudText>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+
 </MudContainer>
+</PermissionGate>
 
 @code {
     private DashboardMetrics? metrics;
     private List<ClaimSummary>? recentClaims;
     private List<AuthorizationSummary>? recentAuthorizations;
     private TenantContext? tenantContext;
+    private UserContext? _userContext;
+    private OperationalAlerts? _alerts;
+    private EdiVolumeSummary? _ediVolume;
     private bool _loading = true;
     private bool _metricsError;
+    private string? _serviceError;
+
+    private Dictionary<string, bool> _systemHealth = new()
+    {
+        ["Claims"] = false,
+        ["Members"] = false,
+        ["Providers"] = false,
+        ["Eligibility"] = false,
+        ["Payments"] = false,
+        ["Benefits"] = false,
+        ["FHIR"] = false
+    };
 
     private double[] _chartData = Array.Empty<double>();
     private string[] _chartLabels = { "Approved", "Denied", "Pending" };
@@ -287,19 +418,27 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _serviceError = null;
+
         try
         {
             tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            _userContext = await UserContextService.GetCurrentUserAsync();
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to load tenant context");
+            Logger.LogWarning(ex, "Failed to load tenant/user context");
         }
 
         try
         {
             metrics = await MetricsService.GetDashboardMetricsAsync();
             _chartData = new double[] { metrics.ApprovedClaims, metrics.DeniedClaims, metrics.PendingClaims };
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _metricsError = true;
         }
         catch (Exception ex)
         {
@@ -310,6 +449,11 @@
         try
         {
             recentClaims = await ClaimsService.GetRecentClaimsAsync(10);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            recentClaims = new();
         }
         catch (Exception ex)
         {
@@ -324,6 +468,11 @@
             var allAuths = await AuthorizationService.GetAuthorizationsAsync();
             recentAuthorizations = allAuths.OrderByDescending(a => a.RequestDate).Take(5).ToList();
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            recentAuthorizations = new();
+        }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to load recent authorizations");
@@ -331,6 +480,60 @@
         }
 
         _loading = false;
+
+        // Operational awareness — loaded in background after main dashboard renders
+        _ = LoadOperationalDataAsync();
+    }
+
+    private async Task LoadOperationalDataAsync()
+    {
+        try
+        {
+            var alertsTask = MetricsService.GetOperationalAlertsAsync();
+            var ediTask = MetricsService.GetTodayEdiVolumeAsync();
+            var healthTask = CheckSystemHealthAsync();
+            await Task.WhenAll(alertsTask, ediTask, healthTask);
+            _alerts = alertsTask.Result;
+            _ediVolume = ediTask.Result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load operational data");
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckSystemHealthAsync()
+    {
+        var config = Configuration;
+        var checks = new Dictionary<string, string>
+        {
+            ["Claims"] = config["Services:ClaimsService"]?.Replace("/api", "") ?? "",
+            ["Members"] = config["Services:MemberService"]?.Replace("/api", "") ?? "",
+            ["Providers"] = config["Services:ProviderService"]?.Replace("/api", "") ?? "",
+            ["Eligibility"] = config["Services:EligibilityService"]?.Replace("/api", "") ?? "",
+            ["Payments"] = config["Services:PaymentService"]?.Replace("/api", "") ?? "",
+            ["Benefits"] = config["Services:BenefitPlanService"]?.Replace("/api", "") ?? "",
+            ["FHIR"] = config["Services:ClaimsService"]?.Replace("5001", "5011").Replace("/api", "") ?? ""
+        };
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        var tasks = checks.Select(async kv =>
+        {
+            try
+            {
+                var response = await client.GetAsync($"{kv.Value}/health/live");
+                return (kv.Key, Healthy: response.IsSuccessStatusCode);
+            }
+            catch
+            {
+                return (kv.Key, Healthy: false);
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        foreach (var (name, healthy) in results)
+            _systemHealth[name] = healthy;
     }
 
     private Color GetApprovalRateColor()

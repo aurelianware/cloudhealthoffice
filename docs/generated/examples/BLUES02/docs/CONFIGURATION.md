@@ -97,7 +97,7 @@ This document describes the configuration for Regional Blue Cross Blue Shield (B
 - **Resource Name Prefix**: blues02
 - **Location**: centralus
 - **Environment**: prod
-- **Logic App SKU**: WS1
+- **AKS Node SKU**: Standard_D4s_v3
 - **Worker Count**: 3
 - **Always On**: true
 

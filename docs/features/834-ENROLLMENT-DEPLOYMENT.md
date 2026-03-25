@@ -82,7 +82,7 @@ echo "Cosmos DB Key: $COSMOS_KEY"
 Create Cosmos DB secret:
 
 ```bash
-kubectl create secret generic cosmos-db-secret \
+kubectl create secret generic database-secret \
   --namespace cloudhealthoffice \
   --from-literal=endpoint="$COSMOS_ENDPOINT" \
   --from-literal=key="$COSMOS_KEY"
@@ -443,7 +443,7 @@ Error: 401 Unauthorized (Cosmos DB)
 **Solution:**
 1. Verify Cosmos DB secret:
 ```bash
-kubectl get secret cosmos-db-secret -n cloudhealthoffice -o yaml
+kubectl get secret database-secret -n cloudhealthoffice -o yaml
 ```
 
 2. Check enrollment-import-service logs:

@@ -1,4 +1,5 @@
 @page "/admin/inquiries"
+@page "/platform/inquiries"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
@@ -7,6 +8,7 @@
 
 <PageTitle>Sales Inquiries - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="platform:inquiries" RoleName="PlatformAdmin">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h4" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Inbox" Class="mr-2" />
@@ -162,6 +164,7 @@
         }
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private List<SalesInquiry> _inquiries = new();
