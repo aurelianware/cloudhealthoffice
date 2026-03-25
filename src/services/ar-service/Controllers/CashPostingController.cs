@@ -86,9 +86,23 @@ public class CashPostingController : ControllerBase
         if (posting.Status == CashPostingStatus.Voided)
             return BadRequest(new { error = "Cannot apply a voided cash posting" });
 
+        if (posting.Status == CashPostingStatus.Applied)
+            return BadRequest(new { error = "Cash posting is already applied" });
+
+        // Validate no negative application amounts
+        if (posting.Applications.Any(a => a.AmountApplied < 0))
+            return BadRequest(new { error = "Application amounts cannot be negative" });
+
         posting.AppliedAmount = posting.Applications.Sum(a => a.AmountApplied);
+
+        // Guard: total applied cannot exceed receipt amount
+        if (posting.AppliedAmount > posting.Amount)
+            return BadRequest(new { error = $"Over-application: applied {posting.AppliedAmount:C} exceeds receipt amount {posting.Amount:C}" });
+
         posting.UnappliedAmount = posting.Amount - posting.AppliedAmount;
-        posting.Status = CashPostingStatus.Applied;
+        posting.Status = posting.AppliedAmount == posting.Amount
+            ? CashPostingStatus.Applied
+            : CashPostingStatus.PartiallyApplied;
         posting.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Applied cash posting {PostingNumber}, applied={AppliedAmount}",
@@ -113,6 +127,9 @@ public class CashPostingController : ControllerBase
 
         if (posting.Status == CashPostingStatus.Voided)
             return BadRequest(new { error = "Cash posting is already voided" });
+
+        if (posting.Status == CashPostingStatus.Applied)
+            return BadRequest(new { error = "Cannot void an applied cash posting — reverse the application first" });
 
         posting.Status = CashPostingStatus.Voided;
         posting.LastUpdatedAt = DateTime.UtcNow;

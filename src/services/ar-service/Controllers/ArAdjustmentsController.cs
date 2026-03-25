@@ -62,6 +62,9 @@ public class ArAdjustmentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ArAdjustment>> CreateAdjustment([FromBody] ArAdjustment adjustment)
     {
+        if (adjustment.Amount <= 0)
+            return BadRequest(new { error = "Adjustment amount must be positive. Use Direction (Debit/Credit) to indicate the posting side." });
+
         // Auto-generate adjustment number
         adjustment.AdjustmentNumber = $"ADJ-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         adjustment.Status = ArAdjustmentStatus.Pending;

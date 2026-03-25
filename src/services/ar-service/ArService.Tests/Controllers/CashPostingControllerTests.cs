@@ -184,7 +184,7 @@ public class CashPostingControllerTests
         var applied = ok!.Value as CashPosting;
         applied!.AppliedAmount.Should().Be(5000.00m + 3000.50m + 2000.25m); // 10000.75
         applied.UnappliedAmount.Should().Be(15000.00m - 10000.75m);          // 4999.25
-        applied.Status.Should().Be(CashPostingStatus.Applied);
+        applied.Status.Should().Be(CashPostingStatus.PartiallyApplied);      // Partial — not fully applied
     }
 
     [Fact]
@@ -329,18 +329,15 @@ public class CashPostingControllerTests
     }
 
     [Fact]
-    public async Task VoidCashPosting_AppliedPosting_StillVoids()
+    public async Task VoidCashPosting_AppliedPosting_ReturnsBadRequest()
     {
-        // Controller allows voiding Applied postings — only Voided is rejected
+        // Cannot void applied postings — must reverse the application first
         var posting = CreatePosting(status: CashPostingStatus.Applied);
         _cashPostingRepo.Setup(r => r.GetByIdAsync("cp-1")).ReturnsAsync(posting);
-        _cashPostingRepo.Setup(r => r.UpdateAsync(It.IsAny<CashPosting>()))
-            .ReturnsAsync((CashPosting p) => p);
 
         var result = await _controller.VoidCashPosting("cp-1");
 
-        var ok = result.Result as OkObjectResult;
-        (ok!.Value as CashPosting)!.Status.Should().Be(CashPostingStatus.Voided);
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]

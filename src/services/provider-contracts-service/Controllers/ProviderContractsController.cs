@@ -83,6 +83,9 @@ public class ProviderContractsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ProviderContract>> CreateContract([FromBody] ProviderContract contract)
     {
+        if (contract.TerminationDate.HasValue && contract.TerminationDate.Value < contract.EffectiveDate)
+            return BadRequest(new { error = "Termination date cannot be before effective date" });
+
         // Auto-generate contract number if not provided
         if (string.IsNullOrEmpty(contract.ContractNumber))
             contract.ContractNumber = $"CTR-{contract.ProviderNPI}-{DateTime.UtcNow.Year}";

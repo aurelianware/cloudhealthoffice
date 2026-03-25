@@ -198,25 +198,18 @@ public class ArBalancesControllerTests
     }
 
     [Fact]
-    public async Task ReconcileBalance_AlreadyReconciled_StillUpdates()
+    public async Task ReconcileBalance_AlreadyReconciled_ReturnsBadRequest()
     {
-        // Note: controller does NOT reject already-reconciled balances — this documents actual behavior.
-        // Financial systems may want to add this guard; the test captures the current contract.
+        // Guard: already-reconciled balances cannot be re-reconciled without explicit un-reconcile
         var balance = CreateBalance(isReconciled: true);
         balance.ReconciledBy = "old-user";
         balance.ReconciledAt = new DateTime(2026, 2, 28);
         _balanceRepo.Setup(r => r.GetByIdAsync("bal-1")).ReturnsAsync(balance);
-        _balanceRepo.Setup(r => r.UpdateAsync(It.IsAny<ArBalance>()))
-            .ReturnsAsync((ArBalance b) => b);
 
         var request = new ReconcileRequest { ReconciledBy = "new-user", Notes = "Re-reconcile" };
         var result = await _controller.ReconcileBalance("bal-1", request);
 
-        var ok = result.Result as OkObjectResult;
-        ok.Should().NotBeNull();
-        var updated = ok!.Value as ArBalance;
-        updated!.ReconciledBy.Should().Be("new-user");
-        updated.ReconciliationNotes.Should().Be("Re-reconcile");
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     #endregion

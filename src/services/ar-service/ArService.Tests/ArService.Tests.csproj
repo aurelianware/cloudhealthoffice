@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ar-service.csproj" />
+    <ProjectReference Include="..\..\provider-contracts-service\provider-contracts-service.csproj" />
   </ItemGroup>
 
   <ItemGroup>
