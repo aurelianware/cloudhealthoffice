@@ -73,6 +73,9 @@ public class ArBalancesController : ControllerBase
         if (balance == null)
             return NotFound(new { error = $"AR balance {id} not found" });
 
+        if (balance.IsReconciled)
+            return BadRequest(new { error = "Balance is already reconciled. Un-reconcile first to re-reconcile." });
+
         balance.IsReconciled = true;
         balance.ReconciledAt = DateTime.UtcNow;
         balance.ReconciledBy = request.ReconciledBy;
