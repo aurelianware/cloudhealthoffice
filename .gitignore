@@ -74,3 +74,4 @@ obj/
 *.DS_Store
 src/services/capitation-service/CapitationService.Tests/TestResults/
 src/portal/CloudHealthOffice.Portal/appsettings.Development.json
+.env.local
