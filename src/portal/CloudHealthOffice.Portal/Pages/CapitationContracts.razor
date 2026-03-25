@@ -1,4 +1,4 @@
-@page "/capitation/contracts"
+@page "/capitation/rate-config"
 @attribute [Authorize]
 @using CloudHealthOffice.Portal.Services
 @inject ICapitationService CapitationService
@@ -6,15 +6,15 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
-<PageTitle>Capitation Contracts — Cloud Health Office</PageTitle>
+<PageTitle>Capitation Rate Config — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="contracts:read,billing:read" RoleName="Finance">
 <MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Style="vertical-align: middle;" />
-    Capitation Contracts
+    Capitation Rate Config
 </MudText>
 <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
-    Manage per-member-per-month capitation agreements with providers
+    Per-contract PMPM rate tiers, risk adjustment, and withhold configuration
 </MudText>
 
 @if (!string.IsNullOrEmpty(_serviceError))

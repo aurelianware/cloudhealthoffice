@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ar-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ar-service
+  namespace: cloudhealthoffice
+  labels:
+    app: ar-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ar-service
+  template:
+    metadata:
+      labels:
+        app: ar-service
+        tier: backend
+    spec:
+      containers:
+      - name: ar-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-ar-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: ar-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+              optional: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ar-service
+  namespace: cloudhealthoffice
+  labels:
+    app: ar-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ar-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

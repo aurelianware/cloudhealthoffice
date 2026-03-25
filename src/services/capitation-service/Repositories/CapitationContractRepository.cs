@@ -13,7 +13,7 @@ public interface ICapitationContractRepository
         string? providerNpi = null,
         LineOfBusiness? lob = null,
         ContractType? type = null,
-        CapitationContractStatus? status = null,
+        CapitationRateConfigStatus? status = null,
         int page = 1,
         int pageSize = 50);
     Task<CapitationContract> CreateAsync(CapitationContract contract);
@@ -67,7 +67,7 @@ public class CapitationContractRepository : ICapitationContractRepository
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.providerNPI = @npi AND c.status = @active")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@npi", npi)
-            .WithParameter("@active", CapitationContractStatus.Active.ToString());
+            .WithParameter("@active", CapitationRateConfigStatus.Active.ToString());
 
         var results = await ExecuteQueryAsync(query);
         return results.FirstOrDefault();
@@ -80,7 +80,7 @@ public class CapitationContractRepository : ICapitationContractRepository
         var parameters = new List<(string, object)>
         {
             ("@tenantId", tenantId),
-            ("@active", CapitationContractStatus.Active.ToString())
+            ("@active", CapitationRateConfigStatus.Active.ToString())
         };
 
         if (lob.HasValue)
@@ -110,7 +110,7 @@ public class CapitationContractRepository : ICapitationContractRepository
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND ARRAY_CONTAINS(c.planIds, @planId) AND c.status = @active ORDER BY c.providerName")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@planId", planId)
-            .WithParameter("@active", CapitationContractStatus.Active.ToString());
+            .WithParameter("@active", CapitationRateConfigStatus.Active.ToString());
 
         return await ExecuteQueryAsync(query);
     }
@@ -119,7 +119,7 @@ public class CapitationContractRepository : ICapitationContractRepository
         string? providerNpi = null,
         LineOfBusiness? lob = null,
         ContractType? type = null,
-        CapitationContractStatus? status = null,
+        CapitationRateConfigStatus? status = null,
         int page = 1,
         int pageSize = 50)
     {

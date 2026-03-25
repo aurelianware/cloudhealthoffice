@@ -17,7 +17,7 @@
     Payment Runs
 </MudText>
 <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
-    Generate, monitor, and download ERA remittance files for adjudicated claims
+    FFS payment runs — grouped by line of business
 </MudText>
 
 <!-- KPI Chips -->
@@ -60,8 +60,17 @@
     </MudItem>
 </MudGrid>
 
-<!-- Action Bar -->
+<!-- Filter Bar -->
 <div class="d-flex align-center gap-3 mb-4">
+    <MudSelect @bind-Value="_lobFilter" Label="Line of Business" Variant="Variant.Outlined"
+               Clearable="true" Style="max-width: 200px;" Dense="true">
+        <MudSelectItem Value=@("Commercial")>Commercial</MudSelectItem>
+        <MudSelectItem Value=@("Medicare")>Medicare</MudSelectItem>
+        <MudSelectItem Value=@("Medicaid")>Medicaid</MudSelectItem>
+        <MudSelectItem Value=@("Exchange")>Exchange</MudSelectItem>
+        <MudSelectItem Value=@("TRICARE")>TRICARE</MudSelectItem>
+        <MudSelectItem Value=@("VA")>VA</MudSelectItem>
+    </MudSelect>
     <MudButton Variant="Variant.Filled"
                Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Add"
@@ -90,11 +99,12 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
 }
 
-<MudTable Items="_runs" Dense="true" Hover="true" SortLabel="Sort By"
+<MudTable Items="FilteredRuns" Dense="true" Hover="true" SortLabel="Sort By"
           Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;"
           T="PaymentRunSummary">
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.RunName)">Run Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.LineOfBusiness)">Line of Business</MudTableSortLabel></MudTh>
         <MudTh>Status</MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<PaymentRunSummary,object>(x=>x.CreatedDate)">Created</MudTableSortLabel></MudTh>
         <MudTh>Claims Processed</MudTh>
@@ -107,6 +117,9 @@
                 <MudText Typo="Typo.body2" Style="font-weight: 600; color: rgba(255,255,255,0.9);">@context.RunName</MudText>
                 <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">@context.RunId</MudText>
             </div>
+        </MudTd>
+        <MudTd DataLabel="Line of Business">
+            <MudText Typo="Typo.body2">@(string.IsNullOrEmpty(context.LineOfBusiness) ? "—" : context.LineOfBusiness)</MudText>
         </MudTd>
         <MudTd DataLabel="Status">
             @{
@@ -211,10 +224,14 @@
 
 @code {
     private List<PaymentRunSummary> _runs = new();
+    private string? _lobFilter;
     private bool _loading = true;
     private bool _hubConnected = false;
     private HubConnection? _hubConnection;
 
+    private IEnumerable<PaymentRunSummary> FilteredRuns => string.IsNullOrEmpty(_lobFilter)
+        ? _runs
+        : _runs.Where(r => r.LineOfBusiness == _lobFilter);
     private decimal _totalPaid => _runs.Where(r => r.Status == "Completed").Sum(r => r.TotalAmount);
     private int _pendingCount => _runs.Count(r => r.Status is "Pending" or "Running");
     private int _failedCount => _runs.Count(r => r.Status == "Failed");

@@ -189,33 +189,67 @@
                     </MudNavGroup>
 
                     <!-- FINANCE -->
-                    <MudNavGroup Title="Finance" Icon="@Icons.Material.Filled.AccountBalance" Expanded="false"
-                                 Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/payment-runs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Payments"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Payment Runs
-                        </MudNavLink>
-                        <MudNavLink Href="/premium-billing" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.RequestQuote"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Premium Billing
-                        </MudNavLink>
-                    </MudNavGroup>
+                    <MudNavGroup Title="Finance" Icon="@Icons.Material.Filled.AccountBalance"
+                                 Expanded="false" Style="border-left: 3px solid transparent;">
 
-                    <!-- CAPITATION -->
-                    <MudNavGroup Title="Capitation" Icon="@Icons.Material.Filled.LocalHospital" Expanded="false"
-                                 Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/capitation/contracts" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Description"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Contracts
-                        </MudNavLink>
-                        <MudNavLink Href="/capitation/runs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PlayCircle"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Capitation Runs
-                        </MudNavLink>
-                        <MudNavLink Href="/capitation/statements" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Statements
-                        </MudNavLink>
+                        <!-- Accounts Receivable -->
+                        <MudNavGroup Title="Accounts Receivable"
+                                     Icon="@Icons.Material.Filled.AccountBalanceWallet"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavLink Href="/finance/ar/accounts" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.TableChart"
+                                Style="border-left: 3px solid transparent;">GL Accounts</MudNavLink>
+                            <MudNavLink Href="/finance/ar/balances" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Balance"
+                                Style="border-left: 3px solid transparent;">Balances</MudNavLink>
+                            <MudNavLink Href="/finance/ar/cash-posting" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Payments"
+                                Style="border-left: 3px solid transparent;">Cash Posting</MudNavLink>
+                            <MudNavLink Href="/finance/ar/adjustments" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Tune"
+                                Style="border-left: 3px solid transparent;">Adjustments</MudNavLink>
+                            <MudNavLink Href="/finance/ar/aging" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Timeline"
+                                Style="border-left: 3px solid transparent;">Aging Report</MudNavLink>
+                        </MudNavGroup>
+
+                        <!-- Premium Billing (existing — route unchanged) -->
+                        <MudNavLink Href="/premium-billing" Match="NavLinkMatch.Prefix"
+                            Icon="@Icons.Material.Filled.RequestQuote"
+                            Style="border-left: 3px solid transparent;">Premium Billing</MudNavLink>
+
+                        <!-- Provider Contracts (new master contract page) -->
+                        <MudNavGroup Title="Provider Contracts"
+                                     Icon="@Icons.Material.Filled.Description"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavLink Href="/finance/contracts" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Article"
+                                Style="border-left: 3px solid transparent;">Contracts</MudNavLink>
+                            <MudNavLink Href="/finance/contracts/statements" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Receipt"
+                                Style="border-left: 3px solid transparent;">Statements</MudNavLink>
+                        </MudNavGroup>
+
+                        <!-- Payments -->
+                        <MudNavGroup Title="Payments" Icon="@Icons.Material.Filled.CreditCard"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavGroup Title="FFS" Icon="@Icons.Material.Filled.AttachMoney"
+                                         Expanded="false" Style="border-left: 3px solid transparent;">
+                                <MudNavLink Href="/payment-runs" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.PlayArrow"
+                                    Style="border-left: 3px solid transparent;">Payment Runs</MudNavLink>
+                            </MudNavGroup>
+                            <MudNavGroup Title="Capitation" Icon="@Icons.Material.Filled.LocalHospital"
+                                         Expanded="false" Style="border-left: 3px solid transparent;">
+                                <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.Settings"
+                                    Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                <MudNavLink Href="/capitation/runs" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.PlayCircle"
+                                    Style="border-left: 3px solid transparent;">Capitation Runs</MudNavLink>
+                            </MudNavGroup>
+                        </MudNavGroup>
+
                     </MudNavGroup>
 
                     <!-- MONITORING -->
