@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ffff" opacity="0.6"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ff88" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="380" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="40" font-family="Segoe UI, system-ui, sans-serif" font-size="24" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Deployment Pipeline</text>
+  <text x="600" y="62" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#00ffff"
+        text-anchor="middle" opacity="0.8">Gated release strategy &#x2022; GitHub Actions &#x2022; OIDC Auth &#x2022; Zero-downtime</text>
+
+  <!-- Option A: SaaS (top row) -->
+  <text x="80" y="115" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+        fill="#00ff88" text-anchor="start">OPTION A: SaaS</text>
+
+  <g transform="translate(200, 145)">
+    <rect x="-75" y="-22" width="150" height="44" rx="7" fill="rgba(0,255,136,0.1)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Sign Up</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">portal.cloudhealthoffice.com</text>
+  </g>
+  <line x1="280" y1="145" x2="370" y2="145" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrowGreen)"/>
+  <g transform="translate(460, 145)">
+    <rect x="-75" y="-22" width="150" height="44" rx="7" fill="rgba(0,255,136,0.1)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Auto-Provision</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">Cosmos DB + SFTP + AD</text>
+  </g>
+  <line x1="540" y1="145" x2="630" y2="145" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrowGreen)"/>
+  <g transform="translate(720, 145)">
+    <rect x="-75" y="-22" width="150" height="44" rx="7" fill="rgba(0,255,136,0.12)" stroke="#00ff88" stroke-width="2"/>
+    <text x="0" y="-2" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700" fill="#00ff88" text-anchor="middle">Live in 5 min</text>
+    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">14-day free trial</text>
+  </g>
+
+  <!-- Option B: Self-Hosted (bottom row) -->
+  <text x="80" y="230" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
+        fill="#00ffff" text-anchor="start">OPTION B: Self-Hosted</text>
+
+  <!-- DEV -->
+  <g transform="translate(200, 265)">
+    <rect x="-65" y="-25" width="130" height="50" rx="7" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-4" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#00ffff" text-anchor="middle">DEV</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">Docker Compose</text>
+  </g>
+
+  <!-- Gate 1 -->
+  <line x1="270" y1="265" x2="345" y2="265" stroke="#00ffff" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+  <g transform="translate(370, 265)">
+    <polygon points="0,-18 18,0 0,18 -18,0" fill="rgba(255,200,0,0.1)" stroke="#ffc800" stroke-width="1.2"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="8" font-weight="700" fill="#ffc800" text-anchor="middle">CI</text>
+  </g>
+
+  <!-- UAT -->
+  <line x1="390" y1="265" x2="445" y2="265" stroke="#00ffff" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+  <g transform="translate(520, 265)">
+    <rect x="-65" y="-25" width="130" height="50" rx="7" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="-4" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#00ffff" text-anchor="middle">UAT</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">AKS / Bicep</text>
+  </g>
+
+  <!-- Gate 2 -->
+  <line x1="590" y1="265" x2="665" y2="265" stroke="#00ffff" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+  <g transform="translate(690, 265)">
+    <polygon points="0,-18 18,0 0,18 -18,0" fill="rgba(255,200,0,0.1)" stroke="#ffc800" stroke-width="1.2"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="7" font-weight="700" fill="#ffc800" text-anchor="middle">GATE</text>
+  </g>
+
+  <!-- PROD -->
+  <line x1="710" y1="265" x2="765" y2="265" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrowGreen)"/>
+  <g transform="translate(840, 265)">
+    <rect x="-65" y="-25" width="130" height="50" rx="7" fill="rgba(0,255,136,0.1)" stroke="#00ff88" stroke-width="2"/>
+    <text x="0" y="-4" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#00ff88" text-anchor="middle">PROD</text>
+    <text x="0" y="12" font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#b0b0b0" text-anchor="middle">AKS + Argo</text>
+  </g>
+
+  <!-- Multi-cloud badges -->
+  <g transform="translate(1020, 235)">
+    <rect x="-45" y="-12" width="90" height="24" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(0,180,255,0.4)" stroke-width="1"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600" fill="#00b4ff" text-anchor="middle">Azure AKS</text>
+  </g>
+  <g transform="translate(1020, 265)">
+    <rect x="-45" y="-12" width="90" height="24" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,153,0,0.4)" stroke-width="1"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600" fill="#ff9900" text-anchor="middle">AWS EKS</text>
+  </g>
+  <g transform="translate(1020, 295)">
+    <rect x="-45" y="-12" width="90" height="24" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(66,133,244,0.4)" stroke-width="1"/>
+    <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600" fill="#4285f4" text-anchor="middle">GCP GKE</text>
+  </g>
+  <line x1="910" y1="265" x2="970" y2="265" stroke="#00ff88" stroke-width="1" opacity="0.3"/>
+
+  <!-- Bottom bar -->
+  <g transform="translate(0, 340)">
+    <rect x="0" y="0" width="1200" height="40" fill="rgba(0,255,255,0.03)"/>
+    <text x="600" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="rgba(176,176,176,0.6)"
+          text-anchor="middle">GitHub Actions OIDC &#x2022; Bicep IaC &#x2022; Helm Charts &#x2022; Environment Protection Rules &#x2022; Approval Gates</text>
+  </g>
+</svg>

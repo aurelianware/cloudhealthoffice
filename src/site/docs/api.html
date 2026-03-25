@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Reference — Cloud Health Office Documentation</title>
+  <meta name="description" content="Cloud Health Office API reference. 7 production FHIR R4 APIs with OpenAPI 3.1 specs — Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, Encounter." />
+  <meta name="keywords" content="FHIR R4 API reference, healthcare payer API, Patient Access API, Prior Authorization API FHIR, OpenAPI healthcare, claims scrubbing API, risk adjustment API, CMS-0057-F API" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/api" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/api" />
+  <meta property="og:title" content="API Reference — Cloud Health Office" />
+  <meta property="og:description" content="7 production FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Auth, Payer-to-Payer, and more." />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Cloud Health Office API Reference","description":"7 production FHIR R4 APIs with OpenAPI 3.1 specifications for healthcare payer integration.","url":"https://cloudhealthoffice.com/docs/api","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"API Reference","item":"https://cloudhealthoffice.com/docs/api"}]}}
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/cms-0057f-compliance">CMS Compliance</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/login" style="color:#00ffff;font-weight:bold;">Sign In</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/api" class="active">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#environments">Environments</a></li><li><a href="#auth">Authentication</a></li><li><a href="#patient-access">Patient Access</a></li><li><a href="#provider-access">Provider Access</a></li><li><a href="#prior-auth">Prior Authorization</a></li><li><a href="#payer-to-payer">Payer-to-Payer</a></li><li><a href="#operational">Operational APIs</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">API Reference</span></div>
+
+        <h1>API Reference</h1>
+        <p class="docs-subtitle">7 production FHIR R4 APIs with OpenAPI 3.1 specs, OAuth 2.0 authentication, and interactive sandbox documentation. All APIs return standard FHIR R4 bundles with Da Vinci and US Core profile conformance.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-api-landscape.svg" alt="API landscape showing 7 FHIR R4 APIs — Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, and Encounter Service" />
+          <figcaption>7 production APIs — 4 CMS-0057-F required + 3 operational</figcaption>
+        </figure>
+
+        <h2 id="environments">Environments</h2>
+        <table>
+          <thead><tr><th>Environment</th><th>Base URL</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-production">Production</span></td><td><code>https://api.cloudhealthoffice.com/fhir/r4</code></td><td>OAuth 2.0 (Azure AD)</td></tr>
+            <tr><td><span class="badge badge-complete">Sandbox</span></td><td><code>https://sandbox.cloudhealthoffice.com/fhir/r4</code></td><td>Test tokens (synthetic data)</td></tr>
+            <tr><td>Local Dev</td><td><code>http://localhost:3000/fhir/r4</code></td><td>Bearer test-token</td></tr>
+          </tbody>
+        </table>
+
+        <p>Interactive OpenAPI docs are available at the <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a>. All requests require an <code>X-Tenant-ID</code> header for multi-tenant routing.</p>
+
+        <h2 id="auth">Authentication</h2>
+        <p>Production APIs use OAuth 2.0 with Azure AD (Microsoft Entra ID). The FHIR server publishes a SMART on FHIR configuration at <code>/.well-known/smart-configuration</code> with supported scopes including <code>patient/*.read</code>, <code>user/*.read</code>, and <code>system/*.read</code>.</p>
+
+<pre><code><span class="code-comment"># Discover OAuth endpoints</span>
+curl https://api.cloudhealthoffice.com/fhir/r4/.well-known/smart-configuration
+
+<span class="code-comment"># Get access token (client credentials)</span>
+curl -X POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token \
+  -d "grant_type=client_credentials" \
+  -d "client_id={client_id}" \
+  -d "client_secret={client_secret}" \
+  -d "scope=api://cloudhealthoffice/.default"</code></pre>
+
+        <h2 id="patient-access">Patient Access API</h2>
+        <p>CMS-9115-F and CMS-0057-F required. Enables patients to access their complete health data via FHIR.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>/Patient/{id}</code></td><td>GET</td><td>Patient demographics and contact information</td></tr>
+            <tr><td><code>/Coverage?patient={id}</code></td><td>GET</td><td>Active benefits and eligibility</td></tr>
+            <tr><td><code>/Claim?patient={id}</code></td><td>GET</td><td>Claims history (X12 837 &#x2192; FHIR Claim)</td></tr>
+            <tr><td><code>/ExplanationOfBenefit?patient={id}</code></td><td>GET</td><td>Payment details (X12 835 &#x2192; FHIR EOB)</td></tr>
+            <tr><td><code>/Encounter?patient={id}</code></td><td>GET</td><td>Healthcare visits and services</td></tr>
+            <tr><td><code>/Condition?patient={id}</code></td><td>GET</td><td>Diagnoses and clinical conditions</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="provider-access">Provider Access API</h2>
+        <p>Gives in-network providers access to member clinical and claims data with Da Vinci PDex profile conformance.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>/Patient/$member-match</code></td><td>POST</td><td>Match patient across payers without sharing raw identifiers</td></tr>
+            <tr><td><code>/Group/{id}/$export</code></td><td>POST</td><td>Bulk FHIR export for attributed members</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="prior-auth">Prior Authorization API</h2>
+        <p>Converts prior auth from phone/fax to real-time FHIR with Da Vinci PAS, CRD, and DTR conformance. Bidirectional X12 278 mapping.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>/Claim/$submit</code></td><td>POST</td><td>Submit prior auth request (X12 278 &#x2192; FHIR)</td></tr>
+            <tr><td><code>/Claim/$inquire</code></td><td>POST</td><td>Check prior auth status</td></tr>
+            <tr><td><code>/Claim/{id}/$cancel</code></td><td>POST</td><td>Cancel existing prior auth</td></tr>
+            <tr><td><code>/Subscription</code></td><td>POST</td><td>Subscribe to auth status updates</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="payer-to-payer">Payer-to-Payer API</h2>
+        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> operations.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>/Patient/$member-match</code></td><td>POST</td><td>Identify member in source payer system</td></tr>
+            <tr><td><code>/Patient/{id}/$everything</code></td><td>GET</td><td>Complete member record transfer</td></tr>
+            <tr><td><code>/Group/$export</code></td><td>POST</td><td>Bulk transfer for member cohorts</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="operational">Operational APIs</h2>
+
+        <h3>Claims Scrubbing</h3>
+        <p>NCCI/MUE edit checking, CPT validation, diagnosis code verification, and custom payer scrub rules.</p>
+
+        <h3>Risk Adjustment</h3>
+        <p>HCC (Hierarchical Condition Category) coding and RAF (Risk Adjustment Factor) score calculation for Medicare Advantage and ACA risk adjustment.</p>
+
+        <h3>Encounter Service</h3>
+        <p>State and federal encounter submission management for Medicaid MCOs, including encounter data validation, submission tracking, and reconciliation.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">OpenAPI specs</div>
+          <p>Full OpenAPI 3.1 specifications are available in the <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/api/openapi" target="_blank" rel="noopener noreferrer">api/openapi</a> directory on GitHub. Explore them interactively in the <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a>.</p>
+        </div>
+
+        <div class="docs-pager">
+          <a href="/docs/architecture"><div class="pager-label">&larr; Previous</div><div class="pager-title">Architecture</div></a>
+          <a href="/docs/deployment" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Deployment</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer>
+  <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
+</body>
+</html>

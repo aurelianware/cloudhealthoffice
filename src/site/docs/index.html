@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentation — Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office documentation. Quick start guides, CMS-0057-F compliance, architecture overview, API reference, and deployment guides for healthcare payer integration." />
+  <meta name="keywords" content="Cloud Health Office docs, CMS-0057-F compliance guide, healthcare payer integration documentation, FHIR R4 API reference, X12 EDI deployment guide, healthcare platform quick start" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs" />
+  <meta property="og:title" content="Documentation — Cloud Health Office" />
+  <meta property="og:description" content="Quick start guides, CMS-0057-F compliance, architecture, API reference, and deployment for healthcare payer integration." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Cloud Health Office Documentation",
+    "url": "https://cloudhealthoffice.com/docs",
+    "description": "Complete documentation for the Cloud Health Office healthcare payer integration platform.",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Cloud Health Office",
+      "url": "https://cloudhealthoffice.com"
+    },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs" class="active">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Docs</span>
+        </div>
+
+        <h1>Documentation</h1>
+        <p class="docs-subtitle">
+          Everything you need to evaluate, deploy, and operate Cloud Health Office — the integration layer for healthcare payer core administration systems.
+        </p>
+
+        <div class="docs-hub-grid">
+
+          <a href="/docs/quickstart" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x26A1;</span>
+            <h3>Quick Start <span class="time-estimate">~15 min</span></h3>
+            <p>Clone the repo, start the Docker stack, submit a claim through the full adjudication pipeline, and generate an 835 ERA — no Azure account needed.</p>
+            <span class="card-arrow">Get started &rarr;</span>
+          </a>
+
+          <a href="/docs/compliance" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x2705;</span>
+            <h3>CMS-0057-F Compliance</h3>
+            <p>Complete guide to meeting the January 2027 CMS Interoperability and Prior Authorization Rule. Patient Access, Provider Access, Payer-to-Payer, and Prior Auth APIs.</p>
+            <span class="card-arrow">View guide &rarr;</span>
+          </a>
+
+          <a href="/docs/architecture" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F3D7;&#xFE0F;</span>
+            <h3>Architecture</h3>
+            <p>Multi-tenant SaaS platform architecture. Kubernetes-native with Argo Workflows, 10 microservices, 9 calculation engines, and configuration-driven deployment.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+
+          <a href="/docs/api" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F517;</span>
+            <h3>API Reference</h3>
+            <p>7 production FHIR R4 APIs with OpenAPI 3.1 specs. Patient Access, Provider Access, Prior Authorization, Payer-to-Payer, Claims Scrubbing, Risk Adjustment, and Encounter.</p>
+            <span class="card-arrow">Browse APIs &rarr;</span>
+          </a>
+
+          <a href="/docs/deployment" class="docs-hub-card">
+            <span class="docs-hub-card-icon">&#x1F680;</span>
+            <h3>Deployment</h3>
+            <p>From local Docker Compose to production AKS, EKS, or GKE. SaaS signup, self-hosted deployment, GitHub Actions CI/CD, Bicep IaC, and Helm charts.</p>
+            <span class="card-arrow">Deploy &rarr;</span>
+          </a>
+
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Looking for the demo?</div>
+          <p>The <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> lets you explore the platform with synthetic data — claims, authorizations, eligibility, member management, and FHIR R4 APIs — without any setup. The <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a> provides interactive OpenAPI documentation.</p>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform &nbsp;&middot;&nbsp; Not affiliated with any payer platform or clearinghouse vendors.</p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile sidebar toggle for docs pages
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('open');
+      });
+      overlay.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      });
+    }
+  </script>
+</body>
+</html>
