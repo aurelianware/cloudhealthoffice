@@ -1,0 +1,197 @@
+@using CloudHealthOffice.Portal.Services
+@inject ICapitationService CapitationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" Style="vertical-align: middle;" />
+            New Capitation Run
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+            Create a capitation run to generate PMPM payment statements for capitated providers.
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_runType"
+                           Label="Run Type"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           HelperText="@GetRunTypeHelperText()">
+                    <MudSelectItem Value="@("Monthly")">Monthly</MudSelectItem>
+                    <MudSelectItem Value="@("AdHocProvider")">Ad-Hoc Provider</MudSelectItem>
+                    <MudSelectItem Value="@("RetroAdjustment")">Retro Adjustment</MudSelectItem>
+                    <MudSelectItem Value="@("WithholdRelease")">Withhold Release</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_lineOfBusiness"
+                           Label="Line of Business *"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           HelperText="Required — capitation runs are scoped to a single LOB">
+                    <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+                    <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+                    <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+                    <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+                    <MudSelectItem Value="@("TRICARE")">TRICARE</MudSelectItem>
+                    <MudSelectItem Value="@("VA")">VA</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_capitationPeriod"
+                               Label="Capitation Period"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               OpenTo="OpenTo.Month"
+                               FixDay="1"
+                               DateFormat="MMMM yyyy"
+                               HelperText="Month for which capitation is being calculated" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_contractType"
+                           Label="Contract Type"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           HelperText="Optional — leave blank for all contract types">
+                    <MudSelectItem Value="@("GlobalCapitation")">Global Capitation</MudSelectItem>
+                    <MudSelectItem Value="@("ProfessionalOnly")">Professional Only</MudSelectItem>
+                    <MudSelectItem Value="@("InstitutionalOnly")">Institutional Only</MudSelectItem>
+                    <MudSelectItem Value="@("BehavioralHealth")">Behavioral Health</MudSelectItem>
+                    <MudSelectItem Value="@("PrimaryCareOnly")">Primary Care Only</MudSelectItem>
+                    <MudSelectItem Value="@("SpecialtyCare")">Specialty Care</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            @if (_showProviderNpi)
+            {
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_providerNpi"
+                                  Label="@(_isNpiRequired ? "Provider NPI *" : "Provider NPI")"
+                                  Variant="Variant.Outlined"
+                                  HelperText="@(_isNpiRequired ? "Enter the NPI of the provider to generate a statement for" : "Optional — scope to a single provider")"
+                                  Mask="@(new PatternMask("0000000000"))" />
+                </MudItem>
+            }
+
+            @if (_showOriginalPeriod)
+            {
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="_originalPeriod"
+                                   Label="Original Period *"
+                                   Variant="Variant.Outlined"
+                                   Required="true"
+                                   OpenTo="OpenTo.Month"
+                                   FixDay="1"
+                                   DateFormat="MMMM yyyy"
+                                   HelperText="The prior capitation period being adjusted" />
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description"
+                              Label="Description"
+                              Variant="Variant.Outlined"
+                              Lines="2"
+                              HelperText="Optional — auto-generated if left blank" />
+            </MudItem>
+        </MudGrid>
+
+        @if (_creating)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);" Class="mt-1 text-center">
+                Creating capitation run...
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="CreateRun"
+                   Disabled="@(!IsValid() || _creating)">
+            @if (_creating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Run
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _runType = "Monthly";
+    private DateTime? _capitationPeriod = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private string _lineOfBusiness = "Commercial";
+    private string? _contractType;
+    private string? _providerNpi;
+    private DateTime? _originalPeriod;
+    private string? _description;
+    private bool _creating = false;
+
+    private bool _isNpiRequired => _runType is "AdHocProvider";
+    private bool _showProviderNpi => _runType is "AdHocProvider" or "RetroAdjustment" or "WithholdRelease";
+    private bool _showOriginalPeriod => _runType is "RetroAdjustment";
+
+    private string GetRunTypeHelperText() => _runType switch
+    {
+        "Monthly" => "Generates statements for all active capitated providers in the selected LOB",
+        "AdHocProvider" => "Generates a statement for a specific provider's contract",
+        "RetroAdjustment" => "Reprocesses a prior period for enrollment or rate changes",
+        "WithholdRelease" => "Releases withheld funds for providers meeting quality targets",
+        _ => ""
+    };
+
+    private bool IsValid()
+    {
+        if (!_capitationPeriod.HasValue) return false;
+        if (string.IsNullOrEmpty(_lineOfBusiness)) return false;
+        if (_isNpiRequired && string.IsNullOrWhiteSpace(_providerNpi)) return false;
+        if (_showOriginalPeriod && !_originalPeriod.HasValue) return false;
+        return true;
+    }
+
+    private async Task CreateRun()
+    {
+        if (!IsValid()) return;
+        _creating = true;
+        try
+        {
+            var request = new CreateCapRunRequest
+            {
+                RunType = _runType,
+                CapitationPeriod = _capitationPeriod!.Value,
+                Criteria = new CreateCapRunCriteria
+                {
+                    LineOfBusiness = _lineOfBusiness,
+                    ProviderNPI = string.IsNullOrWhiteSpace(_providerNpi) ? null : _providerNpi.Trim(),
+                    ContractType = _contractType,
+                    OriginalPeriod = _originalPeriod
+                },
+                Description = string.IsNullOrWhiteSpace(_description) ? null : _description,
+                CreatedBy = "portal-user"
+            };
+
+            var runId = await CapitationService.CreateRunAsync(request);
+            Snackbar.Add("Capitation run created", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(runId));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

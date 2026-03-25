@@ -50,7 +50,7 @@ For customers requiring on-premise or Azure-hosted deployment:
 2. **Secrets & Environment Configuration**: See [DEPLOYMENT-SECRETS-SETUP.md](DEPLOYMENT-SECRETS-SETUP.md) for detailed secrets setup and validation
 3. **Validate Prerequisites**: Ensure all tools are installed (see [Prerequisites](#prerequisites))
 4. **Follow Environment Deployment**: Choose your target environment (DEV/UAT/PROD)
-5. **Run Post-Deployment Steps**: Configure API connections and Integration Account
+5. **Run Post-Deployment Steps**: Configure Kubernetes secrets/ConfigMaps and verify Argo Workflows
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -59,7 +59,7 @@ For customers requiring on-premise or Azure-hosted deployment:
 - [Environment Protection Rules and Approval Gates](#environment-protection-rules-and-approval-gates)
 - [Pre-Deployment Validation](#pre-deployment-validation)
 - [Environment Deployment](#environment-deployment)
-- [Logic App Workflow Deployment](#logic-app-workflow-deployment)
+- [Argo Workflow Deployment](#argo-workflow-deployment)
 - [Post-Deployment Configuration](#post-deployment-configuration)
 - [Verification and Testing](#verification-and-testing)
 - [Rollback Procedures](#rollback-procedures)
@@ -161,8 +161,8 @@ The deployment identity needs these permissions:
 |------------|-------|---------|
 | Contributor | Resource Group | Create and manage resources |
 | User Access Administrator | Resource Group | Assign managed identity roles |
-| Storage Blob Data Contributor | Storage Account | Grant Logic App access |
-| Azure Service Bus Data Sender | Service Bus | Grant Logic App access |
+| Storage Blob Data Contributor | Storage Account | Grant AKS workload identity access |
+| Azure Service Bus Data Sender | Service Bus | Grant AKS workload identity access |
 
 ### Portal-Specific Prerequisites (Self-Hosted Only)
 
@@ -429,15 +429,15 @@ The infrastructure is defined in `infra/main.bicep` which creates:
 - Azure Storage Account (Data Lake Gen2 with hierarchical namespace)
 - Service Bus Namespace (Standard tier)
   - Topics: `attachments-in`, `rfai-requests`, `edi-278`, `appeals-auth`, `auth-statuses`, `dead-letter`
-- Logic App Standard (WS1 SKU with Function App runtime)
+- AKS Cluster with Argo Workflows
 - Application Insights (monitoring and telemetry)
-- Integration Account (X12 processing)
+- C# X12 services (X12 processing, runs on AKS)
 
-**Managed API Connections:**
-- SFTP with SSH (`sftpwithssh` connector)
-- Azure Blob Storage (`azureblob` connector)
-- Service Bus (`servicebus` connector)
-- Integration Account X12 (`x12` connector)
+**Kubernetes Connections (via Secrets/ConfigMaps):**
+- SFTP with SSH (Kubernetes Secret)
+- Azure Blob Storage (Workload Identity)
+- Service Bus (Workload Identity)
+- X12 EDI (handled by C# services, no external connector needed)
 
 ### Bicep Compilation Process
 
@@ -622,13 +622,12 @@ az deployment group create \
 | `location` | Yes | Azure region for core resources | `eastus` |
 | `connectorLocation` | Yes | Region for API connections | `eastus` |
 | `serviceBusName` | Yes | Service Bus namespace name | `hipaa-attachments-prod-svc` |
-| `iaName` | Yes | Integration Account name | `prod-integration-account` |
+| `aksClusterName` | Yes | AKS cluster name | `prod-aks-cluster` |
 | `sftpHost` | Yes | SFTP server hostname | `sftp.clearinghouse.example.com` |
 | `sftpUsername` | Yes | SFTP username | `service-account` |
 | `sftpPassword` | Yes (secure) | SFTP password | `<secret-value>` |
 | `storageSku` | No | Storage account SKU | `Standard_LRS` (default) |
-| `iaSku` | No | Integration Account SKU | `Free` (default) |
-| `useExistingIa` | No | Use existing Integration Account | `false` (default) |
+| `argoNamespace` | No | Argo Workflows namespace | `cho-workflows` (default) |
 | `enableB2B` | No | Enable X12 connector | `true` (default) |
 
 **🔒 Security Note**: Always pass sensitive parameters as secrets, never hardcode in templates or commit to version control.
@@ -712,7 +711,7 @@ az resource list \
 # Verify specific resources
 az storage account show --name <storage-account> --query provisioningState
 az servicebus namespace show --name <service-bus> --query provisioningState
-az webapp show --name <logic-app> --query state
+kubectl get workflows -n cho-workflows
 ```
 
 **Expected output (successful deployment):**
@@ -972,7 +971,7 @@ When a deployment to UAT is triggered (push to `release/*` branch):
 6. **Reviewer approves or rejects**:
    - ✅ **Approve**: Deployment proceeds to UAT
    - ❌ **Reject**: Deployment is cancelled
-7. **If approved**: Workflow continues with infrastructure and Logic App deployment
+7. **If approved**: Workflow continues with infrastructure and Argo Workflow deployment
 8. **If rejected**: Workflow stops, no changes deployed
 
 #### PROD Deployment Approval
@@ -1406,15 +1405,15 @@ The [ENV] deployment has completed successfully.
 - Approved by: [Approver Names]
 
 **Resources Deployed:**
-- Logic App: [Name]
+- AKS Cluster: [Name]
 - Workflows: [List]
 - Infrastructure changes: [Summary]
 
 **Health Check Results:**
 ✓ All health checks passed
-✓ Logic App running
-✓ Workflows enabled
-✓ API connections active
+✓ AKS cluster healthy
+✓ Argo Workflows running
+✓ Microservice pods ready
 ✓ No errors in Application Insights
 
 **Next Steps:**
@@ -1548,38 +1547,25 @@ Tested-in: UAT
 
 **ALWAYS validate before deploying to any environment.**
 
-### 1. Validate JSON Workflows
+### 1. Validate Argo Workflow YAML
 
 ```bash
-cd /path/to/hipaa-attachments
+cd /path/to/cloudhealthoffice
 
-# Validate all workflow.json files
-WF_PATH="logicapps/workflows"
+# Validate all Argo workflow YAML files
+WF_PATH="infrastructure/argo-workflows"
 failed=0
 
-find "$WF_PATH" -type f -name "workflow.json" -print0 | \
-while IFS= read -r -d '' f; do
+for f in "$WF_PATH"/*.yaml; do
   echo "Checking $f"
-  
-  # Check JSON syntax
-  if ! jq . "$f" >/dev/null 2>&1; then
-    echo "ERROR: Invalid JSON in $f"
+
+  # Check YAML syntax
+  if ! kubectl apply --dry-run=client -f "$f" 2>/dev/null; then
+    echo "ERROR: Invalid YAML in $f"
     failed=1
     continue
   fi
-  
-  # Check required keys
-  if ! jq -e 'has("definition") and has("kind") and has("parameters")' "$f" >/dev/null; then
-    echo "ERROR: Missing required keys in $f"
-    failed=1
-    continue
-  fi
-  
-  # Verify kind is Stateful
-  if ! jq -e '.kind == "Stateful"' "$f" >/dev/null; then
-    echo "WARNING: Workflow kind is not Stateful in $f"
-  fi
-  
+
   echo "✓ Valid: $f"
 done
 
@@ -1593,14 +1579,14 @@ fi
 
 **Expected Output:**
 ```
-Checking logicapps/workflows/ingest275/workflow.json
-✓ Valid: logicapps/workflows/ingest275/workflow.json
-Checking logicapps/workflows/ingest278/workflow.json
-✓ Valid: logicapps/workflows/ingest278/workflow.json
-Checking logicapps/workflows/replay278/workflow.json
-✓ Valid: logicapps/workflows/replay278/workflow.json
-Checking logicapps/workflows/rfai277/workflow.json
-✓ Valid: logicapps/workflows/rfai277/workflow.json
+Checking infrastructure/argo-workflows/ingest275.yaml
+✓ Valid: infrastructure/argo-workflows/ingest275.yaml
+Checking infrastructure/argo-workflows/ingest278.yaml
+✓ Valid: infrastructure/argo-workflows/ingest278.yaml
+Checking infrastructure/argo-workflows/replay278.yaml
+✓ Valid: infrastructure/argo-workflows/replay278.yaml
+Checking infrastructure/argo-workflows/rfai277.yaml
+✓ Valid: infrastructure/argo-workflows/rfai277.yaml
 ✅ All workflow files validated successfully
 ```
 
@@ -1649,41 +1635,25 @@ done
 echo "✅ All PowerShell scripts validated"
 ```
 
-### 4. Create Workflow Package
+### 4. Verify Argo Workflow Manifests
 
 ```bash
-# Create deployment ZIP
-cd logicapps
-zip -r ../workflows.zip workflows/
+# List all Argo workflow YAML files
+ls -la infrastructure/argo-workflows/*.yaml
 
-# Verify ZIP structure
-echo "Verifying ZIP structure..."
-unzip -l ../workflows.zip | grep workflow.json
+# Dry-run apply to validate
+kubectl apply --dry-run=client -f infrastructure/argo-workflows/ -n cho-workflows
 
-# Expected to see 4 workflow.json files
-WORKFLOW_COUNT=$(unzip -l ../workflows.zip | grep -c workflow.json)
-if [ "$WORKFLOW_COUNT" -eq 4 ]; then
-  echo "✅ Workflow package validated (4 workflows)"
-else
-  echo "❌ Workflow package invalid (expected 4, found $WORKFLOW_COUNT)"
-  exit 1
-fi
-
-cd ..
+echo "✅ Argo workflow manifests validated"
 ```
 
 **Expected Output:**
 ```
-  adding: workflows/ (stored 0%)
-  adding: workflows/ingest275/ (stored 0%)
-  adding: workflows/ingest275/workflow.json (deflated 85%)
-  adding: workflows/ingest278/ (stored 0%)
-  adding: workflows/ingest278/workflow.json (deflated 84%)
-  adding: workflows/replay278/ (stored 0%)
-  adding: workflows/replay278/workflow.json (deflated 82%)
-  adding: workflows/rfai277/ (stored 0%)
-  adding: workflows/rfai277/workflow.json (deflated 83%)
-✅ Workflow package validated (4 workflows)
+workflow.argoproj.io/ingest275 created (dry run)
+workflow.argoproj.io/ingest278 created (dry run)
+workflow.argoproj.io/replay278 created (dry run)
+workflow.argoproj.io/rfai277 created (dry run)
+✅ Argo workflow manifests validated
 ```
 
 ### 5. Run Repository Structure Check
@@ -1696,158 +1666,64 @@ pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."
 echo "✅ Repository structure validated"
 ```
 
-## Logic App Workflow Deployment
+## Argo Workflow Deployment
 
-This section details the complete process for packaging and deploying Logic App workflows after infrastructure is in place.
+This section details the process for deploying Argo Workflows to AKS after infrastructure is in place. See [ADR 004](../adr/004-remove-logic-apps.md) for the migration rationale.
 
-### Workflow Package Structure
+### Workflow Manifest Structure
 
-Logic App Standard requires workflows in a specific ZIP structure:
+Argo workflow YAML manifests are stored in `infrastructure/argo-workflows/`:
 
 ```
-workflows.zip
-└── workflows/
-    ├── ingest275/
-    │   └── workflow.json
-    ├── ingest278/
-    │   └── workflow.json
-    ├── replay278/
-    │   └── workflow.json
-    ├── rfai277/
-    │   └── workflow.json
-    ├── process_appeals/
-    │   └── workflow.json
-    └── process_authorizations/
-        └── workflow.json
+infrastructure/argo-workflows/
+├── ingest275.yaml
+├── ingest278.yaml
+├── replay278.yaml
+├── rfai277.yaml
+├── claims-adjudication-workflow.yaml
+├── process_appeals.yaml
+└── process_authorizations.yaml
 ```
 
 **Critical Requirements:**
-- ✅ Top-level directory must be named `workflows/`
-- ✅ Each workflow in its own subdirectory
-- ✅ Each subdirectory contains `workflow.json`
-- ✅ All workflows must have `kind: "Stateful"` (requirement for Logic Apps Standard)
-- ❌ Do NOT include `host.json`, `connections.json`, or `local.settings.json` from local development
 
-### Creating Workflow Package
+- ✅ Each workflow is a separate YAML manifest
+- ✅ Workflows define DAG steps that call C# microservice endpoints
+- ✅ Namespace must be `cho-workflows`
+- ✅ Secrets and configuration referenced via Kubernetes Secrets/ConfigMaps
+- ❌ Do NOT hardcode service URLs -- use Kubernetes service DNS names
 
-#### Method 1: Using Bash Script
-
-```bash
-# Navigate to logicapps directory
-cd logicapps
-
-# Create ZIP package with correct structure
-zip -r ../workflows.zip workflows/
-
-# Return to root
-cd ..
-
-# Verify package structure
-echo "Verifying workflows.zip structure..."
-unzip -l workflows.zip | head -30
-
-# Count workflows (should see 6 workflow.json files)
-WORKFLOW_COUNT=$(unzip -l workflows.zip | grep -c "workflow.json")
-echo "Found $WORKFLOW_COUNT workflows"
-
-if [ "$WORKFLOW_COUNT" -eq 6 ]; then
-  echo "✅ Workflow package validated (6 workflows)"
-else
-  echo "⚠️  Expected 6 workflows, found $WORKFLOW_COUNT"
-fi
-
-# Check package size (should be ~15-20 KB)
-ls -lh workflows.zip
-```
-
-**Expected output:**
-```
-Archive:  workflows.zip
-  Length      Date    Time    Name
----------  ---------- -----   ----
-        0  11-16-2024 14:23   workflows/
-        0  11-16-2024 14:23   workflows/ingest275/
-     5432  11-16-2024 14:23   workflows/ingest275/workflow.json
-        0  11-16-2024 14:23   workflows/ingest278/
-     4876  11-16-2024 14:23   workflows/ingest278/workflow.json
-...
-Found 6 workflows
-✅ Workflow package validated (6 workflows)
--rw-r--r-- 1 user user 16K Nov 16 14:23 workflows.zip
-```
-
-#### Method 2: Using PowerShell
-
-```powershell
-# Create workflow package
-$workflowPath = "logicapps/workflows"
-$zipPath = "workflows.zip"
-
-# Ensure we're in the right directory
-Push-Location (Split-Path $workflowPath -Parent)
-
-# Create ZIP
-Compress-Archive -Path (Split-Path $workflowPath -Leaf) -DestinationPath "../$zipPath" -Force
-
-Pop-Location
-
-# Verify
-if (Test-Path $zipPath) {
-    Write-Host "✅ Workflow package created: $zipPath"
-    Write-Host "Package size: $((Get-Item $zipPath).Length / 1KB) KB"
-} else {
-    Write-Error "❌ Failed to create workflow package"
-    exit 1
-}
-```
-
-### Deploying Workflows to Logic App
+### Deploying Workflows to AKS
 
 #### Prerequisites
 
 Before deploying workflows:
 
-- [ ] Infrastructure deployed successfully
-- [ ] Logic App Standard is in "Running" state
-- [ ] Logic App name is known (format: `{baseName}-la`)
-- [ ] Resource group exists
-- [ ] Azure CLI authenticated
-- [ ] Workflow package (`workflows.zip`) created and validated
+- [ ] AKS cluster provisioned and `kubectl` configured
+- [ ] Argo Workflows controller running (`kubectl get pods -n argo`)
+- [ ] C# microservice pods are healthy (`kubectl get pods -n cloudhealthoffice`)
+- [ ] Kubernetes Secrets/ConfigMaps created for SFTP, Service Bus, etc.
 
 #### Deployment Process
 
-**Step 1: Verify Logic App Status**
+**Step 1: Verify AKS and Argo Workflows Status**
 
 ```bash
-RG_NAME="payer-attachments-prod-rg"
-LOGIC_APP_NAME="hipaa-attachments-prod-la"
+# Check AKS cluster connectivity
+kubectl cluster-info
 
-# Check Logic App state
-STATUS=$(az webapp show \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --query "state" -o tsv)
+# Verify Argo Workflows controller
+kubectl get pods -n argo -l app=workflow-controller
 
-echo "Logic App Status: $STATUS"
-
-if [ "$STATUS" != "Running" ]; then
-  echo "⚠️  Warning: Logic App is not running. Current state: $STATUS"
-  echo "Attempting to start..."
-  az webapp start --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
-  sleep 30
-fi
+# Verify microservice pods
+kubectl get pods -n cloudhealthoffice
 ```
 
-**Step 2: Deploy Workflow Package**
+**Step 2: Deploy Workflow Manifests**
 
 ```bash
-# Deploy workflows ZIP to Logic App
-az webapp deploy \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --src-path workflows.zip \
-  --type zip \
-  --async false
+# Apply all Argo workflow manifests
+kubectl apply -f infrastructure/argo-workflows/ -n cho-workflows
 
 # Check deployment status
 if [ $? -eq 0 ]; then
@@ -1858,178 +1734,89 @@ else
 fi
 ```
 
-**Deployment Parameters:**
-- `--src-path`: Path to workflows.zip file
-- `--type zip`: Deployment type (must be "zip" for Logic Apps)
-- `--async false`: Wait for deployment to complete (recommended)
-
-**Step 3: Restart Logic App**
+**Step 3: Verify Workflow Templates**
 
 ```bash
-# Restart Logic App to ensure workflows are loaded
-echo "Restarting Logic App to load new workflows..."
-az webapp restart \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
-
-# Wait for restart
-echo "Waiting 30 seconds for Logic App to restart..."
-sleep 30
-
-# Verify restart completed
-STATUS=$(az webapp show \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --query "state" -o tsv)
-
-echo "Logic App Status after restart: $STATUS"
-```
-
-**Step 4: Verify Workflow Deployment**
-
-```bash
-# List deployed workflows using REST API
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-az rest --method GET \
-  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01" \
-  --query "value[].{Name:name, State:properties.state, Kind:kind}" \
-  --output table
+# List deployed workflow templates
+kubectl get workflowtemplates -n cho-workflows
 
 # Expected output:
-# Name                       State      Kind
-# -------------------------  ---------  ---------
-# ingest275                  Enabled    Stateful
-# ingest278                  Enabled    Stateful
-# replay278                  Enabled    Stateful
-# rfai277                    Enabled    Stateful
-# process_appeals            Enabled    Stateful
-# process_authorizations     Enabled    Stateful
+# NAME                       AGE
+# ingest275                  5s
+# ingest278                  5s
+# replay278                  5s
+# rfai277                    5s
+# claims-adjudication        5s
+# process-appeals            5s
+# process-authorizations     5s
 ```
 
 ### Workflow Deployment via GitHub Actions
 
-The deployment workflows automatically handle workflow packaging and deployment:
+The deployment workflows automatically handle Argo manifest deployment:
 
 ```yaml
-- name: Package Logic App workflows
+- name: Deploy Argo Workflows
   shell: bash
   run: |
     set -euo pipefail
-    WF_PATH="logicapps/workflows"
-    PARENT_DIR="$(dirname "$WF_PATH")"
-    BASE_NAME="$(basename "$WF_PATH")"
+    echo "Deploying Argo workflow manifests..."
+    kubectl apply -f infrastructure/argo-workflows/ -n cho-workflows
+    echo "✓ Argo workflows deployed"
+    kubectl get workflowtemplates -n cho-workflows
 
-    echo "Packaging workflows from: $WF_PATH"
-    pushd "$PARENT_DIR" > /dev/null
-    zip -r ../workflows.zip "$BASE_NAME"
-    popd > /dev/null
-
-    echo "✓ Workflow package created"
-    unzip -l workflows.zip | head -20
-
-- name: Deploy Logic App workflows
-  uses: azure/cli@v2
-  with:
-    inlineScript: |
-      az webapp deploy \
-        --resource-group "${{ env.RESOURCE_GROUP }}" \
-        --name "${{ env.LOGIC_APP_NAME }}" \
-        --src-path workflows.zip \
-        --type zip
-      echo "✓ Workflows deployed"
-
-- name: Restart Logic App
-  uses: azure/cli@v2
-  with:
-    inlineScript: |
-      az webapp restart \
-        --resource-group "${{ env.RESOURCE_GROUP }}" \
-        --name "${{ env.LOGIC_APP_NAME }}"
-      echo "✓ Logic App restarted"
+- name: Verify Workflow Health
+  shell: bash
+  run: |
+    kubectl get pods -n cho-workflows
+    echo "✓ Argo Workflows healthy"
 ```
 
 ### Troubleshooting Workflow Deployment
 
-#### Issue: "Could not find workflows.zip"
+#### Issue: "Workflows not appearing"
 
-**Cause**: Package not created or incorrect path
-
-**Solution**:
-```bash
-# Verify package exists
-ls -l workflows.zip
-
-# Check current directory
-pwd
-
-# Recreate package if needed
-cd logicapps && zip -r ../workflows.zip workflows/ && cd ..
-```
-
-#### Issue: "Deployment timed out"
-
-**Cause**: Large workflow package or slow network
+**Cause**: Argo controller not running or namespace mismatch
 
 **Solution**:
 ```bash
-# Check package size (should be < 50 MB)
-ls -lh workflows.zip
+# Check Argo controller
+kubectl get pods -n argo
 
-# Deploy with increased timeout
-az webapp deploy \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --src-path workflows.zip \
-  --type zip \
-  --timeout 600  # 10 minutes
+# Verify namespace exists
+kubectl get namespace cho-workflows
+
+# Re-apply manifests
+kubectl apply -f infrastructure/argo-workflows/ -n cho-workflows
 ```
 
-#### Issue: "Workflows not appearing in portal"
+#### Issue: "Workflow pods failing"
 
-**Cause**: Logic App cache not refreshed
-
-**Solution**:
-```bash
-# Force restart Logic App
-az webapp stop --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
-sleep 10
-az webapp start --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME"
-sleep 30
-
-# Verify workflows via API
-az rest --method GET \
-  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01"
-```
-
-#### Issue: "Workflows show as 'Disabled'"
-
-**Cause**: Workflow trigger configuration missing or API connections not authenticated
+**Cause**: Missing secrets, ConfigMaps, or service connectivity
 
 **Solution**:
-1. Check API connections are authenticated (see [Post-Deployment Configuration](#post-deployment-configuration))
-2. Enable workflow manually in portal
-3. Review workflow run history for errors
+
+1. Check pod logs: `kubectl logs -n cho-workflows <pod-name>`
+2. Verify secrets exist: `kubectl get secrets -n cho-workflows`
+3. Check microservice health: `kubectl get pods -n cloudhealthoffice`
 
 ### Workflow Deployment Timeline
 
 | Step | Duration | Description |
 |------|----------|-------------|
-| **Package Creation** | 5-10 seconds | Create workflows.zip |
-| **Upload to Logic App** | 30-60 seconds | Transfer and extract ZIP |
-| **Logic App Restart** | 30-45 seconds | Reload workflow definitions |
-| **Workflow Initialization** | 15-30 seconds | Initialize triggers and connections |
-| **Total** | **~2-3 minutes** | Complete workflow deployment |
+| **Manifest Validation** | 5-10 seconds | `kubectl apply --dry-run` |
+| **Apply to AKS** | 10-20 seconds | Deploy workflow templates |
+| **Pod Scheduling** | 15-30 seconds | Schedule workflow pods |
+| **Total** | **~30-60 seconds** | Complete workflow deployment |
 
 ### Best Practices
 
-✅ **Always validate workflow JSON** before packaging  
-✅ **Test package structure** with `unzip -l`  
-✅ **Restart Logic App** after deployment  
-✅ **Verify workflow state** via API or portal  
-✅ **Check Application Insights** for deployment errors  
-✅ **Keep deployment packages** for rollback  
-❌ **Never deploy during peak hours** without testing  
+✅ **Always validate YAML** with `kubectl apply --dry-run=client` before deploying
+✅ **Check microservice health** before deploying workflows
+✅ **Verify workflow templates** via `kubectl get workflowtemplates`
+✅ **Check Application Insights** for deployment errors
+✅ **Keep previous manifests in git** for rollback
+❌ **Never deploy during peak hours** without testing
 ❌ **Never skip validation** steps  
 
 ## Environment Deployment
@@ -2071,20 +1858,20 @@ az deployment group create \
   --parameters location="$LOCATION" \
   --verbose
 
-# Get Logic App name
-LOGIC_APP_NAME="${BASE_NAME}-la"
+# Get AKS cluster name
+AKS_CLUSTER="${BASE_NAME}-aks"
 
 # Deploy workflows
 az webapp deploy \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --src-path workflows.zip \
   --type zip
 
-# Restart Logic App
+# Restart Argo workflow pods
 az webapp restart \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 
 echo "✅ DEV deployment complete"
 ```
@@ -2129,8 +1916,8 @@ git push origin release/v1.0.0
 1. Validates JSON workflows and Bicep templates
 2. Runs ARM What-If analysis
 3. Deploys infrastructure via Bicep
-4. Packages and deploys Logic App workflows
-5. Restarts Logic App
+4. Deploys Argo workflow manifests to AKS
+5. Verifies workflow health
 6. Performs health checks
 
 **Monitor deployment:**
@@ -2152,17 +1939,17 @@ az deployment group create \
   --parameters baseName="$BASE_NAME" \
   --parameters location="$LOCATION"
 
-LOGIC_APP_NAME="${BASE_NAME}-la"
+AKS_CLUSTER="${BASE_NAME}-aks"
 
 az webapp deploy \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --src-path workflows.zip \
   --type zip
 
 az webapp restart \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 ```
 
 ### PROD Environment
@@ -2237,17 +2024,17 @@ az deployment group create \
   --parameters baseName="$BASE_NAME" \
   --parameters location="$LOCATION"
 
-LOGIC_APP_NAME="${BASE_NAME}-la"
+AKS_CLUSTER="${BASE_NAME}-aks"
 
 az webapp deploy \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --src-path workflows.zip \
   --type zip
 
 az webapp restart \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 
 echo "✅ PROD deployment complete"
 ```
@@ -2295,7 +2082,7 @@ az deployment group create \
   --parameters vnetName="${BASE_NAME}-vnet" \
                 location="$LOCATION" \
                 vnetAddressPrefix="10.0.0.0/16" \
-                logicAppsSubnetPrefix="10.0.1.0/24" \
+                aksSubnetPrefix="10.0.1.0/24" \
                 privateEndpointsSubnetPrefix="10.0.2.0/24"
 
 echo "✅ VNet and Private DNS zones deployed"
@@ -2347,15 +2134,8 @@ az deployment group create \
 
 echo "✅ Private endpoints deployed - all resources isolated from public internet"
 
-# 5. Enable VNet Integration for Logic App
-LOGIC_APP_NAME="${BASE_NAME}-la"
-az webapp vnet-integration add \
-  --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --vnet "${BASE_NAME}-vnet" \
-  --subnet "logic-apps-subnet"
-
-echo "✅ Logic App VNet integration enabled"
+# 5. AKS is already VNet-integrated via subnet delegation
+echo "✅ AKS VNet integration configured at cluster creation"
 
 # 6. Disable Public Access
 az storage account update --name "$STORAGE_NAME" -g "$RG_NAME" --public-network-access Disabled
@@ -2363,14 +2143,14 @@ az servicebus namespace update --name "${BASE_NAME}-svc" -g "$RG_NAME" --public-
 
 echo "✅ Public access disabled on all PHI resources"
 
-# 7. Configure Key Vault RBAC for Logic App
-PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" --name "$LOGIC_APP_NAME" --query principalId -o tsv)
+# 7. Configure Key Vault RBAC for AKS Workload Identity
+PRINCIPAL_ID=$(az aks show -g "$RG_NAME" --name "${BASE_NAME}-aks" --query "identityProfile.kubeletidentity.objectId" -o tsv)
 az role assignment create \
   --assignee "$PRINCIPAL_ID" \
   --role "Key Vault Secrets User" \
   --scope "$KEY_VAULT_ID"
 
-echo "✅ Logic App granted Key Vault access via managed identity"
+echo "✅ AKS granted Key Vault access via workload identity"
 
 # 8. Apply Data Lifecycle Policies
 cat > lifecycle-policy.json <<'EOF'
@@ -2434,7 +2214,7 @@ echo "🎉 Security hardening deployment complete!"
 echo ""
 echo "Next steps:"
 echo "1. Migrate secrets to Key Vault (see DEPLOYMENT-SECRETS-SETUP.md § Azure Key Vault Secret Migration)"
-echo "2. Update Logic App workflows to use Key Vault references"
+echo "2. Update Kubernetes Secrets to reference Key Vault via CSI driver"
 echo "3. Configure PHI masking in Application Insights"
 echo "4. Enable Azure AD authentication for replay278 endpoint"
 echo "5. Review SECURITY-HARDENING.md for additional security controls"
@@ -2447,7 +2227,7 @@ echo "5. Review SECURITY-HARDENING.md for additional security controls"
 az network private-endpoint list -g "$RG_NAME" --query "[].{Name:name, State:provisioningState}" -o table
 
 # Verify VNet integration
-az webapp vnet-integration list -g "$RG_NAME" --name "$LOGIC_APP_NAME" -o table
+az webapp vnet-integration list -g "$RG_NAME" --name "$AKS_CLUSTER" -o table
 
 # Verify Key Vault configuration
 az keyvault show --name "${BASE_NAME}-kv" --query "{SKU:properties.sku.name, RBAC:properties.enableRbacAuthorization, SoftDelete:properties.enableSoftDelete, PurgeProtection:properties.enablePurgeProtection}"
@@ -2468,18 +2248,18 @@ For detailed security implementation guidance:
 
 ### 1. Configure API Connections
 
-Logic Apps require API connections to be authenticated:
+Argo Workflows on AKS use Kubernetes Secrets and ConfigMaps for service connections:
 
 ```bash
-# Navigate to Logic App in Azure Portal
-# URL format:
-# https://portal.azure.com/#@/resource/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{logic-app}/logicApp
+# Verify secrets are configured
+kubectl get secrets -n cloudhealthoffice
+kubectl get configmaps -n cloudhealthoffice
 ```
 
 **Configure these connections:**
 
 #### SFTP-SSH Connection
-1. Go to Logic App → Development Tools → API connections
+1. Create Kubernetes Secret for SFTP credentials
 2. Click "sftp-ssh" connection
 3. Configure:
    - **Host**: Clearinghouse SFTP hostname
@@ -2506,16 +2286,13 @@ Logic Apps require API connections to be authenticated:
 3. Test connection
 4. Save
 
-#### Integration Account Connection
-1. Click "integrationaccount" connection
-2. Configure:
-   - **Integration Account**: `{baseName}-ia`
-3. Test connection
-4. Save
+#### X12 EDI Configuration
 
-### 2. Set Up Integration Account
+X12 parsing is handled by C# microservices. No Azure Integration Account is needed (see [ADR 004](../adr/004-remove-logic-apps.md)).
 
-#### Upload X12 Schemas
+### 2. Verify X12 Services
+
+#### X12 Schema Configuration
 
 ```bash
 # Download HIPAA X12 schemas (if not already available)
@@ -2525,7 +2302,7 @@ Logic Apps require API connections to be authenticated:
 ```
 
 **Via Azure Portal:**
-1. Navigate to Integration Account → Schemas
+1. Configure via Kubernetes ConfigMap → Schemas
 2. Click "+ Add"
 3. Upload schema files:
    - `X12_005010X210_275.xsd`
@@ -2549,7 +2326,7 @@ az logic integration-account schema create \
 #### Configure Trading Partners
 
 **Via Azure Portal:**
-1. Navigate to Integration Account → Partners
+1. Configure via Kubernetes ConfigMap → Partners
 2. Add clearinghouse partner:
    - Name: `Clearinghouse`
    - Qualifier: `ZZ`
@@ -2568,7 +2345,7 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachment
 #### Create X12 Agreements
 
 **1. Clearinghouse-to-Health Plan-275-Receive Agreement:**
-1. Navigate to Integration Account → Agreements
+1. Configure via Kubernetes ConfigMap → Agreements
 2. Click "+ Add"
 3. Configure:
    - **Name**: `Clearinghouse-to-Health Plan-275-Receive`
@@ -2618,12 +2395,12 @@ pwsh -c "./configure-hipaa-trading-partners.ps1 -ResourceGroup 'payer-attachment
 pwsh -c "./configure-x12-agreements.ps1 -ResourceGroup 'payer-attachments-uat-rg' -IntegrationAccountName 'hipaa-attachments-uat-ia'"
 ```
 
-### 3. Configure Logic App Parameters
+### 3. Configure Workflow Parameters
 
-Update workflow parameters via Azure Portal or ARM template:
+Update workflow parameters via Kubernetes ConfigMaps:
 
-**Via Portal:**
-1. Navigate to Logic App → Configuration → Application settings
+**Via kubectl:**
+1. Edit the ConfigMap for workflow settings
 2. Add/update these settings:
 
 ```
@@ -2641,24 +2418,24 @@ x12_messagetype_277=X12_005010X212_277
 x12_messagetype_278=X12_005010X217_278
 ```
 
-3. Save and restart Logic App
+3. Apply ConfigMap and restart pods if needed
 
 ### 4. Assign Managed Identity Permissions
 
-Grant Logic App managed identity access to resources:
+Grant AKS workload identity access to resources:
 
 ```bash
 RG_NAME="payer-attachments-uat-rg"
 BASE_NAME="hipaa-attachments-uat"
-LOGIC_APP_NAME="${BASE_NAME}-la"
+AKS_CLUSTER="${BASE_NAME}-aks"
 
-# Get Logic App managed identity principal ID
+# Get AKS managed identity principal ID
 PRINCIPAL_ID=$(az webapp identity show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query principalId -o tsv)
 
-echo "Logic App Principal ID: $PRINCIPAL_ID"
+echo "AKS Principal ID: $PRINCIPAL_ID"
 
 # Assign Storage Blob Data Contributor role
 STORAGE_ACCOUNT="${BASE_NAME}storage"
@@ -2700,7 +2477,7 @@ echo "✅ All role assignments complete"
 
 The replay278 workflow provides an HTTP endpoint for transaction replay:
 
-1. Navigate to Logic App → Workflows → replay278
+1. Navigate to AKS cluster → Workflows → replay278
 2. Click on workflow to open
 3. Go to "Trigger history" or "Overview"
 4. Copy the HTTP POST URL (looks like):
@@ -2753,7 +2530,7 @@ az servicebus topic show \
 # Environment variables
 RG_NAME="payer-attachments-uat-rg"
 BASE_NAME="hipaa-attachments-uat"
-LOGIC_APP_NAME="${BASE_NAME}-la"
+AKS_CLUSTER="${BASE_NAME}-aks"
 KV_NAME="${BASE_NAME}-kv"
 CLAIMS_BACKEND_API_TOKEN="<your-backend-token>"  # Obtain from claims backend administrator
 
@@ -2769,10 +2546,10 @@ az keyvault secret set \
   --name "claims-backend-api-token" \
   --value "$CLAIMS_BACKEND_API_TOKEN"
 
-# Grant Logic App access to Key Vault
+# Grant AKS access to Key Vault
 PRINCIPAL_ID=$(az webapp identity show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query principalId -o tsv)
 
 az keyvault set-policy \
@@ -2795,10 +2572,10 @@ SECRET_URI=$(az keyvault secret show \
 # Set environment-specific claims backend base URL
 claims backend_BASE_URL="https://claims-backend-api-uat.example.com"  # Adjust for DEV/UAT/PROD
 
-# Update Logic App settings
+# Update Kubernetes ConfigMap settings
 az webapp config appsettings set \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --settings \
     "ECS_BACKEND_BASE_URL=$claims backend_BASE_URL" \
     "ECS_CLAIMS_BACKEND_API_TOKEN=@Microsoft.KeyVault(SecretUri=${SECRET_URI})" \
@@ -2813,7 +2590,7 @@ echo "✓ ECS application settings configured"
 # Get ECS endpoint URL
 LOGIC_APP_URL=$(az webapp show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query defaultHostName -o tsv)
 
 ECS_ENDPOINT="https://${LOGIC_APP_URL}/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke"
@@ -2872,22 +2649,22 @@ az resource list \
   --output table
 
 # Expected resources:
-# - Logic App Standard
+# - AKS Cluster with Argo Workflows
 # - Storage Account (Data Lake Gen2)
 # - Service Bus Namespace
-# - Integration Account
+# - C# X12 Services
 # - Application Insights
 ```
 
-#### 2. Verify Logic App Status
+#### 2. Verify AKS and Argo Workflows Status
 
 ```bash
-LOGIC_APP_NAME="hipaa-attachments-uat-la"
+AKS_CLUSTER="hipaa-attachments-uat-aks"
 
-# Get Logic App status
+# Get AKS cluster status
 az webapp show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query "{name:name, state:state, url:defaultHostName}" \
   --output table
 
@@ -2898,10 +2675,10 @@ az webapp show \
 
 ```powershell
 # Run test suite
-pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup '$RG_NAME' -LogicAppName '$LOGIC_APP_NAME'"
+pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup '$RG_NAME' -AksCluster '$AKS_CLUSTER'"
 
 # Test 278 processing
-pwsh -c "./test-workflows.ps1 -TestInbound278 -ResourceGroup '$RG_NAME' -LogicAppName '$LOGIC_APP_NAME'"
+pwsh -c "./test-workflows.ps1 -TestInbound278 -ResourceGroup '$RG_NAME' -AksCluster '$AKS_CLUSTER'"
 ```
 
 #### 4. Verify Application Insights
@@ -2938,7 +2715,7 @@ az resource list \
    ```
 
 2. Monitor workflow execution:
-   - Go to Logic App → Workflows → ingest275 → Runs
+   - Check Argo Workflows dashboard → Workflows → ingest275 → Runs
    - Check latest run status
    - Review run history details
 
@@ -3006,13 +2783,13 @@ Before initiating rollback:
 ```bash
 # Set variables
 RG_NAME="payer-attachments-prod-rg"
-LOGIC_APP_NAME="hipaa-attachments-prod-la"
+AKS_CLUSTER="hipaa-attachments-prod-aks"
 
 # Step 1: Verify infrastructure is healthy
-echo "Checking Logic App status..."
+echo "Checking AKS cluster status..."
 az webapp show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query "{Name:name, State:state, HealthCheckStatus:healthCheckStatus}" \
   --output table
 
@@ -3020,7 +2797,7 @@ az webapp show \
 echo "Checking recent deployments..."
 az webapp deployment list \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --output table
 
 # Step 3: No action needed - previous workflows still active
@@ -3036,7 +2813,7 @@ echo "Fix workflow issues and redeploy when ready"
 
 ```bash
 # List recent commits
-git log --oneline -10 logicapps/workflows/
+git log --oneline -10 infrastructure/argo-workflows/
 
 # Example output:
 # a1b2c3d (HEAD) Update ingest275 trigger config
@@ -3053,39 +2830,39 @@ PREVIOUS_COMMIT="g7h8i9j"  # Last known good commit
 git checkout -b rollback/workflows-$(date +%Y%m%d-%H%M%S)
 
 # Restore previous workflow versions
-git checkout "$PREVIOUS_COMMIT" -- logicapps/workflows/
+git checkout "$PREVIOUS_COMMIT" -- infrastructure/argo-workflows/
 
 # Verify files were restored
 git status
-# Should show modified files in logicapps/workflows/
+# Should show modified files in infrastructure/argo-workflows/
 ```
 
 **Step 3: Package and Deploy Previous Version**
 
 ```bash
 # Package workflows
-cd logicapps
+cd infrastructure/argo-workflows
 zip -r ../workflows-rollback.zip workflows/
 cd ..
 
 # Verify package
-unzip -l workflows-rollback.zip | grep workflow.json
-# Should show 6 workflow.json files
+unzip -l workflows-rollback.zip | grep workflow YAML
+# Should show 6 workflow YAML files
 
 # Deploy rollback package
 echo "Deploying previous workflow version..."
 az webapp deploy \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --src-path workflows-rollback.zip \
   --type zip \
   --async false
 
-# Restart Logic App
-echo "Restarting Logic App..."
+# Restart Argo workflow pods
+echo "Restarting Argo workflow pods..."
 az webapp restart \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 
 # Wait for restart
 sleep 30
@@ -3096,19 +2873,19 @@ echo "✅ Workflow rollback complete"
 **Step 4: Verify Rollback Success**
 
 ```bash
-# Check Logic App status
+# Check AKS/Argo status
 STATUS=$(az webapp show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --query "state" -o tsv)
 
-echo "Logic App Status: $STATUS"
+echo "AKS Cluster Status: $STATUS"
 
 # List workflows and their state
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
 az rest --method GET \
-  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$LOGIC_APP_NAME/workflows?api-version=2022-03-01" \
+  --uri "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Web/sites/$AKS_CLUSTER/workflows?api-version=2022-03-01" \
   --query "value[].{Name:name, State:properties.state}" \
   --output table
 
@@ -3130,7 +2907,7 @@ az monitor app-insights query \
 WORKFLOW_NAME="ingest275"  # Problem workflow
 
 # Option A: Via Azure Portal
-# 1. Navigate to Logic App → Workflows
+# 1. Navigate to AKS cluster → Workflows
 # 2. Click on problematic workflow (e.g., "ingest275")
 # 3. Click "Disable" button
 # 4. Confirm disabling
@@ -3140,7 +2917,7 @@ WORKFLOW_NAME="ingest275"  # Problem workflow
 
 echo "Manual steps:"
 echo "1. Open Azure Portal"
-echo "2. Navigate to: $LOGIC_APP_NAME → Workflows → $WORKFLOW_NAME"
+echo "2. Navigate to: $AKS_CLUSTER → Workflows → $WORKFLOW_NAME"
 echo "3. Click 'Disable'"
 echo "4. Review run history for root cause"
 ```
@@ -3216,13 +2993,13 @@ az deployment group show \
   --query "{Name:name, State:properties.provisioningState, Timestamp:properties.timestamp}"
 ```
 
-**Step 4: Restart Logic App After Infrastructure Rollback**
+**Step 4: Redeploy Argo Workflows After Infrastructure Rollback**
 
 ```bash
 # Restart to pick up infrastructure changes
 az webapp restart \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 
 sleep 30
 
@@ -3243,11 +3020,11 @@ az group export \
   --resource-group "$RG_NAME" \
   --output json > "/tmp/failed-deployment-$(date +%Y%m%d-%H%M%S).json"
 
-# Export Logic App configuration
+# Export AKS configuration
 az webapp config show \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
-  --output json > "/tmp/logic-app-config-backup.json"
+  --name "$AKS_CLUSTER" \
+  --output json > "/tmp/aks-config-backup.json"
 ```
 
 **Step 2: List Deployment History**
@@ -3356,9 +3133,9 @@ After any rollback, verify:
   az resource list --resource-group "$RG_NAME" --output table
   ```
 
-- [ ] **Logic App Running**
+- [ ] **AKS/Argo Workflows Running**
   ```bash
-  az webapp show --resource-group "$RG_NAME" --name "$LOGIC_APP_NAME" --query state
+  az webapp show --resource-group "$RG_NAME" --name "$AKS_CLUSTER" --query state
   ```
 
 - [ ] **Workflows Enabled**
@@ -3461,23 +3238,23 @@ az monitor activity-log list \
   --query "[?level=='Error']"
 ```
 
-#### Issue: Logic App Deployment Fails
+#### Issue: Argo Workflow Deployment Fails
 
 **Symptoms:**
 - Workflow ZIP upload fails
-- Logic App won't restart
+- Argo controller won't restart
 - Workflows don't appear
 
 **Solutions:**
 1. Verify ZIP structure (must have `workflows/` at root)
-2. Check Logic App is in Running state
+2. Check Argo controller pods are running
 3. Ensure ZIP file size is reasonable (<50MB)
-4. Review deployment logs in Kudu (https://{logic-app}.scm.azurewebsites.net)
+4. Review pod logs: `kubectl logs -n argo -l app=workflow-controller`
 
 **Verify ZIP:**
 ```bash
 unzip -l workflows.zip | head -20
-# Should show: workflows/ingest275/workflow.json, etc.
+# Should show: workflows/ingest275/workflow YAML, etc.
 ```
 
 #### Issue: API Connections Not Working
@@ -3528,13 +3305,13 @@ az role assignment list --assignee "$APP_ID"
 #### Issue: Workflows Not Triggering
 
 **Symptoms:**
-- No runs showing in Logic App
+- No runs showing in Argo Workflows
 - Files uploaded but not processed
 
 **Solutions:**
 1. Check trigger configuration (SFTP path, polling interval)
 2. Verify API connections are authenticated
-3. Check Logic App is running (not stopped)
+3. Check AKS cluster and Argo pods are running
 4. Review Application Insights for errors
 5. Verify SFTP credentials and path
 
@@ -3543,14 +3320,14 @@ az role assignment list --assignee "$APP_ID"
 # Enable verbose logging
 az webapp log config \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME" \
+  --name "$AKS_CLUSTER" \
   --application-logging true \
   --level verbose
 
 # Tail logs
 az webapp log tail \
   --resource-group "$RG_NAME" \
-  --name "$LOGIC_APP_NAME"
+  --name "$AKS_CLUSTER"
 ```
 
 ### Getting Help

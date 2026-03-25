@@ -1,53 +1,38 @@
-# Build stage
-FROM node:20-alpine AS builder
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /repo
 
+# Copy csproj files first to maximize layer caching on restore
+COPY src/services/claims-scrubbing-service/claims-scrubbing-service.csproj src/services/claims-scrubbing-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet restore src/services/claims-scrubbing-service/claims-scrubbing-service.csproj
+
+# Copy source and build
+COPY src/services/claims-scrubbing-service/ src/services/claims-scrubbing-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+RUN dotnet build src/services/claims-scrubbing-service/claims-scrubbing-service.csproj -c Release --no-restore
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/claims-scrubbing-service/claims-scrubbing-service.csproj \
+    -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (using npm install since package-lock may be out of sync)
-RUN npm install --production=false
+COPY --from=publish /app/publish .
 
-# Copy source code
-COPY tsconfig.json ./
-COPY src/ ./src/
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
-# Build TypeScript
-RUN npm run build
+EXPOSE 8080
 
-# Prune dev dependencies
-RUN npm prune --production
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
 
-# Production stage
-FROM node:20-alpine
-
-# Security: Run as non-root user (use existing node user instead of creating new one)
-# The node:20-alpine image already has a node user (uid 1000, gid 1000)
-
-WORKDIR /app
-
-# Change ownership to node user
-RUN chown -R node:node /app
-
-# Copy built application
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/package.json ./
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=3000
-
-# Expose port
-EXPOSE 3000
-
-# Switch to non-root user
-USER node
-
-# Health check - using node to make HTTP request since wget/curl not available in alpine
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/livez', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
-
-# Start application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["dotnet", "claims-scrubbing-service.dll"]

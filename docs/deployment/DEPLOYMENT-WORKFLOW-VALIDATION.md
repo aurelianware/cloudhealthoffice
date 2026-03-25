@@ -11,7 +11,7 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
   - Uses: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
   - Action: `azure/login@v2`
 - [x] **Set Environment Variables** - Configures deployment parameters
-  - Resource group, location, base name, Logic App name
+  - Resource group, location, base name, AKS cluster name
   - Uses repository variables
 
 ### Validation Phase
@@ -25,7 +25,7 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
 - [x] **Sanity Check** - Verifies Azure authentication
   - Command: `az account show`
 - [x] **Ensure Providers Registered** - Registers required Azure resource providers
-  - Microsoft.Web, Microsoft.Logic, Microsoft.Storage, Microsoft.ServiceBus
+  - Microsoft.ContainerService, Microsoft.Storage, Microsoft.ServiceBus
 
 ### Infrastructure Deployment Phase
 
@@ -41,45 +41,34 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
   - **Documentation**: [DEPLOYMENT.md § ARM What-If Analysis](DEPLOYMENT.md#arm-what-if-analysis)
 - [x] **Deploy Infrastructure** - Deploys ARM template
   - Action: `azure/arm-deploy@v2`
-  - Deployment name: `hipaa-logic-infra-${{ github.run_number }}`
+  - Deployment name: `cho-infra-${{ github.run_number }}`
   - Fail on stderr: true
   - **Documentation**: [DEPLOYMENT.md § ARM Template Deployment](DEPLOYMENT.md#arm-template-deployment)
 - [x] **Show Failing Operations** (on failure) - Diagnostic information
   - Lists failed deployment operations
   - Shows detailed error messages
 
-### Integration Account Setup Phase
+### Kubernetes Configuration Phase
 
-- [x] **Allow Preview Extensions** - Enables Logic extension
-  - Configures: `extension.dynamic_install_allow_preview=true`
-  - Adds: `logic` extension
-- [x] **Ensure X12 Schema Files** - Validates schema availability
-  - Required schemas: Companion_275AttachmentEnvelope.xsd, X12_005010X212_277.xsd, X12_005010X217_278.xsd
-  - Copies from subdirectories if needed
-- [x] **Configure Integration Account** - Sets up X12 processing
-  - Script: `setup-integration-account-complete.ps1`
-  - Configures: Trading partners, schemas, agreements
+- [x] **Configure Secrets/ConfigMaps** - Sets up service configuration
+  - Applies: Kubernetes secrets for credentials
+  - Applies: ConfigMaps for service endpoints
+  - No Integration Account needed (X12 handled by .NET microservices)
 
-### Logic App Workflow Deployment Phase
+### Argo Workflow Deployment Phase
 
-- [x] **Package Logic App Workflows** - Creates workflows.zip
-  - Structure: workflows/{workflow-name}/workflow.json
-  - Command: `zip -r ../workflows.zip workflows`
-  - Validation: Lists package contents
-  - **Documentation**: [DEPLOYMENT.md § Logic App Workflow Deployment](DEPLOYMENT.md#logic-app-workflow-deployment)
-- [x] **Deploy Logic App Workflows** - Uploads workflows.zip
-  - Command: `az webapp deploy --type zip`
-  - Target: Logic App Standard
-  - **Documentation**: [DEPLOYMENT.md § Logic App Workflow Deployment](DEPLOYMENT.md#logic-app-workflow-deployment)
-- [x] **Restart Logic App** - Ensures workflows are loaded
-  - Command: `az webapp restart`
-  - Wait time: Automatic
+- [x] **Deploy Argo Workflow Manifests** - Applies YAML to AKS
+  - Source: `infrastructure/argo-workflows/*.yaml`
+  - Command: `kubectl apply -f infrastructure/argo-workflows/`
+  - **Documentation**: [DEPLOYMENT.md § Argo Workflow Deployment](DEPLOYMENT.md#argo-workflow-deployment)
+- [x] **Verify Argo Templates** - Confirms workflows registered
+  - Command: `argo template list -n cloudhealthoffice`
 
 ### Verification Phase
 
 - [x] **Post-Deployment Health Check** - Comprehensive validation
-  - Checks Logic App status (must be "Running")
-  - Lists deployed workflows
+  - Checks AKS pod status (all pods Running)
+  - Lists deployed Argo workflow templates
   - Verifies Application Insights connection
   - Validates Storage Account status
   - Validates Service Bus status
@@ -89,7 +78,7 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
 
 - [x] **Rollback on Failure** (if failure) - Diagnostic collection
   - Lists failed deployment operations
-  - Downloads Logic App logs
+  - Collects AKS pod logs
   - Queries Application Insights for errors
   - Provides manual rollback guidance
   - **Documentation**: [DEPLOYMENT.md § Rollback Procedures](DEPLOYMENT.md#rollback-procedures)
@@ -100,7 +89,7 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
   - Lists all deployed resources
   - Shows deployed workflows
   - Provides next steps
-  - Includes Logic App URL
+  - Includes AKS cluster info
 
 ## 📊 Workflow Statistics
 
@@ -109,8 +98,8 @@ This document validates that the deployment workflow (`.github/workflows/deploy.
 | **Total Steps** | 20 |
 | **Validation Steps** | 4 |
 | **Infrastructure Steps** | 5 |
-| **Integration Account Steps** | 3 |
-| **Workflow Deployment Steps** | 3 |
+| **K8s Configuration Steps** | 2 |
+| **Argo Workflow Steps** | 2 |
 | **Verification Steps** | 1 |
 | **Failure Handling Steps** | 1 |
 | **Success Steps** | 1 |
@@ -126,10 +115,8 @@ Every major workflow step has corresponding documentation:
 | Bicep Validation | Bicep Compilation Process | DEPLOYMENT.md |
 | ARM What-If | ARM What-If Analysis | DEPLOYMENT.md |
 | Infrastructure Deploy | ARM Template Deployment | DEPLOYMENT.md |
-| Integration Account | Post-Deployment Configuration | DEPLOYMENT.md |
-| Package Workflows | Logic App Workflow Deployment | DEPLOYMENT.md |
-| Deploy Workflows | Logic App Workflow Deployment | DEPLOYMENT.md |
-| Restart Logic App | Logic App Workflow Deployment | DEPLOYMENT.md |
+| K8s Config | Post-Deployment Configuration | DEPLOYMENT.md |
+| Deploy Argo Workflows | Argo Workflow Deployment | DEPLOYMENT.md |
 | Health Check | Verification and Testing | DEPLOYMENT.md |
 | Rollback | Rollback Procedures | DEPLOYMENT.md |
 
@@ -141,16 +128,11 @@ $ az bicep build --file infra/main.bicep --outfile /tmp/arm.json
 ✅ SUCCESS: ARM template generated (14KB)
 ```
 
-### Workflow JSON Validation
+### Argo Workflow YAML Validation
 ```bash
-$ find logicapps/workflows -name "workflow.json" | xargs jq -e 'has("definition") and has("kind") and has("parameters")'
-✅ SUCCESS: All 6 workflows validated
-- ingest275/workflow.json ✅
-- ingest278/workflow.json ✅
-- replay278/workflow.json ✅
-- rfai277/workflow.json ✅
-- process_appeals/workflow.json ✅
-- process_authorizations/workflow.json ✅
+$ kubectl apply --dry-run=client -f infrastructure/argo-workflows/
+✅ SUCCESS: All Argo workflow manifests validated
+- claims-adjudication-workflow.yaml ✅
 ```
 
 ### Documentation Validation
@@ -177,12 +159,12 @@ $ wc -l *.md
 ## 🔄 Comparison with Other Environments
 
 ### deploy-dev.yml
-- **Structure**: Separate jobs (validate → deploy-infrastructure → deploy-logic-apps → healthcheck)
+- **Structure**: Separate jobs (validate → deploy-infrastructure → deploy-aks-workloads → healthcheck)
 - **Benefits**: Parallel execution, job-level failure isolation
 - **Secrets**: Uses `AZURE_CLIENT_ID` (no environment suffix for DEV default)
 
 ### deploy-uat.yml
-- **Structure**: Separate jobs (validate → deploy-infrastructure → deploy-logic-apps → healthcheck)
+- **Structure**: Separate jobs (validate → deploy-infrastructure → deploy-aks-workloads → healthcheck)
 - **Trigger**: Automatic on `release/*` branches
 - **Secrets**: Uses `AZURE_CLIENT_ID_UAT` environment-specific secrets
 - **Additional**: Rollback job with `if: failure()` condition
@@ -222,8 +204,8 @@ The `deploy.yml` workflow is already comprehensive and production-ready:
 
 4. **Blue-Green Deployment**
    - Advanced deployment strategy
-   - Requires slot support in Logic Apps
-   - Verdict: Not applicable for Logic Apps Standard
+   - Consider Argo Rollouts for canary/blue-green on AKS
+   - Verdict: Future enhancement
 
 ## 🎉 Conclusion
 
@@ -240,7 +222,7 @@ The `deploy.yml` workflow is **complete, comprehensive, and production-ready**:
 - Bicep compilation and validation
 - ARM What-If analysis
 - Infrastructure deployment
-- Logic App workflow deployment
+- Argo Workflow deployment to AKS
 - Post-deployment verification
 - Failure handling and diagnostics
 

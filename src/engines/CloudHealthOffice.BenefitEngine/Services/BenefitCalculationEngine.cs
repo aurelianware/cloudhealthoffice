@@ -62,6 +62,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     private readonly IAccumulatorService _accumulatorService;
     private readonly ILogger<BenefitCalculationEngine> _logger;
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public BenefitCalculationEngine(
         IServiceCategoryResolver categoryResolver,
         IBenefitPlanProvider planProvider,
@@ -81,7 +84,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, " +
             "{LineCount} lines, service date {ServiceDate}",
-            request.MemberId, request.BenefitPlanId,
+            SanitizeForLog(request.MemberId), request.BenefitPlanId,
             request.Lines.Count, request.ServiceDate);
 
         // ── Step 1: Load plan configuration ──

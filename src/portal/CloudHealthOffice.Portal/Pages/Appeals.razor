@@ -1,0 +1,401 @@
+@page "/appeals"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IAppealsService AppealsService
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Appeals - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="appeals:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Balance" Class="mr-2" />
+        Appeals
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Track and manage member and provider appeals through the regulatory lifecycle
+    </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    @if (_loadingSummary)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* ─── Summary Cards ─── *@
+    @if (_summary != null)
+    {
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_summary.OpenAppeals</MudText>
+                        <MudText Typo="Typo.caption">Open Appeals</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.FlashOn" Color="Color.Error" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Error">@_summary.UrgentExpedited</MudText>
+                        <MudText Typo="Typo.caption">Urgent / Expedited</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">72-hour MA deadline</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Warning">@_summary.DueThisWeek</MudText>
+                        <MudText Typo="Typo.caption">Due This Week</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Approaching deadline</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.PublishedWithChanges" Color="Color.Info" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@(_summary.OverturnedRate.ToString("F1"))%</MudText>
+                        <MudText Typo="Typo.caption">Overturned Rate</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Original decision reversed</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+
+    @* ─── Search Form ─── *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchAppealId"
+                              Label="Appeal ID"
+                              Placeholder="APL-2026-..."
+                              Variant="Variant.Outlined"
+                              OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchMemberId"
+                              Label="Member ID"
+                              Placeholder="MBR-..."
+                              Variant="Variant.Outlined"
+                              OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchOriginalId"
+                              Label="Original Claim/Auth ID"
+                              Placeholder="CLM- or AUTH-..."
+                              Variant="Variant.Outlined"
+                              OnKeyUp="OnSearchKeyUp" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudGrid Spacing="1">
+                    <MudItem xs="7">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   FullWidth="true"
+                                   OnClick="SearchAppeals"
+                                   Disabled="_loadingResults">
+                            <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
+                            Search
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Default"
+                                   FullWidth="true"
+                                   OnClick="ClearSearch"
+                                   Disabled="_loadingResults">
+                            Clear
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @* ─── Results ─── *@
+    @if (_hasSearched)
+    {
+        <MudTable Items="@_results"
+                  Hover="true"
+                  Striped="true"
+                  Dense="true"
+                  Elevation="2"
+                  Loading="_loadingResults"
+                  LoadingProgressColor="Color.Primary"
+                  SortLabel="Sort By"
+                  OnRowClick="OnRowClick"
+                  T="AppealSummary"
+                  RowStyle="cursor: pointer;">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppealSummary, object>(x => x.AppealId)">Appeal ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppealSummary, object>(x => x.MemberName)">Member</MudTableSortLabel></MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Original Decision</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppealSummary, object>(x => x.FiledDate)">Filed</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<AppealSummary, object>(x => x.DueDate)">Due Date</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<AppealSummary, object>(x => x.DaysRemaining)">Days Left</MudTableSortLabel></MudTh>
+                <MudTh>Reviewer</MudTh>
+                <MudTh>Compliance</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Appeal ID">
+                    <div class="d-flex align-center gap-1">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.AppealId</MudText>
+                        @if (context.IsExpedited)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">EXP</MudChip>
+                        }
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Member">
+                    <MudText Typo="Typo.body2">@context.MemberName</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.MemberId</MudText>
+                </MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.AppealType == "Claim" ? Color.Primary : context.AppealType == "Authorization" ? Color.Warning : Color.Info)"
+                             Variant="Variant.Outlined">
+                        @context.AppealType
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Original Decision">
+                    <MudText Typo="Typo.body2" Style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        @context.OriginalDenialReason
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family: monospace;">@context.OriginalDecisionId</MudText>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)" Variant="Variant.Filled">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Filed">@context.FiledDate.ToString("MM/dd/yyyy")</MudTd>
+                <MudTd DataLabel="Due Date">
+                    <MudText Typo="Typo.body2" Color="@GetDueDateColor(context.DaysRemaining)">
+                        @context.DueDate.ToString("MM/dd/yyyy")
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Days Left">
+                    <MudText Typo="Typo.body2" Color="@GetDueDateColor(context.DaysRemaining)" Style="font-weight: 600;">
+                        @if (context.DaysRemaining < 0)
+                        {
+                            @($"{Math.Abs(context.DaysRemaining)}d overdue")
+                        }
+                        else
+                        {
+                            @($"{context.DaysRemaining}d")
+                        }
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Reviewer">
+                    @if (string.IsNullOrEmpty(context.AssignedReviewer))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style: italic;">Unassigned</MudText>
+                    }
+                    else
+                    {
+                        @context.AssignedReviewer
+                    }
+                </MudTd>
+                <MudTd DataLabel="Compliance">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@GetComplianceColor(context.ComplianceStatus)"
+                             Variant="Variant.Filled">
+                        @context.ComplianceStatus
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-8">
+                    No appeals found matching the search criteria.
+                </MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+
+        @* ─── Regulatory Reference ─── *@
+        <MudPaper Class="pa-4 mt-4" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Policy" Size="Size.Small" Class="mr-1" />
+                Regulatory Compliance Deadlines
+            </MudText>
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                <thead>
+                    <tr>
+                        <th>Appeal Type</th>
+                        <th>Standard Deadline</th>
+                        <th>Expedited Deadline</th>
+                        <th>Authority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Medicare Advantage — Pre-service</td>
+                        <td>30 calendar days</td>
+                        <td>72 hours</td>
+                        <td>42 CFR 422.590</td>
+                    </tr>
+                    <tr>
+                        <td>Medicare Advantage — Post-service</td>
+                        <td>60 calendar days</td>
+                        <td>N/A</td>
+                        <td>42 CFR 422.590</td>
+                    </tr>
+                    <tr>
+                        <td>Medicaid Managed Care</td>
+                        <td>30 calendar days</td>
+                        <td>72 hours</td>
+                        <td>42 CFR 438.408</td>
+                    </tr>
+                    <tr>
+                        <td>Commercial / ACA</td>
+                        <td>30 calendar days (pre) / 60 days (post)</td>
+                        <td>72 hours (urgent)</td>
+                        <td>29 CFR 2560.503-1</td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+    else if (!_loadingSummary)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            Enter an Appeal ID, Member ID, or Original Claim/Auth ID and click Search to find appeals.
+            You can also click Search with no criteria to see all open appeals.
+        </MudAlert>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private bool _loadingSummary = true;
+    private bool _loadingResults;
+    private bool _hasSearched;
+    private string? _serviceError;
+    private AppealsSummary? _summary;
+    private List<AppealSummary> _results = new();
+
+    private string? _searchAppealId;
+    private string? _searchMemberId;
+    private string? _searchOriginalId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loadingSummary = true;
+        try
+        {
+            _summary = await AppealsService.GetSummaryAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Appeals service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading appeals: {ex.Message}";
+        }
+        finally
+        {
+            _loadingSummary = false;
+        }
+    }
+
+    private async Task SearchAppeals()
+    {
+        _loadingResults = true;
+        _hasSearched = true;
+        _serviceError = null;
+
+        try
+        {
+            _results = await AppealsService.SearchAppealsAsync(
+                _searchAppealId?.Trim(),
+                _searchMemberId?.Trim(),
+                _searchOriginalId?.Trim());
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Appeals service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred searching appeals: {ex.Message}";
+        }
+        finally
+        {
+            _loadingResults = false;
+        }
+    }
+
+    private void ClearSearch()
+    {
+        _searchAppealId = null;
+        _searchMemberId = null;
+        _searchOriginalId = null;
+        _hasSearched = false;
+        _results = new();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SearchAppeals();
+    }
+
+    private async Task OnRowClick(TableRowClickEventArgs<AppealSummary> args)
+    {
+        var appeal = args.Item;
+        if (appeal == null) return;
+
+        var detail = await AppealsService.GetAppealByIdAsync(appeal.AppealId);
+        if (detail == null) return;
+
+        var parameters = new DialogParameters
+        {
+            ["Detail"] = detail
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        await DialogService.ShowAsync<AppealDetailDialog>("Appeal Detail", parameters, options);
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Received" => Color.Default,
+        "Under Review" => Color.Info,
+        "Decision Made" => Color.Success,
+        "Escalated" => Color.Warning,
+        "Withdrawn" => Color.Default,
+        _ => Color.Default
+    };
+
+    private static Color GetDueDateColor(int daysRemaining)
+    {
+        if (daysRemaining < 0) return Color.Error;
+        if (daysRemaining <= 2) return Color.Error;
+        if (daysRemaining <= 5) return Color.Warning;
+        return Color.Default;
+    }
+
+    private static Color GetComplianceColor(string status) => status switch
+    {
+        "On Track" => Color.Success,
+        "At Risk" => Color.Warning,
+        "Overdue" => Color.Error,
+        _ => Color.Default
+    };
+}

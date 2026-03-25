@@ -1,13 +1,13 @@
 @page "/eligibility"
-@page "/demo/eligibility"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject IEligibilityService EligibilityService
 @inject IMemberService MemberService
 
 <PageTitle>Eligibility Verification - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="eligibility:check" RoleName="MemberServices">
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
@@ -16,6 +16,11 @@
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         270/271 EDI Transaction - Check member coverage and benefits
     </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="6">
@@ -217,10 +222,12 @@
         </MudItem>
     </MudGrid>
 </MudContainer>
+</PermissionGate>
 
 @code {
     private MudForm? _form;
     private bool _checking = false;
+    private string? _serviceError;
     private DateTime? _serviceDate = DateTime.Today;
     private EligibilityRequest _request = new();
     private EligibilityResponse? _response;
@@ -244,9 +251,13 @@
                 serviceType = _request.ServiceType
             });
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Eligibility service is currently unavailable: {ex.Message}";
+        }
         catch (Exception ex)
         {
-            // Show error snackbar
+            _serviceError = $"An error occurred checking eligibility: {ex.Message}";
         }
         finally
         {

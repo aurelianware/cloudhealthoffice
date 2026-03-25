@@ -173,7 +173,7 @@ output location string = deploymentKeyVault.location
 // This Key Vault is designed to store deployment secrets that are:
 // 1. Retrieved by GitHub Actions workflows after OIDC authentication
 // 2. Used during infrastructure deployment (e.g., SFTP credentials)
-// 3. Separate from runtime secrets used by Logic Apps during execution
+// 3. Separate from runtime secrets used by AKS workloads during execution
 //
 // RBAC Roles Required:
 // - Service Principal (GitHub Actions): "Key Vault Secrets User"

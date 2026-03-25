@@ -249,25 +249,22 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // Remove the real JwtBearer registration
-            var descriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider));
-
-            // Override authentication to use our test key
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
+            // Override JWT Bearer validation parameters via PostConfigure
+            // instead of removing and re-adding the auth scheme (which causes
+            // "Scheme already exists: Bearer" when the host registers it first).
+            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                options.RequireHttpsMetadata = false;
+                options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    options.RequireHttpsMetadata = false;
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidIssuer = _issuer,
-                        ValidateAudience = true,
-                        ValidAudience = "fhir-api",
-                        ValidateLifetime = true,
-                        IssuerSigningKey = _signingKey
-                    };
-                });
+                    ValidateIssuer = true,
+                    ValidIssuer = _issuer,
+                    ValidateAudience = true,
+                    ValidAudience = "fhir-api",
+                    ValidateLifetime = true,
+                    IssuerSigningKey = _signingKey
+                };
+            });
         });
 
         builder.UseEnvironment("Development");
@@ -284,7 +281,8 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
         {
             new(JwtRegisteredClaimNames.Sub, subject),
             new("scope", scopes),
-            new(JwtRegisteredClaimNames.Aud, "fhir-api")
+            new(JwtRegisteredClaimNames.Aud, "fhir-api"),
+            new("tenant_id", "test-tenant")
         };
 
         if (patientId != null)

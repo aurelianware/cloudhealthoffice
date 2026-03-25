@@ -82,6 +82,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
+// Health checks before auth so they're accessible without a token
+app.MapChoHealthChecks();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -101,6 +104,5 @@ app.Use(async (context, next) =>
 });
 
 app.MapControllers();
-app.MapChoHealthChecks();
 
 app.Run();

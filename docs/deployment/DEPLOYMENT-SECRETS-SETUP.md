@@ -1,6 +1,6 @@
 # Deployment Secrets and Environment Configuration Setup
 
-This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the Cloud Health Office Logic Apps solution.
+This guide provides comprehensive instructions for configuring GitHub Secrets and Repository Variables required for deploying the Cloud Health Office platform.
 
 > **🚀 Quick Validation:** Run `./validate-github-secrets.sh` to verify your configuration!  
 > **🔐 Enhanced Security:** See [Azure Key Vault Migration Guide](docs/SECRETS-MIGRATION-GUIDE.md) for storing runtime secrets in Key Vault
@@ -44,7 +44,7 @@ The Cloud Health Office deployment uses GitHub Actions workflows with OIDC (Open
 - ✅ **Easier Rotation:** Update secrets in one place without updating GitHub
 - ✅ **Audit Trail:** Track who accessed which secrets and when
 - ✅ **Environment Isolation:** Separate Key Vaults for DEV/UAT/PROD
-- ✅ **Managed Identity:** Logic Apps access secrets without storing credentials
+- ✅ **Managed Identity:** AKS workloads access secrets without storing credentials
 
 ### Migration Path
 
@@ -772,7 +772,7 @@ For HIPAA compliance:
 
 - [GitHub Actions Security Hardening](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
 - [Azure OIDC with GitHub Actions](https://docs.microsoft.com/en-us/azure/developer/github/connect-from-azure)
-- [Logic Apps Security Best Practices](https://docs.microsoft.com/en-us/azure/logic-apps/logic-apps-securing-a-logic-app)
+- [AKS Security Best Practices](https://learn.microsoft.com/en-us/azure/aks/best-practices)
 - [HIPAA Compliance on Azure](https://docs.microsoft.com/en-us/azure/compliance/offerings/offering-hipaa-us)
 
 ---
@@ -849,15 +849,15 @@ az keyvault secret set \
 az keyvault secret list --vault-name "$KV_NAME" --output table
 ```
 
-#### Phase 3: Configure Logic App Access
+#### Phase 3: Configure AKS Workload Identity Access
 
 ```bash
-# Get Logic App managed identity principal ID
-LOGIC_APP_NAME="cloud-health-office-prod-la"
-PRINCIPAL_ID=$(az webapp identity show \
+# Get AKS workload identity principal ID
+AKS_NAME="cloud-health-office-prod-aks"
+PRINCIPAL_ID=$(az aks show \
   --resource-group "payer-attachments-prod-rg" \
-  --name "$LOGIC_APP_NAME" \
-  --query principalId -o tsv)
+  --name "$AKS_NAME" \
+  --query "identityProfile.kubeletidentity.objectId" -o tsv)
 
 # Assign "Key Vault Secrets User" role
 az role assignment create \
@@ -872,7 +872,7 @@ az role assignment list \
   --output table
 ```
 
-#### Phase 4: Update Logic App Workflows
+#### Phase 4: Update AKS Service Configuration
 
 Update workflow JSON files to reference Key Vault secrets using `@keyvault()` expression:
 
@@ -907,7 +907,7 @@ Update workflow JSON files to reference Key Vault secrets using `@keyvault()` ex
 #### Phase 5: Validation and Testing
 
 ```bash
-# Test Key Vault access from Logic App
+# Test Key Vault access from AKS workload
 # Trigger a workflow and verify it retrieves secrets successfully
 
 # Check Application Insights for Key Vault access
@@ -1009,12 +1009,12 @@ AzureDiagnostics
 
 ### Troubleshooting
 
-#### Issue: Logic App cannot access Key Vault
+#### Issue: AKS workload cannot access Key Vault
 
 **Solutions:**
-1. Verify managed identity is enabled on Logic App
+1. Verify managed identity is enabled on AKS
 2. Check RBAC role assignment exists
-3. Ensure Key Vault network settings allow Logic App access
+3. Ensure Key Vault network settings allow AKS access
 4. Verify Key Vault secret names match workflow references
 
 ```bash
@@ -1035,7 +1035,7 @@ az role assignment list \
 1. Verify Key Vault URI format: `@keyvault('https://{vault}.vault.azure.net/secrets/{secret-name}')`
 2. Check secret exists: `az keyvault secret show --vault-name "{vault}" --name "{secret}"`
 3. Ensure no typos in secret name
-4. Verify Logic App has network access to Key Vault (private endpoint configuration)
+4. Verify AKS has network access to Key Vault (private endpoint configuration)
 
 ### Security Best Practices
 

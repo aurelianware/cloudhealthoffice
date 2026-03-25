@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # v4.0.0 Release Notes - February 11, 2026
 
 ## 🎯 Major Milestones

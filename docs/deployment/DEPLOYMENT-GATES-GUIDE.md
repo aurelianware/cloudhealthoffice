@@ -243,8 +243,8 @@ $maskedSSN = "XXX-XX-1234"
 
 **What it checks:**
 - `infra/main.bicep` exists
-- `logicapps/workflows` directory exists
-- Workflow JSON files are valid
+- `infrastructure/argo-workflows` directory exists
+- Argo Workflow YAML files are valid
 - Required documentation present
 
 **Blocking criteria:**
@@ -349,7 +349,7 @@ Compliance:
 
 1. **Validation job continues**
 2. **Infrastructure deployment** (5-10 min)
-3. **Logic Apps deployment** (2-3 min)
+3. **Argo Workflow deployment to AKS** (<1 min)
 4. **Health checks run automatically**
 5. **Team notified of completion**
 
@@ -425,7 +425,7 @@ Documentation:
 
 1. **Infrastructure deployment** (5-10 min)
 2. **ARM What-If analysis logged**
-3. **Logic Apps deployment** (2-3 min)
+3. **Argo Workflow deployment to AKS** (<1 min)
 4. **Automated health checks**
 5. **Post-deployment monitoring begins**
 6. **Team notified of completion**
@@ -635,8 +635,8 @@ Status: Healthy
 Health Checks: All Passed ✅
 
 Deployed Resources:
-• Logic App: ✅ Running
-• Workflows: ✅ 6/6 Enabled
+• AKS Cluster: ✅ Running
+• Argo Workflows: ✅ Deployed
 • Service Bus: ✅ Connected
 • Storage: ✅ Accessible
 

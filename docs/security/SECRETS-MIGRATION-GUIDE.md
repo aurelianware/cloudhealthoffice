@@ -17,7 +17,7 @@ This guide walks through migrating deployment secrets (SFTP credentials, API key
 ✅ **Environment Isolation:** DEV/UAT/PROD secrets in separate Key Vaults  
 ✅ **Audit Trail:** Track who accessed which secrets and when  
 ✅ **Clear Separation:** GitHub Secrets only for GitHub → Azure authentication  
-✅ **Managed Identity:** Logic Apps can access secrets without storing credentials
+✅ **Managed Identity:** AKS workloads can access secrets without storing credentials (via Workload Identity)
 
 ---
 
@@ -72,7 +72,7 @@ az role assignment list \
 
 **Required Roles:**
 - `Contributor` on Resource Group (for infrastructure deployment)
-- `Storage Blob Data Contributor` on Storage Account (for Logic Apps)
+- `Storage Blob Data Contributor` on Storage Account (for AKS workloads)
 - `Key Vault Secrets User` on Key Vault (to retrieve secrets) ← **Add this if missing**
 
 #### 1.3 Add Key Vault Secrets User Role
@@ -390,15 +390,15 @@ Retrieving secrets from Key Vault: cloud-health-office-prod-deploy-kv
 3. Open a Pull Request
 4. Merge to `main` (or use `workflow_dispatch`)
 5. Monitor PROD deployment
-6. Verify Logic Apps receive correct SFTP credentials
-7. Test SFTP connection from Logic Apps (check Application Insights)
+6. Verify AKS/Argo Workflows receive correct SFTP credentials via Kubernetes secrets
+7. Test SFTP connection from Argo Workflow pods (check Application Insights)
 
 **Validation points:**
 - [ ] Azure login succeeds (OIDC)
 - [ ] Key Vault secrets retrieved successfully
 - [ ] Secrets are masked in logs
 - [ ] Infrastructure deployment succeeds
-- [ ] Logic Apps can connect to SFTP (runtime test)
+- [ ] Argo Workflow pods can connect to SFTP (runtime test)
 - [ ] No errors in Application Insights related to missing credentials
 
 ---
@@ -505,7 +505,7 @@ az keyvault secret set \
 - [ ] Coordinate with clearinghouse for SFTP password change
 - [ ] Test connection from DEV environment first
 - [ ] Update SFTP credentials in clearinghouse system
-- [ ] Verify Logic Apps can connect with new credentials
+- [ ] Verify Argo Workflow pods can connect with new credentials
 - [ ] Document rotation date in change log
 
 ### Access Reviews
@@ -574,7 +574,7 @@ Use this checklist to track migration progress:
 - [ ] Tested workflow_dispatch deployment in DEV
 - [ ] Verified secrets masked in workflow logs
 - [ ] Tested full deployment in DEV
-- [ ] Tested Logic Apps SFTP connection
+- [ ] Tested Argo Workflow SFTP connection
 - [ ] Tested deployment in UAT
 - [ ] Tested deployment in PROD
 
@@ -681,7 +681,7 @@ az keyvault show --name <KV_NAME> --query "{publicNetworkAccess:properties.publi
 **For migration assistance:**
 - DevOps Team: Review RBAC permissions and Key Vault access
 - Security Team: Review compliance requirements and audit logging
-- Application Team: Test Logic Apps connectivity after migration
+- Application Team: Test Argo Workflow connectivity after migration
 
 **Escalation Path:**
 1. Review troubleshooting section above

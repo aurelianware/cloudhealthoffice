@@ -4,7 +4,6 @@ using System.Text.Json;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace CloudHealthOffice.FhirService.Tests;
 
@@ -14,18 +13,27 @@ namespace CloudHealthOffice.FhirService.Tests;
 /// and responses always carry application/fhir+json as the content-type.
 /// Uses WebApplicationFactory to spin up the real ASP.NET Core pipeline.
 /// </summary>
-public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Program>>
+public class ContentNegotiationTests : IClassFixture<FhirTestWebAppFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly FhirTestWebAppFactory _factory;
     private static readonly JsonSerializerOptions FhirOptions =
         new JsonSerializerOptions().ForFhir(typeof(Patient).Assembly);
 
-    public ContentNegotiationTests(WebApplicationFactory<Program> factory)
+    public ContentNegotiationTests(FhirTestWebAppFactory factory)
     {
         _factory = factory;
     }
 
     private HttpClient CreateClient() => _factory.CreateClient();
+
+    /// <summary>Creates a client with a user/*.read Bearer token for authenticated FHIR requests.</summary>
+    private HttpClient CreateAuthenticatedClient()
+    {
+        var client = _factory.CreateClient();
+        var token = _factory.IssueToken("user/*.read");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
 
     // ── /fhir/r4/metadata ────────────────────────────────────────────────────
 
@@ -74,8 +82,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task PatientRead_KnownId_Returns200WithPatientResource()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/Patient/pat-001");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -90,8 +97,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task PatientRead_UnknownId_Returns404WithOperationOutcome()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/Patient/does-not-exist");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -108,8 +114,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task PatientSearch_ReturnsSearchsetBundle()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/Patient?name=Smith");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -126,8 +131,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task EobSearch_ByPatient_Returns200Bundle()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-001");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -140,8 +144,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task EobSearch_WithoutPatientOrId_Returns400()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/ExplanationOfBenefit");
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -156,8 +159,7 @@ public class ContentNegotiationTests : IClassFixture<WebApplicationFactory<Progr
     [Fact]
     public async Task CoverageSearch_ByPatient_ReturnsMatchingCoverage()
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-Tenant-ID", "test-tenant");
+        var client = CreateAuthenticatedClient();
 
         var response = await client.GetAsync("/fhir/r4/Coverage?patient=Patient/pat-001");
         response.StatusCode.Should().Be(HttpStatusCode.OK);

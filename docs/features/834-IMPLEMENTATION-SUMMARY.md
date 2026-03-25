@@ -188,7 +188,7 @@ Built a complete **X12 834 Benefit Enrollment and Maintenance** import pipeline 
 ### Prerequisites
 
 1. **Cosmos DB**: Database `CloudHealthOffice`, containers `Members`, `Coverage`, `Sponsors` (400 RU/s each)
-2. **Kubernetes Secrets**: `cosmos-db-secret` (endpoint, key), `sftp-creds` (username, password)
+2. **Kubernetes Secrets**: `database-secret` (endpoint, key), `sftp-creds` (username, password)
 3. **Kafka Topic**: `enrollment-import` (3 partitions, 30-day retention)
 4. **SFTP Server**: Directories `/inbound/enrollment`, `/archive/834`
 
@@ -387,7 +387,7 @@ argo logs x12-834-enrollment-import-<timestamp> -n cloudhealthoffice --container
 ### Priority 1: Deploy to Production
 
 1. ✅ **Create Cosmos DB containers** (Members, Coverage, Sponsors)
-2. ✅ **Create Kubernetes secrets** (cosmos-db-secret, sftp-creds)
+2. ✅ **Create Kubernetes secrets** (database-secret, sftp-creds)
 3. ✅ **Deploy enrollment-import-service** to AKS
 4. ✅ **Deploy Argo CronWorkflow**
 5. ✅ **Test with sample 834 file**

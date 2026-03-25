@@ -62,6 +62,7 @@
         <ul id="mainNav">
           <li><a href="/">Home</a></li>
           <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
           <li><a href="/release-notes">Versions</a></li>
@@ -130,10 +131,10 @@
 <p>Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure in <strong>under one hour</strong>—with zero custom code.</p>
 <p><strong>Azure-Native Foundation:</strong></p>
 <ul>
-<li>Logic Apps Standard for workflow orchestration</li>
+<li>Argo Workflows on AKS for Kubernetes-native workflow orchestration</li>
 <li>Service Bus for event-driven architecture</li>
 <li>Data Lake Gen2 for hierarchical storage</li>
-<li>Integration Account for X12 processing</li>
+<li>Container-based microservices for X12 processing</li>
 <li>Key Vault Premium with HSM-backed keys</li>
 </ul>
 <p><strong>Multi-Payer by Design:</strong></p>
@@ -259,8 +260,8 @@ cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh
 <p><strong>What Gets Deployed:</strong></p>
 <ul>
 <li>Complete Azure infrastructure (Bicep)</li>
-<li>All Logic App workflows with X12 processing</li>
-<li>Integration Account with schemas and agreements</li>
+<li>All Argo workflow templates with X12 processing</li>
+<li>Trading partner configurations and schemas</li>
 <li>Service Bus topics and subscriptions</li>
 <li>Data Lake storage with hierarchical namespace</li>
 <li>Key Vault with HSM-backed keys</li>
@@ -341,7 +342,7 @@ cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh
 <p><strong>Low Risk Factors:</strong></p>
 <ul>
 <li>Mature Azure platform</li>
-<li>Battle-tested Logic Apps runtime</li>
+<li>Battle-tested Argo Workflows runtime on Kubernetes</li>
 <li>Standard X12 transaction sets</li>
 <li>Proven deployment automation</li>
 </ul>
@@ -478,14 +479,14 @@ cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh
 <li>Real-time security monitoring</li>
 </ul>
 <h3>Industry Standards</h3>
-<p><strong>X12 Transaction Sets:</strong> 005010X212 (277), 005010X217 (278), 005010X222 (837)<br><strong>NCPDP Support:</strong> Telecom D.0, Script 10.6<br><strong>FHIR R4:</strong> Planned for Q2 2026<br><strong>HL7 v2.x:</strong> Extensible via Logic Apps</p>
+<p><strong>X12 Transaction Sets:</strong> 005010X212 (277), 005010X217 (278), 005010X222 (837)<br><strong>NCPDP Support:</strong> Telecom D.0, Script 10.6<br><strong>FHIR R4:</strong> Planned for Q2 2026<br><strong>HL7 v2.x:</strong> Extensible via Argo Workflows</p>
 <hr>
 <h2>Success Metrics</h2>
 <h3>Deployment Success</h3>
 <ul>
 <li>Infrastructure deployed in &lt;60 minutes: ✅</li>
 <li>Zero custom code required: ✅</li>
-<li>All Logic App workflows operational: ✅</li>
+<li>All Argo workflow templates operational: ✅</li>
 <li>Trading partner connectivity validated: ✅</li>
 </ul>
 <h3>Operational Success</h3>

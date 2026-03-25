@@ -130,7 +130,7 @@ Throughput: 50,000 req/sec
 **Success Metrics**:
 - <200ms response time (p95)
 - 99.95% availability
-- 3x cost reduction vs. Logic Apps at scale
+- 3x cost reduction vs. former Logic Apps at scale
 
 ---
 

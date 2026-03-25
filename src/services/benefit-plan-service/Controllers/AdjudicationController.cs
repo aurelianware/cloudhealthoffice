@@ -107,7 +107,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines",
-            request.ClaimId, request.MemberId, request.BenefitPlanId, request.Lines.Count);
+            SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId), request.BenefitPlanId, request.Lines.Count);
 
         // ── Step 0a: Claims scrub validation ──
         ClaimsScrubResponse scrubResponse;
@@ -192,7 +192,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
-                request.ClaimId, ncciResult.EditFailures.Count);
+                SanitizeForLog(request.ClaimId), ncciResult.EditFailures.Count);
 
             return UnprocessableEntity(new
             {
@@ -362,7 +362,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Adjudication complete for claim {ClaimId}: allowed={Allowed}, plan={Plan}, member={Member}",
-            request.ClaimId, response.Totals.AllowedAmount,
+            SanitizeForLog(request.ClaimId), response.Totals.AllowedAmount,
             response.Totals.PlanPayment, response.Totals.MemberResponsibility);
 
         return Ok(response);
@@ -397,7 +397,7 @@ public class AdjudicationController : ControllerBase
     {
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, {LineCount} lines",
-            request.MemberId, request.BenefitPlanId, request.Lines.Count);
+            SanitizeForLog(request.MemberId), request.BenefitPlanId, request.Lines.Count);
 
         var result = await _benefitEngine.CalculateAsync(request, ct);
         return Ok(result);

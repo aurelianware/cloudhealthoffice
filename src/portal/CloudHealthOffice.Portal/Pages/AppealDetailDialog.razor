@@ -1,0 +1,240 @@
+@using CloudHealthOffice.Portal.Services
+
+<MudDialog Style="min-width: 800px; max-width: 1100px;">
+    <DialogContent>
+        @if (Detail != null)
+        {
+            @* Header *@
+            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+                <MudAvatar Size="Size.Large" Color="@(Detail.IsExpedited ? Color.Error : Color.Primary)">
+                    <MudIcon Icon="@Icons.Material.Filled.Balance" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 600;">@Detail.AppealId</MudText>
+                    <div class="d-flex align-center gap-2 mt-1">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(Detail.Status)" Variant="Variant.Filled">@Detail.Status</MudChip>
+                        @if (Detail.IsExpedited)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">EXPEDITED</MudChip>
+                        }
+                        <MudChip T="string" Size="Size.Small" Color="@GetComplianceColor(Detail.ComplianceStatus)" Variant="Variant.Filled">@Detail.ComplianceStatus</MudChip>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Detail.MemberName (@Detail.MemberId)</MudText>
+                    </div>
+                </div>
+                <MudSpacer />
+                <div class="text-right">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Due</MudText>
+                    <MudText Typo="Typo.h6" Color="@GetDueDateColor(Detail.DaysRemaining)">
+                        @Detail.DueDate.ToString("MM/dd/yyyy")
+                        <MudText Typo="Typo.caption" Color="@GetDueDateColor(Detail.DaysRemaining)">
+                            @if (Detail.DaysRemaining < 0)
+                            {
+                                @($"{Math.Abs(Detail.DaysRemaining)} day(s) overdue")
+                            }
+                            else
+                            {
+                                @($"{Detail.DaysRemaining} day(s) remaining")
+                            }
+                        </MudText>
+                    </MudText>
+                </div>
+            </div>
+
+            <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4">
+                @* ─── Original Decision Tab ─── *@
+                <MudTabPanel Text="Original Decision" Icon="@Icons.Material.Filled.Description">
+                    <MudGrid>
+                        <MudItem xs="12" md="4">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">APPEAL TYPE</MudText>
+                            <MudText Typo="Typo.body2">@Detail.AppealType Appeal</MudText>
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ORIGINAL DECISION ID</MudText>
+                            @{
+                                var decisionHref = GetDecisionLink(Detail.OriginalDecisionId);
+                            }
+                            @if (decisionHref != null)
+                            {
+                                <MudLink Href="@decisionHref" Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudText>
+                            }
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ORIGINAL DECISION</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@Detail.OriginalDecision</MudChip>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">DENIAL REASON</MudText>
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">@Detail.OriginalDenialReason</MudAlert>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">APPEAL REASON (MEMBER/PROVIDER STATEMENT)</MudText>
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-1">@Detail.AppealReason</MudAlert>
+                        </MudItem>
+                    </MudGrid>
+
+                    @if (!string.IsNullOrEmpty(Detail.FinalDecision))
+                    {
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Verified" Size="Size.Small" Class="mr-1" />
+                            Final Decision
+                        </MudText>
+                        <MudGrid>
+                            <MudItem xs="12" md="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">DECISION</MudText>
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(Detail.FinalDecision == "Overturned" ? Color.Success : Detail.FinalDecision == "Partially Overturned" ? Color.Warning : Detail.FinalDecision == "Withdrawn" ? Color.Default : Color.Error)"
+                                         Variant="Variant.Filled">
+                                    @Detail.FinalDecision
+                                </MudChip>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">DECISION DATE</MudText>
+                                <MudText Typo="Typo.body2">@Detail.DecisionDate?.ToString("MM/dd/yyyy")</MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">REVIEWER</MudText>
+                                <MudText Typo="Typo.body2">@Detail.AssignedReviewer</MudText>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">NOTES</MudText>
+                                <MudText Typo="Typo.body2" Class="mt-1">@Detail.FinalDecisionNotes</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    }
+                </MudTabPanel>
+
+                @* ─── Documents Tab ─── *@
+                <MudTabPanel Text="Documents" Icon="@Icons.Material.Filled.AttachFile">
+                    @if (Detail.Documents.Any())
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="1">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Type</th>
+                                    <th>Uploaded</th>
+                                    <th>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var doc in Detail.Documents)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="d-flex align-center gap-1">
+                                                <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" Color="Color.Error" />
+                                                <MudText Typo="Typo.body2">@doc.DocumentName</MudText>
+                                            </div>
+                                        </td>
+                                        <td>@doc.DocumentType</td>
+                                        <td>@doc.UploadedDate.ToString("MM/dd/yyyy")</td>
+                                        <td>@doc.UploadedBy</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">No supporting documents have been uploaded for this appeal.</MudAlert>
+                    }
+                </MudTabPanel>
+
+                @* ─── Timeline Tab ─── *@
+                <MudTabPanel Text="Review Timeline" Icon="@Icons.Material.Filled.Timeline">
+                    @if (Detail.Timeline.Any())
+                    {
+                        <MudTimeline TimelinePosition="TimelinePosition.Start">
+                            @foreach (var evt in Detail.Timeline.OrderBy(e => e.EventDate))
+                            {
+                                <MudTimelineItem Color="@GetTimelineColor(evt.EventType)" Size="Size.Small">
+                                    <ItemContent>
+                                        <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                            <MudCardContent Class="py-2">
+                                                <div class="d-flex justify-space-between align-center">
+                                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>
+                                                    <MudChip T="string" Size="Size.Small" Color="@GetTimelineColor(evt.EventType)">@evt.EventType</MudChip>
+                                                </div>
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                                    @evt.EventDate.ToString("MMM dd, yyyy h:mm tt") — @evt.PerformedBy
+                                                </MudText>
+                                            </MudCardContent>
+                                        </MudCard>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">No timeline events recorded.</MudAlert>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public AppealDetails? Detail { get; set; }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Received" => Color.Default,
+        "Under Review" => Color.Info,
+        "Decision Made" => Color.Success,
+        "Escalated" => Color.Warning,
+        "Withdrawn" => Color.Default,
+        _ => Color.Default
+    };
+
+    private static Color GetComplianceColor(string status) => status switch
+    {
+        "On Track" => Color.Success,
+        "At Risk" => Color.Warning,
+        "Overdue" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color GetDueDateColor(int daysRemaining)
+    {
+        if (daysRemaining < 0) return Color.Error;
+        if (daysRemaining <= 2) return Color.Error;
+        if (daysRemaining <= 5) return Color.Warning;
+        return Color.Default;
+    }
+
+    private static Color GetTimelineColor(string eventType) => eventType switch
+    {
+        "Filed" => Color.Primary,
+        "Acknowledged" => Color.Info,
+        "Assigned" => Color.Info,
+        "Decision" => Color.Success,
+        "Notified" => Color.Success,
+        "Escalated" => Color.Warning,
+        "Withdrawn" => Color.Default,
+        _ => Color.Default
+    };
+
+    private static string? GetDecisionLink(string id)
+    {
+        if (id.StartsWith("CLM-")) return $"/claims/{id}";
+        if (id.StartsWith("AUTH-")) return "/authorizations";
+        return null;
+    }
+
+    private void Close() => MudDialog.Close();
+}

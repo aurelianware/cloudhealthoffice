@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # Authorization Request (X12 278 X217) - Submit New Authorizations
 
 ## Table of Contents

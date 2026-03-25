@@ -1,0 +1,154 @@
+@using CloudHealthOffice.Portal.Services
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.DomainAdd)" Class="mr-2" />
+            @(IsEdit ? "Edit Tenant" : "Add Tenant")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_organizationName" Label="Organization Name" Required="true"
+                      RequiredError="Organization name is required" Class="mb-3" />
+
+        <MudTextField @bind-Value="_azureTenantId" Label="Azure Tenant ID" Required="true"
+                      RequiredError="Azure Tenant ID is required"
+                      HelperText="The customer's Azure AD tenant ID for single sign-on"
+                      Disabled="@IsEdit" Class="mb-3" />
+
+        <MudSelect T="string" @bind-Value="_tier" Label="Subscription Tier" Required="true"
+                   RequiredError="Subscription tier is required" Class="mb-3">
+            <MudSelectItem Value="@("starter")">Starter ($999/mo)</MudSelectItem>
+            <MudSelectItem Value="@("professional")">Professional ($2,999/mo)</MudSelectItem>
+            <MudSelectItem Value="@("enterprise")">Enterprise ($7,999/mo)</MudSelectItem>
+        </MudSelect>
+
+        <MudSelect T="string" @bind-Value="_subscriptionStatus" Label="Subscription Status" Required="true"
+                   RequiredError="Subscription status is required" Class="mb-3">
+            <MudSelectItem Value="@("Trial")">Trial</MudSelectItem>
+            <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+            <MudSelectItem Value="@("Suspended")">Suspended</MudSelectItem>
+        </MudSelect>
+
+        <MudTextField @bind-Value="_adminEmailsText" Label="Admin Email(s)" Class="mb-3"
+                      HelperText="Comma-separated email addresses for initial tenant administrators" />
+
+        <MudSwitch @bind-Value="_isDemo" Label="Demo Tenant" Color="Color.Warning" Class="mb-3" />
+
+        <MudTextField @bind-Value="_notes" Label="Notes" Lines="3" Class="mb-3"
+                      Placeholder="Internal notes (e.g., channel partner, pilot program)" />
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            @(IsEdit ? "Save Changes" : "Create Tenant")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public TenantSubscription? ExistingTenant { get; set; }
+
+    private string _organizationName = string.Empty;
+    private string _azureTenantId = string.Empty;
+    private string _tier = "starter";
+    private string _subscriptionStatus = "Trial";
+    private string _adminEmailsText = string.Empty;
+    private bool _isDemo;
+    private string _notes = string.Empty;
+    private string? _errorMessage;
+    private bool _saving;
+
+    private bool IsEdit => ExistingTenant != null;
+
+    protected override void OnInitialized()
+    {
+        if (ExistingTenant != null)
+        {
+            _organizationName = ExistingTenant.OrganizationName;
+            _azureTenantId = ExistingTenant.AzureTenantId;
+            _tier = ExistingTenant.Tier;
+            _subscriptionStatus = ExistingTenant.SubscriptionStatus;
+            _adminEmailsText = ExistingTenant.AdminEmails?.Count > 0
+                ? string.Join(", ", ExistingTenant.AdminEmails)
+                : string.Empty;
+            _isDemo = ExistingTenant.IsDemo;
+            _notes = ExistingTenant.Notes ?? string.Empty;
+        }
+    }
+
+    private void Submit()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_organizationName))
+        {
+            _errorMessage = "Organization name is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_azureTenantId))
+        {
+            _errorMessage = "Azure Tenant ID is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_tier))
+        {
+            _errorMessage = "Subscription tier is required.";
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var adminEmails = string.IsNullOrWhiteSpace(_adminEmailsText)
+                ? new List<string>()
+                : _adminEmailsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .ToList();
+
+            var result = new TenantDialogResult
+            {
+                OrganizationName = _organizationName.Trim(),
+                AzureTenantId = _azureTenantId.Trim(),
+                Tier = _tier,
+                SubscriptionStatus = _subscriptionStatus,
+                AdminEmails = adminEmails,
+                IsDemo = _isDemo,
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim()
+            };
+
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public class TenantDialogResult
+    {
+        public string OrganizationName { get; set; } = string.Empty;
+        public string AzureTenantId { get; set; } = string.Empty;
+        public string Tier { get; set; } = "starter";
+        public string SubscriptionStatus { get; set; } = "Trial";
+        public List<string> AdminEmails { get; set; } = new();
+        public bool IsDemo { get; set; }
+        public string? Notes { get; set; }
+    }
+}

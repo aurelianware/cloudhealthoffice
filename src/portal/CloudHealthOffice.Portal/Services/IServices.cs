@@ -1,3 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace CloudHealthOffice.Portal.Services;
 
 public interface IClaimsService
@@ -24,6 +28,39 @@ public interface IMemberService
     Task<List<CoverageHistoryEvent>> GetCoverageHistoryAsync(string memberId);
     Task<List<Enrollment834Record>> GetMember834TransactionsAsync(string memberId);
     Task TerminateEnrollmentAsync(TerminateEnrollmentRequest request);
+    Task<MemberAccumulators> GetAccumulatorsAsync(string memberId);
+}
+
+public class MemberAccumulators
+{
+    public decimal IndividualDeductibleUsed { get; set; }
+    public decimal IndividualDeductibleLimit { get; set; }
+    public decimal FamilyDeductibleUsed { get; set; }
+    public decimal FamilyDeductibleLimit { get; set; }
+    public decimal IndividualOopUsed { get; set; }
+    public decimal IndividualOopLimit { get; set; }
+    public decimal FamilyOopUsed { get; set; }
+    public decimal FamilyOopLimit { get; set; }
+    public List<ServiceAccumulator> ServiceAccumulators { get; set; } = new();
+    public List<AccumulatorActivity> RecentActivity { get; set; } = new();
+}
+
+public class ServiceAccumulator
+{
+    public string ServiceType { get; set; } = string.Empty;
+    public int Used { get; set; }
+    public int Limit { get; set; }
+    public string UnitType { get; set; } = "visits";
+}
+
+public class AccumulatorActivity
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+    public decimal DeductibleApplied { get; set; }
+    public decimal CopayApplied { get; set; }
+    public decimal CoinsuranceApplied { get; set; }
+    public decimal PlanPaid { get; set; }
 }
 
 public interface ICoverageService
@@ -81,6 +118,24 @@ public interface IWorkflowService
 public interface IMetricsService
 {
     Task<DashboardMetrics> GetDashboardMetricsAsync();
+    Task<OperationalAlerts> GetOperationalAlertsAsync();
+    Task<EdiVolumeSummary> GetTodayEdiVolumeAsync();
+}
+
+public class OperationalAlerts
+{
+    public int WorkQueueCount { get; set; }
+    public int PendingRfais { get; set; }
+    public int AppealsDueThisWeek { get; set; }
+    public int ApproachingFilingLimit { get; set; }
+}
+
+public class EdiVolumeSummary
+{
+    public int Claims837Received { get; set; }
+    public int Era835Generated { get; set; }
+    public int Eligibility270271 { get; set; }
+    public int PriorAuth278 { get; set; }
 }
 
 public interface IReferenceDataService
@@ -105,6 +160,15 @@ public interface ITenantService
     Task<TenantSubscription?> GetDemoTenantAsync();
     Task<bool> IsMemberOfTenantAsync(string azureTenantId, string userEmail);
     Task<string> CreateTenantAsync(CreateTenantRequest request);
+    Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request);
+    Task DeleteTenantAsync(string azureTenantId);
+    Task<List<TenantSubscription>> GetAllSubscriptionsAsync();
+    Task UpdateSubscriptionStatusAsync(string azureTenantId, string status);
+    /// <summary>
+    /// Get all tenant subscriptions where the given email appears in admin emails
+    /// or user roster. Used for tenant switcher when home tenant ID doesn't match.
+    /// </summary>
+    Task<List<TenantSubscription>> GetTenantsForUserAsync(string userEmail);
 }
 
 public interface ISalesInquiryService
@@ -755,8 +819,12 @@ public class CodeUsageStats
     public decimal TotalBilledAmount { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class TenantSubscription
 {
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string? Id { get; set; }
     public string TenantId { get; set; } = string.Empty;
     public string AzureTenantId { get; set; } = string.Empty;
     public string OrganizationName { get; set; } = string.Empty;
@@ -769,19 +837,53 @@ public class TenantSubscription
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<string> AdminEmails { get; set; } = new();
+    public string? Notes { get; set; }
 }
 
 public class CreateTenantRequest
 {
-    public string AzureTenantId { get; set; } = string.Empty;
+    [Required]
+    [StringLength(300)]
     public string OrganizationName { get; set; } = string.Empty;
+
+    [Required]
+    public string AzureTenantId { get; set; } = string.Empty;
+
+    [Required]
+    public string Tier { get; set; } = "starter";
+
     public string TenantDisplayName { get; set; } = string.Empty;
-    public string Tier { get; set; } = string.Empty;
+
+    public string SubscriptionStatus { get; set; } = "Trial";
+
     public string AdminEmail { get; set; } = string.Empty;
+
+    public List<string> AdminEmails { get; set; } = new();
+
+    public bool IsDemo { get; set; }
+
+    public string? Notes { get; set; }
+
     public string? StripePaymentMethodId { get; set; }
     public string? StripeCustomerId { get; set; }
     public string? StripeSubscriptionId { get; set; }
     public List<string> EnabledModules { get; set; } = new();
+}
+
+public class UpdateTenantRequest
+{
+    [StringLength(300)]
+    public string? OrganizationName { get; set; }
+
+    public string? Tier { get; set; }
+
+    public string? SubscriptionStatus { get; set; }
+
+    public List<string>? AdminEmails { get; set; }
+
+    public bool? IsDemo { get; set; }
+
+    public string? Notes { get; set; }
 }
 
 public class SalesInquiry
@@ -1361,4 +1463,457 @@ public class AuthApprovalReport
     public double ApprovalRate { get; set; }
     public double AvgDecisionDays { get; set; }
     public List<AuthByServiceType> ByServiceType { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Work Queue
+// ---------------------------------------------------------------------------
+
+public interface IWorkQueueService
+{
+    Task<WorkQueueSummary> GetQueueSummaryAsync();
+    Task<List<WorkQueueItem>> GetQueueItemsAsync(string? queueType = null,
+        string? assignedTo = null, int limit = 100);
+    Task AssignClaimAsync(string claimId, string assignTo);
+    Task OverrideAsync(string claimId, string overrideReason);
+}
+
+public class WorkQueueSummary
+{
+    public int NcciEditFailures { get; set; }
+    public int MissingAuth { get; set; }
+    public int ProviderNotContracted { get; set; }
+    public int CobRequired { get; set; }
+    public int MedicalReview { get; set; }
+}
+
+public class WorkQueueItem
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+    public string QueueReason { get; set; } = string.Empty;
+    public string QueueReasonCode { get; set; } = string.Empty;
+    public int DaysInQueue { get; set; }
+    public string Priority { get; set; } = "Low";
+    public string AssignedTo { get; set; } = string.Empty;
+    public decimal TotalCharged { get; set; }
+    public List<string> ProcedureCodes { get; set; } = new();
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment Operations
+// ---------------------------------------------------------------------------
+
+public interface IEnrollmentOperationsService
+{
+    Task<EnrollmentDailySummary> GetTodaySummaryAsync();
+    Task<List<EnrollmentFile>> GetRecentFilesAsync(int days = 7);
+    Task<EnrollmentFileDetail> GetFileDetailAsync(string fileId);
+}
+
+public class EnrollmentDailySummary
+{
+    public int FilesReceived { get; set; }
+    public int TotalTransactions { get; set; }
+    public int MembersAdded { get; set; }
+    public int MembersTermed { get; set; }
+    public int MembersChanged { get; set; }
+    public int ErrorCount { get; set; }
+}
+
+public class EnrollmentFile
+{
+    public string FileId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public DateTime ReceivedTime { get; set; }
+    public string SponsorName { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public int AddedCount { get; set; }
+    public int TermedCount { get; set; }
+    public int ChangedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class EnrollmentFileDetail
+{
+    public string FileId { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public DateTime ReceivedTime { get; set; }
+    public string SponsorName { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public int AddedCount { get; set; }
+    public int TermedCount { get; set; }
+    public int ChangedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public List<EnrollmentRejection> Rejections { get; set; } = new();
+}
+
+public class EnrollmentRejection
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string ErrorCode { get; set; } = string.Empty;
+    public string ErrorDescription { get; set; } = string.Empty;
+    public string RawSegmentReference { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Appeals
+// ---------------------------------------------------------------------------
+
+public interface IAppealsService
+{
+    Task<AppealsSummary> GetSummaryAsync();
+    Task<List<AppealSummary>> SearchAppealsAsync(string? appealId = null,
+        string? memberId = null, string? originalClaimId = null);
+    Task<AppealDetails?> GetAppealByIdAsync(string appealId);
+}
+
+public class AppealsSummary
+{
+    public int OpenAppeals { get; set; }
+    public int UrgentExpedited { get; set; }
+    public int DueThisWeek { get; set; }
+    public double OverturnedRate { get; set; }
+}
+
+public class AppealSummary
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AppealType { get; set; } = string.Empty;
+    public string OriginalDecisionId { get; set; } = string.Empty;
+    public string OriginalDecision { get; set; } = string.Empty;
+    public string OriginalDenialReason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsExpedited { get; set; }
+    public DateTime FiledDate { get; set; }
+    public DateTime DueDate { get; set; }
+    public int DaysRemaining { get; set; }
+    public string AssignedReviewer { get; set; } = string.Empty;
+    public string ComplianceStatus { get; set; } = string.Empty;
+}
+
+public class AppealDetails
+{
+    public string AppealId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string AppealType { get; set; } = string.Empty;
+    public string OriginalDecisionId { get; set; } = string.Empty;
+    public string OriginalDecision { get; set; } = string.Empty;
+    public string OriginalDenialReason { get; set; } = string.Empty;
+    public string AppealReason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsExpedited { get; set; }
+    public DateTime FiledDate { get; set; }
+    public DateTime DueDate { get; set; }
+    public int DaysRemaining { get; set; }
+    public string AssignedReviewer { get; set; } = string.Empty;
+    public string ComplianceStatus { get; set; } = string.Empty;
+    public string FinalDecision { get; set; } = string.Empty;
+    public string FinalDecisionNotes { get; set; } = string.Empty;
+    public DateTime? DecisionDate { get; set; }
+    public List<AppealDocument> Documents { get; set; } = new();
+    public List<AppealTimelineEvent> Timeline { get; set; } = new();
+}
+
+public class AppealDocument
+{
+    public string DocumentId { get; set; } = string.Empty;
+    public string DocumentName { get; set; } = string.Empty;
+    public string DocumentType { get; set; } = string.Empty;
+    public DateTime UploadedDate { get; set; }
+    public string UploadedBy { get; set; } = string.Empty;
+}
+
+public class AppealTimelineEvent
+{
+    public DateTime EventDate { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string PerformedBy { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Correspondence
+// ---------------------------------------------------------------------------
+
+public interface ICorrespondenceService
+{
+    Task<CorrespondenceSummary> GetSummaryAsync();
+    Task<List<CorrespondenceItem>> GetQueueAsync(string? type = null,
+        string? status = null, int limit = 50);
+    Task<List<RfaiTrackingItem>> GetOutstandingRfaisAsync();
+}
+
+public class CorrespondenceSummary
+{
+    public int PendingGeneration { get; set; }
+    public int GeneratedToday { get; set; }
+    public int SentThisWeek { get; set; }
+    public int FailedReturned { get; set; }
+}
+
+public class CorrespondenceItem
+{
+    public string LetterId { get; set; } = string.Empty;
+    public string LetterType { get; set; } = string.Empty;
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientType { get; set; } = string.Empty;
+    public string RelatedId { get; set; } = string.Empty;
+    public DateTime? GeneratedDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string DeliveryMethod { get; set; } = string.Empty;
+}
+
+public class RfaiTrackingItem
+{
+    public string RfaiId { get; set; } = string.Empty;
+    public string RecipientName { get; set; } = string.Empty;
+    public string RecipientType { get; set; } = string.Empty;
+    public string RelatedClaimId { get; set; } = string.Empty;
+    public string DocumentsRequested { get; set; } = string.Empty;
+    public DateTime SentDate { get; set; }
+    public DateTime ResponseDeadline { get; set; }
+    public int DaysSinceSent { get; set; }
+    public int DaysUntilDeadline { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public interface IPricingApiService
+{
+    Task<List<PricingApiKey>> GetApiKeysAsync();
+    Task<PricingApiKey> CreateApiKeyAsync(string tenantName, string contactEmail, string tier);
+    Task DeactivateApiKeyAsync(string apiKey);
+    Task ResetUsageAsync();
+    Task<List<PricingFeeScheduleInfo>> GetFeeSchedulesAsync();
+    Task<FeeScheduleUploadResult> UploadFeeScheduleAsync(string type, int year, Stream csvStream, string fileName, decimal? baseRate = null);
+    Task SeedDemoDataAsync();
+}
+
+public class PricingApiKey
+{
+    public string ApiKey { get; set; } = "";
+    public string TenantName { get; set; } = "";
+    public string ContactEmail { get; set; } = "";
+    public string Tier { get; set; } = "";
+    public int MonthlyLimit { get; set; }
+    public int CurrentMonthUsage { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class PricingFeeScheduleInfo
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string Version { get; set; } = "";
+    public int CodeCount { get; set; }
+    public string? Description { get; set; }
+    public DateTimeOffset LastUpdated { get; set; }
+}
+
+public class FeeScheduleUploadResult
+{
+    public string Message { get; set; } = "";
+    public int CodeCount { get; set; }
+    public string FeeScheduleId { get; set; } = "";
+}
+
+// ── Capitation Management ─────────────────────────────────────────────────
+
+public interface ICapitationService
+{
+    // Contracts
+    Task<List<CapitationContractSummary>> GetContractsAsync(string? npi = null, string? status = null, string? lob = null);
+    Task<CapitationContractSummary?> GetContractByIdAsync(string id);
+    Task<string> CreateContractAsync(CapitationContractSummary contract);
+    Task UpdateContractAsync(string id, CapitationContractSummary contract);
+    Task ActivateContractAsync(string id);
+    Task TerminateContractAsync(string id, string reason, DateTime? terminationDate = null);
+
+    // Runs
+    Task<List<CapRunSummary>> GetRunsAsync(DateTime? from = null, DateTime? to = null, string? lineOfBusiness = null);
+    Task<CapRunSummary?> GetRunByIdAsync(string id);
+    Task<string> CreateRunAsync(CreateCapRunRequest request);
+    Task<CapRunSummary> ExecuteRunAsync(string id);
+    Task CancelRunAsync(string id);
+
+    // Statements
+    Task<List<CapStatementSummary>> GetStatementsAsync(string? npi = null, DateTime? periodFrom = null, DateTime? periodTo = null, string? status = null);
+    Task<CapStatementSummary?> GetStatementByIdAsync(string id);
+    Task<List<CapStatementSummary>> GetStatementsByRunAsync(string runId);
+    Task<List<CapStatementSummary>> GetUnpaidStatementsAsync();
+    Task ApproveStatementAsync(string id);
+    Task VoidStatementAsync(string id, string reason);
+    Task HoldStatementAsync(string id, string reason);
+    Task<CapitationPeriodSummaryDto> GetPeriodSummaryAsync(DateTime period);
+
+    // Disbursements
+    Task<string> InitiateDisbursementAsync(string statementId, string? initiatedBy = null);
+    Task<CapDisbursementBatchResult> InitiateBatchDisbursementAsync(List<string> statementIds, string? initiatedBy = null);
+}
+
+public class CapitationContractSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string ContractNumber { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string ProviderType { get; set; } = "Individual";
+    public string ContractType { get; set; } = "PrimaryCareOnly";
+    public string LineOfBusiness { get; set; } = "Commercial";
+    public List<string> PlanIds { get; set; } = new();
+    public List<CapRateTier> RateTiers { get; set; } = new();
+    public bool RiskAdjusted { get; set; }
+    public decimal DefaultRiskScore { get; set; } = 1.0m;
+    public decimal WithholdPercentage { get; set; }
+    public decimal? IncentivePoolPercentage { get; set; }
+    public decimal? StopLossThreshold { get; set; }
+    public decimal? AggregateStopLoss { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string Status { get; set; } = "Draft";
+}
+
+public class CapRateTier
+{
+    public string TierName { get; set; } = string.Empty;
+    public int AgeFrom { get; set; }
+    public int AgeTo { get; set; }
+    public string? Gender { get; set; }
+    public string? AgeSexCategory { get; set; }
+    public decimal BasePMPM { get; set; }
+    public string? ServiceCategory { get; set; }
+}
+
+public class CapRunSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string RunNumber { get; set; } = string.Empty;
+    public string RunType { get; set; } = "Monthly";
+    public DateTime CapitationPeriod { get; set; }
+    public string Status { get; set; } = "Pending";
+    public string? LineOfBusiness { get; set; }
+    public string? Description { get; set; }
+    public CapRunCriteriaSummary? Criteria { get; set; }
+    public int TotalStatements { get; set; }
+    public int TotalMemberMonths { get; set; }
+    public decimal TotalGrossCapitation { get; set; }
+    public decimal TotalWithholds { get; set; }
+    public decimal TotalNetPayable { get; set; }
+    public int TotalProviders { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTime? ExecutionStartedAt { get; set; }
+    public DateTime? ExecutionCompletedAt { get; set; }
+    public double? ExecutionDurationSeconds { get; set; }
+    public List<string> Warnings { get; set; } = new();
+    public List<string> Errors { get; set; } = new();
+}
+
+public class CapRunCriteriaSummary
+{
+    public string? LineOfBusiness { get; set; }
+    public string? ProviderNPI { get; set; }
+    public string? ContractType { get; set; }
+    public DateTime? OriginalPeriod { get; set; }
+}
+
+public class CreateCapRunRequest
+{
+    public string RunType { get; set; } = "Monthly";
+    public DateTime CapitationPeriod { get; set; }
+    public CreateCapRunCriteria Criteria { get; set; } = new();
+    public string? CreatedBy { get; set; }
+    public string? Description { get; set; }
+}
+
+public class CreateCapRunCriteria
+{
+    public string LineOfBusiness { get; set; } = "Commercial";
+    public string? ProviderNPI { get; set; }
+    public string? ContractType { get; set; }
+    public DateTime? OriginalPeriod { get; set; }
+}
+
+public class CapStatementSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string StatementNumber { get; set; } = string.Empty;
+    public string? CapitationRunId { get; set; }
+    public string ContractId { get; set; } = string.Empty;
+    public string ContractNumber { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime CapitationPeriodStart { get; set; }
+    public DateTime CapitationPeriodEnd { get; set; }
+    public string Status { get; set; } = "Generated";
+    public int MemberMonths { get; set; }
+    public decimal GrossCapitation { get; set; }
+    public decimal WithholdAmount { get; set; }
+    public decimal TotalAdjustments { get; set; }
+    public decimal NetPayable { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public List<CapLineItem> LineItems { get; set; } = new();
+    public List<CapAdjustment> Adjustments { get; set; } = new();
+}
+
+public class CapLineItem
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string? PlanId { get; set; }
+    public int MemberAge { get; set; }
+    public string? Gender { get; set; }
+    public decimal BasePMPM { get; set; }
+    public decimal RiskScore { get; set; } = 1.0m;
+    public decimal AdjustedPMPM { get; set; }
+    public decimal ProrationFactor { get; set; } = 1.0m;
+    public decimal GrossAmount { get; set; }
+    public decimal WithholdAmount { get; set; }
+    public decimal NetAmount { get; set; }
+    public bool IsRetroactive { get; set; }
+    public string? AdjustmentReason { get; set; }
+}
+
+public class CapAdjustment
+{
+    public string Type { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? RelatedMemberId { get; set; }
+    public DateTime AdjustmentDate { get; set; }
+}
+
+public class CapitationPeriodSummaryDto
+{
+    public DateTime Period { get; set; }
+    public int TotalProviders { get; set; }
+    public int TotalMemberMonths { get; set; }
+    public decimal TotalGrossCapitation { get; set; }
+    public decimal TotalWithholds { get; set; }
+    public decimal TotalNetPayable { get; set; }
+    public Dictionary<string, decimal> ByLineOfBusiness { get; set; } = new();
+    public Dictionary<string, decimal> ByContractType { get; set; } = new();
+}
+
+public class CapDisbursementBatchResult
+{
+    public int TotalStatements { get; set; }
+    public int DisbursementsInitiated { get; set; }
+    public int Skipped { get; set; }
+    public int Errors { get; set; }
+    public decimal TotalAmount { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
 }

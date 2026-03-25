@@ -1,4 +1,3 @@
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,26 +5,18 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  ASPNETCORE_URLS: "http://+:8080"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: benefit-plan-service-secret
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  COSMOS_ENDPOINT: "https://your-cosmos-account.documents.azure.com:443/"
-  COSMOS_KEY: "your-cosmos-key-here"
-  MONGODB_CONNECTIONSTRING: "mongodb://mongodb-service:27017"
+  MongoDb__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: benefit-plan-service
   namespace: cloudhealthoffice
+  labels:
+    app: benefit-plan-service
+    tier: backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: benefit-plan-service
@@ -33,89 +24,74 @@ spec:
     metadata:
       labels:
         app: benefit-plan-service
+        tier: backend
     spec:
       containers:
       - name: benefit-plan-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-benefit-plan-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-benefit-plan-service:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
+          name: http
+          protocol: TCP
         env:
-          - name: CosmosDb__Endpoint
-            valueFrom:
-              secretKeyRef:
-                name: benefit-plan-service-secret
-                key: COSMOS_ENDPOINT
-          - name: CosmosDb__Key
-            valueFrom:
-              secretKeyRef:
-                name: benefit-plan-service-secret
-                key: COSMOS_KEY
-          - name: MongoDb__ConnectionString
-            valueFrom:
-              secretKeyRef:
-                name: benefit-plan-service-secret
-                key: MONGODB_CONNECTIONSTRING
-          - name: MongoDb__DatabaseName
-            value: "CloudHealthOffice"
-        envFrom:
-        - configMapRef:
-            name: benefit-plan-service-config
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: benefit-plan-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: benefit-plan-service-config
+              key: MongoDb__DatabaseName
+        - name: Redis__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: connectionString
+        - name: Services__ClaimsServiceUrl
+          value: "http://claims-service.cloudhealthoffice"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
+            cpu: 100m
+            memory: 128Mi
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            cpu: 500m
+            memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: benefit-plan-service
   namespace: cloudhealthoffice
+  labels:
+    app: benefit-plan-service
 spec:
+  type: ClusterIP
   selector:
     app: benefit-plan-service
   ports:
-  - protocol: TCP
+  - name: http
     port: 80
     targetPort: 8080
-  type: ClusterIP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: benefit-plan-service-hpa
-  namespace: cloudhealthoffice
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: benefit-plan-service
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
+    protocol: TCP

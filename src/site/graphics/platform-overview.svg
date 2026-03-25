@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540">
   <defs>
     <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#00ffff"/>
@@ -11,7 +11,7 @@
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="500" fill="#000000"/>
+  <rect width="1200" height="540" fill="#000000"/>
 
   <!-- Title -->
   <text x="600" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="32" font-weight="900"
@@ -42,19 +42,19 @@
   </g>
 
   <!-- Main platform box -->
-  <rect x="100" y="165" width="1000" height="240" rx="14" fill="rgba(8,8,8,0.6)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
+  <rect x="100" y="165" width="1000" height="280" rx="14" fill="rgba(8,8,8,0.6)" stroke="rgba(0,255,255,0.2)" stroke-width="1.5"/>
 
   <!-- Row 1: Core Stats -->
   <g transform="translate(0, 210)">
     <g transform="translate(200, 0)">
       <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
-            fill="#00ffff" text-anchor="middle" filter="url(#glow)">17</text>
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">23</text>
       <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
             fill="#b0b0b0" text-anchor="middle">MICROSERVICES</text>
     </g>
     <g transform="translate(380, 0)">
       <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
-            fill="#00ffff" text-anchor="middle" filter="url(#glow)">6</text>
+            fill="#00ffff" text-anchor="middle" filter="url(#glow)">9</text>
       <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
             fill="#b0b0b0" text-anchor="middle">CALC ENGINES</text>
     </g>
@@ -78,7 +78,7 @@
     </g>
     <g transform="translate(1030, 0)">
       <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
-            fill="#00ff88" text-anchor="middle" filter="url(#glow)">37</text>
+            fill="#00ff88" text-anchor="middle" filter="url(#glow)">47</text>
       <text x="0" y="18" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
             fill="#b0b0b0" text-anchor="middle">PORTAL PAGES</text>
     </g>
@@ -87,42 +87,64 @@
   <!-- Divider -->
   <line x1="140" y1="260" x2="1060" y2="260" stroke="rgba(0,255,255,0.1)" stroke-width="1"/>
 
-  <!-- Row 2: Capabilities -->
-  <g transform="translate(0, 300)">
-    <g transform="translate(200, 0)">
-      <rect x="-70" y="-18" width="140" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+  <!-- Row 2: Capabilities (9 engines, 2 rows) -->
+  <g transform="translate(0, 290)">
+    <g transform="translate(175, 0)">
+      <rect x="-65" y="-16" width="130" height="32" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ffff" text-anchor="middle">Benefit Engine</text>
     </g>
-    <g transform="translate(380, 0)">
-      <rect x="-75" y="-18" width="150" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+    <g transform="translate(345, 0)">
+      <rect x="-70" y="-16" width="140" height="32" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ffff" text-anchor="middle">Fee Schedule Engine</text>
     </g>
-    <g transform="translate(570, 0)">
-      <rect x="-65" y="-18" width="130" height="36" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+    <g transform="translate(515, 0)">
+      <rect x="-60" y="-16" width="120" height="32" rx="6" fill="rgba(0,255,255,0.06)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ffff" text-anchor="middle">Risk Adjustment</text>
     </g>
-    <g transform="translate(745, 0)">
-      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+    <g transform="translate(670, 0)">
+      <rect x="-50" y="-16" width="100" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ff88" text-anchor="middle">COB Engine</text>
     </g>
-    <g transform="translate(905, 0)">
-      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+    <g transform="translate(810, 0)">
+      <rect x="-50" y="-16" width="100" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ff88" text-anchor="middle">NCCI Engine</text>
     </g>
-    <g transform="translate(1050, 0)">
-      <rect x="-55" y="-18" width="110" height="36" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+    <g transform="translate(940, 0)">
+      <rect x="-50" y="-16" width="100" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
             fill="#00ff88" text-anchor="middle">Accumulators</text>
+    </g>
+  </g>
+  <g transform="translate(0, 330)">
+    <g transform="translate(250, 0)">
+      <rect x="-60" y="-16" width="120" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Claims Scrub</text>
+    </g>
+    <g transform="translate(430, 0)">
+      <rect x="-65" y="-16" width="130" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Operating Mode</text>
+    </g>
+    <g transform="translate(620, 0)">
+      <rect x="-65" y="-16" width="130" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Document Store</text>
+    </g>
+    <g transform="translate(810, 0)">
+      <rect x="-60" y="-16" width="120" height="32" rx="6" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.2)" stroke-width="1"/>
+      <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
+            fill="#00ff88" text-anchor="middle">Encounter</text>
     </g>
   </g>
 
   <!-- Row 3: EDI Transactions -->
-  <g transform="translate(0, 355)">
+  <g transform="translate(0, 395)">
     <g transform="translate(200, 0)">
       <rect x="-55" y="-15" width="110" height="30" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
       <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">837 Claims</text>
@@ -150,7 +172,7 @@
   </g>
 
   <!-- Bottom bar -->
-  <g transform="translate(0, 435)">
+  <g transform="translate(0, 465)">
     <rect x="100" y="0" width="1000" height="50" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.15)" stroke-width="1"/>
     <text x="600" y="30" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#b0b0b0"
           text-anchor="middle">Deploy Anywhere &#x2022; Free for Non-Production &#x2022; BSL 1.1 License &#x2022; .NET 8 &#x2022; Python 3.11 &#x2022; Node.js 20</text>

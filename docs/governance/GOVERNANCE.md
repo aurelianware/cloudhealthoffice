@@ -92,7 +92,7 @@ Contributors who have demonstrated sustained commitment and expertise. Maintaine
 - Commitment to ongoing participation (minimum 4 hours/month)
 
 **Maintainer Areas:**
-- **Core**: Logic Apps workflows, infrastructure, API development
+- **Core**: Argo Workflows on AKS, infrastructure, API development
 - **Security**: HIPAA compliance, security reviews, vulnerability management
 - **Documentation**: User guides, API docs, architecture documentation
 - **DevOps**: CI/CD, deployment automation, monitoring

@@ -8,7 +8,7 @@ This deployment package contains all necessary files for deploying HIPAA attachm
 
 ## Contents
 
-- `workflows/` - Logic App workflow definitions
+- `workflows/` - Argo Workflow definitions
 - `infrastructure/` - Bicep infrastructure templates
 - `docs/` - Deployment and configuration documentation
 - `config/` - Payer configuration file

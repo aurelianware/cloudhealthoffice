@@ -56,8 +56,8 @@ builder.Services.AddOpenIddict()
             .SetAuthorizationEndpointUris("/connect/authorize")
             .SetTokenEndpointUris("/connect/token")
             .SetIntrospectionEndpointUris("/connect/introspect")
-            .SetLogoutEndpointUris("/connect/logout")
-            .SetUserinfoEndpointUris("/connect/userinfo");
+            .SetEndSessionEndpointUris("/connect/logout")
+            .SetUserInfoEndpointUris("/connect/userinfo");
 
         // ── Flows ────────────────────────────────────────────────────────────
         options
@@ -110,7 +110,7 @@ builder.Services.AddOpenIddict()
         // ── ASP.NET Core integration ─────────────────────────────────────────
         options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
-               .EnableLogoutEndpointPassthrough()
+               .EnableEndSessionEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
                .EnableStatusCodePagesIntegration();
     })
@@ -163,11 +163,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+
+// Health checks before auth so they're accessible without a token
+app.MapChoHealthChecks();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.MapControllers();
-app.MapChoHealthChecks();
 
 app.Run();
 

@@ -80,7 +80,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     echo "⏳ Wait 5-60 minutes for DNS propagation, then test:"
     echo "   dig $FQDN +short"
-    echo "   sftp logicapp@$FQDN"
+    echo "   sftp cho-edi@$FQDN"
 else
     FQDN="$SFTP_IP"
     echo "Skipping DNS configuration. Using IP: $SFTP_IP"
@@ -101,25 +101,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Collecting IP addresses..."
     echo ""
     
-    # Get Logic Apps outbound IPs
-    echo "📍 Logic Apps IPs:"
-    read -p "Logic App name: " LOGIC_APP_NAME
-    read -p "Logic App resource group: " LOGIC_APP_RG
-    
-    LOGIC_APP_IPS=$(az logicapp show \
-      --name "$LOGIC_APP_NAME" \
-      --resource-group "$LOGIC_APP_RG" \
-      --query outboundIpAddresses -o tsv 2>/dev/null || echo "")
-    
-    if [ -z "$LOGIC_APP_IPS" ]; then
-        echo "⚠️  Could not get Logic Apps IPs. Enter manually:"
-        read -p "Logic Apps IPs (space-separated): " LOGIC_APP_IPS
-    else
-        echo "Found Logic Apps IPs:"
-        echo "$LOGIC_APP_IPS" | tr '\t' '\n'
-    fi
-    
-    echo ""
     echo "📍 Clearinghouse IPs:"
     echo "Enter clearinghouse IP ranges (CIDR notation, one per line, empty line to finish):"
     
@@ -146,11 +127,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     
     WHITELIST_YAML="  loadBalancerSourceRanges:\n"
     
-    # Add Logic Apps IPs
-    for ip in $LOGIC_APP_IPS; do
-        WHITELIST_YAML+="    - $ip/32\n"
-    done
-    
     # Add Clearinghouse IPs
     for ip in "${CLEARINGHOUSE_IPS[@]}"; do
         WHITELIST_YAML+="    - $ip\n"
@@ -172,11 +148,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Build JSON patch
         RANGES_JSON="["
         first=true
-        for ip in $LOGIC_APP_IPS; do
-            [ "$first" = false ] && RANGES_JSON+=","
-            RANGES_JSON+="\"$ip/32\""
-            first=false
-        done
         for ip in "${CLEARINGHOUSE_IPS[@]}"; do
             [ "$first" = false ] && RANGES_JSON+=","
             RANGES_JSON+="\"$ip\""
@@ -202,9 +173,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo ""
         echo "Test connection:"
         if [ "$FQDN" != "$SFTP_IP" ]; then
-            echo "  sftp logicapp@$FQDN"
+            echo "  sftp cho-edi@$FQDN"
         else
-            echo "  sftp logicapp@$SFTP_IP"
+            echo "  sftp cho-edi@$SFTP_IP"
         fi
     fi
 else
@@ -227,9 +198,7 @@ echo ""
 echo "📋 Next Steps:"
 echo "1. Wait for DNS propagation (if configured)"
 echo "2. Test SFTP connection from allowed IP"
-echo "3. Update infra/main.parameters.json with SFTP host"
-echo "4. Run: ./scripts/configure-sftp-connection.sh"
-echo "5. Deploy Logic Apps: ./scripts/deploy-workflows.sh"
+echo "3. Run: ./scripts/setup/configure-sftp-connection.sh"
 echo ""
 echo "📖 Full documentation: docs/SFTP-DNS-SETUP.md"
 echo ""

@@ -91,7 +91,7 @@ Subscription (Owner/Contributor - AVOID)
 │   ├── Storage Account (Storage Blob Data Contributor - JIT only)
 │   ├── Service Bus (Service Bus Data Sender - JIT only)
 │   ├── Key Vault (Key Vault Secrets Officer - JIT only)
-│   └── Logic App (Logic App Contributor - JIT only)
+│   └── AKS Cluster (Azure Kubernetes Service Contributor - JIT only)
 ```
 
 **Example Assignment:**
@@ -116,7 +116,7 @@ az role assignment create \
 
 1. **Identity** - Azure AD with MFA
 2. **Network** - Private endpoints, NSG rules
-3. **Compute** - Logic Apps with managed identity
+3. **Compute** - AKS pods with workload identity
 4. **Application** - Input validation, output encoding
 5. **Data** - Encryption (AES-256), access controls
 6. **Monitoring** - Application Insights, Azure Monitor
@@ -193,7 +193,7 @@ sequenceDiagram
 
 ### Example JIT Workflow
 
-**Scenario:** DevOps engineer needs to update Logic App workflow configuration.
+**Scenario:** DevOps engineer needs to update Argo Workflow configuration on AKS.
 
 **Steps:**
 
@@ -201,7 +201,7 @@ sequenceDiagram
    ```bash
    # Via Azure Portal: PIM → My Roles → Activate
    # Via PowerShell:
-   $roleDefinitionId = Get-AzRoleDefinition -Name "Logic App Contributor" | Select-Object -ExpandProperty Id
+   $roleDefinitionId = Get-AzRoleDefinition -Name "Azure Kubernetes Service Contributor" | Select-Object -ExpandProperty Id
    New-AzRoleEligibilityScheduleRequest \
      -Name (New-Guid).Guid \
      -Scope "/subscriptions/{sub}/resourceGroups/{rg}" \
@@ -215,7 +215,7 @@ sequenceDiagram
          Duration = "PT8H"  # 8 hours
        }
      } \
-     -Justification "Deploying workflow updates for attachment processing (X12 275/277/278) - Ticket #12345"
+     -Justification "Deploying Argo Workflow updates for attachment processing (X12 275/277/278) - Ticket #12345"
    ```
 
 2. **MFA Challenge:**
@@ -233,7 +233,7 @@ sequenceDiagram
    - User can now perform authorized operations
 
 5. **Perform Administrative Tasks:**
-   - Update Logic App workflow
+   - Update Argo Workflow configuration on AKS
    - All actions logged to Activity Log
    - Application Insights captures detailed operations
 

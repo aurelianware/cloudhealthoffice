@@ -1,3 +1,6 @@
+# NOTE: This script references Azure Logic Apps, which were the original orchestration runtime.
+# CHO has since migrated to Argo Workflows on AKS — see docs/adr/004-remove-logic-apps.md for details.
+#
 # Test HIPAA X12 275/277 Workflows with Trading Partners
 # Clearinghouse (030240928) ↔ Health Plan Backend ({config.payerId})
 

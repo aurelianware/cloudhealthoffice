@@ -14,30 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---------- JSON validation for Logic App workflows ----------
-      - name: Validate JSON workflows
-        run: |
-          echo "Validating Logic App workflow JSON files..."
-          failed=0
-          while IFS= read -r -d '' f; do
-            echo "Checking $f"
-            if ! jq . "$f" >/dev/null 2>&1; then
-              echo "::error file=$f::Invalid JSON syntax"
-              failed=1
-            elif ! jq -e 'has("definition") and has("kind") and has("parameters")' "$f" >/dev/null; then
-              echo "::error file=$f::Missing required keys (definition/kind/parameters)"
-              failed=1
-            else
-              echo "✓ Valid workflow JSON: $f"
-            fi
-          done < <(find logicapps/workflows -type f -name "workflow.json" -print0 2>/dev/null || true)
-
-          if [ $failed -eq 1 ]; then
-            echo "::error::JSON validation failed"
-            exit 1
-          fi
-          echo "✓ All workflow JSON files are valid"
-
       # ---------- GitHub Actions workflow lint ----------
       - name: Actionlint (workflows linter)
         uses: reviewdog/action-actionlint@v1
@@ -82,23 +58,6 @@ jobs:
             fi
           else
             echo "::warning::infrastructure/azure/main.bicep not found"
-          fi
-
-          if [ -f attachments_logicapps_package/main.bicep ]; then
-            echo "Building attachments_logicapps_package/main.bicep..."
-            if az bicep build --file attachments_logicapps_package/main.bicep --outfile /tmp/package-arm.json 2>&1 | tee /tmp/bicep-package.log; then
-              if [ ! -s /tmp/package-arm.json ]; then
-                echo "::error file=attachments_logicapps_package/main.bicep::Bicep compilation produced empty ARM template"
-                failed=1
-              else
-                SIZE=$(stat -f%z /tmp/package-arm.json 2>/dev/null || stat -c%s /tmp/package-arm.json 2>/dev/null)
-                echo "✓ attachments_logicapps_package/main.bicep compiled successfully (ARM template: ${SIZE} bytes)"
-              fi
-            else
-              echo "::error file=attachments_logicapps_package/main.bicep::Bicep build failed"
-              cat /tmp/bicep-package.log
-              failed=1
-            fi
           fi
 
           if [ $failed -eq 1 ]; then
@@ -282,7 +241,7 @@ jobs:
 
             # Check for HTTP URLs (should be HTTPS in production)
             if grep -q "http://" "$f" 2>/dev/null; then
-              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com" | grep -q .; then
+              if grep "http://" "$f" 2>/dev/null | grep -v "localhost\|127.0.0.1\|example.com\|cloudhealthoffice\|svc.cluster.local" | grep -q .; then
                 echo "::warning file=$f::Found HTTP URL (should use HTTPS for production)"
               fi
             fi

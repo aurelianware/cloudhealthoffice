@@ -81,6 +81,7 @@
         <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
         <ul id="mainNav">
           <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
           <li><a href="/release-notes">Versions</a></li>
@@ -135,6 +136,14 @@
              class="button button-secondary"
              style="font-size:1.05rem; padding:15px 38px;"
              target="_blank" rel="noopener noreferrer">View Source &rarr;</a>
+          <a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access"
+             class="button button-secondary"
+             style="font-size:1.05rem; padding:15px 38px;"
+             target="_blank" rel="noopener noreferrer">CMS 0057-F Patient Access &rarr;</a>
+          <a href="https://portal.cloudhealthoffice.com/apis"
+             class="button button-secondary"
+             style="font-size:1.05rem; padding:15px 38px;"
+             target="_blank" rel="noopener noreferrer">Claims Repricing API</a>                      
         </div>
       </div>
 
@@ -224,7 +233,7 @@
           <div class="feature-card">
             <div class="feature-icon" aria-hidden="true">&#127760;</div>
             <h3>Flexible Deployment</h3>
-            <p>Azure Logic Apps for rapid delivery or Kubernetes for enterprise control. Identical capabilities across both. Deploy to your own subscription.</p>
+            <p>Kubernetes-native architecture with Argo Workflows on AKS, EKS, or GKE. Container-based microservices with full infrastructure ownership. Deploy to your own subscription.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon" aria-hidden="true">&#128184;</div>
@@ -346,36 +355,22 @@
       <div class="section-wrapper">
         <div class="section-header">
           <span class="section-eyebrow">Infrastructure</span>
-          <h2 class="section-title">Two paths.<br><span>Same destination.</span></h2>
-          <p class="section-subtitle">Both deployment options provide identical healthcare integration capabilities. Choose based on your team&rsquo;s priorities.</p>
+          <h2 class="section-title">One platform.<br><span>Any cloud.</span></h2>
+          <p class="section-subtitle">Kubernetes-native architecture with Argo Workflows. Deploy on any cloud or on-premise with full infrastructure control.</p>
         </div>
 
         <div class="deploy-grid">
           <div class="deploy-card">
-            <span class="deploy-icon" aria-hidden="true">&#9729;&#65039;</span>
-            <h3>Azure Logic Apps</h3>
-            <p style="color:rgba(176,176,176,0.7); font-size:0.95rem; margin-bottom:20px;">
-              <strong style="color:#00ffff;">Best for:</strong> Rapid deployment, Azure-first organizations, minimal operational overhead
-            </p>
-            <ul class="benefit-list">
-              <li>Fastest time to production (&lt;1 hour)</li>
-              <li>Microsoft-managed infrastructure</li>
-              <li>Built-in HIPAA compliance controls</li>
-              <li>Lower ongoing operational overhead</li>
-              <li>Native Azure Logic Apps Standard</li>
-            </ul>
-          </div>
-
-          <div class="deploy-card">
             <span class="deploy-icon" aria-hidden="true">&#9881;&#65039;</span>
-            <h3>Kubernetes Multi-Cloud</h3>
+            <h3>Kubernetes with Argo Workflows</h3>
             <p style="color:rgba(176,176,176,0.7); font-size:0.95rem; margin-bottom:20px;">
-              <strong style="color:#00ffff;">Best for:</strong> Enterprise control, cloud independence, hybrid architectures
+              <strong style="color:#00ffff;">Best for:</strong> Enterprise control, cloud independence, production-grade orchestration
             </p>
             <ul class="benefit-list">
-              <li>Deploy on Azure, AWS, or GCP</li>
-              <li>No cloud vendor lock-in</li>
+              <li>Deploy on Azure AKS, AWS EKS, or GCP GKE</li>
+              <li>Argo Workflows for Kubernetes-native orchestration</li>
               <li>Full infrastructure ownership and control</li>
+              <li>Container-based microservices architecture</li>
               <li>Hybrid and on-premise capable</li>
               <li>BSL 1.1 &mdash; bring your own environment</li>
             </ul>
@@ -383,7 +378,7 @@
         </div>
 
         <p style="text-align:center; margin-top:32px; font-size:0.9rem; color:rgba(176,176,176,0.45);">
-          Both options provide identical FHIR R4, EDI, and compliance capabilities.
+          Complete FHIR R4, EDI, and compliance capabilities on any Kubernetes cluster.
         </p>
       </div>
     </section>
@@ -502,8 +497,10 @@
           <h5>Product</h5>
           <ul>
             <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
             <li><a href="/platform">Platform</a></li>
             <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
             <li><a href="/release-notes">Release Notes</a></li>
           </ul>
         </div>

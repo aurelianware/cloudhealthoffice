@@ -15,10 +15,10 @@
       first-class MongoDB stores for applications, authorizations, scopes, and tokens.
     -->
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
-    <PackageReference Include="OpenIddict.AspNetCore" Version="5.4.0" />
-    <PackageReference Include="OpenIddict.Server.AspNetCore" Version="5.4.0" />
-    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="5.4.0" />
-    <PackageReference Include="OpenIddict.MongoDb" Version="5.4.0" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.4.0" />
+    <PackageReference Include="OpenIddict.Server.AspNetCore" Version="7.4.0" />
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.4.0" />
+    <PackageReference Include="OpenIddict.MongoDb" Version="7.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.25" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <!-- Security: force patched transitive versions (CVE-2024-30105, CVE-2024-43485, CVE-2024-43483) -->

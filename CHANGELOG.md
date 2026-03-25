@@ -5,6 +5,109 @@ All notable changes to Cloud Health Office will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - March 2026
+
+### Capitation Service — PMPM Provider Payments
+
+New microservice enabling per-member-per-month (PMPM) capitation payments from health plans to capitated providers. Structurally mirrors premium-billing-service (which collects premiums FROM sponsors) but pays TO providers.
+
+**New Service: `capitation-service`**
+- **CapitationContract** — provider agreements with 12-tier age-sex rate schedules, risk adjustment (HCC/RAF), quality withhold percentages, incentive pools, per-member and aggregate stop-loss thresholds
+- **CapitationRunService** — monthly batch orchestration that fetches PCP panel rosters from coverage-service, risk scores from risk-adjustment-service, calculates proration for mid-month adds/terms, applies withholds, and generates provider payment statements
+- **CapitationStatement** — provider-facing payment detail with member-level line items (base PMPM, risk score, adjusted PMPM, proration factor, gross/withhold/net), retroactive adjustments, and RecalculateTotals()
+- **CapitationDisbursementService** — EFT payment lifecycle supporting NACHA ACH credits, Stripe Connect transfers, and paper checks, with ACH return handling (R01-R29 codes) and auto-retry logic
+- **CapitationEraService** — X12 005010X221A1 835 ERA generation for capitation payments (CLP02=22, CLP06=CP, no SVC service lines, CAS CO-45 for withholds, PLB with WO/72/L6/FB adjustment codes)
+- **NachaCreditFileService** — NACHA credit file generation (transaction codes 22/32 for checking/savings credits, SEC code CCD, service class 220, entry description CAPITATION)
+- **StripeConnectService** — Stripe Transfer API integration for Connected Account payouts with webhook processing (transfer.created, transfer.reversed, payout.paid, payout.failed)
+- Dual Cosmos DB / MongoDB repositories (8 files) with tenant isolation
+- Kubernetes deployment manifest, Dockerfile, docker-compose entry (port 5012)
+
+**Supporting Service Changes:**
+- **coverage-service** — PcpNpi, PcpName, PcpAssignmentDate, PcpAssignmentMethod, PreviousPcpNpi fields on Coverage model; new PcpAssignmentMethod enum (AutoAssigned, MemberSelected, PlanDefault); `GET /api/v1/coverage/by-pcp/{npi}` endpoint for panel roster queries; compound indexes on (TenantId, PcpNpi, Status)
+- **provider-service** — ProviderBankAccount model with EFT/Stripe Connect/check disbursement support, W-9/1099 compliance fields; DisbursementMethod, BankAccountType, TaxIdType enums; `GET/PUT /api/providers/npi/{npi}/bank-account` endpoints
+
+**Portal — Capitation Management (3 new pages):**
+- Capitation Contracts — data grid with contract#/provider/type/LOB/status/tiers/withhold, inline rate tier editor, activate/terminate actions
+- Capitation Runs — create/execute runs with period selector, run list with provider count/member-months/net payable/duration, drill into statements
+- Capitation Statements — filterable list, member-level breakdown with age/gender/PMPM/risk score/proration/withhold, approve/hold/void workflows, batch "Pay Approved" disbursement
+- ICapitationService API client (16 methods), Capitation navigation group in sidebar
+
+**Seed Data:**
+- `seed-capitation.sh` — 3 demo contracts, 20 member PCP assignments, completed capitation run
+- `seed-capitation-pcp-assignments.js` — mongosh script for Coverage.PcpNpi updates
+
+**Tests: 176 new (163 unit + 13 smoke)**
+- CapitationRunService, CapitationDisbursementService, CapitationEraService (28 X12 835 tests), NachaCreditFileService, StripeConnectService, all 4 controllers, TenantMiddleware, CosmosSerializer
+- WebApplicationFactory smoke tests for full HTTP pipeline
+
+### Metrics
+
+| Metric                | Previous | Current  |
+|-----------------------|----------|----------|
+| Portal pages          | 47       | 50       |
+| Microservices         | 23       | 24       |
+| Service interfaces    | 20       | 21       |
+| C# application lines  | ~74,800  | ~86,800  |
+| Total code lines      | ~192,000 | ~204,000 |
+| Automated tests       | 797      | 973      |
+
+---
+
+## [4.2.0] - March 2026
+
+### Portal — Operations Depth
+
+**New Pages:**
+- Work Queues — claims examiner workflow with pend queue management by reason (NCCI, missing auth, provider not contracted, COB, medical review), priority tracking, and examiner assignment
+- Appeals — search-first appeal tracking with regulatory deadline monitoring (MA 30-day standard, 72-hour expedited), appeal detail dialog with full lifecycle review
+- Correspondence — outbound letter queue management (adverse determinations, EOBs, RFAIs, welcome letters) with RFAI response tracking and deadline monitoring
+- Enrollment Operations — daily 834 file processing dashboard with transaction counts, adds/terms, and rejection detail
+
+**Enhanced Pages:**
+- Dashboard — added operational alerts (work queue count, pending RFAIs, appeals due), EDI transaction volume summary, and system health indicators
+- Member Detail — added Accumulators tab with plan year deductible and OOP max progress bars, service-specific accumulator tracking, and recent claim activity affecting accumulators
+- Claims — consolidated ClaimsNew into primary Claims page with advanced search (Claim ID, Member ID, Provider, status, date range)
+- Settings — added Operating Mode tab showing per-engine Augment/Replace configuration with mode descriptions
+
+**Portal Architecture:**
+- Navigation reorganized into 6 collapsible groups (Operations, Members & Providers, Configuration, Finance, Monitoring, Admin)
+- All PHI pages changed from [AllowAnonymous] to [Authorize]
+- Search-first pattern enforced on all pages displaying member, claim, or authorization data (HIPAA minimum necessary)
+- 5 new service interfaces and implementations (WorkQueue, Appeals, Correspondence, EnrollmentOperations, OperatingMode)
+- Dashboard metrics corrected (approval rate and claims trend math)
+
+### Engine & Infrastructure
+- ClaimsScrubEngine — C# port of TypeScript validation rules with 20+ rules across 6 categories, wired into AdjudicationController
+- OperatingMode engine — per-engine, per-tenant Augment/Replace toggle with AugmentResult<T> and discrepancy logging
+- Seed scripts corrected to lowercase database name (cloudhealthoffice)
+- Tenant onboarding checklist (TENANT_ONBOARDING_CHECKLIST.md) with Azure AD multi-tenant admin consent flow documentation
+- Parameterized seed-demo-data.js (1,345 lines) for any-tenant seeding
+- Parameterized seed-tenant.js for tenant provisioning
+
+### Documentation
+- README updated with accurate platform metrics and new sections
+- Architecture diagram (SVG, Sentinel theme) replacing ASCII art
+- Adjudication pipeline diagram showing 8-stage processing with latency
+- Operating mode diagram illustrating Augment/Replace architecture
+- Channel Partners section for implementation firm distribution model
+- Adoption path rewritten to reference Operating Mode by name
+- Codebase Scale section with line-count breakdown by language
+
+### Metrics
+
+| Metric                | Previous | Current  |
+|-----------------------|----------|----------|
+| Portal pages          | 43       | 47       |
+| Calculation engines   | 7        | 9        |
+| Service interfaces    | 15       | 20       |
+| Portal Razor lines    | 14,622   | 16,279   |
+| C# application lines  | ~72,900  | ~74,800  |
+| Total code lines      | ~160,000 | ~192,000 |
+| Total lines (w/ docs) | ~240,000 | ~303,000 |
+| Automated tests       | 1,018    | 1,295    |
+
+---
+
 ## [Unreleased]
 
 ### v5.0 - Planned Q2 2026
@@ -582,6 +685,9 @@ Star ★ the repo if you believe payers deserve better than 1990s technology in 
 
 ---
 
+[4.2.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0
+[4.1.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.1.0
+[4.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0
 [3.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v3.0.0
 [2.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v2.0.0
 [1.0.0]: https://github.com/aurelianware/cloudhealthoffice/releases/tag/v1.0.0

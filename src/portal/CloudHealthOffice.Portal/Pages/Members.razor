@@ -1,14 +1,14 @@
 @page "/members"
-@page "/demo/members"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject IMemberService MemberService
 @inject ICoverageService CoverageService
 @inject IDialogService DialogService
 
 <PageTitle>Members - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="members:read" RoleName="MemberServices">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" />
@@ -17,6 +17,11 @@
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         Search and manage member information
     </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     <!-- Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
@@ -144,6 +149,7 @@
         </MudPaper>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private string _memberIdSearch = string.Empty;
@@ -153,6 +159,7 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private string? _serviceError;
 
     private bool HasCriteria =>
         !string.IsNullOrWhiteSpace(_memberIdSearch) ||
@@ -179,6 +186,12 @@
                      : _dobSearch;
 
             _members = await MemberService.SearchMembersAsync(term);
+            _hasSearched = true;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _members = new();
             _hasSearched = true;
         }
         catch

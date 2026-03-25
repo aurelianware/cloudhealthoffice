@@ -1,0 +1,554 @@
+# docker-compose.development.yml
+# Complete CHO backend stack for local development and testing.
+# NOT for production — this is what a developer runs locally to have
+# real services behind the portal.
+#
+# Usage:
+#   docker compose -f docker-compose.development.yml up -d
+#   docker compose -f docker-compose.development.yml ps          # check health
+#   docker compose -f docker-compose.development.yml logs -f     # tail all logs
+#
+# Service URLs:
+#   Claims service:             http://localhost:5001  (Swagger: /swagger)
+#   Benefit-plan service:       http://localhost:5002
+#   Member service:             http://localhost:5003
+#   Provider service:           http://localhost:5004
+#   Authorization service:      http://localhost:5005
+#   Payment service:            http://localhost:5006
+#   Eligibility service:        http://localhost:5007
+#   Tenant service:             http://localhost:5008
+#   Coverage service:           http://localhost:5009
+#   Enrollment-import service:  http://localhost:5010
+#   FHIR service:               http://localhost:5011
+#   Capitation service:         http://localhost:5012
+#   Appeals service:            http://localhost:5013
+#   Attachment service:         http://localhost:5014
+#   Sponsor service:            http://localhost:5015
+#   Reference-data service:     http://localhost:5016
+#   Pricing API:                http://localhost:5017
+#   Premium-billing service:    http://localhost:5018
+#   RFAI service:               http://localhost:5019
+#   Claims-scrubbing service:   http://localhost:5020
+#   Encounter service:          http://localhost:5021
+#   Risk-adjustment service:    http://localhost:5022
+#   Smart-auth service:         http://localhost:5023
+#   Trading-partner service:    http://localhost:5024
+#   Portal:                     https://localhost:5025
+#   MongoDB:                    localhost:27017
+#   Redis:                      localhost:6379
+#   PostgreSQL:                 localhost:5432
+
+x-mongo-env: &mongo-env
+  MongoDb__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+  MongoDb__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
+
+x-common-env: &common-env
+  ASPNETCORE_ENVIRONMENT: Development
+  <<: *mongo-env
+
+x-healthcheck: &service-healthcheck
+  test: ["CMD-SHELL", "curl -f http://localhost:8080/health/live || exit 1"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 15s
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-securepassword123}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: cho
+      POSTGRES_PASSWORD: chodevpass
+      POSTGRES_DB: referencedata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cho -d referencedata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Core Services
+  # ---------------------------------------------------------------------------
+  claims-service:
+    build:
+      context: .
+      dockerfile: src/services/claims-service/Dockerfile
+    ports:
+      - "5001:8080"
+    environment:
+      <<: *common-env
+      Redis__ConnectionString: redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  benefit-plan-service:
+    build:
+      context: .
+      dockerfile: src/services/benefit-plan-service/Dockerfile
+    ports:
+      - "5002:8080"
+    environment:
+      <<: *common-env
+      Redis__ConnectionString: redis:6379
+      Services__ClaimsServiceUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  member-service:
+    build:
+      context: .
+      dockerfile: src/services/member-service/Dockerfile
+    ports:
+      - "5003:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  provider-service:
+    build:
+      context: .
+      dockerfile: src/services/provider-service/Dockerfile
+    ports:
+      - "5004:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  authorization-service:
+    build:
+      context: .
+      dockerfile: src/services/authorization-service/Dockerfile
+    ports:
+      - "5005:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: src/services/payment-service/Dockerfile
+    ports:
+      - "5006:8080"
+    environment:
+      <<: *common-env
+      ClaimsService__BaseUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  eligibility-service:
+    build:
+      context: .
+      dockerfile: src/services/eligibility-service/Dockerfile
+    ports:
+      - "5007:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  tenant-service:
+    build:
+      context: .
+      dockerfile: src/services/tenant-service/Dockerfile
+    ports:
+      - "5008:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  coverage-service:
+    build:
+      context: .
+      dockerfile: src/services/coverage-service/Dockerfile
+    ports:
+      - "5009:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  enrollment-import-service:
+    build:
+      context: .
+      dockerfile: src/services/enrollment-import-service/Dockerfile
+    ports:
+      - "5010:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  fhir-service:
+    build:
+      context: .
+      dockerfile: src/services/fhir-service/Dockerfile
+    ports:
+      - "5011:8080"
+    environment:
+      <<: *common-env
+      Services__MemberServiceUrl: http://member-service:8080
+      Services__ClaimsServiceUrl: http://claims-service:8080
+      Services__ProviderServiceUrl: http://provider-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      member-service:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+      provider-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  capitation-service:
+    build:
+      context: .
+      dockerfile: src/services/capitation-service/Dockerfile
+    ports:
+      - "5012:8080"
+    environment:
+      <<: *common-env
+      CoverageService__BaseUrl: http://coverage-service:8080
+      ProviderService__BaseUrl: http://provider-service:8080
+      RiskAdjustmentService__BaseUrl: http://risk-adjustment-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      coverage-service:
+        condition: service_healthy
+      provider-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  appeals-service:
+    build:
+      context: .
+      dockerfile: src/services/appeals-service/Dockerfile
+    ports:
+      - "5013:8080"
+    environment:
+      <<: *common-env
+      ClaimsService__BaseUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  attachment-service:
+    build:
+      context: .
+      dockerfile: src/services/attachment-service/Dockerfile
+    ports:
+      - "5014:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  sponsor-service:
+    build:
+      context: .
+      dockerfile: src/services/sponsor-service/Dockerfile
+    ports:
+      - "5015:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  reference-data-service:
+    build:
+      context: .
+      dockerfile: src/services/reference-data-service/Dockerfile
+    ports:
+      - "5016:8080"
+    environment:
+      <<: *common-env
+      ConnectionString__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=chodevpass
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  pricing-api:
+    build:
+      context: .
+      dockerfile: src/services/CloudHealthOffice.PricingApi/Dockerfile
+    ports:
+      - "5017:8080"
+    environment:
+      <<: *common-env
+      PricingApi__MongoConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      PricingApi__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  premium-billing-service:
+    build:
+      context: .
+      dockerfile: src/services/premium-billing-service/Dockerfile
+    ports:
+      - "5018:8080"
+    environment:
+      <<: *common-env
+      CoverageService__BaseUrl: http://coverage-service:8080
+      SponsorService__BaseUrl: http://sponsor-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      coverage-service:
+        condition: service_healthy
+      sponsor-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  rfai-service:
+    build:
+      context: .
+      dockerfile: src/services/rfai-service/Dockerfile
+    ports:
+      - "5019:8080"
+    environment:
+      <<: *common-env
+      ClaimsService__BaseUrl: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  claims-scrubbing-service:
+    build:
+      context: .
+      dockerfile: src/services/claims-scrubbing-service/Dockerfile
+    ports:
+      - "5020:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  encounter-service:
+    build:
+      context: .
+      dockerfile: src/services/encounter-service/Dockerfile
+    ports:
+      - "5021:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  risk-adjustment-service:
+    build:
+      context: .
+      dockerfile: src/services/risk-adjustment-service/Dockerfile
+    ports:
+      - "5022:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  smart-auth-service:
+    build:
+      context: .
+      dockerfile: src/services/smart-auth-service/Dockerfile
+    ports:
+      - "5023:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  trading-partner-service:
+    build:
+      context: .
+      dockerfile: src/services/trading-partner-service/Dockerfile
+    ports:
+      - "5024:8080"
+    environment:
+      <<: *common-env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
+  # ---------------------------------------------------------------------------
+  # Portal
+  # ---------------------------------------------------------------------------
+  portal:
+    build:
+      context: .
+      dockerfile: src/portal/CloudHealthOffice.Portal/Dockerfile
+    ports:
+      - "5025:8443"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://+:8443;http://+:8080
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/dev-cert.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: devpassword
+      AzureAd__Instance: https://login.microsoftonline.com/
+      AzureAd__TenantId: common
+      AzureAd__ClientId: ${AzureAd_ClientId:-54f3419d-0d69-4b06-939a-c1a260596556}
+      AzureAd__ClientSecret: ${AzureAd_ClientSecret:-}
+      AzureAd__CallbackPath: /signin-oidc
+      AzureAd__SignedOutCallbackPath: /signout-callback-oidc
+      Services__ClaimsService: http://claims-service:8080/api
+      Services__BenefitPlanService: http://benefit-plan-service:8080/api
+      Services__MemberService: http://member-service:8080/api
+      Services__ProviderService: http://provider-service:8080/api
+      Services__AuthorizationService: http://authorization-service:8080/api
+      Services__PaymentService: http://payment-service:8080/api
+      Services__EligibilityService: http://eligibility-service:8080/api
+      Services__TenantService: http://tenant-service:8080/api
+      Services__CoverageService: http://coverage-service:8080/api
+      Services__RfaiService: http://rfai-service:8080/api
+      Services__AppealsService: http://appeals-service:8080/api
+      Services__AttachmentService: http://attachment-service:8080/api
+      Services__SponsorService: http://sponsor-service:8080/api/v1
+      Services__ReferenceDataService: http://reference-data-service:8080/api/ReferenceData
+      Services__CapitationService: http://capitation-service:8080/api
+      Services__PricingApi: http://pricing-api:8080
+      Services__BillingService: http://premium-billing-service:8080/api
+      MongoDB__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      MongoDB__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
+      Redis__ConnectionString: redis:6379
+    volumes:
+      - ./.certs:/https:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fk https://localhost:8443/health || curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Seed Data (runs once, then exits)
+  # ---------------------------------------------------------------------------
+  seed-data:
+    image: mongo:7
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./scripts/setup:/scripts:ro
+    command: >
+      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
+      /scripts/seed-demo-data.js
+      --eval 'var tenantId="dev-tenant", groupNumber="GRP-DEV-2026"'
+    restart: "no"
+
+  # Seed capitation PCP assignments (runs after main seed, then exits)
+  seed-capitation-pcp:
+    image: mongo:7
+    depends_on:
+      seed-data:
+        condition: service_completed_successfully
+    volumes:
+      - ./scripts/setup:/scripts:ro
+    command: >
+      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
+      /scripts/seed-capitation-pcp-assignments.js
+      --eval 'var tenantId="dev-tenant"'
+    restart: "no"
+
+volumes:
+  mongo-data:
+  postgres-data:

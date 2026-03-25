@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # GitHub Actions Setup Guide
 
 This comprehensive guide covers all aspects of setting up GitHub Actions for automated deployment of the Cloud Health Office solution.

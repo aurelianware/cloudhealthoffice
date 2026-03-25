@@ -9,21 +9,18 @@ PowerShell scripts for repository management, deployment automation, and workflo
 ## Script Files
 
 ### Repository Management
-- **bootstrap_repo.ps1**: Creates new repository from template
-- **fix_repo_structure.ps1**: Normalizes repo structure to Logic Apps deployment layout
+- **scripts/deploy/bootstrap_repo.ps1**: Creates new repository from template
 
-### Deployment Scripts
-- **deploy-workflows.ps1**: Deploys Logic App workflows
-- **deploy-new-integration-account.ps1**: Creates and configures Integration Account
-- **deploy-api-connections.json.ps1**: Deploys API connection configurations
+### Setup Scripts
+- **scripts/setup/setup-integration-account.ps1**: Configures X12 schemas and trading partners
+- **scripts/setup/setup-integration-account-complete.ps1**: Full Integration Account setup
+- **scripts/setup/Configure-PortalApiPermissions.ps1**: Configures portal API permissions
+- **scripts/setup/Grant-AdminConsent.ps1**: Grants admin consent for app registrations
+- **scripts/setup/scan-for-phi-pii.ps1**: Scans for PII/PHI in code
 
-### Configuration Scripts  
-- **setup-integration-account.ps1**: Configures X12 schemas and trading partners
-- **configure-x12-agreements.ps1**: Sets up X12 trading partner agreements
-- **configure-hipaa-trading-partners.ps1**: Configures HIPAA-specific partner settings
-
-### Testing Scripts
-- **test-workflows.ps1**: Comprehensive workflow testing framework
+### Testing & Validation Scripts
+- **scripts/test-e2e.ps1**: End-to-end testing framework
+- **scripts/validate-edi-x12.ps1**: Validates EDI X12 files
 
 ## Best Practices
 
@@ -84,49 +81,22 @@ $ErrorActionPreference = "Stop"
 
 ## Key Scripts
 
-### fix_repo_structure.ps1
-**Purpose**: Ensures repository structure matches Logic Apps deployment requirements  
-**Usage**: `pwsh -c "./fix_repo_structure.ps1 -RepoRoot ."`  
-**Timing**: <1 second (set timeout: 30+ seconds)
+### scripts/deploy/bootstrap_repo.ps1
+**Purpose**: Creates new repository from template
+**Usage**: For creating new Cloud Health Office deployments
+**Note**: Typically used once during initial setup
 
-**When to Run**:
-- After cloning repository
-- Before creating deployment package
-- If workflows are in unexpected locations
-- As pre-commit validation
-
-### test-workflows.ps1
-**Purpose**: Comprehensive testing framework for Logic App workflows  
+### scripts/test-e2e.ps1
+**Purpose**: End-to-end testing framework for workflows
 **Usage Examples**:
 ```powershell
-# Test inbound 275 processing
-pwsh -c "./test-workflows.ps1 -TestInbound275"
-
-# Test outbound 277 RFAI
-pwsh -c "./test-workflows.ps1 -TestOutbound277"
-
-# Full end-to-end workflow
-pwsh -c "./test-workflows.ps1 -TestFullWorkflow"
-
-# Custom environment
-pwsh -c "./test-workflows.ps1 -TestInbound275 -ResourceGroup 'my-rg' -LogicAppName 'my-la'"
+# Run end-to-end tests
+pwsh -c "./scripts/test-e2e.ps1"
 ```
 
 **Trading Partners**:
 - Sender: Clearinghouse (030240928)
 - Receiver: Health Plan Backend ({config.payerId})
-
-### bootstrap_repo.ps1
-**Purpose**: Creates new repository from template  
-**Usage**: For creating new Cloud Health Office deployments  
-**Note**: Typically used once during initial setup
-
-### deploy-workflows.ps1
-**Purpose**: Deploys Logic App workflows to Azure  
-**Prerequisites**:
-- Azure CLI authenticated
-- Valid resource group and Logic App
-- workflows.zip package created
 
 ## Validation
 
@@ -203,26 +173,6 @@ az login
 
 # Set subscription
 az account set --subscription "subscription-id"
-```
-
-### Resource Operations
-```powershell
-# Get Logic App details
-$logicApp = az webapp show `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName | ConvertFrom-Json
-
-# Deploy workflows
-az webapp deploy `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName `
-  --src-path workflows.zip `
-  --type zip
-
-# Restart Logic App
-az webapp restart `
-  --resource-group $ResourceGroup `
-  --name $LogicAppName
 ```
 
 ## Testing Workflows

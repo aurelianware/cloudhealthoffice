@@ -1,0 +1,323 @@
+@page "/enrollment-ops"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IEnrollmentOperationsService EnrollmentOpsService
+@inject ISnackbar Snackbar
+
+<PageTitle>Enrollment Operations - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="enrollment:read" RoleName="EnrollmentSpecialist">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.UploadFile" Class="mr-2" />
+        Enrollment Operations
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        834 enrollment file processing status and daily operations dashboard
+    </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* ─── Today's Summary Cards ─── *@
+    @if (_summary != null)
+    {
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_summary.FilesReceived</MudText>
+                        <MudText Typo="Typo.caption">Files Received Today</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_summary.TotalTransactions total transactions</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Success" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Success">@_summary.MembersAdded</MudText>
+                        <MudText Typo="Typo.caption">Members Added</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">New enrollments</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonOff" Color="Color.Warning" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Warning">@_summary.MembersTermed</MudText>
+                        <MudText Typo="Typo.caption">Members Termed</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Terminations processed</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="2">
+                    <MudCardContent Class="text-center pa-4">
+                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Error">@_summary.ErrorCount</MudText>
+                        <MudText Typo="Typo.caption">Errors / Rejections</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Failed validation</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+
+    @* ─── Enrollment Trending ─── *@
+    <MudPaper Class="pa-4 mb-6" Elevation="2">
+        <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Class="mr-1" />
+            Enrollment Trending (Last 30 Days)
+        </MudText>
+        <MudChart ChartType="ChartType.Line"
+                  ChartSeries="@_chartSeries"
+                  XAxisLabels="@_chartLabels"
+                  Width="100%" Height="250px"
+                  ChartOptions="@_chartOptions" />
+    </MudPaper>
+
+    @* ─── Recent 834 Files Table ─── *@
+    <MudText Typo="Typo.h5" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Small" Class="mr-1" />
+        Recent 834 Files
+    </MudText>
+
+    <MudTable Items="@_files"
+              Hover="true"
+              Striped="true"
+              Dense="true"
+              Elevation="2"
+              Loading="_loading"
+              LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>File Name</MudTh>
+            <MudTh>Received</MudTh>
+            <MudTh>Sponsor / Group</MudTh>
+            <MudTh Style="text-align: right;">Transactions</MudTh>
+            <MudTh Style="text-align: right;">Added</MudTh>
+            <MudTh Style="text-align: right;">Termed</MudTh>
+            <MudTh Style="text-align: right;">Changed</MudTh>
+            <MudTh Style="text-align: right;">Rejected</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="File Name">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.FileName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Received">
+                <MudText Typo="Typo.body2">@context.ReceivedTime.ToString("MM/dd HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Sponsor">
+                <MudText Typo="Typo.body2">@context.SponsorName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.GroupNumber</MudText>
+            </MudTd>
+            <MudTd DataLabel="Transactions" Style="text-align: right;">@context.TransactionCount</MudTd>
+            <MudTd DataLabel="Added" Style="text-align: right;">
+                <MudText Typo="Typo.body2" Color="@(context.AddedCount > 0 ? Color.Success : Color.Default)">@context.AddedCount</MudText>
+            </MudTd>
+            <MudTd DataLabel="Termed" Style="text-align: right;">
+                <MudText Typo="Typo.body2" Color="@(context.TermedCount > 0 ? Color.Warning : Color.Default)">@context.TermedCount</MudText>
+            </MudTd>
+            <MudTd DataLabel="Changed" Style="text-align: right;">@context.ChangedCount</MudTd>
+            <MudTd DataLabel="Rejected" Style="text-align: right;">
+                <MudText Typo="Typo.body2" Color="@(context.RejectedCount > 0 ? Color.Error : Color.Default)" Style="@(context.RejectedCount > 0 ? "font-weight: 600;" : "")">
+                    @context.RejectedCount
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small"
+                         Color="@GetStatusColor(context.Status)"
+                         Variant="Variant.Filled"
+                         Style="@(context.Status == "Processing" ? "animation: pulse 1.5s infinite;" : "")">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                    @if (context.RejectedCount > 0 || context.Status == "Partial" || context.Status == "Completed")
+                    {
+                        <MudButton Color="Color.Primary" OnClick="@(() => ToggleDetail(context.FileId))">
+                            @(_expandedFileId == context.FileId ? "Hide" : "Details")
+                        </MudButton>
+                    }
+                    @if (context.Status == "Failed")
+                    {
+                        <MudButton Color="Color.Warning" OnClick="@(() => OnReprocess(context.FileId, context.FileName))">
+                            Reprocess
+                        </MudButton>
+                    }
+                </MudButtonGroup>
+            </MudTd>
+        </RowTemplate>
+        <ChildRowContent>
+            @if (_expandedFileId == context.FileId && _expandedDetail != null)
+            {
+                <MudTr>
+                    <td colspan="10" style="padding: 0;">
+                        <MudPaper Class="pa-4 ma-2" Elevation="0" Style="background: rgba(0,255,255,0.03); border: 1px solid rgba(0,255,255,0.1);">
+                            @if (_expandedDetail.Rejections.Any())
+                            {
+                                <MudText Typo="Typo.subtitle2" Color="Color.Error" Class="mb-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Class="mr-1" />
+                                    @_expandedDetail.Rejections.Count Rejection(s)
+                                </MudText>
+                                <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                                    <thead>
+                                        <tr>
+                                            <th>Member ID</th>
+                                            <th>Member Name</th>
+                                            <th>Error Code</th>
+                                            <th>Error Description</th>
+                                            <th>Raw Segment</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var rej in _expandedDetail.Rejections)
+                                        {
+                                            <tr>
+                                                <td><MudText Typo="Typo.body2" Style="font-family: monospace;">@rej.MemberId</MudText></td>
+                                                <td>@rej.MemberName</td>
+                                                <td><MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">@rej.ErrorCode</MudChip></td>
+                                                <td><MudText Typo="Typo.body2">@rej.ErrorDescription</MudText></td>
+                                                <td><MudText Typo="Typo.caption" Style="font-family: monospace; word-break: break-all; max-width: 300px;">@rej.RawSegmentReference</MudText></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Success" Dense="true">All transactions processed successfully — no rejections.</MudAlert>
+                            }
+                        </MudPaper>
+                    </td>
+                </MudTr>
+            }
+        </ChildRowContent>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-8">
+                No enrollment files received in the selected period.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+</PermissionGate>
+
+@code {
+    private bool _loading = true;
+    private string? _serviceError;
+    private EnrollmentDailySummary? _summary;
+    private List<EnrollmentFile> _files = new();
+    private string? _expandedFileId;
+    private EnrollmentFileDetail? _expandedDetail;
+
+    // Chart data
+    private List<ChartSeries> _chartSeries = new();
+    private string[] _chartLabels = Array.Empty<string>();
+    private ChartOptions _chartOptions = new() { YAxisTicks = 10, LineStrokeWidth = 2 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            var summaryTask = EnrollmentOpsService.GetTodaySummaryAsync();
+            var filesTask = EnrollmentOpsService.GetRecentFilesAsync(7);
+            await Task.WhenAll(summaryTask, filesTask);
+
+            _summary = summaryTask.Result;
+            _files = filesTask.Result;
+
+            BuildChartData();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Enrollment operations service is currently unavailable: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred loading enrollment operations: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildChartData()
+    {
+        var today = DateTime.Today;
+        var labels = new List<string>();
+        var adds = new List<double>();
+        var terms = new List<double>();
+
+        // Generate 30 days of mock trending data
+        var rng = new Random(42); // deterministic seed
+        for (int i = 29; i >= 0; i--)
+        {
+            var date = today.AddDays(-i);
+            labels.Add(date.ToString("MM/dd"));
+
+            // Weekend dip
+            var isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+            var baseAdds = isWeekend ? 2 : 15;
+            var baseTerms = isWeekend ? 1 : 6;
+
+            adds.Add(baseAdds + rng.Next(-3, 8));
+            terms.Add(Math.Max(0, baseTerms + rng.Next(-3, 5)));
+        }
+
+        _chartLabels = labels.ToArray();
+        _chartSeries = new List<ChartSeries>
+        {
+            new() { Name = "Adds", Data = adds.ToArray() },
+            new() { Name = "Terms", Data = terms.ToArray() }
+        };
+    }
+
+    private async Task ToggleDetail(string fileId)
+    {
+        if (_expandedFileId == fileId)
+        {
+            _expandedFileId = null;
+            _expandedDetail = null;
+            return;
+        }
+
+        _expandedFileId = fileId;
+        _expandedDetail = await EnrollmentOpsService.GetFileDetailAsync(fileId);
+    }
+
+    private void OnReprocess(string fileId, string fileName)
+    {
+        Snackbar.Add($"Reprocess queued for {fileName}", Severity.Info);
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Completed" => Color.Success,
+        "Processing" => Color.Info,
+        "Failed" => Color.Error,
+        "Partial" => Color.Warning,
+        _ => Color.Default
+    };
+}

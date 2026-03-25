@@ -1,3 +1,5 @@
+> **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
+
 # AI Error Resolution - Quick Start Guide
 
 Get up and running with AI-driven EDI 277 error resolution in under 5 minutes.

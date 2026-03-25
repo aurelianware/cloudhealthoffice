@@ -93,8 +93,8 @@ Before getting started, ensure you have:
 - Resource Group for deployment
 - Azure Storage Account (Data Lake Gen2)
 - Azure Service Bus Namespace
-- Azure Logic Apps Standard instance
-- Azure Integration Account (for X12 processing)
+- Azure Kubernetes Service (AKS) cluster
+- Argo Workflows (installed on AKS)
 
 ### Access & Permissions
 
@@ -124,8 +124,9 @@ cd cloudhealthoffice
 # Install and build
 npm install && npm run build
 
-# Deploy workflows
-./deploy-workflows.ps1 -ResourceGroup <your-rg> -LogicAppName <your-la>
+# Deploy Argo workflows to AKS
+az aks get-credentials --resource-group <your-rg> --name <your-aks>
+kubectl apply -f infrastructure/argo-workflows/
 ```
 
 **See [QUICKSTART.md](./QUICKSTART.md) for detailed one-click deployment guide.**
@@ -232,9 +233,9 @@ npm run generate -- generate -c my-payer-config.json
 cd generated/YOUR_PAYER_ID/infrastructure
 ./deploy.sh
 
-# Deploy workflows
-cd ../..
-./deploy-workflows.ps1 -ResourceGroup your-resource-group -LogicAppName your-logic-app
+# Deploy Argo workflows
+az aks get-credentials --resource-group your-resource-group --name your-aks-cluster
+kubectl apply -f infrastructure/argo-workflows/
 ```
 
 ---
@@ -245,11 +246,9 @@ Cloud Health Office uses a modern, event-driven architecture:
 
 ### Core Components
 
-1. **Logic Apps Workflows**: Stateful workflows for EDI processing
-   - `ingest275`: Process 275 attachment submissions
-   - `ingest278`: Process 278 authorization requests
-   - `rfai277`: Generate and send 277 RFAI responses
-   - `replay278`: Deterministic replay endpoint for 278 transactions
+1. **Argo Workflows on AKS**: DAG-based workflows for EDI processing
+   - `claims-adjudication-workflow`: 7-step DAG for end-to-end claims adjudication
+   - .NET microservices handle 275/277/278 EDI transactions natively
 
 2. **Azure Service Bus**: Pub/sub messaging for decoupled processing
    - `attachments-in`: Published after 275 ingestion
@@ -260,12 +259,10 @@ Cloud Health Office uses a modern, event-driven architecture:
    - Raw files: `hipaa-attachments/raw/{type}/{yyyy}/{MM}/{dd}/`
    - Archive: Date-partitioned for compliance and auditing
 
-4. **Integration Account**: X12 encoding/decoding with trading partner agreements
-
 ### Data Flow
 
 ```
-SFTP → Logic App → Integration Account (X12 Decode) → Service Bus → claims backend API
+SFTP → AKS Microservices (X12 Decode) → Service Bus → Argo Workflow (Adjudication)
                                                               ↓
                                                         Data Lake Archive
 ```
@@ -427,9 +424,10 @@ npm test -- logging-validation.test.ts
      -p baseName=payer-attachments
    ```
 
-3. **Deploy Workflows**:
+3. **Deploy Argo Workflows**:
    ```bash
-   ./deploy-workflows.ps1 -ResourceGroup payer-attachments-rg -LogicAppName payer-attachments-la
+   az aks get-credentials --resource-group payer-attachments-rg --name payer-attachments-aks
+   kubectl apply -f infrastructure/argo-workflows/
    ```
 
 ### CI/CD Deployment
@@ -447,11 +445,14 @@ See `.github/workflows/deploy.yml` for details.
 After deployment, verify:
 
 ```bash
-# Check Logic App status
-az webapp show -g your-rg -n your-logic-app --query state
+# Check AKS cluster status
+az aks show -g your-rg --name your-aks-cluster --query powerState
 
-# List workflows
-az logicapp list-workflows -g your-rg --name your-logic-app
+# Verify pods are running
+kubectl get pods -n cloudhealthoffice
+
+# List Argo workflow templates
+argo template list -n cloudhealthoffice
 
 # Check Service Bus topics
 az servicebus topic list --namespace-name your-sb-ns -g your-rg
@@ -637,7 +638,7 @@ Before deploying to production, verify:
 
 ### Sample Implementation
 
-Here's a complete example of HIPAA-compliant logging in a Logic App workflow:
+Here's a complete example of HIPAA-compliant logging in a service workflow:
 
 ```typescript
 import { redactPHI, createHIPAALogger } from './src/security/hipaaLogger';

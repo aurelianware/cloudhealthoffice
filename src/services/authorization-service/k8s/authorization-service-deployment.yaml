@@ -5,13 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__ContainerName: "Authorizations"
----
-# Secret is created separately via kubectl with actual Cosmos DB credentials
-# kubectl create secret generic authorization-service-secret \
-#   --from-literal=CosmosDb__Endpoint='...' \
-#   --from-literal=CosmosDb__Key='...'
+  MongoDb__DatabaseName: "cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,9 +15,8 @@ metadata:
   labels:
     app: authorization-service
     tier: backend
-    component: prior-authorization
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: authorization-service
@@ -32,72 +25,52 @@ spec:
       labels:
         app: authorization-service
         tier: backend
-        component: prior-authorization
     spec:
       containers:
       - name: authorization-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-authorization-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-authorization-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
+          protocol: TCP
         env:
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
               name: authorization-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: authorization-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: authorization-service-config
-              key: CosmosDb__ContainerName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: authorization-service-secret
-              key: CosmosDb__Endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: authorization-service-secret
-              key: CosmosDb__Key
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: authorization-service-secret
-              key: MongoDb__ConnectionString
-              optional: true
+              name: database-secret
+              key: connectionString
         - name: MongoDb__DatabaseName
           valueFrom:
             configMapKeyRef:
               name: authorization-service-config
               key: MongoDb__DatabaseName
-              optional: true
         resources:
           requests:
             cpu: 100m
-            memory: 256Mi
+            memory: 128Mi
           limits:
             cpu: 500m
             memory: 512Mi
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/live
             port: 8080
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -115,29 +88,3 @@ spec:
     port: 80
     targetPort: 8080
     protocol: TCP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: authorization-service-hpa
-  namespace: cloudhealthoffice
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: authorization-service
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80

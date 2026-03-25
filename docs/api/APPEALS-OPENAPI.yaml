@@ -259,7 +259,7 @@ paths:
         - FINALIZED status requires `decision` and `decisionReason` fields
         - Includes retry logic (3 retries, 30-second intervals)
         
-        This is implemented as a Logic App workflow: `appeal_update_from_payer_outbound`
+        This is implemented as an Argo Workflow on AKS: `appeal_update_from_payer_outbound`
       operationId: pushAppealUpdateToAvality
       security:
         - bearerAuth: []

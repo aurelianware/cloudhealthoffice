@@ -162,6 +162,7 @@
         <ul id="mainNav">
           <li><a href="/">Home</a></li>
           <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform" style="color:#00ffff;" aria-current="page">Platform</a></li>
           <li><a href="/release-notes">Versions</a></li>
@@ -314,12 +315,12 @@
 
       <section class="assessment-section">
         <h2>Architecture Overview</h2>
-        <p>Azure-native infrastructure leveraging Logic Apps Standard, Service Bus, Data Lake Gen2, and Integration Account for complete X12 transaction processing.</p>
+        <p>Kubernetes-native infrastructure leveraging Argo Workflows on AKS, Service Bus, Data Lake Gen2, and container-based microservices for complete X12 transaction processing.</p>
         
         <div class="card">
           <h3>Deployment Components</h3>
           <ul>
-            <li><strong>Logic Apps Standard:</strong> Workflow orchestration for all EDI transaction types</li>
+            <li><strong>Argo Workflows on AKS:</strong> Kubernetes-native workflow orchestration for all EDI transaction types</li>
             <li><strong>Service Bus:</strong> Event-driven architecture with topics for pub/sub patterns</li>
             <li><strong>Data Lake Gen2:</strong> Hierarchical namespace for organized PHI storage</li>
             <li><strong>Integration Account:</strong> X12 schema validation and trading partner agreements</li>
@@ -333,10 +334,10 @@
           <h3>Multi-Tenant Architecture</h3>
           <p>Each payer tenant receives complete logical isolation while sharing infrastructure efficiency:</p>
           <ul>
-            <li>Dedicated Logic App workflows per payer</li>
+            <li>Dedicated Argo workflow templates per payer</li>
             <li>Isolated Service Bus topics and subscriptions</li>
             <li>Separate Data Lake containers with hierarchical paths</li>
-            <li>Individual Integration Account agreements</li>
+            <li>Individual trading partner configurations</li>
             <li>Zero shared secrets or configuration</li>
           </ul>
         </div>

@@ -90,14 +90,14 @@ internal class NcciEditService : INcciEditService
         _logger.LogInformation(
             "Importing NCCI quarterly update for tenant {TenantId}, quarter {Quarter}: " +
             "{PairCount} pairs, {MueCount} MUE entries",
-            tenantId, quarter, pairs.Count, entries.Count);
+            SanitizeForLog(tenantId), SanitizeForLog(quarter), pairs.Count, entries.Count);
 
         var (pairsWritten, mueWritten) = await _repository.UpsertQuarterAsync(
             tenantId, quarter, pairs, entries, ct);
 
         _logger.LogInformation(
             "NCCI import complete for {Quarter}: {PairsWritten} pairs, {MueWritten} MUE entries written",
-            quarter, pairsWritten, mueWritten);
+            SanitizeForLog(quarter), pairsWritten, mueWritten);
 
         return (pairsWritten, mueWritten);
     }

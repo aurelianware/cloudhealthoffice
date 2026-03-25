@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: appeals-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  AzureStorage__ContainerName: "appeal-attachments"
+  ClaimsService__BaseUrl: "http://claims-service.cloudhealthoffice"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appeals-service
+  namespace: cloudhealthoffice
+  labels:
+    app: appeals-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: appeals-service
+  template:
+    metadata:
+      labels:
+        app: appeals-service
+        tier: backend
+    spec:
+      containers:
+      - name: appeals-service
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-appeals-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: CosmosDb__AccountEndpoint
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: endpoint
+        - name: CosmosDb__AccountKey
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: key
+        - name: CosmosDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: CosmosDb__DatabaseName
+        - name: AzureStorage__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: azure-storage-secret
+              key: connectionString
+        - name: AzureStorage__ContainerName
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AzureStorage__ContainerName
+        - name: ClaimsService__BaseUrl
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: ClaimsService__BaseUrl
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appeals-service
+  namespace: cloudhealthoffice
+  labels:
+    app: appeals-service
+spec:
+  type: ClusterIP
+  selector:
+    app: appeals-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

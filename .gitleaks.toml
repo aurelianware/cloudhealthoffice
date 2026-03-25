@@ -20,6 +20,8 @@ title = "Cloud Health Office Gitleaks Config"
     # README curl examples with Bearer token placeholders
     '''README\.md''',
     '''src/portal/CloudHealthOffice\.Portal/Pages/Apis\.razor''',
+    # Portal app settings has empty placeholder credentials + Stripe price IDs (not secrets)
+    '''src/portal/CloudHealthOffice\.Portal/appsettings\.json''',
     # TypeScript FHIR mapping tests (export names flagged as API keys)
     '''src/fhir/mapping/__tests__/.*\.test\.ts''',
     '''src/fhir/__tests__/.*\.test\.ts''',
@@ -53,4 +55,6 @@ title = "Cloud Health Office Gitleaks Config"
     '''claims_backend_api_key''',
     # TypeScript named imports/exports flagged as API keys
     '''mapX12\d+To\w+''',
+    # Stripe price IDs are public identifiers, not secrets
+    '''price_[a-zA-Z0-9]+''',
   ]

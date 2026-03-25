@@ -94,7 +94,7 @@ This document describes the configuration for State Medicaid MCO (MCO001).
 - **Resource Name Prefix**: mco001
 - **Location**: eastus
 - **Environment**: dev
-- **Logic App SKU**: WS1
+- **AKS Node SKU**: Standard_D4s_v3
 - **Worker Count**: 1
 - **Always On**: true
 

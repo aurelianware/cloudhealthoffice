@@ -38,6 +38,9 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
         _logger = logger;
     }
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public async Task<AccumulatorDocument?> GetAsync(
         string tenantId, string ownerId, AccumulatorScope scope,
         Guid benefitPlanId, string planYear,
@@ -79,7 +82,7 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
                     new PartitionKey(document.TenantId),
                     cancellationToken: ct);
 
-                _logger.LogDebug("Created new Cosmos accumulator document {DocId}", document.Id);
+                _logger.LogDebug("Created new Cosmos accumulator document {DocId}", SanitizeForLog(document.Id));
             }
             else
             {
@@ -103,7 +106,7 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
         {
             _logger.LogDebug(
                 "Cosmos concurrency conflict on {DocId}: {Status}",
-                document.Id, ex.StatusCode);
+                SanitizeForLog(document.Id), ex.StatusCode);
             throw new OptimisticConcurrencyException(document.Id);
         }
     }
