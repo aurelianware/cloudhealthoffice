@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CMS-0057-F Compliance Guide — Cloud Health Office Documentation</title>
+  <meta name="description" content="Complete CMS-0057-F compliance guide for healthcare payers. Patient Access API, Provider Access API, Payer-to-Payer API, Prior Authorization API — achieve compliance 18 months ahead of the January 2027 deadline." />
+  <meta name="keywords" content="CMS-0057-F compliance guide, CMS interoperability rule, healthcare payer FHIR API, prior authorization API compliance, January 2027 deadline, Patient Access API, Da Vinci implementation guide, FHIR R4 healthcare payer" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/compliance" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/compliance" />
+  <meta property="og:title" content="CMS-0057-F Compliance Guide — Cloud Health Office" />
+  <meta property="og:description" content="Achieve CMS-0057-F compliance 18 months ahead of the January 2027 deadline. Complete FHIR R4 API implementation for healthcare payers." />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org", "@type": "TechArticle",
+    "headline": "CMS-0057-F Compliance Guide for Healthcare Payers",
+    "description": "Complete guide to CMS-0057-F (Advancing Interoperability and Improving Prior Authorization) compliance using Cloud Health Office FHIR R4 APIs.",
+    "url": "https://cloudhealthoffice.com/docs/compliance",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "datePublished": "2026-03-24",
+    "about": { "@type": "Thing", "name": "CMS-0057-F", "description": "CMS Interoperability and Prior Authorization Final Rule" },
+    "breadcrumb": { "@type": "BreadcrumbList", "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+      { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+      { "@type": "ListItem", "position": 3, "name": "CMS-0057-F Compliance", "item": "https://cloudhealthoffice.com/docs/compliance" }
+    ]}
+  }
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/cms-0057f-compliance">CMS Compliance</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/login" style="color:#00ffff;font-weight:bold;">Sign In</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance" class="active">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#what-is-cms-0057f">What is CMS-0057-F?</a></li><li><a href="#compliance-dashboard">Compliance Dashboard</a></li><li><a href="#required-apis">Required APIs</a></li><li><a href="#x12-to-fhir">X12 to FHIR Mapping</a></li><li><a href="#deadlines">Compliance Deadlines</a></li><li><a href="#verification">Verification</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">CMS-0057-F Compliance</span></div>
+
+        <h1>CMS-0057-F Compliance Guide</h1>
+        <p class="docs-subtitle">Cloud Health Office delivers 100% CMS-0057-F compliance with production-ready FHIR R4 APIs — 18 months ahead of the January 2027 deadline. Zero external dependencies. 1,018 tests passing.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/cms-0057f-compliance.svg" alt="CMS-0057-F compliance diagram showing Patient Access API, Provider Access API, Prior Authorization, Payer-to-Payer API, and Provider Directory API — all complete" />
+          <figcaption>All five CMS-0057-F required API categories — implemented and production-tested</figcaption>
+        </figure>
+
+        <h2 id="what-is-cms-0057f">What is CMS-0057-F?</h2>
+        <p><strong>CMS-0057-F</strong> (Advancing Interoperability and Improving Prior Authorization Processes) is a final rule requiring health plans to implement specific FHIR APIs to improve prior authorization workflows, reduce provider burden, and enhance patient care coordination.</p>
+        <p>Non-compliance penalties can reach up to <strong>$1M per violation</strong>. The rule applies to Medicaid MCOs, Medicare Advantage plans, CHIP programs, and QHP issuers on the federal exchange.</p>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">Deadline: January 1, 2027</div>
+          <p>All impacted payers must have Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs live in production by this date. Cloud Health Office was production-ready in November 2024.</p>
+        </div>
+
+        <h2 id="compliance-dashboard">Compliance Dashboard</h2>
+
+        <table>
+          <thead><tr><th>Requirement</th><th>Status</th><th>Tests</th><th>Da Vinci IG</th></tr></thead>
+          <tbody>
+            <tr><td>Patient Access API</td><td><span class="badge badge-complete">Complete</span></td><td>19 tests</td><td>PDex</td></tr>
+            <tr><td>Provider Access API</td><td><span class="badge badge-complete">Complete</span></td><td>8 tests</td><td>PDex</td></tr>
+            <tr><td>Payer-to-Payer API</td><td><span class="badge badge-complete">Complete</span></td><td>6 tests</td><td>PAS</td></tr>
+            <tr><td>Prior Authorization API</td><td><span class="badge badge-complete">Complete</span></td><td>12 tests</td><td>PAS + CRD + DTR</td></tr>
+            <tr><td>72-Hour Urgent Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>—</td></tr>
+            <tr><td>7-Day Standard Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>—</td></tr>
+            <tr><td>USCDI v1/v2 Coverage</td><td><span class="badge badge-complete">Complete</span></td><td>Data Class Mapping</td><td>US Core 3.1.1</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="required-apis">Required APIs</h2>
+
+        <h3>Patient Access API</h3>
+        <p>Empowers patients to access their complete health data electronically — claims history, Explanation of Benefits, clinical data, coverage, and eligibility. Transforms X12 837/835 transactions into FHIR Claim and ExplanationOfBenefit resources. Secured with OAuth 2.0 patient consent flow via SMART on FHIR.</p>
+
+        <h3>Provider Access API</h3>
+        <p>Gives in-network providers access to member clinical and claims data with appropriate consent. Implements Da Vinci PDex with $member-match for patient identification across payers without sharing raw identifiers.</p>
+
+        <h3>Payer-to-Payer API</h3>
+        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> for efficient batch transfer of member records between payers while maintaining HIPAA compliance.</p>
+
+        <h3>Prior Authorization API</h3>
+        <p>Converts the prior auth workflow from phone/fax to real-time FHIR-based requests. Full X12 278 bidirectional mapping to FHIR ServiceRequest using Da Vinci PAS, CRD, and DTR implementation guides. Automates the 72-hour urgent and 7-day standard response timelines required by the rule.</p>
+
+        <h2 id="x12-to-fhir">X12 to FHIR R4 Transformation</h2>
+
+        <table>
+          <thead><tr><th>X12 Transaction</th><th>FHIR Resource</th><th>Profile</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>X12 270 Eligibility</td><td>Patient, CoverageEligibilityRequest</td><td>US Core 3.1.1</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 837 Claims</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest</td><td>Da Vinci PAS</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 835 Remittance</td><td>ExplanationOfBenefit</td><td>Da Vinci PDex</td><td><span class="badge badge-production">Production</span></td></tr>
+            <tr><td>X12 275 Attachments</td><td>DocumentReference</td><td>US Core</td><td><span class="badge badge-production">Production</span></td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="deadlines">Compliance Deadlines</h2>
+
+        <table>
+          <thead><tr><th>Requirement</th><th>Effective Date</th><th>CHO Status</th></tr></thead>
+          <tbody>
+            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Live</span></td></tr>
+            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
+            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
+            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Ready</span></td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="verification">Quick Compliance Verification</h2>
+        <p>After deploying Cloud Health Office (see <a href="/docs/quickstart">Quick Start</a>), you can verify compliance readiness in minutes:</p>
+
+<pre><code><span class="code-comment"># Start the FHIR server</span>
+npm run start:fhir-server
+
+<span class="code-comment"># Verify FHIR CapabilityStatement</span>
+curl http://localhost:3000/fhir/r4/metadata | jq '.rest[0].resource | length'
+
+<span class="code-comment"># Run the compliance checker</span>
+npm run compliance:check</code></pre>
+
+        <p>The compliance checker validates all CMS-0057-F data classes, response timelines, USCDI coverage, and Da Vinci IG conformance automatically.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Detailed compliance page</div>
+          <p>For the full commercial breakdown including cost comparisons and implementation timelines, see the <a href="/cms-0057f-compliance">CMS-0057-F Compliance</a> product page.</p>
+        </div>
+
+        <div class="docs-pager">
+          <a href="/docs/quickstart"><div class="pager-label">&larr; Previous</div><div class="pager-title">Quick Start</div></a>
+          <a href="/docs/architecture" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Architecture</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer>
+  <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
+</body>
+</html>
