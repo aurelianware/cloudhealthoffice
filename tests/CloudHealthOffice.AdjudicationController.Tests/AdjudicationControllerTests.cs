@@ -461,7 +461,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     [Fact]
     public async Task ResolveRates_InNetworkProvider_ReturnsContractedRate()
     {
-        // Arrange
+        // Arrange — clear calls accumulated from earlier tests in this shared fixture
+        _factory.RateEngine.ClearReceivedCalls();
         _factory.RateEngine
             .ResolveBatchAsync(Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
             .Returns(new PricingResultSet

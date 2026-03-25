@@ -171,6 +171,20 @@ public class CapitationRunCriteria
     public ContractType? ContractType { get; set; }
 
     /// <summary>
+    /// Optional: limit the run to a specific set of provider NPIs. When non-empty,
+    /// only contracts whose ProviderNPI appears in this list are processed. Useful
+    /// for batch ad-hoc runs covering multiple providers without a full monthly run.
+    /// </summary>
+    public List<string> ProviderNPIs { get; set; } = new();
+
+    /// <summary>
+    /// Optional: limit the run to contracts that cover at least one of these plan IDs.
+    /// When non-empty, contracts whose PlanIds list has no overlap with this list are
+    /// excluded. Useful for running capitation for a specific product/plan.
+    /// </summary>
+    public List<string> PlanIds { get; set; } = new();
+
+    /// <summary>
     /// Original capitation period being adjusted. Required for RetroAdjustment runs
     /// to identify which prior period to reprocess. Must be null for other run types.
     /// </summary>
