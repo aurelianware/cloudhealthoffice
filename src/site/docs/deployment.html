@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deployment Guide — Cloud Health Office Documentation</title>
+  <meta name="description" content="Deploy Cloud Health Office to production. SaaS signup in 5 minutes or self-hosted on AKS, EKS, or GKE with gated releases, Bicep IaC, Helm charts, and GitHub Actions CI/CD." />
+  <meta name="keywords" content="healthcare platform deployment, Kubernetes healthcare deployment, AKS EKS GKE health plan, HIPAA compliant deployment, healthcare payer infrastructure, Bicep IaC healthcare, Helm chart healthcare" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/deployment" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/deployment" />
+  <meta property="og:title" content="Deployment Guide — Cloud Health Office" />
+  <meta property="og:description" content="SaaS signup in 5 minutes or self-hosted on AKS, EKS, GKE with gated releases and HIPAA-compliant infrastructure." />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Cloud Health Office Deployment Guide","description":"Deploy Cloud Health Office — SaaS or self-hosted on any Kubernetes cluster.","url":"https://cloudhealthoffice.com/docs/deployment","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Deployment","item":"https://cloudhealthoffice.com/docs/deployment"}]}}
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/cms-0057f-compliance">CMS Compliance</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/login" style="color:#00ffff;font-weight:bold;">Sign In</a></li></ul></div></div></nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment" class="active">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#saas">Option A: SaaS</a></li><li><a href="#self-hosted">Option B: Self-Hosted</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local-dev">Local Development</a></li><li><a href="#cicd">CI/CD Pipeline</a></li><li><a href="#production">Production Deployment</a></li><li><a href="#verification">Verification</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Deployment</span></div>
+
+        <h1>Deployment Guide</h1>
+        <p class="docs-subtitle">Two paths to production: managed SaaS (live in 5 minutes) or self-hosted on your own Kubernetes cluster with full infrastructure control. Both paths include HIPAA-compliant infrastructure and zero-downtime deployments.</p>
+
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-deployment-pipeline.svg" alt="Deployment pipeline showing SaaS signup flow and self-hosted DEV → UAT → PROD gated release strategy with multi-cloud support" />
+          <figcaption>SaaS auto-provisioning or self-hosted gated release pipeline — AKS, EKS, or GKE</figcaption>
+        </figure>
+
+        <h2 id="saas">Option A: SaaS (Recommended)</h2>
+        <p>The fastest path to production. Sign up at the portal, select your tier, and your tenant is auto-provisioned with Cosmos DB, SFTP credentials, Azure AD, and a 14-day free trial.</p>
+
+        <div class="step">
+          <span class="step-number green">1</span>
+          <div class="step-body">
+            <h3>Sign up and start trial</h3>
+<pre><code><span class="code-comment"># Visit the portal</span>
+open https://portal.cloudhealthoffice.com
+
+<span class="code-comment"># Sign in with any Microsoft account</span>
+<span class="code-comment"># Select tier: Starter ($499/mo) | Professional ($1,499/mo) | Enterprise</span>
+<span class="code-comment"># Click "Start Free Trial"</span></code></pre>
+            <p>What gets auto-provisioned: Cosmos DB tenant partition, SFTP credentials for clearinghouse integration, Azure AD application, 14-day trial subscription (Stripe), and welcome email with credentials.</p>
+          </div>
+        </div>
+
+        <h2 id="self-hosted">Option B: Self-Hosted</h2>
+        <p>For customers requiring on-premise or own-subscription deployment with full infrastructure ownership.</p>
+
+        <h2 id="prerequisites">Prerequisites</h2>
+
+        <table>
+          <thead><tr><th>Tool</th><th>Minimum Version</th></tr></thead>
+          <tbody>
+            <tr><td><code>Azure CLI</code></td><td>2.77.0+</td></tr>
+            <tr><td><code>Bicep CLI</code></td><td>0.37.0+</td></tr>
+            <tr><td><code>kubectl</code></td><td>1.28+</td></tr>
+            <tr><td><code>Helm</code></td><td>3.14+</td></tr>
+            <tr><td><code>Docker</code></td><td>24+</td></tr>
+            <tr><td><code>Node.js</code></td><td>18+</td></tr>
+          </tbody>
+        </table>
+
+<pre><code><span class="code-comment"># Verify all tools</span>
+az --version
+az bicep version
+kubectl version --client
+helm version
+docker --version
+node --version</code></pre>
+
+        <h2 id="local-dev">Local Development</h2>
+        <p>Start with Docker Compose for local development and testing. This runs MongoDB, Redis, and all core services locally. See the <a href="/docs/quickstart">Quick Start</a> for a complete walkthrough.</p>
+
+<pre><code><span class="code-comment"># Start local stack</span>
+docker compose up -d
+
+<span class="code-comment"># Verify health</span>
+curl -s http://localhost:5001/health</code></pre>
+
+        <h2 id="cicd">CI/CD Pipeline</h2>
+        <p>The deployment pipeline uses GitHub Actions with OIDC authentication (no stored secrets) and environment protection rules for approval gates between stages.</p>
+
+        <h3>Pipeline Stages</h3>
+        <table>
+          <thead><tr><th>Stage</th><th>Trigger</th><th>What Happens</th></tr></thead>
+          <tbody>
+            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, test (1,018 tests), security scan, Docker image build</td></tr>
+            <tr><td><strong>DEV</strong></td><td>CI pass</td><td>Auto-deploy to DEV AKS, run E2E tests</td></tr>
+            <tr><td><strong>UAT</strong></td><td>DEV pass + approval</td><td>Deploy to UAT, run integration tests, security validation</td></tr>
+            <tr><td><strong>PROD</strong></td><td>UAT pass + approval</td><td>Blue-green deploy to PROD AKS, smoke tests, rollback-ready</td></tr>
+          </tbody>
+        </table>
+
+        <h3>GitHub Actions Setup</h3>
+<pre><code><span class="code-comment"># Configure OIDC federated credentials (no stored secrets)</span>
+az ad app federated-credential create \
+  --id {app-id} \
+  --parameters '{
+    "name": "github-actions-main",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:aurelianware/cloudhealthoffice:ref:refs/heads/main",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'</code></pre>
+
+        <h2 id="production">Production Deployment</h2>
+
+        <h3>Infrastructure (Bicep)</h3>
+        <p>All Azure infrastructure is defined in Bicep templates under <code>infrastructure/azure/</code>. A single deployment command provisions the complete environment:</p>
+
+<pre><code><span class="code-comment"># Deploy infrastructure</span>
+az deployment sub create \
+  --location eastus2 \
+  --template-file infrastructure/azure/main.bicep \
+  --parameters environment=prod tenantId={tenant}</code></pre>
+
+        <h3>Kubernetes (Helm)</h3>
+        <p>Deploy all services to AKS (or EKS/GKE) using the Helm chart:</p>
+
+<pre><code><span class="code-comment"># Add Helm repos</span>
+helm repo add argo https://argoproj.github.io/argo-helm
+
+<span class="code-comment"># Deploy Cloud Health Office</span>
+helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice \
+  --namespace cloudhealthoffice \
+  --create-namespace \
+  --values infrastructure/helm/values-prod.yaml</code></pre>
+
+        <h2 id="verification">Post-Deployment Verification</h2>
+<pre><code><span class="code-comment"># Health check all services</span>
+kubectl get pods -n cloudhealthoffice
+kubectl exec -it deploy/claims-service -n cloudhealthoffice -- curl -s localhost:5001/health
+
+<span class="code-comment"># Run E2E test suite</span>
+npm run test:e2e -- --environment=prod
+
+<span class="code-comment"># Verify FHIR endpoints</span>
+curl https://api.cloudhealthoffice.com/fhir/r4/metadata | jq .status</code></pre>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Full deployment reference</div>
+          <p>For the complete 3,000+ line deployment guide including secrets management, rollback procedures, and troubleshooting, see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/deployment/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a> on GitHub.</p>
+        </div>
+
+        <div class="docs-pager">
+          <a href="/docs/api"><div class="pager-label">&larr; Previous</div><div class="pager-title">API Reference</div></a>
+          <a href="/docs" class="next"><div class="pager-label">Back to &rarr;</div><div class="pager-title">Docs Home</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer>
+  <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
+</body>
+</html>

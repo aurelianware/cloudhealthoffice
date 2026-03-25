@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320">
+  <defs>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6" fill="#00ffff" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="320" fill="#000000"/>
+
+  <!-- Title -->
+  <text x="600" y="40" font-family="Segoe UI, system-ui, sans-serif" font-size="24" font-weight="900"
+        fill="#ffffff" text-anchor="middle">Quick Start Flow</text>
+  <text x="600" y="62" font-family="Segoe UI, system-ui, sans-serif" font-size="13" fill="#00ffff"
+        text-anchor="middle" opacity="0.8">From zero to running sandbox in under 15 minutes</text>
+
+  <!-- Step 1: Clone -->
+  <g transform="translate(120, 170)">
+    <circle cx="0" cy="-40" r="18" fill="#00ffff" opacity="0.9"/>
+    <text x="0" y="-35" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#000" text-anchor="middle">1</text>
+    <rect x="-70" y="-15" width="140" height="50" rx="8" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Clone</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">git clone &amp; npm install</text>
+    <text x="0" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="rgba(0,255,136,0.7)" text-anchor="middle">~2 min</text>
+  </g>
+
+  <!-- Arrow -->
+  <line x1="195" y1="170" x2="275" y2="170" stroke="#00ffff" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Docker Compose -->
+  <g transform="translate(360, 170)">
+    <circle cx="0" cy="-40" r="18" fill="#00ffff" opacity="0.9"/>
+    <text x="0" y="-35" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#000" text-anchor="middle">2</text>
+    <rect x="-70" y="-15" width="140" height="50" rx="8" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Start Stack</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">docker compose up -d</text>
+    <text x="0" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="rgba(0,255,136,0.7)" text-anchor="middle">~1 min</text>
+  </g>
+
+  <!-- Arrow -->
+  <line x1="435" y1="170" x2="515" y2="170" stroke="#00ffff" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Seed Data -->
+  <g transform="translate(600, 170)">
+    <circle cx="0" cy="-40" r="18" fill="#00ff88" opacity="0.9"/>
+    <text x="0" y="-35" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#000" text-anchor="middle">3</text>
+    <rect x="-70" y="-15" width="140" height="50" rx="8" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Seed Data</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">NCCI edits + benefit plans</text>
+    <text x="0" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="rgba(0,255,136,0.7)" text-anchor="middle">~3 min</text>
+  </g>
+
+  <!-- Arrow -->
+  <line x1="675" y1="170" x2="755" y2="170" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+
+  <!-- Step 4: Submit Claim -->
+  <g transform="translate(840, 170)">
+    <circle cx="0" cy="-40" r="18" fill="#00ff88" opacity="0.9"/>
+    <text x="0" y="-35" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#000" text-anchor="middle">4</text>
+    <rect x="-70" y="-15" width="140" height="50" rx="8" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1.5"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#ffffff" text-anchor="middle">Submit Claim</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Adjudicate end-to-end</text>
+    <text x="0" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="rgba(0,255,136,0.7)" text-anchor="middle">~5 min</text>
+  </g>
+
+  <!-- Arrow -->
+  <line x1="915" y1="170" x2="995" y2="170" stroke="#00ff88" stroke-width="1" opacity="0.4" marker-end="url(#arrow)"/>
+
+  <!-- Step 5: Verify -->
+  <g transform="translate(1080, 170)">
+    <circle cx="0" cy="-40" r="18" fill="#00ff88" opacity="0.9"/>
+    <text x="0" y="-35" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#000" text-anchor="middle">5</text>
+    <rect x="-70" y="-15" width="140" height="50" rx="8" fill="rgba(0,255,136,0.12)" stroke="#00ff88" stroke-width="2"/>
+    <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
+          fill="#00ff88" text-anchor="middle">Verified</text>
+    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">835 ERA + FHIR APIs</text>
+    <text x="0" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="rgba(0,255,136,0.7)" text-anchor="middle">~4 min</text>
+  </g>
+
+  <!-- Bottom bar -->
+  <g transform="translate(0, 280)">
+    <rect x="0" y="0" width="1200" height="40" fill="rgba(0,255,255,0.03)"/>
+    <text x="600" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="rgba(176,176,176,0.6)"
+          text-anchor="middle">Docker Desktop Required &#x2022; No Azure Account Needed &#x2022; Synthetic Data Only &#x2022; &lt;15 Minutes Total</text>
+  </g>
+</svg>
