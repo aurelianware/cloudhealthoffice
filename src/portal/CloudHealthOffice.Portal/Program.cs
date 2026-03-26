@@ -249,6 +249,7 @@ builder.Services.AddScoped<IPricingApiService, PricingApiService>();
 builder.Services.AddScoped<ICapitationService, CapitationService>();
 builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>();
 builder.Services.AddScoped<IArService, ArServiceImpl>();
+builder.Services.AddScoped<ITerminologyService, TerminologyServiceImpl>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
