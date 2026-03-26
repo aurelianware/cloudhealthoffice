@@ -135,7 +135,7 @@ public class ProviderContractsController : ControllerBase
             return BadRequest(new { error = $"Can only activate Draft or Suspended contracts, current: {contract.Status}" });
 
         contract.Status = ProviderContractStatus.Active;
-        _logger.LogInformation("Activated provider contract {ContractNumber}", contract.ContractNumber);
+        _logger.LogInformation("Activated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -205,7 +205,7 @@ public class ProviderContractsController : ControllerBase
             return BadRequest(new { error = $"Can only reinstate Suspended contracts, current: {contract.Status}" });
 
         contract.Status = ProviderContractStatus.Active;
-        _logger.LogInformation("Reinstated provider contract {ContractNumber}", contract.ContractNumber);
+        _logger.LogInformation("Reinstated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -246,12 +246,22 @@ public class ProviderContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { error = $"Contract {id} not found" });
 
-        // TODO: Call capitation-service and ffs-service to propagate
-        // ContractNumber, ProviderNPI, ProviderName, LineOfBusiness
-        // to all child rate configs where ContractId == id
-        _logger.LogInformation("Sync-children requested for provider contract {ContractNumber}", contract.ContractNumber);
+        // TODO: Propagate ContractNumber, ProviderNPI, ProviderName, LineOfBusiness
+        // to all CapitationRateConfig children via capitation-service
+        // /api/v1/capitation/rate-configs?contractId={id} PATCH endpoint,
+        // and to FfsRateConfig children via ffs-service when implemented.
+        // Until then, returns 501 so callers know propagation did not occur.
+        _logger.LogInformation("Sync-children requested for provider contract {ContractNumber}",
+            SanitizeForLog(contract.ContractNumber));
 
-        return Ok(new { message = "Sync initiated", contractId = id, childCount = contract.CapitationRateConfigIds.Count + contract.FfsRateConfigIds.Count });
+        return StatusCode(StatusCodes.Status501NotImplemented, new
+        {
+            message = "Child sync not yet implemented. ContractNumber, ProviderNPI, " +
+                      "ProviderName, and LineOfBusiness must be manually kept in sync " +
+                      "with child rate configs until this is implemented.",
+            contractId = id,
+            childCount = contract.CapitationRateConfigIds.Count + contract.FfsRateConfigIds.Count
+        });
     }
 
     /// <summary>
@@ -274,11 +284,21 @@ public class ProviderContractsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Masks TIN to ***-**-XXXX format (last 4 digits only).
+    /// Strips non-digits to handle both formatted (12-3456789) and raw (123456789) input.
+    /// </summary>
     private static string? MaskTin(string? tin)
     {
-        if (string.IsNullOrEmpty(tin) || tin.Length < 4)
+        if (string.IsNullOrWhiteSpace(tin))
             return tin;
-        return "***" + tin[^4..];
+
+        var digits = new string(tin.Where(char.IsDigit).ToArray());
+        if (digits.Length < 4)
+            return "***-**-****";
+
+        var last4 = digits[^4..];
+        return $"***-**-{last4}";
     }
 
     private static string SanitizeForLog(string? value)
