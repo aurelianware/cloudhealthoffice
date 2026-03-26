@@ -1,12 +1,15 @@
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
+using ProviderContractsService.Middleware;
 using ProviderContractsService.Repositories;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -76,6 +79,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseTenantMiddleware();
 app.UseAuthorization();
 app.MapControllers();
 app.MapChoHealthChecks();

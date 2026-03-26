@@ -83,7 +83,7 @@ public class ArAdjustmentsController : ControllerBase
     [ProducesResponseType(typeof(ArAdjustment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ArAdjustment>> ApproveAdjustment(string id, [FromBody] ApproveAdjustmentRequest request)
+    public async Task<ActionResult<ArAdjustment>> ApproveAdjustment(string id, [FromBody] ApproveAdjustmentRequest? request = null)
     {
         var adjustment = await _adjustmentRepository.GetByIdAsync(id);
         if (adjustment == null)
@@ -92,13 +92,19 @@ public class ArAdjustmentsController : ControllerBase
         if (adjustment.Status != ArAdjustmentStatus.Pending)
             return BadRequest(new { error = $"Can only approve Pending adjustments, current: {adjustment.Status}" });
 
+        var authorizedBy = request?.AuthorizedBy;
+        if (string.IsNullOrWhiteSpace(authorizedBy))
+            authorizedBy = User?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(authorizedBy))
+            authorizedBy = "system";
+
         adjustment.Status = ArAdjustmentStatus.Approved;
-        adjustment.AuthorizedBy = request.AuthorizedBy;
+        adjustment.AuthorizedBy = authorizedBy;
         adjustment.AuthorizedAt = DateTime.UtcNow;
         adjustment.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Approved AR adjustment {AdjustmentNumber} by {AuthorizedBy}",
-            adjustment.AdjustmentNumber, SanitizeForLog(request.AuthorizedBy));
+            SanitizeForLog(adjustment.AdjustmentNumber), SanitizeForLog(authorizedBy));
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);
@@ -197,10 +203,36 @@ public class ArAdjustmentsController : ControllerBase
         if (adjustment.Status != ArAdjustmentStatus.Posted)
             return BadRequest(new { error = $"Can only reverse Posted adjustments, current: {adjustment.Status}" });
 
+        // Reverse the balance effect — undo what PostAdjustment did
+        var balance = await _balanceRepository.GetByIdAsync(adjustment.ArBalanceId);
+        if (balance != null)
+        {
+            var reversalEntry = new ArPostingEntry
+            {
+                Source = ArPostingSource.ManualAdjustment,
+                SourceReferenceId = adjustment.Id,
+                SourceReferenceNumber = $"REV-{adjustment.AdjustmentNumber}",
+                // Swap debit/credit to reverse the original posting
+                DebitAmount = adjustment.Direction == ArAdjustmentDirection.Credit ? adjustment.Amount : 0,
+                CreditAmount = adjustment.Direction == ArAdjustmentDirection.Debit ? adjustment.Amount : 0,
+                PostedAt = DateTime.UtcNow,
+                PostedBy = adjustment.AuthorizedBy,
+                Memo = $"Reversal of {adjustment.AdjustmentNumber}"
+            };
+
+            balance.PostingEntries.Add(reversalEntry);
+            balance.TotalDebits += reversalEntry.DebitAmount;
+            balance.TotalCredits += reversalEntry.CreditAmount;
+            balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
+            balance.LastUpdatedAt = DateTime.UtcNow;
+            await _balanceRepository.UpdateAsync(balance);
+        }
+
         adjustment.Status = ArAdjustmentStatus.Reversed;
         adjustment.LastUpdatedAt = DateTime.UtcNow;
 
-        _logger.LogInformation("Reversed AR adjustment {AdjustmentNumber}", adjustment.AdjustmentNumber);
+        _logger.LogInformation("Reversed AR adjustment {AdjustmentNumber}",
+            SanitizeForLog(adjustment.AdjustmentNumber));
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);

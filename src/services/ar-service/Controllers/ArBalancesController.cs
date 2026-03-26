@@ -143,4 +143,6 @@ public class AgingSummary
     public decimal Days91To120 { get; set; }
     public decimal Over120Days { get; set; }
     public decimal Total { get; set; }
+    /// <summary>Alias for Total — matches portal DTO ArAgingSummary.TotalOutstanding</summary>
+    public decimal TotalOutstanding => Total;
 }

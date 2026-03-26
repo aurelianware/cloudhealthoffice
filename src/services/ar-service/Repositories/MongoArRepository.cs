@@ -3,6 +3,27 @@ using ArService.Models;
 
 namespace ArService.Repositories;
 
+/// <summary>
+/// Helper to ensure MongoDB indexes are only created once per collection per process lifetime,
+/// even though repositories are registered as Scoped (per-request).
+/// </summary>
+internal static class IndexGuard
+{
+    private static readonly HashSet<string> _created = new();
+    private static readonly object _lock = new();
+
+    public static void EnsureOnce(string collectionName, Action createIndexes)
+    {
+        if (_created.Contains(collectionName)) return;
+        lock (_lock)
+        {
+            if (_created.Contains(collectionName)) return;
+            createIndexes();
+            _created.Add(collectionName);
+        }
+    }
+}
+
 public class MongoGlAccountRepository : IGlAccountRepository
 {
     private readonly IMongoCollection<GlAccount> _collection;
@@ -18,7 +39,7 @@ public class MongoGlAccountRepository : IGlAccountRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        IndexGuard.EnsureOnce("gl_accounts", CreateIndexes);
     }
 
     private void CreateIndexes()
@@ -122,7 +143,7 @@ public class MongoArBalanceRepository : IArBalanceRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        IndexGuard.EnsureOnce("ar_balances", CreateIndexes);
     }
 
     private void CreateIndexes()
@@ -236,7 +257,7 @@ public class MongoCashPostingRepository : ICashPostingRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        IndexGuard.EnsureOnce("cash_postings", CreateIndexes);
     }
 
     private void CreateIndexes()
@@ -343,7 +364,7 @@ public class MongoArAdjustmentRepository : IArAdjustmentRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        IndexGuard.EnsureOnce("ar_adjustments", CreateIndexes);
     }
 
     private void CreateIndexes()
@@ -451,7 +472,7 @@ public class MongoArBatchRuleRepository : IArBatchRuleRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        IndexGuard.EnsureOnce("ar_batch_rules", CreateIndexes);
     }
 
     private void CreateIndexes()

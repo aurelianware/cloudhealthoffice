@@ -44,7 +44,6 @@ spec:
             secretKeyRef:
               name: database-secret
               key: connectionString
-              optional: true
         resources:
           requests:
             cpu: 100m
