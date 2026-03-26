@@ -1,17 +1,31 @@
-# Local development stack for Cloud Health Office
-# Starts MongoDB + Redis infrastructure + core adjudication and payment services.
+# Cloud Health Office — Full Local Development Stack
 #
 # Usage:
-#   docker compose up -d
+#   docker compose up -d                    # All services
+#   docker compose --profile core up -d     # Core adjudication only
+#   docker compose --profile finance up -d  # Finance + AR + Capitation
+#   docker compose --profile fhir up -d     # FHIR + interoperability
 #
-# Service URLs:
-#   Claims service:       http://localhost:5001  (Swagger at http://localhost:5001/swagger)
-#   Benefit-plan service: http://localhost:5002  (Swagger at http://localhost:5002/swagger)
-#   Payment service:      http://localhost:5003  (Swagger at http://localhost:5003/swagger)
-#   MongoDB:              localhost:27017
-#   Redis:                localhost:6379
+# All services depend on mongo (and some on redis).
+# Swagger UI available at http://localhost:{port}/swagger for each service.
+#
+# Port Map:
+#   5001  Claims              5002  Benefit Plan        5003  Member
+#   5004  Provider            5005  Authorization       5006  Payment
+#   5007  Eligibility         5008  Tenant              5009  Coverage
+#   5010  Claims Scrubbing    5011  Enrollment Import   5012  Capitation
+#   5013  Appeals             5014  Attachment          5015  Sponsor
+#   5016  Reference Data      5017  Pricing API         5018  Premium Billing
+#   5019  Provider Contracts  5020  AR Service          5021  Trading Partner
+#   5022  RFAI                5023  FHIR                5024  Smart Auth
+#   5025  Risk Adjustment     5026  Encounter
+#   5080  Terminology
+#   27017 MongoDB             6379  Redis
 
 services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────
+
   mongo:
     image: mongo:7
     ports:
@@ -34,6 +48,53 @@ services:
       timeout: 3s
       retries: 10
 
+  # ── Core Adjudication (profile: core) ─────────────────────────────────
+
+  member-service:
+    build:
+      context: .
+      dockerfile: src/services/member-service/Dockerfile
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=MemberDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core, finance, fhir]
+
+  coverage-service:
+    build:
+      context: .
+      dockerfile: src/services/coverage-service/Dockerfile
+    ports:
+      - "5009:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=CoverageDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core, finance, fhir]
+
+  eligibility-service:
+    build:
+      context: .
+      dockerfile: src/services/eligibility-service/Dockerfile
+    ports:
+      - "5007:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=EligibilityDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core, fhir]
+
   claims-service:
     build:
       context: .
@@ -52,6 +113,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    profiles: [core, finance]
+
+  claims-scrubbing-service:
+    build:
+      context: .
+      dockerfile: src/services/claims-scrubbing-service/Dockerfile
+    ports:
+      - "5010:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=ClaimsScrubDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
 
   benefit-plan-service:
     build:
@@ -64,21 +141,81 @@ services:
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=BenefitPlanDB
       - Redis__ConnectionString=redis:6379
-      - Services__ClaimsServiceUrl=http://claims-service:8080
     depends_on:
       mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
-      claims-service:
+    profiles: [core, finance]
+
+  authorization-service:
+    build:
+      context: .
+      dockerfile: src/services/authorization-service/Dockerfile
+    ports:
+      - "5005:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=AuthorizationDB
+    depends_on:
+      mongo:
         condition: service_healthy
+    profiles: [core, fhir]
+
+  provider-service:
+    build:
+      context: .
+      dockerfile: src/services/provider-service/Dockerfile
+    ports:
+      - "5004:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=ProviderDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core, finance]
+
+  tenant-service:
+    build:
+      context: .
+      dockerfile: src/services/tenant-service/Dockerfile
+    ports:
+      - "5008:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=TenantDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  reference-data-service:
+    build:
+      context: .
+      dockerfile: src/services/reference-data-service/Dockerfile
+    ports:
+      - "5016:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=ReferenceDataDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  # ── Finance (profile: finance) ────────────────────────────────────────
 
   payment-service:
     build:
       context: .
       dockerfile: src/services/payment-service/Dockerfile
     ports:
-      - "5003:8080"
+      - "5006:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
@@ -87,8 +224,40 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-      claims-service:
+    profiles: [finance]
+
+  premium-billing-service:
+    build:
+      context: .
+      dockerfile: src/services/premium-billing-service/Dockerfile
+    ports:
+      - "5018:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=PremiumBillingDB
+    depends_on:
+      mongo:
         condition: service_healthy
+    profiles: [finance]
+
+  capitation-service:
+    build:
+      context: .
+      dockerfile: src/services/capitation-service/Dockerfile
+    ports:
+      - "5012:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=CloudHealthOffice
+      - CoverageService__BaseUrl=http://coverage-service:8080
+      - ProviderService__BaseUrl=http://provider-service:8080
+      - RiskAdjustmentService__BaseUrl=http://risk-adjustment-service:8080
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [finance]
 
   ar-service:
     build:
@@ -103,6 +272,7 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    profiles: [finance]
 
   provider-contracts-service:
     build:
@@ -117,6 +287,54 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    profiles: [finance]
+
+  sponsor-service:
+    build:
+      context: .
+      dockerfile: src/services/sponsor-service/Dockerfile
+    ports:
+      - "5015:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=SponsorDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [finance]
+
+  # ── FHIR & Interoperability (profile: fhir) ──────────────────────────
+
+  fhir-service:
+    build:
+      context: .
+      dockerfile: src/services/fhir-service/Dockerfile
+    ports:
+      - "5023:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=FhirDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [fhir]
+
+  smart-auth-service:
+    build:
+      context: .
+      dockerfile: src/services/smart-auth-service/Dockerfile
+    ports:
+      - "5024:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=SmartAuthDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [fhir]
 
   terminology-service:
     build:
@@ -131,6 +349,129 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    profiles: [fhir]
+
+  # ── Supporting Services ───────────────────────────────────────────────
+
+  appeals-service:
+    build:
+      context: .
+      dockerfile: src/services/appeals-service/Dockerfile
+    ports:
+      - "5013:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=AppealsDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  attachment-service:
+    build:
+      context: .
+      dockerfile: src/services/attachment-service/Dockerfile
+    ports:
+      - "5014:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=AttachmentDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  enrollment-import-service:
+    build:
+      context: .
+      dockerfile: src/services/enrollment-import-service/Dockerfile
+    ports:
+      - "5011:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=EnrollmentDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  trading-partner-service:
+    build:
+      context: .
+      dockerfile: src/services/trading-partner-service/Dockerfile
+    ports:
+      - "5021:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=TradingPartnerDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  rfai-service:
+    build:
+      context: .
+      dockerfile: src/services/rfai-service/Dockerfile
+    ports:
+      - "5022:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=RfaiDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  risk-adjustment-service:
+    build:
+      context: .
+      dockerfile: src/services/risk-adjustment-service/Dockerfile
+    ports:
+      - "5025:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=RiskAdjustmentDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [finance, fhir]
+
+  encounter-service:
+    build:
+      context: .
+      dockerfile: src/services/encounter-service/Dockerfile
+    ports:
+      - "5026:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=EncounterDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [fhir]
+
+  pricing-api:
+    build:
+      context: .
+      dockerfile: src/services/CloudHealthOffice.PricingApi/Dockerfile
+    ports:
+      - "5017:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=PricingDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
 
 volumes:
   mongo_data:
