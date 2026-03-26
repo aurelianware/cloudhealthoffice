@@ -21,7 +21,7 @@ public class CapitationContractsControllerTests
     private static CapitationContract CreateContract(
         string id = "c-1",
         string npi = "1234567890",
-        CapitationContractStatus status = CapitationContractStatus.Draft) => new()
+        CapitationRateConfigStatus status = CapitationRateConfigStatus.Draft) => new()
     {
         Id = id,
         ContractNumber = $"CAP-{npi}-2026",
@@ -63,7 +63,7 @@ public class CapitationContractsControllerTests
         ok.Should().NotBeNull();
         _contractRepo.Verify(r => r.GetByPlanIdAsync("PLAN-HMO"), Times.Once);
         _contractRepo.Verify(r => r.SearchAsync(It.IsAny<string>(), It.IsAny<LineOfBusiness?>(),
-            It.IsAny<ContractType?>(), It.IsAny<CapitationContractStatus?>(),
+            It.IsAny<ContractType?>(), It.IsAny<CapitationRateConfigStatus?>(),
             It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }
 
@@ -71,15 +71,15 @@ public class CapitationContractsControllerTests
     public async Task SearchContracts_WithFilters_PassesThrough()
     {
         _contractRepo.Setup(r => r.SearchAsync("1234567890", LineOfBusiness.Commercial,
-            ContractType.PrimaryCareOnly, CapitationContractStatus.Active, 1, 50))
+            ContractType.PrimaryCareOnly, CapitationRateConfigStatus.Active, 1, 50))
             .ReturnsAsync(new List<CapitationContract>());
 
         await _controller.SearchContracts(
             npi: "1234567890", lob: LineOfBusiness.Commercial,
-            type: ContractType.PrimaryCareOnly, status: CapitationContractStatus.Active);
+            type: ContractType.PrimaryCareOnly, status: CapitationRateConfigStatus.Active);
 
         _contractRepo.Verify(r => r.SearchAsync("1234567890", LineOfBusiness.Commercial,
-            ContractType.PrimaryCareOnly, CapitationContractStatus.Active, 1, 50), Times.Once);
+            ContractType.PrimaryCareOnly, CapitationRateConfigStatus.Active, 1, 50), Times.Once);
     }
 
     #endregion
@@ -124,20 +124,20 @@ public class CapitationContractsControllerTests
         var created = result.Result as CreatedAtActionResult;
         created.Should().NotBeNull();
         created!.StatusCode.Should().Be(201);
-        (created.Value as CapitationContract)!.Status.Should().Be(CapitationContractStatus.Draft);
+        (created.Value as CapitationContract)!.Status.Should().Be(CapitationRateConfigStatus.Draft);
     }
 
     [Fact]
     public async Task CreateContract_ForcesDraftStatus()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Active);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Active);
         _contractRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationContract>()))
             .ReturnsAsync((CapitationContract c) => c);
 
         var result = await _controller.CreateContract(contract);
 
         var created = result.Result as CreatedAtActionResult;
-        (created!.Value as CapitationContract)!.Status.Should().Be(CapitationContractStatus.Draft);
+        (created!.Value as CapitationContract)!.Status.Should().Be(CapitationRateConfigStatus.Draft);
     }
 
     #endregion
@@ -181,7 +181,7 @@ public class CapitationContractsControllerTests
     [Fact]
     public async Task ActivateContract_DraftContract_Activates()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Draft);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Draft);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
         _contractRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationContract>()))
             .ReturnsAsync((CapitationContract c) => c);
@@ -190,13 +190,13 @@ public class CapitationContractsControllerTests
 
         var ok = result.Result as OkObjectResult;
         ok.Should().NotBeNull();
-        (ok!.Value as CapitationContract)!.Status.Should().Be(CapitationContractStatus.Active);
+        (ok!.Value as CapitationContract)!.Status.Should().Be(CapitationRateConfigStatus.Active);
     }
 
     [Fact]
     public async Task ActivateContract_SuspendedContract_Activates()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Suspended);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Suspended);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
         _contractRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationContract>()))
             .ReturnsAsync((CapitationContract c) => c);
@@ -204,13 +204,13 @@ public class CapitationContractsControllerTests
         var result = await _controller.ActivateContract("c-1");
 
         var ok = result.Result as OkObjectResult;
-        (ok!.Value as CapitationContract)!.Status.Should().Be(CapitationContractStatus.Active);
+        (ok!.Value as CapitationContract)!.Status.Should().Be(CapitationRateConfigStatus.Active);
     }
 
     [Fact]
     public async Task ActivateContract_AlreadyActive_ReturnsBadRequest()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Active);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Active);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
 
         var result = await _controller.ActivateContract("c-1");
@@ -221,7 +221,7 @@ public class CapitationContractsControllerTests
     [Fact]
     public async Task ActivateContract_Terminated_ReturnsBadRequest()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Terminated);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Terminated);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
 
         var result = await _controller.ActivateContract("c-1");
@@ -246,7 +246,7 @@ public class CapitationContractsControllerTests
     [Fact]
     public async Task TerminateContract_ActiveContract_Terminates()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Active);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Active);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
         _contractRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationContract>()))
             .ReturnsAsync((CapitationContract c) => c);
@@ -257,14 +257,14 @@ public class CapitationContractsControllerTests
         var ok = result.Result as OkObjectResult;
         ok.Should().NotBeNull();
         var terminated = ok!.Value as CapitationContract;
-        terminated!.Status.Should().Be(CapitationContractStatus.Terminated);
+        terminated!.Status.Should().Be(CapitationRateConfigStatus.Terminated);
         terminated.TerminationDate.Should().NotBeNull();
     }
 
     [Fact]
     public async Task TerminateContract_WithCustomDate_UsesProvidedDate()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Active);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Active);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
         _contractRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationContract>()))
             .ReturnsAsync((CapitationContract c) => c);
@@ -280,7 +280,7 @@ public class CapitationContractsControllerTests
     [Fact]
     public async Task TerminateContract_AlreadyTerminated_ReturnsBadRequest()
     {
-        var contract = CreateContract(status: CapitationContractStatus.Terminated);
+        var contract = CreateContract(status: CapitationRateConfigStatus.Terminated);
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
 
         var result = await _controller.TerminateContract("c-1",

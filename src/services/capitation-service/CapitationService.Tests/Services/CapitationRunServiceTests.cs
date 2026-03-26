@@ -58,7 +58,7 @@ public class CapitationRunServiceTests
         ProviderName = name,
         ContractType = ContractType.PrimaryCareOnly,
         LineOfBusiness = LineOfBusiness.Commercial,
-        Status = CapitationContractStatus.Active,
+        Status = CapitationRateConfigStatus.Active,
         EffectiveDate = new DateTime(2026, 1, 1),
         WithholdPercentage = withholdPct,
         RiskAdjusted = riskAdjusted,
