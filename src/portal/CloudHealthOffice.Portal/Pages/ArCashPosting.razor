@@ -1,0 +1,357 @@
+@page "/finance/ar/cash-posting"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IArService ArService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Cash Posting — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Payments" Class="mr-2" Style="vertical-align: middle;" />
+    Cash Posting
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Apply sponsor and member payments to open AR balances
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+<!-- Summary Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">
+                    @_postings.Where(p => p.ReceiptDate.Month == DateTime.Today.Month && p.ReceiptDate.Year == DateTime.Today.Year).Sum(p => p.Amount).ToString("C0")
+                </MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Posted (This Month)</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_postings.Sum(p => p.AppliedAmount).ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Applied Amount</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        @{
+            var unappliedTotal = _postings.Sum(p => p.UnappliedAmount);
+            var unappliedColor = unappliedTotal > 0 ? "#ffaa00" : "#00ff88";
+            var unappliedBorder = unappliedTotal > 0 ? "rgba(255,170,0,0.2)" : "rgba(0,255,136,0.2)";
+            var unappliedBg = unappliedTotal > 0 ? "rgba(255,170,0,0.05)" : "rgba(0,255,136,0.05)";
+        }
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="@($"background: {unappliedBg}; border: 1px solid {unappliedBorder}; border-radius: 12px;")">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Style="@($"color: {unappliedColor}; font-size: 2rem;")" />
+            <div>
+                <MudText Typo="Typo.h5" Style="@($"color: {unappliedColor}; font-weight: 700;")">@unappliedTotal.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Unapplied Amount</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_postings.Count(p => p.Status == "Pending")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filter Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_payerTypeFilter" Label="Payer Type" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Sponsor")">Sponsor</MudSelectItem>
+        <MudSelectItem Value="@("Member")">Member</MudSelectItem>
+        <MudSelectItem Value="@("ThirdParty")">Third Party</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+        <MudSelectItem Value="@("Applied")">Applied</MudSelectItem>
+        <MudSelectItem Value="@("PartiallyApplied")">Partially Applied</MudSelectItem>
+        <MudSelectItem Value="@("Voided")">Voided</MudSelectItem>
+    </MudSelect>
+    <MudDatePicker @bind-Date="_dateFrom" Label="Date From" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width: 150px;" Clearable="true" />
+    <MudDatePicker @bind-Date="_dateTo" Label="Date To" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width: 150px;" Clearable="true" />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadPostings" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewReceiptDialog">Post New Receipt</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Cash Postings Grid -->
+<MudTable Items="_postings" Dense="true" Hover="true" T="CashPostingSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Posting #</MudTh>
+        <MudTh>Receipt Date</MudTh>
+        <MudTh>Payer Type</MudTh>
+        <MudTh>Payer Name</MudTh>
+        <MudTh Style="text-align: right;">Amount</MudTh>
+        <MudTh Style="text-align: right;">Applied</MudTh>
+        <MudTh Style="text-align: right;">Unapplied</MudTh>
+        <MudTh>Payment Method</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Posting #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.PostingNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Receipt Date">@context.ReceiptDate.ToString("MM/dd/yyyy")</MudTd>
+        <MudTd DataLabel="Payer Type">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetPayerTypeColor(context.PayerType)">@context.PayerType</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Payer Name">@(context.PayerName ?? "—")</MudTd>
+        <MudTd DataLabel="Amount" Style="text-align: right;">
+            <MudText Style="font-family: monospace; font-weight: 600;">@context.Amount.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Applied" Style="text-align: right;">
+            <MudText Style="font-family: monospace; color: #00ff88;">@context.AppliedAmount.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Unapplied" Style="text-align: right;">
+            <MudText Style="@($"font-family: monospace; color: {(context.UnappliedAmount > 0 ? "#ffaa00" : "rgba(255,255,255,0.4)")};")">
+                @context.UnappliedAmount.ToString("C2")
+            </MudText>
+        </MudTd>
+        <MudTd DataLabel="Payment Method">
+            @context.PaymentMethod
+            @if (!string.IsNullOrEmpty(context.CheckNumber))
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">#@context.CheckNumber</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetPostingStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                @if (context.Status is "Pending" or "PartiallyApplied")
+                {
+                    <MudTooltip Text="Apply to Balance">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => ApplyPosting(context))" />
+                    </MudTooltip>
+                }
+                @if (context.Status != "Voided")
+                {
+                    <MudTooltip Text="Void">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => VoidPosting(context))" />
+                    </MudTooltip>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No cash postings found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Post a new receipt to get started</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<!-- New Receipt Dialog -->
+<MudDialog @bind-Visible="_receiptDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+            Post New Receipt
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formReceiptDate" Label="Receipt Date" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_formAmount" Label="Amount" Variant="Variant.Outlined"
+                                 Format="C2" HideSpinButtons="true" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formPaymentMethod" Label="Payment Method" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("Check")">Check</MudSelectItem>
+                    <MudSelectItem Value="@("ACH")">ACH</MudSelectItem>
+                    <MudSelectItem Value="@("Wire")">Wire</MudSelectItem>
+                    <MudSelectItem Value="@("EFT")">EFT</MudSelectItem>
+                    <MudSelectItem Value="@("CreditCard")">Credit Card</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formCheckOrRef" Label="Check # / Bank Reference" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formPayerType" Label="Payer Type" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("Sponsor")">Sponsor</MudSelectItem>
+                    <MudSelectItem Value="@("Member")">Member</MudSelectItem>
+                    <MudSelectItem Value="@("ThirdParty")">Third Party</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formPayerName" Label="Payer Name" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseReceiptDialog" Color="Color.Default">Cancel</MudButton>
+        <MudButton OnClick="SaveReceipt" Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving">
+            @(_saving ? "Posting..." : "Post Receipt")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+</PermissionGate>
+
+@code {
+    private List<CashPostingSummary> _postings = new();
+    private bool _loading = true;
+    private string? _serviceError;
+
+    // Filters
+    private string? _payerTypeFilter;
+    private string? _statusFilter;
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+
+    // Receipt Dialog
+    private bool _receiptDialogVisible;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    private bool _saving;
+
+    // Form fields
+    private DateTime? _formReceiptDate = DateTime.Today;
+    private decimal _formAmount;
+    private string _formPaymentMethod = "Check";
+    private string? _formCheckOrRef;
+    private string _formPayerType = "Sponsor";
+    private string _formPayerName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPostings();
+    }
+
+    private async Task LoadPostings()
+    {
+        _loading = true;
+        try
+        {
+            _postings = await ArService.GetCashPostingsAsync(_payerTypeFilter, _statusFilter, _dateFrom, _dateTo);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch (Exception ex) { Snackbar.Add($"Error loading cash postings: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void OpenNewReceiptDialog()
+    {
+        _formReceiptDate = DateTime.Today;
+        _formAmount = 0;
+        _formPaymentMethod = "Check";
+        _formCheckOrRef = null;
+        _formPayerType = "Sponsor";
+        _formPayerName = string.Empty;
+        _receiptDialogVisible = true;
+    }
+
+    private void CloseReceiptDialog() => _receiptDialogVisible = false;
+
+    private async Task SaveReceipt()
+    {
+        _saving = true;
+        try
+        {
+            var posting = new CashPostingSummary
+            {
+                ReceiptDate = _formReceiptDate ?? DateTime.Today,
+                Amount = _formAmount,
+                PaymentMethod = _formPaymentMethod,
+                CheckNumber = _formPaymentMethod == "Check" ? _formCheckOrRef : null,
+                BankReference = _formPaymentMethod != "Check" ? _formCheckOrRef : null,
+                PayerType = _formPayerType,
+                PayerName = _formPayerName,
+                UnappliedAmount = _formAmount,
+                Status = "Pending"
+            };
+
+            await ArService.CreateCashPostingAsync(posting);
+            Snackbar.Add($"Receipt posted — {_formAmount:C2} from {_formPayerName}", Severity.Success);
+            _receiptDialogVisible = false;
+            await LoadPostings();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error posting receipt: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ApplyPosting(CashPostingSummary posting)
+    {
+        try
+        {
+            await ArService.ApplyCashPostingAsync(posting.Id);
+            Snackbar.Add($"Posting {posting.PostingNumber} applied", Severity.Success);
+            await LoadPostings();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error applying posting: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task VoidPosting(CashPostingSummary posting)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Void Cash Posting",
+            $"Are you sure you want to void posting {posting.PostingNumber} — {posting.Amount:C2}? This action cannot be undone.",
+            yesText: "Void", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ArService.VoidCashPostingAsync(posting.Id);
+                posting.Status = "Voided";
+                Snackbar.Add($"Posting {posting.PostingNumber} voided", Severity.Warning);
+                StateHasChanged();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error voiding posting: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private static Color GetPayerTypeColor(string payerType) => payerType switch
+    {
+        "Sponsor" => Color.Primary,
+        "Member" => Color.Info,
+        "ThirdParty" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static Color GetPostingStatusColor(string status) => status switch
+    {
+        "Applied" => Color.Success,
+        "PartiallyApplied" => Color.Info,
+        "Pending" => Color.Warning,
+        "Voided" => Color.Error,
+        _ => Color.Default
+    };
+}

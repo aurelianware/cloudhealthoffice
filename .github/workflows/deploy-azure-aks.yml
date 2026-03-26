@@ -107,6 +107,8 @@ jobs:
           - smart-auth-service
           - risk-adjustment-service
           - encounter-service
+          - provider-contracts-service
+          - ar-service
           - CloudHealthOffice.PricingApi
         include:
           # All .NET services need repo root as context to reach
@@ -154,6 +156,10 @@ jobs:
           - service: risk-adjustment-service
             build_context: '.'
           - service: encounter-service
+            build_context: '.'
+          - service: provider-contracts-service
+            build_context: '.'
+          - service: ar-service
             build_context: '.'
           - service: CloudHealthOffice.PricingApi
             build_context: '.'

@@ -1113,6 +1113,7 @@ public class PaymentRunSummary
 {
     public string RunId { get; set; } = string.Empty;
     public string RunName { get; set; } = string.Empty;
+    public string LineOfBusiness { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty; // Pending, Running, Completed, Failed, Cancelled
     public DateTime CreatedDate { get; set; }
     public DateTime? StartedDate { get; set; }
@@ -1156,6 +1157,8 @@ public class PaymentRunClaimItem
 public class CreatePaymentRunRequest
 {
     public string RunName { get; set; } = string.Empty;
+    [Required]
+    public string LineOfBusiness { get; set; } = string.Empty;
     public DateTime ClaimServiceDateFrom { get; set; }
     public DateTime ClaimServiceDateTo { get; set; }
     public string? SponsorId { get; set; }
@@ -1764,15 +1767,18 @@ public interface ICapitationService
     Task<CapDisbursementBatchResult> InitiateBatchDisbursementAsync(List<string> statementIds, string? initiatedBy = null);
 }
 
-public class CapitationContractSummary
+public class CapitationRateConfigSummary
 {
     public string Id { get; set; } = string.Empty;
+    public string RateConfigNumber { get; set; } = string.Empty;
+    public string ContractId { get; set; } = string.Empty;
     public string ContractNumber { get; set; } = string.Empty;
     public string ProviderNPI { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
     public string ProviderType { get; set; } = "Individual";
     public string ContractType { get; set; } = "PrimaryCareOnly";
     public string LineOfBusiness { get; set; } = "Commercial";
+    public DateTime? LastDenormSyncAt { get; set; }
     public List<string> PlanIds { get; set; } = new();
     public List<CapRateTier> RateTiers { get; set; } = new();
     public bool RiskAdjusted { get; set; }
@@ -1785,6 +1791,9 @@ public class CapitationContractSummary
     public DateTime? TerminationDate { get; set; }
     public string Status { get; set; } = "Draft";
 }
+
+/// <summary>Legacy alias — use CapitationRateConfigSummary going forward</summary>
+public class CapitationContractSummary : CapitationRateConfigSummary { }
 
 public class CapRateTier
 {
@@ -1916,4 +1925,247 @@ public class CapDisbursementBatchResult
     public int Errors { get; set; }
     public decimal TotalAmount { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+}
+
+// ── Provider Contracts ──────────────────────────────────────────────────────
+
+public interface IProviderContractsService
+{
+    Task<List<ProviderContractSummary>> GetContractsAsync(
+        string? npi = null, string? lob = null,
+        string? status = null, string? paymentMethodology = null,
+        string? networkStatus = null);
+    Task<ProviderContractSummary?> GetContractByIdAsync(string id);
+    Task<ProviderContractSummary?> GetContractByNumberAsync(string number);
+    Task<string> CreateContractAsync(ProviderContractSummary contract);
+    Task UpdateContractAsync(string id, ProviderContractSummary contract);
+    Task ActivateContractAsync(string id);
+    Task SuspendContractAsync(string id, string reason);
+    Task TerminateContractAsync(string id, string reason, DateTime? terminationDate = null);
+    Task ReinstateContractAsync(string id);
+    Task AddAmendmentAsync(string id, ContractAmendmentSummary amendment);
+    Task SyncChildrenAsync(string id);
+    Task<List<string>> GetRateConfigIdsAsync(string id);
+}
+
+public class ProviderContractSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string ContractNumber { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public string? ProviderTin { get; set; }
+    public string ProviderType { get; set; } = "Individual";
+    public string LineOfBusiness { get; set; } = "Commercial";
+    public List<string> PlanIds { get; set; } = new();
+    public string PaymentMethodology { get; set; } = "FullCapitation";
+    public string NetworkStatus { get; set; } = "Participating";
+    public string? ContractOwner { get; set; }
+    public string? SignatoryName { get; set; }
+    public DateTime? SignedDate { get; set; }
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+    public string? TerminationReason { get; set; }
+    public bool AutoRenews { get; set; }
+    public int? RenewalTermMonths { get; set; }
+    public int? NoticeRequiredDays { get; set; }
+    public List<ContractAmendmentSummary> Amendments { get; set; } = new();
+    public string Status { get; set; } = "Draft";
+    public List<string> CapitationRateConfigIds { get; set; } = new();
+    public List<string> FfsRateConfigIds { get; set; } = new();
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastUpdatedAt { get; set; }
+}
+
+public class ContractAmendmentSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public DateTime EffectiveDate { get; set; }
+    public string AmendmentType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? ApprovedBy { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+// ── AR Service ──────────────────────────────────────────────────────────────
+
+public interface IArService
+{
+    // GL Accounts
+    Task<List<GlAccountSummary>> GetAccountsAsync(string? accountType = null, string? lob = null, string? status = null);
+    Task<GlAccountSummary?> GetAccountByIdAsync(string id);
+    Task<string> CreateAccountAsync(GlAccountSummary account);
+    Task UpdateAccountAsync(string id, GlAccountSummary account);
+    Task ActivateAccountAsync(string id);
+    Task DeactivateAccountAsync(string id);
+
+    // Balances
+    Task<List<ArBalanceSummary>> GetBalancesAsync(string? accountId = null, DateTime? period = null, bool? isReconciled = null);
+    Task<ArBalanceSummary?> GetBalanceByIdAsync(string id);
+    Task<List<ArBalanceSummary>> GetBalancesByAccountAsync(string accountId);
+    Task<ArAgingSummary> GetAgingSummaryAsync();
+    Task ReconcileBalanceAsync(string id);
+
+    // Cash Posting
+    Task<List<CashPostingSummary>> GetCashPostingsAsync(string? payerType = null, string? status = null, DateTime? dateFrom = null, DateTime? dateTo = null);
+    Task<CashPostingSummary?> GetCashPostingByIdAsync(string id);
+    Task<string> CreateCashPostingAsync(CashPostingSummary posting);
+    Task ApplyCashPostingAsync(string id);
+    Task VoidCashPostingAsync(string id);
+
+    // Adjustments
+    Task<List<ArAdjustmentSummary>> GetAdjustmentsAsync(string? type = null, string? status = null, DateTime? period = null, string? accountId = null);
+    Task<ArAdjustmentSummary?> GetAdjustmentByIdAsync(string id);
+    Task<string> CreateAdjustmentAsync(ArAdjustmentSummary adjustment);
+    Task ApproveAdjustmentAsync(string id);
+    Task RejectAdjustmentAsync(string id, string reason);
+    Task PostAdjustmentAsync(string id);
+    Task ReverseAdjustmentAsync(string id);
+
+    // Batch Rules
+    Task<List<ArBatchRuleSummary>> GetBatchRulesAsync(string? trigger = null, string? status = null);
+    Task<ArBatchRuleSummary?> GetBatchRuleByIdAsync(string id);
+    Task<string> CreateBatchRuleAsync(ArBatchRuleSummary rule);
+    Task UpdateBatchRuleAsync(string id, ArBatchRuleSummary rule);
+    Task<ArBatchRuleTestResult> TestBatchRuleAsync(string id, decimal sampleAmount);
+}
+
+// ── AR DTOs ─────────────────────────────────────────────────────────────────
+
+public class GlAccountSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string AccountName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string AccountType { get; set; } = "Asset";
+    public string NormalBalance { get; set; } = "Debit";
+    public string? SubType { get; set; }
+    public string? StatementSection { get; set; }
+    public string Segments { get; set; } = string.Empty;
+    public GlSegmentCodesSummary SegmentCodes { get; set; } = new();
+    public List<string> LineOfBusinessMapping { get; set; } = new();
+    public PremiumSplitSummary? PremiumSplit { get; set; }
+    public bool IsReconciliationAccount { get; set; }
+    public string? ReconciliationPairAccountId { get; set; }
+    public bool IsIntercompany { get; set; }
+    public string? IntercompanyEntityCode { get; set; }
+    public List<string> BatchRuleIds { get; set; } = new();
+    public string Status { get; set; } = "Active";
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+}
+
+public class GlSegmentCodesSummary
+{
+    public string Company { get; set; } = string.Empty;
+    public string Fund { get; set; } = string.Empty;
+    public string Department { get; set; } = string.Empty;
+    public string Program { get; set; } = string.Empty;
+    public string Account { get; set; } = string.Empty;
+    public string SubAccount { get; set; } = string.Empty;
+}
+
+public class PremiumSplitSummary
+{
+    public decimal SponsorPercentage { get; set; }
+    public decimal MemberPercentage { get; set; }
+    public bool IsPlanSpecific { get; set; }
+}
+
+public class ArBalanceSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string GlAccountId { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public DateTime Period { get; set; }
+    public decimal OpeningBalance { get; set; }
+    public decimal TotalDebits { get; set; }
+    public decimal TotalCredits { get; set; }
+    public decimal ClosingBalance { get; set; }
+    public decimal SponsorBalance { get; set; }
+    public decimal MemberBalance { get; set; }
+    public decimal Current { get; set; }
+    public decimal Days31To60 { get; set; }
+    public decimal Days61To90 { get; set; }
+    public decimal Days91To120 { get; set; }
+    public decimal Over120Days { get; set; }
+    public bool IsReconciled { get; set; }
+    public DateTime? ReconciledAt { get; set; }
+}
+
+public class ArAgingSummary
+{
+    public decimal Current { get; set; }
+    public decimal Days31To60 { get; set; }
+    public decimal Days61To90 { get; set; }
+    public decimal Days91To120 { get; set; }
+    public decimal Over120Days { get; set; }
+    public decimal TotalOutstanding { get; set; }
+}
+
+public class CashPostingSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string PostingNumber { get; set; } = string.Empty;
+    public DateTime ReceiptDate { get; set; }
+    public decimal Amount { get; set; }
+    public string PaymentMethod { get; set; } = "Check";
+    public string? CheckNumber { get; set; }
+    public string? BankReference { get; set; }
+    public string PayerType { get; set; } = "Sponsor";
+    public string PayerReferenceId { get; set; } = string.Empty;
+    public string? PayerName { get; set; }
+    public decimal AppliedAmount { get; set; }
+    public decimal UnappliedAmount { get; set; }
+    public string Status { get; set; } = "Pending";
+}
+
+public class ArAdjustmentSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string AdjustmentNumber { get; set; } = string.Empty;
+    public string AdjustmentType { get; set; } = "ManualCorrection";
+    public string GlAccountId { get; set; } = string.Empty;
+    public string ArBalanceId { get; set; } = string.Empty;
+    public DateTime Period { get; set; }
+    public decimal Amount { get; set; }
+    public string Direction { get; set; } = "Debit";
+    public string ReasonCode { get; set; } = string.Empty;
+    public string? Narrative { get; set; }
+    public string? AuthorizedBy { get; set; }
+    public DateTime? AuthorizedAt { get; set; }
+    public string? SourceType { get; set; }
+    public string? SourceReferenceId { get; set; }
+    public string Status { get; set; } = "Pending";
+}
+
+public class ArBatchRuleSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string RuleCode { get; set; } = string.Empty;
+    public string RuleName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Trigger { get; set; } = string.Empty;
+    public List<string> ApplicableLobs { get; set; } = new();
+    public string DebitAccountId { get; set; } = string.Empty;
+    public string CreditAccountId { get; set; } = string.Empty;
+    public string SplitBehavior { get; set; } = "NoSplit";
+    public decimal? AutoApproveThreshold { get; set; }
+    public int ExecutionOrder { get; set; }
+    public string Status { get; set; } = "Active";
+    public DateTime EffectiveDate { get; set; }
+    public DateTime? TerminationDate { get; set; }
+}
+
+public class ArBatchRuleTestResult
+{
+    public string RuleCode { get; set; } = string.Empty;
+    public decimal SampleAmount { get; set; }
+    public string DebitAccountId { get; set; } = string.Empty;
+    public decimal DebitAmount { get; set; }
+    public string CreditAccountId { get; set; } = string.Empty;
+    public decimal CreditAmount { get; set; }
+    public decimal? SponsorSplitAmount { get; set; }
+    public decimal? MemberSplitAmount { get; set; }
 }

@@ -90,5 +90,33 @@ services:
       claims-service:
         condition: service_healthy
 
+  ar-service:
+    build:
+      context: .
+      dockerfile: src/services/ar-service/Dockerfile
+    ports:
+      - "5020:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=CloudHealthOffice
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  provider-contracts-service:
+    build:
+      context: .
+      dockerfile: src/services/provider-contracts-service/Dockerfile
+    ports:
+      - "5019:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=CloudHealthOffice
+    depends_on:
+      mongo:
+        condition: service_healthy
+
 volumes:
   mongo_data:
