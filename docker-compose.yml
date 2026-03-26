@@ -1,10 +1,14 @@
 # Cloud Health Office — Full Local Development Stack
 #
 # Usage:
-#   docker compose up -d                    # All services
-#   docker compose --profile core up -d     # Core adjudication only
-#   docker compose --profile finance up -d  # Finance + AR + Capitation
-#   docker compose --profile fhir up -d     # FHIR + interoperability
+#   docker compose --profile core up -d                          # Core adjudication
+#   docker compose --profile finance up -d                       # Finance stack
+#   docker compose --profile fhir up -d                          # FHIR + interop
+#   docker compose --profile core --profile finance up -d        # Core + Finance
+#   docker compose --profile core --profile finance --profile fhir up -d  # Everything
+#
+# Note: `docker compose up -d` (no profile) starts only infra (mongo + redis).
+#       You must specify at least one --profile to start application services.
 #
 # All services depend on mongo (and some on redis).
 # Swagger UI available at http://localhost:{port}/swagger for each service.
@@ -141,6 +145,7 @@ services:
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=BenefitPlanDB
       - Redis__ConnectionString=redis:6379
+      - Services__ClaimsServiceUrl=http://claims-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -316,6 +321,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=FhirDB
+      - SmartAuth__Issuer=http://smart-auth-service:8080
+      - SmartAuth__RequireHttpsMetadata=false
     depends_on:
       mongo:
         condition: service_healthy
