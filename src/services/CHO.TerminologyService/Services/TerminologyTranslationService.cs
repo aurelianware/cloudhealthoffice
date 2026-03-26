@@ -1,5 +1,7 @@
+using CHO.TerminologyService.Configuration;
 using CHO.TerminologyService.Models;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace CHO.TerminologyService.Services;
 
@@ -18,20 +20,24 @@ public class TerminologyTranslationService : ITerminologyTranslationService
     private readonly IContextRuleEngine _ruleEngine;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TerminologyTranslationService> _logger;
-
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private readonly IOptions<TerminologyServiceOptions> _options;
 
     public TerminologyTranslationService(
         IConceptMapRepository repository,
         IContextRuleEngine ruleEngine,
         IMemoryCache cache,
-        ILogger<TerminologyTranslationService> logger)
+        ILogger<TerminologyTranslationService> logger,
+        IOptions<TerminologyServiceOptions> options)
     {
         _repository = repository;
         _ruleEngine = ruleEngine;
         _cache = cache;
         _logger = logger;
+        _options = options;
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     public async Task<TranslateResponse> TranslateAsync(TranslateRequest request, CancellationToken ct = default)
     {
@@ -52,7 +58,7 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         var cacheKey = $"translate:{request.System}:{request.Code}:{request.TargetSystem}:{request.TenantId ?? "global"}";
         var candidates = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_options.Value.CacheMinutes);
             return await _repository.FindBySourceCodeAsync(
                 request.System, request.Code, request.TargetSystem, request.TenantId, ct);
         });
@@ -62,7 +68,7 @@ public class TerminologyTranslationService : ITerminologyTranslationService
             response.Result = false;
             response.Message = $"No mapping found for {request.System}|{request.Code} → {request.TargetSystem}";
             _logger.LogInformation("No mapping found: {System}|{Code} → {Target}",
-                request.System, request.Code, request.TargetSystem);
+                SanitizeForLog(request.System), SanitizeForLog(request.Code), SanitizeForLog(request.TargetSystem));
             return response;
         }
 
@@ -100,7 +106,7 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         }
 
         _logger.LogDebug("Translated {System}|{Code} → {Target}: {MatchCount} matches (overrides: {OverrideCount})",
-            request.System, request.Code, request.TargetSystem, matches.Count, overrides.Count);
+            SanitizeForLog(request.System), SanitizeForLog(request.Code), SanitizeForLog(request.TargetSystem), matches.Count, overrides.Count);
 
         return response;
     }

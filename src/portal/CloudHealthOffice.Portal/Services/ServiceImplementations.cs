@@ -3291,10 +3291,10 @@ public class TerminologyServiceImpl : ITerminologyService
                 $"code={Uri.EscapeDataString(code)}",
                 $"target={Uri.EscapeDataString(targetSystem)}"
             };
-            if (!string.IsNullOrEmpty(tenantId)) qs.Add($"tenantId={tenantId}");
+            if (!string.IsNullOrEmpty(tenantId)) qs.Add($"tenantId={Uri.EscapeDataString(tenantId)}");
             if (age.HasValue) qs.Add($"age={age.Value}");
-            if (!string.IsNullOrEmpty(gender)) qs.Add($"gender={gender}");
-            if (!string.IsNullOrEmpty(state)) qs.Add($"state={state}");
+            if (!string.IsNullOrEmpty(gender)) qs.Add($"gender={Uri.EscapeDataString(gender)}");
+            if (!string.IsNullOrEmpty(state)) qs.Add($"state={Uri.EscapeDataString(state)}");
 
             var query = string.Join("&", qs);
             return await _httpClient.GetFromJsonAsync<TermTranslateResult>(

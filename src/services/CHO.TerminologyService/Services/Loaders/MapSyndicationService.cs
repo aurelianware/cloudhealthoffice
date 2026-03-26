@@ -17,7 +17,7 @@ namespace CHO.TerminologyService.Services.Loaders;
 ///   - Plan overrides: on-demand via admin API
 /// 
 /// The loader is idempotent — if the same version is already loaded (matched by
-/// source checksum), it skips the import. This means you can safely point the
+/// version string), it skips the import. This means you can safely point the
 /// scheduled check at the same NLM download URL repeatedly.
 /// </summary>
 public class MapSyndicationService : BackgroundService

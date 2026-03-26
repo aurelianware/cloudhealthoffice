@@ -20,13 +20,17 @@ spec:
     spec:
       containers:
         - name: terminology-service
-          image: aurelianware.azurecr.io/cho-terminology-service:latest
+          image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-terminology-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 5080
               name: http
           env:
             - name: TerminologyService__MongoConnectionString
-              value: "mongodb://mongodb-0.mongodb-headless.cloudhealthoffice.svc.cluster.local:27017"
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: connectionString
             - name: TerminologyService__MongoDatabaseName
               value: "cho_terminology"
             - name: ASPNETCORE_ENVIRONMENT
@@ -69,7 +73,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 5080
+    - port: 80
       targetPort: 5080
       protocol: TCP
       name: http
@@ -84,7 +88,7 @@ metadata:
   namespace: cloudhealthoffice
 spec:
   accessModes:
-    - ReadOnlyMany
+    - ReadWriteMany
   resources:
     requests:
       storage: 5Gi

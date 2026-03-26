@@ -178,7 +178,7 @@ public class CsvMapLoader : IMapLoader
                 rule.StateCode = ruleValue;
                 break;
             case "comorbidity":
-                rule.CoMorbidCodes = ruleValue.Split(';').Where(s => !string.IsNullOrEmpty(s)).ToList();
+                rule.CoMorbidCodes = ruleValue.Split(';').Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
                 break;
             default:
                 rule.Expression = ruleValue;
