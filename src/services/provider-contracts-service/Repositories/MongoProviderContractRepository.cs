@@ -5,6 +5,8 @@ namespace ProviderContractsService.Repositories;
 
 public class MongoProviderContractRepository : IProviderContractRepository
 {
+    private static bool _indexesCreated;
+    private static readonly object _indexLock = new();
     private readonly IMongoCollection<ProviderContract> _collection;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<MongoProviderContractRepository> _logger;
@@ -18,7 +20,18 @@ public class MongoProviderContractRepository : IProviderContractRepository
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
 
-        CreateIndexes();
+        EnsureIndexes();
+    }
+
+    private void EnsureIndexes()
+    {
+        if (_indexesCreated) return;
+        lock (_indexLock)
+        {
+            if (_indexesCreated) return;
+            CreateIndexes();
+            _indexesCreated = true;
+        }
     }
 
     private void CreateIndexes()
