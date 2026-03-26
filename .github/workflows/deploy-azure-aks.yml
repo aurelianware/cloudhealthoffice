@@ -107,6 +107,8 @@ jobs:
           - smart-auth-service
           - risk-adjustment-service
           - encounter-service
+          - provider-contracts-service
+          - ar-service
           - CHO.TerminologyService
           - CloudHealthOffice.PricingApi
         include:
@@ -155,6 +157,10 @@ jobs:
           - service: risk-adjustment-service
             build_context: '.'
           - service: encounter-service
+            build_context: '.'
+          - service: provider-contracts-service
+            build_context: '.'
+          - service: ar-service
             build_context: '.'
           - service: CHO.TerminologyService
             build_context: '.'

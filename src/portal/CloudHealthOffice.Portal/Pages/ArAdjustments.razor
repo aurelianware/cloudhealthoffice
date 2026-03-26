@@ -1,0 +1,428 @@
+@page "/finance/ar/adjustments"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IArService ArService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>AR Adjustments — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mr-2" Style="vertical-align: middle;" />
+    AR Adjustments
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Write-offs, retroactive corrections, and grace period adjustments
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+<!-- Summary Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_adjustments.Count(a => a.Status == "Pending")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending Approval</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_adjustments.Count(a => a.Status == "Posted")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Posted</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Undo" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_adjustments.Count(a => a.Status == "Reversed")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Reversed</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">
+                    @_adjustments.Where(a => a.Status == "Pending").Sum(a => a.Amount).ToString("C0")
+                </MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Amount Pending</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filter Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_typeFilter" Label="Type" Variant="Variant.Outlined"
+               Style="min-width: 180px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("ManualCorrection")">Manual Correction</MudSelectItem>
+        <MudSelectItem Value="@("WriteOff")">Write-Off</MudSelectItem>
+        <MudSelectItem Value="@("RetroActive")">Retroactive</MudSelectItem>
+        <MudSelectItem Value="@("GracePeriod")">Grace Period</MudSelectItem>
+        <MudSelectItem Value="@("BadDebt")">Bad Debt</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+        <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
+        <MudSelectItem Value="@("Rejected")">Rejected</MudSelectItem>
+        <MudSelectItem Value="@("Posted")">Posted</MudSelectItem>
+        <MudSelectItem Value="@("Reversed")">Reversed</MudSelectItem>
+    </MudSelect>
+    <MudDatePicker @bind-Date="_periodFilter" Label="Period" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width: 150px;" Clearable="true" OpenTo="OpenTo.Month" FixMonth="@null" />
+    <MudSelect @bind-Value="_accountFilter" Label="Account" Variant="Variant.Outlined"
+               Style="min-width: 200px;" Clearable="true" Dense="true">
+        @foreach (var acct in _accountOptions)
+        {
+            <MudSelectItem Value="@acct.Id">@acct.AccountNumber — @acct.AccountName</MudSelectItem>
+        }
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadAdjustments" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewAdjustmentDialog">New Adjustment</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Adjustments Grid -->
+<MudTable Items="_adjustments" Dense="true" Hover="true" T="ArAdjustmentSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Adj #</MudTh>
+        <MudTh>Date</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Account</MudTh>
+        <MudTh>Period</MudTh>
+        <MudTh Style="text-align: right;">Amount</MudTh>
+        <MudTh>Direction</MudTh>
+        <MudTh>Reason</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Adj #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.AdjustmentNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Date">
+            @(context.AuthorizedAt?.ToString("MM/dd/yyyy") ?? "—")
+        </MudTd>
+        <MudTd DataLabel="Type">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetAdjTypeColor(context.AdjustmentType)">@context.AdjustmentType</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Account">
+            @{
+                var acctDisplay = _accountOptions.FirstOrDefault(a => a.Id == context.GlAccountId);
+            }
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@(acctDisplay?.AccountNumber ?? context.GlAccountId)</MudText>
+        </MudTd>
+        <MudTd DataLabel="Period">@context.Period.ToString("MMM yyyy")</MudTd>
+        <MudTd DataLabel="Amount" Style="text-align: right;">
+            <MudText Style="font-family: monospace; font-weight: 600;">@context.Amount.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Direction">
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(context.Direction == "Debit" ? Color.Success : Color.Error)">
+                @context.Direction
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Reason">
+            <MudText Typo="Typo.body2">@context.ReasonCode</MudText>
+            @if (!string.IsNullOrEmpty(context.Narrative))
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.Narrative</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetAdjStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                @if (context.Status == "Pending")
+                {
+                    <MudTooltip Text="Approve">
+                        <MudIconButton Icon="@Icons.Material.Filled.ThumbUp" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => ApproveAdjustment(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Reject">
+                        <MudIconButton Icon="@Icons.Material.Filled.ThumbDown" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => RejectAdjustment(context))" />
+                    </MudTooltip>
+                }
+                @if (context.Status == "Approved")
+                {
+                    <MudTooltip Text="Post">
+                        <MudIconButton Icon="@Icons.Material.Filled.Publish" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => PostAdjustment(context))" />
+                    </MudTooltip>
+                }
+                @if (context.Status == "Posted")
+                {
+                    <MudTooltip Text="Reverse">
+                        <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small" Color="Color.Warning"
+                                       OnClick="@(() => ReverseAdjustment(context))" />
+                    </MudTooltip>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Tune" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No adjustments found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create a new adjustment to correct AR balances</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<!-- New Adjustment Dialog -->
+<MudDialog @bind-Visible="_adjDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mr-2" />
+            New Adjustment
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formType" Label="Type" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("ManualCorrection")">Manual Correction</MudSelectItem>
+                    <MudSelectItem Value="@("WriteOff")">Write-Off</MudSelectItem>
+                    <MudSelectItem Value="@("RetroActive")">Retroactive</MudSelectItem>
+                    <MudSelectItem Value="@("GracePeriod")">Grace Period</MudSelectItem>
+                    <MudSelectItem Value="@("BadDebt")">Bad Debt</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formAccountId" Label="Account" Variant="Variant.Outlined" Required="true">
+                    @foreach (var acct in _accountOptions)
+                    {
+                        <MudSelectItem Value="@acct.Id">@acct.AccountNumber — @acct.AccountName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formPeriod" Label="Period" Variant="Variant.Outlined" Required="true"
+                               OpenTo="OpenTo.Month" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_formAmount" Label="Amount" Variant="Variant.Outlined"
+                                 Format="C2" HideSpinButtons="true" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formDirection" Label="Direction" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("Debit")">Debit</MudSelectItem>
+                    <MudSelectItem Value="@("Credit")">Credit</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formReasonCode" Label="Reason Code" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_formNarrative" Label="Narrative" Variant="Variant.Outlined" Lines="3" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseAdjDialog" Color="Color.Default">Cancel</MudButton>
+        <MudButton OnClick="SaveAdjustment" Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving">
+            @(_saving ? "Saving..." : "Submit Adjustment")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+</PermissionGate>
+
+@code {
+    private List<ArAdjustmentSummary> _adjustments = new();
+    private List<GlAccountSummary> _accountOptions = new();
+    private bool _loading = true;
+    private string? _serviceError;
+
+    // Filters
+    private string? _typeFilter;
+    private string? _statusFilter;
+    private DateTime? _periodFilter;
+    private string? _accountFilter;
+
+    // Dialog
+    private bool _adjDialogVisible;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private bool _saving;
+
+    // Form fields
+    private string _formType = "ManualCorrection";
+    private string _formAccountId = string.Empty;
+    private DateTime? _formPeriod = DateTime.Today;
+    private decimal _formAmount;
+    private string _formDirection = "Debit";
+    private string _formReasonCode = string.Empty;
+    private string? _formNarrative;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadAdjustments(), LoadAccountOptions());
+    }
+
+    private async Task LoadAdjustments()
+    {
+        _loading = true;
+        try
+        {
+            _adjustments = await ArService.GetAdjustmentsAsync(_typeFilter, _statusFilter, _periodFilter, _accountFilter);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch (Exception ex) { Snackbar.Add($"Error loading adjustments: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadAccountOptions()
+    {
+        try { _accountOptions = await ArService.GetAccountsAsync(); }
+        catch { /* account list is supplementary */ }
+    }
+
+    private void OpenNewAdjustmentDialog()
+    {
+        _formType = "ManualCorrection";
+        _formAccountId = string.Empty;
+        _formPeriod = DateTime.Today;
+        _formAmount = 0;
+        _formDirection = "Debit";
+        _formReasonCode = string.Empty;
+        _formNarrative = null;
+        _adjDialogVisible = true;
+    }
+
+    private void CloseAdjDialog() => _adjDialogVisible = false;
+
+    private async Task SaveAdjustment()
+    {
+        _saving = true;
+        try
+        {
+            var adjustment = new ArAdjustmentSummary
+            {
+                AdjustmentType = _formType,
+                GlAccountId = _formAccountId,
+                Period = _formPeriod ?? DateTime.Today,
+                Amount = _formAmount,
+                Direction = _formDirection,
+                ReasonCode = _formReasonCode,
+                Narrative = _formNarrative,
+                Status = "Pending"
+            };
+
+            await ArService.CreateAdjustmentAsync(adjustment);
+            Snackbar.Add($"Adjustment submitted — {_formAmount:C2} {_formDirection}", Severity.Success);
+            _adjDialogVisible = false;
+            await LoadAdjustments();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error creating adjustment: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ApproveAdjustment(ArAdjustmentSummary adj)
+    {
+        try
+        {
+            await ArService.ApproveAdjustmentAsync(adj.Id);
+            adj.Status = "Approved";
+            Snackbar.Add($"Adjustment {adj.AdjustmentNumber} approved", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task RejectAdjustment(ArAdjustmentSummary adj)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Reject Adjustment",
+            $"Reject adjustment {adj.AdjustmentNumber} — {adj.Amount:C2}?",
+            yesText: "Reject", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ArService.RejectAdjustmentAsync(adj.Id, "Rejected via portal");
+                adj.Status = "Rejected";
+                Snackbar.Add($"Adjustment {adj.AdjustmentNumber} rejected", Severity.Warning);
+                StateHasChanged();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private async Task PostAdjustment(ArAdjustmentSummary adj)
+    {
+        try
+        {
+            await ArService.PostAdjustmentAsync(adj.Id);
+            adj.Status = "Posted";
+            Snackbar.Add($"Adjustment {adj.AdjustmentNumber} posted to GL", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ReverseAdjustment(ArAdjustmentSummary adj)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Reverse Adjustment",
+            $"Reverse posted adjustment {adj.AdjustmentNumber} — {adj.Amount:C2}? A reversing entry will be created.",
+            yesText: "Reverse", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ArService.ReverseAdjustmentAsync(adj.Id);
+                adj.Status = "Reversed";
+                Snackbar.Add($"Adjustment {adj.AdjustmentNumber} reversed", Severity.Warning);
+                StateHasChanged();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private static Color GetAdjTypeColor(string type) => type switch
+    {
+        "ManualCorrection" => Color.Primary,
+        "WriteOff" => Color.Error,
+        "RetroActive" => Color.Warning,
+        "GracePeriod" => Color.Info,
+        "BadDebt" => Color.Dark,
+        _ => Color.Default
+    };
+
+    private static Color GetAdjStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Warning,
+        "Approved" => Color.Info,
+        "Rejected" => Color.Error,
+        "Posted" => Color.Success,
+        "Reversed" => Color.Dark,
+        _ => Color.Default
+    };
+}

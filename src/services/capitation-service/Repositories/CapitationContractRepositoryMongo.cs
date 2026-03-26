@@ -56,7 +56,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         var filter = Builders<CapitationContract>.Filter.And(
             Builders<CapitationContract>.Filter.Eq(x => x.TenantId, tenantId),
             Builders<CapitationContract>.Filter.Eq(x => x.ProviderNPI, npi),
-            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationContractStatus.Active));
+            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationRateConfigStatus.Active));
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
@@ -66,7 +66,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         var filters = new List<FilterDefinition<CapitationContract>>
         {
             Builders<CapitationContract>.Filter.Eq(x => x.TenantId, tenantId),
-            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationContractStatus.Active)
+            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationRateConfigStatus.Active)
         };
 
         if (lob.HasValue)
@@ -86,7 +86,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         var filter = Builders<CapitationContract>.Filter.And(
             Builders<CapitationContract>.Filter.Eq(x => x.TenantId, tenantId),
             Builders<CapitationContract>.Filter.AnyEq(x => x.PlanIds, planId),
-            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationContractStatus.Active));
+            Builders<CapitationContract>.Filter.Eq(x => x.Status, CapitationRateConfigStatus.Active));
         return await _collection.Find(filter).SortBy(x => x.ProviderName).ToListAsync();
     }
 
@@ -94,7 +94,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         string? providerNpi = null,
         LineOfBusiness? lob = null,
         ContractType? type = null,
-        CapitationContractStatus? status = null,
+        CapitationRateConfigStatus? status = null,
         int page = 1,
         int pageSize = 50)
     {

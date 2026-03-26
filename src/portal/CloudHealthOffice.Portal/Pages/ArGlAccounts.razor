@@ -1,0 +1,522 @@
+@page "/finance/ar/accounts"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IArService ArService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>GL Accounts — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Class="mr-2" Style="vertical-align: middle;" />
+    GL Accounts
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Chart of accounts — segment codes, account types, and premium split configuration
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+<!-- Summary Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_accounts.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Accounts</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_accounts.Count(a => a.Status == "Active")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Balance" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_accounts.Count(a => a.IsReconciliationAccount)</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Reconciliation Accounts</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_accounts.Count(a => a.Status == "Inactive")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Inactive</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filter Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_accountTypeFilter" Label="Account Type" Variant="Variant.Outlined"
+               Style="min-width: 160px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Asset")">Asset</MudSelectItem>
+        <MudSelectItem Value="@("Liability")">Liability</MudSelectItem>
+        <MudSelectItem Value="@("Revenue")">Revenue</MudSelectItem>
+        <MudSelectItem Value="@("Expense")">Expense</MudSelectItem>
+        <MudSelectItem Value="@("Equity")">Equity</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_lobFilter" Label="LOB" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+        <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+        <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+        <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+        <MudSelectItem Value="@("TRICARE")">TRICARE</MudSelectItem>
+        <MudSelectItem Value="@("VA")">VA</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+        <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+        <MudSelectItem Value="@("Suspended")">Suspended</MudSelectItem>
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadAccounts" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewAccountDialog">New Account</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<MudTable Items="FilteredAccounts" Dense="true" Hover="true" T="GlAccountSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Account #</MudTh>
+        <MudTh>Account Name</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Sub-Type</MudTh>
+        <MudTh>Segments</MudTh>
+        <MudTh>LOB</MudTh>
+        <MudTh>Premium Split</MudTh>
+        <MudTh>Reconciliation</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Account #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.AccountNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Account Name">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.AccountName</MudText>
+            @if (!string.IsNullOrEmpty(context.Description))
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.Description</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Type">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetAccountTypeColor(context.AccountType)">@context.AccountType</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Sub-Type">@(context.SubType ?? "—")</MudTd>
+        <MudTd DataLabel="Segments">
+            <MudText Typo="Typo.caption" Style="font-family: monospace; color: rgba(255,255,255,0.6);">@context.Segments</MudText>
+        </MudTd>
+        <MudTd DataLabel="LOB">
+            @foreach (var lob in context.LineOfBusinessMapping.Take(3))
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Class="mr-1">@lob</MudChip>
+            }
+            @if (context.LineOfBusinessMapping.Count > 3)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">+@(context.LineOfBusinessMapping.Count - 3)</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Premium Split">
+            @if (context.PremiumSplit != null)
+            {
+                <MudText Typo="Typo.caption" Style="font-family: monospace;">
+                    S: @(context.PremiumSplit.SponsorPercentage)% / M: @(context.PremiumSplit.MemberPercentage)%
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">—</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Reconciliation">
+            @if (context.IsReconciliationAccount)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.RadioButtonUnchecked" Size="Size.Small" Style="color: rgba(255,255,255,0.2);" />
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                <MudTooltip Text="Edit">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => OpenEditAccountDialog(context))" />
+                </MudTooltip>
+                @if (context.Status == "Active")
+                {
+                    <MudTooltip Text="Deactivate">
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeactivateAccount(context))" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudTooltip Text="Activate">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => ActivateAccount(context))" />
+                    </MudTooltip>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No GL accounts found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create your first account to get started</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<!-- New / Edit Account Dialog -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Class="mr-2" />
+            @(_editingAccount != null ? "Edit GL Account" : "New GL Account")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formAccountNumber" Label="Account Number" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Account number is required" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formAccountName" Label="Account Name" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Account name is required" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_formDescription" Label="Description" Variant="Variant.Outlined" Lines="2" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudSelect @bind-Value="_formAccountType" Label="Account Type" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("Asset")">Asset</MudSelectItem>
+                    <MudSelectItem Value="@("Liability")">Liability</MudSelectItem>
+                    <MudSelectItem Value="@("Revenue")">Revenue</MudSelectItem>
+                    <MudSelectItem Value="@("Expense")">Expense</MudSelectItem>
+                    <MudSelectItem Value="@("Equity")">Equity</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="4">
+                <MudSelect @bind-Value="_formNormalBalance" Label="Normal Balance" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("Debit")">Debit</MudSelectItem>
+                    <MudSelectItem Value="@("Credit")">Credit</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSubType" Label="Sub-Type" Variant="Variant.Outlined" />
+            </MudItem>
+
+            <!-- Segment Codes -->
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: #00ffff;">Segment Codes</MudText>
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegCompany" Label="Company" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegFund" Label="Fund" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegDepartment" Label="Department" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegProgram" Label="Program" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegAccount" Label="Account" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudTextField @bind-Value="_formSegSubAccount" Label="SubAccount" Variant="Variant.Outlined" Dense="true" />
+            </MudItem>
+
+            <!-- LOB Multi-Select -->
+            <MudItem xs="12">
+                <MudSelect @bind-SelectedValues="_formLobs" Label="Lines of Business" MultiSelection="true"
+                           Variant="Variant.Outlined" T="string">
+                    <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+                    <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+                    <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+                    <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+                    <MudSelectItem Value="@("TRICARE")">TRICARE</MudSelectItem>
+                    <MudSelectItem Value="@("VA")">VA</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <!-- Reconciliation Toggle -->
+            <MudItem xs="12">
+                <MudSwitch @bind-Value="_formIsReconciliation" Color="Color.Primary" Label="Reconciliation Account" />
+            </MudItem>
+
+            <!-- Premium Split -->
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: #00ffff;">Premium Split</MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_formSponsorPct" Label="Sponsor %" Variant="Variant.Outlined"
+                                 Min="0" Max="100" HideSpinButtons="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="_formMemberPct" Label="Member %" Variant="Variant.Outlined"
+                                 Min="0" Max="100" HideSpinButtons="true" />
+            </MudItem>
+
+            <!-- Dates -->
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formEffectiveDate" Label="Effective Date" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formTerminationDate" Label="Termination Date" Variant="Variant.Outlined" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog" Color="Color.Default">Cancel</MudButton>
+        <MudButton OnClick="SaveAccount" Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+</PermissionGate>
+
+@code {
+    private List<GlAccountSummary> _accounts = new();
+    private bool _loading = true;
+    private string? _serviceError;
+
+    // Filters
+    private string? _accountTypeFilter;
+    private string? _lobFilter;
+    private string? _statusFilter;
+
+    // Dialog
+    private bool _dialogVisible;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private GlAccountSummary? _editingAccount;
+    private bool _saving;
+
+    // Form fields
+    private string _formAccountNumber = string.Empty;
+    private string _formAccountName = string.Empty;
+    private string? _formDescription;
+    private string _formAccountType = "Asset";
+    private string _formNormalBalance = "Debit";
+    private string? _formSubType;
+    private string _formSegCompany = string.Empty;
+    private string _formSegFund = string.Empty;
+    private string _formSegDepartment = string.Empty;
+    private string _formSegProgram = string.Empty;
+    private string _formSegAccount = string.Empty;
+    private string _formSegSubAccount = string.Empty;
+    private IEnumerable<string> _formLobs = new HashSet<string>();
+    private bool _formIsReconciliation;
+    private decimal _formSponsorPct;
+    private decimal _formMemberPct;
+    private DateTime? _formEffectiveDate = DateTime.Today;
+    private DateTime? _formTerminationDate;
+
+    private IEnumerable<GlAccountSummary> FilteredAccounts => _accounts.Where(a =>
+        (string.IsNullOrEmpty(_lobFilter) || a.LineOfBusinessMapping.Contains(_lobFilter)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAccounts();
+    }
+
+    private async Task LoadAccounts()
+    {
+        _loading = true;
+        try
+        {
+            _accounts = await ArService.GetAccountsAsync(_accountTypeFilter, _lobFilter, _statusFilter);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch (Exception ex) { Snackbar.Add($"Error loading accounts: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void OpenNewAccountDialog()
+    {
+        _editingAccount = null;
+        ResetForm();
+        _dialogVisible = true;
+    }
+
+    private void OpenEditAccountDialog(GlAccountSummary account)
+    {
+        _editingAccount = account;
+        _formAccountNumber = account.AccountNumber;
+        _formAccountName = account.AccountName;
+        _formDescription = account.Description;
+        _formAccountType = account.AccountType;
+        _formNormalBalance = account.NormalBalance;
+        _formSubType = account.SubType;
+        _formSegCompany = account.SegmentCodes.Company;
+        _formSegFund = account.SegmentCodes.Fund;
+        _formSegDepartment = account.SegmentCodes.Department;
+        _formSegProgram = account.SegmentCodes.Program;
+        _formSegAccount = account.SegmentCodes.Account;
+        _formSegSubAccount = account.SegmentCodes.SubAccount;
+        _formLobs = new HashSet<string>(account.LineOfBusinessMapping);
+        _formIsReconciliation = account.IsReconciliationAccount;
+        _formSponsorPct = account.PremiumSplit?.SponsorPercentage ?? 0;
+        _formMemberPct = account.PremiumSplit?.MemberPercentage ?? 0;
+        _formEffectiveDate = account.EffectiveDate;
+        _formTerminationDate = account.TerminationDate;
+        _dialogVisible = true;
+    }
+
+    private void ResetForm()
+    {
+        _formAccountNumber = string.Empty;
+        _formAccountName = string.Empty;
+        _formDescription = null;
+        _formAccountType = "Asset";
+        _formNormalBalance = "Debit";
+        _formSubType = null;
+        _formSegCompany = _formSegFund = _formSegDepartment = _formSegProgram = _formSegAccount = _formSegSubAccount = string.Empty;
+        _formLobs = new HashSet<string>();
+        _formIsReconciliation = false;
+        _formSponsorPct = 0;
+        _formMemberPct = 0;
+        _formEffectiveDate = DateTime.Today;
+        _formTerminationDate = null;
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task SaveAccount()
+    {
+        _saving = true;
+        try
+        {
+            var account = new GlAccountSummary
+            {
+                AccountNumber = _formAccountNumber,
+                AccountName = _formAccountName,
+                Description = _formDescription,
+                AccountType = _formAccountType,
+                NormalBalance = _formNormalBalance,
+                SubType = _formSubType,
+                SegmentCodes = new GlSegmentCodesSummary
+                {
+                    Company = _formSegCompany,
+                    Fund = _formSegFund,
+                    Department = _formSegDepartment,
+                    Program = _formSegProgram,
+                    Account = _formSegAccount,
+                    SubAccount = _formSegSubAccount
+                },
+                Segments = $"{_formSegCompany}-{_formSegFund}-{_formSegDepartment}-{_formSegProgram}-{_formSegAccount}-{_formSegSubAccount}",
+                LineOfBusinessMapping = _formLobs.ToList(),
+                IsReconciliationAccount = _formIsReconciliation,
+                PremiumSplit = (_formSponsorPct > 0 || _formMemberPct > 0) ? new PremiumSplitSummary
+                {
+                    SponsorPercentage = _formSponsorPct,
+                    MemberPercentage = _formMemberPct
+                } : null,
+                EffectiveDate = _formEffectiveDate ?? DateTime.Today,
+                TerminationDate = _formTerminationDate
+            };
+
+            if (_editingAccount != null)
+            {
+                await ArService.UpdateAccountAsync(_editingAccount.Id, account);
+                Snackbar.Add($"Account {account.AccountNumber} updated", Severity.Success);
+            }
+            else
+            {
+                await ArService.CreateAccountAsync(account);
+                Snackbar.Add($"Account {account.AccountNumber} created", Severity.Success);
+            }
+
+            _dialogVisible = false;
+            await LoadAccounts();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error saving account: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ActivateAccount(GlAccountSummary account)
+    {
+        try
+        {
+            await ArService.ActivateAccountAsync(account.Id);
+            account.Status = "Active";
+            Snackbar.Add($"Account {account.AccountNumber} activated", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeactivateAccount(GlAccountSummary account)
+    {
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Deactivate Account",
+            $"Are you sure you want to deactivate account {account.AccountNumber} — {account.AccountName}?",
+            yesText: "Deactivate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ArService.DeactivateAccountAsync(account.Id);
+                account.Status = "Inactive";
+                Snackbar.Add($"Account {account.AccountNumber} deactivated", Severity.Warning);
+                StateHasChanged();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private static Color GetAccountTypeColor(string type) => type switch
+    {
+        "Asset" => Color.Primary,
+        "Liability" => Color.Warning,
+        "Revenue" => Color.Success,
+        "Expense" => Color.Error,
+        "Equity" => Color.Info,
+        _ => Color.Default
+    };
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Inactive" => Color.Default,
+        "Suspended" => Color.Warning,
+        _ => Color.Default
+    };
+}

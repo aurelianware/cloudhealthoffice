@@ -1,0 +1,266 @@
+@page "/finance/ar/balances"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IArService ArService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>AR Balances — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Class="mr-2" Style="vertical-align: middle;" />
+    AR Balances
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Period balances, aging, and reconciliation
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+<!-- Aging Dashboard -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_aging.Current.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Current</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,255,0,0.05); border: 1px solid rgba(255,255,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Style="color: #ffff00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffff00; font-weight: 700;">@_aging.Days31To60.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">31-60 Days</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_aging.Days61To90.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">61-90 Days</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_aging.Days91To120.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">91-120 Days</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(139,0,0,0.15); border: 1px solid rgba(139,0,0,0.4); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Report" Style="color: #8b0000; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff4444; font-weight: 700;">@_aging.Over120Days.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">120+ Days</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_aging.TotalOutstanding.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Outstanding</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filter Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_accountFilter" Label="Account" Variant="Variant.Outlined"
+               Style="min-width: 200px;" Clearable="true" Dense="true">
+        @foreach (var acct in _accountOptions)
+        {
+            <MudSelectItem Value="@acct.Id">@acct.AccountNumber — @acct.AccountName</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect @bind-Value="_reconciledFilter" Label="Reconciled" Variant="Variant.Outlined"
+               Style="min-width: 160px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("All")">All</MudSelectItem>
+        <MudSelectItem Value="@("Unreconciled")">Unreconciled</MudSelectItem>
+        <MudSelectItem Value="@("Reconciled")">Reconciled</MudSelectItem>
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadBalances" Disabled="_loading">Apply</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Balances Grid -->
+<MudTable Items="FilteredBalances" Dense="true" Hover="true" T="ArBalanceSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Account #</MudTh>
+        <MudTh>Account Name</MudTh>
+        <MudTh Style="text-align: right;">Opening</MudTh>
+        <MudTh Style="text-align: right;">Debits</MudTh>
+        <MudTh Style="text-align: right;">Credits</MudTh>
+        <MudTh Style="text-align: right; color: #00ffff;">Closing</MudTh>
+        <MudTh Style="text-align: right;">Sponsor Balance</MudTh>
+        <MudTh Style="text-align: right;">Member Balance</MudTh>
+        <MudTh>Reconciled</MudTh>
+        <MudTh>Period</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Account #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.AccountNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Account Name">
+            @{
+                var acctName = _accountOptions.FirstOrDefault(a => a.Id == context.GlAccountId)?.AccountName ?? "—";
+            }
+            <MudText Typo="Typo.body2">@acctName</MudText>
+        </MudTd>
+        <MudTd DataLabel="Opening" Style="text-align: right;">
+            <MudText Style="font-family: monospace;">@context.OpeningBalance.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Debits" Style="text-align: right;">
+            <MudText Style="font-family: monospace; color: #00ff88;">@context.TotalDebits.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Credits" Style="text-align: right;">
+            <MudText Style="font-family: monospace; color: #ff0055;">@context.TotalCredits.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Closing" Style="text-align: right;">
+            <MudText Style="font-family: monospace; font-weight: 700; color: #00ffff;">@context.ClosingBalance.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Sponsor Balance" Style="text-align: right;">
+            <MudText Style="font-family: monospace;">@context.SponsorBalance.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Member Balance" Style="text-align: right;">
+            <MudText Style="font-family: monospace;">@context.MemberBalance.ToString("C2")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Reconciled">
+            @if (context.IsReconciled)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />Yes
+                </MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">No</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Period">@context.Period.ToString("MMM yyyy")</MudTd>
+        <MudTd DataLabel="Actions">
+            @if (!context.IsReconciled)
+            {
+                <MudTooltip Text="Reconcile">
+                    <MudIconButton Icon="@Icons.Material.Filled.TaskAlt" Size="Size.Small" Color="Color.Success"
+                                   OnClick="@(() => ReconcileBalance(context))" />
+                </MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No AR balances found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Balances will appear when GL accounts have activity</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+</PermissionGate>
+
+@code {
+    private List<ArBalanceSummary> _balances = new();
+    private List<GlAccountSummary> _accountOptions = new();
+    private ArAgingSummary _aging = new();
+    private bool _loading = true;
+    private string? _serviceError;
+
+    // Filters
+    private string? _accountFilter;
+    private string? _reconciledFilter;
+
+    private IEnumerable<ArBalanceSummary> FilteredBalances => _balances.Where(b =>
+        (string.IsNullOrEmpty(_reconciledFilter) || _reconciledFilter == "All" ||
+         (_reconciledFilter == "Reconciled" && b.IsReconciled) ||
+         (_reconciledFilter == "Unreconciled" && !b.IsReconciled)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadBalances(), LoadAging(), LoadAccountOptions());
+    }
+
+    private async Task LoadBalances()
+    {
+        _loading = true;
+        try
+        {
+            bool? reconciled = _reconciledFilter switch
+            {
+                "Reconciled" => true,
+                "Unreconciled" => false,
+                _ => null
+            };
+            _balances = await ArService.GetBalancesAsync(accountId: _accountFilter, isReconciled: reconciled);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch (Exception ex) { Snackbar.Add($"Error loading balances: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadAging()
+    {
+        try
+        {
+            _aging = await ArService.GetAgingSummaryAsync();
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch { /* aging is supplementary */ }
+    }
+
+    private async Task LoadAccountOptions()
+    {
+        try
+        {
+            _accountOptions = await ArService.GetAccountsAsync();
+        }
+        catch { /* account list is supplementary */ }
+    }
+
+    private async Task ReconcileBalance(ArBalanceSummary balance)
+    {
+        var acctName = _accountOptions.FirstOrDefault(a => a.Id == balance.GlAccountId)?.AccountName ?? balance.AccountNumber;
+        bool? confirmed = await DialogService.ShowMessageBox(
+            "Reconcile Balance",
+            $"Confirm reconciliation for {acctName} — {balance.Period:MMM yyyy}? Closing balance: {balance.ClosingBalance:C2}",
+            yesText: "Reconcile", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ArService.ReconcileBalanceAsync(balance.Id);
+                balance.IsReconciled = true;
+                balance.ReconciledAt = DateTime.UtcNow;
+                Snackbar.Add($"Balance for {acctName} reconciled", Severity.Success);
+                await LoadAging();
+                StateHasChanged();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error reconciling: {ex.Message}", Severity.Error); }
+        }
+    }
+}
