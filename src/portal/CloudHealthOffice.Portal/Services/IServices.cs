@@ -1927,6 +1927,63 @@ public class CapDisbursementBatchResult
     public List<string> ErrorMessages { get; set; } = new();
 }
 
+// ── Terminology Service ─────────────────────────────────────────────────────
+
+public interface ITerminologyService
+{
+    Task<TermTranslateResult> TranslateAsync(string system, string code, string targetSystem,
+        string? tenantId = null, int? age = null, string? gender = null, string? state = null);
+    Task<List<TermMapVersionSummary>> GetMapVersionsAsync();
+    Task<TermHealthStatus> GetHealthAsync();
+}
+
+public class TermTranslateResult
+{
+    public bool Result { get; set; }
+    public string? Message { get; set; }
+    public List<TermTranslateMatch> Matches { get; set; } = new();
+    public string? MapVersionId { get; set; }
+    public DateTime TranslatedAt { get; set; }
+}
+
+public class TermTranslateMatch
+{
+    public string Equivalence { get; set; } = string.Empty;
+    public TermCoding Concept { get; set; } = new();
+    public bool IsContextResolved { get; set; }
+    public bool IsOverride { get; set; }
+    public string Source { get; set; } = string.Empty;
+}
+
+public class TermCoding
+{
+    public string System { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Display { get; set; } = string.Empty;
+}
+
+public class TermMapVersionSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string MapName { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string SourceSystem { get; set; } = string.Empty;
+    public string TargetSystem { get; set; } = string.Empty;
+    public DateTime ImportedAt { get; set; }
+    public bool IsActive { get; set; }
+    public int EntryCount { get; set; }
+    public string? SourceChecksum { get; set; }
+}
+
+public class TermHealthStatus
+{
+    public string Status { get; set; } = string.Empty;
+    public string Service { get; set; } = string.Empty;
+    public int TotalActiveEntries { get; set; }
+    public List<TermMapVersionSummary> ActiveMaps { get; set; } = new();
+    public DateTime Timestamp { get; set; }
+}
+
 // ── Provider Contracts ──────────────────────────────────────────────────────
 
 public interface IProviderContractsService
