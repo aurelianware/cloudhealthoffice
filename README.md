@@ -172,7 +172,7 @@ curl http://localhost:5000/health
 
 ### Full Development Stack
 
-To bring up the complete backend (all 11 services + MongoDB + Redis + seed data):
+To bring up the complete backend (all 25 services + MongoDB + Redis + seed data):
 
 ```bash
 # Start everything
