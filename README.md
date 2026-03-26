@@ -37,7 +37,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 |Component           |Count    |Details                                                                                                    |
 |---------------------|---------|-----------------------------------------------------------------------------------------------------------|
-|Microservices        |24       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
+|Microservices        |28       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
 |Calculation Engines  |9        |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store        |
 |X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
 |FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
@@ -78,6 +78,10 @@ Start with compliance. Expand into claims. Move at your own pace.
 |risk-adjustment-service  |HCC risk score calculation and submission     |—               |
 |smart-auth-service       |SMART on FHIR authorization                   |—               |
 |pricing-api              |Medicare/custom fee schedule repricing       |—               |
+|ar-service               |GL accounts, AR balances, cash posting, adjustments|—          |
+|terminology-service      |SNOMED↔ICD-10/CPT/HCPCS terminology crosswalk (FHIR $translate)|278  |
+|provider-contracts-service|Provider contract master management          |—               |
+|ffs-service              |Fee-for-service rate configuration            |—               |
 
 ### Calculation Engines
 
@@ -172,7 +176,7 @@ curl http://localhost:5000/health
 
 ### Full Development Stack
 
-To bring up the complete backend (all 25 services + MongoDB + Redis + seed data):
+To bring up the complete backend (all 28 services + MongoDB + Redis + seed data):
 
 ```bash
 # Start everything
@@ -197,7 +201,7 @@ Or deploy to Azure:
 ```
 cloudhealthoffice/
 ├── src/
-│   ├── services/           # 24 C# microservices
+│   ├── services/           # 28 C# microservices
 │   ├── engines/            # Calculation engines (Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter)
 │   ├── portal/             # Blazor Server portal (50 pages, MudBlazor, Entra ID multi-tenant)
 │   ├── site/               # Marketing site (cloudhealthoffice.com)
