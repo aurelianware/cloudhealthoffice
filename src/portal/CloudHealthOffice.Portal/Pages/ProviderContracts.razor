@@ -1,0 +1,497 @@
+@page "/finance/contracts"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IProviderContractsService ContractsService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Provider Contracts — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="contracts:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Style="vertical-align: middle;" />
+    Provider Contracts
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Master provider agreements — capitation, FFS, and hybrid payment arrangements
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+        @_serviceError
+    </MudAlert>
+}
+
+<!-- KPI Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Description" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_contracts.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Contracts</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_contracts.Count(c => c.Status == "Active")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.EditNote" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_contracts.Count(c => c.Status == "Draft")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Draft</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_contracts.Count(c => c.Status == "Terminated")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Terminated</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(138,43,226,0.05); border: 1px solid rgba(138,43,226,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Autorenew" Style="color: #8a2be2; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #8a2be2; font-weight: 700;">@_contracts.Count(c => c.Status == "PendingRenewal")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending Renewal</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filters + Actions -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudTextField @bind-Value="_npiFilter" Label="Provider NPI" Variant="Variant.Outlined"
+                  Style="min-width: 160px;" Clearable="true" Dense="true" />
+    <MudSelect @bind-Value="_lobFilter" Label="LOB" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("Commercial")>Commercial</MudSelectItem>
+        <MudSelectItem Value=@("Medicare")>Medicare</MudSelectItem>
+        <MudSelectItem Value=@("Medicaid")>Medicaid</MudSelectItem>
+        <MudSelectItem Value=@("Exchange")>Exchange</MudSelectItem>
+        <MudSelectItem Value=@("TRICARE")>TRICARE</MudSelectItem>
+        <MudSelectItem Value=@("VA")>VA</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_methodologyFilter" Label="Payment Methodology" Variant="Variant.Outlined"
+               Style="min-width: 180px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("FullCapitation")>Full Capitation</MudSelectItem>
+        <MudSelectItem Value=@("FeeForService")>Fee-for-Service</MudSelectItem>
+        <MudSelectItem Value=@("Hybrid")>Hybrid</MudSelectItem>
+        <MudSelectItem Value=@("GlobalRisk")>Global Risk</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_networkFilter" Label="Network Status" Variant="Variant.Outlined"
+               Style="min-width: 160px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("Participating")>Participating</MudSelectItem>
+        <MudSelectItem Value=@("NonParticipating")>Non-Participating</MudSelectItem>
+        <MudSelectItem Value=@("TieredException")>Tiered Exception</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("Active")>Active</MudSelectItem>
+        <MudSelectItem Value=@("Draft")>Draft</MudSelectItem>
+        <MudSelectItem Value=@("Suspended")>Suspended</MudSelectItem>
+        <MudSelectItem Value=@("Terminated")>Terminated</MudSelectItem>
+        <MudSelectItem Value=@("PendingRenewal")>Pending Renewal</MudSelectItem>
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadContracts" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenCreateForm">New Contract</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Contracts Table -->
+<MudTable Items="_contracts" Dense="true" Hover="true" T="ProviderContractSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Contract #</MudTh>
+        <MudTh>Provider NPI</MudTh>
+        <MudTh>Provider Name</MudTh>
+        <MudTh>LOB</MudTh>
+        <MudTh>Payment Methodology</MudTh>
+        <MudTh>Network Status</MudTh>
+        <MudTh>Effective</MudTh>
+        <MudTh>Term Date</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Contract #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.ContractNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Provider NPI">
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ProviderNPI</MudText>
+        </MudTd>
+        <MudTd DataLabel="Provider Name">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.ProviderName</MudText>
+        </MudTd>
+        <MudTd DataLabel="LOB">@context.LineOfBusiness</MudTd>
+        <MudTd DataLabel="Payment Methodology">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@FormatMethodology(context.PaymentMethodology)</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Network Status">@FormatNetworkStatus(context.NetworkStatus)</MudTd>
+        <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+        <MudTd DataLabel="Term Date">@(context.TerminationDate?.ToString("MM/dd/yyyy") ?? "—")</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                <MudTooltip Text="View Details">
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => ViewContract(context)" />
+                </MudTooltip>
+                <MudTooltip Text="Edit">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="() => EditContract(context)" />
+                </MudTooltip>
+                @if (context.Status is "Draft" or "Suspended")
+                {
+                    <MudTooltip Text="Activate">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                       OnClick="() => ActivateContract(context)" />
+                    </MudTooltip>
+                }
+                @if (context.Status == "Active")
+                {
+                    <MudTooltip Text="Suspend">
+                        <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small" Color="Color.Warning"
+                                       OnClick="() => SuspendContract(context)" />
+                    </MudTooltip>
+                }
+                @if (context.Status is not "Terminated")
+                {
+                    <MudTooltip Text="Terminate">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => TerminateContract(context)" />
+                    </MudTooltip>
+                }
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Description" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No provider contracts found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create a new contract to get started</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<!-- Create/Edit Form Dialog -->
+@if (_showCreateForm)
+{
+    <MudDialog @bind-Visible="_showCreateForm" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
+        <TitleContent>
+            <MudText Typo="Typo.h6" Style="color: #00ffff;">
+                @(string.IsNullOrEmpty(_editContract?.Id) ? "New" : "Edit") Provider Contract
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract!.ProviderNPI" Label="Provider NPI" Required="true"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract.ProviderName" Label="Provider Name" Required="true"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract.ProviderTin" Label="Provider TIN"
+                                  Variant="Variant.Outlined" HelperText="9-digit TIN — will be masked in lists" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect @bind-Value="_editContract.ProviderType" Label="Provider Type" Required="true"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value=@("Individual")>Individual</MudSelectItem>
+                        <MudSelectItem Value=@("Organization")>Organization</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect @bind-Value="_editContract.LineOfBusiness" Label="Line of Business" Required="true"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value=@("Commercial")>Commercial</MudSelectItem>
+                        <MudSelectItem Value=@("Medicare")>Medicare</MudSelectItem>
+                        <MudSelectItem Value=@("Medicaid")>Medicaid</MudSelectItem>
+                        <MudSelectItem Value=@("Exchange")>Exchange</MudSelectItem>
+                        <MudSelectItem Value=@("TRICARE")>TRICARE</MudSelectItem>
+                        <MudSelectItem Value=@("VA")>VA</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect @bind-Value="_editContract.PaymentMethodology" Label="Payment Methodology" Required="true"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value=@("FullCapitation")>Full Capitation</MudSelectItem>
+                        <MudSelectItem Value=@("FeeForService")>Fee-for-Service</MudSelectItem>
+                        <MudSelectItem Value=@("Hybrid")>Hybrid</MudSelectItem>
+                        <MudSelectItem Value=@("GlobalRisk")>Global Risk</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect @bind-Value="_editContract.NetworkStatus" Label="Network Status"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value=@("Participating")>Participating</MudSelectItem>
+                        <MudSelectItem Value=@("NonParticipating")>Non-Participating</MudSelectItem>
+                        <MudSelectItem Value=@("TieredException")>Tiered Exception</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract.ContractOwner" Label="Contract Owner"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract.SignatoryName" Label="Signatory Name"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_editSignedDate" Label="Signed Date" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_editEffective" Label="Effective Date" Required="true"
+                                   Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_editTermination" Label="Termination Date" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudCheckBox @bind-Value="_editContract.AutoRenews" Label="Auto-Renews" />
+                </MudItem>
+                @if (_editContract.AutoRenews)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_editContract.RenewalTermMonths" Label="Renewal Term (months)"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_editContract.NoticeRequiredDays" Label="Notice Required (days)"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="() => _showCreateForm = false">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveContract" Disabled="_saving">
+                @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> } Save
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+}
+
+<!-- Detail Drawer -->
+@if (_detailContract != null)
+{
+    <MudDrawer @bind-Open="_showDetail" Anchor="Anchor.End" Width="600px" Variant="DrawerVariant.Temporary"
+               Style="background: #0a0a0a; border-left: 1px solid rgba(0,255,255,0.2);">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6" Style="color: #00ffff;">@_detailContract.ContractNumber</MudText>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="() => _showDetail = false" />
+        </MudDrawerHeader>
+        <div class="pa-4">
+            <!-- Contract Details -->
+            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color: #00ffff;">Contract Details</MudText>
+            <MudSimpleTable Dense="true" Style="background: transparent;">
+                <tbody>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Provider</td><td>@_detailContract.ProviderName (@_detailContract.ProviderNPI)</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">TIN</td><td>@(_detailContract.ProviderTin ?? "—")</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">LOB</td><td>@_detailContract.LineOfBusiness</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Payment</td><td>@FormatMethodology(_detailContract.PaymentMethodology)</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Network</td><td>@FormatNetworkStatus(_detailContract.NetworkStatus)</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Status</td><td><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(_detailContract.Status)">@_detailContract.Status</MudChip></td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Effective</td><td>@_detailContract.EffectiveDate.ToString("MM/dd/yyyy")</td></tr>
+                    <tr><td style="color: rgba(255,255,255,0.5);">Term Date</td><td>@(_detailContract.TerminationDate?.ToString("MM/dd/yyyy") ?? "Open-ended")</td></tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <!-- Amendments -->
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: #00ffff;">Amendments</MudText>
+            @if (_detailContract.Amendments.Any())
+            {
+                @foreach (var amendment in _detailContract.Amendments.OrderByDescending(a => a.EffectiveDate))
+                {
+                    <MudPaper Class="pa-3 mb-2" Style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                        <div class="d-flex justify-space-between">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@amendment.AmendmentType</MudChip>
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">Effective @amendment.EffectiveDate.ToString("MM/dd/yyyy")</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mt-1">@amendment.Description</MudText>
+                    </MudPaper>
+                }
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.4);">No amendments</MudText>
+            }
+
+            <!-- Rate Config Children -->
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: #00ffff;">Rate Config Children</MudText>
+            <div class="d-flex gap-4">
+                <div>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Capitation Rate Configs</MudText>
+                    <MudText Typo="Typo.h6">@_detailContract.CapitationRateConfigIds.Count</MudText>
+                </div>
+                <div>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">FFS Rate Configs</MudText>
+                    <MudText Typo="Typo.h6">@_detailContract.FfsRateConfigIds.Count</MudText>
+                </div>
+            </div>
+        </div>
+    </MudDrawer>
+}
+</PermissionGate>
+
+@code {
+    private List<ProviderContractSummary> _contracts = new();
+    private string? _npiFilter;
+    private string? _lobFilter;
+    private string? _methodologyFilter;
+    private string? _networkFilter;
+    private string? _statusFilter;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _serviceError;
+    private bool _showCreateForm;
+    private ProviderContractSummary? _editContract;
+    private DateTime? _editEffective;
+    private DateTime? _editTermination;
+    private DateTime? _editSignedDate;
+    private bool _showDetail;
+    private ProviderContractSummary? _detailContract;
+
+    protected override async Task OnInitializedAsync() => await LoadContracts();
+
+    private async Task LoadContracts()
+    {
+        _loading = true;
+        try
+        {
+            _contracts = await ContractsService.GetContractsAsync(
+                _npiFilter, _lobFilter, _statusFilter, _methodologyFilter, _networkFilter);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void OpenCreateForm()
+    {
+        _editContract = new ProviderContractSummary();
+        _editEffective = DateTime.Today;
+        _editTermination = null;
+        _editSignedDate = null;
+        _showCreateForm = true;
+    }
+
+    private void EditContract(ProviderContractSummary contract)
+    {
+        _editContract = contract;
+        _editEffective = contract.EffectiveDate;
+        _editTermination = contract.TerminationDate;
+        _editSignedDate = contract.SignedDate;
+        _showCreateForm = true;
+    }
+
+    private void ViewContract(ProviderContractSummary contract)
+    {
+        _detailContract = contract;
+        _showDetail = true;
+    }
+
+    private async Task SaveContract()
+    {
+        if (_editContract == null) return;
+        _saving = true;
+        try
+        {
+            if (_editEffective.HasValue) _editContract.EffectiveDate = _editEffective.Value;
+            _editContract.TerminationDate = _editTermination;
+            _editContract.SignedDate = _editSignedDate;
+
+            if (string.IsNullOrEmpty(_editContract.Id))
+                await ContractsService.CreateContractAsync(_editContract);
+            else
+                await ContractsService.UpdateContractAsync(_editContract.Id, _editContract);
+            Snackbar.Add("Contract saved", Severity.Success);
+            _showCreateForm = false;
+            await LoadContracts();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ActivateContract(ProviderContractSummary contract)
+    {
+        try { await ContractsService.ActivateContractAsync(contract.Id); Snackbar.Add("Contract activated", Severity.Success); await LoadContracts(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task SuspendContract(ProviderContractSummary contract)
+    {
+        var result = await DialogService.ShowMessageBox("Suspend Contract",
+            $"Suspend contract {contract.ContractNumber} for {contract.ProviderName}?",
+            "Suspend", "Cancel");
+        if (result != true) return;
+        try { await ContractsService.SuspendContractAsync(contract.Id, "User-initiated suspension"); Snackbar.Add("Contract suspended", Severity.Warning); await LoadContracts(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task TerminateContract(ProviderContractSummary contract)
+    {
+        var result = await DialogService.ShowMessageBox("Terminate Contract",
+            $"Are you sure you want to terminate contract {contract.ContractNumber} for {contract.ProviderName}?",
+            "Terminate", "Cancel");
+        if (result != true) return;
+        try { await ContractsService.TerminateContractAsync(contract.Id, "User-initiated termination"); Snackbar.Add("Contract terminated", Severity.Warning); await LoadContracts(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Draft" => Color.Warning,
+        "Suspended" => Color.Info,
+        "Terminated" => Color.Error,
+        "Expired" => Color.Default,
+        "PendingRenewal" => Color.Secondary,
+        _ => Color.Default
+    };
+
+    private static string FormatMethodology(string? m) => m switch
+    {
+        "FullCapitation" => "Full Capitation",
+        "FeeForService" => "Fee-for-Service",
+        "GlobalRisk" => "Global Risk",
+        _ => m ?? "—"
+    };
+
+    private static string FormatNetworkStatus(string? s) => s switch
+    {
+        "NonParticipating" => "Non-Par",
+        "TieredException" => "Tiered Exception",
+        "Participating" => "Par",
+        _ => s ?? "—"
+    };
+}
