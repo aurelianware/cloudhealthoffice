@@ -67,7 +67,7 @@ public class ArBalancesController : ControllerBase
     [HttpPost("{id}/reconcile")]
     [ProducesResponseType(typeof(ArBalance), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ArBalance>> ReconcileBalance(string id, [FromBody] ReconcileRequest request)
+    public async Task<ActionResult<ArBalance>> ReconcileBalance(string id, [FromBody] ReconcileRequest? request = null)
     {
         var balance = await _balanceRepository.GetByIdAsync(id);
         if (balance == null)
@@ -76,12 +76,19 @@ public class ArBalancesController : ControllerBase
         if (balance.IsReconciled)
             return BadRequest(new { error = "Balance is already reconciled. Un-reconcile first to re-reconcile." });
 
+        // Resolve who reconciled: explicit body → authenticated user → "system"
+        var reconciledBy = request?.ReconciledBy;
+        if (string.IsNullOrWhiteSpace(reconciledBy))
+            reconciledBy = User?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(reconciledBy))
+            reconciledBy = "system";
+
         balance.IsReconciled = true;
         balance.ReconciledAt = DateTime.UtcNow;
-        balance.ReconciledBy = request.ReconciledBy;
-        balance.ReconciliationNotes = request.Notes;
+        balance.ReconciledBy = reconciledBy;
+        balance.ReconciliationNotes = request?.Notes;
         _logger.LogInformation("Reconciled AR balance {BalanceId} by {ReconciledBy}",
-            id, SanitizeForLog(request.ReconciledBy));
+            SanitizeForLog(id), SanitizeForLog(reconciledBy));
 
         var updated = await _balanceRepository.UpdateAsync(balance);
         return Ok(updated);
@@ -94,6 +101,10 @@ public class ArBalancesController : ControllerBase
     [ProducesResponseType(typeof(AgingSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<AgingSummary>> GetAgingSummary()
     {
+        // TODO: Replace with MongoDB $group aggregation pipeline for production scale.
+        // Current implementation loads all balance documents into memory —
+        // acceptable for dev/demo scale but will degrade at >10k balance records.
+        // Tracked for a future refactor to IArBalanceRepository.GetAgingTotalsAsync().
         var allBalances = await _balanceRepository.SearchAsync(page: 1, pageSize: int.MaxValue);
 
         var summary = new AgingSummary

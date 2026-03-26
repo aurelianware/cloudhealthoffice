@@ -1,5 +1,6 @@
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
+using ArService.Middleware;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
@@ -75,6 +76,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseTenantMiddleware();
 app.UseAuthorization();
 app.MapControllers();
 app.MapChoHealthChecks();

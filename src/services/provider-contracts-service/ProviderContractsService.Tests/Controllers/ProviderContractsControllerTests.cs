@@ -389,7 +389,7 @@ public class ProviderContractsControllerTests
 
         var ok = result.Result as OkObjectResult;
         var items = (ok!.Value as IEnumerable<ProviderContract>)!.ToList();
-        items.First().ProviderTin.Should().Be("***6789");
+        items.First().ProviderTin.Should().Be("***-**-6789");
     }
 
     [Fact]
