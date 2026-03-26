@@ -29,15 +29,22 @@ public class TerminologyController : ControllerBase
         public const string Hcpcs = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
     }
 
+    private readonly IConfiguration _configuration;
+
     public TerminologyController(
         ITerminologyTranslationService translationService,
         IEnumerable<IMapLoader> loaders,
-        ILogger<TerminologyController> logger)
+        ILogger<TerminologyController> logger,
+        IConfiguration configuration)
     {
         _translationService = translationService;
         _loaders = loaders;
         _logger = logger;
+        _configuration = configuration;
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     // ──────────────────────────────────────────────────────
     // FHIR $translate operation
@@ -180,6 +187,11 @@ public class TerminologyController : ControllerBase
         [FromQuery] bool isOverride = false,
         CancellationToken ct = default)
     {
+        var apiKey = Request.Headers["X-Admin-Key"].FirstOrDefault();
+        var expectedKey = _configuration["TerminologyService:AdminApiKey"];
+        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
+            return Unauthorized(new { error = "Invalid or missing X-Admin-Key header" });
+
         if (Request.Body == null)
         {
             return BadRequest(new { error = "Request body must contain the map file" });
@@ -204,7 +216,7 @@ public class TerminologyController : ControllerBase
         };
 
         _logger.LogInformation("Loading map: {MapName} v{Version} ({Format}) {Source} → {Target}",
-            mapName, version, format, sourceSystem, targetSystem);
+            SanitizeForLog(mapName), SanitizeForLog(version), SanitizeForLog(format), SanitizeForLog(sourceSystem), SanitizeForLog(targetSystem));
 
         var result = await loader.LoadAsync(Request.Body, options, ct);
         return Ok(result);

@@ -35,6 +35,9 @@ public class Rf2MapLoader : IMapLoader
         _logger = logger;
     }
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public async Task<MapLoadResult> LoadAsync(Stream source, MapLoadOptions options, CancellationToken ct = default)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -141,7 +144,7 @@ public class Rf2MapLoader : IMapLoader
             if (entries.Count > 0)
             {
                 _logger.LogInformation("Bulk inserting {Count} entries for map {MapName} v{Version}",
-                    entries.Count, options.MapName, options.Version);
+                    entries.Count, SanitizeForLog(options.MapName), SanitizeForLog(options.Version));
 
                 await _repository.BulkInsertAsync(entries, ct);
 

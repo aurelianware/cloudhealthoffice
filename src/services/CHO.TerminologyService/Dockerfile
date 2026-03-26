@@ -1,11 +1,13 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
-WORKDIR /src
+WORKDIR /repo
 
-COPY CHO.TerminologyService.csproj .
-RUN dotnet restore
+# Copy csproj and restore (matches CI repo-root build context)
+COPY src/services/CHO.TerminologyService/CHO.TerminologyService.csproj src/services/CHO.TerminologyService/
+RUN dotnet restore src/services/CHO.TerminologyService/CHO.TerminologyService.csproj
 
-COPY . .
-RUN dotnet publish -c Release -o /app --no-restore
+# Copy source and publish
+COPY src/services/CHO.TerminologyService/ src/services/CHO.TerminologyService/
+RUN dotnet publish src/services/CHO.TerminologyService/CHO.TerminologyService.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
@@ -13,10 +15,13 @@ WORKDIR /app
 # Create directory for map file mounts
 RUN mkdir -p /data/maps
 
-COPY --from=build /app .
+COPY --from=publish /app/publish .
+
+RUN addgroup -S appuser && adduser -S appuser -G appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 ENV ASPNETCORE_URLS=http://+:5080
-ENV DOTNET_RUNNING_IN_CONTAINER=true
 
 EXPOSE 5080
 

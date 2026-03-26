@@ -144,7 +144,22 @@ public class MongoConceptMapRepository : IConceptMapRepository
             Builders<ConceptMapEntry>.Filter.Eq(e => e.IsOverride, true)
         );
 
-        await _entries.ReplaceOneAsync(filter, entry, new ReplaceOptions { IsUpsert = true }, ct);
+        var update = Builders<ConceptMapEntry>.Update
+            .Set(e => e.SourceDisplay, entry.SourceDisplay)
+            .Set(e => e.TargetDisplay, entry.TargetDisplay)
+            .Set(e => e.Equivalence, entry.Equivalence)
+            .Set(e => e.Priority, entry.Priority)
+            .Set(e => e.Rule, entry.Rule)
+            .Set(e => e.MapVersionId, entry.MapVersionId)
+            .Set(e => e.IsOverride, true)
+            .Set(e => e.MapGroupId, entry.MapGroupId)
+            .SetOnInsert(e => e.SourceSystem, entry.SourceSystem)
+            .SetOnInsert(e => e.SourceCode, entry.SourceCode)
+            .SetOnInsert(e => e.TargetSystem, entry.TargetSystem)
+            .SetOnInsert(e => e.TargetCode, entry.TargetCode)
+            .SetOnInsert(e => e.TenantId, entry.TenantId);
+
+        await _entries.UpdateOneAsync(filter, update, new UpdateOptions { IsUpsert = true }, ct);
     }
 
     public async Task<MapVersion?> GetActiveMapVersionAsync(

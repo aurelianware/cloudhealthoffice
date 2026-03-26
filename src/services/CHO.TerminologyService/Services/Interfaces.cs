@@ -63,8 +63,7 @@ public interface IConceptMapRepository
 
 /// <summary>
 /// Loads crosswalk data from various source formats.
-/// Implementations: RF2Loader (NLM SNOMED), FhirConceptMapLoader (FHIR JSON), 
-/// CsvLoader (AMA CPT cross maps, plan-specific overrides).
+/// Implementations: Rf2MapLoader (NLM SNOMED), CsvMapLoader (AMA CPT cross maps, plan-specific overrides).
 /// </summary>
 public interface IMapLoader
 {

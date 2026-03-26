@@ -15,9 +15,6 @@ public class TranslateRequest
     /// <summary>Target coding system URI</summary>
     public string TargetSystem { get; set; } = string.Empty;
 
-    /// <summary>Optional: specific ConceptMap URL to use</summary>
-    public string? ConceptMapUrl { get; set; }
-
     /// <summary>Optional patient context for rule-based disambiguation</summary>
     public PatientContext? Context { get; set; }
 
