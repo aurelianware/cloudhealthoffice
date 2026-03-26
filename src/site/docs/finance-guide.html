@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module User Guide — Cloud Health Office</title>
+  <meta name="description" content="Complete user guide for Cloud Health Office finance modules — premium billing, accounts receivable (AR), capitation payments, and FFS payment runs for healthcare payer organizations." />
+  <meta name="keywords" content="healthcare payer AR, capitation payment management, premium billing software, FFS payment runs, QNXT finance alternative, healthcare payer finance, accounts receivable healthcare, capitation PMPM, ERA 835 generation, NACHA ACH healthcare" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/finance-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/finance-guide" />
+  <meta property="og:title" content="Finance Module User Guide — Cloud Health Office" />
+  <meta property="og:description" content="Complete user guide for healthcare payer finance — premium billing, AR, capitation payments, and FFS payment runs." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Finance Module User Guide — Cloud Health Office",
+    "description": "Complete user guide covering premium billing, accounts receivable, capitation payments, and fee-for-service payment runs for healthcare payer organizations.",
+    "url": "https://cloudhealthoffice.com/docs/finance-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-03-26",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Healthcare payer finance",
+      "Premium billing",
+      "Accounts receivable",
+      "Capitation payments",
+      "Fee-for-service payment runs"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Finance Guide", "item": "https://cloudhealthoffice.com/docs/finance-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide" class="active">Finance Guide</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#premium-billing">Premium Billing</a></li>
+              <li><a href="#accounts-receivable">Accounts Receivable</a></li>
+              <li><a href="#capitation">Capitation</a></li>
+              <li><a href="#ffs-payment-runs">FFS Payment Runs</a></li>
+              <li><a href="#getting-started">Getting Started</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Finance Guide</span>
+        </div>
+
+        <h1>Finance Module User Guide</h1>
+        <p class="docs-subtitle">
+          End-to-end guide to Cloud Health Office's four finance modules — premium billing, accounts receivable, capitation, and fee-for-service payment runs. Covers configuration, daily workflows, and integration with downstream clearinghouse and banking systems.
+        </p>
+
+        <!-- Overview -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Cloud Health Office finance is built on four interconnected pillars that cover the complete revenue cycle for healthcare payer organizations:</p>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4B0;</span>
+            <h3>Premium Billing</h3>
+            <p>Monthly premium invoice generation for sponsor groups. Billing cycles, sponsor/member premium splits, payment tracking, and overdue management.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CA;</span>
+            <h3>Accounts Receivable</h3>
+            <p>Chart of accounts, period balances, aging buckets, cash posting, AR adjustments, and automated batch rules.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F3E5;</span>
+            <h3>Capitation</h3>
+            <p>Per-member-per-month provider payments. Provider contracts, rate configuration, capitation runs, and ACH/Stripe disbursements.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4DD;</span>
+            <h3>FFS Payment Runs</h3>
+            <p>Fee-for-service claim payment processing organized by line of business. Claim selection, payment batching, and ERA 835 generation.</p>
+          </div>
+        </div>
+
+        <p>Each module operates independently but shares a common chart of accounts and GL posting infrastructure. Outputs from Premium Billing and Capitation Runs feed into Accounts Receivable automatically via configurable batch rules.</p>
+
+        <!-- ============================= -->
+        <!-- PREMIUM BILLING               -->
+        <!-- ============================= -->
+        <h2 id="premium-billing">1. Premium Billing</h2>
+
+        <p>The Premium Billing module generates monthly invoices for sponsor groups (employers, unions, government agencies) based on enrolled member counts and configured premium rates. It is the primary revenue-recognition entry point for most health plans.</p>
+
+        <h3 id="billing-cycles">Billing Cycles</h3>
+
+        <p>Each sponsor group is assigned a billing cycle that determines when invoices are generated and when payment is due:</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>BillingFrequency</code></td><td>Monthly (default), Quarterly, or Annual</td></tr>
+            <tr><td><code>InvoiceGenerationDay</code></td><td>Day of the month the invoice is created (e.g., 1st or 15th)</td></tr>
+            <tr><td><code>PaymentDueDays</code></td><td>Number of days after invoice date that payment is due</td></tr>
+            <tr><td><code>GracePeriodDays</code></td><td>Days after due date before the invoice is flagged overdue</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="premium-splits">Sponsor &amp; Member Premium Splits</h3>
+
+        <p>Premiums are split between the sponsor (employer contribution) and the member (employee contribution). The split is configured at the benefit plan level and can vary by coverage tier:</p>
+
+        <table>
+          <thead>
+            <tr><th>Coverage Tier</th><th>Total Premium</th><th>Sponsor %</th><th>Member %</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Employee Only</td><td>$650.00</td><td>80%</td><td>20%</td></tr>
+            <tr><td>Employee + Spouse</td><td>$1,300.00</td><td>75%</td><td>25%</td></tr>
+            <tr><td>Employee + Children</td><td>$1,100.00</td><td>75%</td><td>25%</td></tr>
+            <tr><td>Family</td><td>$1,800.00</td><td>70%</td><td>30%</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="invoice-generation">Invoice Generation</h3>
+
+        <p>When a billing cycle triggers, the system:</p>
+
+        <ol>
+          <li>Snapshots all active enrollments for the sponsor group as of the billing period start date</li>
+          <li>Calculates the total premium for each member based on their coverage tier and benefit plan</li>
+          <li>Applies the sponsor/member split to produce two line items per member</li>
+          <li>Aggregates sponsor-portion line items into a single sponsor invoice</li>
+          <li>Creates individual member premium statements (if member payroll deduction is not configured)</li>
+          <li>Posts the receivable entries to the AR ledger via batch rules</li>
+        </ol>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-finance-premium-billing-flow.svg" alt="Premium billing workflow: enrollment snapshot, premium calculation, sponsor/member split, invoice generation, AR posting" />
+        </figure>
+
+        <h3 id="payment-tracking">Payment Tracking</h3>
+
+        <p>Each invoice tracks its payment status through a simple lifecycle:</p>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Generated</code></td><td>Invoice created, not yet sent</td></tr>
+            <tr><td><code>Sent</code></td><td>Invoice delivered to sponsor (email/EDI 820)</td></tr>
+            <tr><td><code>PartiallyPaid</code></td><td>Payment received but less than invoice total</td></tr>
+            <tr><td><code>Paid</code></td><td>Full payment received and posted</td></tr>
+            <tr><td><code>Overdue</code></td><td>Grace period has elapsed without full payment</td></tr>
+            <tr><td><code>WrittenOff</code></td><td>Balance written off via AR adjustment</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="overdue-management">Overdue Management</h3>
+
+        <p>When an invoice enters <code>Overdue</code> status, the system can be configured to:</p>
+
+        <ul>
+          <li>Send automated reminder notifications to the sponsor's billing contact</li>
+          <li>Escalate to a collections queue after a configurable number of days</li>
+          <li>Suspend new enrollment processing for the sponsor group</li>
+          <li>Generate a retroactive disenrollment file if the grace period defined by state regulation is exceeded</li>
+        </ul>
+
+        <!-- ============================= -->
+        <!-- ACCOUNTS RECEIVABLE           -->
+        <!-- ============================= -->
+        <h2 id="accounts-receivable">2. Accounts Receivable (AR)</h2>
+
+        <p>The Accounts Receivable module is the financial backbone of Cloud Health Office. All premium revenue, capitation expenses, and FFS claim payments flow through the AR ledger. It provides a healthcare-specific chart of accounts, period-based balance tracking, cash posting, adjustments, and automated batch posting rules.</p>
+
+        <h3 id="gl-accounts">GL Accounts (Chart of Accounts)</h3>
+
+        <p>Cloud Health Office uses a QNXT-compatible 6-segment Chart of Accounts (COA) structure. Each GL account is identified by a composite code that encodes organizational and financial dimensions:</p>
+
+        <table>
+          <thead>
+            <tr><th>Segment</th><th>Label</th><th>Example</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Company</td><td><code>100</code></td><td>Legal entity or subsidiary</td></tr>
+            <tr><td>2</td><td>Line of Business</td><td><code>2010</code></td><td>Medicaid, Medicare Advantage, Commercial, Exchange</td></tr>
+            <tr><td>3</td><td>Region</td><td><code>01</code></td><td>Geographic service area</td></tr>
+            <tr><td>4</td><td>Department</td><td><code>4100</code></td><td>Functional cost center</td></tr>
+            <tr><td>5</td><td>Account</td><td><code>510200</code></td><td>Natural account (revenue, expense, asset, liability)</td></tr>
+            <tr><td>6</td><td>Sub-Account</td><td><code>00</code></td><td>Additional detail or project code</td></tr>
+          </tbody>
+        </table>
+
+        <p>A fully qualified COA code looks like: <code>100-2010-01-4100-510200-00</code></p>
+
+        <p>Account types supported:</p>
+
+        <ul>
+          <li><strong>Asset</strong> — Cash, premium receivables, capitation prepayments</li>
+          <li><strong>Liability</strong> — Unearned premium, provider payables, IBNR reserves</li>
+          <li><strong>Revenue</strong> — Premium revenue, risk adjustment revenue, reinsurance recoveries</li>
+          <li><strong>Expense</strong> — Medical claims expense, capitation expense, pharmacy expense</li>
+          <li><strong>Equity</strong> — Retained surplus, statutory reserves</li>
+        </ul>
+
+        <p>Each GL account can be tagged with a premium split configuration that determines how incoming premium payments are allocated between sponsor-portion and member-portion receivables.</p>
+
+        <h3 id="ar-balances">AR Balances &amp; Aging</h3>
+
+        <p>AR balances are tracked per period (typically monthly) and per sponsor group. The aging view provides instant visibility into outstanding receivables across five standard buckets:</p>
+
+        <table>
+          <thead>
+            <tr><th>Aging Bucket</th><th>Days Outstanding</th><th>Typical Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Current</strong></td><td>0 &ndash; 30</td><td>Normal — no action required</td></tr>
+            <tr><td><strong>31 &ndash; 60</strong></td><td>31 &ndash; 60</td><td>First reminder sent to sponsor</td></tr>
+            <tr><td><strong>61 &ndash; 90</strong></td><td>61 &ndash; 90</td><td>Escalation to finance manager</td></tr>
+            <tr><td><strong>91 &ndash; 120</strong></td><td>91 &ndash; 120</td><td>Collections queue, enrollment suspension review</td></tr>
+            <tr><td><strong>120+</strong></td><td>&gt; 120</td><td>Write-off candidate, regulatory reporting trigger</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-finance-ar-aging-dashboard.svg" alt="AR aging dashboard showing current, 31-60, 61-90, 91-120, and 120+ day buckets with totals by sponsor group" />
+        </figure>
+
+        <p>Reconciliation is performed at period close by comparing the AR sub-ledger totals to the GL account balances. Any discrepancies are surfaced in the Reconciliation Exceptions report.</p>
+
+        <h3 id="cash-posting">Cash Posting</h3>
+
+        <p>Cash posting applies incoming payments from sponsors and members to open AR balances. The module supports multiple payment methods:</p>
+
+        <table>
+          <thead>
+            <tr><th>Payment Method</th><th>Source</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Check</code></td><td>Manual entry or lockbox file</td><td>Small sponsor groups, individual member payments</td></tr>
+            <tr><td><code>EFT</code></td><td>Electronic funds transfer</td><td>Large sponsor groups with bank integration</td></tr>
+            <tr><td><code>Wire</code></td><td>Wire transfer</td><td>Government sponsors, large one-time payments</td></tr>
+            <tr><td><code>ACH</code></td><td>Automated Clearing House</td><td>Recurring sponsor payments, payroll deductions</td></tr>
+          </tbody>
+        </table>
+
+        <p>When a payment is posted, the system:</p>
+
+        <ol>
+          <li>Matches the payment to open invoices (by sponsor ID, check number, or remittance reference)</li>
+          <li>Applies the payment amount to the oldest open invoices first (FIFO) unless manually directed</li>
+          <li>Updates the invoice status (<code>PartiallyPaid</code> or <code>Paid</code>)</li>
+          <li>Creates the GL journal entry (debit Cash, credit Accounts Receivable)</li>
+          <li>Recalculates the aging buckets for the affected sponsor</li>
+        </ol>
+
+        <h3 id="ar-adjustments">AR Adjustments</h3>
+
+        <p>AR adjustments handle non-payment changes to receivable balances. Every adjustment follows a four-stage approval workflow:</p>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Pending</code></td><td>Adjustment created, awaiting review</td></tr>
+            <tr><td><code>Approved</code></td><td>Reviewed and approved by authorized user</td></tr>
+            <tr><td><code>Posted</code></td><td>GL journal entry created, AR balance updated</td></tr>
+            <tr><td><code>Reversed</code></td><td>Previously posted adjustment reversed (creates contra entry)</td></tr>
+          </tbody>
+        </table>
+
+        <p>Common adjustment types include:</p>
+
+        <ul>
+          <li><strong>Write-offs</strong> — Uncollectible balances removed from the AR ledger after collections exhaustion</li>
+          <li><strong>Retroactive enrollment corrections</strong> — Member added or removed mid-period; premium recalculated and difference posted</li>
+          <li><strong>Grace period adjustments</strong> — Premium forgiveness during regulatory grace periods (e.g., ACA 90-day grace period for Exchange members)</li>
+          <li><strong>Rate corrections</strong> — Premium rate was incorrect at invoice time; adjustment posts the difference</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Audit trail</div>
+          <p>Every AR adjustment records the creating user, approving user, reason code, and full before/after balance snapshot. Adjustments above a configurable dollar threshold require a second-level approval.</p>
+        </div>
+
+        <h3 id="batch-rules">Batch Rules</h3>
+
+        <p>Batch rules automate the GL posting of outputs from billing runs, payment runs, and capitation runs. Instead of manually creating journal entries, you configure rules that fire when a run completes:</p>
+
+        <ul>
+          <li><strong>Billing Run Output</strong> — Automatically debits Accounts Receivable and credits Premium Revenue for each generated invoice</li>
+          <li><strong>Cash Posting Run</strong> — Debits Cash and credits Accounts Receivable for each applied payment</li>
+          <li><strong>Capitation Run Output</strong> — Debits Capitation Expense and credits Provider Payable for each calculated payment</li>
+          <li><strong>FFS Payment Run Output</strong> — Debits Claims Expense and credits Claims Payable for each paid claim</li>
+        </ul>
+
+        <p>Each batch rule specifies the source GL account, destination GL account, and any segment overrides (e.g., force Line of Business segment from the sponsor's enrollment data).</p>
+
+        <!-- ============================= -->
+        <!-- CAPITATION                    -->
+        <!-- ============================= -->
+        <h2 id="capitation">3. Capitation</h2>
+
+        <p>The Capitation module manages per-member-per-month (PMPM) payments to contracted providers. It covers the full lifecycle from provider contract setup through rate configuration, monthly payment calculation, and disbursement via ACH or Stripe Connect.</p>
+
+        <h3 id="provider-contracts">Provider Contracts</h3>
+
+        <p>Each capitation arrangement starts with a <code>ProviderContract</code> — the master agreement between the health plan and a provider or provider group. Contracts follow a four-stage lifecycle:</p>
+
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Draft</code></td><td>Contract being negotiated; rates and terms are editable</td></tr>
+            <tr><td><code>Active</code></td><td>Contract in effect; capitation runs include this contract's providers</td></tr>
+            <tr><td><code>Suspended</code></td><td>Temporarily paused (e.g., credentialing issue); payments held</td></tr>
+            <tr><td><code>Terminated</code></td><td>Contract ended; no further capitation payments generated</td></tr>
+          </tbody>
+        </table>
+
+        <p>Key contract fields:</p>
+
+        <ul>
+          <li><strong>Payment Methodology</strong> — Determines how providers are compensated:
+            <ul>
+              <li><code>Full Capitation</code> — Provider receives fixed PMPM for all covered services</li>
+              <li><code>FFS</code> — Fee-for-service; claims paid per encounter (no capitation)</li>
+              <li><code>Hybrid</code> — Base capitation PMPM plus FFS for specified service categories</li>
+              <li><code>Global Risk</code> — Provider accepts full financial risk with stop-loss protection</li>
+            </ul>
+          </li>
+          <li><strong>TIN (Tax Identification Number)</strong> — Stored with masking (displayed as <code>***-**-1234</code>) for compliance; full TIN used only in disbursement files</li>
+          <li><strong>Amendments</strong> — Rate changes or term modifications during the contract period are tracked as versioned amendments with effective dates</li>
+        </ul>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-finance-provider-contract-lifecycle.svg" alt="Provider contract lifecycle: Draft, Active, Suspended, Terminated with transition arrows" />
+        </figure>
+
+        <h3 id="rate-config">Rate Configuration</h3>
+
+        <p>Capitation rates are configured as PMPM amounts organized by rate tiers. The rate engine supports multiple dimensions:</p>
+
+        <table>
+          <thead>
+            <tr><th>Dimension</th><th>Description</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Age Band</td><td>Member age range</td><td>0-18, 19-44, 45-64, 65+</td></tr>
+            <tr><td>Sex</td><td>Biological sex for actuarial rating</td><td>Male, Female</td></tr>
+            <tr><td>Service Category</td><td>Type of service covered by the rate</td><td>Primary Care, Specialty, Behavioral Health, Pharmacy</td></tr>
+            <tr><td>Region</td><td>Geographic service area</td><td>Metro, Suburban, Rural</td></tr>
+          </tbody>
+        </table>
+
+        <p>Additional rate components:</p>
+
+        <ul>
+          <li><strong>Risk Adjustment</strong> — PMPM rates are multiplied by the member's risk score (HCC-based) to account for acuity. A member with a risk score of 1.35 receives 35% more capitation funding than the base rate.</li>
+          <li><strong>Withhold/Incentive Pools</strong> — A configurable percentage (typically 10-20%) of the capitation payment is withheld and placed in an incentive pool. The withheld amount is distributed at year-end based on quality metrics and utilization targets.</li>
+          <li><strong>Stop-Loss</strong> — Per-member and aggregate stop-loss thresholds protect providers under Global Risk contracts. Claims exceeding the stop-loss threshold are reimbursed FFS above the cap.</li>
+        </ul>
+
+        <h3 id="capitation-runs">Capitation Runs</h3>
+
+        <p>A capitation run is the monthly process that calculates provider payments. When a run is executed:</p>
+
+        <ol>
+          <li><strong>Member Matching</strong> — The system identifies all members with active coverage whose PCP or assigned provider group matches the contract's provider roster</li>
+          <li><strong>Rate Lookup</strong> — For each matched member, the appropriate PMPM rate is selected based on age, sex, service category, and region</li>
+          <li><strong>Risk Adjustment</strong> — The base PMPM is multiplied by the member's current risk score</li>
+          <li><strong>Withhold Calculation</strong> — The withhold percentage is applied and the withheld amount is tracked separately</li>
+          <li><strong>Aggregation</strong> — Member-level amounts are summed to a provider-level payment total</li>
+          <li><strong>Statement Generation</strong> — A capitation statement is produced for each provider showing member-level detail, rates applied, and net payment amount</li>
+          <li><strong>GL Posting</strong> — Batch rules post the capitation expense to the AR ledger</li>
+        </ol>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-finance-capitation-run-flow.svg" alt="Capitation run workflow: member matching, rate lookup, risk adjustment, withhold, aggregation, statement, GL posting" />
+        </figure>
+
+        <h3 id="disbursements">Disbursements</h3>
+
+        <p>After a capitation run completes and statements are approved, payments are disbursed to providers through one of the supported channels:</p>
+
+        <table>
+          <thead>
+            <tr><th>Channel</th><th>Format</th><th>Use Case</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>NACHA ACH</strong></td><td>ACH credit file (CCD+ or CTX)</td><td>Standard provider payments via banking network</td></tr>
+            <tr><td><strong>Stripe Connect</strong></td><td>Stripe API payout</td><td>Smaller provider groups, instant or next-day settlement</td></tr>
+            <tr><td><strong>ERA 835</strong></td><td>X12 835 remittance advice</td><td>Accompanies payment with claim-level detail for provider reconciliation</td></tr>
+          </tbody>
+        </table>
+
+        <p>The NACHA ACH file is generated in the standard NACHA format with batch headers per provider TIN. The file can be uploaded directly to the health plan's originating bank or transmitted via secure file transfer.</p>
+
+        <p>The ERA 835 remittance advice is generated alongside the payment and includes member-level capitation detail, enabling providers to reconcile payments against their own member rosters.</p>
+
+        <!-- ============================= -->
+        <!-- FFS PAYMENT RUNS              -->
+        <!-- ============================= -->
+        <h2 id="ffs-payment-runs">4. FFS Payment Runs</h2>
+
+        <p>The FFS (Fee-for-Service) Payment Runs module processes claim payments for non-capitated services. Unlike Premium Billing which is organized by sponsor group, FFS payment runs are organized by <strong>Line of Business</strong> — this is the primary grouping dimension.</p>
+
+        <h3 id="ffs-line-of-business">Line of Business Grouping</h3>
+
+        <p>Each payment run targets a single Line of Business (LOB). This ensures that claim payments are properly segregated for financial reporting, regulatory compliance, and fund accounting:</p>
+
+        <ul>
+          <li><strong>Medicaid</strong> — State-funded claims with specific prompt-pay requirements</li>
+          <li><strong>Medicare Advantage</strong> — CMS-regulated claims with MA-specific payment rules</li>
+          <li><strong>Commercial</strong> — Employer-sponsored plan claims</li>
+          <li><strong>Exchange (QHP)</strong> — ACA marketplace plan claims</li>
+        </ul>
+
+        <h3 id="ffs-payment-run-creation">Payment Run Creation</h3>
+
+        <p>To create a payment run:</p>
+
+        <ol>
+          <li>Select the <strong>Line of Business</strong> for the run</li>
+          <li>Set the <strong>claim service date range</strong> — only adjudicated claims with service dates in this range are included</li>
+          <li>Set the <strong>claim status filter</strong> — typically <code>Adjudicated</code> (clean claims ready for payment)</li>
+          <li>Review the claim count and total dollar amount before confirming</li>
+          <li>Execute the run to batch claims into payment groups by rendering provider TIN</li>
+        </ol>
+
+        <!-- Screenshot placeholder -->
+        <figure class="docs-diagram">
+          <img src="/graphics/docs-finance-ffs-payment-run.svg" alt="FFS payment run workflow: select LOB, set date range, filter claims, review totals, execute, generate ERA 835" />
+        </figure>
+
+        <p>The payment run engine:</p>
+
+        <ul>
+          <li>Groups claims by rendering provider TIN for payment aggregation</li>
+          <li>Applies any provider-level payment holds or offsets</li>
+          <li>Calculates net payment amounts after withholding and offsets</li>
+          <li>Generates check or EFT payment records</li>
+          <li>Posts the claims expense to the GL via batch rules</li>
+        </ul>
+
+        <h3 id="era-835-generation">ERA 835 Generation &amp; Download</h3>
+
+        <p>Every FFS payment run produces an X12 835 Electronic Remittance Advice for each provider included in the run. The ERA 835 contains:</p>
+
+        <ul>
+          <li>Payment header with check/EFT number, payment date, and total amount</li>
+          <li>Claim-level detail including original billed amount, allowed amount, patient responsibility, and adjustment reason codes (CARCs/RARCs)</li>
+          <li>Service line detail with procedure codes, units, and line-level adjustments</li>
+        </ul>
+
+        <p>ERA 835 files can be:</p>
+
+        <ul>
+          <li><strong>Downloaded</strong> directly from the portal in X12 835 format</li>
+          <li><strong>Transmitted</strong> to providers via clearinghouse EDI (Change Healthcare, Availity, etc.)</li>
+          <li><strong>Viewed</strong> in the portal as a human-readable remittance summary</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Prompt-pay compliance</div>
+          <p>FFS payment runs track the date each claim was received (clean claim date) and flag any claims approaching the state-mandated prompt-pay deadline. Claims nearing the deadline are prioritized in the next payment run.</p>
+        </div>
+
+        <!-- ============================= -->
+        <!-- GETTING STARTED               -->
+        <!-- ============================= -->
+        <h2 id="getting-started">Getting Started</h2>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the Demo Portal</div>
+          <p>All four finance modules are available in the <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> with synthetic data. Navigate to <strong>Finance</strong> in the left sidebar to explore Premium Billing, AR, Capitation, and FFS Payment Runs with pre-configured sponsor groups, provider contracts, and adjudicated claims.</p>
+        </div>
+
+        <p>Recommended setup order for a new health plan implementation:</p>
+
+        <ol>
+          <li><strong>Chart of Accounts</strong> — Configure GL accounts with your organization's COA segments</li>
+          <li><strong>Batch Rules</strong> — Set up auto-posting rules for billing, cash, capitation, and FFS runs</li>
+          <li><strong>Premium Billing</strong> — Configure sponsor billing cycles and premium splits</li>
+          <li><strong>Provider Contracts</strong> — Create capitation contracts with rate tiers</li>
+          <li><strong>Run your first billing cycle</strong> — Generate invoices and verify AR postings</li>
+          <li><strong>Run your first capitation run</strong> — Calculate provider payments and generate statements</li>
+        </ol>
+
+        <!-- Related Docs -->
+        <h2 id="related-docs">Related Documentation</h2>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+          <a href="/docs/quickstart" class="docs-hub-card">
+            <h3>Quick Start</h3>
+            <p>Run the full Cloud Health Office stack locally in under 15 minutes — includes claim adjudication and 835 ERA generation.</p>
+            <span class="card-arrow">Get started &rarr;</span>
+          </a>
+          <a href="/docs/api" class="docs-hub-card">
+            <h3>API Reference</h3>
+            <p>Explore the FHIR R4 APIs, including ExplanationOfBenefit and Claim resources used by the finance modules.</p>
+            <span class="card-arrow">Browse APIs &rarr;</span>
+          </a>
+          <a href="/docs/architecture" class="docs-hub-card">
+            <h3>Architecture</h3>
+            <p>Understand how finance microservices fit into the broader Cloud Health Office platform architecture.</p>
+            <span class="card-arrow">Explore &rarr;</span>
+          </a>
+          <a href="/docs/terminology-guide" class="docs-hub-card">
+            <h3>Terminology Crosswalk</h3>
+            <p>Map Cloud Health Office terminology to QNXT, Facets, and other payer platform concepts.</p>
+            <span class="card-arrow">View crosswalk &rarr;</span>
+          </a>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/deployment">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Deployment</div>
+          </a>
+          <a href="/docs/terminology-guide" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">Terminology Crosswalk</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform &nbsp;&middot;&nbsp; Not affiliated with any payer platform or clearinghouse vendors.</p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
