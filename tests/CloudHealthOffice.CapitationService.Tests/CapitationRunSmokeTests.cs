@@ -40,7 +40,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         ProviderType = ProviderType.Individual,
         ContractType = ContractType.PrimaryCareOnly,
         LineOfBusiness = LineOfBusiness.Commercial,
-        Status = CapitationContractStatus.Active,
+        Status = CapitationRateConfigStatus.Active,
         EffectiveDate = new DateTime(2026, 1, 1),
         WithholdPercentage = 0.10m,
         RateTiers = new List<CapitationRateTier>
@@ -183,7 +183,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     {
         var contract = CreateContract();
         var draftContract = CreateContract();
-        draftContract.Status = CapitationContractStatus.Draft;
+        draftContract.Status = CapitationRateConfigStatus.Draft;
 
         _factory.ContractRepository.CreateAsync(Arg.Any<CapitationContract>())
             .Returns(ci => ci.Arg<CapitationContract>());
@@ -194,7 +194,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
             .Returns(ci =>
             {
                 var c = ci.Arg<CapitationContract>();
-                c.Status = CapitationContractStatus.Active;
+                c.Status = CapitationRateConfigStatus.Active;
                 return c;
             });
 
