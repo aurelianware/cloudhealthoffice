@@ -1,0 +1,231 @@
+@page "/finance/ar/aging"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+
+@* TODO: Replace with @inject IArService ArService when Prompt 7 (IArService) is implemented *@
+
+<PageTitle>AR Aging Report — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" Style="vertical-align: middle;" />
+    AR Aging Report
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Outstanding balances by aging bucket — current through 120+ days
+</MudText>
+
+<!-- Summary Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_currentTotal.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Current (0-30)</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">@_currentCount items</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,255,0,0.05); border: 1px solid rgba(255,255,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Style="color: #ffff00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffff00; font-weight: 700;">@_bucket31_60Total.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">31-60 Days</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">@_bucket31_60Count items</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_bucket61_90Total.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">61-90 Days</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">@_bucket61_90Count items</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_bucket91_120Total.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">91-120 Days</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">@_bucket91_120Count items</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(139,0,0,0.15); border: 1px solid rgba(139,0,0,0.4); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Report" Style="color: #8b0000; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff4444; font-weight: 700;">@_bucket120PlusTotal.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">120+ Days</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">@_bucket120PlusCount items</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filter Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_glAccountFilter" Label="GL Account" Variant="Variant.Outlined"
+               Style="min-width: 200px;" Clearable="true" Dense="true">
+        @foreach (var account in _glAccounts)
+        {
+            <MudSelectItem Value="@account">@account</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect @bind-Value="_balanceTypeFilter" Label="Balance Type" Variant="Variant.Outlined"
+               Style="min-width: 160px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("Receivable")>Receivable</MudSelectItem>
+        <MudSelectItem Value=@("Payable")>Payable</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_lobFilter" Label="LOB" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value=@("Commercial")>Commercial</MudSelectItem>
+        <MudSelectItem Value=@("Medicare")>Medicare</MudSelectItem>
+        <MudSelectItem Value=@("Medicaid")>Medicaid</MudSelectItem>
+        <MudSelectItem Value=@("Exchange")>Exchange</MudSelectItem>
+        <MudSelectItem Value=@("TRICARE")>TRICARE</MudSelectItem>
+        <MudSelectItem Value=@("VA")>VA</MudSelectItem>
+    </MudSelect>
+    <MudDatePicker @bind-Date="_asOfDate" Label="As-of Date" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width: 160px;" />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="ComputeAging" Disabled="_loading">Apply</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Aging Grid -->
+<MudTable Items="_agingRows" Dense="true" Hover="true" T="AgingRow"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>GL Account</MudTh>
+        <MudTh>Description</MudTh>
+        <MudTh>LOB</MudTh>
+        <MudTh Style="text-align: right; color: #00ff88;">Current</MudTh>
+        <MudTh Style="text-align: right; color: #ffff00;">31-60</MudTh>
+        <MudTh Style="text-align: right; color: #ffaa00;">61-90</MudTh>
+        <MudTh Style="text-align: right; color: #ff0055;">91-120</MudTh>
+        <MudTh Style="text-align: right; color: #8b0000;">120+</MudTh>
+        <MudTh Style="text-align: right; color: #00ffff; font-weight: 700;">Total</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="GL Account">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.GlAccount</MudText>
+        </MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="LOB">@context.LineOfBusiness</MudTd>
+        <MudTd DataLabel="Current" Style="text-align: right;">@context.Current.ToString("C2")</MudTd>
+        <MudTd DataLabel="31-60" Style="text-align: right;">@context.Bucket31_60.ToString("C2")</MudTd>
+        <MudTd DataLabel="61-90" Style="text-align: right;">@context.Bucket61_90.ToString("C2")</MudTd>
+        <MudTd DataLabel="91-120" Style="text-align: right;">@context.Bucket91_120.ToString("C2")</MudTd>
+        <MudTd DataLabel="120+" Style="@($"text-align: right; color: {(context.Bucket120Plus > 0 ? "#ff4444" : "inherit")};")">@context.Bucket120Plus.ToString("C2")</MudTd>
+        <MudTd DataLabel="Total" Style="text-align: right; font-weight: 700; color: #00ffff;">@context.Total.ToString("C2")</MudTd>
+    </RowTemplate>
+    <FooterContent>
+        <MudTFootRow>
+            <MudTd Colspan="3" Style="font-weight: 700;">Grand Total</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #00ff88;">@_agingRows.Sum(r => r.Current).ToString("C2")</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #ffff00;">@_agingRows.Sum(r => r.Bucket31_60).ToString("C2")</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #ffaa00;">@_agingRows.Sum(r => r.Bucket61_90).ToString("C2")</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #ff0055;">@_agingRows.Sum(r => r.Bucket91_120).ToString("C2")</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #8b0000;">@_agingRows.Sum(r => r.Bucket120Plus).ToString("C2")</MudTd>
+            <MudTd Style="text-align: right; font-weight: 700; color: #00ffff;">@_agingRows.Sum(r => r.Total).ToString("C2")</MudTd>
+        </MudTFootRow>
+    </FooterContent>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Timeline" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No open AR balances found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Aging buckets will appear when open balances exist</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+</PermissionGate>
+
+@code {
+    private List<AgingRow> _agingRows = new();
+    private bool _loading;
+    private string? _glAccountFilter;
+    private string? _balanceTypeFilter;
+    private string? _lobFilter;
+    private DateTime? _asOfDate = DateTime.Today;
+
+    // Summary KPIs
+    private decimal _currentTotal;
+    private int _currentCount;
+    private decimal _bucket31_60Total;
+    private int _bucket31_60Count;
+    private decimal _bucket61_90Total;
+    private int _bucket61_90Count;
+    private decimal _bucket91_120Total;
+    private int _bucket91_120Count;
+    private decimal _bucket120PlusTotal;
+    private int _bucket120PlusCount;
+
+    private List<string> _glAccounts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ComputeAging();
+    }
+
+    private async Task ComputeAging()
+    {
+        _loading = true;
+        try
+        {
+            // TODO: Replace with IArService.GetBalancesAsync(status: "Open") when Prompt 7 lands.
+            // For now, aging grid is empty — ready to wire up.
+            await Task.CompletedTask;
+            _agingRows = new();
+            UpdateSummaries();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void UpdateSummaries()
+    {
+        _currentTotal = _agingRows.Sum(r => r.Current);
+        _currentCount = _agingRows.Count(r => r.Current > 0);
+        _bucket31_60Total = _agingRows.Sum(r => r.Bucket31_60);
+        _bucket31_60Count = _agingRows.Count(r => r.Bucket31_60 > 0);
+        _bucket61_90Total = _agingRows.Sum(r => r.Bucket61_90);
+        _bucket61_90Count = _agingRows.Count(r => r.Bucket61_90 > 0);
+        _bucket91_120Total = _agingRows.Sum(r => r.Bucket91_120);
+        _bucket91_120Count = _agingRows.Count(r => r.Bucket91_120 > 0);
+        _bucket120PlusTotal = _agingRows.Sum(r => r.Bucket120Plus);
+        _bucket120PlusCount = _agingRows.Count(r => r.Bucket120Plus > 0);
+    }
+
+    /// <summary>
+    /// Client-side aging row — grouped by GL Account + LOB.
+    /// Computed from open ArBalance records.
+    /// </summary>
+    public class AgingRow
+    {
+        public string GlAccount { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string LineOfBusiness { get; set; } = string.Empty;
+        public decimal Current { get; set; }
+        public decimal Bucket31_60 { get; set; }
+        public decimal Bucket61_90 { get; set; }
+        public decimal Bucket91_120 { get; set; }
+        public decimal Bucket120Plus { get; set; }
+        public decimal Total => Current + Bucket31_60 + Bucket61_90 + Bucket91_120 + Bucket120Plus;
+    }
+}
