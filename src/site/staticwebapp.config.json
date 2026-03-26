@@ -142,6 +142,24 @@
       "rewrite": "/docs/deployment.html"
     },
     {
+      "route": "/docs/finance-guide.html",
+      "redirect": "/docs/finance-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/finance-guide",
+      "rewrite": "/docs/finance-guide.html"
+    },
+    {
+      "route": "/docs/terminology-guide.html",
+      "redirect": "/docs/terminology-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/terminology-guide",
+      "rewrite": "/docs/terminology-guide.html"
+    },
+    {
       "route": "/login.html",
       "redirect": "/login",
       "statusCode": 301
