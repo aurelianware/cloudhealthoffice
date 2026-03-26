@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: terminology-service
+  namespace: cloudhealthoffice
+  labels:
+    app: terminology-service
+    component: crosswalk
+    part-of: cloud-health-office
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: terminology-service
+  template:
+    metadata:
+      labels:
+        app: terminology-service
+        component: crosswalk
+    spec:
+      containers:
+        - name: terminology-service
+          image: aurelianware.azurecr.io/cho-terminology-service:latest
+          ports:
+            - containerPort: 5080
+              name: http
+          env:
+            - name: TerminologyService__MongoConnectionString
+              value: "mongodb://mongodb-0.mongodb-headless.cloudhealthoffice.svc.cluster.local:27017"
+            - name: TerminologyService__MongoDatabaseName
+              value: "cho_terminology"
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: map-data
+              mountPath: /data/maps
+              readOnly: true
+      volumes:
+        - name: map-data
+          persistentVolumeClaim:
+            claimName: terminology-maps-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: terminology-service
+  namespace: cloudhealthoffice
+  labels:
+    app: terminology-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5080
+      targetPort: 5080
+      protocol: TCP
+      name: http
+  selector:
+    app: terminology-service
+---
+# PVC for map files (NLM RF2, AMA cross maps, plan overrides)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: terminology-maps-pvc
+  namespace: cloudhealthoffice
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: azurefile-csi

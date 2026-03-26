@@ -1,0 +1,246 @@
+@page "/terminology/crosswalk"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject ITerminologyService TerminologyService
+@inject ISnackbar Snackbar
+
+<PageTitle>Terminology Crosswalk — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="terminology:read" RoleName="Admin">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Translate" Class="mr-2" Style="vertical-align: middle;" />
+    Terminology Crosswalk
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    FHIR ConceptMap/$translate — SNOMED CT, ICD-10-CM, and CPT code translation for CMS-0057 compliance
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+        @_serviceError
+    </MudAlert>
+}
+
+<!-- Health Status Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="@($"background: rgba({(_health?.Status == "healthy" ? "0,255,136" : "255,0,85")},0.05); border: 1px solid rgba({(_health?.Status == "healthy" ? "0,255,136" : "255,0,85")},0.2); border-radius: 12px;")">
+            <MudIcon Icon="@(_health?.Status == "healthy" ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                     Style="@($"color: {(_health?.Status == "healthy" ? "#00ff88" : "#ff0055")}; font-size: 2rem;")" />
+            <div>
+                <MudText Typo="Typo.h5" Style="@($"color: {(_health?.Status == "healthy" ? "#00ff88" : "#ff0055")}; font-weight: 700;")">@(_health?.Status ?? "Unknown")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Service Status</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Storage" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@(_health?.TotalActiveEntries.ToString("N0") ?? "—")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active Entries</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(138,43,226,0.05); border: 1px solid rgba(138,43,226,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Map" Style="color: #8a2be2; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #8a2be2; font-weight: 700;">@(_mapVersions.Count(v => v.IsActive))</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active Maps</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.History" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@(_mapVersions.Count)</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Versions</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Translation Tester -->
+<MudPaper Class="pa-4 mb-4" Style="background: rgba(60,52,137,0.15); border: 1px solid rgba(175,169,236,0.3); border-radius: 12px;">
+    <MudText Typo="Typo.h6" Class="mb-3" Style="color: #cec3f6;">
+        <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" Style="vertical-align: middle;" />
+        Translation Tester
+    </MudText>
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="3">
+            <MudSelect @bind-Value="_sourceSystem" Label="Source System" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value=@("http://snomed.info/sct")>SNOMED CT</MudSelectItem>
+                <MudSelectItem Value=@("http://hl7.org/fhir/sid/icd-10-cm")>ICD-10-CM</MudSelectItem>
+                <MudSelectItem Value=@("http://www.ama-assn.org/go/cpt")>CPT</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudTextField @bind-Value="_sourceCode" Label="Code" Variant="Variant.Outlined" Dense="true"
+                          Placeholder="e.g., 390840006" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect @bind-Value="_targetSystem" Label="Target System" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value=@("http://hl7.org/fhir/sid/icd-10-cm")>ICD-10-CM</MudSelectItem>
+                <MudSelectItem Value=@("http://www.ama-assn.org/go/cpt")>CPT</MudSelectItem>
+                <MudSelectItem Value=@("http://snomed.info/sct")>SNOMED CT</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" md="1">
+            <MudNumericField @bind-Value="_testAge" Label="Age" Variant="Variant.Outlined" Dense="true" />
+        </MudItem>
+        <MudItem xs="6" md="1">
+            <MudSelect @bind-Value="_testGender" Label="Gender" Variant="Variant.Outlined" Dense="true" Clearable="true">
+                <MudSelectItem Value=@("male")>M</MudSelectItem>
+                <MudSelectItem Value=@("female")>F</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.Translate" OnClick="RunTranslation"
+                       Disabled="@(string.IsNullOrEmpty(_sourceCode) || _translating)"
+                       Style="height: 40px;">
+                @if (_translating) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                Translate
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_translateResult != null)
+    {
+        <MudDivider Class="my-3" />
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudIcon Icon="@(_translateResult.Result ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                     Color="@(_translateResult.Result ? Color.Success : Color.Error)" Size="Size.Small" />
+            <MudText Typo="Typo.subtitle2" Style="color: rgba(255,255,255,0.7);">
+                @(_translateResult.Result ? $"{_translateResult.Matches.Count} match(es) found" : "No mapping found")
+            </MudText>
+            @if (_translateResult.MapVersionId != null)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="color: rgba(175,169,236,0.8);">
+                    @_translateResult.MapVersionId
+                </MudChip>
+            }
+        </div>
+        @foreach (var match in _translateResult.Matches)
+        {
+            <MudPaper Class="pa-3 mb-2" Style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                <div class="d-flex align-center gap-3">
+                    <MudText Typo="Typo.h6" Style="font-family: monospace; color: #00ffff;">@match.Concept.Code</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">@match.Concept.Display</MudText>
+                    <MudSpacer />
+                    <MudChip T="string" Size="Size.Small" Color="@GetEquivalenceColor(match.Equivalence)">@match.Equivalence</MudChip>
+                    @if (match.IsContextResolved)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">context-resolved</MudChip>
+                    }
+                    @if (match.IsOverride)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">plan override</MudChip>
+                    }
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@match.Source</MudText>
+                </div>
+            </MudPaper>
+        }
+    }
+</MudPaper>
+
+<!-- Map Versions Table -->
+<MudText Typo="Typo.h6" Class="mb-2" Style="color: #00ffff;">Loaded Map Versions</MudText>
+<MudTable Items="_mapVersions" Dense="true" Hover="true" T="TermMapVersionSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Map Name</MudTh>
+        <MudTh>Version</MudTh>
+        <MudTh>Source System</MudTh>
+        <MudTh>Target System</MudTh>
+        <MudTh Style="text-align: right;">Entries</MudTh>
+        <MudTh>Imported</MudTh>
+        <MudTh>Status</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Map Name">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.MapName</MudText>
+        </MudTd>
+        <MudTd DataLabel="Version">
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.Version</MudText>
+        </MudTd>
+        <MudTd DataLabel="Source">@FormatSystem(context.SourceSystem)</MudTd>
+        <MudTd DataLabel="Target">@FormatSystem(context.TargetSystem)</MudTd>
+        <MudTd DataLabel="Entries" Style="text-align: right; font-family: monospace;">@context.EntryCount.ToString("N0")</MudTd>
+        <MudTd DataLabel="Imported">@context.ImportedAt.ToString("MM/dd/yyyy HH:mm")</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                @(context.IsActive ? "Active" : "Inactive")
+            </MudChip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Translate" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No maps loaded</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Upload NLM RF2 or AMA CSV files via the admin API</MudText>
+        </div>
+    </NoRecordsContent>
+</MudTable>
+</PermissionGate>
+
+@code {
+    private List<TermMapVersionSummary> _mapVersions = new();
+    private TermHealthStatus? _health;
+    private string? _serviceError;
+
+    private string _sourceSystem = "http://snomed.info/sct";
+    private string _sourceCode = string.Empty;
+    private string _targetSystem = "http://hl7.org/fhir/sid/icd-10-cm";
+    private int? _testAge;
+    private string? _testGender;
+    private bool _translating;
+    private TermTranslateResult? _translateResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _health = await TerminologyService.GetHealthAsync();
+            _mapVersions = await TerminologyService.GetMapVersionsAsync();
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+    }
+
+    private async Task RunTranslation()
+    {
+        if (string.IsNullOrEmpty(_sourceCode)) return;
+        _translating = true;
+        _translateResult = null;
+        try
+        {
+            _translateResult = await TerminologyService.TranslateAsync(
+                _sourceSystem, _sourceCode, _targetSystem,
+                age: _testAge, gender: _testGender);
+        }
+        catch (ServiceUnavailableException ex) { Snackbar.Add($"Translation failed: {ex.Message}", Severity.Error); }
+        finally { _translating = false; }
+    }
+
+    private static string FormatSystem(string uri) => uri switch
+    {
+        "http://snomed.info/sct" => "SNOMED CT",
+        "http://hl7.org/fhir/sid/icd-10-cm" => "ICD-10-CM",
+        "http://hl7.org/fhir/sid/icd-10" => "ICD-10",
+        "http://www.ama-assn.org/go/cpt" => "CPT",
+        "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets" => "HCPCS",
+        _ => uri
+    };
+
+    private static Color GetEquivalenceColor(string eq) => eq switch
+    {
+        "equivalent" => Color.Success,
+        "wider" or "narrower" => Color.Info,
+        "inexact" => Color.Warning,
+        "unmatched" or "disjoint" => Color.Error,
+        _ => Color.Default
+    };
+}

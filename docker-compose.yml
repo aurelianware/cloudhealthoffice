@@ -90,5 +90,19 @@ services:
       claims-service:
         condition: service_healthy
 
+  terminology-service:
+    build:
+      context: .
+      dockerfile: src/services/CHO.TerminologyService/Dockerfile
+    ports:
+      - "5080:5080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - TerminologyService__MongoConnectionString=mongodb://mongo:27017
+      - TerminologyService__MongoDatabaseName=cho_terminology
+    depends_on:
+      mongo:
+        condition: service_healthy
+
 volumes:
   mongo_data:
