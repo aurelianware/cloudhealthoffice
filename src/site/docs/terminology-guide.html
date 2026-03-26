@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terminology Crosswalk Guide — Cloud Health Office</title>
+  <meta name="description" content="FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance. ConceptMap/$translate API, context-aware disambiguation, NLM/UMLS maps, and payer system integration." />
+  <meta name="keywords" content="SNOMED CT ICD-10 crosswalk, FHIR ConceptMap translate, healthcare terminology service, CMS-0057 code translation, CPT SNOMED mapping, healthcare code crosswalk, terminology translation, payer interoperability" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/terminology-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/terminology-guide" />
+  <meta property="og:title" content="Terminology Crosswalk Guide — Cloud Health Office" />
+  <meta property="og:description" content="FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance. Context-aware disambiguation with ConceptMap/$translate." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Terminology Crosswalk Guide — Cloud Health Office",
+    "description": "Complete guide to the CHO Terminology Crosswalk service: FHIR-native SNOMED CT to ICD-10-CM and CPT code translation for CMS-0057 compliance, context-aware disambiguation, and payer system integration.",
+    "url": "https://cloudhealthoffice.com/docs/terminology-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-03-26",
+    "proficiencyLevel": "Intermediate",
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Terminology Crosswalk Guide", "item": "https://cloudhealthoffice.com/docs/terminology-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Guide</a></li>
+              <li><a href="/docs/terminology-guide" class="active">Terminology Crosswalk Guide</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#how-it-works">How It Works</a></li>
+              <li><a href="#data-sources">Data Sources</a></li>
+              <li><a href="#map-management">Map Management</a></li>
+              <li><a href="#portal-integration">Portal Integration</a></li>
+              <li><a href="#context-rule-engine">Context Rule Engine</a></li>
+              <li><a href="#api-reference">API Reference</a></li>
+              <li><a href="#consumer-integration">Consumer Integration</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Terminology Crosswalk Guide</span>
+        </div>
+
+        <h1>Terminology Crosswalk Guide</h1>
+        <p class="docs-subtitle">
+          FHIR-native SNOMED CT, CPT, and ICD-10-CM code translation for CMS-0057 compliance. The crosswalk bridges the terminology gap between Da Vinci clinical workflows and payer claims adjudication systems.
+        </p>
+
+        <!-- ============================================================ -->
+        <!-- 1. Overview -->
+        <!-- ============================================================ -->
+        <h2 id="overview">1. Overview</h2>
+
+        <p>
+          The CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) requires payers to support Da Vinci CRD, DTR, and PAS workflows. These workflows exchange clinical data encoded in <strong>SNOMED CT</strong> — the standard used by EHRs and clinical decision support systems. But payer core administration platforms (QNXT, Facets, HealthEdge, and others) store and adjudicate claims using <strong>CPT</strong> and <strong>ICD-10-CM</strong> codes.
+        </p>
+        <p>
+          The CHO Terminology Crosswalk service bridges that gap. It provides a FHIR-native <code>ConceptMap/$translate</code> API that converts codes between SNOMED CT, CPT, and ICD-10-CM in real time — with context-aware disambiguation for one-to-many mappings.
+        </p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Why this matters</div>
+          <p>Without terminology translation, a prior authorization request containing SNOMED CT code <code>73211009</code> (Diabetes mellitus) cannot be matched to the payer's ICD-10-CM benefit configuration (<code>E11.9</code>, <code>E10.9</code>, etc.). The crosswalk ensures that clinical intent is preserved as codes move between systems.</p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 2. How It Works -->
+        <!-- ============================================================ -->
+        <h2 id="how-it-works">2. How It Works</h2>
+
+        <p>
+          The crosswalk implements the FHIR R4 <a href="https://hl7.org/fhir/R4/conceptmap-operation-translate.html" target="_blank" rel="noopener noreferrer"><code>ConceptMap/$translate</code></a> operation. You provide a source code system, a code, and a target code system. The service returns one or more translated codes with equivalence metadata.
+        </p>
+
+        <h3>Basic translation flow</h3>
+
+<pre><code><span class="code-comment"># Translate SNOMED CT 73211009 (Diabetes mellitus) to ICD-10-CM</span>
+curl -s "http://localhost:5010/fhir/ConceptMap/\$translate?\
+system=http://snomed.info/sct&amp;\
+code=73211009&amp;\
+targetsystem=http://hl7.org/fhir/sid/icd-10-cm" | jq .
+
+<span class="code-comment"># Response (simplified)</span>
+{
+  "resourceType": "Parameters",
+  "parameter": [
+    { "name": "result", "valueBoolean": true },
+    {
+      "name": "match",
+      "part": [
+        { "name": "equivalence", "valueCode": "narrower" },
+        { "name": "concept", "valueCoding": {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "E11.9",
+            "display": "Type 2 diabetes mellitus without complications"
+        }},
+        { "name": "score", "valueDecimal": 0.85 }
+      ]
+    }
+  ]
+}</code></pre>
+
+        <h3>Context-aware disambiguation</h3>
+
+        <p>
+          Many SNOMED CT concepts map to multiple ICD-10-CM codes. For example, SNOMED <code>73211009</code> (Diabetes mellitus) can map to <code>E10.x</code> (Type 1), <code>E11.x</code> (Type 2), <code>E13.x</code> (Other specified), or <code>O24.x</code> (Gestational). The crosswalk uses clinical context to disambiguate:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Context Parameter</th><th>Effect</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>patient.age</code></td><td>Selects age-appropriate codes</td><td>Pediatric vs. adult diabetes codes</td></tr>
+            <tr><td><code>patient.gender</code></td><td>Excludes gender-impossible codes</td><td>Prostate conditions excluded for female patients</td></tr>
+            <tr><td><code>patient.state</code></td><td>Applies state-specific rules</td><td>Texas TMPPM coding conventions</td></tr>
+            <tr><td><code>patient.conditions</code></td><td>Co-morbidity-aware selection</td><td>Diabetes with CKD selects <code>E11.22</code> over <code>E11.9</code></td></tr>
+          </tbody>
+        </table>
+
+<pre><code><span class="code-comment"># Context-aware translation — include patient details for disambiguation</span>
+curl -s -X POST http://localhost:5010/fhir/ConceptMap/\$translate \
+  -H "Content-Type: application/fhir+json" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "resourceType": "Parameters",
+    "parameter": [
+      { "name": "system", "valueUri": "http://snomed.info/sct" },
+      { "name": "code", "valueCode": "73211009" },
+      { "name": "targetsystem", "valueUri": "http://hl7.org/fhir/sid/icd-10-cm" },
+      { "name": "context-age", "valueInteger": 12 },
+      { "name": "context-gender", "valueCode": "male" },
+      { "name": "context-state", "valueCode": "TX" },
+      { "name": "context-conditions", "valueString": "chronic-kidney-disease" }
+    ]
+  }' | jq .</code></pre>
+
+        <!-- ============================================================ -->
+        <!-- 3. Data Sources -->
+        <!-- ============================================================ -->
+        <h2 id="data-sources">3. Data Sources</h2>
+
+        <p>The crosswalk aggregates maps from three tiers, each with different licensing and update cadences:</p>
+
+        <table>
+          <thead>
+            <tr><th>Source</th><th>Mapping Direction</th><th>Entries</th><th>License</th><th>Update Cadence</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>NLM / UMLS</strong></td>
+              <td>SNOMED CT &rarr; ICD-10-CM</td>
+              <td>~119,000</td>
+              <td>Free (UMLS license)</td>
+              <td>Twice yearly (March, September)</td>
+            </tr>
+            <tr>
+              <td><strong>AMA</strong></td>
+              <td>CPT &harr; SNOMED CT</td>
+              <td>Varies</td>
+              <td>Customer-provided (bring your own license)</td>
+              <td>Annually</td>
+            </tr>
+            <tr>
+              <td><strong>Plan-specific overrides</strong></td>
+              <td>Any direction</td>
+              <td>Varies</td>
+              <td>Tenant-scoped</td>
+              <td>As needed</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>NLM / UMLS maps</h3>
+        <p>
+          The National Library of Medicine publishes the official SNOMED CT to ICD-10-CM mapping tables as part of the <a href="https://www.nlm.nih.gov/research/umls/" target="_blank" rel="noopener noreferrer">UMLS</a> distribution. These maps are free to use under a UMLS license and contain approximately 119,000 entries. They are distributed in RF2 (Release Format 2) and updated twice per year with each ICD-10-CM annual release and mid-year supplement.
+        </p>
+
+        <h3>AMA CPT cross maps</h3>
+        <p>
+          The American Medical Association publishes CPT-to-SNOMED CT cross maps. Because CPT is a proprietary code set, customers must provide their own AMA license files. Upload the CSV export through the Admin API or mount the file to the service's data volume. The crosswalk never redistributes AMA content.
+        </p>
+
+        <h3>Plan-specific overrides</h3>
+        <p>
+          Payers frequently maintain local coding conventions that differ from the national standard. Examples include Texas TMPPM (Texas Medicaid &amp; CHIP Preferred Procedure Manual), state Medicaid variations, and plan-specific coding policies. Overrides are tenant-scoped — each plan can have its own override file, and overrides take the highest priority during translation.
+        </p>
+
+        <!-- ============================================================ -->
+        <!-- 4. Map Management -->
+        <!-- ============================================================ -->
+        <h2 id="map-management">4. Map Management</h2>
+
+        <h3>Auto-loading at startup</h3>
+        <p>
+          When the crosswalk service starts, it scans the configured data volume (<code>/data/maps</code> by default) for RF2 and CSV files. Recognized map files are loaded automatically. Loading is <strong>idempotent</strong> — if a map version has already been loaded (tracked by filename hash and version header), it is skipped.
+        </p>
+
+        <h3>Admin API for uploading maps</h3>
+        <p>
+          New map files can be uploaded at runtime without restarting the service:
+        </p>
+
+<pre><code><span class="code-comment"># Upload an NLM RF2 map file</span>
+curl -s -X POST http://localhost:5010/admin/maps/load \
+  -H "X-Tenant-ID: demo" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@tls_Icd10cmHumanReadableMap_US1000124_20250301.txt" \
+  -F "format=rf2" \
+  -F "source=nlm" | jq .
+
+<span class="code-comment"># Upload an AMA CSV cross map</span>
+curl -s -X POST http://localhost:5010/admin/maps/load \
+  -H "X-Tenant-ID: demo" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@cpt-snomed-crossmap-2025.csv" \
+  -F "format=csv" \
+  -F "source=ama" | jq .
+
+<span class="code-comment"># Upload plan-specific overrides (tenant-scoped)</span>
+curl -s -X POST http://localhost:5010/admin/maps/load \
+  -H "X-Tenant-ID: acme-health" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@acme-overrides-2025-q1.csv" \
+  -F "format=csv" \
+  -F "source=override" | jq .</code></pre>
+
+        <h3>Version tracking and audit trail</h3>
+        <p>
+          Every loaded map is assigned a version record that includes the filename, SHA-256 hash, source type, entry count, and load timestamp. Every translation response includes a <code>map-version</code> extension so downstream consumers can trace exactly which map version produced a given translation. This is critical for audit and compliance.
+        </p>
+
+<pre><code><span class="code-comment"># List all loaded map versions</span>
+curl -s http://localhost:5010/admin/maps \
+  -H "X-Tenant-ID: demo" | jq .
+
+<span class="code-comment"># Example response</span>
+{
+  "maps": [
+    {
+      "id": "map-nlm-20250301",
+      "source": "nlm",
+      "format": "rf2",
+      "version": "US1000124_20250301",
+      "entries": 119423,
+      "loadedAt": "2026-03-26T08:15:00Z",
+      "sha256": "a1b2c3d4..."
+    },
+    {
+      "id": "map-ama-2025",
+      "source": "ama",
+      "format": "csv",
+      "version": "2025.1",
+      "entries": 8742,
+      "loadedAt": "2026-03-26T08:15:02Z",
+      "sha256": "e5f6g7h8..."
+    }
+  ]
+}</code></pre>
+
+        <!-- ============================================================ -->
+        <!-- 5. Portal Integration -->
+        <!-- ============================================================ -->
+        <h2 id="portal-integration">5. Portal Integration</h2>
+
+        <p>
+          The Cloud Health Office portal provides a dedicated <strong>Terminology Crosswalk</strong> page at <code>/terminology/crosswalk</code> with four key features:
+        </p>
+
+        <h3>Health status dashboard</h3>
+        <p>
+          The top of the page displays real-time service health: connection status (green/red), total active map entries across all loaded maps, and the number of map files currently loaded. If the crosswalk service is unreachable, the dashboard shows a clear error state with troubleshooting guidance.
+        </p>
+
+        <h3>Interactive translation tester</h3>
+        <p>
+          A form where users can enter a source code system, code, and target system, then execute a live translation. The result displays all matched target codes with their equivalence level, display name, and score. Context fields (age, gender, state, conditions) are optional inputs for disambiguation testing.
+        </p>
+
+        <h3>Map versions table</h3>
+        <p>
+          A sortable table showing every loaded map version: source, format, version string, entry count, load timestamp, and SHA-256 hash. Administrators can use this view to verify that the correct map versions are active before going live with a configuration change.
+        </p>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Try it in the demo portal</div>
+          <p>The <a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a> includes pre-loaded NLM maps. Navigate to <strong>Terminology &gt; Crosswalk</strong> in the sidebar to test live translations against the full SNOMED CT to ICD-10-CM map set.</p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 6. Context Rule Engine -->
+        <!-- ============================================================ -->
+        <h2 id="context-rule-engine">6. Context Rule Engine</h2>
+
+        <p>
+          When a SNOMED CT concept maps to multiple ICD-10-CM codes, the context rule engine selects the best match. Rules are evaluated in priority order, and the narrowest matching rule wins.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Rule Type</th><th>Priority</th><th>Description</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Plan-specific overrides</strong></td>
+              <td>Highest</td>
+              <td>Tenant-scoped overrides from plan coding policy</td>
+              <td>Acme Health maps <code>73211009</code> to <code>E11.65</code> for all members</td>
+            </tr>
+            <tr>
+              <td><strong>Co-morbidity rules</strong></td>
+              <td>High</td>
+              <td>Require specific active conditions on the patient</td>
+              <td>Diabetes + CKD selects <code>E11.22</code> over <code>E11.9</code></td>
+            </tr>
+            <tr>
+              <td><strong>State-specific rules</strong></td>
+              <td>Medium</td>
+              <td>TMPPM, Medicaid state variations, local conventions</td>
+              <td>Texas Medicaid requires specific modifier codes</td>
+            </tr>
+            <tr>
+              <td><strong>Gender rules</strong></td>
+              <td>Medium</td>
+              <td>Exclude gender-impossible ICD-10-CM codes</td>
+              <td>Prostate conditions excluded for female patients</td>
+            </tr>
+            <tr>
+              <td><strong>Age rules</strong></td>
+              <td>Standard</td>
+              <td>Pediatric vs. adult code selection</td>
+              <td>Juvenile diabetes (<code>E10.x</code>) for patients under 18</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Scoring</h3>
+        <p>
+          Each rule that matches adds to the candidate code's score. Narrower rules (those with more specific criteria) contribute higher score values. When multiple candidate codes remain after rule evaluation, the code with the highest aggregate score is returned as the primary match. All other candidates are returned as secondary matches with lower scores, allowing consumers to make their own selection if needed.
+        </p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Rule evaluation order</div>
+          <p>Rules are evaluated from highest to lowest priority. If a plan-specific override exists for a given SNOMED code and tenant, it short-circuits all other rules and returns immediately. Otherwise, all applicable rules contribute to scoring, and the best-scoring candidate wins.</p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 7. API Reference -->
+        <!-- ============================================================ -->
+        <h2 id="api-reference">7. API Reference</h2>
+
+        <p>All endpoints require the <code>X-Tenant-ID</code> header. FHIR endpoints accept and return <code>application/fhir+json</code>.</p>
+
+        <h3>GET /fhir/ConceptMap/$translate</h3>
+        <p>Single code translation via query parameters.</p>
+        <table>
+          <thead>
+            <tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>system</code></td><td>uri</td><td>Yes</td><td>Source code system (e.g., <code>http://snomed.info/sct</code>)</td></tr>
+            <tr><td><code>code</code></td><td>string</td><td>Yes</td><td>Source code value</td></tr>
+            <tr><td><code>targetsystem</code></td><td>uri</td><td>Yes</td><td>Target code system (e.g., <code>http://hl7.org/fhir/sid/icd-10-cm</code>)</td></tr>
+            <tr><td><code>context-age</code></td><td>integer</td><td>No</td><td>Patient age in years</td></tr>
+            <tr><td><code>context-gender</code></td><td>code</td><td>No</td><td>Patient gender (<code>male</code>, <code>female</code>, <code>other</code>)</td></tr>
+            <tr><td><code>context-state</code></td><td>code</td><td>No</td><td>Two-letter US state code</td></tr>
+            <tr><td><code>context-conditions</code></td><td>string</td><td>No</td><td>Comma-separated active condition codes</td></tr>
+          </tbody>
+        </table>
+
+        <h3>POST /fhir/ConceptMap/$translate</h3>
+        <p>Single code translation via structured FHIR <code>Parameters</code> resource in the request body. Supports the same context parameters as the GET variant. Preferred for complex requests with multiple context values.</p>
+
+        <h3>POST /fhir/ConceptMap/$batch-translate</h3>
+        <p>Bulk translation of up to <strong>500 codes</strong> in a single request. The request body is a FHIR <code>Bundle</code> of <code>Parameters</code> resources. Each entry is translated independently and the response is a <code>Bundle</code> of translation results in the same order.</p>
+
+<pre><code><span class="code-comment"># Batch translate 3 SNOMED codes to ICD-10-CM</span>
+curl -s -X POST http://localhost:5010/fhir/ConceptMap/\$batch-translate \
+  -H "Content-Type: application/fhir+json" \
+  -H "X-Tenant-ID: demo" \
+  -d '{
+    "resourceType": "Bundle",
+    "type": "batch",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Parameters",
+          "parameter": [
+            { "name": "system", "valueUri": "http://snomed.info/sct" },
+            { "name": "code", "valueCode": "73211009" },
+            { "name": "targetsystem", "valueUri": "http://hl7.org/fhir/sid/icd-10-cm" }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Parameters",
+          "parameter": [
+            { "name": "system", "valueUri": "http://snomed.info/sct" },
+            { "name": "code", "valueCode": "386661006" },
+            { "name": "targetsystem", "valueUri": "http://hl7.org/fhir/sid/icd-10-cm" }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Parameters",
+          "parameter": [
+            { "name": "system", "valueUri": "http://snomed.info/sct" },
+            { "name": "code", "valueCode": "195967001" },
+            { "name": "targetsystem", "valueUri": "http://hl7.org/fhir/sid/icd-10-cm" }
+          ]
+        }
+      }
+    ]
+  }' | jq .</code></pre>
+
+        <h3>GET /admin/maps</h3>
+        <p>List all loaded map versions for the current tenant. Returns source, format, version, entry count, load timestamp, and SHA-256 hash for each map.</p>
+
+        <h3>POST /admin/maps/load</h3>
+        <p>Upload a new map file. Accepts <code>multipart/form-data</code> with the following fields:</p>
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>file</code></td><td>file</td><td>Yes</td><td>The map file (RF2 or CSV)</td></tr>
+            <tr><td><code>format</code></td><td>string</td><td>Yes</td><td><code>rf2</code> or <code>csv</code></td></tr>
+            <tr><td><code>source</code></td><td>string</td><td>Yes</td><td><code>nlm</code>, <code>ama</code>, or <code>override</code></td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Idempotent loading</div>
+          <p>If the uploaded file has the same SHA-256 hash as an already-loaded map, the upload returns <code>200 OK</code> with a message indicating the version is already active. The map is never loaded twice.</p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 8. Consumer Integration -->
+        <!-- ============================================================ -->
+        <h2 id="consumer-integration">8. Consumer Integration</h2>
+
+        <p>Three core CHO services consume the Terminology Crosswalk at runtime:</p>
+
+        <h3>CRD Server (Coverage Requirements Discovery)</h3>
+        <p>
+          When a CRD hook fires, the CRD server receives SNOMED CT codes from the EHR. It calls the crosswalk to translate them into the payer's CPT/ICD-10-CM code space, then checks those codes against the plan's benefit configuration to determine whether prior authorization is required. Without the crosswalk, the CRD server cannot match clinical codes to payer business rules.
+        </p>
+
+        <h3>PAS Server (Prior Authorization Support)</h3>
+        <p>
+          The PAS server receives X12 278 prior authorization requests and converts them to FHIR. During this conversion, procedure and diagnosis codes may need to be translated between code systems. The PAS server uses the <code>$batch-translate</code> endpoint to convert all codes in a single round trip, keeping latency low for real-time prior auth decisions.
+        </p>
+
+        <h3>DTR Engine (Documentation Templates and Rules)</h3>
+        <p>
+          Da Vinci DTR questionnaires may reference codes in a different system than the one used by the EHR. The DTR engine uses the crosswalk to resolve questionnaire answer codes so that pre-populated values match the expected code system in each question. This ensures that auto-populated questionnaire responses are clinically accurate and machine-readable.
+        </p>
+
+        <div class="callout callout-success">
+          <div class="callout-title">End-to-end CMS-0057 compliance</div>
+          <p>The Terminology Crosswalk is a foundational building block for CMS-0057-F compliance. It enables the CRD, DTR, and PAS workflows to operate seamlessly across the SNOMED CT / CPT / ICD-10-CM boundary. See the <a href="/docs/compliance">CMS-0057-F Compliance Guide</a> for the full compliance checklist.</p>
+        </div>
+
+        <!-- Prev / Next -->
+        <div class="docs-pager">
+          <a href="/docs/finance-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Finance Guide</div>
+          </a>
+          <a href="/docs/api" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">API Reference</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.0.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform &nbsp;&middot;&nbsp; Not affiliated with any payer platform or clearinghouse vendors.</p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>
