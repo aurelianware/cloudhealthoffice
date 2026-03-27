@@ -298,16 +298,22 @@ No transaction caps. No feature gates. No per-claim charges. Every tier includes
 
 For pricing details and a cost calculator: [cloudhealthoffice.com/pricing](https://cloudhealthoffice.com/pricing)
 
-## License
+## Licensing
 
-Cloud Health Office is licensed under the [Business Source License 1.1](./LICENSE).
+Cloud Health Office is a **source-available** platform licensed under the [Business Source License 1.1](./LICENSE). It is **not** open source software.
+
+- **Non-production use is free.** You may use Cloud Health Office at no cost for evaluation, development, testing, staging, and proof-of-concept work.
+- **A paid commercial license is required for production use.** Any deployment serving live members, processing real claims, or generating revenue requires a subscription from Aurelianware, Inc.
 
 |                          |                                                              |
 |--------------------------|--------------------------------------------------------------|
+|**License**               |Business Source License 1.1 (BSL 1.1)                        |
 |**Free for**              |Non-production use — evaluation, development, testing, staging|
-|**Requires a license for**|Production use                                                |
+|**Requires a license for**|Production deployment                                         |
 |**Converts to**           |Apache 2.0 on 2030-03-08                                      |
 |**Licensor**              |Aurelianware, Inc                                             |
+
+For full license terms, see [LICENSE](./LICENSE). For a plain-language overview, see [LICENSE_SUMMARY.md](./LICENSE_SUMMARY.md).
 
 For commercial licensing: [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
 
