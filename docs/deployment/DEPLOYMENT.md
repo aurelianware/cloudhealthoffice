@@ -16,9 +16,10 @@ open https://portal.cloudhealthoffice.com
 
 # 2. Sign in with Azure AD (any Microsoft account)
 # 3. Select your tier:
-#    - Starter: $499/mo, 10K claims, 14-day trial
-#    - Professional: $1,499/mo, 50K claims, 14-day trial
+#    - Starter: 10K claims, 14-day trial
+#    - Professional: 50K claims, 14-day trial
 #    - Enterprise: Contact Sales for custom pricing
+#    Pricing: Contact sales@cloudhealthoffice.com
 
 # 4. Enter payment details (Stripe - PCI compliant)
 # 5. Choose modules (EDI, Claims, Provider Network, FHIR)
@@ -266,9 +267,9 @@ stripe products create \
   --name "Cloud Health Office - Starter" \
   --description "10,000 claims/month, all EDI modules"
 
-# Create Starter price ($499/mo with 14-day trial)
+# Create Starter price (with 14-day trial - contact sales for pricing)
 STARTER_PRICE_ID=$(stripe prices create \
-  --unit-amount 49900 \
+  --unit-amount ${STRIPE_PRICE_CENTS:?Set price in cents} \
   --currency usd \
   --recurring[interval]=month \
   --product=<starter-product-id> \
@@ -279,9 +280,9 @@ stripe products create \
   --name "Cloud Health Office - Professional" \
   --description "50,000 claims/month, all modules + FHIR + Analytics"
 
-# Create Professional price ($1,499/mo with 14-day trial)
+# Create Professional price (contact sales for pricing, with 14-day trial)
 PROFESSIONAL_PRICE_ID=$(stripe prices create \
-  --unit-amount 149900 \
+  --unit-amount ${STRIPE_PRICE_CENTS:?Set price in cents} \
   --currency usd \
   --recurring[interval]=month \
   --product=<professional-product-id> \

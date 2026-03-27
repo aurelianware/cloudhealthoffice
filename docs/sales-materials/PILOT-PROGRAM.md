@@ -225,15 +225,15 @@ We'll help you calculate:
 
 | Tier | Monthly | Annual | Recommendation |
 |------|---------|--------|----------------|
-| **Starter** | $999 | $10,788 | Single LOB, evaluation extension |
-| **Professional** | $2,999 | $32,388 | Production deployment, mid-market |
-| **Enterprise** | $7,999 | $86,388 | High volume, dedicated instance |
+| **Starter** | [Contact sales] | [Contact sales] | Single LOB, evaluation extension |
+| **Professional** | [Contact sales] | [Contact sales] | Production deployment, mid-market |
+| **Enterprise** | [Contact sales] | [Contact sales] | High volume, dedicated instance |
 
 ### Pilot-to-Paid Incentives
 
 | Incentive | Condition | Value |
 |-----------|-----------|-------|
-| **10% Annual Discount** | Sign within 30 days of pilot end | $1,100 - $8,600 |
+| **10% Annual Discount** | Sign within 30 days of pilot end | [Contact sales] |
 | **Extended Onboarding** | First year customers | 30 days additional support |
 | **Success Manager** | Professional+ tiers | Dedicated CSM first 90 days |
 | **Training Credits** | All tiers | $2,500 in additional training |
@@ -280,7 +280,7 @@ A: Approximately 20-40 hours total over the 60-day pilot, primarily in Weeks 1-4
 A: No. The pilot creates no purchase obligation. We hope to earn your business based on demonstrated value.
 
 **Q: What's the typical subscription after a pilot?**
-A: Most pilot customers start with the Professional tier ($2,999/month) for production use.
+A: Most pilot customers start with the Professional tier ([Contact sales]) for production use.
 
 **Q: Can we negotiate pricing?**
 A: Yes. Annual contracts and multi-year commitments offer additional flexibility.

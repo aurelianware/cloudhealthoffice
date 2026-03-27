@@ -142,25 +142,25 @@ Customer is solely responsible for:
 
 Customer shall pay Provider the subscription fees based on the selected tier:
 
-| Tier | Monthly Price | Annual Price (10% discount) | Included Payers | Included Transactions/Month |
-|------|---------------|------------------------------|-----------------|------------------------------|
-| **Starter** | $899 | $9,709 | 1-3 | 10,000 |
-| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 |
-| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited |
-| **Custom** | Contact Sales | Contact Sales | Unlimited | Unlimited |
+| Tier | Monthly Price | Annual Price | Included Payers | Included Transactions/Month |
+|------|---------------|--------------|-----------------|------------------------------|
+| **Starter** | [Per Agreement] | [Per Agreement] | 1-3 | 10,000 |
+| **Professional** | [Per Agreement] | [Per Agreement] | 4-10 | 100,000 |
+| **Enterprise** | [Per Agreement] | [Per Agreement] | Unlimited | Unlimited |
+| **Custom** | [Per Agreement] | [Per Agreement] | Unlimited | Unlimited |
 
 Prices are exclusive of taxes. All amounts in USD.
 
 ### 4.2 Overage Charges
 
 **Transaction Overages:**
-- Transactions exceeding tier limits are billed at $0.05 per transaction
+- Transactions exceeding tier limits are billed at the per-transaction overage rate specified in the Order Form
 - Overages are calculated monthly and invoiced in arrears
 - Enterprise tier includes unlimited transactions (no overage charges)
 
 **Storage Overages:**
 - Each tier includes 1TB of Data Lake storage
-- Additional storage beyond 1TB is billed at $50/TB/month (prorated daily) for all tiers
+- Additional storage beyond 1TB is billed at the storage overage rate specified in the Order Form (prorated daily) for all tiers
 - Storage is calculated as average daily usage over the billing period
 
 ### 4.3 Payment Terms
@@ -515,6 +515,6 @@ Legal: legal@cloudhealthoffice.com
 ---
 
 **Cloud Health Office** – The Inevitable Evolution of Healthcare EDI  
-**Open Source | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready**
+**Source-Available (BSL 1.1) | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready**
 
 © 2026 Aurelianware. All rights reserved.

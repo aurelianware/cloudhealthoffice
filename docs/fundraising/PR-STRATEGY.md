@@ -116,16 +116,16 @@ This strategy outlines how Cloud Health Office will build market awareness, esta
 
 ---
 
-### Pillar 3: Open Source in Healthcare
+### Pillar 3: Source-Available Software in Healthcare
 
-**Core Message:** Open source is the future of healthcare IT—providing transparency, security, and community-driven innovation.
+**Core Message:** Source-available software is the future of healthcare IT — providing transparency, security, and community-driven innovation without vendor lock-in.
 
 **Content Topics:**
-- Why open source for healthcare
+- Why source-available licensing for healthcare
 - BSL 1.1 licensing in healthcare
-- Building healthcare open source communities
+- Building healthcare source-available communities
 - Security through transparency
-- Case studies of successful healthcare OSS
+- Case studies of successful healthcare source-available platforms
 
 **Content Formats:**
 - Thought leadership articles
@@ -163,7 +163,7 @@ With the CMS-0057-F deadline in January 2027, every health plan in America faces
 
 • What CMS-0057-F actually requires (and what most health plans misunderstand)
 • Why traditional vendors are failing the mid-market
-• How open source is changing healthcare IT
+• How source-available software is changing healthcare IT
 
 I've [relevant credentials/experience] and can speak to both technical and business audiences.
 

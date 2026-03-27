@@ -95,7 +95,7 @@ Production-grade HIPAA infrastructure:
 | Time to Production | 18-36 months | **< 5 minutes** |
 | Compliance Risk | Team dependent | **Validated architecture** |
 | Ongoing Maintenance | Full burden | **Platform updates included** |
-| Community Support | Internal only | **Open source community** |
+| Community Support | Internal only | **Source-available community** |
 
 ---
 
@@ -134,9 +134,9 @@ Production-grade HIPAA infrastructure:
 
 | Tier | Monthly | Annual | Best For |
 |------|---------|--------|----------|
-| **Starter** | $999 | $10,788 | Regional payers, single LOB |
-| **Professional** | $2,999 | $32,388 | Mid-market, multiple payers |
-| **Enterprise** | $7,999 | $86,388 | Large plans, unlimited scale |
+| **Starter** | Contact us for pricing | Contact us for pricing | Regional payers, single LOB |
+| **Professional** | Contact us for pricing | Contact us for pricing | Mid-market, multiple payers |
+| **Enterprise** | Contact us for pricing | Contact us for pricing | Large plans, unlimited scale |
 
 *Annual pricing includes a 10% discount compared to monthly billing.*
 
@@ -166,7 +166,7 @@ Production-grade HIPAA infrastructure:
 
 ## Technical Differentiators
 
-### Open Source Advantage
+### Source-Available Advantage
 
 - **BSL 1.1 license** - no vendor lock-in
 - **Full source code access** - audit, customize, extend

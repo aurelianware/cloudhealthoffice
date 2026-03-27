@@ -19,8 +19,8 @@ Phase 2 website updates implement the dual-market strategic positioning across a
 **Key Features:**
 - Two-column pricing grid (Health Plans | Practices)
 - Payer tiers: Starter ($50k-100k) / Growth ($100k-200k) / Enterprise ($200k-250k)
-- Provider tiers: Solo ($99-199/mo) / Small Group ($499-999/mo) / Group Practice ($1,999-4,999/mo)
-- Founding Practices Program callout ($99/month for first year, limited to 50 practices)
+- Provider tiers: Solo / Small Group / Group Practice — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
+- Founding Practices Program — [Contact sales](mailto:sales@cloudhealthoffice.com) for details
 - ROI comparison table (82%+ savings vs traditional solutions)
 - Contact sales CTAs for all tiers
 

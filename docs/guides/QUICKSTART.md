@@ -25,8 +25,8 @@ Choose the plan that fits your needs:
 
 | Tier | Price | Claims/Month | Modules | Support | Trial |
 |------|-------|--------------|---------|---------|-------|
-| **Starter** | $499/mo | 10,000 | EDI + Claims Adjudication | Community + Email | 14 days |
-| **Professional** | $1,499/mo | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
+| **Starter** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10,000 | EDI + Claims Adjudication | Community + Email | 14 days |
+| **Professional** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
 | **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
 
 **Note**: All tiers include a **14-day free trial**. Cancel anytime before Feb 23, 2026 (trial end).
@@ -111,7 +111,7 @@ The Azure Deploy button creates a self-hosted environment:
 - ✅ **Cosmos DB** - Multi-tenant data isolation
 - ✅ **Application Insights** - Monitoring and telemetry
 
-**Estimated cost**: ~$300-500/month for production environment (compare to SaaS: $499/mo Starter, $1,499/mo Professional)
+**Estimated cost**: ~$300-500/month for production environment ([Contact sales](mailto:sales@cloudhealthoffice.com) for SaaS tier pricing)
 
 ## 📋 Prerequisites
 
@@ -483,4 +483,4 @@ After successful deployment:
 
 **Cloud Health Office** – The Future of Healthcare EDI Integration
 
-*Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
+*Source-Available | Azure-Native | Production-Grade | HIPAA-Compliant*

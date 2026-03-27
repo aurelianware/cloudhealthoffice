@@ -182,8 +182,8 @@ az cosmosdb sql container create \
 1. Create Stripe account at https://stripe.com
 2. Get API keys from Dashboard → Developers → API keys
 3. Create products and pricing:
-   - **Starter**: $500/month
-   - **Professional**: $2,500/month
+   - **Starter**: [Contact sales](mailto:sales@cloudhealthoffice.com)
+   - **Professional**: [Contact sales](mailto:sales@cloudhealthoffice.com)
    - **Enterprise**: Custom pricing
 4. Set up webhook endpoint: `https://your-domain/api/v1/billing/webhook`
 5. Copy webhook signing secret

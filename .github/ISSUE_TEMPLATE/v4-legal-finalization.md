@@ -153,15 +153,12 @@ Based on V4-LAUNCH-ROADMAP.md recommendations:
 
 | Tier | Monthly Price | Payers | Transactions | Target Customer |
 |------|---------------|--------|--------------|-----------------|
-| **Starter** | $499 | 1-3 | 10,000 | Small payers, pilots |
-| **Professional** | $1,999 | 4-10 | 100,000 | Regional payers |
-| **Enterprise** | $4,999 | Unlimited | Unlimited | National payers |
-| **Custom** | Quote | Unlimited | Unlimited | White-label, SLA |
+| **Starter** | [See internal pricing] | 1-3 | 10,000 | Small payers, pilots |
+| **Professional** | [See internal pricing] | 4-10 | 100,000 | Regional payers |
+| **Enterprise** | [See internal pricing] | Unlimited | Unlimited | National payers |
+| **Custom** | [See internal pricing] | Unlimited | Unlimited | White-label, SLA |
 
-**Overage Pricing:**
-- Transactions: $0.05 per transaction over limit
-- Storage: $50/TB/month over 1TB included
-- Support: $200/hour for ad-hoc requests (non-Enterprise)
+**Overage Pricing:** See internal pricing documentation.
 
 **Action Items:**
 - [ ] Validate pricing with comparable SaaS platforms (Waystar, Change Healthcare)
@@ -178,27 +175,8 @@ Based on V4-LAUNCH-ROADMAP.md recommendations:
 - ✅ Webhook handling
 
 **Remaining Work:**
-- [ ] Create Stripe products for each tier
-  ```bash
-  # Starter tier
-  stripe products create --name="Cloud Health Office - Starter" --description="1-3 payers, 10K transactions/month"
-  stripe prices create --product=prod_XXX --unit-amount=49900 --currency=usd --recurring[interval]=month
-  
-  # Professional tier
-  stripe products create --name="Cloud Health Office - Professional" --description="4-10 payers, 100K transactions/month"
-  stripe prices create --product=prod_YYY --unit-amount=199900 --currency=usd --recurring[interval]=month
-  
-  # Enterprise tier
-  stripe products create --name="Cloud Health Office - Enterprise" --description="Unlimited payers and transactions"
-  stripe prices create --product=prod_ZZZ --unit-amount=499900 --currency=usd --recurring[interval]=month
-  ```
-
-- [ ] Set up usage-based metering
-  ```bash
-  # Transaction overage meter
-  stripe products create --name="Transaction Overage" --type=metered
-  stripe prices create --product=prod_AAA --unit-amount=5 --currency=usd --recurring[interval]=month --billing_scheme=tiered
-  ```
+- [ ] Create Stripe products for each tier (see internal pricing documentation for amounts)
+- [ ] Set up usage-based metering (see internal pricing documentation for rates)
 
 - [ ] Test subscription lifecycle (create, upgrade, cancel)
 - [ ] Configure Stripe Tax for sales tax calculation
@@ -219,7 +197,7 @@ Based on V4-LAUNCH-ROADMAP.md recommendations:
 4. **Product Demo:** Live walkthrough of 837 claim submission
 5. **Technology:** Kubernetes, Azure-native, HIPAA-compliant architecture
 6. **Security:** Zero vulnerabilities, multi-tenant isolation, BAA included
-7. **Pricing:** Transparent tiers starting at $499/month
+7. **Pricing:** Commercial licensing available upon request
 8. **Case Study:** Mock "ACME Health Plan reduced EDI costs by 80%"
 9. **Roadmap:** v4.0 features (clearinghouses, portals, analytics)
 10. **Call to Action:** "Start 30-day free trial today"
@@ -263,7 +241,7 @@ Based on V4-LAUNCH-ROADMAP.md recommendations:
 1. **LinkedIn Search:** "Health Plan CTO" + "Medicaid" + "EDI"
 2. **Cold Email:** Personalized message highlighting pain points
 3. **Demo Call:** 30-minute live demo + Q&A
-4. **LOI Request:** "Commit to 90-day Beta at 50% discount ($249/month for Starter)"
+4. **LOI Request:** "Commit to 90-day Beta pilot program"
 
 **Email Template:**
 ```
@@ -277,7 +255,7 @@ We built Cloud Health Office to eliminate the $500K+ price tag of traditional ED
 
 ✅ 837 Claims, 270/271 Eligibility, 276/277 Status, 278 Prior Auth
 ✅ HIPAA-compliant SaaS (BAA included)
-✅ $499/month starting price (vs. $50K+ setup fees)
+✅ Competitive pricing (vs. $50K+ setup fees with legacy vendors)
 
 Would you be open to a 15-minute demo to see if we can save [Company] time and money?
 

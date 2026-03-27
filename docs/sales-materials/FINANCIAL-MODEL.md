@@ -26,9 +26,9 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 
 | Tier | Monthly | Annual | Transaction Limit | Target Segment |
 |------|---------|--------|-------------------|----------------|
-| **Starter** | $999 | $10,788 | 25,000/month | Regional payers, single LOB |
-| **Professional** | $2,999 | $32,388 | 150,000/month | Mid-market, multi-payer |
-| **Enterprise** | $7,999 | $86,388 | Unlimited | Large plans, custom needs |
+| **Starter** | [Contact sales] | [Contact sales] | 25,000/month | Regional payers, single LOB |
+| **Professional** | [Contact sales] | [Contact sales] | 150,000/month | Mid-market, multi-payer |
+| **Enterprise** | [Contact sales] | [Contact sales] | Unlimited | Large plans, custom needs |
 
 ### Tier Distribution Assumptions
 

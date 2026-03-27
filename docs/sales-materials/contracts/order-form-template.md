@@ -59,12 +59,12 @@ Phone: ___________________________________________________________________
 
 ### Base Subscription Fees
 
-| Tier | Monthly Fee | Annual Fee (10% discount) | Payers Included | Transactions/Month |
-|------|-------------|---------------------------|-----------------|---------------------|
-| **Starter** | $899 | $9,709 | 1-3 | 10,000 |
-| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 |
-| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited |
-| **Custom** | Custom Quote | Custom Quote | Unlimited | Unlimited |
+| Tier | Monthly Fee | Annual Fee | Payers Included | Transactions/Month |
+|------|-------------|------------|-----------------|---------------------|
+| **Starter** | [Per Agreement] | [Per Agreement] | 1-3 | 10,000 |
+| **Professional** | [Per Agreement] | [Per Agreement] | 4-10 | 100,000 |
+| **Enterprise** | [Per Agreement] | [Per Agreement] | Unlimited | Unlimited |
+| **Custom** | [Per Agreement] | [Per Agreement] | Unlimited | Unlimited |
 
 **Selected Tier**: ___________________  
 **Billing Frequency**: ☐ Monthly  ☐ Annual  
@@ -74,16 +74,16 @@ Phone: ___________________________________________________________________
 
 | Overage Type | Rate | Billing |
 |--------------|------|---------|
-| Transaction Overage | $0.05 per transaction | Monthly in arrears |
-| Storage Overage | $50 per TB/month | Monthly in arrears |
+| Transaction Overage | [Per Agreement] | Monthly in arrears |
+| Storage Overage | [Per Agreement] | Monthly in arrears |
 
-**Note**: Enterprise tier includes unlimited transactions (no transaction overages). Storage overages of $50/TB/month apply to all tiers (including Enterprise) for storage beyond the included 1TB.
+**Note**: Enterprise tier includes unlimited transactions (no transaction overages). Storage overages apply to all tiers (including Enterprise) for storage beyond the included allocation.
 
 ### Optional Add-Ons
 
-☐ **Premium Support** - $500/month  
-   - 24/7 phone support  
-   - Dedicated Customer Success Manager  
+☐ **Premium Support** - [Per Agreement]
+   - 24/7 phone support
+   - Dedicated Customer Success Manager
    - Quarterly Business Reviews (QBRs)
 
 ☐ **Professional Services** - Custom Quote  
@@ -96,8 +96,8 @@ Phone: ___________________________________________________________________
    - Dedicated infrastructure (single-tenant)  
    - Custom RTO/RPO: $______
 
-☐ **Additional Storage** - $50 per TB/month  
-   - Additional storage beyond included 1TB: _____ TB
+☐ **Additional Storage** - [Per Agreement]
+   - Additional storage beyond included allocation: _____ TB
 
 **Total Optional Add-Ons**: $____________ per month
 

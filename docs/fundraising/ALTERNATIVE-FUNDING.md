@@ -428,7 +428,7 @@ Equity crowdfunding allows raising capital from many small investors through reg
 
 **Fit:**
 - ✅ Healthcare mission resonates
-- ✅ Open source community alignment
+- ✅ Source-available community alignment
 - ⚠️ Investor management overhead
 - ⚠️ Public disclosure requirements
 

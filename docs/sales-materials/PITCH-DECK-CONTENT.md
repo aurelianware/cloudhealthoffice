@@ -224,9 +224,9 @@ npm run generate -- interactive --output my-config.json --generate
 | **CMS-0057-F Ready** | Partial | Partial | Partial | ✅ Complete |
 | **Implementation** | 12-18 months | 6-12 months | 12+ months | **< 5 minutes** |
 | **FHIR R4 Native** | Add-on | Planned | Add-on | ✅ Built-in |
-| **Open Source** | ❌ | ❌ | ❌ | ✅ BSL 1.1 |
+| **Source-Available** | ❌ | ❌ | ❌ | ✅ BSL 1.1 |
 | **Azure Native** | Hybrid | Legacy | Hybrid | ✅ Native |
-| **Annual Cost** | $150K-$500K | $100K-$300K | $200K+ | **$12K-$96K** |
+| **Annual Cost** | $150K-$500K | $100K-$300K | $200K+ | **[Contact sales](mailto:sales@cloudhealthoffice.com)** |
 
 ### Competitive Advantages
 
@@ -241,7 +241,7 @@ npm run generate -- interactive --output my-config.json --generate
 ## Slide 7: Differentiation
 
 ### Visual Elements
-- [PLACEHOLDER: Open source community graphic]
+- [PLACEHOLDER: Source-available community graphic]
 - [PLACEHOLDER: AI/ML capabilities icon]
 - [PLACEHOLDER: CMS compliance badge]
 
@@ -374,9 +374,9 @@ npm run generate -- interactive --output my-config.json --generate
 
 | Tier | Monthly | Annual | Best For |
 |------|---------|--------|----------|
-| **Starter** | $999 | $10,788 | Regional payers, evaluation |
-| **Professional** | $2,999 | $32,388 | Mid-market, production |
-| **Enterprise** | $7,999 | $86,388 | Large plans, unlimited scale |
+| **Starter** | [Contact sales] | [Contact sales] | Regional payers, evaluation |
+| **Professional** | [Contact sales] | [Contact sales] | Mid-market, production |
+| **Enterprise** | [Contact sales] | [Contact sales] | Large plans, unlimited scale |
 
 *Annual pricing includes a 10% discount compared to monthly billing.*
 

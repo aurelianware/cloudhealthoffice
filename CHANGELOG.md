@@ -255,7 +255,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (legac
 #### Azure Marketplace Readiness (December 2025)
 - **Managed Application Plan**: ARM template deploying full Cloud Health Office stack
 - **SaaS Plan with Meter-Based Billing**: Per-transaction pricing (837, 278, 275, FHIR API calls)
-- **3-Tier Pricing**: Starter ($499/mo), Professional ($1,999/mo), Enterprise ($4,999/mo)
+- **3-Tier Pricing**: Starter, Professional, Enterprise — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 - **Partner Center Metadata**: Complete offer listing and marketing assets
 - **Legal Documents**: Privacy policy, SLA (99.5%-99.95% uptime), support terms
 - **Marketplace Icons**: Sentinel-branded SVG assets for all required sizes
@@ -600,7 +600,7 @@ This is the first production release of Cloud Health Office — the source-avail
 - **Example Configurations**: Medicaid MCO and Regional Blues templates
 - **Comprehensive Documentation**: 20+ detailed guides
 
-#### claims backend Integration (First in Open Source)
+#### claims backend Integration (First in Source-Available)
 - **Real-Time Correlation APIs**: Link attachments to claims
 - **Appeals Registration**: Direct integration with claims backend Appeals API
 - **Authorization Processing**: Complete authorization lifecycle management

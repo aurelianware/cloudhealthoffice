@@ -33,7 +33,7 @@ Cloud Health Office provides a complete EDI integration solution for healthcare 
 ### Key Features
 
 - ✅ **&lt;5 Minute Onboarding**: Self-service signup with automatic tenant provisioning
-- ✅ **14-Day Free Trial**: Test all features (Starter $499/mo, Professional $1,499/mo, Enterprise custom)
+- ✅ **14-Day Free Trial**: Test all features (Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing)
 - ✅ **Zero Custom Code**: Template-driven workflow generation
 - ✅ **Production HIPAA Controls**: Built-in compliance and security
 - ✅ **Automated Testing**: Comprehensive test framework included
@@ -49,7 +49,7 @@ Cloud Health Office provides a complete EDI integration solution for healthcare 
 ### Signup Process
 
 1. **Azure AD Login**: Sign in with any Microsoft account
-2. **Select Tier**: Starter ($499/mo, 10K claims) or Professional ($1,499/mo, 50K claims)
+2. **Select Tier**: Starter (10K claims) or Professional (50K claims) — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 3. **Enter Payment**: Stripe payment (14-day trial, no charge until trial ends)
 4. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
 5. **Start Trial**: Complete signup to begin your 14-day free trial
