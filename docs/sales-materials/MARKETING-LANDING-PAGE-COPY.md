@@ -70,7 +70,7 @@ No per-transaction fees. No per-payer licensing. Predictable subscription pricin
 
 *"We calculated $2.4M in savings over our enterprise vendor quote."*
 
-### Value Prop 3: Open Source Transparency
+### Value Prop 3: Source-Available Transparency
 [PLACEHOLDER: Open lock/code icon]
 
 **BSL 1.1 Licensed. No Vendor Lock-In.**
@@ -239,7 +239,7 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 | **HIPAA Compliant** | Addresses key HIPAA technical safeguards (§164.312) |
 | **SOC 2 Type II** | [PLACEHOLDER: Certification in progress] |
 | **Azure Native** | Built on AKS with Argo Workflows, Key Vault, Service Bus |
-| **Open Source** | BSL 1.1 license, full source transparency |
+| **Source-Available** | BSL 1.1 license, full source transparency |
 | **Da Vinci Conformant** | PDex, PAS, CRD, DTR implementation guides |
 | **US Core 3.1.1** | FHIR patient profile conformance |
 
@@ -364,9 +364,9 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 
 ### Primary Page
 
-**Title**: Cloud Health Office - CMS-0057-F Compliant EDI Platform | Open Source, Azure-Native
+**Title**: Cloud Health Office - CMS-0057-F Compliant EDI Platform | Source-Available, Azure-Native
 
-**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Open-source, Azure-native EDI platform with 85% lower cost than enterprise vendors. Start free pilot.
+**Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Source-available, Azure-native EDI platform with 85% lower cost than enterprise vendors. Start free pilot.
 
 **Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, source-available healthcare, HIPAA compliant EDI
 

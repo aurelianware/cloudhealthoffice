@@ -125,7 +125,7 @@ Experienced leadership in healthcare IT, Azure platform architecture, and SaaS s
 
 *Cloud Health Office — The inevitable evolution of healthcare EDI*
 
-*Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
 
 ---
 

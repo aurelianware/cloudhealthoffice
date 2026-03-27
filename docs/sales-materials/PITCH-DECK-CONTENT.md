@@ -248,7 +248,7 @@ npm run generate -- interactive --output my-config.json --generate
 ### Headline
 **Three Pillars of Differentiation**
 
-### 1. Open Source (BSL 1.1)
+### 1. Source-Available (BSL 1.1)
 
 **Why it matters:**
 - **No vendor lock-in**: Full source code access
@@ -639,7 +639,7 @@ Reference: [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md)
 
 *Cloud Health Office - The inevitable evolution of healthcare EDI*
 
-*Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
 
 ---
 

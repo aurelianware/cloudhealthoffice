@@ -194,10 +194,10 @@ Best,
 | Title | Pillar | Target Publication |
 |-------|--------|-------------------|
 | "The $8B Compliance Cliff: Why CMS-0057-F Changes Everything" | CMS Compliance | Healthcare IT News |
-| "Why Open Source is the Future of Healthcare EDI" | Open Source | HIMSS Blog |
+| "Why Source-Available is the Future of Healthcare EDI" | Open Source | HIMSS Blog |
 | "From X12 to FHIR: A Technical Guide to Healthcare Interoperability" | EDI Modernization | Health Data Management |
 | "5 Things Every CIO Should Know About CMS-0057-F" | CMS Compliance | Healthcare Dive |
-| "We Open-Sourced Our Healthcare Platform—Here's What We Learned" | Open Source | TechCrunch |
+| "We Made Our Healthcare Platform Source-Available—Here's What We Learned" | Open Source | TechCrunch |
 
 ---
 

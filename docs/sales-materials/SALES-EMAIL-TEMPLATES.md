@@ -122,7 +122,7 @@ I'm reaching out because Cloud Health Office can reduce your EDI platform costs 
 | **3-Year TCO** | **$[X]M** | **$169,000** |
 
 **Why the difference?**
-• Open-source platform (BSL 1.1) - no vendor lock-in
+• Source-available platform (BSL 1.1) - no vendor lock-in
 • Azure-native architecture - infrastructure scales with usage
 • Self-service configuration - deploy in under 1 hour
 • All-inclusive pricing - no per-transaction or per-payer fees

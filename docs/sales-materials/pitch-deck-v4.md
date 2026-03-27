@@ -767,7 +767,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 
 **Cloud Health Office** – *The inevitable evolution of healthcare EDI*
 
-**Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready**
+**Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready**
 
 © 2026 Aurelianware. All rights reserved.
 
