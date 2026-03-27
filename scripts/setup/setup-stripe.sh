@@ -81,7 +81,7 @@ if command -v stripe &> /dev/null; then
         --recurring[trial_period_days]=14 \
         --format json | jq -r '.id')
     
-    echo "✅ Starter tier created: $STARTER_PRICE ($499/month)"
+    echo "✅ Starter tier created: $STARTER_PRICE"
     
     # Create Professional tier
     PROFESSIONAL_PRODUCT=$(stripe products create \
@@ -97,7 +97,7 @@ if command -v stripe &> /dev/null; then
         --recurring[trial_period_days]=14 \
         --format json | jq -r '.id')
     
-    echo "✅ Professional tier created: $PROFESSIONAL_PRICE ($1,499/month)"
+    echo "✅ Professional tier created: $PROFESSIONAL_PRICE"
     
     # Create Enterprise tier (custom pricing)
     ENTERPRISE_PRODUCT=$(stripe products create \
@@ -111,11 +111,11 @@ else
     echo ""
     echo "Starter tier:"
     echo "  - Name: Cloud Health Office - Starter"
-    echo "  - Price: $499/month with 14-day trial"
+    echo "  - Price: See internal pricing documentation"
     echo ""
     echo "Professional tier:"
     echo "  - Name: Cloud Health Office - Professional"
-    echo "  - Price: $1,499/month with 14-day trial"
+    echo "  - Price: See internal pricing documentation"
     echo ""
     read -p "Starter price ID (price_...): " STARTER_PRICE
     read -p "Professional price ID (price_...): " PROFESSIONAL_PRICE

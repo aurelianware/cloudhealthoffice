@@ -135,9 +135,9 @@ Response:
 | Tier | Monthly Claims | Price |
 |------|---------------|-------|
 | **Free** | 1,000 | $0 |
-| **Starter** | 10,000 | $199/mo |
-| **Professional** | 100,000 | $999/mo |
-| **Enterprise** | Unlimited | Custom |
+| **Starter** | 10,000 | [Contact us](mailto:sales@cloudhealthoffice.com) |
+| **Professional** | 100,000 | [Contact us](mailto:sales@cloudhealthoffice.com) |
+| **Enterprise** | Unlimited | [Contact us](mailto:sales@cloudhealthoffice.com) |
 
 ## Rate Limiting
 

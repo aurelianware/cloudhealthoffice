@@ -50,9 +50,9 @@ Fully managed SaaS deployment with meter-based billing for EDI transactions.
 **Plans:**
 | Plan | Base Price | 837 Claims Included | Target |
 |------|-----------|-------------------|--------|
-| Starter | $499/mo | 1,000 | Small orgs, dev/test |
-| Professional | $1,999/mo | 10,000 | Mid-size orgs |
-| Enterprise | $4,999/mo | 50,000 | Large orgs |
+| Starter | [Contact sales](mailto:sales@cloudhealthoffice.com) | 1,000 | Small orgs, dev/test |
+| Professional | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10,000 | Mid-size orgs |
+| Enterprise | [Contact sales](mailto:sales@cloudhealthoffice.com) | 50,000 | Large orgs |
 
 **Meters:**
 - `edi_837_transactions`: 837 Professional, Institutional, Dental claims
@@ -159,6 +159,6 @@ convert -background none logo-48x48.svg logo-48x48.png
 ---
 
 **Cloud Health Office** – Advancing Healthcare EDI Integration  
-**Open Source | Azure-Native | HIPAA-Compliant**
+**Source-Available (BSL 1.1) | Azure-Native | HIPAA-Compliant**
 
 © 2025 Cloud Health Office. All rights reserved.

@@ -211,9 +211,9 @@ Throughput: 50,000 req/sec
 **Pricing Tiers**:
 | Tier | Monthly Price | Included | Target Segment |
 |------|---------------|----------|----------------|
-| **Starter** | $999/mo | 3 payers, 25K transactions | Regional payers |
-| **Professional** | $2,999/mo | 10 payers, 150K transactions | Mid-market |
-| **Enterprise** | $7,999/mo | Unlimited | Large health plans |
+| **Starter** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 3 payers, 25K transactions | Regional payers |
+| **Professional** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10 payers, 150K transactions | Mid-market |
+| **Enterprise** | [Contact sales](mailto:sales@cloudhealthoffice.com) | Unlimited | Large health plans |
 
 **Deliverables**:
 | Deliverable | Target Date | Status |
@@ -775,7 +775,7 @@ Throughput: 500,000 transactions/day
 | Contributor Awards | - | - | - | ✅ Annual |
 | Case Study Program | ✅ Start | 🔄 5 cases | 🔄 10 cases | 🔄 15 cases |
 
-### Open Source Governance
+### Source-Available Governance
 
 **Governance Model**: Meritocratic open governance with Steering Committee
 
@@ -845,7 +845,7 @@ Throughput: 500,000 transactions/day
 - KR2: 150 paying customers (by Q4)
 - KR3: $2M ARR (by Q4)
 
-**Objective 3**: Build Thriving Open Source Community
+**Objective 3**: Build Thriving Source-Available Community
 - KR1: 150 active contributors (by Q4)
 - KR2: 25 partner organizations (by Q4)
 - KR3: First annual conference with 500+ attendees (Q3)
@@ -890,7 +890,7 @@ This roadmap is a living document. We review and update quarterly based on:
 
 **Cloud Health Office** — The Future of Healthcare EDI Integration
 
-*Open Source | Azure-Native | CMS-Compliant | AI-Powered*
+*Source-Available | Azure-Native | CMS-Compliant | AI-Powered*
 
 ---
 

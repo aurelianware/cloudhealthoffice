@@ -22,7 +22,7 @@ This is the third major release of Cloud Health Office — the source-available,
 ### 🚀 Azure Marketplace Ready
 - **Managed Application**: One-click deployment via Azure Marketplace
 - **Meter-Based Billing**: Per-transaction pricing for 837, 278, 275, FHIR API calls
-- **3-Tier Pricing**: Starter ($499/mo), Professional ($1,999/mo), Enterprise ($4,999/mo)
+- **3-Tier Pricing**: Starter, Professional, Enterprise — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 
 ### 🏗️ Microservices Architecture
 - **Eligibility Service**: Dual X12 270/271 + FHIR interface on Azure Container Apps
