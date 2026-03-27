@@ -15,7 +15,7 @@
     "health-insurance"
   ],
   "author": "Cloud Health Office",
-  "license": "Apache-2.0",
+  "license": "BUSL-1.1",
   "dependencies": {
     "x12-parser": "^1.3.0"
   }
