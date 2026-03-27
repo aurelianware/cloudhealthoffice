@@ -856,4 +856,4 @@ For questions about CMS-0057-F compliance with Cloud Health Office:
 
 **Cloud Health Office** – Production-Ready CMS-0057-F Compliance
 
-*Open Source | Azure-Native | FHIR R4 | Da Vinci IGs | <10 Minute Deployment*
+*Source-Available | Azure-Native | FHIR R4 | Da Vinci IGs | <10 Minute Deployment*

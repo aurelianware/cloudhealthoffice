@@ -82,11 +82,11 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 ### ✅ **Strengths**
 
 #### 2.1 Pricing Model Defined
-- **SaaS Model**: $10k-50k/month (member count + transaction volume)
-- **BYOS Model**: $50k-250k one-time + $5k-15k/month support
+- **SaaS Model**: [Contact sales](mailto:sales@cloudhealthoffice.com) (member count + transaction volume)
+- **BYOS Model**: [Contact sales](mailto:sales@cloudhealthoffice.com) for one-time + monthly support pricing
 - **Subscription tiers** documented:
-  - Starter: $500/mo, 10k claims/mo, 5 users
-  - Professional: $2,500/mo, 100k claims/mo, 25 users
+  - Starter: [Contact sales](mailto:sales@cloudhealthoffice.com), 10k claims/mo, 5 users
+  - Professional: [Contact sales](mailto:sales@cloudhealthoffice.com), 100k claims/mo, 25 users
   - Enterprise: Custom, unlimited, dedicated CSM
 
 #### 2.2 Marketing Assets

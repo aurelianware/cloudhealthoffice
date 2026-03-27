@@ -180,9 +180,9 @@ Legacy CAPS vendors profit from complexity. Each customization creates dependenc
 - Custom module development: $500,000-2,000,000 per module
 - Typical time to implement regulatory changes: 12-24 months
 
-### The Open Source Alternative
+### The Source-Available Alternative
 
-CloudHealthOffice inverts this model. Open source transparency eliminates vendor lock-in concerns. Configuration-driven deployment replaces custom development. Azure-native architecture provides enterprise-grade reliability without proprietary infrastructure.
+CloudHealthOffice inverts this model. Source-available transparency eliminates vendor lock-in concerns. Configuration-driven deployment replaces custom development. Azure-native architecture provides enterprise-grade reliability without proprietary infrastructure.
 
 The platform does not replace claims backend or claims adjudication system for core claims processing. Instead, it provides the interoperability layer these systems cannot deliver natively. Existing investments remain protected. Compliance becomes achievable.
 
@@ -736,7 +736,7 @@ CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmo
 
 | Benefit | Legacy Approach | CloudHealthOffice Advantage |
 |---------|-----------------|----------------------------|
-| **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Open-source agility; no vendor lock-in |
+| **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Source-available agility; no vendor lock-in |
 | **CMS Compliance** | 18-36 month uncertain timeline | 100% compliant by January 2027, 90-day deployment |
 | **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
 | **5-Year TCO** | $16.7M+ | $2.6M ($10M+ savings) |
@@ -828,4 +828,4 @@ The January 2027 deadline is not a threat. With CloudHealthOffice, it's an oppor
 
 **CloudHealthOffice** – Systems That Do Not Fail
 
-*Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
+*Source-Available (BSL 1.1) | Azure-Native | Production-Grade | HIPAA-Compliant*

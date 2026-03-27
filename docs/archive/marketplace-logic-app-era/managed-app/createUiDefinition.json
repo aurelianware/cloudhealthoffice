@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "**Cloud Health Office** - The #1 open-source Azure-native multi-payer EDI platform.\n\nDeploy a complete HIPAA-compliant EDI integration solution in minutes. This managed application includes:\n\n- ✅ X12 EDI Processing (275, 277, 278, 837)\n- ✅ FHIR R4 Integration (CMS-0057-F Compliant)\n- ✅ Prior Authorization APIs\n- ✅ Zero-Code Payer Onboarding\n- ✅ Enterprise Security (HSM-backed keys)",
+        "description": "**Cloud Health Office** - The #1 source-available Azure-native multi-payer EDI platform.\n\nDeploy a complete HIPAA-compliant EDI integration solution in minutes. This managed application includes:\n\n- ✅ X12 EDI Processing (275, 277, 278, 837)\n- ✅ FHIR R4 Integration (CMS-0057-F Compliant)\n- ✅ Prior Authorization APIs\n- ✅ Zero-Code Payer Onboarding\n- ✅ Enterprise Security (HSM-backed keys)",
         "location": {
           "label": "Region",
           "toolTip": "Select the Azure region for deployment.",

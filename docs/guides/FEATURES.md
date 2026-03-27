@@ -34,7 +34,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Feature | Description | Status | Details |
 |---------|-------------|--------|---------|
-| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter $499/mo, Professional $1,999/mo, Enterprise $4,999/mo, 30-day trials |
+| **Self-Service Signup** | 5-minute onboarding with Stripe payment | ✅ Complete | Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing, 30-day trials |
 | **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | ✅ Complete | Tenant-scoped access via claims, automatic user provisioning |
 | **Subscription Management** | Stripe-powered billing and subscriptions | ✅ Complete | Test mode, webhook integration, automatic renewals |
 | **Contact Sales** | Enterprise inquiry tracking | ✅ Complete | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |
@@ -46,7 +46,7 @@ This document provides a comprehensive overview of all features available in Clo
 
 1. **Visit Portal**: Navigate to portal.cloudhealthoffice.com
 2. **Azure AD Login**: Sign in with Microsoft account (multi-tenant)
-3. **Select Tier**: Choose Starter ($499/mo, 10K claims) or Professional ($1,499/mo, 50K claims)
+3. **Select Tier**: Choose Starter (10K claims) or Professional (50K claims) — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 4. **Enter Payment**: Stripe payment method with PCI compliance
 5. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
 6. **Start Free Trial**: 14-day trial, cancel anytime
@@ -107,8 +107,8 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 | Tier | Price | Claims/Month | Modules | Support | Trial |
 |------|-------|--------------|---------|---------|-------|
-| **Starter** | $499/mo | 10,000 | All EDI + Claims | Community + Email | 14 days |
-| **Professional** | $1,499/mo | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
+| **Starter** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10,000 | All EDI + Claims | Community + Email | 14 days |
+| **Professional** | [Contact sales](mailto:sales@cloudhealthoffice.com) | 50,000 | All + FHIR + Analytics | Priority + Slack | 14 days |
 | **Enterprise** | Custom | Unlimited | White-label + SLA | 24/7 + Dedicated CSM | Custom |
 
 **Stripe Integration**:
@@ -984,4 +984,4 @@ Cloud Health Office is designed to complement leading core administrative platfo
 
 **Cloud Health Office** – Advancing Healthcare EDI Integration
 
-*Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
+*Source-Available | Azure-Native | Production-Grade | HIPAA-Compliant*

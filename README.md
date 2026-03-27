@@ -286,17 +286,11 @@ Contact [partners@cloudhealthoffice.com](mailto:partners@cloudhealthoffice.com) 
 
 ## Pricing
 
-Cloud Health Office uses per-member-per-month (PMPM) pricing that scales with your health plan.
-
-|Tier          |PMPM  |Members   |Includes                                                                           |
-|--------------|------|----------|-----------------------------------------------------------------------------------|
-|**Growth**    |$0.75 |Up to 50K |Full platform, managed SaaS, single clearinghouse, 4hr email SLA                   |
-|**Scale**     |$0.45 |Up to 250K|Multi-clearinghouse failover, prior auth automation, dedicated onboarding, 1hr SLA |
-|**Enterprise**|Custom|250K+     |Volume pricing, dedicated CSM + TAM, hybrid/on-prem, white-label portal, 99.99% SLA|
+Commercial licensing available upon request. Contact our team for production licensing.
 
 No transaction caps. No feature gates. No per-claim charges. Every tier includes the full platform.
 
-For pricing details and a cost calculator: [cloudhealthoffice.com/pricing](https://cloudhealthoffice.com/pricing)
+Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for pricing details.
 
 ## Licensing
 

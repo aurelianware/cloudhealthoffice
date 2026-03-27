@@ -47,9 +47,9 @@ kubectl apply -f argo-workflows/
 
 | Tier         | Price      | 837 Claims Included |
 |--------------|------------|---------------------|
-| Starter      | $499/mo    | 1,000               |
-| Professional | $1,999/mo  | 10,000              |
-| Enterprise   | $4,999/mo  | 50,000              |
+| Starter      | [Contact sales](mailto:sales@cloudhealthoffice.com) | 1,000               |
+| Professional | [Contact sales](mailto:sales@cloudhealthoffice.com) | 10,000              |
+| Enterprise   | [Contact sales](mailto:sales@cloudhealthoffice.com) | 50,000              |
 
 **Documentation**: [marketplace/README.md](./marketplace/)
 
@@ -469,6 +469,6 @@ BSL 1.1 - See [LICENSE](./LICENSE) for details.
 
 **Cloud Health Office** – The Future of Healthcare EDI Integration
 
-*Open Source | Azure-Native | Production-Grade | HIPAA-Compliant*
+*Source-Available | Azure-Native | Production-Grade | HIPAA-Compliant*
 
 **Just emerged from the void.**

@@ -572,13 +572,6 @@
   <p>Cloud Health Office delivers all four required CMS-0057-F FHIR APIs as a vendor-neutral compliance layer — or as your complete core admin system. You choose the deployment mode. We handle the interoperability.</p>
 </section>
 
-<div class="toggle-wrap">
-  <div class="pricing-toggle">
-    <button class="toggle-btn active" onclick="togglePricing('monthly')">Monthly</button>
-    <button class="toggle-btn" onclick="togglePricing('annual')">Annual <span class="save-badge">Save 15%</span></button>
-  </div>
-</div>
-
 <div class="pricing-grid">
   <!-- STARTER -->
   <div class="pricing-card">
@@ -586,13 +579,9 @@
     <div class="card-title">Standalone</div>
     <div class="card-desc">CHO as your core admin system with built-in CMS-0057-F compliance. For new plans and startups.</div>
 
-    <div class="price-block monthly-price">
-      <div class="platform-price">$999<span class="price-period">/mo</span></div>
+    <div class="price-block">
+      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
     </div>
-    <div class="price-block annual-price">
-      <div class="platform-price">$849<span class="price-period">/mo</span></div>
-    </div>
-    <div class="pmpm-price">+ $0.75 PMPM <span>up to 25K members</span></div>
 
     <hr class="divider">
 
@@ -624,13 +613,9 @@
     <div class="card-title">Single System</div>
     <div class="card-desc">CHO as a compliance layer alongside your existing CAPS. Connect one core admin backend.</div>
 
-    <div class="price-block monthly-price">
-      <div class="platform-price">$2,999<span class="price-period">/mo</span></div>
+    <div class="price-block">
+      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
     </div>
-    <div class="price-block annual-price">
-      <div class="platform-price">$2,549<span class="price-period">/mo</span></div>
-    </div>
-    <div class="pmpm-price">+ $0.50 PMPM <span>25K–150K members</span></div>
 
     <hr class="divider">
 
@@ -666,13 +651,9 @@
     <div class="card-title">Multi-System</div>
     <div class="card-desc">Full adapter library, custom integrations, and dedicated onboarding for complex environments.</div>
 
-    <div class="price-block monthly-price">
-      <div class="platform-price">$7,999<span class="price-period">/mo</span></div>
+    <div class="price-block">
+      <div class="platform-price" style="font-size:1.5rem;">Contact Us</div>
     </div>
-    <div class="price-block annual-price">
-      <div class="platform-price">$6,799<span class="price-period">/mo</span></div>
-    </div>
-    <div class="pmpm-price">+ $0.25 PMPM <span>150K+ members, volume discount</span></div>
 
     <hr class="divider">
 
@@ -707,39 +688,39 @@
 <!-- COST CALCULATOR -->
 <section class="calculator-section">
   <h2>Estimate Your Cost</h2>
-  <p>Select your deployment mode and member count to see your total monthly investment.</p>
+  <p>Pricing is based on your deployment mode and member count. Contact us for a personalized quote.</p>
 
   <div class="calculator">
     <div class="calc-row">
       <div class="calc-field">
         <label>Deployment Mode</label>
-        <select id="calcTier" onchange="calculateCost()">
-          <option value="starter">Starter — Standalone ($999/mo)</option>
-          <option value="professional" selected>Professional — Single System ($2,999/mo)</option>
-          <option value="enterprise">Enterprise — Multi-System ($7,999/mo)</option>
+        <select id="calcTier">
+          <option value="starter">Starter — Standalone</option>
+          <option value="professional" selected>Professional — Single System</option>
+          <option value="enterprise">Enterprise — Multi-System</option>
         </select>
       </div>
       <div class="calc-field">
         <label>Total Members</label>
-        <input type="number" id="calcMembers" value="75000" min="1000" step="1000" onchange="calculateCost()" oninput="calculateCost()">
+        <input type="number" id="calcMembers" value="75000" min="1000" step="1000">
       </div>
     </div>
 
     <div class="calc-results">
       <div class="calc-result-item">
         <div class="calc-result-label">Platform Fee</div>
-        <div class="calc-result-value blue" id="resultPlatform">$2,999</div>
-        <div class="calc-result-sub">per month</div>
+        <div class="calc-result-value blue" id="resultPlatform">Contact us</div>
+        <div class="calc-result-sub">for pricing</div>
       </div>
       <div class="calc-result-item">
         <div class="calc-result-label">PMPM Cost</div>
-        <div class="calc-result-value teal" id="resultPmpm">$37,500</div>
-        <div class="calc-result-sub" id="resultPmpmRate">@ $0.50 PMPM</div>
+        <div class="calc-result-value teal" id="resultPmpm">Contact us</div>
+        <div class="calc-result-sub" id="resultPmpmRate">for pricing</div>
       </div>
       <div class="calc-result-item">
         <div class="calc-result-label">Total Monthly</div>
-        <div class="calc-result-value gold" id="resultTotal">$40,499</div>
-        <div class="calc-result-sub" id="resultAnnual">$485,988/year</div>
+        <div class="calc-result-value gold" id="resultTotal">Contact us</div>
+        <div class="calc-result-sub" id="resultAnnual">for pricing</div>
       </div>
     </div>
   </div>
@@ -849,25 +830,13 @@ function calculateCost() {
 
   const isAnnual = document.querySelector('.toggle-btn.active').textContent.includes('Annual');
 
-  const config = {
-    starter:      { monthly: 999,  annual: 849,  pmpm: 0.75 },
-    professional: { monthly: 2999, annual: 2549, pmpm: 0.50 },
-    enterprise:   { monthly: 7999, annual: 6799, pmpm: 0.25 }
-  };
-
-  const c = config[tier];
-  const platform = isAnnual ? c.annual : c.monthly;
-  const pmpmCost = members * c.pmpm;
-  const total = platform + pmpmCost;
-
-  document.getElementById('resultPlatform').textContent = '$' + platform.toLocaleString();
-  document.getElementById('resultPmpm').textContent = '$' + pmpmCost.toLocaleString();
-  document.getElementById('resultPmpmRate').textContent = '@ $' + c.pmpm.toFixed(2) + ' PMPM';
-  document.getElementById('resultTotal').textContent = '$' + Math.round(total).toLocaleString();
-  document.getElementById('resultAnnual').textContent = '$' + Math.round(total * 12).toLocaleString() + '/year';
+  // Pricing details available upon request
+  document.getElementById('resultPlatform').textContent = 'Contact us';
+  document.getElementById('resultPmpm').textContent = 'Contact us';
+  document.getElementById('resultPmpmRate').textContent = 'for pricing';
+  document.getElementById('resultTotal').textContent = 'Contact us';
+  document.getElementById('resultAnnual').textContent = 'for pricing';
 }
-
-calculateCost();
 </script>
 </body>
 </html>

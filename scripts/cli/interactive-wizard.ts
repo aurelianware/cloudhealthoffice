@@ -32,7 +32,7 @@ export class InteractiveWizard {
     console.log('\n' + chalk.bold(chalk.cyan('═'.repeat(70))));
     console.log(chalk.bold(chalk.cyan('    Cloud Health Office - Interactive Onboarding Wizard')));
     console.log(chalk.bold(chalk.cyan('═'.repeat(70))));
-    console.log(chalk.cyan('\n  Welcome to the #1 open-source Azure-native multi-payer EDI platform'));
+    console.log(chalk.cyan('\n  Welcome to the #1 source-available Azure-native multi-payer EDI platform'));
     console.log(chalk.cyan('  This wizard will guide you through configuration in <5 minutes'));
     console.log(chalk.green('\n  ✓ CMS-0057-F Compliant - Prior Authorization & Interoperability APIs'));
     console.log(chalk.green('  ✓ FHIR R4 - Complete X12 to FHIR transformation'));

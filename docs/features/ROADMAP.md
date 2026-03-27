@@ -96,9 +96,12 @@ This document outlines the strategic vision and planned enhancements for the Clo
 - [ ] Customer billing portal integration
 
 **Pricing Tiers** (Proposed):
-1. **Starter**: $499/month - 1-3 payers, 10K transactions/month
-2. **Professional**: $1,999/month - 4-10 payers, 100K transactions/month
-3. **Enterprise**: $4,999/month - Unlimited payers, unlimited transactions
+1. **Starter**: 1-3 payers, 10K transactions/month
+2. **Professional**: 4-10 payers, 100K transactions/month
+3. **Enterprise**: Unlimited payers, unlimited transactions
+4. **Custom**: Quote-based - White-label, dedicated infrastructure
+
+[Contact sales](mailto:sales@cloudhealthoffice.com) for pricing on all tiers.
 4. **Custom**: Quote-based - White-label, dedicated infrastructure
 
 #### 3. Enhanced Analytics & Dashboards 📊
