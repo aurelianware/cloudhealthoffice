@@ -160,6 +160,15 @@
       "rewrite": "/docs/terminology-guide.html"
     },
     {
+      "route": "/docs/commercial-licensing.html",
+      "redirect": "/docs/commercial-licensing",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/commercial-licensing",
+      "rewrite": "/docs/commercial-licensing.html"
+    },
+    {
       "route": "/login.html",
       "redirect": "/login",
       "statusCode": 301
