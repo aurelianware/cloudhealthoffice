@@ -42,8 +42,8 @@ public class CosmosSystemTextJsonSerializerTests
         using var stream = _serializer.ToStream(doc);
         var json = new StreamReader(stream).ReadToEnd();
 
-        json.Should().Contain("\"active\"");
-        json.Should().NotContain("0");
+        json.Should().Contain("\"status\":\"active\"");
+        json.Should().NotContain("\"status\":0");
     }
 
     [Fact]

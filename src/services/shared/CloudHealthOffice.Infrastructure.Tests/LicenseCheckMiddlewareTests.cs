@@ -26,11 +26,23 @@ public class LicenseCheckMiddlewareTests
             .AddInMemoryCollection(configValues)
             .Build();
 
-        return new LicenseCheckMiddleware(
-            next,
-            logger ?? NullLogger<LicenseCheckMiddleware>.Instance,
-            env.Object,
-            config);
+        // Temporarily clear the env-var so tests are deterministic regardless of CI environment.
+        // The middleware prefers CHO_LICENSE_KEY over IConfiguration, so a set env var would
+        // cause "without license key" test cases to behave as licensed and fail.
+        var savedEnvVar = Environment.GetEnvironmentVariable("CHO_LICENSE_KEY");
+        Environment.SetEnvironmentVariable("CHO_LICENSE_KEY", licenseKey);
+        try
+        {
+            return new LicenseCheckMiddleware(
+                next,
+                logger ?? NullLogger<LicenseCheckMiddleware>.Instance,
+                env.Object,
+                config);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CHO_LICENSE_KEY", savedEnvVar);
+        }
     }
 
     [Fact]
