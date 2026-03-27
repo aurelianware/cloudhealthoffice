@@ -226,7 +226,7 @@ npm run generate -- interactive --output my-config.json --generate
 | **FHIR R4 Native** | Add-on | Planned | Add-on | ✅ Built-in |
 | **Source-Available** | ❌ | ❌ | ❌ | ✅ BSL 1.1 |
 | **Azure Native** | Hybrid | Legacy | Hybrid | ✅ Native |
-| **Annual Cost** | $150K-$500K | $100K-$300K | $200K+ | **$12K-$96K** |
+| **Annual Cost** | $150K-$500K | $100K-$300K | $200K+ | **[Contact sales](mailto:sales@cloudhealthoffice.com)** |
 
 ### Competitive Advantages
 

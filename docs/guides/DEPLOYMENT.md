@@ -269,7 +269,7 @@ stripe products create \
 
 # Create Starter price (with 14-day trial - contact sales for pricing)
 STARTER_PRICE_ID=$(stripe prices create \
-  --unit-amount <contact-sales> \
+  --unit-amount ${STRIPE_PRICE_CENTS:?Set price in cents} \
   --currency usd \
   --recurring[interval]=month \
   --product=<starter-product-id> \
@@ -282,7 +282,7 @@ stripe products create \
 
 # Create Professional price (contact sales for pricing, with 14-day trial)
 PROFESSIONAL_PRICE_ID=$(stripe prices create \
-  --unit-amount <contact-sales> \
+  --unit-amount ${STRIPE_PRICE_CENTS:?Set price in cents} \
   --currency usd \
   --recurring[interval]=month \
   --product=<professional-product-id> \
