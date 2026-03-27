@@ -54,8 +54,8 @@ A commercial license is required when Cloud Health Office is used in a
 | Processing live 837 claims for a health plan | **Yes** |
 | Running capitation payments to providers | **Yes** |
 | Operating Patient Access API for real members | **Yes** |
-| Hosting CHO as part of a consulting engagement | **Yes** |
-| Offering CHO-based services to health plan clients | **Yes** |
+| Hosting Cloud Health Office as part of a consulting engagement | **Yes** |
+| Offering Cloud Health Office-based services to health plan clients | **Yes** |
 
 ---
 

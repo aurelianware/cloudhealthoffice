@@ -13,7 +13,7 @@ namespace CloudHealthOffice.Infrastructure.Licensing;
 ///   - Development/Test environments: no license required, no warnings
 ///   - Production/Staging without a key: service starts normally but logs a
 ///     warning on startup and periodically during requests
-///   - Production/Staging with a valid key: normal operation, no warnings
+///   - Production/Staging with a configured key: normal operation, no warnings
 ///
 /// This is advisory enforcement only — services always start and function
 /// regardless of license status. No feature gating, no phone-home, no time-bomb.
@@ -29,8 +29,8 @@ public class LicenseCheckMiddleware
     private readonly bool _isProduction;
     private readonly bool _hasLicenseKey;
     private readonly string _environment;
-    private DateTime _lastWarning = DateTime.MinValue;
-    private static readonly TimeSpan WarningInterval = TimeSpan.FromHours(1);
+    private long _lastWarningTicks = 0;
+    private static readonly long WarningIntervalTicks = TimeSpan.FromHours(1).Ticks;
 
     public LicenseCheckMiddleware(
         RequestDelegate next,
@@ -60,7 +60,7 @@ public class LicenseCheckMiddleware
         }
         else if (_isProduction && _hasLicenseKey)
         {
-            _logger.LogInformation("Cloud Health Office production license key configured");
+            _logger.LogInformation("Cloud Health Office production license key present");
         }
     }
 
@@ -73,14 +73,26 @@ public class LicenseCheckMiddleware
             return;
         }
 
-        // In production without a key, log periodic warning (not per-request)
-        if (_isProduction && !_hasLicenseKey && DateTime.UtcNow - _lastWarning > WarningInterval)
+        // In production without a key, log periodic warning (not per-request, thread-safe)
+        if (_isProduction && !_hasLicenseKey)
         {
-            _lastWarning = DateTime.UtcNow;
-            _logger.LogWarning(
-                "LICENSING: Cloud Health Office requires a commercial license for production use. " +
-                "Visit https://cloudhealthoffice.com/docs/commercial-licensing or " +
-                "contact licensing@cloudhealthoffice.com");
+            var now = DateTime.UtcNow.Ticks;
+            var last = Interlocked.Read(ref _lastWarningTicks);
+            if (now - last <= WarningIntervalTicks)
+            {
+                // Skip — warned recently
+            }
+            else if (Interlocked.CompareExchange(ref _lastWarningTicks, now, last) != last)
+            {
+                // Another thread won the race — skip
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "LICENSING: Cloud Health Office requires a commercial license for production use. " +
+                    "Visit https://cloudhealthoffice.com/docs/commercial-licensing or " +
+                    "contact licensing@cloudhealthoffice.com");
+            }
         }
 
         // Add license status header (informational, helps admins diagnose)
