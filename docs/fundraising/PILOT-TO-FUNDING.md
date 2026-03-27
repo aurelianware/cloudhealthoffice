@@ -386,7 +386,7 @@ Thanks for considering!
 ### Storytelling Framework
 
 **Before Pilots:**
-> "We've built the only open-source, Azure-native solution for CMS-0057-F compliance. The market needs this—here's our thesis..."
+> "We've built the only source-available, Azure-native solution for CMS-0057-F compliance. The market needs this—here's our thesis..."
 
 **After Pilots:**
 > "We've deployed with 5 health plans, converted 2 to paying customers, and have $100K+ in committed ARR. Here's the proof..."

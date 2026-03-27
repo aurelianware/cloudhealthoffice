@@ -547,7 +547,7 @@ Complete CMS-0057-F compliance with production-ready FHIR R4 APIs, delivered 18 
 
 ### The Sentinel Has Awakened
 
-This is the first production release of Cloud Health Office — the open-source, Azure-native, HIPAA-engineered platform that ends decades of payer EDI pain.
+This is the first production release of Cloud Health Office — the source-available, Azure-native, HIPAA-engineered platform that ends decades of payer EDI pain.
 
 ### Added
 
@@ -618,7 +618,7 @@ This is the first production release of Cloud Health Office — the open-source,
 
 - **Onboarding time reduction**: 6–18 months (legacy) → <1 hour
 - **Professional services cost elimination**: $500k–$2M → $0 (bring-your-own-subscription)
-- **First production-grade claims backend REST correlation** in open source
+- **First production-grade claims backend REST correlation** in source-available healthcare IT
 - **Complete source code transparency**: No black boxes, fully auditable
 - **Azure Marketplace ready**: Prepared for Managed Application publishing
 

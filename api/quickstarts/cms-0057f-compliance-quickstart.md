@@ -251,5 +251,5 @@ npm run validate:x12-schemas
 ---
 
 **Time to CMS compliance: 15 minutes** ✅  
-**Cost to implement: $0 (open source)** 💰  
+**Cost to implement: $0 for non-production use (BSL 1.1)** 💰  
 **Penalty avoidance: Up to $1M** 🚀

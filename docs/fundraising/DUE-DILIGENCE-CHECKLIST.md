@@ -432,7 +432,7 @@ Cloud Health Office Data Room/
 | How do you make money? | [FINANCIAL-MODEL.md](../sales-materials/FINANCIAL-MODEL.md) |
 | What are your unit economics? | [FINANCIAL-MODEL.md](../sales-materials/FINANCIAL-MODEL.md) |
 | What's your pricing strategy? | [SALES-PRODUCT-OVERVIEW.md](../sales-materials/SALES-PRODUCT-OVERVIEW.md) |
-| How does the open source model work? | [README.md](../README.md), [LICENSE](../LICENSE) |
+| How does the source-available licensing model work? | [README.md](../README.md), [LICENSE](../LICENSE) |
 
 ### Market Questions
 

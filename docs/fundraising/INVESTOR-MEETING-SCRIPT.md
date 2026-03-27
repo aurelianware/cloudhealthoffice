@@ -33,7 +33,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 > "Traditional healthcare EDI implementations take 6-18 months and cost $500K to $2M. We've reduced that to under 5 minutes and $36K per year—and we're already 100% compliant with the upcoming CMS mandate."
 
 **Option C: Market Transformation**
-> "The healthcare EDI market is $8 billion and hasn't seen meaningful innovation in 20 years. The CMS-0057-F mandate is forcing every health plan in America to modernize—and we're the only open-source, cloud-native solution ready to help them."
+> "The healthcare EDI market is $8 billion and hasn't seen meaningful innovation in 20 years. The CMS-0057-F mandate is forcing every health plan in America to modernize—and we're the only source-available, cloud-native solution ready to help them."
 
 ### Problem Statement (60-90 seconds)
 
@@ -53,7 +53,7 @@ This script provides a structured framework for 30-minute investor meetings. Ada
 
 ### Platform Overview (60 seconds)
 
-> "Cloud Health Office is the first open-source, Azure-native EDI platform that delivers complete CMS-0057-F compliance. We've pre-built everything a health plan needs:
+> "Cloud Health Office is the first source-available, Azure-native EDI platform that delivers complete CMS-0057-F compliance. We've pre-built everything a health plan needs:
 >
 > - Patient Access API ✓
 > - Provider Access API ✓
@@ -217,7 +217,7 @@ npm run generate -- interactive --output demo-config.json --generate
 > "With this funding, we're adding:
 >
 > - **Sr. AI/ML Engineer** (Q1)—to accelerate our auto-adjudication roadmap
-> - **Developer Advocate** (Q1)—to grow our open source community
+> - **Developer Advocate** (Q1)—to grow our source-available community
 > - **Sr. Backend Engineer** (Q2)—for enterprise scale
 > - **Frontend Tech Lead** (Q2)—for portal development
 >
@@ -278,9 +278,9 @@ npm run generate -- interactive --output demo-config.json --generate
 > "This is a compelling opportunity because:
 >
 > 1. **Market timing**: Regulatory deadline creates $8B+ market urgency
-> 2. **Product-market fit**: We're the only open-source, Azure-native solution
+> 2. **Product-market fit**: We're the only source-available, Azure-native solution
 > 3. **Capital efficiency**: LTV:CAC > 25:1, profitability by Year 3
-> 4. **Defensibility**: Open source community, compliance expertise, Azure partnership
+> 4. **Defensibility**: Source-available community, compliance expertise, Azure partnership
 > 5. **Exit potential**: 8-12x ARR = $108M-$162M at Year 3 metrics"
 
 ---
@@ -297,9 +297,9 @@ npm run generate -- interactive --output demo-config.json --generate
 
 > "The primary competition is traditional enterprise vendors like Change Healthcare and TriZetto. They serve large health plans but struggle with mid-market due to cost and implementation complexity. We're 85% less expensive with 95% faster deployment.
 >
-> There's no other open-source, Azure-native solution in market. Custom development is the other alternative, but that's 18+ months and $2M+ in cost."
+> There's no other source-available, Azure-native solution in market. Custom development is the other alternative, but that's 18+ months and $2M+ in cost."
 
-**Q: Why open source?**
+**Q: Why source-available?**
 
 > "Three reasons:
 > 1. **Trust**: Healthcare organizations can audit everything—critical for compliance

@@ -88,7 +88,7 @@ This template is designed to capture pilot customer success stories in a consist
 
 **Example narrative**:
 
-> After evaluating [X] vendors, [Customer Name] selected Cloud Health Office based on three key differentiators: (1) immediate deployment capability that reduced time-to-compliance from 12+ months to under 90 days, (2) open-source transparency that eliminated vendor lock-in concerns, and (3) total cost of ownership 85% lower than enterprise alternatives.
+> After evaluating [X] vendors, [Customer Name] selected Cloud Health Office based on three key differentiators: (1) immediate deployment capability that reduced time-to-compliance from 12+ months to under 90 days, (2) source-available transparency that eliminated vendor lock-in concerns, and (3) total cost of ownership 85% lower than enterprise alternatives.
 
 ### Implementation Timeline
 
@@ -296,7 +296,7 @@ Example structure:
 
 ## About Cloud Health Office
 
-Cloud Health Office is the industry's first open-source, Azure-native EDI platform delivering complete CMS-0057-F compliance. The platform enables healthcare payers to deploy production-ready HIPAA infrastructure in under 5 minutes, with full FHIR R4 transformation, 60+ enhanced claim status fields, and enterprise-grade security.
+Cloud Health Office is the industry's first source-available, Azure-native EDI platform delivering complete CMS-0057-F compliance. The platform enables healthcare payers to deploy production-ready HIPAA infrastructure in under 5 minutes, with full FHIR R4 transformation, 60+ enhanced claim status fields, and enterprise-grade security.
 
 **Learn More**:
 - Website: [cloudhealthoffice.com](https://cloudhealthoffice.com)

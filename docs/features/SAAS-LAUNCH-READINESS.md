@@ -408,8 +408,8 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 - Faster to market (no multi-tenant complexity)
 - **Revenue**: $100k-250k implementation + $10-15k/month managed services
 
-### **Option C: Open-Source Community Focus (ongoing)**
-- Delay SaaS launch, focus on **open-source adoption**
+### **Option C: Community Focus (ongoing)**
+- Delay SaaS launch, focus on **source-available adoption**
 - Build community (GitHub stars, contributors)
 - Offer **professional services** (consulting, training)
 - **Revenue**: $200-400/hour consulting, $50k+ implementations
@@ -436,7 +436,7 @@ Cloud Health Office has **strong technical foundations** but is **NOT production
 - Strong technical foundation (80% there)
 - Clear market need (legacy platform integration pain is real)
 - Proven architecture (multi-tenant design complete)
-- Differentiated offering (open-source + SaaS flexibility)
+- Differentiated offering (source-available + SaaS flexibility)
 - Experienced team (based on code quality)
 
 **You're 8-12 weeks from first revenue. Let's ship it.** 🚀

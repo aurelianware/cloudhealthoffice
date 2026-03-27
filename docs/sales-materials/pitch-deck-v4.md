@@ -95,7 +95,7 @@
 
 ### Platform Overview
 
-**The first open-source, Azure-native EDI platform with complete CMS-0057-F compliance**
+**The first source-available, Azure-native EDI platform with complete CMS-0057-F compliance**
 
 | Capability | Status |
 |------------|--------|
@@ -265,7 +265,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 1. **10-month head start** on CMS compliance (production-ready today)
 2. **85%+ cost reduction** vs. enterprise vendors
-3. **Open source transparency** eliminates vendor lock-in and security concerns
+3. **Source-available transparency** eliminates vendor lock-in and security concerns
 4. **Azure Marketplace** enables instant evaluation and procurement
 5. **Community-driven** continuous improvement (GitHub, Slack, Office Hours)
 
@@ -683,7 +683,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 
 1. **Market urgency**: Regulatory deadline creates a must-buy event
 2. **Product maturity**: Production-ready, not vaporware
-3. **Competitive moat**: 10-month lead, open source community
+3. **Competitive moat**: 10-month lead, source-available community
 4. **Capital efficiency**: Lean team, profitable in 3 years
 5. **Exit potential**: 8-12x ARR exit multiples (SaaS healthcare IT)
 
@@ -732,7 +732,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 
 **Investment Highlights**:
 - ✅ **Product-market fit**: Beta program validates demand
-- ✅ **Defensible moat**: Open source community + 10-month lead
+- ✅ **Defensible moat**: Source-available community + 10-month lead
 - ✅ **Capital efficient**: LTV:CAC > 25:1, profitability Year 3
 - ✅ **Regulatory tailwind**: $8B+ market with mandatory compliance
 - ✅ **Exit potential**: 8-12x ARR multiples ($108M-$162M valuation at Year 3 $13.5M ARR)

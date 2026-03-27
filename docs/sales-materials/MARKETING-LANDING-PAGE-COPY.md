@@ -10,7 +10,7 @@
 **CMS-0057-F Compliance in 5 Minutes, Not 18 Months**
 
 ### Subheadline
-The open-source, Azure-native EDI platform that delivers complete Patient Access, Provider Access, and Prior Authorization APIs—production-ready from Day 1.
+The source-available, Azure-native EDI platform that delivers complete Patient Access, Provider Access, and Prior Authorization APIs—production-ready from Day 1.
 
 ### Primary CTA
 **[Start Free Pilot]** — 60-day implementation, $0 cost
@@ -303,7 +303,7 @@ On average, **85% lower total cost of ownership**. Enterprise vendors typically 
 
 ### FAQ 10: Is there a community or support available?
 
-**Both.** Paid subscriptions include direct support (email, phone, or 24/7 depending on tier). The open-source community includes GitHub discussions, documentation, and contributor resources. We're also launching monthly community calls and an annual conference in 2026.
+**Both.** Paid subscriptions include direct support (email, phone, or 24/7 depending on tier). The source-available community includes GitHub discussions, documentation, and contributor resources. We're also launching monthly community calls and an annual conference in 2026.
 
 ---
 
@@ -368,7 +368,7 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 
 **Description**: Deploy HIPAA-compliant Patient Access, Provider Access, and Prior Authorization APIs in 5 minutes. Open-source, Azure-native EDI platform with 85% lower cost than enterprise vendors. Start free pilot.
 
-**Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, open source healthcare, HIPAA compliant EDI
+**Keywords**: CMS-0057-F compliance, healthcare EDI, FHIR R4, Patient Access API, Prior Authorization API, Azure healthcare, source-available healthcare, HIPAA compliant EDI
 
 ### Schema Markup
 

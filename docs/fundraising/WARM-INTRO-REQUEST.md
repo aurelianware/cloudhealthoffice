@@ -37,7 +37,7 @@ Hi [Connection Name],
 
 I noticed you're connected to [Partner Name] at [Firm], and I'm hoping you might be able to make an introduction.
 
-I'm the [title] of Cloud Health Office—we've built an open-source, Azure-native platform that helps health plans achieve CMS-0057-F compliance in under 5 minutes instead of the typical 6-18 months.
+I'm the [title] of Cloud Health Office—we've built a source-available, Azure-native platform that helps health plans achieve CMS-0057-F compliance in under 5 minutes instead of the typical 6-18 months.
 
 [Partner Name] at [Firm] seems like a great fit because:
 • [Firm] has invested in healthcare infrastructure (e.g., [portfolio company])
@@ -93,7 +93,7 @@ Subject: Introduction: [Your Name] / Cloud Health Office <> [Partner Name]
 
 I wanted to introduce you to [Your Name], founder of Cloud Health Office.
 
-They've built an open-source, Azure-native EDI platform that helps health plans achieve CMS-0057-F compliance in under 5 minutes—compared to 6-18 months with traditional vendors. With the January 2027 deadline approaching, 900+ health plans face mandatory compliance, and there's no comparable solution in market.
+They've built a source-available, Azure-native EDI platform that helps health plans achieve CMS-0057-F compliance in under 5 minutes—compared to 6-18 months with traditional vendors. With the January 2027 deadline approaching, 900+ health plans face mandatory compliance, and there's no comparable solution in market.
 
 I've been advising them for [X months/time] and have been impressed by:
 • Technical execution (100% CMS-compliant, 193 tests passing)
@@ -117,7 +117,7 @@ Subject: Re: Introduction: [Your Name] / Cloud Health Office <> [Partner Name]
 
 Thanks for connecting, [Advisor Name].
 
-[Partner Name], I'd love to find 30 minutes to share what we're building at Cloud Health Office. We're the only open-source, Azure-native solution helping health plans navigate the CMS-0057-F compliance deadline.
+[Partner Name], I'd love to find 30 minutes to share what we're building at Cloud Health Office. We're the only source-available, Azure-native solution helping health plans navigate the CMS-0057-F compliance deadline.
 
 A few quick highlights:
 • 900+ health plans must comply by January 1, 2027
@@ -158,7 +158,7 @@ Subject: Introduction: Cloud Health Office - Exceptional Seed Opportunity
 
 I wanted to introduce you to a portfolio company that I think would be a strong fit for [Firm].
 
-Cloud Health Office has built the first open-source, Azure-native EDI platform for healthcare payer compliance. With the CMS-0057-F deadline in January 2027, 900+ health plans face mandatory compliance—and there's no viable alternative to their solution.
+Cloud Health Office has built the first source-available, Azure-native EDI platform for healthcare payer compliance. With the CMS-0057-F deadline in January 2027, 900+ health plans face mandatory compliance—and there's no viable alternative to their solution.
 
 Why I invested:
 • Technical execution: 100% CMS-compliant, production-ready platform
@@ -227,7 +227,7 @@ Subject: Vendor Recommendation - Cloud Health Office
 
 I wanted to share a company we've been working with that I think could be a strong investment opportunity.
 
-Cloud Health Office is helping us achieve CMS-0057-F compliance with their open-source, Azure-native platform. What would have taken us 12+ months with a traditional vendor, we've been able to accomplish in [timeframe].
+Cloud Health Office is helping us achieve CMS-0057-F compliance with their source-available, Azure-native platform. What would have taken us 12+ months with a traditional vendor, we've been able to accomplish in [timeframe].
 
 What impressed us:
 • Deployed in [timeframe] vs. typical 6-18 months

@@ -142,7 +142,7 @@ Expected improvements with real services:
 ### Registry Security
 - ✅ GitHub Container Registry (ghcr.io)
 - ✅ Automatic authentication via GITHUB_TOKEN
-- ✅ Public packages for open-source project
+- ✅ Public packages for source-available project
 - ✅ Image signing (future enhancement)
 
 ---

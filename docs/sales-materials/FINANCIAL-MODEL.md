@@ -358,9 +358,9 @@ This financial model outlines Cloud Health Office's path to profitability as a S
 | Factor | Evidence |
 |--------|----------|
 | **Market Timing** | CMS-0057-F deadline creates urgent demand |
-| **Product-Market Fit** | Only open-source, Azure-native solution |
+| **Product-Market Fit** | Only source-available, Azure-native solution |
 | **Capital Efficiency** | LTV:CAC > 25:1, profitability by Year 3 |
-| **Defensibility** | Open source community, compliance expertise |
+| **Defensibility** | Source-available community, compliance expertise |
 | **Scalability** | SaaS model, platform economics |
 
 ### Key Metrics Comparison

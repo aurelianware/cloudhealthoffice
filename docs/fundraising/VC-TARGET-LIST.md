@@ -63,7 +63,7 @@ This document identifies and prioritizes venture capital firms for Cloud Health 
 - ✅ Large market opportunity ($8B+ TAM)
 - ✅ Regulatory tailwind (CMS deadline)
 - ✅ Platform play (multiple products)
-- ✅ Technical differentiation (open source, Azure-native)
+- ✅ Technical differentiation (source-available, Azure-native)
 
 **Red Flags to Address:**
 - ⚠️ Early revenue stage - prepare strong pipeline data
@@ -436,7 +436,7 @@ This document identifies and prioritizes venture capital firms for Cloud Health 
 
 ### For Healthcare VCs
 
-> "Cloud Health Office is the only open-source, Azure-native EDI platform that delivers 100% CMS-0057-F compliance in under 5 minutes. With the January 1, 2027 deadline approaching, 900+ health plans face mandatory compliance—we're positioned to capture this $8B market opportunity."
+> "Cloud Health Office is the only source-available, Azure-native EDI platform that delivers 100% CMS-0057-F compliance in under 5 minutes. With the January 1, 2027 deadline approaching, 900+ health plans face mandatory compliance—we're positioned to capture this $8B market opportunity."
 
 ### For Enterprise SaaS VCs
 
