@@ -59,15 +59,13 @@ A commercial license is required when Cloud Health Office is used in a
 
 ---
 
-## Pricing
+## Commercial Licensing
 
-Commercial licensing is usage-based and scaled to your organization:
+Commercial licensing is available upon request, scaled to your organization's size
+and deployment needs. Contact our team for production licensing.
 
-- **Starter** — single health plan, up to 50K members
-- **Growth** — multiple plans or LOBs, up to 500K members
-- **Enterprise** — unlimited members, dedicated support, custom SLAs
-
-Contact us for pricing tailored to your deployment.
+- **Email:** [licensing@cloudhealthoffice.com](mailto:licensing@cloudhealthoffice.com)
+- **Sales:** [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
 
 ---
 

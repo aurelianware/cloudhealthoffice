@@ -18,9 +18,9 @@
 
         <MudSelect T="string" @bind-Value="_tier" Label="Subscription Tier" Required="true"
                    RequiredError="Subscription tier is required" Class="mb-3">
-            <MudSelectItem Value="@("starter")">Starter ($999/mo)</MudSelectItem>
-            <MudSelectItem Value="@("professional")">Professional ($2,999/mo)</MudSelectItem>
-            <MudSelectItem Value="@("enterprise")">Enterprise ($7,999/mo)</MudSelectItem>
+            <MudSelectItem Value="@("starter")">Starter</MudSelectItem>
+            <MudSelectItem Value="@("professional")">Professional</MudSelectItem>
+            <MudSelectItem Value="@("enterprise")">Enterprise</MudSelectItem>
         </MudSelect>
 
         <MudSelect T="string" @bind-Value="_subscriptionStatus" Label="Subscription Status" Required="true"

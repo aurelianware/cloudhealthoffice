@@ -46,7 +46,7 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
   - **Status**: ⬜ Not Started / 🔄 In Progress / ✅ Complete
   - **Location**: [Link to agreements folder]
 
-- [ ] **Open Source License Review**
+- [ ] **Source-Available License Review**
   - BSL 1.1 license compliance confirmed
   - Third-party dependency license audit
   - No GPL or copyleft contamination

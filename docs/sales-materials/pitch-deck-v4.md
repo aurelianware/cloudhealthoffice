@@ -172,25 +172,24 @@ npm run generate -- interactive --output my-config.json --generate
 
 | Tier | Monthly | Annual (10% off) | Payers | Transactions/Month | Best For |
 |------|---------|------------------|--------|---------------------|----------|
-| **Starter** | $899 | $9,709 | 1-3 | 10,000 | Small payers, pilots, evaluation |
-| **Professional** | $2,999 | $32,389 | 4-10 | 100,000 | Regional plans, production |
-| **Enterprise** | $6,499 | $70,189 | Unlimited | Unlimited | National plans, high volume |
-| **Custom** | Quote | Quote | Unlimited | Unlimited | White-label, dedicated SLA |
+| **Starter** | [Contact sales] | [Contact sales] | 1-3 | 10,000 | Small payers, pilots, evaluation |
+| **Professional** | [Contact sales] | [Contact sales] | 4-10 | 100,000 | Regional plans, production |
+| **Enterprise** | [Contact sales] | [Contact sales] | Unlimited | Unlimited | National plans, high volume |
+| **Custom** | [Contact sales] | [Contact sales] | Unlimited | Unlimited | White-label, dedicated SLA |
 
 **Beta Launch Offer**: 50% discount for 90 days
-- Starter: $449/month
-- Professional: $1,499/month
-- Enterprise: $3,249/month
+- Starter: [Contact sales]
+- Professional: [Contact sales]
+- Enterprise: [Contact sales]
 
 ### Overage Pricing
 
 **Transactions** (Starter & Professional only):
-- $0.05 per transaction over tier limit
-- Example: 15,000 transactions on Starter = $499 + (5,000 × $0.05) = $749
+- [Contact sales] per transaction over tier limit
 
 **Storage** (all tiers):
 - 1TB included per tier
-- $50/TB/month for additional storage beyond 1TB (applies to all tiers including Enterprise)
+- [Contact sales] for additional storage beyond 1TB (applies to all tiers including Enterprise)
 
 **No Transaction Overages on Enterprise**: Unlimited transactions included
 
@@ -256,7 +255,7 @@ npm run generate -- interactive --output my-config.json --generate
 | **CMS-0057-F Ready** | Partial | Partial | Partial | ✅ **Complete** |
 | **Implementation** | 12-18 months | 6-12 months | 12+ months | **< 1 hour** |
 | **FHIR R4 Native** | Add-on ($$$) | Planned 2027 | Add-on | ✅ **Built-in** |
-| **Open Source** | ❌ | ❌ | ❌ | ✅ **BSL 1.1** |
+| **Source-Available** | ❌ | ❌ | ❌ | ✅ **BSL 1.1** |
 | **Azure Native** | Hybrid | Legacy | Hybrid | ✅ **100% Native** |
 | **Annual Cost (Mid-Market)** | $150K-$500K | $100K-$300K | $200K+ | **$21K-$54K** |
 | **Vendor Lock-In** | High | High | High | **None** |
@@ -431,13 +430,13 @@ npm run generate -- interactive --output my-config.json --generate
 **Slots Available**: 10 customers (first-come, first-served)  
 **Discount**: 50% off subscription fee for 90 days
 
-| Tier | Regular Price | Beta Price (50% off) | Annual Savings (if continued) |
-|------|---------------|----------------------|-------------------------------|
-| **Starter** | $499/month | **$249/month** | Save $2,994 in Year 1 |
-| **Professional** | $1,999/month | **$999/month** | Save $11,994 in Year 1 |
-| **Enterprise** | $4,999/month | **$2,499/month** | Save $29,994 in Year 1 |
+| Tier | Beta Benefit |
+|------|-------------|
+| **Starter** | 50% off for 90 days |
+| **Professional** | 50% off for 90 days |
+| **Enterprise** | 50% off for 90 days |
 
-**After Beta**: Transition to standard pricing (or negotiate custom terms for annual commitment)
+**After Beta**: Transition to standard pricing (or negotiate custom terms for annual commitment). Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for details.
 
 ### Beta Customer Benefits
 
@@ -673,7 +672,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 - **Low CAC**: Self-service Azure Marketplace reduces acquisition cost
 - **High LTV**: Annual subscriptions with 115-125% net revenue retention
 - **Fast payback**: 6-month CAC payback period
-- **Viral growth**: Open source community drives adoption
+- **Viral growth**: Source-available community drives adoption
 
 **Result**: Path to profitability in Year 3 without massive capital raise
 

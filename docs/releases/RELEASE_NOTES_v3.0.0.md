@@ -40,7 +40,7 @@ CloudHealthOffice v3.0.0 marks a transformational release that delivers multi-cl
 
 - **Managed Application Plan**: ARM template deploying complete Cloud Health Office stack
 - **SaaS Plan with Meter-Based Billing**: Per-transaction pricing for 837, 278, 275, and FHIR API calls
-- **3-Tier Pricing Structure**: Starter ($499/mo), Professional ($1,999/mo), Enterprise ($4,999/mo)
+- **3-Tier Pricing Structure**: Starter, Professional, Enterprise — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing
 - **Legal Documentation**: Privacy policy, SLA (99.5%-99.95% uptime), and support terms
 
 ### Commercial Launch Materials

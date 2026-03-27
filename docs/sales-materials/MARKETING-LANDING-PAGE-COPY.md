@@ -66,7 +66,7 @@ Every API required by the January 2027 deadline is production-ready today. Patie
 
 **85% Lower Cost Than Enterprise Vendors**
 
-No per-transaction fees. No per-payer licensing. Predictable subscription pricing from $999/month.
+No per-transaction fees. No per-payer licensing. Contact us for commercial licensing.
 
 *"We calculated $2.4M in savings over our enterprise vendor quote."*
 
@@ -77,7 +77,7 @@ No per-transaction fees. No per-payer licensing. Predictable subscription pricin
 
 Full source code access. Audit everything. Customize anything. Join a community of healthcare innovators building the future of interoperability.
 
-*"Open source means we own our destiny. No more vendor surprises."*
+*"Source-available means we own our destiny. No more vendor surprises."*
 
 ### Value Prop 4: Azure-Native Security
 [PLACEHOLDER: Cloud security icon]
@@ -198,8 +198,8 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 
 | Feature | Starter | Professional | Enterprise |
 |---------|---------|--------------|------------|
-| **Monthly Price** | $999 | $2,999 | $7,999 |
-| **Annual Price** | $10,788 | $32,388 | $86,388 |
+| **Monthly Price** | Contact us for commercial licensing | Contact us for commercial licensing | Contact us for commercial licensing |
+| **Annual Price** | Contact us for commercial licensing | Contact us for commercial licensing | Contact us for commercial licensing |
 | | | | |
 | EDI Transactions | 25,000/mo | 150,000/mo | Unlimited |
 | FHIR R4 APIs | ✅ | ✅ | ✅ |
@@ -243,9 +243,9 @@ const daysRemaining = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
 | **Da Vinci Conformant** | PDex, PAS, CRD, DTR implementation guides |
 | **US Core 3.1.1** | FHIR patient profile conformance |
 
-### Open Source Badge
+### Source-Available Badge
 
-**🔓 Open Source**
+**🔓 Source-Available**
 
 BSL 1.1 Licensed | 193 Tests | Community Driven
 
@@ -273,13 +273,13 @@ BSL 1.1 Licensed | 193 Tests | Community Driven
 
 **Yes, 100%.** Cloud Health Office includes production-ready Patient Access API, Provider Access API, Prior Authorization API, and Payer-to-Payer API—all the APIs required by the January 1, 2027 deadline. Our FHIR R4 implementation conforms to US Core 3.1.1 and Da Vinci Implementation Guides (PDex, PAS, CRD, DTR).
 
-### FAQ 3: What does "open source" mean for a healthcare platform?
+### FAQ 3: What does "source-available" mean for a healthcare platform?
 
-It means **full transparency and no vendor lock-in**. The complete source code is available under BSL 1.1 license. You can audit every line, customize for your needs, or fork the project entirely. Your data and configurations are always yours.
+It means **full transparency and no vendor lock-in**. The complete source code is available under the Business Source License 1.1 (BSL 1.1). You can audit every line, customize for your needs, or fork the project entirely. Non-production use is free; production use requires a commercial license. Your data and configurations are always yours.
 
 ### FAQ 4: How does pricing compare to enterprise vendors?
 
-On average, **85% lower total cost of ownership**. Enterprise vendors typically charge $150K-$500K annually plus implementation fees. Cloud Health Office starts at $12K/year with self-service deployment included. No per-transaction or per-payer fees.
+**Significantly lower total cost of ownership.** Enterprise vendors typically charge $150K-$500K annually plus implementation fees. Cloud Health Office offers competitive, usage-based pricing with self-service deployment included. Contact us for commercial licensing details.
 
 ### FAQ 5: Do we need Azure expertise?
 
@@ -421,7 +421,7 @@ CMS-0057-F compliance statements reflect platform capabilities; customers are re
 |----------|-----------|-----------|
 | Lead | Compliance | Cost Savings |
 | Second | Cost | Speed |
-| Third | Open Source | Security |
+| Third | Source-Available | Security |
 
 ---
 

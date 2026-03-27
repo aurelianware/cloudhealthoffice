@@ -279,9 +279,9 @@ Enable production EDI exchanges with major clearinghouses to process real X12 tr
   ```
 
 - [ ] Add usage-based pricing tier in Stripe:
-  - **Starter:** $500/mo base + $0.50/transaction
-  - **Professional:** $2,500/mo base + $0.25/transaction
-  - **Enterprise:** Custom pricing
+  - **Starter:** Contact sales for pricing
+  - **Professional:** Contact sales for pricing
+  - **Enterprise:** Contact sales for pricing
 
 - [ ] Emit Kafka event on transaction complete:
   ```csharp

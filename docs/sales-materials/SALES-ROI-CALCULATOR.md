@@ -59,19 +59,11 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 #### Cloud Health Office Path
 
-| Item | Year 1 | Year 2 | Year 3 | Total |
-|------|--------|--------|--------|-------|
-| Implementation (Self-Service) | $5,000 | — | — | $5,000 |
-| Professional Subscription | $35,988 | $35,988 | $35,988 | $107,964 |
-| Professional Services (Optional) | $10,000 | $5,000 | $5,000 | $20,000 |
-| Support (Included) | $0 | $0 | $0 | $0 |
-| **Annual Total** | **$50,988** | **$40,988** | **$40,988** | **$132,964** |
-
-*Note: Professional tier subscription is $2,999/month ($35,988/year). Annual billing saves 10%: $32,389/year. The table above uses monthly billing for conservative estimation. Subscription price includes all Azure infrastructure costs for Cloud Health Office EDI processing.*
+Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for current subscription pricing. Cloud Health Office pricing is usage-based and includes all Azure infrastructure costs.
 
 **Pricing Model:**
 - **SaaS Model**: Subscription includes ALL infrastructure costs (Azure compute, storage, Service Bus, Application Insights)
-- **Implementation**: One-time self-service setup assistance ($5K)
+- **Implementation**: Self-service setup assistance available
 - **Professional Services**: Optional custom integration work (not required for standard onboarding)
 - **Customer Azure Costs**: Only for customer's own claims system/backend (not included in Cloud Health Office subscription)
 
@@ -81,20 +73,7 @@ This ROI calculator enables healthcare organizations to quantify the financial i
 
 ### TCO Comparison by Organization Size
 
-| Organization Size | Custom Dev | Enterprise Vendor | Cloud Health Office | Savings |
-|-------------------|------------|-------------------|---------------------|-------------|
-| **Small (50K members)** | $1,500,000 | $500,000 | $34,000 (Starter) | 93-98% |
-| **Medium (200K members)** | $2,630,000 | $1,065,000 | $107,000 (Professional) | 90-96% |
-| **Large (500K members)** | $4,500,000 | $2,000,000 | $221,000 (Enterprise) | 89-95% |
-| **Enterprise (1M+ members)** | $8,000,000 | $4,000,000 | $265,000 (Enterprise) | 93-97% |
-
-**Cloud Health Office Cost Calculation (3-Year):**
-- **Small (Starter)**: $9,709/year × 3 years + $5K implementation = $34,127 ≈ $34K
-- **Medium (Professional)**: $32,389/year × 3 years + $5K implementation + optional services = $102,167 ≈ $107K (with some professional services)
-- **Large (Enterprise)**: $70,189/year × 3 years + $10K implementation + premium services = $220,567 ≈ $221K
-- **Enterprise (1M+)**: $70,189/year × 3 years + $15K implementation + extensive services = $265,567 ≈ $265K
-
-These figures represent ALL-IN subscription fees including Azure infrastructure costs, plus typical implementation and optional professional services. Customer's own Azure infrastructure costs for claims systems are separate and similar across all EDI platform options.
+Cloud Health Office delivers **85–98% savings** compared to custom development or enterprise vendor alternatives across all organization sizes. Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for a custom TCO analysis tailored to your organization.
 
 ### Hidden Costs Avoided
 
@@ -187,7 +166,7 @@ Every month of delayed CMS-0057-F compliance carries risk:
 | Project Management | $150,000 | $450,000 |
 | **Total Development Team** | **$1,350,000** | **$4,050,000** |
 
-**Cloud Health Office Alternative**: $36,000-$96,000/year
+**Cloud Health Office Alternative**: Contact us for pricing
 
 **Development Cost Avoided**: **$2,000,000 - $4,000,000**
 
@@ -297,8 +276,8 @@ Annual Platform Savings = Current EDI Spend - Cloud Health Office Subscription
 
 Example:
   Current: $200,000/year
-  Cloud Health Office Professional: $35,988/year
-  Savings: $164,012/year
+  Cloud Health Office: Contact sales for current pricing
+  Savings: Significant reduction vs. legacy platforms
 ```
 
 **2. Labor Efficiency Savings**
@@ -338,68 +317,20 @@ Example:
 Total Annual Benefit = Platform Savings + Labor Savings + Call Center Savings + Risk Value
 ROI = (Total Annual Benefit / Annual Cloud Health Office Investment) × 100
 
-Example:
-  ($114,000 + $1,400,000 + $200,000 + $1,500,000) / $36,000 × 100 = 8,928% ROI
+Contact sales@cloudhealthoffice.com for a personalized ROI analysis.
 ```
 
 ### Sample ROI Scenarios
 
-#### Scenario A: Small Regional Health Plan (75,000 members)
+#### Sample ROI Scenarios
 
-| Input | Value |
-|-------|-------|
-| Annual Claims | 150,000 |
-| Claim Status Queries | 40,000 |
-| Current EDI Spend | $75,000 |
-| IT Staff on EDI | 1.5 FTE |
+ROI varies by organization size. Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for a personalized ROI analysis based on your organization's member count, claims volume, and current EDI spend.
 
-| Benefit Category | Annual Value |
-|------------------|--------------|
-| Platform Savings | $64,000 |
-| Labor Efficiency | $560,000 |
-| Call Center Reduction | $80,000 |
-| Risk Mitigation | $500,000 |
-| **Total Benefit** | **$1,204,000** |
-| **Cloud Health Office Investment** | **$10,788** (Starter: $899/month) |
-| **ROI** | **11,162%** |
-
-#### Scenario B: Mid-Market TPA (300,000 members managed)
-
-| Input | Value |
-|-------|-------|
-| Annual Claims | 750,000 |
-| Claim Status Queries | 180,000 |
-| Current EDI Spend | $200,000 |
-| IT Staff on EDI | 3 FTE |
-
-| Benefit Category | Annual Value |
-|------------------|--------------|
-| Platform Savings | $164,000 |
-| Labor Efficiency | $2,520,000 |
-| Call Center Reduction | $360,000 |
-| Risk Mitigation | $1,500,000 |
-| **Total Benefit** | **$4,544,000** |
-| **Cloud Health Office Investment** | **$35,988** (Professional: $2,999/month) |
-| **ROI** | **12,627%** |
-
-#### Scenario C: Large Medicaid MCO (800,000 members)
-
-| Input | Value |
-|-------|-------|
-| Annual Claims | 2,000,000 |
-| Claim Status Queries | 500,000 |
-| Current EDI Spend | $500,000 |
-| IT Staff on EDI | 6 FTE |
-
-| Benefit Category | Annual Value |
-|------------------|--------------|
-| Platform Savings | $422,000 |
-| Labor Efficiency | $7,000,000 |
-| Call Center Reduction | $1,000,000 |
-| Risk Mitigation | $3,000,000 |
-| **Total Benefit** | **$11,422,000** |
-| **Cloud Health Office Investment** | **$77,988** (Enterprise: $6,499/month) |
-| **ROI** | **14,648%** |
+Typical benefits include:
+- **Platform cost savings** vs. legacy EDI vendors
+- **Labor efficiency gains** from automated claim status processing
+- **Call center cost reduction** through self-service portals
+- **Compliance risk mitigation** for CMS-0057-F deadlines
 
 ---
 
@@ -412,7 +343,7 @@ Example:
 | **Zero Implementation Cost** | Immediate value, no sunk costs |
 | **Instant Deployment** | Time-to-value measured in minutes, not months |
 | **Inclusive Support** | No hidden maintenance fees |
-| **Open Source** | No vendor lock-in, full transparency |
+| **Source-Available** | No vendor lock-in, full transparency |
 | **Continuous Updates** | Compliance maintained automatically |
 | **Predictable Pricing** | Budget certainty, no surprise fees |
 
@@ -420,16 +351,11 @@ Example:
 
 For organizations seeking CMS-0057-F compliance with minimal investment and maximum ROI:
 
-1. **Start with Starter tier** ($899/month or $9,709/year) for evaluation and small payers (1-3 payers, 10K transactions/month)
-2. **Upgrade to Professional** ($2,999/month or $32,389/year) for production and mid-market (4-10 payers, 100K transactions/month)
-3. **Consider Enterprise** ($6,499/month or $70,189/year) for high-volume, unlimited payers/transactions, or dedicated requirements
+1. **Start with evaluation** — non-production use is free under BSL 1.1
+2. **Contact us for production licensing** — tiered pricing scaled to your organization
+3. **All subscription tiers include Azure infrastructure costs** — no separate cloud charges
 
-**Beta Launch Special**: 50% discount for 90 days for first 10 customers
-- Starter: $449/month
-- Professional: $1,499/month
-- Enterprise: $3,249/month
-
-**All subscription tiers include Azure infrastructure costs** - no separate cloud charges
+Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com) for commercial licensing.
 
 **Payback Period**: Less than 1 month for most organizations
 

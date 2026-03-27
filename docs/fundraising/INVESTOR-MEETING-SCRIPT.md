@@ -321,7 +321,7 @@ npm run generate -- interactive --output demo-config.json --generate
 
 > "Four elements:
 > 1. **Time-to-market**: 18+ month head start on CMS compliance
-> 2. **Open source community**: Contributors create network effects
+> 2. **Source-available community**: Contributors create network effects
 > 3. **Azure-native**: Deep platform integration creates switching costs
 > 4. **Compliance expertise**: Domain knowledge is hard to replicate"
 

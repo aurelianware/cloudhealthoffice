@@ -275,9 +275,9 @@ Pay through your existing Azure commitment. No separate vendor contracts, no new
 
 | Tier | Monthly | Best For |
 |------|---------|----------|
-| Starter | $999 | Evaluation, single LOB |
-| Professional | $2,999 | Production, mid-market |
-| Enterprise | $7,999 | High volume, dedicated |
+| Starter | Competitive pricing | Evaluation, single LOB |
+| Professional | Competitive pricing | Production, mid-market |
+| Enterprise | Competitive pricing | High volume, dedicated |
 
 **Try it now:**
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/...)

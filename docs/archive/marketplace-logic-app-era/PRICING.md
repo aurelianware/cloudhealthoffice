@@ -1,8 +1,12 @@
-# Cloud Health Office - Pricing
+# Cloud Health Office - Pricing (ARCHIVED)
 
-**Transparent, predictable pricing. No hidden fees. No vendor lock-in.**
+> **ARCHIVED — This document is outdated and retained for historical reference only.**
+> Public pricing is no longer listed. Contact [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
+> for current commercial licensing information.
 
-Start with a 30-day free trial. Cancel anytime. All plans include HIPAA compliance, BAA agreement, and 24/7 support.
+~~**Transparent, predictable pricing. No hidden fees. No vendor lock-in.**~~
+
+~~Start with a 30-day free trial. Cancel anytime. All plans include HIPAA compliance, BAA agreement, and 24/7 support.~~
 
 ---
 
@@ -10,8 +14,8 @@ Start with a 30-day free trial. Cancel anytime. All plans include HIPAA complian
 
 | Feature | **Starter** | **Professional** | **Enterprise** |
 |---------|-------------|------------------|----------------|
-| **Monthly Price** | **$499** | **$1,999** | **$4,999** |
-| **Annual Price** | $4,990 (2 months free) | $19,990 (2 months free) | $49,990 (2 months free) |
+| **Monthly Price** | [Contact sales](mailto:sales@cloudhealthoffice.com) | [Contact sales](mailto:sales@cloudhealthoffice.com) | [Contact sales](mailto:sales@cloudhealthoffice.com) |
+| **Annual Price** | [Contact sales](mailto:sales@cloudhealthoffice.com) | [Contact sales](mailto:sales@cloudhealthoffice.com) | [Contact sales](mailto:sales@cloudhealthoffice.com) |
 | **Payers Supported** | 1-3 | 4-10 | Unlimited |
 | **Monthly Transactions** | 10,000 | 100,000 | Unlimited |
 | **Storage Included** | 100 GB | 500 GB | 1 TB |
@@ -30,14 +34,11 @@ All plans include generous base limits. If you exceed your plan limits, we charg
 
 | Resource | Overage Price | Billing Increment |
 |----------|---------------|-------------------|
-| **Transactions** | $0.05 per transaction | Per transaction |
-| **Storage** | $50/TB/month | Per GB over limit |
-| **Support Requests** | $200/hour | Ad-hoc requests (non-Enterprise) |
+| **Transactions** | [Contact sales](mailto:sales@cloudhealthoffice.com) | Per transaction |
+| **Storage** | [Contact sales](mailto:sales@cloudhealthoffice.com) | Per GB over limit |
+| **Support Requests** | [Contact sales](mailto:sales@cloudhealthoffice.com) | Ad-hoc requests (non-Enterprise) |
 
-**Example:** Starter plan customer processes 12,000 transactions in a month.
-- Base: 10,000 transactions included
-- Overage: 2,000 transactions × $0.05 = **$100**
-- **Total bill:** $499 + $100 = **$599**
+[Contact sales](mailto:sales@cloudhealthoffice.com) for overage pricing details.
 
 ---
 

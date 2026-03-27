@@ -453,6 +453,6 @@ Attachments:
 ---
 
 **Cloud Health Office** – Advancing Healthcare EDI Integration  
-**Open Source | Azure-Native | HIPAA-Compliant**
+**Source-Available (BSL 1.1) | Azure-Native | HIPAA-Compliant**
 
 © 2025 Aurelianware. All rights reserved.
