@@ -1,6 +1,6 @@
 # Cloud Health Office - Quick Start Guide
 
-Get started with the #1 open-source Azure-native multi-payer EDI platform in **5 minutes**.
+Get started with the #1 source-available Azure-native multi-payer EDI platform in **5 minutes**.
 
 ## 🌐 Self-Service Signup (Fastest - 5 minutes)
 

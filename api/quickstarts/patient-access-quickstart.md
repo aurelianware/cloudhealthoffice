@@ -498,5 +498,5 @@ curl "${FHIR_BASE}/Claim?patient=${PATIENT_ID}&_count=20&_page=1"
 ---
 
 **Time to implement: 30 minutes** ⏱️  
-**Cost: $0 (open source)** 💰  
+**Cost: $0 for non-production use (BSL 1.1)** 💰  
 **Patient satisfaction: ⬆️ 40%** 🎉

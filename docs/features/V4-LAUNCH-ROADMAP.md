@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Cloud Health Office v4.0 represents the evolution from open-source infrastructure to production-ready SaaS platform. With tenant management and Stripe billing now complete, we have 5 major initiatives to finalize the commercial launch.
+Cloud Health Office v4.0 represents the evolution from source-available infrastructure to production-ready SaaS platform. With tenant management and Stripe billing now complete, we have 5 major initiatives to finalize the commercial launch.
 
 **Current State:**
 - ✅ 11 microservices deployed (including new tenant-service)

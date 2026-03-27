@@ -16,7 +16,7 @@ Welcome to the Cloud Health Office platform repository! We’re building a moder
 
 ## About the Project
 
-Cloud Health Office is an open-source healthcare integration platform built by former healthcare payer architects and implementation specialists. We’re solving real problems faced by health plans:
+Cloud Health Office is a source-available healthcare integration platform built by former healthcare payer architects and implementation specialists. We’re solving real problems faced by health plans:
 
 - **CMS-0057-F Compliance**: January 2027 deadline approaching, $2M+ vendor upgrades required
 - **Vendor Lock-in**: Expensive BPaaS dependencies with limited operational control
