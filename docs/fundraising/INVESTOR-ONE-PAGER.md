@@ -4,7 +4,7 @@
 
 ## The Company
 
-**Cloud Health Office** is the first open-source, Azure-native EDI platform delivering complete CMS-0057-F compliance to health plans in under 5 minutes—not 6-18 months.
+**Cloud Health Office** is the first source-available, Azure-native EDI platform delivering complete CMS-0057-F compliance to health plans in under 5 minutes—not 6-18 months.
 
 ---
 
@@ -104,9 +104,9 @@ Experienced leadership in healthcare IT, Azure platform architecture, and SaaS s
 ## Investment Highlights
 
 - **Market Timing**: CMS deadline creates $8B+ market urgency
-- **Product-Market Fit**: Only open-source, Azure-native solution
+- **Product-Market Fit**: Only source-available, Azure-native solution
 - **Capital Efficiency**: LTV:CAC > 25:1, profitability Year 3
-- **Defensibility**: Open source community, compliance expertise, Azure partnership
+- **Defensibility**: Source-available community, compliance expertise, Azure partnership
 - **Exit Potential**: 8-12x ARR ($108M-$162M Year 3)
 
 ---
@@ -125,7 +125,7 @@ Experienced leadership in healthcare IT, Azure platform architecture, and SaaS s
 
 *Cloud Health Office — The inevitable evolution of healthcare EDI*
 
-*Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
 
 ---
 

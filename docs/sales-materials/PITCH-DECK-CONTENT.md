@@ -125,7 +125,7 @@
 
 ### Platform Overview
 
-**The first open-source, Azure-native EDI platform with complete CMS-0057-F compliance**
+**The first source-available, Azure-native EDI platform with complete CMS-0057-F compliance**
 
 | Capability | Status |
 |------------|--------|
@@ -232,7 +232,7 @@ npm run generate -- interactive --output my-config.json --generate
 
 1. **18-month head start** on CMS compliance
 2. **85%+ cost reduction** vs. enterprise vendors
-3. **Open source transparency** eliminates vendor lock-in
+3. **Source-available transparency** eliminates vendor lock-in
 4. **Azure Marketplace** enables instant evaluation
 5. **Community-driven** continuous improvement
 
@@ -248,7 +248,7 @@ npm run generate -- interactive --output my-config.json --generate
 ### Headline
 **Three Pillars of Differentiation**
 
-### 1. Open Source (BSL 1.1)
+### 1. Source-Available (BSL 1.1)
 
 **Why it matters:**
 - **No vendor lock-in**: Full source code access
@@ -602,9 +602,9 @@ Reference: [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md)
 
 **Investment Highlights:**
 - **Market Timing**: CMS deadline creates $8B+ market urgency
-- **Product-Market Fit**: Only open-source, Azure-native solution
+- **Product-Market Fit**: Only source-available, Azure-native solution
 - **Capital Efficiency**: LTV:CAC > 25:1, profitability Year 3
-- **Defensibility**: Open source community, compliance expertise
+- **Defensibility**: Source-available community, compliance expertise
 - **Exit Potential**: 8-12x ARR ($108M-$162M Year 3)
 
 ### For Customers
@@ -639,7 +639,7 @@ Reference: [FINANCIAL-MODEL.md](./FINANCIAL-MODEL.md)
 
 *Cloud Health Office - The inevitable evolution of healthcare EDI*
 
-*Open Source | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
+*Source-Available (BSL 1.1) | Azure-Native | CMS-0057-F Compliant | HIPAA-Ready*
 
 ---
 

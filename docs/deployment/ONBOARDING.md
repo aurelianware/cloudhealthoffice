@@ -2,7 +2,7 @@
 
 ## Welcome to Cloud Health Office
 
-Welcome to **Cloud Health Office** – the premier open-source, Azure-native, multi-payer EDI integration platform. This guide will help you get started with the platform, understand key concepts, and ensure HIPAA-compliant operations.
+Welcome to **Cloud Health Office** – the premier source-available, Azure-native, multi-payer EDI integration platform. This guide will help you get started with the platform, understand key concepts, and ensure HIPAA-compliant operations.
 
 ## Table of Contents
 

@@ -159,7 +159,7 @@ Hi [Host Name],
 
 I'm [Your Name], founder of Cloud Health Office, and I wanted to pitch myself as a guest for [Podcast Name].
 
-With the CMS-0057-F deadline in January 2027, every health plan in America faces mandatory compliance—and most have no clear path to get there. I've been building the first open-source solution to this problem and have unique insights on:
+With the CMS-0057-F deadline in January 2027, every health plan in America faces mandatory compliance—and most have no clear path to get there. I've been building the first source-available solution to this problem and have unique insights on:
 
 • What CMS-0057-F actually requires (and what most health plans misunderstand)
 • Why traditional vendors are failing the mid-market
@@ -194,10 +194,10 @@ Best,
 | Title | Pillar | Target Publication |
 |-------|--------|-------------------|
 | "The $8B Compliance Cliff: Why CMS-0057-F Changes Everything" | CMS Compliance | Healthcare IT News |
-| "Why Open Source is the Future of Healthcare EDI" | Open Source | HIMSS Blog |
+| "Why Source-Available is the Future of Healthcare EDI" | Open Source | HIMSS Blog |
 | "From X12 to FHIR: A Technical Guide to Healthcare Interoperability" | EDI Modernization | Health Data Management |
 | "5 Things Every CIO Should Know About CMS-0057-F" | CMS Compliance | Healthcare Dive |
-| "We Open-Sourced Our Healthcare Platform—Here's What We Learned" | Open Source | TechCrunch |
+| "We Made Our Healthcare Platform Source-Available—Here's What We Learned" | Open Source | TechCrunch |
 
 ---
 
@@ -220,7 +220,7 @@ Best,
 Session Title: "CMS-0057-F in 60 Days: How One Health Plan Achieved Compliance"
 
 Session Description:
-With the January 2027 deadline approaching, health plans face a compliance cliff that threatens penalties, program exclusion, and provider network attrition. This session presents a case study of how [Customer] achieved full CMS-0057-F compliance in under 60 days using an open-source, Azure-native approach.
+With the January 2027 deadline approaching, health plans face a compliance cliff that threatens penalties, program exclusion, and provider network attrition. This session presents a case study of how [Customer] achieved full CMS-0057-F compliance in under 60 days using a source-available, Azure-native approach.
 
 Attendees will learn:
 • The specific requirements of CMS-0057-F and common misconceptions
@@ -231,7 +231,7 @@ Attendees will learn:
 Target Audience: CIOs, IT Directors, Compliance Officers, Enterprise Architects
 
 Speaker Bio:
-[Your Name] is the founder of Cloud Health Office, the first open-source platform for healthcare EDI compliance. With [X] years of experience in healthcare IT, [he/she] has helped [X] health plans achieve CMS compliance.
+[Your Name] is the founder of Cloud Health Office, the first source-available platform for healthcare EDI compliance. With [X] years of experience in healthcare IT, [he/she] has helped [X] health plans achieve CMS compliance.
 ```
 
 ---

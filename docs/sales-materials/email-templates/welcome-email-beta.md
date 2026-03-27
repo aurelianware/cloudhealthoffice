@@ -268,7 +268,7 @@ P.S. We're just a message away. Don't hesitate to reach out with questions - we 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Cloud Health Office
 The Inevitable Evolution of Healthcare EDI
-Open Source | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready
+Source-Available (BSL 1.1) | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready
 
 © 2026 Aurelianware. All rights reserved.
 
@@ -328,6 +328,6 @@ Use these variables when sending the email:
 ---
 
 **Cloud Health Office** – The Inevitable Evolution of Healthcare EDI  
-**Open Source | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready**
+**Source-Available (BSL 1.1) | Azure-Native | HIPAA-Compliant | CMS-0057-F Ready**
 
 © 2026 Aurelianware. All rights reserved.

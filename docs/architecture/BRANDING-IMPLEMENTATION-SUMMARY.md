@@ -197,12 +197,12 @@ Global Sentinel branding enforcement has been successfully implemented across th
 
 **November 21, 2025**
 
-This is the first production release of Cloud Health Office — the open-source, Azure-native, HIPAA-engineered platform that ends decades of payer EDI pain.
+This is the first production release of Cloud Health Office — the source-available, Azure-native, HIPAA-engineered platform that ends decades of payer EDI pain.
 
 #### Key Metrics
 - **Onboarding time**: 6–18 months → <1 hour
 - **Professional services cost**: $500k–$2M → $0
-- **First platform ever** to ship production-grade claims backend REST correlation in open source
+- **First platform ever** to ship production-grade claims backend REST correlation in source-available healthcare IT
 
 #### The Sentinel Has Awakened
 The monolith has landed.  

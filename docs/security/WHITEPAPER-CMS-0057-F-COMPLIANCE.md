@@ -45,12 +45,12 @@ Organizations relying on legacy core administrative processing systems (CAPS) su
 
 ### Strategic Value Proposition
 
-CloudHealthOffice is the #1 open-source Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, CloudHealthOffice provides:
+CloudHealthOffice is the #1 source-available Azure-native multi-payer EDI platform[^AHIP2024]. Unlike legacy vendor lock-in approaches, CloudHealthOffice provides:
 
 - **100% CMS-0057-F compliance** with production-ready FHIR R4 APIs
 - **Backend-agnostic architecture** that integrates with existing claims adjudication systems investments
 - **Zero-code onboarding** completing configuration in under one hour
-- **Open source transparency** eliminating vendor dependency concerns
+- **Source-available transparency** eliminating vendor dependency concerns
 - **Proven ROI** with 5-year TCO savings exceeding $14 million
 
 The transformation does not require wholesale replacement of existing systems. CloudHealthOffice augments and extends claims adjudication systems with the interoperability layer CMS-0057-F demands. Legacy investments remain protected while compliance becomes absolute.
@@ -740,7 +740,7 @@ CloudHealthOffice transforms the CMS-0057-F compliance challenge from an insurmo
 | **CMS Compliance** | 18-36 month uncertain timeline | 100% compliant by January 2027, 90-day deployment |
 | **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
 | **5-Year TCO** | $16.7M+ | $2.6M ($10M+ savings) |
-| **Technical Debt** | Compounds annually | Zero; open-source community-maintained |
+| **Technical Debt** | Compounds annually | Zero; source-available community-maintained |
 
 ### The Strategic Edge
 

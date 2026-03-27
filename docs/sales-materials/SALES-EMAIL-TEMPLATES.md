@@ -40,7 +40,7 @@ The challenge we're hearing from organizations like yours:
 • Custom development requires $2M+ and specialized talent
 • The deadline doesn't move, but budgets and resources are constrained
 
-Cloud Health Office is the industry's first open-source, Azure-native EDI platform with 100% CMS-0057-F compliance built in. What typically takes 12+ months, we deploy in under 5 minutes.
+Cloud Health Office is the industry's first source-available, Azure-native EDI platform with 100% CMS-0057-F compliance built in. What typically takes 12+ months, we deploy in under 5 minutes.
 
 **Quick Proof Points:**
 ✓ Complete FHIR R4 Patient Access API (production-ready)
@@ -122,7 +122,7 @@ I'm reaching out because Cloud Health Office can reduce your EDI platform costs 
 | **3-Year TCO** | **$[X]M** | **$169,000** |
 
 **Why the difference?**
-• Open-source platform (BSL 1.1) - no vendor lock-in
+• Source-available platform (BSL 1.1) - no vendor lock-in
 • Azure-native architecture - infrastructure scales with usage
 • Self-service configuration - deploy in under 1 hour
 • All-inclusive pricing - no per-transaction or per-payer fees
@@ -323,7 +323,7 @@ I'm reaching out because [Company Name]'s expertise in [healthcare IT / system i
 
 **The Opportunity:**
 
-Cloud Health Office is the industry's first open-source, Azure-native EDI platform with complete CMS-0057-F compliance. With the January 2027 compliance deadline approaching, we're seeing unprecedented demand from regional health plans, TPAs, and Medicaid MCOs.
+Cloud Health Office is the industry's first source-available, Azure-native EDI platform with complete CMS-0057-F compliance. With the January 2027 compliance deadline approaching, we're seeing unprecedented demand from regional health plans, TPAs, and Medicaid MCOs.
 
 We're building a partner ecosystem to help us scale—and we want [Company Name] to be part of it.
 
@@ -345,7 +345,7 @@ We're building a partner ecosystem to help us scale—and we want [Company Name]
 
 **Why Partner with Cloud Health Office:**
 • **Market Timing**: CMS deadline creates $8B+ market urgency
-• **Unique Positioning**: Only open-source, Azure-native solution
+• **Unique Positioning**: Only source-available, Azure-native solution
 • **Low Barrier**: < 5 minute deployment = faster customer wins
 • **High Value**: $60K+ average implementation opportunity per customer
 

@@ -7,7 +7,7 @@
 The frontier is now open.  
 Healthcare EDI runs anywhere.
 
-This is the third major release of Cloud Health Office — the open-source, multi-cloud, HIPAA-engineered platform that breaks free from cloud vendor lock-in while maintaining enterprise-grade security and compliance.
+This is the third major release of Cloud Health Office — the source-available, multi-cloud, HIPAA-engineered platform that breaks free from cloud vendor lock-in while maintaining enterprise-grade security and compliance.
 
 ---
 

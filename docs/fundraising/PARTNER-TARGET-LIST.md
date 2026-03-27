@@ -466,7 +466,7 @@ This document identifies and prioritizes strategic partners for Cloud Health Off
 
 ### For Microsoft/Azure
 
-> "Cloud Health Office is the leading open-source, Azure-native EDI platform helping health plans achieve CMS-0057-F compliance. We showcase Azure Healthcare capabilities and drive Azure consumption while serving an underserved market segment."
+> "Cloud Health Office is the leading source-available, Azure-native EDI platform helping health plans achieve CMS-0057-F compliance. We showcase Azure Healthcare capabilities and drive Azure consumption while serving an underserved market segment."
 
 **Key Benefits:**
 - Azure consumption driver

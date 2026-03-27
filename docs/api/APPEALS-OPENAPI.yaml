@@ -20,8 +20,8 @@ info:
     name: Health Plan API Support
     email: api-support@healthplan.com
   license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: BSL 1.1 (Business Source License)
+    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE
 
 servers:
   - url: https://api.healthplan.com/v1
