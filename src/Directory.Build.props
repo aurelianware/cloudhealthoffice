@@ -12,6 +12,6 @@
     <!-- Fix CVE-2024-21907: Newtonsoft.Json Improper Handling vulnerability -->
     <!-- Severity: High | Advisory: GHSA-5crp-9r3c-p9vr -->
     <!-- Minimum safe version: 13.0.3 (fixes deserialization attacks) -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 </Project>
