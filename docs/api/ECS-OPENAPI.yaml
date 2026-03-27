@@ -20,8 +20,8 @@ info:
     name: API Support
     email: api-support@example.com
   license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: BSL 1.1 (Business Source License)
+    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE.html
 
 servers:
   - url: https://{environment}-ecs.cloudhealthoffice.com/api/ecs_summary_search
