@@ -21,7 +21,7 @@ info:
     email: api-support@healthplan.com
   license:
     name: BSL 1.1 (Business Source License)
-    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE.html
+    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE
 
 servers:
   - url: https://api.healthplan.com/v1

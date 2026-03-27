@@ -21,7 +21,7 @@ info:
     email: api-support@example.com
   license:
     name: BSL 1.1 (Business Source License)
-    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE.html
+    url: https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE
 
 servers:
   - url: https://{environment}-ecs.cloudhealthoffice.com/api/ecs_summary_search
