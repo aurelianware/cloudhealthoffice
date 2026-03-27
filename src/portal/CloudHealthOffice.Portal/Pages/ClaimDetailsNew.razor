@@ -1,8 +1,7 @@
 @page "/claims/{ClaimId}"
-@page "/demo/claims/{ClaimId}"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
-@attribute [AllowAnonymous]
+@attribute [Authorize]
 @inject IClaimsService ClaimsService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
@@ -501,7 +500,7 @@
             <MudButton Variant="Variant.Outlined"
                       Color="Color.Default"
                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                      OnClick="@(() => NavigationManager.NavigateTo("/claims-new"))">
+                      OnClick="@(() => NavigationManager.NavigateTo("/claims"))">
                 Back to Claims
             </MudButton>
             <MudStack Row="true" Spacing="2">
@@ -784,7 +783,7 @@
         <MudButton Variant="Variant.Outlined" 
                   Color="Color.Default"
                   StartIcon="@Icons.Material.Filled.ArrowBack"
-                  OnClick="@(() => NavigationManager.NavigateTo("/claims-new"))"
+                  OnClick="@(() => NavigationManager.NavigateTo("/claims"))"
                   Class="mt-4">
             Back to Claims
         </MudButton>
@@ -807,7 +806,7 @@
         _breadcrumbItems = new List<BreadcrumbItem>
         {
             new BreadcrumbItem("Home", href: "/"),
-            new BreadcrumbItem("Claims", href: "/claims-new"),
+            new BreadcrumbItem("Claims", href: "/claims"),
             new BreadcrumbItem($"Claim {ClaimId}", href: null, disabled: true)
         };
 

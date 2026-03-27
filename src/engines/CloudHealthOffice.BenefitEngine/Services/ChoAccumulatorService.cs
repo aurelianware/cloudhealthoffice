@@ -46,6 +46,9 @@ internal class ChoAccumulatorService : IAccumulatorService
     private readonly IBenefitEngineTenantContext _tenantContext;
     private readonly ILogger<ChoAccumulatorService> _logger;
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public ChoAccumulatorService(
         IAccumulatorRepository repository,
         IBenefitEngineTenantContext tenantContext,
@@ -85,7 +88,7 @@ internal class ChoAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId} / {PlanYear}",
-            snapshots.Count, memberId, benefitPlanId, planYear);
+            snapshots.Count, SanitizeForLog(memberId), benefitPlanId, SanitizeForLog(planYear));
 
         return snapshots;
     }
@@ -184,7 +187,7 @@ internal class ChoAccumulatorService : IAccumulatorService
             {
                 _logger.LogInformation(
                     "Claim {ClaimId} already applied to {Scope} accumulator {DocId}. Skipping (idempotent).",
-                    claimId, scope, doc.Id);
+                    SanitizeForLog(claimId), scope, SanitizeForLog(doc.Id));
                 return;
             }
 
@@ -218,7 +221,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 await _repository.UpsertAsync(doc, ct);
                 _logger.LogDebug(
                     "Applied {EntryCount} accumulator entries for claim {ClaimId} to {DocId}",
-                    transaction.Entries.Count, claimId, doc.Id);
+                    transaction.Entries.Count, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
                 return;
             }
             catch (OptimisticConcurrencyException)
@@ -229,13 +232,13 @@ internal class ChoAccumulatorService : IAccumulatorService
                         "Optimistic concurrency failure after {Attempts} retries " +
                         "for claim {ClaimId}, document {DocId}. " +
                         "This may indicate extremely high concurrent adjudication volume.",
-                        MaxConcurrencyRetries, claimId, doc.Id);
+                        MaxConcurrencyRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
                     throw;
                 }
 
                 _logger.LogDebug(
                     "Concurrency conflict on attempt {Attempt}/{Max} for claim {ClaimId}, doc {DocId}. Reloading.",
-                    attempt + 1, MaxConcurrencyRetries, claimId, doc.Id);
+                    attempt + 1, MaxConcurrencyRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
             }
         }
     }

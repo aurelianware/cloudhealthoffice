@@ -33,7 +33,7 @@ NOW, THEREFORE, in consideration of the mutual covenants and agreements set fort
 
 ## 1. DEFINITIONS
 
-**1.1 "Platform"** means the Cloud Health Office Platform software-as-a-service solution, including all Logic Apps workflows, Azure infrastructure, integrations, and related components.
+**1.1 "Platform"** means the Cloud Health Office Platform software-as-a-service solution, including all AKS microservices, Argo Workflows, Azure infrastructure, integrations, and related components.
 
 **1.2 "Services"** means the Platform and all related services provided by Provider under this Agreement, including implementation, support, and maintenance.
 

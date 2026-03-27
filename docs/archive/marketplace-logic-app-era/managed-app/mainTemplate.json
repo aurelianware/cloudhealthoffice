@@ -1,0 +1,492 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Cloud Health Office - Azure Managed Application. Complete HIPAA-compliant EDI integration platform deployed as a managed application.",
+    "author": "Aurelianware",
+    "github": "https://github.com/aurelianware/cloudhealthoffice",
+    "marketplace": {
+      "offerType": "Managed Application",
+      "planId": "cloudhealthoffice-managed",
+      "version": "1.0.0"
+    }
+  },
+  "parameters": {
+    "baseName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 20,
+      "metadata": {
+        "description": "Base name for all resources. Used to generate unique resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "allowedValues": [
+        "eastus",
+        "eastus2",
+        "westus",
+        "westus2",
+        "centralus",
+        "northcentralus",
+        "southcentralus"
+      ],
+      "metadata": {
+        "description": "Azure region for core resources."
+      }
+    },
+    "deploymentTier": {
+      "type": "string",
+      "defaultValue": "Standard",
+      "allowedValues": [
+        "Sandbox",
+        "Standard",
+        "Enterprise"
+      ],
+      "metadata": {
+        "description": "Deployment tier determines resource SKUs and features."
+      }
+    },
+    "sftpHost": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SFTP host for EDI file exchange (e.g., sftp.clearinghouse.example.com). Leave empty for sandbox mode."
+      }
+    },
+    "sftpUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SFTP username for authentication. Leave empty for sandbox mode."
+      }
+    },
+    "sftpPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SFTP password (leave empty for demo/sandbox mode)."
+      }
+    },
+    "enableB2B": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable X12 B2B Integration Account for EDI processing."
+      }
+    },
+    "enableFhirIntegration": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable FHIR R4 integration for CMS-0057-F compliance."
+      }
+    },
+    "enableCosmosDb": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Cosmos DB for Prior Auth and Provider Directory APIs."
+      }
+    },
+    "adminEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Administrator email for notifications and alerts."
+      }
+    },
+    "organizationName": {
+      "type": "string",
+      "metadata": {
+        "description": "Organization name for branding and compliance documentation."
+      }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[uniqueString(resourceGroup().id)]",
+    "storageAccountName": "[concat('cho', variables('uniqueSuffix'))]",
+    "serviceBusName": "[concat(parameters('baseName'), '-sb-', variables('uniqueSuffix'))]",
+    "integrationAccountName": "[concat(parameters('baseName'), '-ia')]",
+    "appInsightsName": "[concat(parameters('baseName'), '-ai')]",
+    "logAnalyticsName": "[concat(parameters('baseName'), '-law')]",
+    "keyVaultName": "[concat(parameters('baseName'), '-kv-', take(variables('uniqueSuffix'), 8))]",
+    "cosmosDbAccountName": "[concat(parameters('baseName'), '-cosmos-', variables('uniqueSuffix'))]",
+    "iaSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Free', if(equals(parameters('deploymentTier'), 'Standard'), 'Basic', 'Standard'))]",
+    "storageSku": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 'Standard_LRS', if(equals(parameters('deploymentTier'), 'Standard'), 'Standard_GRS', 'Standard_RAGRS'))]",
+    "cosmosDbThroughput": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 400, if(equals(parameters('deploymentTier'), 'Standard'), 800, 1600))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[variables('storageSku')]"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "isHnsEnabled": true,
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "services": {
+            "blob": {
+              "enabled": true
+            },
+            "file": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "bypass": "AzureServices"
+        }
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true",
+        "Tier": "[parameters('deploymentTier')]",
+        "Organization": "[parameters('organizationName')]"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[concat(variables('storageAccountName'), '/default/hipaa-attachments')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "publicAccess": "None"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-01-01",
+      "name": "[concat(variables('storageAccountName'), '/default/edi-archive')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "publicAccess": "None"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[variables('serviceBusName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2"
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/attachments-in')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/edi-278')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/rfai-requests')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/edi-837-claims')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/prior-auth-requests')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2022-10-01-preview",
+      "name": "[concat(variables('serviceBusName'), '/prior-auth-responses')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusName'))]"
+      ],
+      "properties": {
+        "maxSizeInMegabytes": 1024,
+        "requiresDuplicateDetection": true,
+        "defaultMessageTimeToLive": "P14D"
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": "[if(equals(parameters('deploymentTier'), 'Sandbox'), 30, 365)]"
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "[if(equals(parameters('deploymentTier'), 'Enterprise'), 'premium', 'standard')]"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "enabledForDeployment": true,
+        "enabledForTemplateDeployment": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enableRbacAuthorization": true,
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "bypass": "AzureServices"
+        }
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "condition": "[parameters('enableB2B')]",
+      "type": "Microsoft.Logic/integrationAccounts",
+      "apiVersion": "2019-05-01",
+      "name": "[variables('integrationAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[variables('iaSku')]"
+      },
+      "properties": {},
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "condition": "[parameters('enableCosmosDb')]",
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2023-11-15",
+      "name": "[variables('cosmosDbAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": "[equals(parameters('deploymentTier'), 'Enterprise')]"
+          }
+        ],
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session"
+        },
+        "enableAutomaticFailover": "[equals(parameters('deploymentTier'), 'Enterprise')]"
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    },
+    {
+      "condition": "[parameters('enableCosmosDb')]",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "apiVersion": "2023-11-15",
+      "name": "[concat(variables('cosmosDbAccountName'), '/cloudhealthoffice')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosDbAccountName'))]"
+      ],
+      "properties": {
+        "resource": {
+          "id": "cloudhealthoffice"
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableCosmosDb')]",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2023-11-15",
+      "name": "[concat(variables('cosmosDbAccountName'), '/cloudhealthoffice/prior-authorizations')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosDbAccountName'), 'cloudhealthoffice')]"
+      ],
+      "properties": {
+        "resource": {
+          "id": "prior-authorizations",
+          "partitionKey": {
+            "paths": ["/payerId"],
+            "kind": "Hash"
+          }
+        },
+        "options": {
+          "throughput": "[variables('cosmosDbThroughput')]"
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableCosmosDb')]",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2023-11-15",
+      "name": "[concat(variables('cosmosDbAccountName'), '/cloudhealthoffice/provider-directory')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosDbAccountName'), 'cloudhealthoffice')]"
+      ],
+      "properties": {
+        "resource": {
+          "id": "provider-directory",
+          "partitionKey": {
+            "paths": ["/npi"],
+            "kind": "Hash"
+          }
+        },
+        "options": {
+          "throughput": "[variables('cosmosDbThroughput')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2023-01-01",
+      "name": "[concat(parameters('baseName'), '-alerts')]",
+      "location": "Global",
+      "properties": {
+        "groupShortName": "CHOAlerts",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "AdminEmail",
+            "emailAddress": "[parameters('adminEmail')]",
+            "useCommonAlertSchema": true
+          }
+        ]
+      },
+      "tags": {
+        "Project": "CloudHealthOffice",
+        "ManagedApp": "true"
+      }
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "serviceBusNamespace": {
+      "type": "string",
+      "value": "[variables('serviceBusName')]"
+    },
+    "integrationAccountName": {
+      "type": "string",
+      "value": "[if(parameters('enableB2B'), variables('integrationAccountName'), 'Not deployed')]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[variables('keyVaultName')]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), '2023-07-01').vaultUri]"
+    },
+    "applicationInsightsName": {
+      "type": "string",
+      "value": "[variables('appInsightsName')]"
+    },
+    "cosmosDbAccountName": {
+      "type": "string",
+      "value": "[if(parameters('enableCosmosDb'), variables('cosmosDbAccountName'), 'Not deployed')]"
+    },
+    "deploymentTier": {
+      "type": "string",
+      "value": "[parameters('deploymentTier')]"
+    },
+    "nextSteps": {
+      "type": "string",
+      "value": "1. Deploy Argo Workflows to the AKS cluster. 2. Configure X12 schemas in the Integration Account. 3. Set up SFTP credentials in Key Vault. 4. Review the monitoring dashboard in Application Insights."
+    }
+  }
+}

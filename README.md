@@ -1,16 +1,14 @@
-<div align="center">
+# Cloud Health Office
 
 ![Cloud Health Office](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
-
-# Cloud Health Office
 
 **The payer platform that starts where your core admin stops — and grows from there.**
 
 CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engines.
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
-[![Version](https://img.shields.io/badge/version-v4.0.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0)
-[![Tests](https://img.shields.io/badge/tests-1018%20passing-brightgreen)](./tests/)
+[![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
+[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
@@ -31,62 +29,28 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 ## How It Works
 
-```
-                         ┌──────────────────────┐
-                         │   Your Core Admin     │
-                         │  (QNXT, FACETS, etc.) │
-                         └──────────┬───────────┘
-                                    │
-┌───────────────────────────────────┼───────────────────────────────────┐
-│                     Cloud Health Office                               │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────────┐  │
-│  │                      API Gateway (YARP)                         │  │
-│  ├──────────┬───────────┬───────────┬───────────┬─────────────────┤  │
-│  │  Claims  │ Eligiblty │   Auth    │  Benefit  │    Provider     │  │
-│  │ Service  │  Service  │  Service  │  Engine   │    Service      │  │
-│  │ (837/835)│ (270/271) │   (278)   │           │                 │  │
-│  ├──────────┴───────────┴───────────┴───────────┴─────────────────┤  │
-│  │              Argo Workflows — Adjudication DAG                  │  │
-│  │  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌────────┐ │  │
-│  │  │ Verify  │→│ Validate │→│   Get    │→│ Price  │→│  Pay   │ │  │
-│  │  │Coverage │ │ Provider │ │ Benefits │ │ Claim  │ │ Claim  │ │  │
-│  │  └─────────┘ └──────────┘ └──────────┘ └────────┘ └────────┘ │  │
-│  ├──────────────────────────────────────────────────────────────────┤ │
-│  │  Argo Events — SFTP polling, Kafka triggers, EDI ingest         │ │
-│  ├──────────────────────────────────────────────────────────────────┤ │
-│  │  X12 Parsers (Python) │ FHIR Mappers (TS) │ 999/277 Gen (.NET) │ │
-│  ├──────────────────────────────────────────────────────────────────┤ │
-│  │              MongoDB / Cosmos DB — Multi-tenant                  │ │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│                                                                       │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐     │
-│  │  Availity  │  │   Change   │  │   Optum    │  │  Inovalon  │     │
-│  │            │  │ Healthcare │  │            │  │            │     │
-│  └────────────┘  └────────────┘  └────────────┘  └────────────┘     │
-└───────────────────────────────────────────────────────────────────────┘
-```
+![Architecture](docs/images/architecture-diagram.svg)
 
 ## Platform
 
-<div align="center">
-
 ![Platform Overview](src/site/graphics/platform-overview.svg)
 
-</div>
-
-|Component          |Count    |Details                                                                        |
-|-------------------|---------|-------------------------------------------------------------------------------|
-|Microservices      |22       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                          |
-|Calculation Engines|6        |Benefit/accumulator, fee schedule, NCCI edits, COB, risk adjustment, encounter |
-|X12 Parsers        |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                     |
-|FHIR APIs          |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory|
-|Argo Workflows     |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                       |
-|Portal Pages       |37       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                   |
-|CI/CD Workflows    |20       |GitHub Actions — build, test, deploy, security scan                            |
-|Claims Scrubbing   |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits             |
+|Component           |Count    |Details                                                                                                    |
+|---------------------|---------|-----------------------------------------------------------------------------------------------------------|
+|Microservices        |28       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
+|Calculation Engines  |9        |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store        |
+|X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
+|FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
+|Argo Workflows       |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                                                    |
+|Portal Pages         |50       |Blazor Server + MudBlazor, Microsoft Entra ID (multi-tenant)                                                |
+|CI/CD Workflows      |18       |GitHub Actions — build, test, deploy, security scan                                                         |
+|Claims Scrubbing     |20+ rules|Data completeness, ICD-10/CPT format, NPI Luhn, POS, filing limits                                         |
+|Automated Tests      |973      |C# xUnit, TypeScript Jest, Python pytest                                                                    |
+|Lines of Code        |~204,000 |C#, TypeScript, Razor, Python, YAML, Shell, PowerShell (excludes docs)                                      |
 
 ### Services
+
+![Services Overview](docs/images/services-overview.svg)
 
 |Service                  |Purpose                                      |X12 Transactions|
 |-------------------------|---------------------------------------------|----------------|
@@ -110,10 +74,18 @@ Start with compliance. Expand into claims. Move at your own pace.
 |encounter-service        |Encounter data submission and reporting       |—               |
 |fhir-service             |FHIR R4 API gateway and resource serving      |—               |
 |premium-billing-service  |Premium billing and invoicing                 |—               |
+|capitation-service       |PMPM capitation payments to providers         |835             |
 |risk-adjustment-service  |HCC risk score calculation and submission     |—               |
 |smart-auth-service       |SMART on FHIR authorization                   |—               |
+|pricing-api              |Medicare/custom fee schedule repricing       |—               |
+|ar-service               |GL accounts, AR balances, cash posting, adjustments|—          |
+|terminology-service      |SNOMED↔ICD-10/CPT/HCPCS terminology crosswalk (FHIR $translate)|278  |
+|provider-contracts-service|Provider contract master management          |—               |
+|ffs-service              |Fee-for-service rate configuration            |—               |
 
 ### Calculation Engines
+
+![Calculation Engines](docs/images/calculation-engines.svg)
 
 |Engine              |Purpose                                                                                                     |
 |--------------------|------------------------------------------------------------------------------------------------------------|
@@ -123,14 +95,19 @@ Start with compliance. Expand into claims. Move at your own pace.
 |CobEngine           |Coordination of benefits, payer order determination, primary/secondary/tertiary payment split               |
 |RiskAdjustmentEngine|ICD-10 to HCC mapping, hierarchy resolution, CMS-HCC risk score calculation                                 |
 |EncounterEngine     |Encounter data transformation and batch submission for Medicaid/MA reporting                                |
+|ClaimsScrubEngine   |Pre-adjudication validation: 20+ rules across 6 categories (data completeness, code validation, date logic, amount logic, provider validation, modifier validation)|
+|OperatingMode       |Per-engine, per-tenant Augment/Replace mode toggle with AugmentResult&lt;T&gt; for parallel-run comparison against legacy CAPS|
+|DocumentStore       |IDocumentStore abstraction with Azure Blob Storage + InMemory providers for attachment and document management|
+
+### Claims Adjudication Pipeline
+
+![Adjudication Pipeline](docs/images/adjudication-pipeline.svg)
+
+The adjudication pipeline processes each claim through eight stages with sub-second end-to-end latency. In Augment mode, the pipeline runs in parallel with your legacy CAPS and logs discrepancies without affecting production claims processing.
 
 ### CMS-0057-F Compliance
 
-<div align="center">
-
 ![CMS-0057-F Compliance](src/site/graphics/cms-0057f-compliance.svg)
-
-</div>
 
 Cloud Health Office implements the CMS Interoperability and Prior Authorization Final Rule ahead of the January 2027 deadline.
 
@@ -143,15 +120,43 @@ Cloud Health Office implements the CMS Interoperability and Prior Authorization 
 |Provider Directory API |FHIR R4 — Practitioner, Organization, Location, Network|
 |USCDI v1/v2            |US Core profiles, Da Vinci Implementation Guides       |
 
+### Augment / Replace Architecture
+
+![Operating Mode](docs/images/operating-mode.svg)
+
+Every CHO engine can run in one of two modes, configured per-tenant:
+
+**Augment:** CHO processes claims alongside your existing CAPS. Both systems compute results independently. CHO logs discrepancies but your legacy system remains authoritative. This is how every deployment starts.
+
+**Replace:** CHO is the authoritative system for that engine. Your legacy system is no longer used for that function.
+
+Toggle engines independently — run benefit calculation in Augment while NCCI edits run in Replace. Migrate at your own pace, one engine at a time.
+
+### Operations Portal
+
+Cloud Health Office includes a full operations portal built with Blazor Server and MudBlazor, secured by Microsoft Entra ID with multi-tenant authentication. The portal is organized into six functional areas:
+
+**Operations:** Dashboard with KPI cards (total claims, approval rate, processing time, plan paid), claims-by-status donut chart, recent claims and authorizations tables, operational alerts (work queue counts, pending RFAIs, appeals due this week), EDI transaction volume, and system health indicators. Claims management with advanced search. Claims work queues organized by pend reason (NCCI failures, missing auth, provider not contracted, COB required, medical review) with examiner assignment and priority tracking. Eligibility verification (270/271), prior authorization management (278), and appeals tracking with regulatory deadline monitoring (30-day standard, 72-hour expedited for Medicare Advantage).
+
+**Members & Providers:** Search-first member lookup enforcing HIPAA minimum necessary — no data displayed until explicit search. Member detail with demographics, coverage history, PCP assignment, 834 enrollment transactions, and plan year accumulator display showing deductible and OOP max progress bars. Provider directory with credentialing status, network participation, contract details, and performance metrics. Enrollment operations dashboard for daily 834 file processing.
+
+**Configuration:** Benefit plan management (HMO, PPO, HDHP, Medicaid MCO) with service category cost-sharing rules. Sponsor/employer group management. Trading partner configuration. Reference data (ICD-10, CPT, HCPCS, Revenue, POS codes).
+
+**Finance:** Payment run management with 835 ERA generation and batch processing status. Premium billing with billing cycle management, sponsor invoicing, mid-month proration, aging reports, and delinquency tracking. Capitation management with provider contract administration (age-sex rate tiers, risk adjustment, quality withholds, stop-loss), monthly capitation run execution, statement review with member-level PMPM breakdowns, approve/hold/void workflows, and batch disbursement via NACHA ACH credits or Stripe Connect.
+
+**Monitoring:** Workflow monitor with real-time SignalR updates from Argo Workflows, claims adjudication pipeline timeline with per-step latency, and failed workflow retry. EDI operations center. Reports.
+
+**Admin:** Settings with Operating Mode configuration display. Correspondence center with adverse determination letters, RFAI tracking, EOB statements, and provider payment notices.
+
 ## Typical Adoption Path
 
 Most health plans follow a phased approach:
 
-**Phase 1 — Compliance (weeks):** Deploy FHIR R4 APIs alongside your existing core admin to satisfy CMS-0057-F. Your core system continues handling all claims and enrollment. CHO handles the API layer and EDI-to-FHIR transformation.
+**Phase 1 — Compliance (weeks):** Deploy FHIR R4 APIs alongside your existing CAPS to satisfy CMS-0057-F. All CHO engines run in **Augment mode** — computing results in parallel with your legacy system, logging discrepancies, but leaving your core system authoritative. Your operations team uses the portal to monitor processing and verify results match.
 
-**Phase 2 — EDI Modernization (months):** Route clearinghouse EDI through CHO for multi-clearinghouse failover, real-time 276/277 status, and medical attachment (275/RFAI) workflows. Claims still adjudicate in your core system.
+**Phase 2 — Validation (months):** Expand EDI routing through CHO for multi-clearinghouse failover, real-time 276/277 status, and 275/RFAI workflows. As confidence builds, toggle individual engines from Augment to **Replace mode** — starting with NCCI edits and claims scrubbing (lowest risk), then fee schedule pricing, then benefit calculation. Each engine can be toggled independently per tenant.
 
-**Phase 3 — Workload Migration (your timeline):** Begin shifting adjudication workloads — claims scrubbing, benefit calculation, NCCI edits, COB — into CHO’s engines. Migrate service by service, not all-or-nothing.
+**Phase 3 — Full Operations (your timeline):** With engines validated and operations staff trained on the portal, migrate remaining workloads. The portal provides the full operational workflow: claims processing, work queues, member services, prior authorization, appeals, enrollment, premium billing, and provider management. Your legacy CAPS becomes optional.
 
 ## Quick Start
 
@@ -169,18 +174,36 @@ docker-compose up -d
 curl http://localhost:5000/health
 ```
 
+### Full Development Stack
+
+To bring up the complete backend (all 28 services + MongoDB + Redis + seed data):
+
+```bash
+# Start everything
+docker compose -f docker-compose.development.yml up -d
+
+# Wait for health checks to pass
+docker compose -f docker-compose.development.yml ps
+
+# Verify seed data loaded
+docker compose -f docker-compose.development.yml exec mongodb \
+  mongosh cloudhealthoffice --eval 'db.Claims.countDocuments()'
+```
+
+Services are available at `http://localhost:5001` through `5012` (Swagger UI at `/swagger` on each). See [docker-compose.development.yml](docker-compose.development.yml) for the full port map and configuration. Copy `.env.example` to `.env` to customise credentials.
+
 Or deploy to Azure:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fmain.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fmain%2Finfrastructure%2Fazure%2Fazure%2Fazuredeploy.json)
 
 ## Project Structure
 
 ```
 cloudhealthoffice/
 ├── src/
-│   ├── services/           # 22 C# microservices
+│   ├── services/           # 28 C# microservices
 │   ├── engines/            # Calculation engines (Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter)
-│   ├── portal/             # Blazor Server portal (MudBlazor)
+│   ├── portal/             # Blazor Server portal (50 pages, MudBlazor, Entra ID multi-tenant)
 │   ├── site/               # Marketing site (cloudhealthoffice.com)
 │   ├── fhir/               # FHIR R4 APIs and X12→FHIR mappers
 │   ├── api-docs/           # Swagger UI (api.cloudhealthoffice.com)
@@ -211,8 +234,21 @@ cloudhealthoffice/
 **Orchestration:** Argo Workflows + Argo Events (Kubernetes-native)
 **Infrastructure:** Azure (AKS, ACR, Key Vault, Cosmos DB), Helm, Bicep IaC
 **EDI:** X12 5010 (270/271, 275, 276/277, 278, 834, 835, 837, 824, 999)
-**FHIR:** R4, US Core, Da Vinci IG (PDex, PAS, CRD, DTR, HRex)
-**CI/CD:** GitHub Actions (20 workflows), Codecov, Dependabot, Gitleaks
+**FHIR:** R4, US Core 3.1.1+, Da Vinci IG (PDex, PAS, CRD, DTR, HRex), SMART on FHIR, content negotiation
+**CI/CD:** GitHub Actions (18 workflows), Codecov, Dependabot, Gitleaks
+
+### Codebase Scale
+
+|Category         |Lines    |Breakdown                                                       |
+|-----------------|---------|----------------------------------------------------------------|
+|Application Code |139,000  |C# 86.8K, TypeScript 24.4K, Razor 19.8K, Python 6.7K, JS 2.6K |
+|Web / UI         |9,500    |HTML/CSHTML 6.2K, CSS 3.4K                                     |
+|Infrastructure   |55,000   |YAML 27.2K, JSON 15.4K, Shell 8.3K, PowerShell 3.2K, Docker 1.3K|
+|Documentation    |111,000  |Architecture, ADRs, deployment guides, features, security, sales|
+|**Total**        |**~315,000**|                                                             |
+
+973 automated tests across C# (xUnit), TypeScript (Jest), and Python (pytest).
+Built by a solo founder with 25+ years of payer IT experience and AI-assisted development.
 
 ## Deployment Options
 
@@ -238,6 +274,16 @@ cloudhealthoffice/
 
 **Medicaid MCOs** facing CMS-0057-F deadlines without the budget or runway for a core system upgrade. **Medicare Advantage plans** exiting BPaaS arrangements and building internal operations capability. **Commercial payers** modernizing EDI infrastructure and adding FHIR APIs. **Health plan startups** that need a production-grade payer platform from day one.
 
+## Channel Partners
+
+Cloud Health Office is designed for channel distribution through implementation partners who have existing health plan client relationships.
+
+**For implementation firms:** CHO gives you a platform to sell alongside your consulting services. The subscription revenue goes to Aurelianware; the implementation services revenue — benefit plan configuration, provider network setup, EDI trading partner onboarding, parallel-run validation, engine-by-engine cutover — goes to you.
+
+**For health plans:** Your existing implementation partner deploys CHO alongside your current CAPS in 90 days. They configure it using the same domain expertise they've always applied to your system. You get CMS-0057-F compliance without disrupting operations.
+
+Contact [partners@cloudhealthoffice.com](mailto:partners@cloudhealthoffice.com) to discuss channel partnership opportunities.
+
 ## Pricing
 
 Cloud Health Office uses per-member-per-month (PMPM) pricing that scales with your health plan.
@@ -252,16 +298,22 @@ No transaction caps. No feature gates. No per-claim charges. Every tier includes
 
 For pricing details and a cost calculator: [cloudhealthoffice.com/pricing](https://cloudhealthoffice.com/pricing)
 
-## License
+## Licensing
 
-Cloud Health Office is licensed under the [Business Source License 1.1](./LICENSE).
+Cloud Health Office is a **source-available** platform licensed under the [Business Source License 1.1](./LICENSE). It is **not** open source software.
+
+- **Non-production use is free.** You may use Cloud Health Office at no cost for evaluation, development, testing, staging, and proof-of-concept work.
+- **A paid commercial license is required for production use.** Any deployment serving live members, processing real claims, or generating revenue requires a subscription from Aurelianware, Inc.
 
 |                          |                                                              |
 |--------------------------|--------------------------------------------------------------|
+|**License**               |Business Source License 1.1 (BSL 1.1)                        |
 |**Free for**              |Non-production use — evaluation, development, testing, staging|
-|**Requires a license for**|Production use                                                |
+|**Requires a license for**|Production deployment                                         |
 |**Converts to**           |Apache 2.0 on 2030-03-08                                      |
 |**Licensor**              |Aurelianware, Inc                                             |
+
+For full license terms, see [LICENSE](./LICENSE). For a plain-language overview, see [LICENSE_SUMMARY.md](./LICENSE_SUMMARY.md).
 
 For commercial licensing: [sales@cloudhealthoffice.com](mailto:sales@cloudhealthoffice.com)
 

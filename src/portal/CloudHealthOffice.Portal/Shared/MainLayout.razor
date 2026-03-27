@@ -4,6 +4,10 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITenantContextService TenantContextService
 @inject NavigationManager Navigation
+@inject IUserContextService UserContextService
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="_theme" />
 <MudDialogProvider />
@@ -12,31 +16,77 @@
 <MudLayout>
     <MudAppBar Elevation="3" Dense="true" Style="border-bottom: 1px solid rgba(0, 255, 255, 0.3);">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Primary" Edge="Edge.Start" OnClick="@ToggleDrawer" />
-        
-        <!-- The Sentinel Logo -->
-        <img src="/images/logo-cloudhealthoffice-sentinel-primary.svg"
-             alt="Cloud Health Office - The Sentinel"
-             class="appbar-logo" />
 
         <MudText Typo="Typo.h6" Class="appbar-title">
             Cloud Health Office
         </MudText>
-        
+
         <MudSpacer />
-        
-        @if (!string.IsNullOrEmpty(_tenantName))
+
+        @* Tenant Switcher / Badge *@
+        @if (_availableTenants.Count > 1)
         {
-            <MudChip T="string" 
-                     Color="@(_isDemo ? Color.Warning : Color.Primary)" 
-                     Variant="Variant.Outlined" 
-                     Size="Size.Small" 
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudChip T="string"
+                             Color="@GetCurrentTenantChipColor()"
+                             Variant="Variant.Outlined"
+                             Size="Size.Small"
+                             Style="@(GetCurrentTenantChipStyle() + " cursor: pointer;")">
+                        @_tenantName
+                        @if (_isDemo) { <text> (Demo)</text> }
+                        @if (_isImpersonating) { <text> [Impersonating]</text> }
+                        <MudIcon Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" Class="ml-1" />
+                    </MudChip>
+                </ActivatorContent>
+                <ChildContent>
+                    @foreach (var tenant in _availableTenants)
+                    {
+                        <MudMenuItem OnClick="@(() => SwitchToTenant(tenant))">
+                            <div class="d-flex align-center gap-2">
+                                @if (tenant.AzureTenantId == _currentAzureTenantId)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                             Color="Color.Success" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" />
+                                }
+                                <div>
+                                    <MudText Typo="Typo.body2">@tenant.OrganizationName</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @tenant.Tier
+                                        @if (tenant.IsDemo) { <text> · Demo</text> }
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </ChildContent>
+            </MudMenu>
+        }
+        else if (!string.IsNullOrEmpty(_tenantName))
+        {
+            @* Single tenant — static badge *@
+            <MudChip T="string"
+                     Color="@(_isDemo ? Color.Warning : Color.Primary)"
+                     Variant="Variant.Outlined"
+                     Size="Size.Small"
                      Style="@(_isDemo ? "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);" : "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);")">
                 @_tenantName @(_isDemo ? "(Demo)" : "")
             </MudChip>
         }
-        
+        else if (_tenantLoadComplete && string.IsNullOrEmpty(_tenantName))
+        {
+            @* No tenant access *@
+            <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">
+                No tenant access
+            </MudChip>
+        }
+
         <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Style="margin-left: 12px;" />
-        
+
         <AuthorizeView>
             <Authorized>
                 <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
@@ -56,85 +106,212 @@
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
-    
+
     <MudDrawer @bind-Open="_drawerOpen" Elevation="3" Style="border-right: 1px solid rgba(0, 255, 255, 0.2);">
         <div style="padding: 24px 16px; border-bottom: 1px solid rgba(0, 255, 255, 0.2);">
             <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.1em;">
                 Navigation
             </MudText>
         </div>
-        
+
         <MudNavMenu Style="padding-top: 8px;">
             <AuthorizeView>
                 <Authorized>
-                    <!-- Authenticated User Menu -->
-                    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" 
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Dashboard
-                    </MudNavLink>
-                    <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Claims
-                    </MudNavLink>
-                    <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Eligibility
-                    </MudNavLink>
-                    <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Members
-                    </MudNavLink>
-                    <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Sponsors
-                    </MudNavLink>
-                    <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Benefit Plans
-                    </MudNavLink>
-                    <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Providers
-                    </MudNavLink>
-                    <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Authorizations
-                    </MudNavLink>
-                    <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Workflows
-                    </MudNavLink>
-                    <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Trading Partners
-                    </MudNavLink>
-                    <MudNavLink Href="/edi-operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        EDI Operations
-                    </MudNavLink>
-                    <MudNavLink Href="/payment-runs" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Payments"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Payment Runs
-                    </MudNavLink>
-                    <MudNavLink Href="/premium-billing" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.RequestQuote"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Premium Billing
-                    </MudNavLink>
-                    <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Reports
-                    </MudNavLink>
-                    
-                    <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
-                    
-                    <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Reference Data
-                    </MudNavLink>
-                    <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings"
-                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                        Settings
-                    </MudNavLink>
+                    <!-- OPERATIONS — expanded by default, where users spend 90% of time -->
+                    <MudNavGroup Title="Operations" Icon="@Icons.Material.Filled.Speed" Expanded="true"
+                                 Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Dashboard
+                        </MudNavLink>
+                        <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Claims
+                        </MudNavLink>
+                        <MudNavLink Href="/work-queues" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Queue"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Work Queues
+                        </MudNavLink>
+                        <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Eligibility
+                        </MudNavLink>
+                        <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Authorizations
+                        </MudNavLink>
+                        <MudNavLink Href="/appeals" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Balance"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Appeals
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <!-- MEMBERS & PROVIDERS -->
+                    <MudNavGroup Title="Members & Providers" Icon="@Icons.Material.Filled.People" Expanded="false"
+                                 Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Members
+                        </MudNavLink>
+                        <MudNavLink Href="/providers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.LocalHospital"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Providers
+                        </MudNavLink>
+                        <MudNavLink Href="/enrollment-ops" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.GroupAdd"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Enrollment Ops
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <!-- CONFIGURATION -->
+                    <MudNavGroup Title="Configuration" Icon="@Icons.Material.Filled.Tune" Expanded="false"
+                                 Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Benefit Plans
+                        </MudNavLink>
+                        <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Sponsors
+                        </MudNavLink>
+                        <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Trading Partners
+                        </MudNavLink>
+                        <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Reference Data
+                        </MudNavLink>
+                        <MudNavLink Href="/terminology/crosswalk" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Translate"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Terminology Crosswalk
+                        </MudNavLink>
+                        <MudNavLink Href="/pricing-api" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Api"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Pricing API
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <!-- FINANCE -->
+                    <MudNavGroup Title="Finance" Icon="@Icons.Material.Filled.AccountBalance"
+                                 Expanded="false" Style="border-left: 3px solid transparent;">
+
+                        <!-- Accounts Receivable -->
+                        <MudNavGroup Title="Accounts Receivable"
+                                     Icon="@Icons.Material.Filled.AccountBalanceWallet"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavLink Href="/finance/ar/accounts" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.TableChart"
+                                Style="border-left: 3px solid transparent;">GL Accounts</MudNavLink>
+                            <MudNavLink Href="/finance/ar/balances" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Balance"
+                                Style="border-left: 3px solid transparent;">Balances</MudNavLink>
+                            <MudNavLink Href="/finance/ar/cash-posting" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Payments"
+                                Style="border-left: 3px solid transparent;">Cash Posting</MudNavLink>
+                            <MudNavLink Href="/finance/ar/adjustments" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Tune"
+                                Style="border-left: 3px solid transparent;">Adjustments</MudNavLink>
+                            <MudNavLink Href="/finance/ar/aging" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Timeline"
+                                Style="border-left: 3px solid transparent;">Aging Report</MudNavLink>
+                        </MudNavGroup>
+
+                        <!-- Premium Billing (existing — route unchanged) -->
+                        <MudNavLink Href="/premium-billing" Match="NavLinkMatch.Prefix"
+                            Icon="@Icons.Material.Filled.RequestQuote"
+                            Style="border-left: 3px solid transparent;">Premium Billing</MudNavLink>
+
+                        <!-- Provider Contracts (new master contract page) -->
+                        <MudNavGroup Title="Provider Contracts"
+                                     Icon="@Icons.Material.Filled.Description"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavLink Href="/finance/contracts" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Article"
+                                Style="border-left: 3px solid transparent;">Contracts</MudNavLink>
+                            <MudNavLink Href="/finance/contracts/statements" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Filled.Receipt"
+                                Style="border-left: 3px solid transparent;">Statements</MudNavLink>
+                        </MudNavGroup>
+
+                        <!-- Payments -->
+                        <MudNavGroup Title="Payments" Icon="@Icons.Material.Filled.CreditCard"
+                                     Expanded="false" Style="border-left: 3px solid transparent;">
+                            <MudNavGroup Title="FFS" Icon="@Icons.Material.Filled.AttachMoney"
+                                         Expanded="false" Style="border-left: 3px solid transparent;">
+                                <MudNavLink Href="/payment-runs" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.PlayArrow"
+                                    Style="border-left: 3px solid transparent;">Payment Runs</MudNavLink>
+                            </MudNavGroup>
+                            <MudNavGroup Title="Capitation" Icon="@Icons.Material.Filled.LocalHospital"
+                                         Expanded="false" Style="border-left: 3px solid transparent;">
+                                <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.Settings"
+                                    Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                <MudNavLink Href="/capitation/runs" Match="NavLinkMatch.Prefix"
+                                    Icon="@Icons.Material.Filled.PlayCircle"
+                                    Style="border-left: 3px solid transparent;">Capitation Runs</MudNavLink>
+                            </MudNavGroup>
+                        </MudNavGroup>
+
+                    </MudNavGroup>
+
+                    <!-- MONITORING -->
+                    <MudNavGroup Title="Monitoring" Icon="@Icons.Material.Filled.BarChart" Expanded="false"
+                                 Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Workflows
+                        </MudNavLink>
+                        <MudNavLink Href="/edi-operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            EDI Operations
+                        </MudNavLink>
+                        <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Reports
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <MudDivider Style="margin: 12px 0; border-color: rgba(0, 255, 255, 0.15);" />
+
+                    <!-- ADMIN -->
+                    <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false"
+                                 Style="border-left: 3px solid transparent; font-size: 0.85rem;">
+                        <MudNavLink Href="/correspondence" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Email"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Correspondence
+                        </MudNavLink>
+                        @if (_isTenantAdmin)
+                        {
+                            <MudNavLink Href="/settings/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                User Management
+                            </MudNavLink>
+                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Settings"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Settings
+                            </MudNavLink>
+                        }
+                    </MudNavGroup>
+
+                    @if (_isPlatformAdmin)
+                    {
+                        <MudDivider Style="margin: 12px 0; border-color: rgba(0, 255, 255, 0.15);" />
+
+                        <!-- PLATFORM ADMIN -->
+                        <MudNavGroup Title="Platform" Icon="@Icons.Material.Filled.Cloud" Expanded="false"
+                                     Style="border-left: 3px solid rgba(0, 255, 136, 0.4); font-size: 0.85rem;">
+                            <MudNavLink Href="/platform/tenants" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Tenants
+                            </MudNavLink>
+                            <MudNavLink Href="/platform/inquiries" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Sales Inquiries
+                            </MudNavLink>
+                        </MudNavGroup>
+                    }
                 </Authorized>
                 <NotAuthorized>
                     <!-- Public Website Menu -->
@@ -158,7 +335,7 @@
                                 Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                         Live Demo
                     </MudNavLink>
-                    
+
                     <MudDivider Style="margin: 16px 0; border-color: rgba(0, 255, 255, 0.2);" />
 
                     <MudNavLink Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Login"
@@ -185,7 +362,7 @@
                 </NotAuthorized>
             </AuthorizeView>
         </MudNavMenu>
-        
+
         <!-- Footer branding in drawer -->
         <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; border-top: 1px solid rgba(0, 255, 255, 0.2); text-align: center;">
             <MudText Typo="Typo.caption" Style="color: rgba(255, 255, 255, 0.4);">
@@ -196,7 +373,7 @@
             </MudText>
         </div>
     </MudDrawer>
-    
+
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
             @Body
@@ -207,14 +384,53 @@
 @code {
     private bool _drawerOpen = true;
     private string? _tenantName;
+    private string? _currentAzureTenantId;
     private bool _isDemo;
+    private bool _isImpersonating;
+    private bool _isTenantAdmin;
+    private bool _isPlatformAdmin;
+    private bool _tenantLoadComplete;
+    private List<TenantSubscription> _availableTenants = new();
 
     private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
 
     protected override async Task OnInitializedAsync()
     {
-        // Load tenant context
         await LoadTenantContextAsync();
+        await LoadUserContextAsync();
+    }
+
+    private async Task LoadUserContextAsync()
+    {
+        try
+        {
+            var userContext = await UserContextService.GetCurrentUserAsync();
+            _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
+            _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
+
+            // If platform admin, reload the tenant list (may include more tenants
+            // than the initial load found via email-based resolution)
+            if (_isPlatformAdmin)
+            {
+                try
+                {
+                    var adminTenants = await TenantContextService.GetAvailableTenantsAsync();
+                    if (adminTenants.Count > _availableTenants.Count)
+                    {
+                        _availableTenants = adminTenants;
+                        StateHasChanged();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to load platform admin tenant list");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load user context");
+        }
     }
 
     private async Task LoadTenantContextAsync()
@@ -226,6 +442,19 @@
             {
                 _tenantName = tenantContext.TenantName;
                 _isDemo = tenantContext.IsDemo;
+                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _isImpersonating = TenantContextService.IsImpersonating;
+
+                // Set X-Tenant-ID on the shared HttpClient so the
+                // TenantHttpMessageHandler does not need to call
+                // AuthenticationStateProvider (which is only valid
+                // inside a Razor component DI scope).
+                HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
+                HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
+
+                // Load available tenants for the switcher
+                _availableTenants = await TenantContextService.GetAvailableTenantsAsync();
+
                 StateHasChanged();
             }
         }
@@ -234,6 +463,58 @@
             // Log error but don't crash the layout
             Console.Error.WriteLine($"Error loading tenant context: {ex.Message}");
         }
+        finally
+        {
+            _tenantLoadComplete = true;
+        }
+    }
+
+    private async Task SwitchToTenant(TenantSubscription tenant)
+    {
+        if (tenant.AzureTenantId == _currentAzureTenantId)
+            return; // Already on this tenant
+
+        var success = await TenantContextService.SwitchTenantAsync(tenant.AzureTenantId);
+        if (success)
+        {
+            var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+            if (tenantContext != null)
+            {
+                _tenantName = tenantContext.TenantName;
+                _isDemo = tenantContext.IsDemo;
+                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _isImpersonating = TenantContextService.IsImpersonating;
+
+                // Update the X-Tenant-ID header for all subsequent API calls
+                HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
+                HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
+            }
+
+            Snackbar.Add($"Switched to {tenant.OrganizationName}", Severity.Success);
+
+            // Navigate to dashboard to reload data for the new tenant
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add("Failed to switch tenant. You may not have access.", Severity.Error);
+        }
+    }
+
+    private Color GetCurrentTenantChipColor()
+    {
+        if (_isImpersonating) return Color.Warning;
+        if (_isDemo) return Color.Warning;
+        return Color.Primary;
+    }
+
+    private string GetCurrentTenantChipStyle()
+    {
+        if (_isImpersonating)
+            return "border: 1px solid rgba(255, 170, 0, 0.8); background: rgba(255, 170, 0, 0.15);";
+        if (_isDemo)
+            return "border: 1px solid rgba(255, 170, 0, 0.6); background: rgba(255, 170, 0, 0.08);";
+        return "border: 1px solid rgba(0, 255, 255, 0.4); background: rgba(0, 255, 255, 0.05);";
     }
 
     private void Logout()
@@ -249,39 +530,39 @@
         {
             // Core brand colors
             Primary = "#00ffff",           // Cyan - primary actions
-            Secondary = "#00ff88",         // Neon green - secondary elements  
+            Secondary = "#00ff88",         // Neon green - secondary elements
             Tertiary = "#00ddbb",          // Teal - tertiary accent
-            
+
             // Backgrounds - absolute black
             Background = "#000000",
             BackgroundGrey = "#0a0a0a",
             Surface = "#0f0f0f",
             DrawerBackground = "#000000",
             AppbarBackground = "#000000",
-            
+
             // Text - high contrast white
             TextPrimary = "#ffffff",
             TextSecondary = "rgba(255, 255, 255, 0.7)",
             TextDisabled = "rgba(255, 255, 255, 0.38)",
-            
+
             // Semantic colors - neon palette
             Success = "#00ff88",           // Neon green
             Error = "#ff0055",             // Neon red/pink
             Warning = "#ffaa00",           // Neon orange
             Info = "#00ffff",              // Cyan
-            
+
             // Borders and dividers
             Divider = "rgba(0, 255, 255, 0.2)",
             DividerLight = "rgba(0, 255, 255, 0.1)",
-            
+
             // Actions and overlays
             ActionDefault = "rgba(0, 255, 255, 0.54)",
             ActionDisabled = "rgba(255, 255, 255, 0.26)",
             ActionDisabledBackground = "rgba(255, 255, 255, 0.12)",
-            
+
             // Hover effects - neon glow
             HoverOpacity = 0.15,
-            
+
             // Lines
             LinesDefault = "rgba(0, 255, 255, 0.2)",
             LinesInputs = "rgba(0, 255, 255, 0.3)"

@@ -1,12 +1,14 @@
 # Argo Workflows Migration Guide
 
-This guide provides step-by-step instructions for migrating from Azure Logic Apps to Argo Workflows for X12 EDI processing in Cloud Health Office.
+> **Status: COMPLETE.** The migration from Azure Logic Apps to Argo Workflows is finished. All EDI orchestration now runs on Argo Workflows on AKS. See [ADR-004](../adr/004-remove-logic-apps.md) for the decision record. This document is retained as a reference for the migration process that was followed.
+
+This guide documents the migration from Azure Logic Apps to Argo Workflows for X12 EDI processing in Cloud Health Office.
 
 ## Overview
 
-The migration moves X12 EDI processing from Azure-native services to a cloud-agnostic Kubernetes architecture:
+The migration moved X12 EDI processing from Azure-native services to a cloud-agnostic Kubernetes architecture:
 
-| Component | Azure (Current) | Kubernetes (Target) |
+| Component | Azure (Legacy) | Kubernetes (Current) |
 |-----------|-----------------|---------------------|
 | Workflow Orchestration | Logic Apps Standard | Argo Workflows |
 | Event Streaming | Service Bus Topics | Apache Kafka |

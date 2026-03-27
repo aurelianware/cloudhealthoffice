@@ -138,11 +138,6 @@ export interface InfrastructureConfig {
     topics: TopicConfig[];
     queues: QueueConfig[];
   };
-  logicAppConfig: {
-    sku: string;
-    workerCount: number;
-    alwaysOn: boolean;
-  };
   keyVaultConfig: {
     sku: 'standard' | 'premium';
     enableSoftDelete: boolean;

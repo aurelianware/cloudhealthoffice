@@ -18,7 +18,7 @@ metadata:
     tier: backend
     component: risk-adjustment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: risk-adjustment-service
@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - name: risk-adjustment-service
-        image: ghcr.io/aurelianware/cloudhealthoffice-risk-adjustment-service:latest
+        image: choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-risk-adjustment-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -61,12 +61,12 @@ spec:
         - name: CosmosDb__Endpoint
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: endpoint
         - name: CosmosDb__Key
           valueFrom:
             secretKeyRef:
-              name: cosmos-db-secret
+              name: database-secret
               key: key
         resources:
           requests:
@@ -115,7 +115,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: risk-adjustment-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
   - type: Resource

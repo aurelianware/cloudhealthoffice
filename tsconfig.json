@@ -21,8 +21,7 @@
     "scripts/**/*",
     "core/**/*",
     "src/security/**/*",
-    "src/fhir/**/*",
-    "src/logicapps/**/*"
+    "src/fhir/**/*"
   ],
   "exclude": [
     "node_modules",

@@ -47,7 +47,7 @@ Cloud Health Office represents the inevitable evolution of healthcare payer EDI 
 Cloud Health Office deploys production-grade, HIPAA-compliant EDI infrastructure in **under one hour**—with zero custom code.
 
 **Azure-Native Foundation:**
-- Logic Apps Standard for workflow orchestration
+- Argo Workflows on AKS for Kubernetes-native workflow orchestration
 - Service Bus for event-driven architecture
 - Data Lake Gen2 for hierarchical storage
 - Integration Account for X12 processing
@@ -177,8 +177,8 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 **What Gets Deployed:**
 - Complete Azure infrastructure (Bicep)
-- All Logic App workflows with X12 processing
-- Integration Account with schemas and agreements
+- All Argo workflow templates with X12 processing
+- Trading partner configurations and schemas
 - Service Bus topics and subscriptions
 - Data Lake storage with hierarchical namespace
 - Key Vault with HSM-backed keys
@@ -264,7 +264,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 **Low Risk Factors:**
 - Mature Azure platform
-- Battle-tested Logic Apps runtime
+- Battle-tested Argo Workflows runtime on Kubernetes
 - Standard X12 transaction sets
 - Proven deployment automation
 
@@ -396,7 +396,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 **X12 Transaction Sets:** 005010X212 (277), 005010X217 (278), 005010X222 (837)  
 **NCPDP Support:** Telecom D.0, Script 10.6  
 **FHIR R4:** Planned for Q2 2026  
-**HL7 v2.x:** Extensible via Logic Apps
+**HL7 v2.x:** Extensible via Argo Workflows
 
 ---
 
@@ -406,7 +406,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 
 - Infrastructure deployed in <60 minutes: ✅
 - Zero custom code required: ✅
-- All Logic App workflows operational: ✅
+- All Argo workflow templates operational: ✅
 - Trading partner connectivity validated: ✅
 
 ### Operational Success

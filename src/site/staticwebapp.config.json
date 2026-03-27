@@ -93,6 +93,73 @@
       "rewrite": "/release-notes.html"
     },
     {
+      "route": "/docs",
+      "rewrite": "/docs/index.html"
+    },
+    {
+      "route": "/docs/quickstart.html",
+      "redirect": "/docs/quickstart",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/quickstart",
+      "rewrite": "/docs/quickstart.html"
+    },
+    {
+      "route": "/docs/compliance.html",
+      "redirect": "/docs/compliance",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/compliance",
+      "rewrite": "/docs/compliance.html"
+    },
+    {
+      "route": "/docs/architecture.html",
+      "redirect": "/docs/architecture",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/architecture",
+      "rewrite": "/docs/architecture.html"
+    },
+    {
+      "route": "/docs/api.html",
+      "redirect": "/docs/api",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/api",
+      "rewrite": "/docs/api.html"
+    },
+    {
+      "route": "/docs/deployment.html",
+      "redirect": "/docs/deployment",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/deployment",
+      "rewrite": "/docs/deployment.html"
+    },
+    {
+      "route": "/docs/finance-guide.html",
+      "redirect": "/docs/finance-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/finance-guide",
+      "rewrite": "/docs/finance-guide.html"
+    },
+    {
+      "route": "/docs/terminology-guide.html",
+      "redirect": "/docs/terminology-guide",
+      "statusCode": 301
+    },
+    {
+      "route": "/docs/terminology-guide",
+      "rewrite": "/docs/terminology-guide.html"
+    },
+    {
       "route": "/login.html",
       "redirect": "/login",
       "statusCode": 301

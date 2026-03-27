@@ -121,7 +121,7 @@ public class PaymentRepositoryMongo : IPaymentRepository
         payment.ReceivedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(payment);
         _logger.LogInformation("Created payment {PaymentId} for check {CheckNumber}",
-            payment.Id, payment.CheckNumber);
+            SanitizeForLog(payment.Id), SanitizeForLog(payment.CheckNumber));
         return payment;
     }
 
@@ -144,4 +144,7 @@ public class PaymentRepositoryMongo : IPaymentRepository
         await _collection.DeleteOneAsync(filter);
         _logger.LogInformation("Deleted payment {PaymentId}", id);
     }
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

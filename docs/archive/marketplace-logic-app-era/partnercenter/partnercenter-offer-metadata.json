@@ -1,0 +1,286 @@
+{
+  "$schema": "https://schema.microsoft.com/partnercenter/schemas/offer/2021-11-01/offer.json",
+  "offerMetadata": {
+    "offerId": "cloudhealthoffice",
+    "publisherId": "aurelianware",
+    "offerVersion": "1.0.0",
+    "createdDate": "2024-12-01T00:00:00Z",
+    "lastModifiedDate": "2024-12-01T00:00:00Z"
+  },
+  "offerListing": {
+    "name": "Cloud Health Office",
+    "shortDescription": "Azure-native HIPAA-compliant multi-payer EDI integration platform",
+    "description": "Cloud Health Office is the #1 open-source Azure-native platform for multi-payer EDI integration in healthcare. Deploy a complete HIPAA-compliant EDI solution in minutes, not months.\n\n## Key Capabilities\n\n### EDI Transaction Processing\n- **275 Attachments**: Clinical and administrative attachment processing\n- **277 RFAI**: Request for Additional Information workflows\n- **278 Authorizations**: Prior authorization requests and inquiries\n- **837 Claims**: Professional, Institutional, and Dental claims\n- **270/271 Eligibility**: Real-time eligibility verification\n\n### FHIR R4 Integration (CMS-0057-F Compliant)\n- Patient Access API\n- Provider Access API\n- Payer-to-Payer API\n- Prior Authorization API\n- Da Vinci IG support (PDex, PAS, CRD, DTR)\n\n### Zero-Code Payer Onboarding\n- Interactive configuration wizard\n- Config-to-Workflow generator\n- Deploy new payers in under 5 minutes\n\n### Enterprise Security\n- Premium Key Vault with HSM-backed keys\n- Private endpoints for PHI resources\n- PHI masking in logs\n- Customer-managed keys (BYOK)\n- 7-year data retention\n\n## Deployment Tiers\n\n**Sandbox**: Ideal for development and testing\n**Standard**: Production-ready with geo-redundant storage\n**Enterprise**: Maximum availability with zone redundancy\n\n## Why Cloud Health Office?\n\n- **Rapid Deployment**: Deploy in <5 minutes with one-click Azure deployment\n- **Backend Agnostic**: Integrates with claims adjudication systems such as and other core systems\n- **Open Source**: Apache 2.0 licensed, no vendor lock-in\n- **CMS-0057-F Ready**: Full compliance with interoperability mandates\n- **Cost Effective**: Pay only for what you use with Azure-native pricing",
+    "summary": "Deploy HIPAA-compliant EDI integration (275, 277, 278, 837) with FHIR R4 APIs in minutes. Zero-code payer onboarding, CMS-0057-F compliant, Azure-native.",
+    "searchResultsSummary": "HIPAA EDI platform: 275/277/278/837 processing, FHIR R4 APIs, CMS-0057-F compliant",
+    "gettingStartedInstructions": "## Quick Start\n\n1. Click 'Deploy to Azure' or 'Get it now'\n2. Select your Azure subscription and resource group\n3. Configure deployment settings (name, region, tier)\n4. Click Create and wait for deployment (~5 minutes)\n5. Access the Logic App to configure workflows\n6. Follow the post-deployment guide to configure trading partners\n\n## Documentation\n\n- [Quick Start Guide](https://github.com/aurelianware/cloudhealthoffice/blob/main/QUICKSTART.md)\n- [Deployment Guide](https://github.com/aurelianware/cloudhealthoffice/blob/main/DEPLOYMENT.md)\n- [Security Guide](https://github.com/aurelianware/cloudhealthoffice/blob/main/SECURITY.md)"
+  },
+  "offerProperties": {
+    "categories": [
+      {
+        "primary": "analytics",
+        "subcategories": ["data-analytics"]
+      },
+      {
+        "primary": "it-developer-tools",
+        "subcategories": ["integration-tools"]
+      }
+    ],
+    "industries": [
+      {
+        "primary": "healthcare",
+        "subcategories": ["health-payor", "health-provider", "pharmaceuticals"]
+      }
+    ],
+    "applicableProducts": [
+      "Azure",
+      "Logic Apps",
+      "Service Bus",
+      "Storage",
+      "Cosmos DB",
+      "Key Vault"
+    ],
+    "appVersion": "1.0.0",
+    "standardContractAmendments": [],
+    "useStandardContract": true,
+    "termsOfUse": "Use of this application is subject to the terms set forth in the Master Services Agreement, Privacy Policy, and Service Level Agreement.",
+    "globalAmendmentTerms": "",
+    "enableTestDrive": true,
+    "testDriveDurationInDays": 30
+  },
+  "contacts": {
+    "engineering": {
+      "name": "Cloud Health Office Engineering",
+      "email": "engineering@cloudhealthoffice.com",
+      "phone": "+1-928-940-2410"
+    },
+    "support": {
+      "name": "Cloud Health Office Support",
+      "email": "support@cloudhealthoffice.com",
+      "phone": "+1-928-940-2410",
+      "url": "https://support.cloudhealthoffice.com"
+    },
+    "cspProgram": {
+      "name": "Partner Program",
+      "email": "partners@cloudhealthoffice.com"
+    }
+  },
+  "marketingAssets": {
+    "logos": {
+      "small": {
+        "uri": "icons/logo-48x48.png",
+        "dimensions": "48x48"
+      },
+      "medium": {
+        "uri": "icons/logo-90x90.png",
+        "dimensions": "90x90"
+      },
+      "large": {
+        "uri": "icons/logo-216x216.png",
+        "dimensions": "216x216"
+      },
+      "wide": {
+        "uri": "icons/logo-255x115.png",
+        "dimensions": "255x115"
+      },
+      "hero": {
+        "uri": "icons/hero-815x290.png",
+        "dimensions": "815x290"
+      }
+    },
+    "screenshots": [
+      {
+        "uri": "screenshots/dashboard.png",
+        "title": "Cloud Health Office Dashboard",
+        "description": "Monitor EDI transactions, view metrics, and manage workflows"
+      },
+      {
+        "uri": "screenshots/workflow-designer.png",
+        "title": "Workflow Designer",
+        "description": "Configure EDI processing workflows with visual designer"
+      },
+      {
+        "uri": "screenshots/fhir-apis.png",
+        "title": "FHIR R4 APIs",
+        "description": "CMS-0057-F compliant FHIR APIs for interoperability"
+      },
+      {
+        "uri": "screenshots/security-dashboard.png",
+        "title": "Security Dashboard",
+        "description": "Monitor security metrics and compliance status"
+      }
+    ],
+    "videos": [
+      {
+        "uri": "https://www.youtube.com/watch?v=demo-video",
+        "title": "Cloud Health Office Overview",
+        "description": "5-minute overview of platform capabilities"
+      }
+    ],
+    "marketingDocuments": [
+      {
+        "uri": "docs/datasheet.pdf",
+        "title": "Product Datasheet",
+        "description": "Technical specifications and feature overview"
+      },
+      {
+        "uri": "docs/hipaa-whitepaper.pdf",
+        "title": "HIPAA Compliance Whitepaper",
+        "description": "Detailed HIPAA compliance documentation"
+      }
+    ]
+  },
+  "supportInformation": {
+    "publicDocumentUrl": "https://github.com/aurelianware/cloudhealthoffice",
+    "privacyPolicyUrl": "https://cloudhealthoffice.com/privacy",
+    "helpUrl": "https://docs.cloudhealthoffice.com",
+    "supportUrl": "https://support.cloudhealthoffice.com"
+  },
+  "plans": {
+    "managedApplication": {
+      "planId": "cloudhealthoffice-managed",
+      "displayName": "Cloud Health Office - Managed Application",
+      "summary": "Deploy the complete Cloud Health Office stack as an Azure Managed Application",
+      "description": "Azure Managed Application deployment with full platform capabilities. Infrastructure is deployed to your Azure subscription with managed access for updates and support.",
+      "visibility": "public",
+      "pricing": {
+        "model": "byol",
+        "freeTrialDays": 30
+      },
+      "technicalConfiguration": {
+        "packageUrl": "https://github.com/aurelianware/cloudhealthoffice/releases/latest/download/managed-app.zip",
+        "mainTemplate": "mainTemplate.json",
+        "createUiDefinition": "createUiDefinition.json",
+        "version": "1.0.0",
+        "allowedCustomerActions": [
+          "Microsoft.Resources/deployments/read",
+          "Microsoft.Resources/subscriptions/resourceGroups/read",
+          "Microsoft.Web/sites/Read",
+          "Microsoft.Insights/components/read"
+        ],
+        "allowedDataActions": [],
+        "publicAzureTenantId": "",
+        "authorizations": [
+          {
+            "principalId": "{publisher-principal-id}",
+            "roleDefinitionId": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+            "displayName": "Owner"
+          },
+          {
+            "principalId": "{support-principal-id}",
+            "roleDefinitionId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "displayName": "Reader"
+          }
+        ]
+      }
+    },
+    "saasStarter": {
+      "planId": "cho-starter",
+      "displayName": "Cloud Health Office - Starter",
+      "summary": "SaaS deployment for small healthcare organizations",
+      "description": "Fully managed SaaS deployment with 1,000 837 claims/month included. Ideal for development, testing, and small organizations.",
+      "visibility": "public",
+      "pricing": {
+        "model": "flatRate",
+        "pricePerMonth": 499,
+        "currency": "USD",
+        "freeTrialDays": 30
+      }
+    },
+    "saasProfessional": {
+      "planId": "cho-professional",
+      "displayName": "Cloud Health Office - Professional",
+      "summary": "SaaS deployment for mid-size organizations with meter-based billing",
+      "description": "Fully managed SaaS deployment with 10,000 837 claims/month included. Pay-per-use pricing for additional transactions.",
+      "visibility": "public",
+      "pricing": {
+        "model": "flatRateWithMeters",
+        "pricePerMonth": 1999,
+        "currency": "USD",
+        "freeTrialDays": 14
+      }
+    },
+    "saasEnterprise": {
+      "planId": "cho-enterprise",
+      "displayName": "Cloud Health Office - Enterprise",
+      "summary": "SaaS deployment for large organizations with volume discounts",
+      "description": "Enterprise SaaS deployment with 50,000 837 claims/month included. Volume-tiered pricing, 24/7 support, dedicated account manager.",
+      "visibility": "public",
+      "pricing": {
+        "model": "meterBased",
+        "pricePerMonth": 4999,
+        "currency": "USD",
+        "freeTrialDays": 0
+      }
+    }
+  },
+  "certifications": [
+    {
+      "name": "HIPAA Compliance",
+      "description": "Implements HIPAA technical safeguards including encryption, access controls, audit logging, and breach notification procedures",
+      "documentUrl": "https://cloudhealthoffice.com/certifications/hipaa"
+    },
+    {
+      "name": "Azure Certified",
+      "description": "Azure Marketplace certified application",
+      "documentUrl": "https://docs.microsoft.com/azure/marketplace/azure-app-certification"
+    }
+  ],
+  "resellConfiguration": {
+    "resellThroughCsp": true,
+    "partnerCenterOptIn": true,
+    "dealRegistration": {
+      "enabled": true,
+      "minimumDealValue": 10000
+    },
+    "margins": {
+      "starter": 15,
+      "professional": 20,
+      "enterprise": 25
+    }
+  },
+  "coSellStatus": {
+    "coSellReady": false,
+    "azureIpCoSell": false,
+    "businessApplicationsCoSell": false,
+    "solutionAreas": [
+      "Healthcare & Life Sciences",
+      "Integration Services",
+      "Data & Analytics"
+    ]
+  },
+  "legalInformation": {
+    "privacyPolicyLink": "marketplace/legal/privacy-policy.md",
+    "slaLink": "marketplace/legal/sla.md",
+    "supportTermsLink": "marketplace/legal/support-terms.md",
+    "termsOfUse": "Use of Cloud Health Office is governed by the applicable subscription agreement, Master Services Agreement, and Business Associate Agreement for healthcare deployments.",
+    "license": "BUSL-1.1"
+  },
+  "technicalRequirements": {
+    "azureServices": [
+      "Logic Apps Standard",
+      "Azure Storage (Data Lake Gen2)",
+      "Service Bus (Standard tier)",
+      "Application Insights",
+      "Log Analytics",
+      "Key Vault",
+      "Integration Account (optional)",
+      "Cosmos DB (optional)"
+    ],
+    "estimatedMonthlyCost": {
+      "sandbox": "$150-300/month",
+      "standard": "$500-1000/month",
+      "enterprise": "$1500-3000/month",
+      "note": "Azure infrastructure costs vary based on transaction volume"
+    },
+    "supportedRegions": [
+      "eastus",
+      "eastus2",
+      "westus",
+      "westus2",
+      "centralus",
+      "northcentralus",
+      "southcentralus"
+    ]
+  }
+}

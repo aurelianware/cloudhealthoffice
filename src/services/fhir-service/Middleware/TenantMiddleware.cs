@@ -27,7 +27,7 @@ public class TenantMiddleware
 
         if (string.IsNullOrEmpty(tenantId))
         {
-            _logger.LogWarning("FHIR request missing tenant context: {Path}", context.Request.Path);
+            _logger.LogWarning("FHIR request missing tenant context: {Path}", SanitizeForLog(context.Request.Path));
             context.Response.StatusCode = 401;
             await context.Response.WriteAsJsonAsync(new { error = "Missing tenant context" });
             return;
@@ -44,6 +44,7 @@ public class TenantMiddleware
         || path.StartsWithSegments("/ready")
         || path.StartsWithSegments("/live")
         || path.StartsWithSegments("/fhir/r4/metadata")
+        || path.StartsWithSegments("/fhir/r4/.well-known")
         || path.StartsWithSegments("/swagger");
 
     private static string? ExtractTenantId(HttpContext context)

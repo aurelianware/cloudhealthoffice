@@ -37,6 +37,9 @@ public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
     private readonly IAccumulatorRepository _repository;
     private readonly ILogger<MongoAccumulatorAuditWriter> _logger;
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
     public MongoAccumulatorAuditWriter(
         IAccumulatorRepository repository,
         ILogger<MongoAccumulatorAuditWriter> logger)
@@ -130,7 +133,7 @@ public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
                     _logger.LogWarning(
                         "Audit write failed after {Retries} retries for claim {ClaimId}, doc {DocId}. " +
                         "Audit trail will self-heal on next cache rebuild.",
-                        MaxRetries, claimId, doc.Id);
+                        MaxRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
                     throw;
                 }
             }

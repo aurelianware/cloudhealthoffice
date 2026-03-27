@@ -41,13 +41,23 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // Azure AD Authentication
-var initialScopes = builder.Configuration["DownstreamApi:Scopes"]?.Split(' ') ?? Array.Empty<string>();
+// Do not include downstream API scopes in the initial sign-in request.
+// For multi-tenant apps, custom API scopes must be acquired incrementally
+// (on first API call) to avoid AADSTS1003031 at the authorization endpoint.
+var initialScopes = Array.Empty<string>();
 
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(options =>
     {
         builder.Configuration.Bind("AzureAd", options);
-        
+
+        // Use 'query' response mode so the callback is a GET (not cross-origin POST)
+        // This avoids SameSite cookie issues in local development
+        if (builder.Environment.IsDevelopment())
+        {
+            options.ResponseMode = "query";
+        }
+
         // Force HTTPS for redirect URIs when behind reverse proxy
         options.Events.OnRedirectToIdentityProvider = context =>
         {
@@ -109,7 +119,7 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
+    options.Cookie.SameSite = SameSiteMode.None;
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.Name = ".CloudHealthOffice.Auth";
@@ -187,17 +197,28 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 // than registering IXmlRepository in DI — AddDataProtection's internal setup does not
 // reliably pick up a separately-registered IXmlRepository singleton.
 builder.Services.AddDataProtection()
-    .SetApplicationName("CloudHealthOffice.Portal");
-builder.Services.AddOptions<KeyManagementOptions>()
-    .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
-    {
-        options.XmlRepository = new MongoDbXmlRepository(
-            mongoClient,
-            loggerFactory.CreateLogger<MongoDbXmlRepository>());
-    });
+    .SetApplicationName("CloudHealthOffice.Portal")
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CloudHealthOffice", "DataProtection-Keys")));
+
+if (!builder.Environment.IsDevelopment())
+{
+    // In production, persist keys to MongoDB so all replicas share the same key ring
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
+        {
+            options.XmlRepository = new MongoDbXmlRepository(
+                mongoClient,
+                loggerFactory.CreateLogger<MongoDbXmlRepository>());
+        });
+}
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
+
+// Register user context service for RBAC
+builder.Services.AddScoped<IUserContextService, UserContextService>();
 
 // Register microservice clients
 builder.Services.AddScoped<IMemberService, MemberService>();
@@ -220,6 +241,15 @@ builder.Services.AddScoped<IEdiOperationsService, EdiOperationsService>();
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
+builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
+builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();
+builder.Services.AddScoped<IAppealsService, AppealsService>();
+builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();
+builder.Services.AddScoped<IPricingApiService, PricingApiService>();
+builder.Services.AddScoped<ICapitationService, CapitationService>();
+builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>();
+builder.Services.AddScoped<IArService, ArServiceImpl>();
+builder.Services.AddScoped<ITerminologyService, TerminologyServiceImpl>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
@@ -249,7 +279,7 @@ builder.Services.AddSession(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Lax; // Changed from None to Lax
+    options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.Name = ".CloudHealthOffice.Session";
 });
 
@@ -272,6 +302,9 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
     }
     return url;
 }
+
+// Register background tenant seed so it doesn't block startup or health probes
+builder.Services.AddHostedService<TenantSeedService>();
 
 var app = builder.Build();
 

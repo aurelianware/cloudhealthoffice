@@ -1,0 +1,487 @@
+@page "/finance/ar/batch-rules"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IArService ArService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Batch Posting Rules — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="finance:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Rule" Class="mr-2" Style="vertical-align: middle;" />
+    Batch Posting Rules
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Auto-posting configuration for billing and payment run outputs
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+<!-- Filter + Action Bar -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_triggerFilter" Label="Trigger" Variant="Variant.Outlined"
+               Style="min-width: 180px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("PremiumBilling")">Premium Billing</MudSelectItem>
+        <MudSelectItem Value="@("CashReceipt")">Cash Receipt</MudSelectItem>
+        <MudSelectItem Value="@("CapitationRun")">Capitation Run</MudSelectItem>
+        <MudSelectItem Value="@("ClaimPayment")">Claim Payment</MudSelectItem>
+        <MudSelectItem Value="@("Adjustment")">Adjustment</MudSelectItem>
+    </MudSelect>
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 140px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+        <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+        <MudSelectItem Value="@("Draft")">Draft</MudSelectItem>
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadRules" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewRuleDialog">New Rule</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Rules Grid -->
+<MudTable Items="_rules" Dense="true" Hover="true" T="ArBatchRuleSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Rule Code</MudTh>
+        <MudTh>Rule Name</MudTh>
+        <MudTh>Trigger</MudTh>
+        <MudTh>Debit Account</MudTh>
+        <MudTh>Credit Account</MudTh>
+        <MudTh>Split</MudTh>
+        <MudTh>LOBs</MudTh>
+        <MudTh>Auto-Approve</MudTh>
+        <MudTh>Order</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Rule Code">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.RuleCode</MudText>
+        </MudTd>
+        <MudTd DataLabel="Rule Name">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.RuleName</MudText>
+            @if (!string.IsNullOrEmpty(context.Description))
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.Description</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Trigger">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetTriggerColor(context.Trigger)">@context.Trigger</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Debit Account">
+            @{
+                var debitAcct = _accountLookup.GetValueOrDefault(context.DebitAccountId);
+            }
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@(debitAcct?.AccountNumber ?? context.DebitAccountId)</MudText>
+        </MudTd>
+        <MudTd DataLabel="Credit Account">
+            @{
+                var creditAcct = _accountLookup.GetValueOrDefault(context.CreditAccountId);
+            }
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@(creditAcct?.AccountNumber ?? context.CreditAccountId)</MudText>
+        </MudTd>
+        <MudTd DataLabel="Split">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@context.SplitBehavior</MudChip>
+        </MudTd>
+        <MudTd DataLabel="LOBs">
+            @foreach (var lob in context.ApplicableLobs.Take(2))
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Class="mr-1">@lob</MudChip>
+            }
+            @if (context.ApplicableLobs.Count > 2)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">+@(context.ApplicableLobs.Count - 2)</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Auto-Approve">
+            @if (context.AutoApproveThreshold.HasValue)
+            {
+                <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ff88;">@context.AutoApproveThreshold.Value.ToString("C0")</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">Manual</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Order">
+            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ExecutionOrder</MudText>
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetRuleStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <div class="d-flex gap-1">
+                <MudTooltip Text="Edit">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => OpenEditRuleDialog(context))" />
+                </MudTooltip>
+                <MudTooltip Text="Test Rule">
+                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success"
+                                   OnClick="@(() => OpenTestRuleDialog(context))" />
+                </MudTooltip>
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <div class="pa-8 text-center">
+            <MudIcon Icon="@Icons.Material.Filled.Rule" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No batch posting rules found</MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create rules to automate GL postings</MudText>
+        </div>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
+
+<!-- New / Edit Rule Dialog -->
+<MudDialog @bind-Visible="_ruleDialogVisible" Options="_ruleDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Rule" Class="mr-2" />
+            @(_editingRule != null ? "Edit Batch Rule" : "New Batch Rule")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formRuleCode" Label="Rule Code" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudTextField @bind-Value="_formRuleName" Label="Rule Name" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_formRuleDescription" Label="Description" Variant="Variant.Outlined" Lines="2" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formTrigger" Label="Trigger" Variant="Variant.Outlined" Required="true">
+                    <MudSelectItem Value="@("PremiumBilling")">Premium Billing</MudSelectItem>
+                    <MudSelectItem Value="@("CashReceipt")">Cash Receipt</MudSelectItem>
+                    <MudSelectItem Value="@("CapitationRun")">Capitation Run</MudSelectItem>
+                    <MudSelectItem Value="@("ClaimPayment")">Claim Payment</MudSelectItem>
+                    <MudSelectItem Value="@("Adjustment")">Adjustment</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formSplitBehavior" Label="Split Behavior" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("NoSplit")">No Split</MudSelectItem>
+                    <MudSelectItem Value="@("PremiumSplit")">Premium Split</MudSelectItem>
+                    <MudSelectItem Value="@("EvenSplit")">Even Split</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formDebitAccountId" Label="Debit Account" Variant="Variant.Outlined" Required="true">
+                    @foreach (var acct in _accountOptions)
+                    {
+                        <MudSelectItem Value="@acct.Id">@acct.AccountNumber — @acct.AccountName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="_formCreditAccountId" Label="Credit Account" Variant="Variant.Outlined" Required="true">
+                    @foreach (var acct in _accountOptions)
+                    {
+                        <MudSelectItem Value="@acct.Id">@acct.AccountNumber — @acct.AccountName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect @bind-SelectedValues="_formApplicableLobs" Label="Applicable LOBs" MultiSelection="true"
+                           Variant="Variant.Outlined" T="string">
+                    <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+                    <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+                    <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+                    <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+                    <MudSelectItem Value="@("TRICARE")">TRICARE</MudSelectItem>
+                    <MudSelectItem Value="@("VA")">VA</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_formAutoApproveThreshold" Label="Auto-Approve Threshold"
+                                 Variant="Variant.Outlined" Format="C0" HideSpinButtons="true" Clearable="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_formExecutionOrder" Label="Execution Order"
+                                 Variant="Variant.Outlined" Min="0" HideSpinButtons="true" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudSelect @bind-Value="_formRuleStatus" Label="Status" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                    <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+                    <MudSelectItem Value="@("Draft")">Draft</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formEffectiveDate" Label="Effective Date" Variant="Variant.Outlined" Required="true" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_formTerminationDate" Label="Termination Date" Variant="Variant.Outlined" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseRuleDialog" Color="Color.Default">Cancel</MudButton>
+        <MudButton OnClick="SaveRule" Color="Color.Primary" Variant="Variant.Filled" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save Rule")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- Test Rule Dialog -->
+<MudDialog @bind-Visible="_testDialogVisible" Options="_testDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
+            Test Rule: @(_testingRule?.RuleCode ?? "")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudNumericField @bind-Value="_testSampleAmount" Label="Sample Amount" Variant="Variant.Outlined"
+                                 Format="C2" HideSpinButtons="true" />
+            </MudItem>
+            @if (_testResult != null)
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="pa-4" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+                        <MudText Typo="Typo.subtitle2" Style="color: #00ffff;" Class="mb-2">Projected Result</MudText>
+                        <MudGrid>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Debit Account</MudText>
+                                <MudText Style="font-family: monospace;">@(_accountLookup.GetValueOrDefault(_testResult.DebitAccountId)?.AccountNumber ?? _testResult.DebitAccountId)</MudText>
+                                <MudText Typo="Typo.h6" Style="color: #00ff88; font-family: monospace;">@_testResult.DebitAmount.ToString("C2")</MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Credit Account</MudText>
+                                <MudText Style="font-family: monospace;">@(_accountLookup.GetValueOrDefault(_testResult.CreditAccountId)?.AccountNumber ?? _testResult.CreditAccountId)</MudText>
+                                <MudText Typo="Typo.h6" Style="color: #ff0055; font-family: monospace;">@_testResult.CreditAmount.ToString("C2")</MudText>
+                            </MudItem>
+                            @if (_testResult.SponsorSplitAmount.HasValue)
+                            {
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Sponsor Split</MudText>
+                                    <MudText Style="font-family: monospace; color: #ffaa00;">@_testResult.SponsorSplitAmount.Value.ToString("C2")</MudText>
+                                </MudItem>
+                            }
+                            @if (_testResult.MemberSplitAmount.HasValue)
+                            {
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member Split</MudText>
+                                    <MudText Style="font-family: monospace; color: #ffaa00;">@_testResult.MemberSplitAmount.Value.ToString("C2")</MudText>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseTestDialog" Color="Color.Default">Close</MudButton>
+        <MudButton OnClick="ExecuteTest" Color="Color.Success" Variant="Variant.Filled" Disabled="_testing"
+                   StartIcon="@Icons.Material.Filled.PlayArrow">
+            @(_testing ? "Running..." : "Run Test")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+</PermissionGate>
+
+@code {
+    private List<ArBatchRuleSummary> _rules = new();
+    private List<GlAccountSummary> _accountOptions = new();
+    private Dictionary<string, GlAccountSummary> _accountLookup = new();
+    private bool _loading = true;
+    private string? _serviceError;
+
+    // Filters
+    private string? _triggerFilter;
+    private string? _statusFilter;
+
+    // Rule Dialog
+    private bool _ruleDialogVisible;
+    private DialogOptions _ruleDialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private ArBatchRuleSummary? _editingRule;
+    private bool _saving;
+
+    // Rule form fields
+    private string _formRuleCode = string.Empty;
+    private string _formRuleName = string.Empty;
+    private string? _formRuleDescription;
+    private string _formTrigger = "PremiumBilling";
+    private string _formSplitBehavior = "NoSplit";
+    private string _formDebitAccountId = string.Empty;
+    private string _formCreditAccountId = string.Empty;
+    private IEnumerable<string> _formApplicableLobs = new HashSet<string>();
+    private decimal? _formAutoApproveThreshold;
+    private int _formExecutionOrder;
+    private string _formRuleStatus = "Active";
+    private DateTime? _formEffectiveDate = DateTime.Today;
+    private DateTime? _formTerminationDate;
+
+    // Test Dialog
+    private bool _testDialogVisible;
+    private DialogOptions _testDialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    private ArBatchRuleSummary? _testingRule;
+    private decimal _testSampleAmount = 1000m;
+    private ArBatchRuleTestResult? _testResult;
+    private bool _testing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadRules(), LoadAccountOptions());
+    }
+
+    private async Task LoadRules()
+    {
+        _loading = true;
+        try
+        {
+            _rules = await ArService.GetBatchRulesAsync(_triggerFilter, _statusFilter);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        catch (Exception ex) { Snackbar.Add($"Error loading batch rules: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadAccountOptions()
+    {
+        try
+        {
+            _accountOptions = await ArService.GetAccountsAsync();
+            _accountLookup = _accountOptions.ToDictionary(a => a.Id);
+        }
+        catch { /* supplementary */ }
+    }
+
+    private void OpenNewRuleDialog()
+    {
+        _editingRule = null;
+        _formRuleCode = string.Empty;
+        _formRuleName = string.Empty;
+        _formRuleDescription = null;
+        _formTrigger = "PremiumBilling";
+        _formSplitBehavior = "NoSplit";
+        _formDebitAccountId = string.Empty;
+        _formCreditAccountId = string.Empty;
+        _formApplicableLobs = new HashSet<string>();
+        _formAutoApproveThreshold = null;
+        _formExecutionOrder = 0;
+        _formRuleStatus = "Active";
+        _formEffectiveDate = DateTime.Today;
+        _formTerminationDate = null;
+        _ruleDialogVisible = true;
+    }
+
+    private void OpenEditRuleDialog(ArBatchRuleSummary rule)
+    {
+        _editingRule = rule;
+        _formRuleCode = rule.RuleCode;
+        _formRuleName = rule.RuleName;
+        _formRuleDescription = rule.Description;
+        _formTrigger = rule.Trigger;
+        _formSplitBehavior = rule.SplitBehavior;
+        _formDebitAccountId = rule.DebitAccountId;
+        _formCreditAccountId = rule.CreditAccountId;
+        _formApplicableLobs = new HashSet<string>(rule.ApplicableLobs);
+        _formAutoApproveThreshold = rule.AutoApproveThreshold;
+        _formExecutionOrder = rule.ExecutionOrder;
+        _formRuleStatus = rule.Status;
+        _formEffectiveDate = rule.EffectiveDate;
+        _formTerminationDate = rule.TerminationDate;
+        _ruleDialogVisible = true;
+    }
+
+    private void CloseRuleDialog() => _ruleDialogVisible = false;
+
+    private async Task SaveRule()
+    {
+        _saving = true;
+        try
+        {
+            var rule = new ArBatchRuleSummary
+            {
+                RuleCode = _formRuleCode,
+                RuleName = _formRuleName,
+                Description = _formRuleDescription,
+                Trigger = _formTrigger,
+                SplitBehavior = _formSplitBehavior,
+                DebitAccountId = _formDebitAccountId,
+                CreditAccountId = _formCreditAccountId,
+                ApplicableLobs = _formApplicableLobs.ToList(),
+                AutoApproveThreshold = _formAutoApproveThreshold,
+                ExecutionOrder = _formExecutionOrder,
+                Status = _formRuleStatus,
+                EffectiveDate = _formEffectiveDate ?? DateTime.Today,
+                TerminationDate = _formTerminationDate
+            };
+
+            if (_editingRule != null)
+            {
+                await ArService.UpdateBatchRuleAsync(_editingRule.Id, rule);
+                Snackbar.Add($"Rule {rule.RuleCode} updated", Severity.Success);
+            }
+            else
+            {
+                await ArService.CreateBatchRuleAsync(rule);
+                Snackbar.Add($"Rule {rule.RuleCode} created", Severity.Success);
+            }
+
+            _ruleDialogVisible = false;
+            await LoadRules();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error saving rule: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void OpenTestRuleDialog(ArBatchRuleSummary rule)
+    {
+        _testingRule = rule;
+        _testSampleAmount = 1000m;
+        _testResult = null;
+        _testDialogVisible = true;
+    }
+
+    private void CloseTestDialog() => _testDialogVisible = false;
+
+    private async Task ExecuteTest()
+    {
+        if (_testingRule == null) return;
+        _testing = true;
+        try
+        {
+            _testResult = await ArService.TestBatchRuleAsync(_testingRule.Id, _testSampleAmount);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error testing rule: {ex.Message}", Severity.Error); }
+        finally { _testing = false; }
+    }
+
+    private static Color GetTriggerColor(string trigger) => trigger switch
+    {
+        "PremiumBilling" => Color.Primary,
+        "CashReceipt" => Color.Success,
+        "CapitationRun" => Color.Info,
+        "ClaimPayment" => Color.Warning,
+        "Adjustment" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color GetRuleStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Inactive" => Color.Default,
+        "Draft" => Color.Warning,
+        _ => Color.Default
+    };
+}

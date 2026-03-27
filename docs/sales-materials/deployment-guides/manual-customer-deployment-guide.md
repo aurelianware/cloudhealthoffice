@@ -150,7 +150,7 @@ This guide outlines the step-by-step process for manually deploying the Cloud He
 2. **Azure Infrastructure Planning**
    - Define resource naming: `customer-hipaa-[resource-type]`
    - Select Azure regions (primary + DR if required)
-   - Size Logic Apps SKU (WS1 for production, B1 for dev/test)
+   - Size AKS node pool (Standard_D4s_v3 for production, Standard_B2s for dev/test)
    - Estimate Azure costs (typically $500-1000/month)
 
 3. **Security & Compliance Planning**
@@ -197,7 +197,7 @@ az deployment group create \
 ```
 
 **Expected Resources:**
-- Logic App Standard: `${BASE_NAME}-la`
+- AKS Cluster: `${BASE_NAME}-aks`
 - Storage Account (Data Lake): `${BASE_NAME}dlgen2`
 - Service Bus Namespace: `${BASE_NAME}-svc`
 - Service Bus Topics: `attachments-in`, `rfai-requests`, `edi-278`
@@ -230,15 +230,15 @@ az keyvault secret set \
 # Add any other secrets as needed
 ```
 
-#### Step 3: Grant Logic App Access to Key Vault
+#### Step 3: Grant AKS Access to Key Vault
 
 ```bash
-# Get Logic App managed identity principal ID
-LA_NAME="${BASE_NAME}-la"
-PRINCIPAL_ID=$(az webapp identity show \
+# Get AKS managed identity principal ID
+AKS_NAME="${BASE_NAME}-aks"
+PRINCIPAL_ID=$(az aks show \
   --resource-group $RG_NAME \
-  --name $LA_NAME \
-  --query principalId -o tsv)
+  --name $AKS_NAME \
+  --query identityProfile.kubeletidentity.objectId -o tsv)
 
 # Grant Key Vault secrets user role
 az keyvault set-policy \
@@ -261,65 +261,50 @@ az keyvault set-policy \
 # Password: @Microsoft.KeyVault(SecretUri=https://${KV_NAME}.vault.azure.net/secrets/AvilitySftpPassword)
 ```
 
-### Week 4: Integration Account Setup
+### Week 4: X12 EDI Services & Argo Workflows Setup
 
-#### Step 1: Create Integration Account
-
-```bash
-# Create Integration Account
-IA_NAME="${BASE_NAME}-ia"
-
-az integration-account create \
-  --resource-group $RG_NAME \
-  --name $IA_NAME \
-  --location $LOCATION \
-  --sku Standard
-```
-
-#### Step 2: Upload X12 Schemas
+#### Step 1: Deploy Argo Workflows on AKS
 
 ```bash
-# Upload 275 schema
-az integration-account schema create \
-  --resource-group $RG_NAME \
-  --integration-account-name $IA_NAME \
-  --name "X12_005010X210_275" \
-  --file-path ./X12_005010X210_275.xsd \
-  --schema-type Xml
+# Install Argo Workflows into the AKS cluster
+AKS_NAME="${BASE_NAME}-aks"
 
-# Upload 277 schema
-az integration-account schema create \
+az aks get-credentials \
   --resource-group $RG_NAME \
-  --integration-account-name $IA_NAME \
-  --name "X12_005010X212_277" \
-  --file-path ./X12_005010X212_277.xsd \
-  --schema-type Xml
+  --name $AKS_NAME
 
-# Upload 278 schema
-az integration-account schema create \
-  --resource-group $RG_NAME \
-  --integration-account-name $IA_NAME \
-  --name "X12_005010X217_278" \
-  --file-path ./X12_005010X217_278.xsd \
-  --schema-type Xml
+kubectl create namespace argo
+kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/latest/download/install.yaml
 ```
 
-#### Step 3: Configure Trading Partners
+#### Step 2: Deploy X12 EDI Microservices
 
-```powershell
-# Use provided PowerShell script
-pwsh -File ./configure-hipaa-trading-partners.ps1 `
-  -ResourceGroup $RG_NAME `
-  -IntegrationAccountName $IA_NAME `
-  -PayerId "[customer-payer-id]" `
-  -PayerQualifier "ZZ"
+```bash
+# Deploy C# X12 EDI services for 275/277/278 processing
+kubectl apply -f k8s/edi-services/x12-275-service.yaml
+kubectl apply -f k8s/edi-services/x12-277-service.yaml
+kubectl apply -f k8s/edi-services/x12-278-service.yaml
+
+# Verify services are running
+kubectl get pods -n edi-services
+```
+
+#### Step 3: Configure Trading Partner Secrets
+
+```bash
+# Store trading partner configuration in Kubernetes secrets
+kubectl create secret generic trading-partners \
+  --from-literal=clearinghouse-id="030240928" \
+  --from-literal=payer-id="[customer-payer-id]" \
+  --from-literal=payer-qualifier="ZZ" \
+  -n edi-services
 ```
 
 **Verify:**
 - Partner 1: Clearinghouse (030240928)
 - Partner 2: Customer Payer ([customer-payer-id])
-- Agreement: Clearinghouse-to-Customer (receive 275)
-- Agreement: Customer-to-Clearinghouse (send 277)
+- Argo DAG: Clearinghouse-to-Customer (receive 275)
+- Argo DAG: Customer-to-Clearinghouse (send 277)
 
 ---
 
@@ -373,9 +358,9 @@ export class CustomerClaimsConnector {
 }
 ```
 
-#### Step 2: Update Logic App Workflows
+#### Step 2: Update Argo Workflow DAGs
 
-Modify `logicapps/workflows/ingest275/workflow.json`:
+Modify `infrastructure/argo-workflows/ingest275-workflow.yaml`:
 
 1. **Update SFTP Trigger:**
    ```json
@@ -408,21 +393,12 @@ Modify `logicapps/workflows/ingest275/workflow.json`:
 #### Step 3: Deploy Workflows
 
 ```bash
-# Package workflows
-cd logicapps
-zip -r ../workflows.zip workflows/
+# Deploy Argo Workflow DAGs to AKS
+kubectl apply -f infrastructure/argo-workflows/ingest275-workflow.yaml -n argo
+kubectl apply -f infrastructure/argo-workflows/claims-adjudication-workflow.yaml -n argo
 
-# Deploy to Logic App
-az webapp deploy \
-  --resource-group $RG_NAME \
-  --name $LA_NAME \
-  --src-path ../workflows.zip \
-  --type zip
-
-# Restart Logic App
-az webapp restart \
-  --resource-group $RG_NAME \
-  --name $LA_NAME
+# Verify workflow templates are registered
+argo template list -n argo
 ```
 
 ### Week 6-7: Configuration & Refinement
@@ -580,7 +556,7 @@ az deployment group create \
 **Production-Specific Settings:**
 - Enable private endpoints for all PHI resources
 - Configure geo-redundant storage
-- Enable Azure Backup for Logic Apps configuration
+- Enable Azure Backup for AKS configuration
 - Set up production monitoring and alerting
 - Configure log retention (365 days for audit logs)
 
@@ -615,7 +591,7 @@ az webapp show \
 - [ ] Production workflows deployed and verified
 - [ ] Key Vault secrets configured
 - [ ] API connections authenticated
-- [ ] Integration Account configured with prod partners
+- [ ] X12 EDI services configured with prod trading partners
 - [ ] Monitoring and alerting configured
 - [ ] Backup and DR procedures documented
 - [ ] Operations runbook reviewed
@@ -652,7 +628,7 @@ az webapp show \
 
 **Topics:**
 1. Azure infrastructure overview
-2. Logic Apps workflow deep dive
+2. AKS and Argo Workflows deep dive
 3. Troubleshooting common issues
 4. How to access logs and diagnostics
 5. Security and compliance features

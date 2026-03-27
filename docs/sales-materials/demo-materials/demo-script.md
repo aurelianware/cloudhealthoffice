@@ -4,7 +4,7 @@
 
 ### Technical Setup:
 - [ ] Test screen sharing capability
-- [ ] Open Azure Portal (Logic Apps workflow runs)
+- [ ] Open Azure Portal (AKS / Argo Workflows dashboard)
 - [ ] Open Application Insights (monitoring dashboard)
 - [ ] Have test 275 file ready (`test-x12-275-clearinghouse-inbound.edi`)
 - [ ] Prepare ROI calculator with prospect's numbers
@@ -84,13 +84,13 @@
 **YOU:** "The platform has four main components:"
 
 **1. SFTP Polling & Data Lake**
-- "Logic App polls Clearinghouse SFTP every 15 minutes"
+- "Argo Workflow on AKS polls Clearinghouse SFTP every 15 minutes"
 - "Automatically downloads new 275 files"
 - "Archives raw files to Azure Data Lake with date-based partitioning"
 - "Maintains 7-year retention for HIPAA compliance"
 
-**2. X12 Processing & Integration Account**
-- "Integration Account decodes X12 275 format"
+**2. X12 Processing via C# EDI Services**
+- "C# X12 EDI microservices decode the X12 275 format"
 - "Extracts claim number, member ID, provider NPI, attachment metadata"
 - "Validates file structure and required fields"
 
@@ -113,10 +113,10 @@
 
 **YOU:** "Let me show you this in action. I'm going to process a real 275 attachment file."
 
-**[Navigate to Azure Portal → Logic Apps]**
+**[Navigate to Argo Workflows dashboard on AKS]**
 
 #### Step 1: Show SFTP Trigger
-**YOU:** "Here's the Logic App workflow called `ingest275`. It's configured to check Clearinghouse SFTP every 15 minutes for new files in the `/inbound/attachments` folder."
+**YOU:** "Here's the Argo Workflow DAG called `ingest275`. It's configured to check Clearinghouse SFTP every 15 minutes for new files in the `/inbound/attachments` folder."
 
 **[Show workflow definition, trigger configuration]**
 
@@ -130,7 +130,7 @@
 **YOU:** "In a production environment, this would be coming from the clearinghouse automatically."
 
 #### Step 3: Show Workflow Execution
-**[Navigate to Logic App → Runs History]**
+**[Navigate to Argo Workflows → Workflow Runs]**
 
 **YOU:** "And here we can see the workflow running in real-time. Let me open this run..."
 
@@ -140,7 +140,7 @@
 
 1. **SFTP Get File** - "Downloaded the attachment from SFTP"
 2. **Archive to Data Lake** - "Stored raw file in `hipaa-attachments/raw/275/2025/01/15/`"
-3. **Decode X12 275** - "Integration Account decoded the X12 message"
+3. **Decode X12 275** - "C# EDI service decoded the X12 message"
 4. **Extract Metadata** - "Pulled out claim number: 2025010112345, member ID: ABC123456, provider NPI: 1234567890"
 5. **claims backend API Call** - "Called [Their Claims System] API to validate claim and link attachment"
 6. **Publish to Service Bus** - "Published event to `attachments-in` topic for downstream processing"
@@ -212,7 +212,7 @@
 - "Audit logging for every secret access"
 
 **2. Private Endpoints & Network Isolation**
-- "VNet integration for Logic Apps"
+- "VNet integration for AKS cluster"
 - "Private endpoints for Storage, Service Bus, and Key Vault"
 - "Zero public internet exposure for PHI data"
 
@@ -375,7 +375,7 @@
 
 ### Technical Demo (45 minutes)
 - Include Bicep infrastructure review
-- Show Logic App workflow JSON
+- Show Argo Workflow YAML manifests
 - Review API integration code
 - Discuss security architecture in depth
 - Use for IT/engineering teams
@@ -454,7 +454,7 @@
 ## Additional Demo Resources
 
 ### Demo Environment Checklist:
-- [ ] Azure subscription with Logic Apps deployed
+- [ ] Azure subscription with AKS and Argo Workflows deployed
 - [ ] Test SFTP server with sample 275 files
 - [ ] Application Insights with demo data
 - [ ] Sample integration to mock claims system

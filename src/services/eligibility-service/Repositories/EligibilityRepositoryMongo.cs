@@ -97,7 +97,7 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
         }
         
         await _inquiryCollection.InsertOneAsync(inquiry);
-        _logger.LogInformation("Created eligibility inquiry {InquiryId} (Mongo)", inquiry.Id);
+        _logger.LogInformation("Created eligibility inquiry {InquiryId} (Mongo)", SanitizeForLog(inquiry.Id));
     }
 
     public async Task UpdateInquiryAsync(EligibilityInquiry inquiry)

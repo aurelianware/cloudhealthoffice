@@ -1,0 +1,494 @@
+@page "/pricing-api"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IPricingApiService PricingApiService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Pricing API - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Api" Class="mr-2" />
+        Pricing API Management
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Manage API keys, fee schedules, and monitor usage for the Pricing API
+    </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4"
+             Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+        <!-- Tab 1: API Keys -->
+        <MudTabPanel Text="API Keys" Icon="@Icons.Material.Filled.Key">
+            @if (_loadingKeys)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+
+            <!-- Stats Row -->
+            <MudGrid Class="pa-4">
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.03);">
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@_apiKeys.Count</MudText>
+                        <MudText Typo="Typo.caption">Total Keys</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 136, 0.2); background: rgba(0, 255, 136, 0.03);">
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_apiKeys.Count(k => k.IsActive)</MudText>
+                        <MudText Typo="Typo.caption">Active Keys</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.03);">
+                        <MudText Typo="Typo.h4" Color="Color.Info">@_apiKeys.Sum(k => k.CurrentMonthUsage)</MudText>
+                        <MudText Typo="Typo.caption">Total Usage This Month</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                        <MudText Typo="Typo.h4">@_apiKeys.Count(k => k.Tier == "Free")</MudText>
+                        <MudText Typo="Typo.caption">Free</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                        <MudText Typo="Typo.h4">@_apiKeys.Count(k => k.Tier == "Starter")</MudText>
+                        <MudText Typo="Typo.caption">Starter</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="2">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                        <MudText Typo="Typo.h4">@(_apiKeys.Count(k => k.Tier == "Professional") + _apiKeys.Count(k => k.Tier == "Enterprise"))</MudText>
+                        <MudText Typo="Typo.caption">Pro / Enterprise</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-2 pa-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenCreateApiKeyDialog">
+                    Create API Key
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.RestartAlt"
+                           OnClick="ConfirmResetUsage">
+                    Reset Monthly Usage
+                </MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadApiKeysAsync">
+                    Refresh
+                </MudButton>
+            </div>
+
+            <!-- API Keys Table -->
+            <MudTable Items="_apiKeys" Hover="true" Striped="true" Dense="true" Elevation="0"
+                      Style="border: 1px solid rgba(0, 255, 255, 0.15);">
+                <HeaderContent>
+                    <MudTh>Tenant Name</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Tier</MudTh>
+                    <MudTh>API Key</MudTh>
+                    <MudTh>Usage</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Created</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Tenant Name">@context.TenantName</MudTd>
+                    <MudTd DataLabel="Email">@context.ContactEmail</MudTd>
+                    <MudTd DataLabel="Tier">
+                        <MudChip T="string" Color="@GetTierColor(context.Tier)" Size="Size.Small" Variant="Variant.Outlined">
+                            @context.Tier
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="API Key">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0, 255, 255, 0.7);">
+                            @(context.ApiKey.Length > 12 ? context.ApiKey[..12] + "..." : context.ApiKey)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Usage">
+                        <div style="min-width: 120px;">
+                            <MudText Typo="Typo.caption">@context.CurrentMonthUsage / @context.MonthlyLimit</MudText>
+                            <MudProgressLinear Color="@GetUsageColor(context.CurrentMonthUsage, context.MonthlyLimit)"
+                                               Value="@GetUsagePercent(context.CurrentMonthUsage, context.MonthlyLimit)"
+                                               Style="height: 6px; border-radius: 3px;" />
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" Variant="Variant.Filled">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (context.IsActive)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Small"
+                                           OnClick="() => ConfirmDeactivateKey(context)" Title="Deactivate" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-4" Color="Color.Secondary">
+                        No API keys found. Create one to get started.
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudTabPanel>
+
+        <!-- Tab 2: Fee Schedules -->
+        <MudTabPanel Text="Fee Schedules" Icon="@Icons.Material.Filled.TableChart">
+            @if (_loadingSchedules)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            }
+
+            <!-- Fee Schedules Table -->
+            <MudTable Items="_feeSchedules" Hover="true" Striped="true" Dense="true" Elevation="0" Class="ma-4"
+                      Style="border: 1px solid rgba(0, 255, 255, 0.15);">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Version</MudTh>
+                    <MudTh>Code Count</MudTh>
+                    <MudTh>Last Updated</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0, 255, 255, 0.7);">
+                            @context.Id
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined">
+                            @context.Type
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Version">@context.Version</MudTd>
+                    <MudTd DataLabel="Code Count">@context.CodeCount.ToString("N0")</MudTd>
+                    <MudTd DataLabel="Last Updated">@context.LastUpdated.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-4" Color="Color.Secondary">
+                        No fee schedules found. Upload one or seed demo data.
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <!-- Upload Section -->
+            <MudPaper Class="pa-4 ma-4" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.02);">
+                <MudText Typo="Typo.h6" GutterBottom="true">Upload Fee Schedule</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="3">
+                        <MudSelect @bind-Value="_uploadType" Label="Schedule Type" Variant="Variant.Outlined" T="string"
+                                   AnchorOrigin="Origin.BottomCenter">
+                            <MudSelectItem Value="@("rbrvs")">RBRVS (Physician)</MudSelectItem>
+                            <MudSelectItem Value="@("opps")">OPPS (Outpatient)</MudSelectItem>
+                            <MudSelectItem Value="@("drg")">DRG (Inpatient)</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudNumericField @bind-Value="_uploadYear" Label="Year" Variant="Variant.Outlined" Min="2020" Max="2030" />
+                    </MudItem>
+                    @if (_uploadType == "drg")
+                    {
+                        <MudItem xs="12" md="2">
+                            <MudNumericField @bind-Value="_uploadBaseRate" Label="Base Rate ($)" Variant="Variant.Outlined"
+                                             Format="N2" />
+                        </MudItem>
+                    }
+                    <MudItem xs="12" md="3">
+                        <MudFileUpload T="IBrowserFile" Accept=".csv" OnFilesChanged="OnFileSelected" MaximumFileCount="1">
+                            <ButtonTemplate>
+                                <MudButton HtmlTag="label" Variant="Variant.Outlined" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.CloudUpload"
+                                           for="@context" FullWidth="true" Style="height: 56px;">
+                                    @(_selectedFile != null ? _selectedFile.Name : "Select CSV File")
+                                </MudButton>
+                            </ButtonTemplate>
+                        </MudFileUpload>
+                    </MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
+                                   OnClick="UploadFeeScheduleAsync" Disabled="@(_selectedFile == null || _uploading)"
+                                   FullWidth="true" Style="height: 56px;">
+                            @if (_uploading)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Uploading...</span>
+                            }
+                            else
+                            {
+                                <span>Upload</span>
+                            }
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <!-- Actions -->
+            <div class="d-flex gap-2 pa-4">
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.DatasetLinked"
+                           OnClick="SeedDemoDataAsync">
+                    Seed Demo Data
+                </MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadFeeSchedulesAsync">
+                    Refresh
+                </MudButton>
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private bool _loadingKeys;
+    private bool _loadingSchedules;
+    private bool _uploading;
+    private string? _serviceError;
+
+    private List<PricingApiKey> _apiKeys = new();
+    private List<PricingFeeScheduleInfo> _feeSchedules = new();
+
+    // Upload form state
+    private string _uploadType = "rbrvs";
+    private int _uploadYear = 2025;
+    private decimal _uploadBaseRate = 6377.73m;
+    private IBrowserFile? _selectedFile;
+
+    // Create key dialog state
+    private string _newTenantName = "";
+    private string _newContactEmail = "";
+    private string _newTier = "Free";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadApiKeysAsync(), LoadFeeSchedulesAsync());
+    }
+
+    private async Task LoadApiKeysAsync()
+    {
+        _loadingKeys = true;
+        try
+        {
+            _apiKeys = await PricingApiService.GetApiKeysAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading API keys: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingKeys = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadFeeSchedulesAsync()
+    {
+        _loadingSchedules = true;
+        try
+        {
+            _feeSchedules = await PricingApiService.GetFeeSchedulesAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading fee schedules: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingSchedules = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateApiKeyDialog()
+    {
+        _newTenantName = "";
+        _newContactEmail = "";
+        _newTier = "Free";
+
+        var parameters = new DialogParameters<CreateApiKeyDialog>
+        {
+            { x => x.TenantName, _newTenantName },
+            { x => x.ContactEmail, _newContactEmail },
+            { x => x.Tier, _newTier }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateApiKeyDialog>("Create API Key", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is PricingApiKey createdKey)
+        {
+            // Show the full key in a confirmation dialog
+            var confirmParams = new DialogParameters<ApiKeyCreatedDialog>
+            {
+                { x => x.ApiKey, createdKey.ApiKey },
+                { x => x.TenantName, createdKey.TenantName }
+            };
+            var confirmOptions = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+            await DialogService.ShowAsync<ApiKeyCreatedDialog>("API Key Created", confirmParams, confirmOptions);
+
+            await LoadApiKeysAsync();
+        }
+    }
+
+    private async Task ConfirmDeactivateKey(PricingApiKey key)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Deactivate API Key",
+            $"Are you sure you want to deactivate the API key for '{key.TenantName}'? This cannot be undone.",
+            yesText: "Deactivate",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await PricingApiService.DeactivateApiKeyAsync(key.ApiKey);
+                Snackbar.Add($"API key for '{key.TenantName}' has been deactivated.", Severity.Success);
+                await LoadApiKeysAsync();
+            }
+            catch (ServiceUnavailableException ex)
+            {
+                _serviceError = ex.Message;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deactivating key: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ConfirmResetUsage()
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Reset Monthly Usage",
+            "Are you sure you want to reset usage counters for ALL API keys? This is typically done at the start of a new billing period.",
+            yesText: "Reset All",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await PricingApiService.ResetUsageAsync();
+                Snackbar.Add("Monthly usage has been reset for all API keys.", Severity.Success);
+                await LoadApiKeysAsync();
+            }
+            catch (ServiceUnavailableException ex)
+            {
+                _serviceError = ex.Message;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error resetting usage: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+    }
+
+    private async Task UploadFeeScheduleAsync()
+    {
+        if (_selectedFile == null) return;
+
+        _uploading = true;
+        try
+        {
+            var stream = _selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024); // 50MB max
+            decimal? baseRate = _uploadType == "drg" ? _uploadBaseRate : null;
+            var result = await PricingApiService.UploadFeeScheduleAsync(_uploadType, _uploadYear, stream, _selectedFile.Name, baseRate);
+            Snackbar.Add($"{result.Message} ({result.CodeCount:N0} codes loaded)", Severity.Success);
+            _selectedFile = null;
+            await LoadFeeSchedulesAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error uploading fee schedule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _uploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SeedDemoDataAsync()
+    {
+        try
+        {
+            await PricingApiService.SeedDemoDataAsync();
+            Snackbar.Add("Demo data has been seeded successfully.", Severity.Success);
+            await LoadFeeSchedulesAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error seeding demo data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetTierColor(string tier) => tier switch
+    {
+        "Free" => Color.Default,
+        "Starter" => Color.Info,
+        "Professional" => Color.Primary,
+        "Enterprise" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private double GetUsagePercent(int current, int limit) =>
+        limit > 0 ? Math.Min(100.0, (double)current / limit * 100.0) : 0;
+
+    private Color GetUsageColor(int current, int limit)
+    {
+        if (limit <= 0) return Color.Default;
+        var pct = (double)current / limit * 100.0;
+        return pct switch
+        {
+            >= 90 => Color.Error,
+            >= 70 => Color.Warning,
+            _ => Color.Success
+        };
+    }
+}

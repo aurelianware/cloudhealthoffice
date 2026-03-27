@@ -82,9 +82,10 @@
         <ul id="mainNav">
           <li><a href="/">Home</a></li>
           <li><a href="/solutions-payers" style="color:#00ffff;" aria-current="page">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
           <li><a href="/pricing">Pricing</a></li>
           <li><a href="/platform">Platform</a></li>
-          <li><a href="/release-notes">Versions</a></li>
+          <li><a href="/docs">Docs</a></li>
           <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
           <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
           <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
@@ -169,7 +170,7 @@
         <li><strong>Multi-Clearinghouse Support:</strong> Connect to Change Healthcare, Availity, Waystar, Relay Health via unified API. Add new clearinghouses in <1 day.</li>
         <li><strong>X12 EDI Automation:</strong> 275, 276, 277, 278, 834, 835, 837 workflows included. Production-tested with 1,018+ test cases.</li>
         <li><strong>Zero-Code Deployment:</strong> Config-driven payer onboarding. Add new trading partners via JSON, no custom development.</li>
-        <li><strong>Azure-Native Architecture:</strong> Logic Apps Standard, Service Bus, Data Lake Gen2. Scales to millions of members.</li>
+        <li><strong>Kubernetes-Native Architecture:</strong> Argo Workflows on AKS, Service Bus, Data Lake Gen2. Scales to millions of members.</li>
         <li><strong>Deployment Options:</strong> Managed SaaS or self-hosted in your Azure tenant. You choose the model.</li>
         <li><strong>Source-Available Core:</strong> BSL 1.1 license. Full source transparency. Audit every line, customize for your environment. No black-box vendor lock-in.</li>
       </ul>
@@ -215,7 +216,7 @@ Claims Platform → Cloud Health Office → Clearinghouses
         <p><strong>Key Components:</strong></p>
         <ul style="margin-top:15px;">
           <li><strong>FHIR Gateway:</strong> Translates QNXT data to FHIR R4 resources (Patient, Coverage, ExplanationOfBenefit)</li>
-          <li><strong>EDI Orchestration:</strong> Logic Apps Standard workflows for 275/276/277/278/834/835/837</li>
+          <li><strong>EDI Orchestration:</strong> Argo Workflows on AKS for 275/276/277/278/834/835/837</li>
           <li><strong>Prior Auth Engine:</strong> Automated 278 request routing with real-time status tracking</li>
           <li><strong>Multi-Tenant Isolation:</strong> Separate Azure Service Bus namespaces per payer/clearinghouse</li>
           <li><strong>Audit Trail:</strong> Every transaction logged to Data Lake Gen2 with 7-year retention</li>
@@ -298,7 +299,8 @@ Claims Platform → Cloud Health Office → Clearinghouses
       <a href="/solutions-payers">Solutions</a> •
       <a href="/pricing">Pricing</a> •
       <a href="/platform">Platform</a> •
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> •
+      <a href="/docs">Docs</a>
     </p>
     <p style="opacity:0.6; font-size:0.9rem; margin-top:20px;">
       © 2026 Cloud Health Office • Built by healthcare payer system experts

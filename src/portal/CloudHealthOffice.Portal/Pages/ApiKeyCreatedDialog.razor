@@ -1,0 +1,53 @@
+@inject IJSRuntime JSRuntime
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" Style="color: #00ff88;" />
+            API Key Created
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+            Save this key now. It will not be shown again.
+        </MudAlert>
+
+        <MudText Typo="Typo.body2" Class="mb-2" Color="Color.Secondary">Tenant: @TenantName</MudText>
+
+        <MudPaper Class="pa-3" Elevation="0" Style="border: 1px solid rgba(0, 255, 255, 0.3); background: rgba(0, 255, 255, 0.05); font-family: monospace; word-break: break-all;">
+            @ApiKey
+        </MudPaper>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy"
+                   Class="mt-3" OnClick="CopyToClipboard" FullWidth="true">
+            @(_copied ? "Copied!" : "Copy to Clipboard")
+        </MudButton>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string ApiKey { get; set; } = "";
+    [Parameter] public string TenantName { get; set; } = "";
+
+    private bool _copied;
+
+    private async Task CopyToClipboard()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", ApiKey);
+            _copied = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            // Clipboard API may not be available
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+}

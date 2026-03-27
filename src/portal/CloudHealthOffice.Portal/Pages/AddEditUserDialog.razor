@@ -1,0 +1,177 @@
+@using CloudHealthOffice.Portal.Services
+@inject HttpClient Http
+@inject IConfiguration Configuration
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.PersonAdd)" Class="mr-2" />
+            @(IsEdit ? "Edit User" : "Add User")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_email" Label="Email" Required="true" RequiredError="Email is required"
+                      InputType="InputType.Email" Disabled="@IsEdit" Class="mb-3" />
+        <MudTextField @bind-Value="_displayName" Label="Display Name" Required="true"
+                      RequiredError="Display name is required" Class="mb-3" />
+        <MudStack Row="true" Spacing="2" Class="mb-3">
+            <MudTextField @bind-Value="_firstName" Label="First Name" />
+            <MudTextField @bind-Value="_lastName" Label="Last Name" />
+        </MudStack>
+        <MudSelect T="string" Label="Department" @bind-Value="_department" Class="mb-3">
+            <MudSelectItem Value="@("Claims")">Claims</MudSelectItem>
+            <MudSelectItem Value="@("Utilization Management")">Utilization Management</MudSelectItem>
+            <MudSelectItem Value="@("Member Services")">Member Services</MudSelectItem>
+            <MudSelectItem Value="@("Enrollment")">Enrollment</MudSelectItem>
+            <MudSelectItem Value="@("Provider Relations")">Provider Relations</MudSelectItem>
+            <MudSelectItem Value="@("Finance")">Finance</MudSelectItem>
+            <MudSelectItem Value="@("Compliance")">Compliance</MudSelectItem>
+            <MudSelectItem Value="@("Administration")">Administration</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles" Class="mb-3">
+            @foreach (var role in AvailableRoles)
+            {
+                <MudSelectItem T="string" Value="@role">@FormatRoleName(role)</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            @(IsEdit ? "Save Changes" : "Add User")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? TenantId { get; set; }
+    [Parameter] public UserManagement.UserListItem? ExistingUser { get; set; }
+    [Parameter] public List<string> AvailableRoles { get; set; } = new();
+
+    private string _email = string.Empty;
+    private string _displayName = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _department = string.Empty;
+    private IEnumerable<string> _selectedRoles = new List<string>();
+    private string? _errorMessage;
+    private bool _saving;
+
+    private bool IsEdit => ExistingUser != null;
+
+    protected override void OnInitialized()
+    {
+        if (ExistingUser != null)
+        {
+            _email = ExistingUser.Email;
+            _displayName = ExistingUser.DisplayName;
+            _firstName = ExistingUser.FirstName;
+            _lastName = ExistingUser.LastName;
+            _department = ExistingUser.Department;
+            _selectedRoles = ExistingUser.Roles;
+        }
+    }
+
+    private async Task Submit()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_displayName))
+        {
+            _errorMessage = "Email and Display Name are required.";
+            return;
+        }
+
+        if (!_selectedRoles.Any())
+        {
+            _errorMessage = "At least one role must be selected.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            _errorMessage = "Tenant context is not available. Please refresh and try again.";
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var baseUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
+
+            if (IsEdit)
+            {
+                var response = await Http.PutAsJsonAsync(
+                    $"{baseUrl}/v1/tenants/{TenantId}/users/{ExistingUser!.Id}",
+                    new
+                    {
+                        DisplayName = _displayName,
+                        FirstName = _firstName,
+                        LastName = _lastName,
+                        Roles = _selectedRoles.ToList(),
+                        Department = _department
+                    });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _errorMessage = $"Failed to update user: {response.ReasonPhrase}";
+                    return;
+                }
+            }
+            else
+            {
+                var response = await Http.PostAsJsonAsync(
+                    $"{baseUrl}/v1/tenants/{TenantId}/users",
+                    new
+                    {
+                        Email = _email,
+                        DisplayName = _displayName,
+                        FirstName = _firstName,
+                        LastName = _lastName,
+                        Roles = _selectedRoles.ToList(),
+                        Department = _department
+                    });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    _errorMessage = $"Failed to add user: {body}";
+                    return;
+                }
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private string FormatRoleName(string role) => role switch
+    {
+        "ClaimsExaminer" => "Claims Examiner",
+        "ClaimsSupervisor" => "Claims Supervisor",
+        "MemberServices" => "Member Services",
+        "EnrollmentSpecialist" => "Enrollment Specialist",
+        "UMCoordinator" => "UM Coordinator",
+        "ProviderRelations" => "Provider Relations",
+        "ComplianceOfficer" => "Compliance Officer",
+        "TenantAdmin" => "Tenant Admin",
+        _ => role
+    };
+}

@@ -153,7 +153,7 @@ This checklist ensures Cloud Health Office is prepared for investor due diligenc
 
 - [ ] **Technology Stack**
   - Frontend: React, Azure Static Web Apps (planned)
-  - Backend: Node.js, TypeScript, Azure Logic Apps
+  - Backend: C#, .NET, Argo Workflows on AKS
   - Infrastructure: Azure (native), Bicep IaC
   - Data: Azure Data Lake Gen2, Service Bus
   - **Reference**: [ARCHITECTURE.md](../ARCHITECTURE.md)

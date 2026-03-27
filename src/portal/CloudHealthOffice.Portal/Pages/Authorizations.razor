@@ -1,12 +1,13 @@
 @page "/authorizations"
-@page "/demo/authorizations"
 @using Microsoft.AspNetCore.Authorization
-@attribute [AllowAnonymous]
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IDialogService DialogService
 
 <PageTitle>Authorizations - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.FactCheck" Class="mr-2" />
@@ -15,6 +16,11 @@
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         Real-time prior authorization management • Avg decision time: &lt;2 minutes
     </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     <!-- Search Form -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
@@ -215,6 +221,7 @@
         </MudPaper>
     }
 </MudContainer>
+</PermissionGate>
 
 @code {
     private List<AuthorizationSummary> _allAuthorizations = new();
@@ -222,6 +229,7 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private string? _serviceError;
 
     private string _authIdSearch = string.Empty;
     private string _memberIdSearch = string.Empty;
@@ -247,6 +255,13 @@
         {
             _allAuthorizations = await AuthorizationService.GetAuthorizationsAsync();
             ApplyFilters();
+            _hasSearched = true;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _allAuthorizations = new();
+            _filteredAuthorizations = new();
             _hasSearched = true;
         }
         catch

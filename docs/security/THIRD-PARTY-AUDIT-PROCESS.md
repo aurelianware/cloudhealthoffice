@@ -170,7 +170,7 @@ Third-party security audits provide independent validation of Cloud Health Offic
 **Cost:** $10,000 - $20,000
 
 **Scope:**
-- Logic App workflow security review
+- Argo Workflow definition security review
 - Bicep infrastructure code review
 - PowerShell script security review
 - Configuration file security review
@@ -192,7 +192,7 @@ Third-party security audits provide independent validation of Cloud Health Offic
 
 **Recommended Providers:**
 - Application security specialists
-- Azure Logic Apps security experts
+- AKS/Argo Workflows security experts
 - Healthcare application security experience
 
 ---
@@ -214,7 +214,7 @@ Third-party security audits provide independent validation of Cloud Health Offic
 - Minimum 3 years healthcare/HIPAA experience
 - Azure cloud security expertise
 - EDI/X12 transaction knowledge (preferred)
-- Logic Apps security experience (preferred)
+- AKS/Kubernetes security experience (preferred)
 
 **References:**
 - Minimum 3 healthcare client references
@@ -244,7 +244,7 @@ Cloud Health Office is an open-source, Azure-native HIPAA-compliant EDI platform
 
 ## 2. Audit Scope
 - **Type:** [HIPAA Compliance Audit / Penetration Testing / SOC 2]
-- **Systems:** Azure Logic Apps, Data Lake Storage, Service Bus, Integration Account, Key Vault
+- **Systems:** AKS with Argo Workflows, Data Lake Storage, Service Bus, Key Vault
 - **Environment:** Production and UAT environments
 - **Timeline:** Preferred start date, duration
 - **Deliverables:** Detailed audit report, executive summary, remediation recommendations
@@ -910,7 +910,7 @@ We respectfully disagree with this finding for the following reasons:
 - [ ] Key Vault unauthorized secret access
 
 **Application Testing:**
-- [ ] Logic App workflow manipulation
+- [ ] Argo Workflow definition manipulation
 - [ ] API authentication bypass
 - [ ] Input validation vulnerabilities
 - [ ] Output encoding issues

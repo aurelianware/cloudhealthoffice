@@ -26,7 +26,9 @@ public class CoverageRepositoryMongo : ICoverageRepository
             new CreateIndexModel<Coverage>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.MemberId)),
             new CreateIndexModel<Coverage>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.GroupNumber)),
             // Compound index for active coverage search
-            new CreateIndexModel<Coverage>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.MemberId).Ascending(c => c.Status).Ascending(c => c.EffectiveDate))
+            new CreateIndexModel<Coverage>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.MemberId).Ascending(c => c.Status).Ascending(c => c.EffectiveDate)),
+            // PCP panel roster lookup (capitation-service queries by provider NPI)
+            new CreateIndexModel<Coverage>(indexKeys.Ascending(c => c.TenantId).Ascending(c => c.PcpNpi).Ascending(c => c.Status))
         };
         
         _collection.Indexes.CreateMany(indexModels);
@@ -161,6 +163,31 @@ public class CoverageRepositoryMongo : ICoverageRepository
             Builders<Coverage>.Filter.Eq(c => c.TenantId, tenantId),
             Builders<Coverage>.Filter.Eq(c => c.GroupNumber, groupNumber)
         );
+
+        return await _collection.Find(filter).ToListAsync();
+    }
+
+    public async Task<List<Coverage>> GetByPcpNpiAsync(
+        string tenantId,
+        string pcpNpi,
+        CoverageStatus? status = null,
+        LineOfBusiness? lineOfBusiness = null)
+    {
+        var builder = Builders<Coverage>.Filter;
+        var filter = builder.And(
+            builder.Eq(c => c.TenantId, tenantId),
+            builder.Eq(c => c.PcpNpi, pcpNpi)
+        );
+
+        if (status.HasValue)
+        {
+            filter = builder.And(filter, builder.Eq(c => c.Status, status.Value));
+        }
+
+        if (lineOfBusiness.HasValue)
+        {
+            filter = builder.And(filter, builder.Eq(c => c.LineOfBusiness, lineOfBusiness.Value));
+        }
 
         return await _collection.Find(filter).ToListAsync();
     }

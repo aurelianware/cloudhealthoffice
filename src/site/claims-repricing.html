@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Free Medicare claims repricing tool. Look up RBRVS physician fee schedule rates, OPPS APC payments, and MS-DRG weights for 2025. No signup required — verify allowed amounts instantly.">
+  <meta name="keywords" content="claims repricing, Medicare fee schedule lookup, RBRVS rate lookup, Medicare allowed amount, CMS physician fee schedule 2025, OPPS APC payment rate, MS-DRG weight lookup, free claims repricing tool, healthcare repricing engine, medical billing rate check">
+  <meta name="author" content="Aurelianware">
+  <link rel="canonical" href="https://cloudhealthoffice.com/claims-repricing">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:url" content="https://cloudhealthoffice.com/claims-repricing">
+  <meta property="og:title" content="Free Medicare Claims Repricing Tool — Cloud Health Office">
+  <meta property="og:description" content="Look up Medicare RBRVS, OPPS, and MS-DRG rates instantly. Free tier includes 1,000 claims/month. No credit card required.">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/claims-repricing">
+  <meta name="twitter:title" content="Free Medicare Claims Repricing Tool — Cloud Health Office">
+  <meta name="twitter:description" content="Look up Medicare RBRVS, OPPS, and MS-DRG rates instantly. Free tier includes 1,000 claims/month. No credit card required.">
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg">
+
+  <title>Free Medicare Claims Repricing &amp; Fee Schedule Lookup — Cloud Health Office</title>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Cloud Health Office Claims Repricing Tool",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Web",
+    "url": "https://cloudhealthoffice.com/claims-repricing",
+    "description": "Free Medicare claims repricing tool supporting RBRVS physician fee schedule, OPPS APC rates, and MS-DRG weights. Look up allowed amounts instantly with no signup required.",
+    "offers": {
+      "@type": "Offer",
+      "name": "Free Tier",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "1,000 claims per month, all three Medicare fee schedules, full RVU breakdown"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "Aurelianware, Inc.",
+      "url": "https://cloudhealthoffice.com"
+    },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Claims Repricing", "item": "https://cloudhealthoffice.com/claims-repricing" }
+      ]
+    }
+  }
+  </script>
+
+  <!-- FAQ structured data for rich snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is claims repricing?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Claims repricing is the process of recalculating the allowed amount for a healthcare claim using a specific fee schedule, such as Medicare RBRVS, OPPS, or MS-DRG. Health plans use repricing to determine what they should pay for a given procedure based on standardized rates rather than billed charges."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What fee schedules does Cloud Health Office support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Cloud Health Office supports three CMS fee schedules: Medicare RBRVS (Physician Fee Schedule) for professional claims, Medicare OPPS (Outpatient Prospective Payment System) for facility outpatient claims, and Medicare MS-DRG for inpatient hospital claims. Custom and commercial fee schedules are available on paid tiers."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is the claims repricing tool really free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The free tier includes 1,000 claims per month across all three Medicare fee schedules with full RVU breakdown, modifier adjustments, and facility/non-facility rate differentiation. No credit card is required to get started."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does Medicare RBRVS repricing work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "RBRVS (Resource-Based Relative Value Scale) pricing calculates the allowed amount using three RVU components: Work RVU, Practice Expense RVU, and Malpractice RVU. These are adjusted by Geographic Practice Cost Indices (GPCI) for the provider's locality, then multiplied by the CMS Conversion Factor to produce the final allowed amount."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
+  <link rel="stylesheet" href="css/sentinel.css">
+  <script src="js/auth.js"></script>
+  <script src="js/mobile-nav.js"></script>
+  <style>
+    .lookup-demo {
+      max-width: 700px;
+      margin: 0 auto;
+      background: rgba(8,8,8,0.9);
+      border: 1px solid rgba(0,255,255,0.2);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 0 30px rgba(0,255,255,0.06);
+    }
+    .lookup-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .lookup-field {
+      margin-bottom: 16px;
+    }
+    .lookup-field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: rgba(176,176,176,0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .lookup-field input, .lookup-field select {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .lookup-field input:focus, .lookup-field select:focus {
+      outline: none;
+      border-color: #00ffff;
+      box-shadow: 0 0 0 3px rgba(0,255,255,0.1);
+    }
+    .lookup-field select option { background: #111; }
+    .lookup-btn {
+      width: 100%;
+      padding: 14px;
+      background: #00ffff;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 8px;
+      transition: box-shadow 0.2s ease;
+    }
+    .lookup-btn:hover { box-shadow: 0 0 20px rgba(0,255,255,0.4); }
+    .lookup-result {
+      margin-top: 24px;
+      padding: 24px;
+      background: rgba(0,255,136,0.04);
+      border: 1px solid rgba(0,255,136,0.2);
+      border-radius: 12px;
+      display: none;
+    }
+    .lookup-result.visible { display: block; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 24px;
+    }
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .result-label { color: rgba(176,176,176,0.7); font-size: 0.88rem; }
+    .result-value { color: #fff; font-weight: 600; font-size: 0.95rem; }
+    .result-value.highlight { color: #00ff88; font-size: 1.2rem; }
+    .use-case-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+      margin-top: 40px;
+    }
+    .use-case-card {
+      background: rgba(8,8,8,0.9);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px;
+      padding: 36px 28px;
+      transition: border-color 0.3s ease;
+    }
+    .use-case-card:hover { border-color: rgba(0,255,255,0.3); }
+    .use-case-icon {
+      font-size: 2rem;
+      margin-bottom: 16px;
+      display: block;
+    }
+    .use-case-card h3 {
+      color: #fff;
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+    }
+    .use-case-card p {
+      color: rgba(176,176,176,0.7);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      margin: 0;
+    }
+    .schedule-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 32px;
+    }
+    .schedule-card {
+      background: rgba(8,8,8,0.9);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .schedule-card h3 { color: #00ffff; font-size: 1.1rem; margin-bottom: 8px; }
+    .schedule-card .schedule-type { color: rgba(176,176,176,0.6); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+    .schedule-card ul { list-style: none; padding: 0; margin: 0; text-align: left; }
+    .schedule-card li { font-size: 0.88rem; color: rgba(176,176,176,0.7); padding: 6px 0; }
+    .schedule-card li::before { content: '\2713'; color: #00ff88; margin-right: 8px; font-weight: 700; }
+    .free-banner {
+      display: inline-block;
+      background: rgba(0,255,136,0.1);
+      border: 1px solid rgba(0,255,136,0.3);
+      border-radius: 24px;
+      padding: 6px 20px;
+      color: #00ff88;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+    .trust-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 32px;
+    }
+    .trust-item { text-align: center; }
+    .trust-number { font-size: 2rem; font-weight: 700; color: #00ffff; }
+    .trust-label { font-size: 0.82rem; color: rgba(176,176,176,0.6); margin-top: 4px; }
+    @media (max-width: 768px) {
+      .lookup-row, .use-case-grid, .schedule-grid { grid-template-columns: 1fr; }
+      .trust-grid { grid-template-columns: repeat(2, 1fr); }
+      .result-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav style="margin-bottom:40px;">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/">Home</a></li>
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      updateNavigation('#mainNav');
+    });
+  </script>
+
+  <main id="main-content">
+
+    <!-- ===== HERO ===== -->
+    <div class="hero circuit-veins">
+      <div class="hero-content">
+        <span class="free-banner">Free — No Credit Card Required</span>
+        <h1>Medicare Claims Repricing</h1>
+        <p class="tagline" style="max-width: 680px; margin: 0 auto;">
+          Look up allowed amounts across CMS physician, outpatient, and inpatient fee schedules.
+          Verify what Medicare pays for any procedure — instantly.
+        </p>
+        <div style="margin-top: 30px;">
+          <a href="#try-it" class="button">Try It Free</a>
+          <a href="/pricing-api" class="button button-secondary">View API Docs</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-narrow">
+
+      <!-- ===== WHAT IS REPRICING ===== -->
+      <section class="assessment-section">
+        <h2>What Is Claims Repricing?</h2>
+        <p>
+          Claims repricing determines what a health plan should pay for a medical service based on a
+          contracted or reference fee schedule — rather than the provider's billed charges. It's the
+          foundation of accurate claims adjudication, network adequacy analysis, and provider contract negotiation.
+        </p>
+        <p>
+          Cloud Health Office gives you direct access to the same CMS fee schedule data used by
+          Medicare Administrative Contractors, so you can verify rates before paying a claim,
+          audit existing payments, or benchmark your commercial contracts against Medicare.
+        </p>
+      </section>
+
+      <!-- ===== SUPPORTED FEE SCHEDULES ===== -->
+      <section class="assessment-section">
+        <h2>Supported Fee Schedules</h2>
+        <p>All three major CMS payment methodologies, updated for 2025.</p>
+
+        <div class="schedule-grid">
+          <div class="schedule-card">
+            <h3>RBRVS</h3>
+            <div class="schedule-type">Physician Fee Schedule</div>
+            <ul>
+              <li>Work, PE &amp; MP RVU components</li>
+              <li>Geographic (GPCI) adjustment</li>
+              <li>Facility / non-facility rates</li>
+              <li>Conversion factor applied</li>
+              <li>Modifier adjustments (50, 52, 62, 80)</li>
+            </ul>
+          </div>
+          <div class="schedule-card">
+            <h3>OPPS</h3>
+            <div class="schedule-type">Outpatient Prospective Payment</div>
+            <ul>
+              <li>APC assignment &amp; payment rate</li>
+              <li>Status indicator logic</li>
+              <li>Device-intensive add-ons</li>
+              <li>Composite APC grouping</li>
+              <li>Multiple procedure discounting</li>
+            </ul>
+          </div>
+          <div class="schedule-card">
+            <h3>MS-DRG</h3>
+            <div class="schedule-type">Inpatient Prospective Payment</div>
+            <ul>
+              <li>DRG relative weight</li>
+              <li>Hospital base rate</li>
+              <li>Wage index adjustment</li>
+              <li>Outlier threshold</li>
+              <li>Transfer policy logic</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== INTERACTIVE DEMO ===== -->
+      <section class="assessment-section" id="try-it">
+        <h2>Try It — Look Up a Rate</h2>
+        <p>Enter a CPT or HCPCS code to see the Medicare allowed amount. No signup needed.</p>
+
+        <div class="lookup-demo">
+          <div class="lookup-row">
+            <div class="lookup-field">
+              <label for="cptCode">Procedure Code</label>
+              <input type="text" id="cptCode" placeholder="e.g., 99213, 27447, 43239" maxlength="10" />
+            </div>
+            <div class="lookup-field">
+              <label for="feeSchedule">Fee Schedule</label>
+              <select id="feeSchedule">
+                <option value="MEDICARE_RBRVS_2025">Medicare RBRVS 2025</option>
+                <option value="MEDICARE_OPPS_2025">Medicare OPPS 2025</option>
+                <option value="MEDICARE_DRG_2025">Medicare MS-DRG 2025</option>
+              </select>
+            </div>
+          </div>
+          <div class="lookup-row">
+            <div class="lookup-field">
+              <label for="facilityToggle">Setting</label>
+              <select id="facilityToggle">
+                <option value="false">Non-Facility (Office)</option>
+                <option value="true">Facility (Hospital)</option>
+              </select>
+            </div>
+            <div class="lookup-field">
+              <label for="locality">Locality</label>
+              <input type="text" id="locality" placeholder="e.g., 05 (optional)" maxlength="4" />
+            </div>
+          </div>
+          <button class="lookup-btn" onclick="lookupCode()">Look Up Rate</button>
+
+          <div class="lookup-result" id="lookupResult">
+            <div style="margin-bottom: 16px;">
+              <span class="result-label">Allowed Amount</span><br>
+              <span class="result-value highlight" id="resultAmount">—</span>
+            </div>
+            <div class="result-grid">
+              <div class="result-item"><span class="result-label">Code</span><span class="result-value" id="resultCode">—</span></div>
+              <div class="result-item"><span class="result-label">Description</span><span class="result-value" id="resultDesc">—</span></div>
+              <div class="result-item"><span class="result-label">Work RVU</span><span class="result-value" id="resultWorkRvu">—</span></div>
+              <div class="result-item"><span class="result-label">PE RVU</span><span class="result-value" id="resultPeRvu">—</span></div>
+              <div class="result-item"><span class="result-label">MP RVU</span><span class="result-value" id="resultMpRvu">—</span></div>
+              <div class="result-item"><span class="result-label">Conversion Factor</span><span class="result-value" id="resultCf">—</span></div>
+              <div class="result-item"><span class="result-label">Setting</span><span class="result-value" id="resultSetting">—</span></div>
+              <div class="result-item"><span class="result-label">Fee Schedule</span><span class="result-value" id="resultFs">—</span></div>
+            </div>
+          </div>
+          <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:rgba(176,176,176,0.5);">
+            Powered by the Cloud Health Office Repricing API.
+            <a href="/pricing-api" style="color:#00ffff;">Get your free API key</a> for programmatic access.
+          </p>
+        </div>
+      </section>
+
+      <!-- ===== WHO IS THIS FOR ===== -->
+      <section class="assessment-section">
+        <h2>Who Uses Claims Repricing?</h2>
+
+        <div class="use-case-grid">
+          <div class="use-case-card">
+            <span class="use-case-icon" aria-hidden="true">&#9878;</span>
+            <h3>Health Plans &amp; TPAs</h3>
+            <p>
+              Price claims against Medicare or custom fee schedules during adjudication.
+              Validate provider contracts and detect overpayments before they happen.
+            </p>
+          </div>
+          <div class="use-case-card">
+            <span class="use-case-icon" aria-hidden="true">&#9733;</span>
+            <h3>Revenue Cycle Teams</h3>
+            <p>
+              Verify expected reimbursement before submitting claims. Compare
+              commercial rates against Medicare benchmarks to identify underpayments.
+            </p>
+          </div>
+          <div class="use-case-card">
+            <span class="use-case-icon" aria-hidden="true">&#128202;</span>
+            <h3>Actuaries &amp; Analysts</h3>
+            <p>
+              Model network costs, build rate comparison reports, and benchmark
+              fee schedules across geographies using CMS-sourced data.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== TRUST SIGNALS ===== -->
+      <section class="assessment-section">
+        <h2>Built on CMS Data You Can Trust</h2>
+
+        <div class="trust-grid">
+          <div class="trust-item">
+            <div class="trust-number">80K+</div>
+            <div class="trust-label">CPT/HCPCS Codes</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-number">3</div>
+            <div class="trust-label">Fee Schedules</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-number">1,000</div>
+            <div class="trust-label">Free Claims / Month</div>
+          </div>
+          <div class="trust-item">
+            <div class="trust-number">0</div>
+            <div class="trust-label">Credit Card Required</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HOW IT WORKS ===== -->
+      <section class="assessment-section">
+        <h2>How It Works</h2>
+
+        <div class="schedule-grid">
+          <div class="schedule-card">
+            <h3>1. Submit a Code</h3>
+            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+              Enter a CPT, HCPCS, or DRG code with the fee schedule and place of service.
+              Use the form above or call the REST API directly.
+            </p>
+          </div>
+          <div class="schedule-card">
+            <h3>2. Get the Rate</h3>
+            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+              Receive the Medicare allowed amount with full breakdown: RVU components,
+              conversion factor, facility differential, and modifier adjustments.
+            </p>
+          </div>
+          <div class="schedule-card">
+            <h3>3. Scale Up</h3>
+            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+              Integrate via API for batch repricing. Connect to your claims adjudication
+              pipeline or build custom rate comparison dashboards.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== FREE TIER DETAILS ===== -->
+      <section class="assessment-section">
+        <h2>What's Included Free</h2>
+        <div style="max-width:600px; margin:0 auto;">
+          <ul style="list-style:none; padding:0;">
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> 1,000 claims per month
+            </li>
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> All three Medicare fee schedules (RBRVS, OPPS, MS-DRG)
+            </li>
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Full RVU breakdown &amp; modifier adjustments
+            </li>
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Facility / non-facility rate differentiation
+            </li>
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Multiple procedure payment reduction (MPPR)
+            </li>
+            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> REST API with JSON responses
+            </li>
+            <li style="padding:12px 0; color:rgba(176,176,176,0.8); font-size:0.95rem;">
+              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> No credit card, no contract, no vendor lock-in
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== CTA ===== -->
+      <section class="cta-section">
+        <h2>Start Repricing Claims for Free</h2>
+        <p>
+          Get your API key in 30 seconds. Use the free tier as long as you want —
+          upgrade only when your volume grows.
+        </p>
+        <div style="margin-top: 24px;">
+          <a href="/pricing-api#signup" class="button button-green">Get Free API Key</a>
+          <a href="/pricing" class="button button-secondary">See Full Platform Pricing</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <strong>Cloud Health Office v4.0 — The Sentinel</strong><br>
+      Capabilities beyond question. Systems that do not fail.
+    </p>
+    <p>
+      BSL 1.1 &bull; Not affiliated with CMS or third-party vendors &bull; &copy; 2026 Aurelianware<br>
+      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> &bull;
+      <a href="/docs">Docs</a> &bull;
+      <a href="mailto:mark@aurelianware.com">Contact</a> &bull;
+      <a href="/legal/privacy-policy">Privacy</a>
+    </p>
+  </footer>
+
+  <script>
+    async function lookupCode() {
+      const code = document.getElementById('cptCode').value.trim();
+      if (!code) return;
+      const fs = document.getElementById('feeSchedule').value;
+      const facility = document.getElementById('facilityToggle').value;
+      const locality = document.getElementById('locality').value.trim();
+
+      const resultDiv = document.getElementById('lookupResult');
+      resultDiv.classList.remove('visible');
+
+      let url = `https://api.cloudhealthoffice.com/api/v1/lookup/${encodeURIComponent(code)}?feeScheduleId=${encodeURIComponent(fs)}&facility=${facility}`;
+      if (locality) url += `&locality=${encodeURIComponent(locality)}`;
+
+      try {
+        const resp = await fetch(url);
+        const json = await resp.json();
+
+        if (!json.success || !json.data) {
+          document.getElementById('resultAmount').textContent = 'Not Found';
+          document.getElementById('resultCode').textContent = code;
+          document.getElementById('resultDesc').textContent = json.error?.message || 'Code not found in this fee schedule';
+          document.getElementById('resultWorkRvu').textContent = '—';
+          document.getElementById('resultPeRvu').textContent = '—';
+          document.getElementById('resultMpRvu').textContent = '—';
+          document.getElementById('resultCf').textContent = '—';
+          document.getElementById('resultSetting').textContent = '—';
+          document.getElementById('resultFs').textContent = fs;
+          resultDiv.classList.add('visible');
+          return;
+        }
+
+        const d = json.data;
+        document.getElementById('resultAmount').textContent = '$' + d.allowedAmount.toFixed(2);
+        document.getElementById('resultCode').textContent = d.procedureCode;
+        document.getElementById('resultDesc').textContent = d.description || '—';
+        document.getElementById('resultWorkRvu').textContent = d.workRvu?.toFixed(2) || '—';
+        document.getElementById('resultPeRvu').textContent = d.practiceExpenseRvu?.toFixed(2) || '—';
+        document.getElementById('resultMpRvu').textContent = d.malpracticeRvu?.toFixed(2) || '—';
+        document.getElementById('resultCf').textContent = d.conversionFactor ? ('$' + d.conversionFactor.toFixed(2)) : '—';
+        document.getElementById('resultSetting').textContent = d.facility ? 'Facility' : 'Non-Facility';
+        document.getElementById('resultFs').textContent = d.feeScheduleId;
+        resultDiv.classList.add('visible');
+      } catch (err) {
+        document.getElementById('resultAmount').textContent = 'Error';
+        document.getElementById('resultDesc').textContent = 'Could not reach the repricing API. Try again later.';
+        resultDiv.classList.add('visible');
+      }
+    }
+    // Allow Enter key in the code input
+    document.getElementById('cptCode')?.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') lookupCode();
+    });
+  </script>
+
+</body>
+</html>

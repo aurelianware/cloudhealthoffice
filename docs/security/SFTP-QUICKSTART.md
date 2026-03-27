@@ -1,14 +1,14 @@
-# SFTP + Logic Apps Quick Reference
+# SFTP + Argo Workflows Quick Reference
 
 ## 🚀 Deployment Flow
 
 ```mermaid
 graph LR
     A[Deploy SFTP to K8s] --> B[Get LoadBalancer IP]
-    B --> C[Configure API Connection]
+    B --> C[Configure K8s Secrets]
     C --> D[Update Parameters]
     D --> E[Deploy Infrastructure]
-    E --> F[Deploy Logic Apps]
+    E --> F[Deploy Argo Workflows]
 ```
 
 ## 📋 Step-by-Step Commands
@@ -42,7 +42,7 @@ echo "SFTP Server: $SFTP_IP"
 # Create or update Key Vault
 az keyvault create \
   --name cho-secrets \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --location westus2
 
 # Store SFTP password
@@ -60,7 +60,7 @@ az keyvault secret set \
 **Or manually**:
 ```bash
 az deployment group create \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --template-file infra/main.bicep \
   --parameters \
     baseName=cho-prod \
@@ -76,14 +76,14 @@ sftp logicapp@$SFTP_IP
 
 # Test Azure API connection
 az resource invoke-action \
-  --resource-group rg-hipaa-logic-apps \
+  --resource-group rg-hipaa-aks \
   --resource-type Microsoft.Web/connections \
   --name cho-prod-sftp \
   --action testConnection \
   --api-version 2016-06-01
 ```
 
-### 6. Deploy Logic Apps
+### 6. Deploy Argo Workflows
 ```bash
 ./scripts/deploy-workflows.sh
 ```
@@ -148,12 +148,12 @@ kubectl delete namespace cho-sftp
 | LoadBalancer IP pending | `kubectl get svc -n cho-sftp` | Use NodePort or install MetalLB |
 | Connection refused | `kubectl get pods -n cho-sftp` | Check pod status, network policies |
 | Authentication failed | `kubectl logs -n cho-sftp -l app=sftp-server` | Verify password in secret |
-| Logic Apps can't connect | Test API connection in Azure Portal | Re-run configure-sftp-connection.sh |
+| Argo Workflows can't connect | Verify K8s secret and pod connectivity | Re-run configure-sftp-connection.sh |
 | Files not appearing | `kubectl exec -n cho-sftp deployment/sftp-server -- ls -la /home/logicapp/upload` | Check permissions, verify upload path |
 
 ## 📊 Monitoring Queries
 
-### Application Insights (Logic Apps)
+### Application Insights (Argo Workflows)
 ```kusto
 customEvents
 | where name == "SFTP_Upload_Success" or name == "SFTP_Upload_Failed"
@@ -190,5 +190,5 @@ az keyvault secret set --vault-name cho-secrets --name sftp-logicapp-password --
 
 - **K8s Issues**: `kubectl describe pod -n cho-sftp`
 - **Azure Issues**: Check Azure Portal → Resource → Activity Log
-- **Logic Apps**: Application Insights → Live Metrics
+- **Argo Workflows**: Application Insights → Live Metrics
 - **SFTP Logs**: `kubectl logs -n cho-sftp -l app=sftp-server -f`

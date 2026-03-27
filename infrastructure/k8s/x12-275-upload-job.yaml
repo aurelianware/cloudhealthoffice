@@ -59,7 +59,11 @@ spec:
               - name: SFTP_PORT
                 value: "22"
               - name: SFTP_USER
-                value: "logicapp"
+                valueFrom:
+                  secretKeyRef:
+                    name: sftp-credentials
+                    key: username
+                    optional: true
               - name: SFTP_PASS
                 valueFrom:
                   secretKeyRef:
@@ -92,6 +96,8 @@ spec:
                 apk add --no-cache sshpass openssh-client curl jq coreutils
                 
                 # Use default password if secret doesn't exist
+                # Use defaults if secrets not mounted
+                SFTP_USER="${SFTP_USER:-cho-edi}"
                 if [ -z "${SFTP_PASS}" ]; then
                   echo "⚠️  SFTP_PASS not set, using default (UPDATE IN PRODUCTION!)"
                   SFTP_PASS="changeme"
@@ -270,7 +276,7 @@ metadata:
 type: Opaque
 stringData:
   password: "changeme"  # UPDATE THIS IN PRODUCTION!
-  username: "logicapp"
+  username: "cho-edi"
 ---
 # Optional: ConfigMap for clearinghouse-specific settings
 apiVersion: v1

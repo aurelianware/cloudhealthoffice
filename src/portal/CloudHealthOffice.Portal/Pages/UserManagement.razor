@@ -1,0 +1,304 @@
+@page "/settings/users"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IUserContextService UserContextService
+@inject ITenantContextService TenantContextService
+@inject HttpClient Http
+@inject IConfiguration Configuration
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>User Management - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="users:manage" RoleName="TenantAdmin">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <div>
+            <MudText Typo="Typo.h3" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Class="mr-2" />
+                User Management
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Manage users, roles, and access for your organization
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="ShowAddUserDialog">
+            Add User
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    else if (_error)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
+            Failed to load users. Please try again.
+        </MudAlert>
+    }
+    else
+    {
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardContent>
+                <MudStack Row="true" Spacing="3" Class="mb-4">
+                    <MudTextField @bind-Value="_searchTerm" Placeholder="Search by name or email..."
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300" Class="flex-grow-1" />
+                    <MudSelect T="string" @bind-Value="_roleFilter" Label="Filter by Role" Clearable="true" Style="min-width: 200px;">
+                        @foreach (var role in _availableRoles)
+                        {
+                            <MudSelectItem Value="@role">@role</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+
+                <MudTable Items="@FilteredUsers" Dense="true" Hover="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Email</MudTh>
+                        <MudTh>Roles</MudTh>
+                        <MudTh>Department</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Last Login</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">
+                            <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Email">
+                            <MudText Typo="Typo.body2">@context.Email</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Roles">
+                            @foreach (var role in context.Roles)
+                            {
+                                <MudChip Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Class="mr-1 mb-1">
+                                    @FormatRoleName(role)
+                                </MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Department">
+                            <MudText Typo="Typo.body2">@context.Department</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Last Login">
+                            <MudText Typo="Typo.body2">
+                                @(context.LastLoginAt?.ToString("MMM dd, yyyy HH:mm") ?? "Never")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => ShowEditUserDialog(context))" />
+                            @if (context.Status == "Active")
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => DisableUser(context))" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                               OnClick="@(() => EnableUser(context))" />
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private List<UserListItem> _users = new();
+    private bool _loading = true;
+    private bool _error;
+    private string _searchTerm = string.Empty;
+    private string? _roleFilter;
+    private string? _tenantId;
+
+    private readonly List<string> _availableRoles = new()
+    {
+        "TenantAdmin", "ClaimsExaminer", "ClaimsSupervisor", "MemberServices",
+        "EnrollmentSpecialist", "UMCoordinator", "ProviderRelations",
+        "Finance", "ComplianceOfficer"
+    };
+
+    private IEnumerable<UserListItem> FilteredUsers => _users.Where(u =>
+    {
+        if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            var match = u.DisplayName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                        || u.Email.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase);
+            if (!match) return false;
+        }
+        if (!string.IsNullOrEmpty(_roleFilter))
+        {
+            if (!u.Roles.Contains(_roleFilter, StringComparer.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    });
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
+        _tenantId = tenantContext?.TenantId;
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        if (string.IsNullOrEmpty(_tenantId))
+        {
+            _loading = false;
+            _error = true;
+            return;
+        }
+
+        try
+        {
+            var baseUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
+            var response = await Http.GetAsync($"{baseUrl}/v1/tenants/{_tenantId}/users");
+
+            if (response.IsSuccessStatusCode)
+            {
+                _users = await response.Content.ReadFromJsonAsync<List<UserListItem>>() ?? new();
+            }
+            else
+            {
+                _error = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            Console.Error.WriteLine($"Error loading users: {ex.Message}");
+        }
+
+        _loading = false;
+    }
+
+    private async Task ShowAddUserDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            { "TenantId", _tenantId },
+            { "AvailableRoles", _availableRoles }
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditUserDialog>("Add User", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+            Snackbar.Add("User added successfully", Severity.Success);
+        }
+    }
+
+    private async Task ShowEditUserDialog(UserListItem user)
+    {
+        var parameters = new DialogParameters
+        {
+            { "TenantId", _tenantId },
+            { "ExistingUser", user },
+            { "AvailableRoles", _availableRoles }
+        };
+
+        var dialog = await DialogService.ShowAsync<AddEditUserDialog>("Edit User", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+            Snackbar.Add("User updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task DisableUser(UserListItem user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Disable User",
+            $"Are you sure you want to disable {user.DisplayName}? They will no longer be able to access the system.",
+            yesText: "Disable", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            await UpdateUserStatusAsync(user.Id, "Disabled");
+            Snackbar.Add($"{user.DisplayName} has been disabled", Severity.Warning);
+        }
+    }
+
+    private async Task EnableUser(UserListItem user)
+    {
+        await UpdateUserStatusAsync(user.Id, "Active");
+        Snackbar.Add($"{user.DisplayName} has been re-enabled", Severity.Success);
+    }
+
+    private async Task UpdateUserStatusAsync(string userId, string status)
+    {
+        try
+        {
+            var baseUrl = Configuration["Services:TenantService"] ?? "http://tenant-service.cho-svcs/api";
+            var response = await Http.PutAsJsonAsync(
+                $"{baseUrl}/v1/tenants/{_tenantId}/users/{userId}",
+                new { Status = status });
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadUsersAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string FormatRoleName(string role) => role switch
+    {
+        "ClaimsExaminer" => "Claims Examiner",
+        "ClaimsSupervisor" => "Claims Supervisor",
+        "MemberServices" => "Member Services",
+        "EnrollmentSpecialist" => "Enrollment Specialist",
+        "UMCoordinator" => "UM Coordinator",
+        "ProviderRelations" => "Provider Relations",
+        "ComplianceOfficer" => "Compliance Officer",
+        "TenantAdmin" => "Tenant Admin",
+        _ => role
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Disabled" => Color.Warning,
+        "Locked" => Color.Error,
+        _ => Color.Default
+    };
+
+    public class UserListItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+        public string Department { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? LastLoginAt { get; set; }
+    }
+}

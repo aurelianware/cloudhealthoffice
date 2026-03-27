@@ -1,4 +1,6 @@
 #!/bin/bash
+# NOTE: This script references Azure Logic Apps, which were the original orchestration runtime.
+# CHO has since migrated to Argo Workflows on AKS — see docs/adr/004-remove-logic-apps.md for details.
 set -e
 
 echo "🔗 Testing SFTP 275/278 Linked Workflow"

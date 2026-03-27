@@ -86,10 +86,10 @@ npm run generate -- interactive --output demo-config.json --generate
 > "With configuration complete, deployment is literally one click."
 
 *Show Deploy to Azure button and explain what gets deployed:*
-- Logic Apps for workflow orchestration
+- Argo Workflows on AKS for workflow orchestration
 - Azure Data Lake for HIPAA-compliant storage
 - Service Bus for event-driven messaging
-- Integration Account for X12 EDI processing
+- C# X12 EDI services for EDI processing
 - Application Insights for monitoring
 
 **Step 3: Process Transaction (90 seconds)**
@@ -98,7 +98,7 @@ npm run generate -- interactive --output demo-config.json --generate
 
 *Walk through a sample transaction:*
 - Attachment received via SFTP from the clearinghouse
-- Decoded and validated via Integration Account
+- Decoded and validated via C# X12 EDI services
 - Linked to claim in backend system
 - Status published to Service Bus
 - Complete audit trail in Application Insights

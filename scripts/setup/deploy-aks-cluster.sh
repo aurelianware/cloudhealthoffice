@@ -26,8 +26,8 @@ echo "✅ Azure CLI found and authenticated"
 echo ""
 
 # Configuration
-read -p "Resource Group name [rg-hipaa-logic-apps]: " RESOURCE_GROUP
-RESOURCE_GROUP=${RESOURCE_GROUP:-rg-hipaa-logic-apps}
+read -p "Resource Group name [rg-cloudhealthoffice]: " RESOURCE_GROUP
+RESOURCE_GROUP=${RESOURCE_GROUP:-rg-cloudhealthoffice}
 
 read -p "AKS Cluster name [cho-aks-cluster]: " CLUSTER_NAME
 CLUSTER_NAME=${CLUSTER_NAME:-cho-aks-cluster}

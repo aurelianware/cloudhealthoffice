@@ -1,16 +1,16 @@
 # ValueAdds277 Configuration-to-Workflow Parameter Mapping
 
-This document explains how the ValueAdds277 configuration in the unified schema maps to Logic App workflow parameters.
+> **Note:** This document was originally written for Azure Logic Apps workflows. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details. The configuration schema and parameter mapping concepts still apply; the runtime is now Argo DAG steps backed by C# microservices instead of Logic App actions.
 
 ## Configuration Schema Location
 
-**File**: `core/schemas/clearinghouse-integration-config.schema.json`  
+**File**: `core/schemas/clearinghouse-integration-config.schema.json`
 **Path**: `definitions.ECSModule.properties.valueAdds277`
 
 ## Workflow Parameters Location
 
-**File**: `logicapps/workflows/ecs_summary_search/workflow.json`  
-**Path**: `definition.parameters`
+**Original (Legacy)**: `logicapps/workflows/ecs_summary_search/workflow.json` (removed)
+**Current**: Argo workflow YAML in `infrastructure/argo-workflows/` with parameters passed via Kubernetes ConfigMaps
 
 ## Field Mapping
 
@@ -60,22 +60,16 @@ This document explains how the ValueAdds277 configuration in the unified schema 
 
 ## Workflow Parameter Usage
 
-The workflow uses these parameters in the `Map_Claims_with_ValueAdds277` action:
+The workflow uses these parameters in the claims mapping step. Originally this was a Logic App `Select` action; it is now handled by the ECS summary C# service in the Argo DAG. The mapping logic is equivalent:
 
 ```json
 {
-  "type": "Select",
-  "inputs": {
-    "from": "@variables('backendResults')?['claims']",
-    "select": {
-      "BILLED": "@if(parameters('includeFinancialFields'), coalesce(item()?['BILLED'], item()?['billedAmount']), null())",
-      "drgCode": "@if(parameters('includeClinicalFields'), item()?['drgCode'], null())",
-      "patient": "@if(parameters('includeDemographicFields'), item()?['patient'], null())",
-      "payeeName": "@if(parameters('includeRemittanceFields'), item()?['payeeName'], null())",
-      "eligibleForAppeal": "@if(parameters('includeIntegrationFlags'), or(equals(item()?['claimStatus'], 'Denied'), equals(item()?['claimStatus'], 'Partially Paid')), null())",
-      "serviceLines": "@if(parameters('includeServiceLineDetails'), item()?['serviceLines'], null())"
-    }
-  }
+  "BILLED": "conditionally included if includeFinancialFields is true",
+  "drgCode": "conditionally included if includeClinicalFields is true",
+  "patient": "conditionally included if includeDemographicFields is true",
+  "payeeName": "conditionally included if includeRemittanceFields is true",
+  "eligibleForAppeal": "true if claimStatus is Denied or Partially Paid and includeIntegrationFlags is true",
+  "serviceLines": "conditionally included if includeServiceLineDetails is true"
 }
 ```
 
@@ -159,12 +153,10 @@ The workflow uses these parameters in the `Map_Claims_with_ValueAdds277` action:
 
 To test different configurations:
 
-1. **Update Logic App Parameters** via Azure Portal or ARM template:
+1. **Update workflow parameters** via Kubernetes ConfigMap or Helm values:
    ```bash
-   az webapp config appsettings set \
-     --resource-group <rg-name> \
-     --name <logicapp-name> \
-     --settings includeFinancialFields=false
+   kubectl -n cloudhealthoffice edit configmap ecs-config
+   # Set includeFinancialFields=false, then restart the ECS pod
    ```
 
 2. **Query ECS API** and verify response:
@@ -173,7 +165,7 @@ To test different configurations:
      -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" \
      -d @test-request.json \
-     https://<logicapp>.azurewebsites.net/api/ecs_summary_search/triggers/HTTP_ECS_Summary_Search_Request/invoke
+     https://api.cloudhealthoffice.com/api/ecs/summary-search
    ```
 
 3. **Validate Response** contains/excludes expected fields:
@@ -259,17 +251,17 @@ The workflow expects claims backend backend to provide these fields:
 ### Issue: Financial fields returning null
 
 **Cause**: `includeFinancialFields` parameter is `false`  
-**Solution**: Set parameter to `true` in Logic App configuration
+**Solution**: Set parameter to `true` in workflow configuration (Kubernetes ConfigMap)
 
 ### Issue: Integration flags not appearing
 
 **Cause**: `includeIntegrationFlags` parameter is `false`  
-**Solution**: Set parameter to `true` in Logic App configuration
+**Solution**: Set parameter to `true` in workflow configuration (Kubernetes ConfigMap)
 
 ### Issue: Service lines missing
 
 **Cause**: `includeServiceLineDetails` parameter is `false`  
-**Solution**: Set parameter to `true` in Logic App configuration
+**Solution**: Set parameter to `true` in workflow configuration (Kubernetes ConfigMap)
 
 ### Issue: Backend doesn't have ValueAdds277 fields
 

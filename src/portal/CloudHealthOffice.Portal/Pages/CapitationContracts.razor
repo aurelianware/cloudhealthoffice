@@ -1,0 +1,314 @@
+@page "/capitation/rate-config"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject ICapitationService CapitationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Capitation Rate Config — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="contracts:read,billing:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Style="vertical-align: middle;" />
+    Capitation Rate Config
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Per-contract PMPM rate tiers, risk adjustment, and withhold configuration
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">
+        @_serviceError
+    </MudAlert>
+}
+
+<!-- KPI Cards -->
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Description" Style="color: #00ffff; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_contracts.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Contracts</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_contracts.Count(c => c.Status == "Active")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.EditNote" Style="color: #ffaa00; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_contracts.Count(c => c.Status == "Draft")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Draft</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #ff0055; font-size: 2rem;" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_contracts.Count(c => c.Status == "Terminated")</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Terminated</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Filters + Actions -->
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+               Style="min-width: 160px;" Clearable="true" Dense="true">
+        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+        <MudSelectItem Value="@("Draft")">Draft</MudSelectItem>
+        <MudSelectItem Value="@("Suspended")">Suspended</MudSelectItem>
+        <MudSelectItem Value="@("Terminated")">Terminated</MudSelectItem>
+    </MudSelect>
+    <MudTextField @bind-Value="_npiFilter" Label="Provider NPI" Variant="Variant.Outlined"
+                  Style="min-width: 160px;" Clearable="true" Dense="true" />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+               OnClick="LoadContracts" Disabled="_loading">Apply</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="() => _showCreateForm = true">New Contract</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<!-- Contracts Table -->
+<MudTable Items="_contracts" Dense="true" Hover="true" T="CapitationContractSummary"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Contract #</MudTh>
+        <MudTh>Provider</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>LOB</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Effective</MudTh>
+        <MudTh>Rate Tiers</MudTh>
+        <MudTh>Withhold</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Contract #">
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.ContractNumber</MudText>
+        </MudTd>
+        <MudTd DataLabel="Provider">
+            <div>
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.ProviderName</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">@context.ProviderNPI</MudText>
+            </div>
+        </MudTd>
+        <MudTd DataLabel="Type"><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.ContractType</MudChip></MudTd>
+        <MudTd DataLabel="LOB">@context.LineOfBusiness</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
+        <MudTd DataLabel="Rate Tiers">@context.RateTiers.Count tiers</MudTd>
+        <MudTd DataLabel="Withhold">@context.WithholdPercentage.ToString("P0")</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditContract(context)" />
+            @if (context.Status is "Draft" or "Suspended")
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                               OnClick="() => ActivateContract(context)" Title="Activate" />
+            }
+            @if (context.Status is not "Terminated")
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                               OnClick="() => TerminateContract(context)" Title="Terminate" />
+            }
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+<!-- Create/Edit Form Dialog -->
+@if (_showCreateForm)
+{
+    <MudDialog @bind-Visible="_showCreateForm" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
+        <TitleContent>
+            <MudText Typo="Typo.h6">@(_editContract?.Id != null ? "Edit" : "New") Capitation Contract</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract!.ProviderNPI" Label="Provider NPI" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_editContract.ProviderName" Label="Provider Name" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect @bind-Value="_editContract.ContractType" Label="Contract Type" Required="true">
+                        <MudSelectItem Value="@("GlobalCapitation")">Global Capitation</MudSelectItem>
+                        <MudSelectItem Value="@("ProfessionalOnly")">Professional Only</MudSelectItem>
+                        <MudSelectItem Value="@("InstitutionalOnly")">Institutional Only</MudSelectItem>
+                        <MudSelectItem Value="@("BehavioralHealth")">Behavioral Health</MudSelectItem>
+                        <MudSelectItem Value="@("PrimaryCareOnly")">Primary Care Only</MudSelectItem>
+                        <MudSelectItem Value="@("SpecialtyCare")">Specialty Care</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect @bind-Value="_editContract.LineOfBusiness" Label="Line of Business" Required="true">
+                        <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
+                        <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
+                        <MudSelectItem Value="@("Medicaid")">Medicaid</MudSelectItem>
+                        <MudSelectItem Value="@("Exchange")">Exchange</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudDatePicker @bind-Date="_editEffective" Label="Effective Date" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_editContract.WithholdPercentage" Label="Withhold %" Format="P0" Step="0.01M" Min="0" Max="1" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_editContract.StopLossThreshold" Label="Stop-Loss Threshold" Format="C2" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudCheckBox @bind-Value="_editContract.RiskAdjusted" Label="Risk Adjusted" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudNumericField @bind-Value="_editContract.DefaultRiskScore" Label="Default Risk Score" Step="0.1M" Min="0.1M" />
+                </MudItem>
+
+                <!-- Rate Tiers -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-2">Rate Tiers</MudText>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddRateTier" Class="mb-2">Add Tier</MudButton>
+                    <MudTable Items="_editContract.RateTiers" Dense="true" Hover="true" T="CapRateTier"
+                              Style="background: rgba(10,10,10,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                        <HeaderContent>
+                            <MudTh>Tier Name</MudTh>
+                            <MudTh>Age Range</MudTh>
+                            <MudTh>Gender</MudTh>
+                            <MudTh>Base PMPM</MudTh>
+                            <MudTh></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd><MudTextField @bind-Value="context.TierName" Dense="true" Variant="Variant.Text" /></MudTd>
+                            <MudTd>
+                                <div class="d-flex gap-2">
+                                    <MudNumericField @bind-Value="context.AgeFrom" Dense="true" Variant="Variant.Text" Style="max-width: 60px;" />
+                                    <MudText>-</MudText>
+                                    <MudNumericField @bind-Value="context.AgeTo" Dense="true" Variant="Variant.Text" Style="max-width: 60px;" />
+                                </div>
+                            </MudTd>
+                            <MudTd>
+                                <MudSelect @bind-Value="context.Gender" Dense="true" Variant="Variant.Text" Clearable="true" Style="max-width: 80px;">
+                                    <MudSelectItem Value="@("M")">M</MudSelectItem>
+                                    <MudSelectItem Value="@("F")">F</MudSelectItem>
+                                </MudSelect>
+                            </MudTd>
+                            <MudTd><MudNumericField @bind-Value="context.BasePMPM" Dense="true" Variant="Variant.Text" Format="C2" Style="max-width: 120px;" /></MudTd>
+                            <MudTd>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="() => _editContract.RateTiers.Remove(context)" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="() => _showCreateForm = false">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveContract" Disabled="_saving">
+                @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> } Save
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+}
+</PermissionGate>
+
+@code {
+    private List<CapitationContractSummary> _contracts = new();
+    private string? _statusFilter;
+    private string? _npiFilter;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _serviceError;
+    private bool _showCreateForm;
+    private CapitationContractSummary? _editContract;
+    private DateTime? _editEffective;
+
+    protected override async Task OnInitializedAsync() => await LoadContracts();
+
+    private async Task LoadContracts()
+    {
+        _loading = true;
+        try
+        {
+            _contracts = await CapitationService.GetContractsAsync(_npiFilter, _statusFilter);
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void EditContract(CapitationContractSummary contract)
+    {
+        _editContract = contract;
+        _editEffective = contract.EffectiveDate;
+        _showCreateForm = true;
+    }
+
+    private void AddRateTier()
+    {
+        _editContract ??= new();
+        _editContract.RateTiers.Add(new CapRateTier { TierName = "New Tier", AgeFrom = 0, AgeTo = 120, BasePMPM = 0 });
+    }
+
+    private async Task SaveContract()
+    {
+        if (_editContract == null) return;
+        _saving = true;
+        try
+        {
+            if (_editEffective.HasValue) _editContract.EffectiveDate = _editEffective.Value;
+            if (string.IsNullOrEmpty(_editContract.Id))
+                await CapitationService.CreateContractAsync(_editContract);
+            else
+                await CapitationService.UpdateContractAsync(_editContract.Id, _editContract);
+            Snackbar.Add("Contract saved", Severity.Success);
+            _showCreateForm = false;
+            await LoadContracts();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ActivateContract(CapitationContractSummary contract)
+    {
+        try { await CapitationService.ActivateContractAsync(contract.Id); Snackbar.Add("Contract activated", Severity.Success); await LoadContracts(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task TerminateContract(CapitationContractSummary contract)
+    {
+        var result = await DialogService.ShowMessageBox("Terminate Contract",
+            $"Are you sure you want to terminate contract {contract.ContractNumber} for {contract.ProviderName}?",
+            "Terminate", "Cancel");
+        if (result != true) return;
+        try { await CapitationService.TerminateContractAsync(contract.Id, "User-initiated termination"); Snackbar.Add("Contract terminated", Severity.Warning); await LoadContracts(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success, "Draft" => Color.Warning,
+        "Suspended" => Color.Info, "Terminated" => Color.Error,
+        "Expired" => Color.Default, _ => Color.Default
+    };
+}

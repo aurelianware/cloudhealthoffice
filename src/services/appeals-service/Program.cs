@@ -20,27 +20,47 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cosmos DB client (singleton)
-builder.Services.AddSingleton<CosmosClient>(sp =>
+// Database Configuration
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+
+if (!string.IsNullOrEmpty(mongoConnectionString))
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    var endpoint = config["CosmosDb:Endpoint"];
-    var key = config["CosmosDb:Key"];
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp =>
+        new MongoDB.Driver.MongoClient(mongoConnectionString));
 
-    if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
     {
-        throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-    }
+        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
+        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
+        return client.GetDatabase(databaseName);
+    });
 
-    var options = new CosmosClientOptions
+    builder.Services.AddScoped<IAppealRepository, AppealRepositoryMongo>();
+    Console.WriteLine("Using MongoDB database provider");
+}
+else
+{
+    builder.Services.AddSingleton<CosmosClient>(sp =>
     {
-        Serializer = new CosmosSystemTextJsonSerializer()
-    };
-    return new CosmosClient(endpoint, key, options);
-});
+        var config = sp.GetRequiredService<IConfiguration>();
+        var endpoint = config["CosmosDb:Endpoint"];
+        var key = config["CosmosDb:Key"];
 
-// Repositories
-builder.Services.AddScoped<IAppealRepository, AppealRepository>();
+        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
+        {
+            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
+        }
+
+        var options = new CosmosClientOptions
+        {
+            Serializer = new CosmosSystemTextJsonSerializer()
+        };
+        return new CosmosClient(endpoint, key, options);
+    });
+
+    builder.Services.AddScoped<IAppealRepository, AppealRepository>();
+    Console.WriteLine("Using Cosmos DB database provider");
+}
 
 // HTTP context accessor (for tenant middleware)
 builder.Services.AddHttpContextAccessor();

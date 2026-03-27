@@ -1,13 +1,22 @@
 @page "/providers"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
 @inject IProviderService ProviderService
 
 <PageTitle>Providers - Cloud Health Office</PageTitle>
 
+<PermissionGate Permission="providers:read" RoleName="ProviderRelations">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h4" GutterBottom="true">Provider Network</MudText>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
         Manage provider network, credentials, and performance
     </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
 
     <!-- Search Form -->
     <MudCard Elevation="2" Class="mb-4">
@@ -245,11 +254,13 @@
 
 <ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="SearchProviders" />
 <CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="SearchProviders" />
+</PermissionGate>
 
 @code {
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private string? _serviceError;
     private List<ProviderListItem> _providers = new();
 
     private string? _npiSearch;
@@ -273,6 +284,7 @@
         }
 
         _showValidationMessage = false;
+        _serviceError = null;
         _loading = true;
         StateHasChanged();
 
@@ -281,6 +293,12 @@
             // Pass NPI as search term if filled, otherwise name
             var searchTerm = !string.IsNullOrWhiteSpace(_npiSearch) ? _npiSearch : _nameSearch;
             _providers = await ProviderService.SearchProvidersAsync(_selectedSpecialty, _selectedNetworkStatus, searchTerm);
+            _hasSearched = true;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _providers = new();
             _hasSearched = true;
         }
         catch
@@ -304,6 +322,7 @@
         _providers = new();
         _hasSearched = false;
         _showValidationMessage = false;
+        _serviceError = null;
     }
 
     private async Task OnSearchKeyUp(KeyboardEventArgs e)

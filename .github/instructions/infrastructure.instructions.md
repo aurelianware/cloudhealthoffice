@@ -1,25 +1,21 @@
 # Infrastructure (Bicep) Instructions
 
-**Applies to**: `infra/*.bicep`, `attachments_logicapps_package/*.bicep`
+**Applies to**: `infrastructure/azure/*.bicep`
 
 ## Overview
 
-Infrastructure as Code (IaC) using Azure Bicep for deploying HIPAA-compliant Logic Apps infrastructure.
+Infrastructure as Code (IaC) using Azure Bicep for deploying HIPAA-compliant infrastructure.
 
 ## Main Templates
 
-### infra/main.bicep
+### infrastructure/azure/main.bicep
 Primary infrastructure template that deploys:
 - **Azure Data Lake Storage Gen2**: Hierarchical namespace enabled for HIPAA attachments
 - **Service Bus Namespace**: Standard tier with three topics
   - `attachments-in`: For processed 275 attachment events
-  - `rfai-requests`: For 277 RFAI outbound requests  
+  - `rfai-requests`: For 277 RFAI outbound requests
   - `edi-278`: For 278 Health Care Services Review transactions
-- **Logic App Standard**: WS1 SKU for workflow runtime
 - **Application Insights**: Telemetry and monitoring
-
-### attachments_logicapps_package/main.bicep
-Alternative package-based deployment template (if used)
 
 ## Best Practices
 
@@ -47,14 +43,6 @@ Alternative package-based deployment template (if used)
 - Enable dead-letter queues
 ```
 
-#### Logic App Standard
-```bicep
-- Use WS1 SKU minimum
-- Enable Application Insights integration
-- Configure system-assigned managed identity
-- Set WEBSITE_CONTENTAZUREFILECONNECTIONSTRING if needed
-```
-
 ### Parameter Patterns
 ```bicep
 @description('Base name for all resources')
@@ -76,18 +64,18 @@ param location string = 'eastus'
 ### Local Validation
 ```bash
 # Compile Bicep to ARM template
-az bicep build --file infra/main.bicep --outfile /tmp/arm.json
+az bicep build --file infrastructure/azure/main.bicep --outfile /tmp/arm.json
 
 # Validate deployment (without deploying)
 az deployment group validate \
   --resource-group <rg-name> \
-  --template-file infra/main.bicep \
+  --template-file infrastructure/azure/main.bicep \
   --parameters baseName=test-name
 
 # Preview changes (What-If)
 az deployment group what-if \
   --resource-group <rg-name> \
-  --template-file infra/main.bicep \
+  --template-file infrastructure/azure/main.bicep \
   --parameters baseName=prod-name \
   --no-pretty-print
 ```
@@ -108,7 +96,7 @@ az group create -n payer-attachments-rg -l eastus
 # Deploy infrastructure
 az deployment group create \
   -g payer-attachments-rg \
-  -f infra/main.bicep \
+  -f infrastructure/azure/main.bicep \
   -p baseName=payer-attachments
 ```
 
@@ -132,7 +120,7 @@ Infrastructure deployment is handled by workflow files:
 1. Remember all three topics: `attachments-in`, `rfai-requests`, `edi-278`
 2. Maintain consistent configuration across topics
 3. Don't change existing topic names (breaks workflows)
-4. Update Logic App workflows if adding new topics
+4. Update Argo workflows if adding new topics
 
 ### Changing Storage Configuration
 1. Data Lake Gen2 requires hierarchical namespace
@@ -163,7 +151,7 @@ Infrastructure deployment is handled by workflow files:
 - Follow least-privilege access principles
 
 ### Managed Identity
-- Enable system-assigned managed identity on Logic App
+- Use managed identities for service authentication
 - Grant specific RBAC roles (Storage Blob Data Contributor, Service Bus Data Sender)
 - Avoid using storage account keys in production
 

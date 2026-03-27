@@ -111,10 +111,10 @@ Use this streamlined checklist to track progress through the customer onboarding
 - [ ] Notification preferences configured (email alerts, Slack webhooks)
 
 ### Backend Integration (Cloud Health Office)
-- [ ] Logic App workflows configured for customer tenant
+- [ ] Argo Workflow DAGs configured for customer tenant
 - [ ] API connection to customer claims system tested successfully
 - [ ] SFTP connection to clearinghouse tested successfully
-- [ ] Integration Account configured with customer's X12 trading partner IDs
+- [ ] C# X12 EDI services configured with customer's trading partner IDs
 - [ ] Field mapping logic implemented and tested
 - [ ] Error handling and retry policies configured
 - [ ] Monitoring alerts configured (failure notifications)
@@ -329,7 +329,7 @@ Use this streamlined checklist to track progress through the customer onboarding
 **SaaS Model (This Checklist)**:
 - ✅ No Azure subscription required (Cloud Health Office manages infrastructure)
 - ✅ No resource provisioning needed (automated by Cloud Health Office)
-- ✅ No infrastructure deployment (Logic Apps, Storage, Service Bus pre-configured)
+- ✅ No infrastructure deployment (AKS, Argo Workflows, Storage, Service Bus pre-configured)
 - ✅ No Azure cost management needed (included in subscription)
 - ✅ Faster onboarding (7 days vs. 12 weeks for self-hosted)
 - ✅ Lower complexity (customer focuses on configuration, not infrastructure)

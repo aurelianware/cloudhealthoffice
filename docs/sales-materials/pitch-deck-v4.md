@@ -152,7 +152,7 @@ npm run generate -- interactive --output my-config.json --generate
 | Feature | Description | Value Prop |
 |---------|-------------|------------|
 | **Interactive Wizard** | Guided configuration in < 5 minutes | Zero technical expertise required |
-| **Config-to-Workflow Generator** | Automatic Logic App generation | No custom code needed |
+| **Config-to-Workflow Generator** | Automatic Argo Workflow generation | No custom code needed |
 | **FHIR R4 APIs** | Native X12 ↔ FHIR transformation | CMS-0057-F compliant out-of-box |
 | **ValueAdds277** | 60+ enhanced claim status fields | Provider satisfaction++, call volume-- |
 | **Security Hardening** | HSM-backed keys, private endpoints, PHI masking | HIPAA-ready from Day 1 |
@@ -200,7 +200,7 @@ npm run generate -- interactive --output my-config.json --generate
 ✅ HIPAA Business Associate Agreement (BAA)  
 ✅ X12 EDI processing (837, 270/271, 275, 276/277, 278, 835, 834)  
 ✅ FHIR R4 APIs (Patient, Provider, Prior Auth, Payer-to-Payer)  
-✅ **All Azure infrastructure costs** (Logic Apps, Service Bus, Storage, Key Vault)  
+✅ **All Azure infrastructure costs** (AKS, Argo Workflows, Service Bus, Storage, Key Vault)
 ✅ 7-year EDI archive retention  
 ✅ Application Insights monitoring  
 ✅ Managed security updates  
@@ -650,7 +650,7 @@ Reference: [ROADMAP-2026.md](../ROADMAP-2026.md)
 ### Technology Maturity
 
 **Cloud-Native Tools Now Ready**:
-- **Azure Logic Apps**: Enterprise-grade workflow engine (GA 2020)
+- **Argo Workflows on AKS**: Cloud-native workflow orchestration for Kubernetes
 - **FHIR R4**: Stable standard (normative 2019)
 - **Da Vinci IGs**: Production-ready (v2.0 released 2023)
 - **Open Source Momentum**: Healthcare IT embracing OSS (95% of EHRs use Linux)

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
@@ -62,6 +63,26 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Get recent claims (for dashboard display)
+    /// </summary>
+    [HttpGet("recent")]
+    [ProducesResponseType(typeof(IEnumerable<Claim>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<Claim>>> GetRecentClaims(
+        [FromQuery][Range(1, 100)] int count = 10)
+    {
+        _logger.LogInformation("Fetching {Count} recent claims", count);
+
+        var claims = await _claimRepository.SearchAsync(
+            memberId: null, providerNPI: null,
+            serviceDateFrom: null, serviceDateTo: null,
+            status: null, lineOfBusiness: null,
+            page: 1, pageSize: count);
+
+        return Ok(claims);
+    }
+
+    /// <summary>
     /// Get claim by ID
     /// </summary>
     [HttpGet("{id}")]
@@ -122,6 +143,25 @@ public class ClaimsController : ControllerBase
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
 
         return Ok(claims);
+    }
+
+    /// <summary>Search claims via POST body (portal search form).</summary>
+    [HttpPost("search")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SearchClaimsPost([FromBody] ClaimSearchBody body)
+    {
+        ClaimStatus? status = null;
+        if (!string.IsNullOrEmpty(body.Status) && Enum.TryParse<ClaimStatus>(body.Status, true, out var parsed))
+            status = parsed;
+
+        var claims = await _claimRepository.SearchAsync(
+            body.MemberId, body.ProviderId,
+            body.ServiceDateFrom, body.ServiceDateTo,
+            status, null,
+            body.PageNumber, body.PageSize);
+
+        var list = claims.ToList();
+        return Ok(new { claims = list, totalCount = list.Count, page = body.PageNumber, pageSize = body.PageSize });
     }
 
     /// <summary>
@@ -375,10 +415,167 @@ public class ClaimsController : ControllerBase
         return Ok(result);
     }
 
+    // ── Work Queue endpoints ────────────────────────────────────────────
+    // These power the portal's Claims Work Queue page. Work queue items
+    // are derived from claims in Pended status.
+
+    /// <summary>
+    /// Get work queue summary counts by pend reason
+    /// </summary>
+    [HttpGet("work-queue/summary")]
+    [ProducesResponseType(typeof(WorkQueueSummary), StatusCodes.Status200OK)]
+    public async Task<ActionResult<WorkQueueSummary>> GetWorkQueueSummary()
+    {
+        var pendedClaims = (await _claimRepository.SearchAsync(
+            memberId: null, providerNPI: null,
+            serviceDateFrom: null, serviceDateTo: null,
+            status: ClaimStatus.Pended, lineOfBusiness: null,
+            page: 1, pageSize: 1000)).ToList();
+
+        // Categorize by claim-level adjudication denial reason code
+        static string? PendCode(Claim c) => c.AdjudicationResult?.DenialReasonCode;
+
+        var summary = new WorkQueueSummary
+        {
+            NcciEditFailures = pendedClaims.Count(c => PendCode(c) is "NCCI" or "MUE"),
+            MissingAuth = pendedClaims.Count(c => PendCode(c) is "AUTH" or "NOAUTH"),
+            ProviderNotContracted = pendedClaims.Count(c => PendCode(c) is "OON" or "NOCONTRACT"),
+            CobRequired = pendedClaims.Count(c => PendCode(c) is "COB"),
+            MedicalReview = pendedClaims.Count(c => PendCode(c) is "MEDREVIEW" or "CLINICAL")
+        };
+
+        // Claims without a recognized pend reason go to medical review as default
+        var categorized = summary.NcciEditFailures + summary.MissingAuth +
+                          summary.ProviderNotContracted + summary.CobRequired + summary.MedicalReview;
+        summary.MedicalReview += pendedClaims.Count - categorized;
+
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Get work queue items (pended claims for examiner review)
+    /// </summary>
+    [HttpGet("work-queue/items")]
+    [ProducesResponseType(typeof(IEnumerable<WorkQueueItem>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<WorkQueueItem>>> GetWorkQueueItems(
+        [FromQuery] string? queueType = null,
+        [FromQuery] string? assignedTo = null,
+        [FromQuery] int limit = 100)
+    {
+        var pendedClaims = (await _claimRepository.SearchAsync(
+            memberId: null, providerNPI: null,
+            serviceDateFrom: null, serviceDateTo: null,
+            status: ClaimStatus.Pended, lineOfBusiness: null,
+            page: 1, pageSize: limit)).ToList();
+
+        var items = pendedClaims.Select(c => new WorkQueueItem
+        {
+            ClaimId = c.Id,
+            MemberName = c.SubscriberLastName != null ? $"{c.SubscriberFirstName} {c.SubscriberLastName}" : c.MemberId,
+            MemberId = c.MemberId,
+            ProviderName = c.BillingProviderName ?? c.BillingProviderNPI,
+            ServiceDate = c.ClaimLines.FirstOrDefault()?.ServiceDateFrom ?? c.CreatedDate,
+            QueueReason = MapPendReason(c.AdjudicationResult?.DenialReasonCode),
+            QueueReasonCode = c.AdjudicationResult?.DenialReasonCode ?? "REVIEW",
+            DaysInQueue = (int)(DateTime.UtcNow - c.LastUpdatedDate).TotalDays,
+            Priority = (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 14 ? "High" :
+                       (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 7 ? "Medium" : "Low",
+            AssignedTo = "",
+            TotalCharged = c.TotalChargeAmount,
+            ProcedureCodes = c.ClaimLines.Select(sl => sl.ProcedureCode).ToList()
+        }).ToList();
+
+        if (!string.IsNullOrEmpty(queueType))
+            items = items.Where(i => i.QueueReasonCode == queueType).ToList();
+
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Assign a pended claim to an examiner
+    /// </summary>
+    [HttpPost("work-queue/{claimId}/assign")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> AssignClaim(string claimId, [FromBody] AssignClaimRequest request)
+    {
+        var claim = await _claimRepository.GetByIdAsync(claimId);
+        if (claim == null) return NotFound();
+
+        // In a full implementation, this would update an AssignedTo field.
+        // For now, just log and return success.
+        _logger.LogInformation("Claim {ClaimId} assigned to {AssignedTo}", SanitizeForLog(claimId), SanitizeForLog(request.AssignTo));
+        return Ok(new { claimId, assignedTo = request.AssignTo });
+    }
+
+    /// <summary>
+    /// Override a pended claim (supervisor action)
+    /// </summary>
+    [HttpPost("work-queue/{claimId}/override")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> OverrideClaim(string claimId, [FromBody] OverrideClaimRequest request)
+    {
+        var claim = await _claimRepository.GetByIdAsync(claimId);
+        if (claim == null) return NotFound();
+
+        claim.Status = ClaimStatus.Approved;
+        claim.LastUpdatedDate = DateTime.UtcNow;
+        await _claimRepository.UpdateAsync(claim);
+
+        _logger.LogInformation("Claim {ClaimId} override-approved: {Reason}", SanitizeForLog(claimId), SanitizeForLog(request.OverrideReason));
+        return Ok(new { claimId, status = "Approved", overrideReason = request.OverrideReason });
+    }
+
+    private static string MapPendReason(string? code) => code switch
+    {
+        "NCCI" or "MUE" => "NCCI Edit Failure",
+        "AUTH" or "NOAUTH" => "Missing Authorization",
+        "OON" or "NOCONTRACT" => "Provider Not Contracted",
+        "COB" => "COB Required",
+        "MEDREVIEW" or "CLINICAL" => "Medical Review",
+        _ => "Pending Review"
+    };
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+public class WorkQueueSummary
+{
+    public int NcciEditFailures { get; set; }
+    public int MissingAuth { get; set; }
+    public int ProviderNotContracted { get; set; }
+    public int CobRequired { get; set; }
+    public int MedicalReview { get; set; }
+}
+
+public class WorkQueueItem
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string MemberName { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+    public string QueueReason { get; set; } = string.Empty;
+    public string QueueReasonCode { get; set; } = string.Empty;
+    public int DaysInQueue { get; set; }
+    public string Priority { get; set; } = "Low";
+    public string AssignedTo { get; set; } = string.Empty;
+    public decimal TotalCharged { get; set; }
+    public List<string> ProcedureCodes { get; set; } = new();
+}
+
+public class AssignClaimRequest
+{
+    public string AssignTo { get; set; } = string.Empty;
+}
+
+public class OverrideClaimRequest
+{
+    public string OverrideReason { get; set; } = string.Empty;
 }

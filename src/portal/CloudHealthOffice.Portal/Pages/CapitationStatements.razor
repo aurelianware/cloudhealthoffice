@@ -1,0 +1,325 @@
+@page "/finance/contracts/statements"
+@page "/finance/contracts/statements/{StatementId}"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject ICapitationService CapitationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Capitation Statements — Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="billing:read,payments:read" RoleName="Finance">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" Style="vertical-align: middle;" />
+    Capitation Statements
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+    Review, approve, and disburse capitation payment statements to providers
+</MudText>
+
+@if (!string.IsNullOrEmpty(_serviceError))
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
+@if (string.IsNullOrEmpty(StatementId))
+{
+    <!-- ═══ LIST VIEW ═══ -->
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex flex-column" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending Approval</MudText>
+                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_statements.Count(s => s.Status == "Generated")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex flex-column" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Approved (Ready to Pay)</MudText>
+                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_statements.Count(s => s.Status == "Approved")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex flex-column" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Net Payable</MudText>
+                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">@_statements.Sum(s => s.NetPayable).ToString("C0")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 d-flex flex-column" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">On Hold</MudText>
+                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_statements.Count(s => s.Status == "OnHold")</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filters + Batch Actions -->
+    <div class="d-flex align-center flex-wrap gap-3 mb-4">
+        <MudTextField @bind-Value="_npiFilter" Label="Provider NPI" Variant="Variant.Outlined"
+                      Style="min-width: 160px;" Clearable="true" Dense="true" />
+        <MudSelect @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+                   Style="min-width: 160px;" Clearable="true" Dense="true">
+            <MudSelectItem Value="@("Generated")">Generated</MudSelectItem>
+            <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
+            <MudSelectItem Value="@("PaymentInitiated")">Payment Initiated</MudSelectItem>
+            <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
+            <MudSelectItem Value="@("OnHold")">On Hold</MudSelectItem>
+            <MudSelectItem Value="@("Voided")">Voided</MudSelectItem>
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
+                   OnClick="LoadStatements" Disabled="_loading">Apply</MudButton>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.DoneAll"
+                   OnClick="ApproveAllGenerated" Disabled="@(!_statements.Any(s => s.Status == "Generated"))">
+            Approve All
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Payment"
+                   OnClick="InitiateBatchPayment" Disabled="@(!_statements.Any(s => s.Status == "Approved"))">
+            Pay Approved
+        </MudButton>
+    </div>
+
+    @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" /> }
+
+    <MudTable Items="_statements" Dense="true" Hover="true" T="CapStatementSummary"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+        <HeaderContent>
+            <MudTh>Statement #</MudTh>
+            <MudTh>Provider</MudTh>
+            <MudTh>Period</MudTh>
+            <MudTh>Members</MudTh>
+            <MudTh>Gross</MudTh>
+            <MudTh>Net Payable</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/statements/" + context.Id))"
+                           Style="font-family: monospace; color: #00ffff; font-size: 0.85rem;">@context.StatementNumber</MudButton>
+            </MudTd>
+            <MudTd>
+                <MudText Typo="Typo.body2">@context.ProviderName</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.ProviderNPI</MudText>
+            </MudTd>
+            <MudTd>@context.CapitationPeriodStart.ToString("MMM yyyy")</MudTd>
+            <MudTd>@context.MemberMonths</MudTd>
+            <MudTd Style="font-family: monospace;">@context.GrossCapitation.ToString("C2")</MudTd>
+            <MudTd Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.NetPayable.ToString("C2")</MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip></MudTd>
+            <MudTd>
+                @if (context.Status == "Generated")
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                   OnClick="() => ApproveOne(context)" Title="Approve" />
+                    <MudIconButton Icon="@Icons.Material.Filled.PauseCircle" Size="Size.Small" Color="Color.Warning"
+                                   OnClick="() => HoldOne(context)" Title="Hold" />
+                }
+                @if (context.Status == "Approved")
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Payment" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => PayOne(context)" Title="Initiate Payment" />
+                }
+                @if (context.Status is not "Paid" and not "Voided")
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => VoidOne(context)" Title="Void" />
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+else
+{
+    <!-- ═══ DETAIL VIEW ═══ -->
+    @if (_selectedStatement != null)
+    {
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="@(() => Navigation.NavigateTo("/capitation/statements"))" Class="mb-3">Back to Statements</MudButton>
+
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudText Typo="Typo.h5" Style="font-family: monospace; color: #00ffff;">@_selectedStatement.StatementNumber</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(_selectedStatement.Status)">@_selectedStatement.Status</MudChip>
+                <MudSpacer />
+                @if (_selectedStatement.Status == "Generated")
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="() => ApproveOne(_selectedStatement)">Approve</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="() => HoldOne(_selectedStatement)">Hold</MudButton>
+                }
+                @if (_selectedStatement.Status == "Approved")
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Payment"
+                               OnClick="() => PayOne(_selectedStatement)">Initiate Payment</MudButton>
+                }
+            </div>
+            <MudGrid>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Provider</MudText><MudText>@_selectedStatement.ProviderName (@_selectedStatement.ProviderNPI)</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Period</MudText><MudText>@_selectedStatement.CapitationPeriodStart.ToString("MMM yyyy")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Members</MudText><MudText>@_selectedStatement.MemberMonths</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Gross</MudText><MudText Style="font-family: monospace;">@_selectedStatement.GrossCapitation.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Withhold</MudText><MudText Style="font-family: monospace; color: #ffaa00;">@_selectedStatement.WithholdAmount.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Net Payable</MudText><MudText Style="font-family: monospace; color: #00ff88; font-weight: 700;">@_selectedStatement.NetPayable.ToString("C2")</MudText></MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- Member-Level Line Items -->
+        <MudText Typo="Typo.h6" Class="mb-2">Member-Level Breakdown (@_selectedStatement.LineItems.Count members)</MudText>
+        <MudTable Items="_selectedStatement.LineItems" Dense="true" Hover="true" T="CapLineItem"
+                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh>Age</MudTh>
+                <MudTh>Gender</MudTh>
+                <MudTh>Base PMPM</MudTh>
+                <MudTh>Risk Score</MudTh>
+                <MudTh>Adjusted PMPM</MudTh>
+                <MudTh>Proration</MudTh>
+                <MudTh>Gross</MudTh>
+                <MudTh>Withhold</MudTh>
+                <MudTh>Net</MudTh>
+                <MudTh>Retro</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudText Typo="Typo.body2">@context.MemberName</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">@context.MemberId</MudText>
+                </MudTd>
+                <MudTd>@context.MemberAge</MudTd>
+                <MudTd>@context.Gender</MudTd>
+                <MudTd Style="font-family: monospace;">@context.BasePMPM.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace;">@context.RiskScore.ToString("F2")</MudTd>
+                <MudTd Style="font-family: monospace;">@context.AdjustedPMPM.ToString("C2")</MudTd>
+                <MudTd>
+                    @if (context.ProrationFactor < 1.0m) { <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.ProrationFactor.ToString("P0")</MudChip> }
+                    else { <text>Full</text> }
+                </MudTd>
+                <MudTd Style="font-family: monospace;">@context.GrossAmount.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: #ffaa00;">@context.WithholdAmount.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: #00ff88;">@context.NetAmount.ToString("C2")</MudTd>
+                <MudTd>@if (context.IsRetroactive) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Retro</MudChip> }</MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <!-- Adjustments -->
+        @if (_selectedStatement.Adjustments.Any())
+        {
+            <MudText Typo="Typo.h6" Class="mt-4 mb-2">Adjustments (@_selectedStatement.Adjustments.Count)</MudText>
+            <MudTable Items="_selectedStatement.Adjustments" Dense="true" Hover="true" T="CapAdjustment"
+                      Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+                <HeaderContent>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Amount</MudTh>
+                    <MudTh>Date</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.Type</MudChip></MudTd>
+                    <MudTd>@context.Description</MudTd>
+                    <MudTd Style="@($"font-family: monospace; color: {(context.Amount >= 0 ? "#00ff88" : "#ff0055")};")">@context.Amount.ToString("C2")</MudTd>
+                    <MudTd>@context.AdjustmentDate.ToString("MM/dd/yyyy")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+}
+</PermissionGate>
+
+@code {
+    [Parameter] public string? StatementId { get; set; }
+
+    private List<CapStatementSummary> _statements = new();
+    private CapStatementSummary? _selectedStatement;
+    private string? _npiFilter;
+    private string? _statusFilter;
+    private bool _loading = true;
+    private string? _serviceError;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+    protected override async Task OnParametersSetAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            if (!string.IsNullOrEmpty(StatementId))
+                _selectedStatement = await CapitationService.GetStatementByIdAsync(StatementId);
+            else
+            {
+                _selectedStatement = null;
+                await LoadStatements();
+                return;
+            }
+        }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadStatements()
+    {
+        _loading = true;
+        try { _statements = await CapitationService.GetStatementsAsync(_npiFilter, status: _statusFilter); }
+        catch (ServiceUnavailableException ex) { _serviceError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task ApproveOne(CapStatementSummary s)
+    {
+        try { await CapitationService.ApproveStatementAsync(s.Id); Snackbar.Add("Statement approved", Severity.Success); await LoadData(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task HoldOne(CapStatementSummary s)
+    {
+        try { await CapitationService.HoldStatementAsync(s.Id, "Manual hold from portal"); Snackbar.Add("Statement held", Severity.Warning); await LoadData(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task VoidOne(CapStatementSummary s)
+    {
+        var result = await DialogService.ShowMessageBox("Void Statement", $"Void {s.StatementNumber}?", "Void", "Cancel");
+        if (result != true) return;
+        try { await CapitationService.VoidStatementAsync(s.Id, "Voided from portal"); Snackbar.Add("Statement voided", Severity.Warning); await LoadData(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task PayOne(CapStatementSummary s)
+    {
+        try { await CapitationService.InitiateDisbursementAsync(s.Id, "portal-user"); Snackbar.Add("Payment initiated", Severity.Success); await LoadData(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ApproveAllGenerated()
+    {
+        var generated = _statements.Where(s => s.Status == "Generated").ToList();
+        var result = await DialogService.ShowMessageBox("Approve All", $"Approve {generated.Count} statements?", "Approve All", "Cancel");
+        if (result != true) return;
+        foreach (var s in generated) { try { await CapitationService.ApproveStatementAsync(s.Id); } catch { /* continue */ } }
+        Snackbar.Add($"{generated.Count} statements approved", Severity.Success);
+        await LoadStatements();
+    }
+
+    private async Task InitiateBatchPayment()
+    {
+        var approved = _statements.Where(s => s.Status == "Approved").ToList();
+        var result = await DialogService.ShowMessageBox("Batch Payment",
+            $"Initiate payment for {approved.Count} approved statements totaling {approved.Sum(s => s.NetPayable):C2}?", "Pay All", "Cancel");
+        if (result != true) return;
+        try
+        {
+            var batchResult = await CapitationService.InitiateBatchDisbursementAsync(approved.Select(s => s.Id).ToList(), "portal-user");
+            Snackbar.Add($"Batch payment: {batchResult.DisbursementsInitiated} disbursements initiated, {batchResult.TotalAmount:C2}", Severity.Success);
+            await LoadStatements();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "Paid" => Color.Success, "Approved" => Color.Info,
+        "PaymentInitiated" => Color.Primary, "Generated" => Color.Warning,
+        "OnHold" => Color.Default, "Voided" => Color.Error, _ => Color.Default
+    };
+}

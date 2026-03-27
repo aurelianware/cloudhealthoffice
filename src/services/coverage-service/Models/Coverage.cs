@@ -124,6 +124,38 @@ public class Coverage
     [StringLength(3)]
     public string? MaintenanceReasonCode { get; set; }
 
+    // ── PCP (Primary Care Provider) Assignment ──
+
+    /// <summary>
+    /// NPI of the assigned Primary Care Provider (10-digit NPI)
+    /// </summary>
+    [StringLength(10)]
+    public string? PcpNpi { get; set; }
+
+    /// <summary>
+    /// Denormalized PCP name for display (avoids provider-service round-trip)
+    /// </summary>
+    [StringLength(200)]
+    public string? PcpName { get; set; }
+
+    /// <summary>
+    /// Date the PCP was assigned to the member on this coverage
+    /// </summary>
+    public DateTime? PcpAssignmentDate { get; set; }
+
+    /// <summary>
+    /// How the PCP was assigned
+    /// </summary>
+    public PcpAssignmentMethod? PcpAssignmentMethod { get; set; }
+
+    /// <summary>
+    /// Previous PCP NPI — retained for retro capitation adjustments when PCP changes
+    /// </summary>
+    [StringLength(10)]
+    public string? PreviousPcpNpi { get; set; }
+
+    // ── Audit ──
+
     /// <summary>
     /// Audit: Record creation timestamp
     /// </summary>
@@ -296,4 +328,25 @@ public enum LineOfBusiness
     Exchange = 4,
     TRICARE = 5,
     VA = 6
+}
+
+/// <summary>
+/// How the PCP was assigned to the member
+/// </summary>
+public enum PcpAssignmentMethod
+{
+    /// <summary>
+    /// Auto-assigned by the system (e.g., geo-proximity, panel availability)
+    /// </summary>
+    AutoAssigned = 1,
+
+    /// <summary>
+    /// Member selected the PCP themselves
+    /// </summary>
+    MemberSelected = 2,
+
+    /// <summary>
+    /// Plan-level default PCP assignment
+    /// </summary>
+    PlanDefault = 3
 }
