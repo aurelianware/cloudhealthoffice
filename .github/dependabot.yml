@@ -260,6 +260,119 @@ updates:
     groups: *dotnet-groups
     ignore: *dotnet-ignore
 
+  - package-ecosystem: "nuget"
+    directory: "/src/services/capitation-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/premium-billing-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/fhir-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/smart-auth-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/risk-adjustment-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/encounter-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/ar-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/provider-contracts-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/ffs-service"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/CHO.TerminologyService"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels: *dotnet-labels
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
+  - package-ecosystem: "nuget"
+    directory: "/src/services/CloudHealthOffice.PricingApi"
+    schedule: *dotnet-schedule
+    open-pull-requests-limit: 5
+    reviewers: *dotnet-reviewers
+    labels:
+      - "dependencies"
+      - "dotnet"
+      - "pricing-api"
+    commit-message: *dotnet-commit
+    groups: *dotnet-groups
+    ignore: *dotnet-ignore
+
   # ============================================================
   # NuGet — Engines
   # ============================================================

@@ -15,7 +15,7 @@ WORKDIR /app
 # Create directory for map file mounts
 RUN mkdir -p /data/maps
 
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
 
 RUN addgroup -S appuser && adduser -S appuser -G appuser \
     && chown -R appuser:appuser /app
