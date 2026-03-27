@@ -102,7 +102,6 @@ This document outlines the strategic vision and planned enhancements for the Clo
 4. **Custom**: Quote-based - White-label, dedicated infrastructure
 
 [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing on all tiers.
-4. **Custom**: Quote-based - White-label, dedicated infrastructure
 
 #### 3. Enhanced Analytics & Dashboards 📊
 **Priority**: Medium  

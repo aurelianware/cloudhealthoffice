@@ -687,40 +687,25 @@
 
 <!-- COST CALCULATOR -->
 <section class="calculator-section">
-  <h2>Estimate Your Cost</h2>
-  <p>Pricing is based on your deployment mode and member count. Contact us for a personalized quote.</p>
+  <h2>Get a Quote</h2>
+  <p>Pricing is based on your deployment mode and member count. Contact our team for a personalized quote.</p>
 
   <div class="calculator">
-    <div class="calc-row">
-      <div class="calc-field">
-        <label>Deployment Mode</label>
-        <select id="calcTier">
-          <option value="starter">Starter — Standalone</option>
-          <option value="professional" selected>Professional — Single System</option>
-          <option value="enterprise">Enterprise — Multi-System</option>
-        </select>
-      </div>
-      <div class="calc-field">
-        <label>Total Members</label>
-        <input type="number" id="calcMembers" value="75000" min="1000" step="1000">
-      </div>
-    </div>
-
     <div class="calc-results">
       <div class="calc-result-item">
-        <div class="calc-result-label">Platform Fee</div>
-        <div class="calc-result-value blue" id="resultPlatform">Contact us</div>
-        <div class="calc-result-sub">for pricing</div>
+        <div class="calc-result-label">Platform + PMPM</div>
+        <div class="calc-result-value blue">Usage-Based</div>
+        <div class="calc-result-sub">scaled to your organization</div>
       </div>
       <div class="calc-result-item">
-        <div class="calc-result-label">PMPM Cost</div>
-        <div class="calc-result-value teal" id="resultPmpm">Contact us</div>
-        <div class="calc-result-sub" id="resultPmpmRate">for pricing</div>
+        <div class="calc-result-label">All Tiers Include</div>
+        <div class="calc-result-value teal">Full Platform</div>
+        <div class="calc-result-sub">no feature gates</div>
       </div>
       <div class="calc-result-item">
-        <div class="calc-result-label">Total Monthly</div>
-        <div class="calc-result-value gold" id="resultTotal">Contact us</div>
-        <div class="calc-result-sub" id="resultAnnual">for pricing</div>
+        <div class="calc-result-label">Ready?</div>
+        <div class="calc-result-value gold"><a href="mailto:sales@cloudhealthoffice.com" style="color:inherit;text-decoration:none;">Contact Sales</a></div>
+        <div class="calc-result-sub"><a href="mailto:sales@cloudhealthoffice.com" style="color:rgba(255,255,255,0.6);">sales@cloudhealthoffice.com</a></div>
       </div>
     </div>
   </div>
@@ -807,36 +792,8 @@
 </div>
 
 <script>
-function togglePricing(mode) {
-  document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
-
-  const monthlyEls = document.querySelectorAll('.monthly-price');
-  const annualEls = document.querySelectorAll('.annual-price');
-
-  if (mode === 'annual') {
-    monthlyEls.forEach(el => el.style.display = 'none');
-    annualEls.forEach(el => el.style.display = 'block');
-  } else {
-    monthlyEls.forEach(el => el.style.display = 'block');
-    annualEls.forEach(el => el.style.display = 'none');
-  }
-  calculateCost();
-}
-
-function calculateCost() {
-  const tier = document.getElementById('calcTier').value;
-  const members = parseInt(document.getElementById('calcMembers').value) || 0;
-
-  const isAnnual = document.querySelector('.toggle-btn.active').textContent.includes('Annual');
-
-  // Pricing details available upon request
-  document.getElementById('resultPlatform').textContent = 'Contact us';
-  document.getElementById('resultPmpm').textContent = 'Contact us';
-  document.getElementById('resultPmpmRate').textContent = 'for pricing';
-  document.getElementById('resultTotal').textContent = 'Contact us';
-  document.getElementById('resultAnnual').textContent = 'for pricing';
-}
+// Pricing toggle and calculator removed — pricing available upon request.
+// Contact sales@cloudhealthoffice.com for a personalized quote.
 </script>
 </body>
 </html>
