@@ -34,7 +34,7 @@
     "x12"
   ],
   "author": "Aurelianware",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "BUSL-1.1",
   "dependencies": {
     "@azure/identity": "^4.13.1",
     "@azure/openai": "^2.0.0",
