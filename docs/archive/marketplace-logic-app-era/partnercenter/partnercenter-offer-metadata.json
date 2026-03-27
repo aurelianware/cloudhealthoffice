@@ -254,7 +254,7 @@
     "slaLink": "marketplace/legal/sla.md",
     "supportTermsLink": "marketplace/legal/support-terms.md",
     "termsOfUse": "Use of Cloud Health Office is governed by the applicable subscription agreement, Master Services Agreement, and Business Associate Agreement for healthcare deployments.",
-    "license": "Apache-2.0"
+    "license": "BUSL-1.1"
   },
   "technicalRequirements": {
     "azureServices": [

@@ -357,4 +357,4 @@ npm start
 
 ## License
 
-Apache-2.0
+BSL 1.1 - See [LICENSE](../../LICENSE) for details
