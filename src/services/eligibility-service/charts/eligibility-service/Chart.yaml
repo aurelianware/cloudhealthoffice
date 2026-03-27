@@ -20,4 +20,4 @@ sources:
   - https://github.com/cloudhealthoffice/cloudhealthoffice
 annotations:
   category: Healthcare
-  licenses: Apache-2.0
+  licenses: BUSL-1.1
