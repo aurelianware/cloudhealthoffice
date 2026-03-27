@@ -15,7 +15,7 @@ This document outlines the governance structure, decision-making processes, and 
 
 ## Overview
 
-Cloud Health Office is an open-source, Azure-native multi-payer EDI platform for healthcare. Our governance model is designed to be transparent, inclusive, and meritocratic while ensuring the project maintains its focus on security, HIPAA compliance, and healthcare interoperability.
+Cloud Health Office is a source-available, Azure-native multi-payer EDI platform for healthcare. Our governance model is designed to be transparent, inclusive, and meritocratic while ensuring the project maintains its focus on security, HIPAA compliance, and healthcare interoperability.
 
 ### Core Principles
 

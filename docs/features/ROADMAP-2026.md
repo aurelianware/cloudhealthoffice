@@ -26,7 +26,7 @@ This roadmap outlines **quarterly milestones** across four strategic pillars:
 
 ## 2026 Vision Statement
 
-> **By December 31, 2026, Cloud Health Office will be the industry's most trusted, AI-powered, fully CMS-compliant EDI platform—deployed by 100+ payers, supported by a thriving open-source community, and recognized as the standard for healthcare interoperability.**
+> **By December 31, 2026, Cloud Health Office will be the industry's most trusted, AI-powered, fully CMS-compliant EDI platform—deployed by 100+ payers, supported by a thriving developer community, and recognized as the standard for healthcare interoperability.**
 
 ---
 
