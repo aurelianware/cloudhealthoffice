@@ -85,348 +85,97 @@ updates:
 
   # ============================================================
   # NuGet — .NET Microservices (all under src/services/)
+  # Uses "directories" to avoid repeating config per service.
   # ============================================================
   - package-ecosystem: "nuget"
-    directory: "/src/services/appeals-service"
-    schedule: &dotnet-schedule
+    directories:
+      - "/src/services/appeals-service"
+      - "/src/services/ar-service"
+      - "/src/services/attachment-service"
+      - "/src/services/authorization-service"
+      - "/src/services/benefit-plan-service"
+      - "/src/services/capitation-service"
+      - "/src/services/CHO.TerminologyService"
+      - "/src/services/claims-scrubbing-service"
+      - "/src/services/claims-service"
+      - "/src/services/CloudHealthOffice.PricingApi"
+      - "/src/services/coverage-service"
+      - "/src/services/eligibility-service"
+      - "/src/services/encounter-service"
+      - "/src/services/enrollment-import-service"
+      - "/src/services/ffs-service"
+      - "/src/services/fhir-service"
+      - "/src/services/member-service"
+      - "/src/services/payment-service"
+      - "/src/services/premium-billing-service"
+      - "/src/services/provider-contracts-service"
+      - "/src/services/provider-service"
+      - "/src/services/reference-data-service"
+      - "/src/services/rfai-service"
+      - "/src/services/risk-adjustment-service"
+      - "/src/services/smart-auth-service"
+      - "/src/services/sponsor-service"
+      - "/src/services/tenant-service"
+      - "/src/services/trading-partner-service"
+      - "/src/services/shared/CloudHealthOffice.Infrastructure"
+    schedule:
       interval: "weekly"
       day: "tuesday"
       time: "02:00"
-    open-pull-requests-limit: 5
-    reviewers: &dotnet-reviewers
+    open-pull-requests-limit: 10
+    reviewers:
       - "aurelianware"
-    labels: &dotnet-labels
+    labels:
       - "dependencies"
       - "dotnet"
-    commit-message: &dotnet-commit
+    commit-message:
       prefix: "chore"
       include: "scope"
-    groups: &dotnet-groups
+    groups:
       dotnet-minor-patch:
         update-types:
           - "minor"
           - "patch"
-    ignore: &dotnet-ignore
+    ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/attachment-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/authorization-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/benefit-plan-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/claims-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/coverage-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/eligibility-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/enrollment-import-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/member-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/payment-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/provider-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/reference-data-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/rfai-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/sponsor-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/tenant-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/trading-partner-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/capitation-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/premium-billing-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/fhir-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/smart-auth-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/risk-adjustment-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/encounter-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/ar-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/provider-contracts-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/ffs-service"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/CHO.TerminologyService"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels: *dotnet-labels
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/services/CloudHealthOffice.PricingApi"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels:
-      - "dependencies"
-      - "dotnet"
-      - "pricing-api"
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
 
   # ============================================================
   # NuGet — Engines
   # ============================================================
   - package-ecosystem: "nuget"
-    directory: "/src/engines/CloudHealthOffice.CobEngine"
-    schedule: *dotnet-schedule
+    directories:
+      - "/src/engines/CloudHealthOffice.BenefitEngine"
+      - "/src/engines/CloudHealthOffice.ClaimsScrubEngine"
+      - "/src/engines/CloudHealthOffice.CobEngine"
+      - "/src/engines/CloudHealthOffice.DocumentStore"
+      - "/src/engines/CloudHealthOffice.EncounterEngine"
+      - "/src/engines/CloudHealthOffice.FeeScheduleEngine"
+      - "/src/engines/CloudHealthOffice.NcciEngine"
+      - "/src/engines/CloudHealthOffice.OperatingMode"
+      - "/src/engines/CloudHealthOffice.RiskAdjustmentEngine"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
     open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
+    reviewers:
+      - "aurelianware"
     labels:
       - "dependencies"
       - "dotnet"
       - "engines"
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/engines/CloudHealthOffice.RiskAdjustmentEngine"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels:
-      - "dependencies"
-      - "dotnet"
-      - "engines"
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/engines/CloudHealthOffice.NcciEngine"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels:
-      - "dependencies"
-      - "dotnet"
-      - "engines"
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
-
-  - package-ecosystem: "nuget"
-    directory: "/src/engines/CloudHealthOffice.DocumentStore"
-    schedule: *dotnet-schedule
-    open-pull-requests-limit: 5
-    reviewers: *dotnet-reviewers
-    labels:
-      - "dependencies"
-      - "dotnet"
-      - "engines"
-    commit-message: *dotnet-commit
-    groups: *dotnet-groups
-    ignore: *dotnet-ignore
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      dotnet-engines-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # ============================================================
   # Docker — Base images
