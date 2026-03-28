@@ -108,7 +108,7 @@ public class LicenseCheckMiddleware
     {
         return path.StartsWithSegments("/health")
             || path.StartsWithSegments("/swagger")
-            || path.StartsWithSegments("/favicon");
+            || (path.Value?.StartsWith("/favicon", StringComparison.OrdinalIgnoreCase) == true);
     }
 }
 
