@@ -34,6 +34,8 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     {
         Id = id,
         TenantId = "smoke-test-tenant",
+        ContractId = "pc-smoke-1",
+        RateConfigNumber = "CAP-1234567890-2026-1",
         ContractNumber = "CAP-1234567890-2026",
         ProviderNPI = "1234567890",
         ProviderName = "Dr. Sarah Chen, MD",
