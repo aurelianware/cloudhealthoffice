@@ -206,7 +206,7 @@ public class PremiumBillingServiceTests
     }
 
     [Fact]
-    public async Task ExecuteBillingRunAsync_InvoiceGenerationFails_AddsWarningAndContinues()
+    public async Task ExecuteBillingRunAsync_EmptyCoverageForSponsor_StillGeneratesInvoiceAndContinues()
     {
         var billingRun = new BillingRun
         {
@@ -277,6 +277,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ExecuteBillingRunAsync("br-1");
 
+        callCount.Should().Be(2);
         result.Status.Should().Be(BillingRunStatus.Completed);
         result.TotalInvoices.Should().Be(2);
     }
