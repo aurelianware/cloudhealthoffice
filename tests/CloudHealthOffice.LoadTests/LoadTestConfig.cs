@@ -43,8 +43,15 @@ public static class LoadTestConfig
         TimeSpan.FromMilliseconds(ParseInt("LOAD_TEST_MAX_P99_MS", 2000));
 
     // Maximum acceptable error rate (0.0 - 1.0)
-    public static double MaxErrorRate =>
-        double.Parse(Environment.GetEnvironmentVariable("LOAD_TEST_MAX_ERROR_RATE") ?? "0.01");
+    public static double MaxErrorRate
+    {
+        get
+        {
+            var raw = Environment.GetEnvironmentVariable("LOAD_TEST_MAX_ERROR_RATE");
+            return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0.01;
+        }
+    }
 
     // ── Report output ──────────────────────────────────────────────────
     public static string ReportFolder =>

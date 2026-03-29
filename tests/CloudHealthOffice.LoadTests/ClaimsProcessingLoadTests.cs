@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using NBomber.Contracts;
 using NBomber.CSharp;
@@ -32,7 +31,12 @@ public class ClaimsProcessingLoadTests
 
     private static HttpClient CreateClient(string baseUrl)
     {
-        var client = new HttpClient
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            MaxConnectionsPerServer = 100
+        };
+        var client = new HttpClient(handler)
         {
             BaseAddress = new Uri(baseUrl),
             Timeout = TimeSpan.FromSeconds(10)
@@ -92,16 +96,15 @@ public class ClaimsProcessingLoadTests
     public void ClaimSubmission_SustainedLoad_MeetsSlaTargets()
     {
         var counter = 0;
+        using var client = CreateClient(LoadTestConfig.ClaimsServiceUrl);
 
         var scenario = Scenario.Create("claim_submission", async context =>
         {
             var index = Interlocked.Increment(ref counter);
-            using var client = CreateClient(LoadTestConfig.ClaimsServiceUrl);
             var claim = GenerateClaim(index);
 
             var request = Http.CreateRequest("POST", "/api/claims")
                 .WithHeader("Content-Type", "application/json")
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId)
                 .WithBody(new StringContent(
                     JsonSerializer.Serialize(claim, Json),
                     System.Text.Encoding.UTF8,
@@ -154,16 +157,15 @@ public class ClaimsProcessingLoadTests
     {
         var writeCounter = 0;
         var createdClaimIds = new System.Collections.Concurrent.ConcurrentBag<string>();
+        using var client = CreateClient(LoadTestConfig.ClaimsServiceUrl);
 
         var writeScenario = Scenario.Create("claim_write", async context =>
         {
             var index = Interlocked.Increment(ref writeCounter);
-            using var client = CreateClient(LoadTestConfig.ClaimsServiceUrl);
             var claim = GenerateClaim(index);
 
             var request = Http.CreateRequest("POST", "/api/claims")
                 .WithHeader("Content-Type", "application/json")
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId)
                 .WithBody(new StringContent(
                     JsonSerializer.Serialize(claim, Json),
                     System.Text.Encoding.UTF8,
@@ -196,8 +198,6 @@ public class ClaimsProcessingLoadTests
 
         var readScenario = Scenario.Create("claim_read", async context =>
         {
-            using var client = CreateClient(LoadTestConfig.ClaimsServiceUrl);
-
             // Read a previously-created claim, or hit the list endpoint
             string path;
             if (createdClaimIds.TryPeek(out var claimId))
@@ -205,8 +205,7 @@ public class ClaimsProcessingLoadTests
             else
                 path = "/api/claims?page=1&pageSize=10";
 
-            var request = Http.CreateRequest("GET", path)
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId);
+            var request = Http.CreateRequest("GET", path);
 
             var response = await Http.Send(client, request);
             return response;

@@ -10,8 +10,9 @@
  * Usage:
  *   node scripts/inject-test-metrics.js [path-to-metrics-json]
  *
- * If no metrics file is found, it falls back to a "live" count by scanning
- * the test projects in the repository.
+ * If no metrics file is found, the script exits gracefully and leaves files
+ * unchanged (the existing static values remain as-is until the next
+ * test-metrics workflow run produces an artifact).
  *
  * This script is called by:
  *   - deploy-static-site.yml (before site deployment)

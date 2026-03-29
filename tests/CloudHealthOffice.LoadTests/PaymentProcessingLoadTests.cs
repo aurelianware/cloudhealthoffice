@@ -26,7 +26,12 @@ public class PaymentProcessingLoadTests
 
     private static HttpClient CreateClient(string baseUrl)
     {
-        var client = new HttpClient
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            MaxConnectionsPerServer = 100
+        };
+        var client = new HttpClient(handler)
         {
             BaseAddress = new Uri(baseUrl),
             Timeout = TimeSpan.FromSeconds(15)
@@ -91,16 +96,15 @@ public class PaymentProcessingLoadTests
     public void PaymentCreation_BatchLoad_MeetsSlaTargets()
     {
         var counter = 0;
+        using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
 
         var scenario = Scenario.Create("payment_creation", async context =>
         {
             var index = Interlocked.Increment(ref counter);
-            using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
             var payment = GeneratePayment(index);
 
             var request = Http.CreateRequest("POST", "/api/payments")
                 .WithHeader("Content-Type", "application/json")
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId)
                 .WithBody(new StringContent(
                     JsonSerializer.Serialize(payment, Json),
                     System.Text.Encoding.UTF8,
@@ -154,16 +158,15 @@ public class PaymentProcessingLoadTests
         // Seed: create a few payments first, then hammer ERA downloads
         var paymentIds = new System.Collections.Concurrent.ConcurrentBag<string>();
         var seedCounter = 0;
+        using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
 
         var seedScenario = Scenario.Create("seed_payments", async context =>
         {
             var index = Interlocked.Increment(ref seedCounter);
-            using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
             var payment = GeneratePayment(index);
 
             var request = Http.CreateRequest("POST", "/api/payments")
                 .WithHeader("Content-Type", "application/json")
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId)
                 .WithBody(new StringContent(
                     JsonSerializer.Serialize(payment, Json),
                     System.Text.Encoding.UTF8,
@@ -192,14 +195,11 @@ public class PaymentProcessingLoadTests
 
         var eraScenario = Scenario.Create("era_download", async context =>
         {
-            using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
-
             string paymentId;
             if (!paymentIds.TryPeek(out paymentId!))
                 paymentId = "nonexistent";
 
-            var request = Http.CreateRequest("GET", $"/api/payments/{paymentId}/835")
-                .WithHeader("X-Tenant-ID", LoadTestConfig.TenantId);
+            var request = Http.CreateRequest("GET", $"/api/payments/{paymentId}/835");
 
             var response = await Http.Send(client, request);
             return response;
@@ -242,12 +242,12 @@ public class PaymentProcessingLoadTests
     /// application logic issues.
     /// </summary>
     [Fact]
-    public void HealthEndpoint_HighConcurrency_SubMillisecondP50()
+    public void HealthEndpoint_HighConcurrency_Under100msP50()
     {
+        using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
+
         var scenario = Scenario.Create("health_check", async context =>
         {
-            using var client = CreateClient(LoadTestConfig.PaymentServiceUrl);
-
             var request = Http.CreateRequest("GET", "/health/live");
             var response = await Http.Send(client, request);
             return response;
