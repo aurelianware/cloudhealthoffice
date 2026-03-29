@@ -35,11 +35,13 @@ const TARGETS = [
 let metrics;
 if (fs.existsSync(METRICS_PATH)) {
   metrics = JSON.parse(fs.readFileSync(METRICS_PATH, 'utf8'));
-  console.log(`Loaded metrics from ${METRICS_PATH}`);
-  console.log(`  Total tests: ${metrics.summary.total_tests}`);
-  console.log(`  Coverage:    ${metrics.summary.coverage_pct}%`);
+  const totalCount = metrics.summary.total_tests;
+  const coverageResult = metrics.summary.coverage_pct;
+  console.log('Loaded metrics from ' + METRICS_PATH);
+  console.log('  Total count: ' + totalCount);
+  console.log('  Coverage result: ' + coverageResult + '%');
 } else {
-  console.log(`No metrics file found at ${METRICS_PATH}, using fallback count...`);
+  console.log('No metrics file found at ' + METRICS_PATH + ', using fallback count...');
   metrics = null;
 }
 
@@ -54,14 +56,14 @@ if (!totalTests) {
 const formattedCount = totalTests.toLocaleString('en-US');
 const coverageStr = coveragePct ? `${coveragePct}%` : null;
 
-console.log(`\nInjecting: ${formattedCount} tests, ${coverageStr || 'N/A'} coverage\n`);
+console.log('\nInjecting: ' + formattedCount + ' tests, ' + (coverageStr || 'N/A') + ' coverage\n');
 
 let filesUpdated = 0;
 
 for (const target of TARGETS) {
   const filePath = path.resolve(target.file);
   if (!fs.existsSync(filePath)) {
-    console.log(`  SKIP: ${target.file} (not found)`);
+    console.log('  SKIP: ' + target.file + ' (not found)');
     continue;
   }
 
@@ -147,11 +149,11 @@ for (const target of TARGETS) {
 
   if (content !== originalContent) {
     fs.writeFileSync(filePath, content, 'utf8');
-    console.log(`  UPDATED: ${target.file}`);
+    console.log('  UPDATED: ' + target.file);
     filesUpdated++;
   } else {
-    console.log(`  NO CHANGE: ${target.file}`);
+    console.log('  NO CHANGE: ' + target.file);
   }
 }
 
-console.log(`\nDone. ${filesUpdated} file(s) updated.`);
+console.log('\nDone. ' + filesUpdated + ' file(s) updated.');
