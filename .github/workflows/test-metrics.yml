@@ -1,0 +1,420 @@
+name: Test Metrics
+
+# Runs all tests (unit, smoke, integration) across all languages, collects
+# metrics (counts, timings, coverage), publishes a JSON artifact consumed by
+# the site build and README badge pipelines.  This is the single source of
+# truth for test counts displayed anywhere in the repository or website.
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+
+on:
+  push:
+    branches: [main, 'release/*']
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/tests/**'
+      - 'containers/*/tests/**'
+      - '.github/workflows/test-metrics.yml'
+  pull_request:
+    branches: [main, 'release/*']
+  schedule:
+    # Run nightly at 3 AM UTC to keep metrics current even without code changes
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: test-metrics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # 1. .NET Unit Tests
+  # ═══════════════════════════════════════════════════════════════════════
+  dotnet-tests:
+    name: .NET Tests
+    runs-on: ubuntu-latest
+    outputs:
+      test_count: ${{ steps.parse.outputs.test_count }}
+      pass_count: ${{ steps.parse.outputs.pass_count }}
+      fail_count: ${{ steps.parse.outputs.fail_count }}
+      skip_count: ${{ steps.parse.outputs.skip_count }}
+      duration_ms: ${{ steps.parse.outputs.duration_ms }}
+      coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Discover and run .NET test projects
+        id: run
+        run: |
+          set -euo pipefail
+          START_MS=$(date +%s%3N)
+
+          # Discover unit/integration test projects (exclude E2E)
+          mapfile -t PROJECTS < <(find src tests -name '*.Tests.csproj' | sort)
+          COUNT=${#PROJECTS[@]}
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No .NET test projects found"
+            echo "project_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Found $COUNT .NET test projects"
+          mkdir -p TestResults
+
+          FAILED=0
+          for PROJECT in "${PROJECTS[@]}"; do
+            NAME=$(basename "$PROJECT" .csproj)
+            echo "::group::$NAME"
+            dotnet restore "$PROJECT" 2>&1 || { FAILED=$((FAILED+1)); echo "::endgroup::"; continue; }
+            dotnet build "$PROJECT" --no-restore 2>&1 || { FAILED=$((FAILED+1)); echo "::endgroup::"; continue; }
+            dotnet test "$PROJECT" --no-build --verbosity normal \
+              --logger "trx;LogFileName=${NAME}.trx" \
+              --results-directory ./TestResults \
+              --collect:"XPlat Code Coverage" 2>&1 || FAILED=$((FAILED+1))
+            echo "::endgroup::"
+          done
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+          echo "build_failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Parse TRX results
+        id: parse
+        run: |
+          set -euo pipefail
+
+          TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0; DURATION=0
+
+          for trx in TestResults/*.trx; do
+            [ -f "$trx" ] || continue
+            # Extract counters from TRX XML
+            t=$(grep -oP 'total="\K[0-9]+' "$trx" | head -1) || t=0
+            p=$(grep -oP 'passed="\K[0-9]+' "$trx" | head -1) || p=0
+            f=$(grep -oP 'failed="\K[0-9]+' "$trx" | head -1) || f=0
+            s=$(grep -oP '(?:skipped|inconclusive)="\K[0-9]+' "$trx" | head -1) || s=0
+            TOTAL=$((TOTAL + t)); PASSED=$((PASSED + p)); FAILED=$((FAILED + f)); SKIPPED=$((SKIPPED + s))
+          done
+
+          # Coverage: merge Cobertura reports if available
+          COVERAGE="0"
+          if ls TestResults/**/coverage.cobertura.xml 1>/dev/null 2>&1; then
+            dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.4.9 2>/dev/null || true
+            reportgenerator \
+              "-reports:TestResults/**/coverage.cobertura.xml" \
+              "-targetdir:./MergedCoverage" \
+              "-reporttypes:JsonSummary" 2>/dev/null || true
+            if [ -f MergedCoverage/Summary.json ]; then
+              COVERAGE=$(python3 -c "import json; d=json.load(open('MergedCoverage/Summary.json')); print(d.get('summary',{}).get('linecoverage', 0))" 2>/dev/null || echo "0")
+            fi
+          fi
+
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .NET test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/coverage.cobertura.xml
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 2. TypeScript / Jest Tests
+  # ═══════════════════════════════════════════════════════════════════════
+  jest-tests:
+    name: Jest Tests
+    runs-on: ubuntu-latest
+    outputs:
+      test_count: ${{ steps.parse.outputs.test_count }}
+      pass_count: ${{ steps.parse.outputs.pass_count }}
+      fail_count: ${{ steps.parse.outputs.fail_count }}
+      skip_count: ${{ steps.parse.outputs.skip_count }}
+      duration_ms: ${{ steps.parse.outputs.duration_ms }}
+      coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Jest with JSON reporter
+        id: run
+        run: |
+          set -euo pipefail
+          START_MS=$(date +%s%3N)
+
+          npx jest --coverage \
+            --coverageReporters=json-summary --coverageReporters=lcov \
+            --json --outputFile=jest-results.json \
+            --passWithNoTests 2>&1 || true
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+
+      - name: Parse Jest results
+        id: parse
+        run: |
+          set -euo pipefail
+
+          if [ -f jest-results.json ]; then
+            TOTAL=$(python3 -c "import json; d=json.load(open('jest-results.json')); print(d.get('numTotalTests', 0))")
+            PASSED=$(python3 -c "import json; d=json.load(open('jest-results.json')); print(d.get('numPassedTests', 0))")
+            FAILED=$(python3 -c "import json; d=json.load(open('jest-results.json')); print(d.get('numFailedTests', 0))")
+            SKIPPED=$(python3 -c "import json; d=json.load(open('jest-results.json')); print(d.get('numPendingTests', 0))")
+          else
+            TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
+          fi
+
+          COVERAGE="0"
+          if [ -f coverage/coverage-summary.json ]; then
+            COVERAGE=$(python3 -c "import json; d=json.load(open('coverage/coverage-summary.json')); print(d['total']['lines']['pct'])")
+          fi
+
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Jest results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jest-test-results
+          path: |
+            jest-results.json
+            coverage/
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 3. Python / pytest Tests
+  # ═══════════════════════════════════════════════════════════════════════
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    outputs:
+      test_count: ${{ steps.parse.outputs.test_count }}
+      pass_count: ${{ steps.parse.outputs.pass_count }}
+      fail_count: ${{ steps.parse.outputs.fail_count }}
+      skip_count: ${{ steps.parse.outputs.skip_count }}
+      duration_ms: ${{ steps.parse.outputs.duration_ms }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-json-report
+          if [ -f containers/x12-parser/requirements.txt ]; then
+            pip install -r containers/x12-parser/requirements.txt
+          fi
+          if [ -f src/functions/ClaimRiskScorer/requirements.txt ]; then
+            pip install -r src/functions/ClaimRiskScorer/requirements.txt
+          fi
+
+      - name: Run pytest with JSON report
+        id: run
+        run: |
+          set -euo pipefail
+          START_MS=$(date +%s%3N)
+
+          python -m pytest \
+            tests/unit/ tests/integration/ \
+            src/functions/ClaimRiskScorer/tests/ \
+            --json-report --json-report-file=pytest-results.json \
+            -v --tb=short 2>&1 || true
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+
+      - name: Parse pytest results
+        id: parse
+        run: |
+          if [ -f pytest-results.json ]; then
+            TOTAL=$(python3 -c "import json; d=json.load(open('pytest-results.json')); s=d.get('summary',{}); print(s.get('total',0))")
+            PASSED=$(python3 -c "import json; d=json.load(open('pytest-results.json')); s=d.get('summary',{}); print(s.get('passed',0))")
+            FAILED=$(python3 -c "import json; d=json.load(open('pytest-results.json')); s=d.get('summary',{}); print(s.get('failed',0))")
+            SKIPPED=$(python3 -c "import json; d=json.load(open('pytest-results.json')); s=d.get('summary',{}); print(s.get('skipped',0) + s.get('deselected',0))")
+          else
+            TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
+          fi
+
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload pytest results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-test-results
+          path: pytest-results.json
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 4. Aggregate & Publish Metrics
+  # ═══════════════════════════════════════════════════════════════════════
+  publish-metrics:
+    name: Publish Test Metrics
+    runs-on: ubuntu-latest
+    needs: [dotnet-tests, jest-tests, python-tests]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate test-metrics.json
+        run: |
+          set -euo pipefail
+
+          DOTNET_TOTAL=${{ needs.dotnet-tests.outputs.test_count || 0 }}
+          DOTNET_PASS=${{ needs.dotnet-tests.outputs.pass_count || 0 }}
+          DOTNET_FAIL=${{ needs.dotnet-tests.outputs.fail_count || 0 }}
+          DOTNET_SKIP=${{ needs.dotnet-tests.outputs.skip_count || 0 }}
+          DOTNET_DURATION=${{ needs.dotnet-tests.outputs.duration_ms || 0 }}
+          DOTNET_COVERAGE=${{ needs.dotnet-tests.outputs.coverage_pct || 0 }}
+
+          JEST_TOTAL=${{ needs.jest-tests.outputs.test_count || 0 }}
+          JEST_PASS=${{ needs.jest-tests.outputs.pass_count || 0 }}
+          JEST_FAIL=${{ needs.jest-tests.outputs.fail_count || 0 }}
+          JEST_SKIP=${{ needs.jest-tests.outputs.skip_count || 0 }}
+          JEST_DURATION=${{ needs.jest-tests.outputs.duration_ms || 0 }}
+          JEST_COVERAGE=${{ needs.jest-tests.outputs.coverage_pct || 0 }}
+
+          PYTHON_TOTAL=${{ needs.python-tests.outputs.test_count || 0 }}
+          PYTHON_PASS=${{ needs.python-tests.outputs.pass_count || 0 }}
+          PYTHON_FAIL=${{ needs.python-tests.outputs.fail_count || 0 }}
+          PYTHON_SKIP=${{ needs.python-tests.outputs.skip_count || 0 }}
+          PYTHON_DURATION=${{ needs.python-tests.outputs.duration_ms || 0 }}
+
+          GRAND_TOTAL=$((DOTNET_TOTAL + JEST_TOTAL + PYTHON_TOTAL))
+          GRAND_PASS=$((DOTNET_PASS + JEST_PASS + PYTHON_PASS))
+          GRAND_FAIL=$((DOTNET_FAIL + JEST_FAIL + PYTHON_FAIL))
+          GRAND_SKIP=$((DOTNET_SKIP + JEST_SKIP + PYTHON_SKIP))
+          GRAND_DURATION=$((DOTNET_DURATION + JEST_DURATION + PYTHON_DURATION))
+
+          # Weighted average coverage (.NET and Jest have coverage; Python does not yet)
+          if [ "$DOTNET_TOTAL" -gt 0 ] && [ "$JEST_TOTAL" -gt 0 ]; then
+            WEIGHTED_COVERAGE=$(python3 -c "
+          dn=$DOTNET_COVERAGE; jc=$JEST_COVERAGE; dt=$DOTNET_TOTAL; jt=$JEST_TOTAL
+          print(round((dn*dt + jc*jt) / (dt + jt), 2))
+          ")
+          elif [ "$JEST_TOTAL" -gt 0 ]; then
+            WEIGHTED_COVERAGE=$JEST_COVERAGE
+          elif [ "$DOTNET_TOTAL" -gt 0 ]; then
+            WEIGHTED_COVERAGE=$DOTNET_COVERAGE
+          else
+            WEIGHTED_COVERAGE=0
+          fi
+
+          TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          SHA="${GITHUB_SHA:-unknown}"
+          REF="${GITHUB_REF_NAME:-unknown}"
+
+          cat > test-metrics.json <<METRICS_EOF
+          {
+            "generated_at": "$TIMESTAMP",
+            "git_sha": "$SHA",
+            "git_ref": "$REF",
+            "summary": {
+              "total_tests": $GRAND_TOTAL,
+              "passed": $GRAND_PASS,
+              "failed": $GRAND_FAIL,
+              "skipped": $GRAND_SKIP,
+              "duration_ms": $GRAND_DURATION,
+              "coverage_pct": $WEIGHTED_COVERAGE,
+              "all_passing": $([ "$GRAND_FAIL" -eq 0 ] && echo "true" || echo "false")
+            },
+            "suites": {
+              "dotnet": {
+                "framework": "xUnit",
+                "total": $DOTNET_TOTAL,
+                "passed": $DOTNET_PASS,
+                "failed": $DOTNET_FAIL,
+                "skipped": $DOTNET_SKIP,
+                "duration_ms": $DOTNET_DURATION,
+                "coverage_pct": $DOTNET_COVERAGE
+              },
+              "jest": {
+                "framework": "Jest",
+                "total": $JEST_TOTAL,
+                "passed": $JEST_PASS,
+                "failed": $JEST_FAIL,
+                "skipped": $JEST_SKIP,
+                "duration_ms": $JEST_DURATION,
+                "coverage_pct": $JEST_COVERAGE
+              },
+              "python": {
+                "framework": "pytest",
+                "total": $PYTHON_TOTAL,
+                "passed": $PYTHON_PASS,
+                "failed": $PYTHON_FAIL,
+                "skipped": $PYTHON_SKIP,
+                "duration_ms": $PYTHON_DURATION
+              }
+            }
+          }
+          METRICS_EOF
+
+          # Pretty-print for the job summary
+          echo "## Test Metrics Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | Total | Passed | Failed | Skipped | Duration | Coverage |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|--------|--------|---------|----------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| .NET (xUnit) | $DOTNET_TOTAL | $DOTNET_PASS | $DOTNET_FAIL | $DOTNET_SKIP | ${DOTNET_DURATION}ms | ${DOTNET_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| TypeScript (Jest) | $JEST_TOTAL | $JEST_PASS | $JEST_FAIL | $JEST_SKIP | ${JEST_DURATION}ms | ${JEST_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Python (pytest) | $PYTHON_TOTAL | $PYTHON_PASS | $PYTHON_FAIL | $PYTHON_SKIP | ${PYTHON_DURATION}ms | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Grand Total** | **$GRAND_TOTAL** | **$GRAND_PASS** | **$GRAND_FAIL** | **$GRAND_SKIP** | **${GRAND_DURATION}ms** | **${WEIGHTED_COVERAGE}%** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Generated: $TIMESTAMP | Commit: \`${SHA::7}\` | Ref: \`$REF\`" >> "$GITHUB_STEP_SUMMARY"
+
+          cat test-metrics.json
+
+      - name: Upload test-metrics.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-metrics
+          path: test-metrics.json
+          retention-days: 365
+
+      - name: Upload to coverage
+        uses: codecov/codecov-action@v4
+        if: hashFiles('coverage/lcov.info') != ''
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: combined
+          name: combined-coverage
+        continue-on-error: true
