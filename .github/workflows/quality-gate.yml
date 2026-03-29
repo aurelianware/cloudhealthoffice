@@ -64,12 +64,18 @@ jobs:
         id: discover
         run: |
           set -euo pipefail
-          # Smoke tests are identified by:
-          #   1. Projects containing "Smoke" in the name
-          #   2. Projects with [Trait("Category", "Smoke")] tests
+          # Smoke tests are discovered by filename convention:
+          #   - *Smoke*.csproj or *smoke*.csproj in tests/
+          # To add new smoke tests, create a project with "Smoke" in the name.
           mapfile -t SMOKE_PROJECTS < <(
-            find tests -name '*.Tests.csproj' -exec grep -l -i 'smoke\|capitation' {} \; 2>/dev/null | sort
+            find tests -type f \( -name '*Smoke*.csproj' -o -name '*smoke*.csproj' \) 2>/dev/null | sort
           )
+
+          # Also include the CapitationService tests which contain smoke test methods
+          for proj in tests/CloudHealthOffice.CapitationService.Tests/*.csproj; do
+            [ -f "$proj" ] && SMOKE_PROJECTS+=("$proj")
+          done
+
           echo "count=${#SMOKE_PROJECTS[@]}" >> "$GITHUB_OUTPUT"
           printf '%s\n' "${SMOKE_PROJECTS[@]}" > /tmp/smoke-projects.txt
 
