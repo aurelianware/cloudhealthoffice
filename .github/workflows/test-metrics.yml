@@ -222,6 +222,7 @@ jobs:
       fail_count: ${{ steps.parse.outputs.fail_count }}
       skip_count: ${{ steps.parse.outputs.skip_count }}
       duration_ms: ${{ steps.parse.outputs.duration_ms }}
+      coverage_pct: ${{ steps.parse.outputs.coverage_pct }}
 
     steps:
       - uses: actions/checkout@v4
@@ -233,7 +234,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-json-report
+          pip install pytest pytest-json-report pytest-cov
           if [ -f containers/x12-parser/requirements.txt ]; then
             pip install -r containers/x12-parser/requirements.txt
           fi
@@ -241,16 +242,22 @@ jobs:
             pip install -r src/functions/ClaimRiskScorer/requirements.txt
           fi
 
-      - name: Run pytest with JSON report
+      - name: Run pytest with JSON report and coverage
         id: run
         run: |
           set -euo pipefail
           START_MS=$(date +%s%3N)
 
+          # Collect coverage for source directories that have corresponding tests
           python -m pytest \
             tests/unit/ tests/integration/ \
             src/functions/ClaimRiskScorer/tests/ \
             --json-report --json-report-file=pytest-results.json \
+            --cov=containers/x12-parser \
+            --cov=src/functions/ClaimRiskScorer \
+            --cov-report=xml:python-coverage.xml \
+            --cov-report=term-missing \
+            --cov-config=.coveragerc \
             -v --tb=short 2>&1 || true
 
           END_MS=$(date +%s%3N)
@@ -268,18 +275,32 @@ jobs:
             TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
           fi
 
+          # Extract coverage percentage from Cobertura XML
+          COVERAGE="0"
+          if [ -f python-coverage.xml ]; then
+            COVERAGE=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('python-coverage.xml')
+          rate = float(tree.getroot().get('line-rate', 0))
+          print(round(rate * 100, 2))
+          " 2>/dev/null || echo "0")
+          fi
+
           echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
           echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
           echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
           echo "skip_count=$SKIPPED" >> "$GITHUB_OUTPUT"
           echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+          echo "coverage_pct=$COVERAGE" >> "$GITHUB_OUTPUT"
 
       - name: Upload pytest results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: python-test-results
-          path: pytest-results.json
+          path: |
+            pytest-results.json
+            python-coverage.xml
           retention-days: 90
 
   # ═══════════════════════════════════════════════════════════════════════
@@ -317,6 +338,7 @@ jobs:
           PYTHON_FAIL=${{ needs.python-tests.outputs.fail_count || 0 }}
           PYTHON_SKIP=${{ needs.python-tests.outputs.skip_count || 0 }}
           PYTHON_DURATION=${{ needs.python-tests.outputs.duration_ms || 0 }}
+          PYTHON_COVERAGE=${{ needs.python-tests.outputs.coverage_pct || 0 }}
 
           GRAND_TOTAL=$((DOTNET_TOTAL + JEST_TOTAL + PYTHON_TOTAL))
           GRAND_PASS=$((DOTNET_PASS + JEST_PASS + PYTHON_PASS))
@@ -324,19 +346,21 @@ jobs:
           GRAND_SKIP=$((DOTNET_SKIP + JEST_SKIP + PYTHON_SKIP))
           GRAND_DURATION=$((DOTNET_DURATION + JEST_DURATION + PYTHON_DURATION))
 
-          # Weighted average coverage (.NET and Jest have coverage; Python does not yet)
-          if [ "$DOTNET_TOTAL" -gt 0 ] && [ "$JEST_TOTAL" -gt 0 ]; then
-            WEIGHTED_COVERAGE=$(python3 -c "
-          dn=$DOTNET_COVERAGE; jc=$JEST_COVERAGE; dt=$DOTNET_TOTAL; jt=$JEST_TOTAL
-          print(round((dn*dt + jc*jt) / (dt + jt), 2))
+          # Weighted average coverage across all suites that report coverage
+          WEIGHTED_COVERAGE=$(python3 -c "
+          suites = [
+              ($DOTNET_COVERAGE, $DOTNET_TOTAL),
+              ($JEST_COVERAGE, $JEST_TOTAL),
+              ($PYTHON_COVERAGE, $PYTHON_TOTAL),
+          ]
+          with_coverage = [(c, t) for c, t in suites if t > 0 and c > 0]
+          if with_coverage:
+              total_tests = sum(t for _, t in with_coverage)
+              weighted = sum(c * t for c, t in with_coverage)
+              print(round(weighted / total_tests, 2))
+          else:
+              print(0)
           ")
-          elif [ "$JEST_TOTAL" -gt 0 ]; then
-            WEIGHTED_COVERAGE=$JEST_COVERAGE
-          elif [ "$DOTNET_TOTAL" -gt 0 ]; then
-            WEIGHTED_COVERAGE=$DOTNET_COVERAGE
-          else
-            WEIGHTED_COVERAGE=0
-          fi
 
           TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           SHA="${GITHUB_SHA:-unknown}"
@@ -381,7 +405,8 @@ jobs:
                 "passed": $PYTHON_PASS,
                 "failed": $PYTHON_FAIL,
                 "skipped": $PYTHON_SKIP,
-                "duration_ms": $PYTHON_DURATION
+                "duration_ms": $PYTHON_DURATION,
+                "coverage_pct": $PYTHON_COVERAGE
               }
             }
           }
@@ -394,7 +419,7 @@ jobs:
           echo "|-------|-------|--------|--------|---------|----------|----------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| .NET (xUnit) | $DOTNET_TOTAL | $DOTNET_PASS | $DOTNET_FAIL | $DOTNET_SKIP | ${DOTNET_DURATION}ms | ${DOTNET_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
           echo "| TypeScript (Jest) | $JEST_TOTAL | $JEST_PASS | $JEST_FAIL | $JEST_SKIP | ${JEST_DURATION}ms | ${JEST_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Python (pytest) | $PYTHON_TOTAL | $PYTHON_PASS | $PYTHON_FAIL | $PYTHON_SKIP | ${PYTHON_DURATION}ms | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Python (pytest) | $PYTHON_TOTAL | $PYTHON_PASS | $PYTHON_FAIL | $PYTHON_SKIP | ${PYTHON_DURATION}ms | ${PYTHON_COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Grand Total** | **$GRAND_TOTAL** | **$GRAND_PASS** | **$GRAND_FAIL** | **$GRAND_SKIP** | **${GRAND_DURATION}ms** | **${WEIGHTED_COVERAGE}%** |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Generated: $TIMESTAMP | Commit: \`${SHA::7}\` | Ref: \`$REF\`" >> "$GITHUB_STEP_SUMMARY"

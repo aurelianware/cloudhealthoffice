@@ -17,6 +17,12 @@ public static class LoadTestConfig
     public static string BenefitPlanServiceUrl =>
         Environment.GetEnvironmentVariable("LOAD_TEST_BENEFIT_URL") ?? "http://localhost:5002";
 
+    public static string EligibilityServiceUrl =>
+        Environment.GetEnvironmentVariable("LOAD_TEST_ELIGIBILITY_URL") ?? "http://localhost:5007";
+
+    public static string AuthorizationServiceUrl =>
+        Environment.GetEnvironmentVariable("LOAD_TEST_AUTHORIZATION_URL") ?? "http://localhost:5005";
+
     // ── Tenant isolation ───────────────────────────────────────────────
     public static string TenantId => "load-test-tenant";
 
