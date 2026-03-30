@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
@@ -51,5 +52,74 @@ public class EligibilityServiceTests
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.CheckEligibilityAsync(new { MemberId = "MBR-001" }));
         ex.Message.Should().Contain("Eligibility Service");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Happy-path tests
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task CheckEligibilityAsync_WhenApiReturns200_DeserializesResponse()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            isCovered = true, insurancePlanName = "Gold PPO",
+            groupNumber = "GRP-100", coverageLevel = "Employee+Family",
+            coverageBeginDate = "2024-01-01",
+            deductible = new { individualAmount = 1500m, individualMet = 750m,
+                               familyAmount = 3000m, familyMet = 1200m },
+            outOfPocket = new { individualAmount = 6000m, individualMet = 2000m,
+                                familyAmount = 12000m, familyMet = 4000m },
+            benefits = new[]
+            {
+                new { serviceTypeName = "Office Visit", monetaryAmount = 30m,
+                      percentage = 0.8m, authorizationRequired = false }
+            }
+        }, JsonOpts);
+
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.CheckEligibilityAsync(new { MemberId = "MBR-001", ServiceDate = "2025-03-15" });
+
+        result.IsCovered.Should().BeTrue();
+        result.InsurancePlanName.Should().Be("Gold PPO");
+        result.CoverageLevel.Should().Be("Employee+Family");
+        result.Deductible.Should().NotBeNull();
+        result.Deductible!.IndividualAmount.Should().Be(1500m);
+        result.Benefits.Should().HaveCount(1);
+        result.Benefits![0].ServiceTypeName.Should().Be("Office Visit");
+    }
+
+    [Fact]
+    public async Task CheckEligibilityAsync_PostsToCorrectUrl()
+    {
+        var json = JsonSerializer.Serialize(new { isCovered = false, insurancePlanName = "", groupNumber = "", coverageLevel = "" }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.CheckEligibilityAsync(new { MemberId = "MBR-001" });
+
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
+        handler.CapturedUrls[0].Should().Contain("/eligibility/inquiry");
+    }
+
+    [Fact]
+    public async Task CheckEligibilityAsync_WhenNotCovered_HasRejectionReason()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            isCovered = false, rejectionReason = "Coverage terminated",
+            insurancePlanName = "", groupNumber = "", coverageLevel = ""
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.CheckEligibilityAsync(new { MemberId = "MBR-TERMED" });
+
+        result.IsCovered.Should().BeFalse();
+        result.RejectionReason.Should().Be("Coverage terminated");
     }
 }

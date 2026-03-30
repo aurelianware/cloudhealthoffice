@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Web;
@@ -86,5 +88,88 @@ public class AttachmentServiceTests
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.GetAttachmentsAsync("AUTH-001"));
         ex.InnerException.Should().BeOfType<HttpRequestException>();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Happy-path tests
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task GetAttachmentsAsync_WhenApiReturns200_DeserializesAttachmentList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { attachmentId = "ATT-1", fileName = "medical-records.pdf",
+                  contentType = "application/pdf", fileSizeBytes = 245000L,
+                  uploadedDate = "2025-03-01", uploadedBy = "admin@acme.com",
+                  attachmentType = "MedicalRecord", blobPath = "/blobs/ATT-1" }
+        }, JsonOpts);
+
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetAttachmentsAsync("AUTH-001");
+
+        result.Should().HaveCount(1);
+        result[0].FileName.Should().Be("medical-records.pdf");
+        result[0].ContentType.Should().Be("application/pdf");
+        result[0].FileSizeBytes.Should().Be(245000);
+        handler.CapturedUrls[0].Should().Contain("/attachments/authorization/AUTH-001");
+    }
+
+    [Fact]
+    public async Task UploadAttachmentAsync_WhenApiReturns200_ExtractsAttachmentId()
+    {
+        var json = JsonSerializer.Serialize(new { attachmentId = "ATT-NEW-1" }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("PDF content"));
+        var result = await sut.UploadAttachmentAsync("AUTH-001", stream, "doc.pdf", "application/pdf");
+
+        result.Should().Be("ATT-NEW-1");
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
+        handler.CapturedUrls[0].Should().Contain("/attachments/upload");
+    }
+
+    [Fact]
+    public async Task DownloadAttachmentAsync_WhenApiReturns200_ReturnsStream()
+    {
+        var content = "file-content-bytes";
+        var handler = new FakeHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK);
+            response.Content = new StringContent(content, Encoding.UTF8, "application/octet-stream");
+            return response;
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        var stream = await sut.DownloadAttachmentAsync("AUTH-001", "ATT-1");
+
+        using var reader = new StreamReader(stream);
+        (await reader.ReadToEndAsync()).Should().Contain("file-content");
+        handler.CapturedUrls[0].Should().Contain("/attachments/AUTH-001/ATT-1");
+    }
+
+    [Fact]
+    public async Task DeleteAttachmentAsync_WhenApiReturns200_SendsDeleteToCorrectUrl()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.DeleteAttachmentAsync("AUTH-001", "ATT-1");
+
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Delete);
+        handler.CapturedUrls[0].Should().Contain("/attachments/AUTH-001/ATT-1");
+    }
+
+    [Fact]
+    public async Task GetAttachmentsAsync_WhenApiReturnsNull_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, "null")));
+        var result = await sut.GetAttachmentsAsync("AUTH-001");
+        result.Should().BeEmpty();
     }
 }
