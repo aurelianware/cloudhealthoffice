@@ -23,6 +23,8 @@ public class DockerComposeFixture : IAsyncLifetime
     public HttpClient ClaimsClient { get; private set; } = null!;
     public HttpClient BenefitPlanClient { get; private set; } = null!;
     public HttpClient PaymentClient { get; private set; } = null!;
+    public HttpClient EligibilityClient { get; private set; } = null!;
+    public HttpClient AuthorizationClient { get; private set; } = null!;
 
     private const string TenantId = "e2e-test-tenant";
     private const int MaxWaitSeconds = 120;
@@ -32,10 +34,14 @@ public class DockerComposeFixture : IAsyncLifetime
         ClaimsClient = CreateClient("http://localhost:5001");
         BenefitPlanClient = CreateClient("http://localhost:5002");
         PaymentClient = CreateClient("http://localhost:5003");
+        EligibilityClient = CreateClient("http://localhost:5007");
+        AuthorizationClient = CreateClient("http://localhost:5005");
 
         await WaitForServiceAsync(ClaimsClient, "claims-service", "/health");
         await WaitForServiceAsync(BenefitPlanClient, "benefit-plan-service", "/health");
         await WaitForServiceAsync(PaymentClient, "payment-service", "/health");
+        await WaitForServiceAsync(EligibilityClient, "eligibility-service", "/health");
+        await WaitForServiceAsync(AuthorizationClient, "authorization-service", "/health");
     }
 
     public Task DisposeAsync()
@@ -43,6 +49,8 @@ public class DockerComposeFixture : IAsyncLifetime
         ClaimsClient.Dispose();
         BenefitPlanClient.Dispose();
         PaymentClient.Dispose();
+        EligibilityClient.Dispose();
+        AuthorizationClient.Dispose();
         return Task.CompletedTask;
     }
 
