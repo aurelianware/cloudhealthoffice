@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 
 namespace CloudHealthOffice.Portal.Tests;
 
@@ -8,16 +9,37 @@ namespace CloudHealthOffice.Portal.Tests;
 /// </summary>
 public class FakeHandler : HttpMessageHandler
 {
-    private readonly HttpStatusCode _statusCode;
+    private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
+
+    public List<HttpRequestMessage> CapturedRequests { get; } = new();
+
+    public List<string> CapturedUrls =>
+        CapturedRequests.Select(r => r.RequestUri?.AbsoluteUri ?? "").ToList();
 
     public FakeHandler(HttpStatusCode statusCode)
+        : this(_ => new HttpResponseMessage(statusCode))
     {
-        _statusCode = statusCode;
+    }
+
+    public FakeHandler(HttpStatusCode statusCode, string responseBody)
+        : this(_ =>
+        {
+            var response = new HttpResponseMessage(statusCode);
+            response.Content = new StringContent(responseBody, Encoding.UTF8, "application/json");
+            return response;
+        })
+    {
+    }
+
+    public FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
+    {
+        _handler = handler;
     }
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        return Task.FromResult(new HttpResponseMessage(_statusCode));
+        CapturedRequests.Add(request);
+        return Task.FromResult(_handler(request));
     }
 }
