@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Web;
@@ -81,5 +82,148 @@ public class AuthorizationServiceTests
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetAuthorizationsAsync());
         ex.InnerException.Should().BeOfType<HttpRequestException>();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Happy-path and edge-case tests
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    // ── GetAuthorizationsAsync ──
+
+    [Fact]
+    public async Task GetAuthorizationsAsync_WhenApiReturns200_DeserializesAuthorizationsList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { authorizationId = "AUTH-001", memberName = "Jane Doe",
+                  serviceType = "MRI", status = "Approved",
+                  requestDate = "2026-02-01", providerName = "Dr. Lee",
+                  processingTimeMs = 1500 },
+            new { authorizationId = "AUTH-002", memberName = "John Roe",
+                  serviceType = "Surgery", status = "Pending",
+                  requestDate = "2026-03-10", providerName = "Dr. Kim",
+                  processingTimeMs = 0 }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAuthorizationsAsync();
+
+        result.Should().HaveCount(2);
+        result[0].AuthorizationId.Should().Be("AUTH-001");
+        result[0].Status.Should().Be("Approved");
+        result[1].ServiceType.Should().Be("Surgery");
+    }
+
+    [Fact]
+    public async Task GetAuthorizationsAsync_WithoutMemberId_UrlHasNoQueryString()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetAuthorizationsAsync();
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().EndWith("/authorizations");
+    }
+
+    [Fact]
+    public async Task GetAuthorizationsAsync_WithMemberId_UrlContainsMemberIdFilter()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetAuthorizationsAsync(memberId: "MBR-42");
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Contain("memberId=MBR-42");
+    }
+
+    [Fact]
+    public async Task GetAuthorizationsAsync_WhenApiReturnsNull_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetAuthorizationsAsync();
+
+        result.Should().BeEmpty();
+    }
+
+    // ── GetAuthorizationByIdAsync ──
+
+    [Fact]
+    public async Task GetAuthorizationByIdAsync_WhenApiReturns200_DeserializesAuthorizationDetails()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            authorizationId = "AUTH-100", memberName = "Alice Wonder",
+            serviceType = "Physical Therapy", status = "Approved",
+            requestDate = "2026-01-15", providerName = "Dr. House",
+            processingTimeMs = 800,
+            memberId = "MBR-42", providerId = "PRV-50",
+            diagnosisCode = "M54.5", diagnosisDescription = "Low back pain",
+            procedureCode = "97110", procedureDescription = "Therapeutic exercises",
+            unitsRequested = 12, unitsApproved = 10,
+            serviceStartDate = "2026-02-01", serviceEndDate = "2026-05-01",
+            reviewerNotes = "Approved 10 of 12 units"
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAuthorizationByIdAsync("AUTH-100");
+
+        result.Should().NotBeNull();
+        result!.AuthorizationId.Should().Be("AUTH-100");
+        result.MemberId.Should().Be("MBR-42");
+        result.DiagnosisCode.Should().Be("M54.5");
+        result.ProcedureCode.Should().Be("97110");
+        result.UnitsRequested.Should().Be(12);
+        result.UnitsApproved.Should().Be(10);
+        result.ReviewerNotes.Should().Be("Approved 10 of 12 units");
+    }
+
+    [Fact]
+    public async Task GetAuthorizationByIdAsync_WhenApiReturnsNull_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetAuthorizationByIdAsync("AUTH-NONE");
+
+        result.Should().BeNull();
+    }
+
+    // ── SubmitAuthorizationAsync ──
+
+    [Fact]
+    public async Task SubmitAuthorizationAsync_WhenApiReturns200_ExtractsAuthorizationId()
+    {
+        var json = JsonSerializer.Serialize(
+            new { authorizationId = "AUTH-NEW-555" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SubmitAuthorizationAsync(new SubmitAuthorizationRequest
+        {
+            MemberId = "MBR-42", ProviderId = "PRV-50",
+            ServiceType = "MRI", DiagnosisCode = "M54.5",
+            ProcedureCode = "70553", UnitsRequested = 1,
+            ServiceStartDate = new DateTime(2026, 4, 1)
+        });
+
+        result.Should().Be("AUTH-NEW-555");
+    }
+
+    [Fact]
+    public async Task SubmitAuthorizationAsync_WhenResponseMissingAuthorizationId_ReturnsEmptyString()
+    {
+        var json = JsonSerializer.Serialize(new { other = "value" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SubmitAuthorizationAsync(new SubmitAuthorizationRequest());
+
+        result.Should().BeEmpty();
     }
 }

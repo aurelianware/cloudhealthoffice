@@ -6,12 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PaymentService</RootNamespace>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.45.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.58.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>

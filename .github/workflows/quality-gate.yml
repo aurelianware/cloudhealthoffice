@@ -1,0 +1,458 @@
+name: Quality Gate
+
+# Comprehensive quality control pipeline that runs smoke tests and E2E tests
+# on a schedule and on-demand.  Captures timing metrics and test results as
+# artifacts for trend analysis.
+#
+# Design principles:
+#   - Smoke tests run on every PR and push to main (fast feedback)
+#   - E2E tests run nightly and on release branches (thorough validation)
+#   - All results are published as artifacts with consistent schema
+#   - New tests are added by creating new test projects in tests/ and they
+#     are automatically discovered
+#   - Metrics (pass/fail, duration, timestamps) feed into trend dashboards
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  push:
+    branches: [main, 'release/*']
+  pull_request:
+    branches: [main, 'release/*']
+  schedule:
+    # Nightly at 4 AM UTC — full suite including E2E
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: 'Run E2E tests (requires Docker Compose services)'
+        type: boolean
+        default: false
+      run_load:
+        description: 'Run load tests'
+        type: boolean
+        default: false
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # 1. Smoke Tests — fast structural & API validation
+  # ═══════════════════════════════════════════════════════════════════════
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    outputs:
+      test_count: ${{ steps.results.outputs.test_count }}
+      pass_count: ${{ steps.results.outputs.pass_count }}
+      fail_count: ${{ steps.results.outputs.fail_count }}
+      duration_ms: ${{ steps.results.outputs.duration_ms }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Discover smoke test projects
+        id: discover
+        run: |
+          set -euo pipefail
+          # Smoke tests are discovered by filename convention:
+          #   - *Smoke*.csproj or *smoke*.csproj in tests/
+          # To add new smoke tests, create a project with "Smoke" in the name.
+          mapfile -t SMOKE_PROJECTS < <(
+            find tests -type f \( -name '*Smoke*.csproj' -o -name '*smoke*.csproj' \) 2>/dev/null | sort
+          )
+
+          # Also include the CapitationService tests which contain smoke test methods
+          for proj in tests/CloudHealthOffice.CapitationService.Tests/*.csproj; do
+            [ -f "$proj" ] && SMOKE_PROJECTS+=("$proj")
+          done
+
+          echo "count=${#SMOKE_PROJECTS[@]}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${SMOKE_PROJECTS[@]}" > /tmp/smoke-projects.txt
+
+      - name: Run smoke tests
+        id: run
+        run: |
+          set -euo pipefail
+          START_MS=$(date +%s%3N)
+          mkdir -p SmokeResults
+
+          FAILED=0
+          while IFS= read -r PROJECT; do
+            [ -z "$PROJECT" ] && continue
+            NAME=$(basename "$PROJECT" .csproj)
+            echo "::group::Smoke: $NAME"
+
+            dotnet restore "$PROJECT" 2>&1 || { FAILED=$((FAILED+1)); echo "::endgroup::"; continue; }
+            dotnet build "$PROJECT" --no-restore 2>&1 || { FAILED=$((FAILED+1)); echo "::endgroup::"; continue; }
+            dotnet test "$PROJECT" --no-build \
+              --logger "trx;LogFileName=${NAME}-smoke.trx" \
+              --results-directory ./SmokeResults \
+              --verbosity normal 2>&1 || FAILED=$((FAILED+1))
+
+            echo "::endgroup::"
+          done < /tmp/smoke-projects.txt
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Parse smoke results
+        id: results
+        run: |
+          TOTAL=0; PASSED=0; FAILED=0
+          for trx in SmokeResults/*.trx; do
+            [ -f "$trx" ] || continue
+            t=$(grep -oP 'total="\K[0-9]+' "$trx" | head -1) || t=0
+            p=$(grep -oP 'passed="\K[0-9]+' "$trx" | head -1) || p=0
+            f=$(grep -oP 'failed="\K[0-9]+' "$trx" | head -1) || f=0
+            TOTAL=$((TOTAL + t)); PASSED=$((PASSED + p)); FAILED=$((FAILED + f))
+          done
+
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload smoke results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-results
+          path: SmokeResults/
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 2. Sanity Checks — repository structure & infrastructure validation
+  # ═══════════════════════════════════════════════════════════════════════
+  sanity-checks:
+    name: Sanity Checks
+    runs-on: ubuntu-latest
+    outputs:
+      check_count: ${{ steps.results.outputs.check_count }}
+      pass_count: ${{ steps.results.outputs.pass_count }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run structural validation
+        id: results
+        run: |
+          set -euo pipefail
+          CHECKS=0; PASSED=0
+
+          # Required directories
+          for dir in infrastructure scripts .github/workflows src/services tests; do
+            CHECKS=$((CHECKS + 1))
+            if [ -d "$dir" ]; then
+              PASSED=$((PASSED + 1))
+              echo "PASS: directory $dir exists"
+            else
+              echo "FAIL: directory $dir missing"
+            fi
+          done
+
+          # Required files
+          for file in README.md SECURITY.md CONTRIBUTING.md; do
+            CHECKS=$((CHECKS + 1))
+            if [ -f "$file" ]; then
+              PASSED=$((PASSED + 1))
+              echo "PASS: file $file exists"
+            else
+              echo "FAIL: file $file missing"
+            fi
+          done
+
+          # Test projects exist
+          CHECKS=$((CHECKS + 1))
+          TEST_PROJ_COUNT=$(find tests -name '*.Tests.csproj' | wc -l)
+          if [ "$TEST_PROJ_COUNT" -gt 0 ]; then
+            PASSED=$((PASSED + 1))
+            echo "PASS: $TEST_PROJ_COUNT .NET test projects found"
+          else
+            echo "FAIL: no .NET test projects"
+          fi
+
+          # Jest config exists
+          CHECKS=$((CHECKS + 1))
+          if [ -f jest.config.js ]; then
+            PASSED=$((PASSED + 1))
+            echo "PASS: jest.config.js exists"
+          else
+            echo "FAIL: jest.config.js missing"
+          fi
+
+          # Docker Compose files
+          CHECKS=$((CHECKS + 1))
+          if [ -f docker-compose.yml ]; then
+            PASSED=$((PASSED + 1))
+            echo "PASS: docker-compose.yml exists"
+          else
+            echo "FAIL: docker-compose.yml missing"
+          fi
+
+          echo "check_count=$CHECKS" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+
+          if [ "$PASSED" -lt "$CHECKS" ]; then
+            echo "::warning::$((CHECKS - PASSED)) sanity checks failed"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 3. E2E Tests — full system integration (nightly + manual)
+  # ═══════════════════════════════════════════════════════════════════════
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event.inputs.run_e2e == 'true' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/'))
+    outputs:
+      test_count: ${{ steps.results.outputs.test_count }}
+      pass_count: ${{ steps.results.outputs.pass_count }}
+      fail_count: ${{ steps.results.outputs.fail_count }}
+      duration_ms: ${{ steps.results.outputs.duration_ms }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Start services with Docker Compose
+        run: |
+          docker compose -f docker-compose.yml up -d \
+            claims-service benefit-plan-service payment-service \
+            mongodb redis
+          echo "Waiting for services to become healthy..."
+          sleep 30
+
+      - name: Wait for service health
+        run: |
+          for svc in "localhost:5001/health" "localhost:5002/health" "localhost:5003/health"; do
+            echo "Checking $svc..."
+            for i in $(seq 1 30); do
+              if curl -sf "http://$svc" >/dev/null 2>&1; then
+                echo "  $svc is healthy"
+                break
+              fi
+              [ "$i" -eq 30 ] && echo "::warning::$svc did not become healthy within 60s"
+              sleep 2
+            done
+          done
+
+      - name: Run E2E tests
+        id: run
+        run: |
+          set -euo pipefail
+          START_MS=$(date +%s%3N)
+          mkdir -p E2EResults
+
+          dotnet restore tests/CloudHealthOffice.E2E/CloudHealthOffice.E2E.csproj
+          dotnet build tests/CloudHealthOffice.E2E/CloudHealthOffice.E2E.csproj --no-restore
+          dotnet test tests/CloudHealthOffice.E2E/CloudHealthOffice.E2E.csproj --no-build \
+            --logger "trx;LogFileName=e2e-results.trx" \
+            --results-directory ./E2EResults \
+            --verbosity normal 2>&1 || true
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+
+      - name: Parse E2E results
+        id: results
+        run: |
+          TOTAL=0; PASSED=0; FAILED=0
+          for trx in E2EResults/*.trx; do
+            [ -f "$trx" ] || continue
+            t=$(grep -oP 'total="\K[0-9]+' "$trx" | head -1) || t=0
+            p=$(grep -oP 'passed="\K[0-9]+' "$trx" | head -1) || p=0
+            f=$(grep -oP 'failed="\K[0-9]+' "$trx" | head -1) || f=0
+            TOTAL=$((TOTAL + t)); PASSED=$((PASSED + p)); FAILED=$((FAILED + f))
+          done
+
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "pass_count=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "fail_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+
+      - name: Capture service logs on failure
+        if: failure()
+        run: |
+          mkdir -p E2EResults/logs
+          docker compose logs --tail=200 > E2EResults/logs/docker-compose.log 2>&1 || true
+
+      - name: Tear down services
+        if: always()
+        run: docker compose down -v 2>/dev/null || true
+
+      - name: Upload E2E results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: E2EResults/
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 4. Load Tests (on-demand or nightly)
+  # ═══════════════════════════════════════════════════════════════════════
+  load-tests:
+    name: Load Tests
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.inputs.run_load == 'true' ||
+      github.event_name == 'schedule'
+    outputs:
+      scenarios_run: ${{ steps.results.outputs.scenarios_run }}
+      duration_ms: ${{ steps.results.outputs.duration_ms }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Start services
+        run: |
+          docker compose -f docker-compose.yml up -d \
+            claims-service payment-service mongodb redis
+          sleep 30
+
+      - name: Run load tests
+        id: run
+        run: |
+          START_MS=$(date +%s%3N)
+          mkdir -p LoadResults
+
+          dotnet restore tests/CloudHealthOffice.LoadTests/CloudHealthOffice.LoadTests.csproj 2>&1 || true
+          dotnet build tests/CloudHealthOffice.LoadTests/CloudHealthOffice.LoadTests.csproj --no-restore 2>&1 || true
+          dotnet test tests/CloudHealthOffice.LoadTests/CloudHealthOffice.LoadTests.csproj --no-build \
+            --logger "trx;LogFileName=load-results.trx" \
+            --results-directory ./LoadResults \
+            --verbosity normal 2>&1 || true
+
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> "$GITHUB_OUTPUT"
+
+      - name: Parse load test results
+        id: results
+        run: |
+          SCENARIOS=0
+          for trx in LoadResults/*.trx; do
+            [ -f "$trx" ] || continue
+            t=$(grep -oP 'total="\K[0-9]+' "$trx" | head -1) || t=0
+            SCENARIOS=$((SCENARIOS + t))
+          done
+          echo "scenarios_run=$SCENARIOS" >> "$GITHUB_OUTPUT"
+          echo "duration_ms=${{ steps.run.outputs.duration_ms }}" >> "$GITHUB_OUTPUT"
+
+      - name: Tear down services
+        if: always()
+        run: docker compose down -v 2>/dev/null || true
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: LoadResults/
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # 5. Quality Gate Summary
+  # ═══════════════════════════════════════════════════════════════════════
+  quality-summary:
+    name: Quality Gate Summary
+    runs-on: ubuntu-latest
+    needs: [smoke-tests, sanity-checks, e2e-tests, load-tests]
+    if: always()
+
+    steps:
+      - name: Generate quality report
+        run: |
+          TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          SHA="${GITHUB_SHA:-unknown}"
+
+          SMOKE_TOTAL=${{ needs.smoke-tests.outputs.test_count || 0 }}
+          SMOKE_PASS=${{ needs.smoke-tests.outputs.pass_count || 0 }}
+          SMOKE_FAIL=${{ needs.smoke-tests.outputs.fail_count || 0 }}
+          SMOKE_DURATION=${{ needs.smoke-tests.outputs.duration_ms || 0 }}
+
+          SANITY_TOTAL=${{ needs.sanity-checks.outputs.check_count || 0 }}
+          SANITY_PASS=${{ needs.sanity-checks.outputs.pass_count || 0 }}
+
+          E2E_TOTAL=${{ needs.e2e-tests.outputs.test_count || 0 }}
+          E2E_PASS=${{ needs.e2e-tests.outputs.pass_count || 0 }}
+          E2E_FAIL=${{ needs.e2e-tests.outputs.fail_count || 0 }}
+          E2E_DURATION=${{ needs.e2e-tests.outputs.duration_ms || 0 }}
+
+          LOAD_SCENARIOS=${{ needs.load-tests.outputs.scenarios_run || 0 }}
+          LOAD_DURATION=${{ needs.load-tests.outputs.duration_ms || 0 }}
+
+          cat > quality-report.json <<EOF
+          {
+            "generated_at": "$TIMESTAMP",
+            "git_sha": "$SHA",
+            "smoke_tests": {
+              "total": $SMOKE_TOTAL,
+              "passed": $SMOKE_PASS,
+              "failed": $SMOKE_FAIL,
+              "duration_ms": $SMOKE_DURATION
+            },
+            "sanity_checks": {
+              "total": $SANITY_TOTAL,
+              "passed": $SANITY_PASS
+            },
+            "e2e_tests": {
+              "total": $E2E_TOTAL,
+              "passed": $E2E_PASS,
+              "failed": $E2E_FAIL,
+              "duration_ms": $E2E_DURATION
+            },
+            "load_tests": {
+              "scenarios": $LOAD_SCENARIOS,
+              "duration_ms": $LOAD_DURATION
+            }
+          }
+          EOF
+
+          echo "## Quality Gate Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Category | Total | Passed | Failed | Duration |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|--------|--------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Smoke Tests | $SMOKE_TOTAL | $SMOKE_PASS | $SMOKE_FAIL | ${SMOKE_DURATION}ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Sanity Checks | $SANITY_TOTAL | $SANITY_PASS | $((SANITY_TOTAL - SANITY_PASS)) | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| E2E Tests | $E2E_TOTAL | $E2E_PASS | $E2E_FAIL | ${E2E_DURATION}ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Load Tests | $LOAD_SCENARIOS scenarios | — | — | ${LOAD_DURATION}ms |" >> "$GITHUB_STEP_SUMMARY"
+
+          # Gate: fail if any smoke tests failed
+          if [ "$SMOKE_FAIL" -gt 0 ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Quality Gate FAILED**: $SMOKE_FAIL smoke test(s) failed" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Quality Gate PASSED**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-report
+          path: quality-report.json
+          retention-days: 365

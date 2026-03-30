@@ -1,6 +1,8 @@
 <Project>
   <PropertyGroup>
     <!-- Security: Force minimum versions for vulnerable transitive dependencies -->
+    <!-- Suppress Cosmos DB Newtonsoft.Json co-existence check (we use System.Text.Json serializer) -->
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>

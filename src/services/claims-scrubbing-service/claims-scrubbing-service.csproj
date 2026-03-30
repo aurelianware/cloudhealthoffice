@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>claims-scrubbing-service</AssemblyName>
     <RootNamespace>ClaimsScrubbingService</RootNamespace>
+    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>

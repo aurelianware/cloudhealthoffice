@@ -24,6 +24,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: build-containers-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
@@ -83,7 +87,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push ${{ matrix.container.name }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.container.context }}
           push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_to_registry == 'true' }}
@@ -122,7 +126,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -161,7 +165,8 @@ jobs:
 
     steps:
       - name: Run Snyk container scan
-        uses: snyk/actions/docker@0.4.0
+        # snyk/actions v1.0.0 (2025-10-03)
+        uses: snyk/actions/docker@9adf32b1121593767fc3c057af55b55db032dc04
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
