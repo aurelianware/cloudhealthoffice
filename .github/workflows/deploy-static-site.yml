@@ -277,6 +277,26 @@ jobs:
             exit 1
           fi
 
+      - name: Download latest test metrics
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: test-metrics.yml
+          name: test-metrics
+          path: .
+          if_no_artifact_found: warn
+          search_artifacts: true
+          branch: main
+        continue-on-error: true
+
+      - name: Inject test metrics into site
+        run: |
+          if [ -f test-metrics.json ]; then
+            echo "Found test-metrics.json, injecting values into site..."
+            node scripts/inject-test-metrics.js test-metrics.json
+          else
+            echo "No test-metrics.json found; site will use existing static values"
+          fi
+
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -417,7 +437,7 @@ jobs:
 
       - name: Upload DNS Instructions
         if: steps.get-swa.outputs.swa_exists == 'true' && steps.custom-domain.outputs.dns_instructions_file != ''
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: dns-configuration-instructions
           path: ${{ steps.custom-domain.outputs.dns_instructions_file }}

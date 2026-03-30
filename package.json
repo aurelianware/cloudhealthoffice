@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "build:site": "node site/js/markdown-converter.js",
+    "inject:metrics": "node scripts/inject-test-metrics.js",
     "validate:site": "node site/js/validate-accessibility.js",
     "generate": "node dist/scripts/cli/payer-generator-cli.js",
     "generate-pdf": "./scripts/generate-whitepaper-pdf.sh",
