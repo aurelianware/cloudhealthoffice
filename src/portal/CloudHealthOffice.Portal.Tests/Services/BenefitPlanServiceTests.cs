@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
@@ -150,5 +151,314 @@ public class BenefitPlanServiceTests
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(() => sut.GetBenefitPlansAsync());
         ex.InnerException.Should().BeOfType<HttpRequestException>();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Happy-path and edge-case tests
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    // ── GetBenefitPlansAsync ──
+
+    [Fact]
+    public async Task GetBenefitPlansAsync_WhenApiReturns200_DeserializesPlanList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { planId = "PLN-1", planName = "Gold PPO", planType = "PPO",
+                  deductible = 500m, outOfPocketMax = 5000m },
+            new { planId = "PLN-2", planName = "Silver HMO", planType = "HMO",
+                  deductible = 1000m, outOfPocketMax = 7000m }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetBenefitPlansAsync();
+
+        result.Should().HaveCount(2);
+        result[0].PlanId.Should().Be("PLN-1");
+        result[0].PlanName.Should().Be("Gold PPO");
+        result[0].Deductible.Should().Be(500m);
+        result[1].PlanType.Should().Be("HMO");
+    }
+
+    [Fact]
+    public async Task GetBenefitPlansAsync_WhenApiReturnsNull_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetBenefitPlansAsync();
+
+        result.Should().BeEmpty();
+    }
+
+    // ── SearchBenefitPlansAsync ──
+
+    [Fact]
+    public async Task SearchBenefitPlansAsync_WithSponsorId_BuildsCorrectQueryString()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.SearchBenefitPlansAsync(sponsorId: "SP-001", productType: "PPO");
+
+        var url = handler.CapturedUrls.Single();
+        url.Should().Contain("payer=SP-001");
+        url.Should().Contain("planType=PPO");
+    }
+
+    [Fact]
+    public async Task SearchBenefitPlansAsync_WithNoParams_CallsBaseUrlOnly()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.SearchBenefitPlansAsync();
+
+        var url = handler.CapturedUrls.Single();
+        url.Should().Contain("/v1/plans?");
+        url.Should().NotContain("payer=");
+        url.Should().NotContain("planType=");
+    }
+
+    [Fact]
+    public async Task SearchBenefitPlansAsync_WhenApiReturns200_DeserializesBenefitPlanListItems()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { planId = "PLN-10", planName = "Platinum EPO", sponsorId = "SP-1",
+                  sponsorName = "Acme Corp", productType = "EPO", network = "Tier1",
+                  enrolledMembers = 500, assignedBenefits = 12, status = "Active",
+                  effectiveDate = "2025-01-01" }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SearchBenefitPlansAsync(sponsorId: "SP-1");
+
+        result.Should().ContainSingle();
+        result[0].ProductType.Should().Be("EPO");
+        result[0].EnrolledMembers.Should().Be(500);
+    }
+
+    // ── GetBenefitPlanByIdAsync ──
+
+    [Fact]
+    public async Task GetBenefitPlanByIdAsync_WhenApiReturns200_DeserializesBenefitPlanDetails()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            planId = "PLN-100", planName = "Gold PPO", sponsorId = "SP-1",
+            sponsorName = "Acme", productType = "PPO", network = "Broad",
+            enrolledMembers = 1200, assignedBenefits = 18, status = "Active",
+            effectiveDate = "2025-01-01",
+            metalTier = "Gold", individualDeductible = 750m, familyDeductible = 1500m,
+            individualOOPMax = 6000m, familyOOPMax = 12000m, coinsurance = 0.20m,
+            monthlyPremium = 450m, planYear = "2025",
+            benefits = new[]
+            {
+                new { benefitId = "BEN-1", serviceType = "Office Visit",
+                      category = "Medical", copay = 25m, priorAuthRequired = false }
+            },
+            exclusions = new[] { "Cosmetic surgery", "Experimental treatments" }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetBenefitPlanByIdAsync("PLN-100");
+
+        result.Should().NotBeNull();
+        result!.MetalTier.Should().Be("Gold");
+        result.IndividualDeductible.Should().Be(750m);
+        result.FamilyOOPMax.Should().Be(12000m);
+        result.MonthlyPremium.Should().Be(450m);
+        result.Benefits.Should().ContainSingle()
+            .Which.Copay.Should().Be(25m);
+        result.Exclusions.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetBenefitPlanByIdAsync_WhenApiReturnsNull_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetBenefitPlanByIdAsync("PLN-NONE");
+
+        result.Should().BeNull();
+    }
+
+    // ── CreateBenefitPlanAsync ──
+
+    [Fact]
+    public async Task CreateBenefitPlanAsync_WhenApiReturns200_ExtractsPlanId()
+    {
+        var json = JsonSerializer.Serialize(new { planId = "PLN-NEW-99" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.CreateBenefitPlanAsync(new CreateBenefitPlanRequest
+        {
+            SponsorId = "SP-1", PlanName = "Bronze HDHP", ProductType = "HDHP"
+        });
+
+        result.Should().Be("PLN-NEW-99");
+    }
+
+    // ── UpdateBenefitPlanAsync ──
+
+    [Fact]
+    public async Task UpdateBenefitPlanAsync_WhenApiReturns200_SendsPutWithCorrectUrl()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.UpdateBenefitPlanAsync("PLN-100", new UpdateBenefitPlanRequest
+        {
+            PlanName = "Updated Gold PPO", Status = "Active"
+        });
+
+        handler.CapturedRequests.Should().ContainSingle();
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
+        handler.CapturedUrls[0].Should().Contain("/v1/plans/PLN-100");
+    }
+
+    // ── GetAvailableBenefitsAsync ──
+
+    [Fact]
+    public async Task GetAvailableBenefitsAsync_WhenApiReturns200_DeserializesBenefitItemList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { benefitId = "BEN-1", serviceType = "Office Visit",
+                  category = "Medical", description = "Primary care office visit",
+                  defaultCopay = 25m, requiresPriorAuth = false },
+            new { benefitId = "BEN-2", serviceType = "MRI",
+                  category = "Medical", description = "Magnetic resonance imaging",
+                  defaultCopay = 150m, requiresPriorAuth = true }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAvailableBenefitsAsync();
+
+        result.Should().HaveCount(2);
+        result[0].ServiceType.Should().Be("Office Visit");
+        result[0].DefaultCopay.Should().Be(25m);
+        result[1].RequiresPriorAuth.Should().BeTrue();
+    }
+
+    // ── GetServiceBenefitRulesAsync ──
+
+    [Fact]
+    public async Task GetServiceBenefitRulesAsync_WhenApiReturns200_UrlIncludesPlanId()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetServiceBenefitRulesAsync("PLN-100");
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Contain("/v1/plans/PLN-100/service-rules");
+    }
+
+    [Fact]
+    public async Task GetServiceBenefitRulesAsync_WhenApiReturns200_DeserializesRules()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { ruleId = "RULE-1", serviceCategory = "Medical",
+                  serviceTypeCode = "OV", serviceTypeDescription = "Office Visit",
+                  networkTier = "Tier1", copay = 25m, subjectToDeductible = false,
+                  priorAuthRequired = false }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetServiceBenefitRulesAsync("PLN-100");
+
+        result.Should().ContainSingle();
+        result[0].ServiceCategory.Should().Be("Medical");
+        result[0].Copay.Should().Be(25m);
+    }
+
+    // ── UpdateServiceBenefitRulesAsync ──
+
+    [Fact]
+    public async Task UpdateServiceBenefitRulesAsync_WhenApiReturns200_SendsPutWithCorrectUrl()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.UpdateServiceBenefitRulesAsync(new UpdateServiceBenefitRulesRequest
+        {
+            PlanId = "PLN-100",
+            Rules = new List<ServiceBenefitRule>
+            {
+                new() { RuleId = "RULE-1", ServiceCategory = "Medical" }
+            }
+        });
+
+        handler.CapturedRequests.Should().ContainSingle();
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
+        handler.CapturedUrls[0].Should().Contain("/v1/plans/PLN-100/service-rules");
+    }
+
+    // ── GetAccumulatorConfigAsync ──
+
+    [Fact]
+    public async Task GetAccumulatorConfigAsync_WhenApiReturns200_DeserializesConfig()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            configId = "ACC-1", planId = "PLN-100",
+            individualDeductible = 750m, familyDeductible = 1500m,
+            individualOopMax = 6000m, familyOopMax = 12000m,
+            pharmacyCrossAccumulatesDeductible = true,
+            pharmacyCrossAccumulatesOop = false,
+            dentalCrossAccumulatesOop = false,
+            embeddedOrAggregate = "Embedded"
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAccumulatorConfigAsync("PLN-100");
+
+        result.Should().NotBeNull();
+        result!.IndividualDeductible.Should().Be(750m);
+        result.FamilyOopMax.Should().Be(12000m);
+        result.PharmacyCrossAccumulatesDeductible.Should().BeTrue();
+        result.EmbeddedOrAggregate.Should().Be("Embedded");
+    }
+
+    [Fact]
+    public async Task GetAccumulatorConfigAsync_WhenApiReturnsNull_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetAccumulatorConfigAsync("PLN-NONE");
+
+        result.Should().BeNull();
+    }
+
+    // ── UpdateAccumulatorConfigAsync ──
+
+    [Fact]
+    public async Task UpdateAccumulatorConfigAsync_WhenApiReturns200_SendsPutWithCorrectUrl()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.UpdateAccumulatorConfigAsync("PLN-100", new AccumulatorConfiguration
+        {
+            ConfigId = "ACC-1", PlanId = "PLN-100",
+            IndividualDeductible = 1000m, FamilyDeductible = 2000m
+        });
+
+        handler.CapturedRequests.Should().ContainSingle();
+        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
+        handler.CapturedUrls[0].Should().Contain("/v1/plans/PLN-100/accumulators");
     }
 }
