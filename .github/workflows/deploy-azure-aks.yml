@@ -48,7 +48,7 @@ jobs:
         run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push portal
         uses: docker/build-push-action@v6
@@ -183,7 +183,7 @@ jobs:
         run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
@@ -231,7 +231,7 @@ jobs:
         run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Check Dockerfile exists
         id: check

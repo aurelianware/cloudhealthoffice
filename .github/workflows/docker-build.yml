@@ -64,7 +64,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
         if: github.event_name != 'pull_request'
@@ -113,7 +113,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
         if: github.event_name != 'pull_request'
@@ -162,7 +162,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
         if: github.event_name != 'pull_request'
@@ -345,7 +345,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
         if: github.event_name != 'pull_request'
