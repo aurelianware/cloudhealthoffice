@@ -151,7 +151,7 @@ public class EligibilityControllerTests : IClassFixture<EligibilityApiFactory>
                 TenantId = "test-tenant",
                 SubscriberId = "SUB-001",
                 PayerId = "PAYER-001",
-                Status = "Completed",
+                Status = EligibilityInquiryStatus.Completed,
                 RequestDate = DateTime.UtcNow.AddDays(-1)
             }
         };
