@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AuthorizationService.Models;
+using Authorization = AuthorizationService.Models.Authorization;
 using NSubstitute;
 
 namespace CloudHealthOffice.AuthorizationService.Tests;
@@ -59,6 +60,7 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
         var request = new
         {
             tenantId = "test-tenant",
+            authorizationNumber = "AUTH-001",
             memberId = "MBR-001",
             coverageId = "COV-001",
             patientFirstName = "John",
