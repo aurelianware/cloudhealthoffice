@@ -16,4 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
 </Project>

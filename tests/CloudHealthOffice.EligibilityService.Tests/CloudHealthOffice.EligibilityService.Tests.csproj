@@ -16,4 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\eligibility-service\eligibility-service.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
 </Project>
