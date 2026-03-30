@@ -60,6 +60,7 @@ public class AuthorizationsControllerTests : IClassFixture<AuthorizationApiFacto
         var request = new
         {
             tenantId = "test-tenant",
+            authorizationNumber = "AUTH-001",
             memberId = "MBR-001",
             coverageId = "COV-001",
             patientFirstName = "John",
