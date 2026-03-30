@@ -8,8 +8,8 @@ CMS-0057-F compliance, real-time EDI, FHIR R4 APIs, and claims adjudication engi
 Deploy alongside your existing Core Admin Processing System (CAPS) today. Migrate workloads on your timeline.
 
 [![Version](https://img.shields.io/badge/version-v4.2.0-blue)](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.2.0)
-[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](./tests/)
-[![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice)
+[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](./tests/) <!-- auto-updated by test-metrics workflow -->
+[![Coverage](https://img.shields.io/badge/coverage-85.93%25-green)](https://codecov.io/gh/aurelianware/cloudhealthoffice) <!-- auto-updated by test-metrics workflow -->
 [![Security](https://img.shields.io/badge/vulnerabilities-0-brightgreen)](./SECURITY.md)
 [![License](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](./LICENSE)
 

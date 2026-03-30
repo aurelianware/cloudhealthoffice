@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Upload audit results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: npm-audit-results
@@ -64,15 +64,20 @@ jobs:
     strategy:
       matrix:
         service:
-          - services/sponsor-service
-          - services/member-service
-          - services/coverage-service
-          - services/provider-service
-          - services/claims-service
-          - services/authorization-service
-          - services/reference-data-service
-          - services/benefit-plan-service
-          - services/eligibility-service
+          - src/services/sponsor-service
+          - src/services/member-service
+          - src/services/coverage-service
+          - src/services/provider-service
+          - src/services/claims-service
+          - src/services/authorization-service
+          - src/services/reference-data-service
+          - src/services/benefit-plan-service
+          - src/services/eligibility-service
+          - src/services/payment-service
+          - src/services/attachment-service
+          - src/services/enrollment-import-service
+          - src/services/trading-partner-service
+          - src/services/tenant-service
 
     steps:
       - name: Checkout code
@@ -85,15 +90,19 @@ jobs:
 
       - name: Restore dependencies
         run: |
-          if [ -f "${{ matrix.service }}/*.csproj" ]; then
-            cd ${{ matrix.service }}
+          CSPROJ=$(find "${{ matrix.service }}" -maxdepth 1 -name '*.csproj' | head -1)
+          if [ -n "$CSPROJ" ]; then
+            cd "${{ matrix.service }}"
             dotnet restore
+          else
+            echo "No .csproj found in ${{ matrix.service }}, skipping"
           fi
 
       - name: Check for vulnerable packages
         run: |
-          if [ -f "${{ matrix.service }}/*.csproj" ]; then
-            cd ${{ matrix.service }}
+          CSPROJ=$(find "${{ matrix.service }}" -maxdepth 1 -name '*.csproj' | head -1)
+          if [ -n "$CSPROJ" ]; then
+            cd "${{ matrix.service }}"
             dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-check.txt
 
             if grep -q "has the following vulnerable packages" vuln-check.txt; then

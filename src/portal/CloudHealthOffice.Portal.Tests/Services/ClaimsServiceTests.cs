@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
@@ -106,5 +107,281 @@ public class ClaimsServiceTests
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
             () => sut.GetAdjudicationDataAsync("CLM-2026-00001"));
         ex.Message.Should().Contain("Claims Service");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Happy-path and edge-case tests
+    // ════════════════════════════════════════════════════════════════
+
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    // ── GetRecentClaimsAsync ──
+
+    [Fact]
+    public async Task GetRecentClaimsAsync_WhenApiReturns200_DeserializesClaimsList()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new { claimId = "CLM-001", claimNumber = "2026-00001", memberName = "Jane Doe",
+                  memberId = "MBR-1", providerName = "Dr. Smith", providerId = "PRV-1",
+                  claimType = "Professional", totalChargeAmount = 500.00m, allowedAmount = 400.00m,
+                  paidAmount = 320.00m, status = "Paid", serviceDateFrom = "2026-01-15",
+                  serviceDateTo = "2026-01-15", submittedDate = "2026-01-16", lineCount = 2 },
+            new { claimId = "CLM-002", claimNumber = "2026-00002", memberName = "John Roe",
+                  memberId = "MBR-2", providerName = "Dr. Jones", providerId = "PRV-2",
+                  claimType = "Institutional", totalChargeAmount = 1200.00m, allowedAmount = 1000.00m,
+                  paidAmount = 800.00m, status = "Approved", serviceDateFrom = "2026-02-01",
+                  serviceDateTo = "2026-02-03", submittedDate = "2026-02-04", lineCount = 5 }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetRecentClaimsAsync(10);
+
+        result.Should().HaveCount(2);
+        result[0].ClaimId.Should().Be("CLM-001");
+        result[0].MemberName.Should().Be("Jane Doe");
+        result[0].TotalChargeAmount.Should().Be(500.00m);
+        result[1].ClaimId.Should().Be("CLM-002");
+        result[1].ClaimType.Should().Be("Institutional");
+        result[1].LineCount.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task GetRecentClaimsAsync_WhenApiReturnsNull_ReturnsEmptyList()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetRecentClaimsAsync(5);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetRecentClaimsAsync_VerifyUrlContainsCountParameter()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.GetRecentClaimsAsync(25);
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Contain("count=25");
+    }
+
+    // ── GetClaimByIdAsync ──
+
+    [Fact]
+    public async Task GetClaimByIdAsync_WhenApiReturns200_DeserializesClaimDetails()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            claimId = "CLM-100", claimNumber = "2026-00100", memberName = "Alice",
+            memberId = "MBR-10", providerName = "Dr. Lee", providerId = "PRV-10",
+            claimType = "Professional", totalChargeAmount = 750m, allowedAmount = 600m,
+            paidAmount = 480m, status = "Paid", serviceDateFrom = "2026-03-01",
+            serviceDateTo = "2026-03-01", submittedDate = "2026-03-02", lineCount = 1,
+            subscriberId = "SUB-10", subscriberName = "Alice Parent",
+            billingProviderName = "Lee Medical", billingProviderNPI = "1234567890",
+            placeOfService = "11", deductibleAmount = 50m, coinsuranceAmount = 70m,
+            copayAmount = 25m, patientResponsibility = 145m, isEditable = true,
+            diagnosisCodes = new[]
+            {
+                new { code = "J06.9", description = "Acute URI", type = "Principal", pointerNumber = 1 }
+            },
+            serviceLines = new[]
+            {
+                new { lineNumber = 1, procedureCode = "99213", procedureDescription = "Office visit",
+                      units = 1m, chargeAmount = 750m, allowedAmount = 600m, paidAmount = 480m,
+                      patientResponsibility = 145m, serviceDateFrom = "2026-03-01",
+                      serviceDateTo = "2026-03-01" }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("CLM-100");
+
+        result.Should().NotBeNull();
+        result!.ClaimId.Should().Be("CLM-100");
+        result.SubscriberId.Should().Be("SUB-10");
+        result.BillingProviderNPI.Should().Be("1234567890");
+        result.DeductibleAmount.Should().Be(50m);
+        result.DiagnosisCodes.Should().ContainSingle()
+            .Which.Code.Should().Be("J06.9");
+        result.ServiceLines.Should().ContainSingle()
+            .Which.ProcedureCode.Should().Be("99213");
+    }
+
+    [Fact]
+    public async Task GetClaimByIdAsync_WhenApiReturnsNull_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.GetClaimByIdAsync("CLM-NONE");
+
+        result.Should().BeNull();
+    }
+
+    // ── SubmitClaimAsync ──
+
+    [Fact]
+    public async Task SubmitClaimAsync_WhenApiReturns200_ExtractsClaimId()
+    {
+        var json = JsonSerializer.Serialize(new { claimId = "CLM-NEW-999" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SubmitClaimAsync(new SubmitClaimRequest
+        {
+            MemberId = "MBR-1", ProviderId = "PRV-1",
+            ServiceDate = new DateTime(2026, 3, 15)
+        });
+
+        result.Should().Be("CLM-NEW-999");
+    }
+
+    [Fact]
+    public async Task SubmitClaimAsync_WhenResponseMissingClaimId_ReturnsEmptyString()
+    {
+        var json = JsonSerializer.Serialize(new { otherField = "value" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SubmitClaimAsync(new SubmitClaimRequest());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SubmitClaimAsync_VerifyPostBodyContainsRequest()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            JsonSerializer.Serialize(new { claimId = "CLM-X" }, JsonOpts));
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.SubmitClaimAsync(new SubmitClaimRequest
+        {
+            MemberId = "MBR-42", ProviderId = "PRV-7",
+            ServiceDate = new DateTime(2026, 6, 1)
+        });
+
+        handler.CapturedRequests.Should().ContainSingle();
+        var req = handler.CapturedRequests[0];
+        req.Method.Should().Be(HttpMethod.Post);
+        var body = await req.Content!.ReadAsStringAsync();
+        body.Should().Contain("MBR-42");
+        body.Should().Contain("PRV-7");
+    }
+
+    // ── SearchClaimsAsync ──
+
+    [Fact]
+    public async Task SearchClaimsAsync_WhenApiReturns200_DeserializesSearchResult()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            claims = new[]
+            {
+                new { claimId = "CLM-S1", claimNumber = "2026-S1", memberName = "Bob",
+                      memberId = "MBR-3", providerName = "Dr. X", providerId = "PRV-3",
+                      claimType = "Professional", totalChargeAmount = 200m, allowedAmount = 150m,
+                      paidAmount = 120m, status = "Paid", serviceDateFrom = "2026-01-01",
+                      serviceDateTo = "2026-01-01", submittedDate = "2026-01-02", lineCount = 1 }
+            },
+            totalCount = 42, pageNumber = 1, pageSize = 25,
+            totalChargeAmount = 8400m, totalAllowedAmount = 6300m, totalPaidAmount = 5040m,
+            approvedCount = 30, deniedCount = 5, pendingCount = 7
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SearchClaimsAsync(new ClaimSearchRequest { Status = "Paid" });
+
+        result.Claims.Should().ContainSingle();
+        result.TotalCount.Should().Be(42);
+        result.ApprovedCount.Should().Be(30);
+        result.DeniedCount.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task SearchClaimsAsync_WhenApiReturnsNull_ReturnsEmptySearchResult()
+    {
+        var sut = CreateService(new HttpClient(
+            new FakeHandler(HttpStatusCode.OK, "null")));
+
+        var result = await sut.SearchClaimsAsync(new ClaimSearchRequest());
+
+        result.Claims.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+    }
+
+    // ── UpdateClaimStatusAsync ──
+
+    [Fact]
+    public async Task UpdateClaimStatusAsync_WhenApiReturns200_CompletesWithoutException()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var act = () => sut.UpdateClaimStatusAsync("CLM-001", "Denied", "Insufficient documentation");
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task UpdateClaimStatusAsync_VerifyUrlContainsClaimId()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.UpdateClaimStatusAsync("CLM-5050", "Approved");
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Contain("/claims/CLM-5050/status");
+    }
+
+    // ── GetAdjudicationDataAsync ──
+
+    [Fact]
+    public async Task GetAdjudicationDataAsync_WhenApiReturns200_DeserializesTransparencyData()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            steps = new[]
+            {
+                new { stepName = "Eligibility", stepNumber = 1, status = "Passed", durationMs = 12 }
+            },
+            ncciResults = new[]
+            {
+                new { editCode = "MUE-99213", editType = "MUE", description = "Max units",
+                      passed = true }
+            },
+            feeScheduleResults = new[]
+            {
+                new { procedureCode = "99213", feeScheduleName = "Medicare RBRVS",
+                      billedAmount = 200m, allowedAmount = 150m, contractedRate = 150m,
+                      rateBasis = "MedicareRVU", rateMultiplier = 1.0m, networkTier = "In-Network" }
+            },
+            benefitCalculation = new
+            {
+                serviceType = "Office Visit", benefitRuleApplied = "PPO-Standard",
+                networkTier = "In-Network", allowedAmount = 150m, deductibleApplied = 50m,
+                copayAmount = 25m, coinsuranceAmount = 15m, planPayment = 60m,
+                memberResponsibility = 90m, deductibleMet = false, oopMaxMet = false
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAdjudicationDataAsync("CLM-ADJ-1");
+
+        result.Should().NotBeNull();
+        result!.Steps.Should().ContainSingle().Which.StepName.Should().Be("Eligibility");
+        result.NcciResults.Should().ContainSingle().Which.Passed.Should().BeTrue();
+        result.FeeScheduleResults.Should().ContainSingle()
+            .Which.ProcedureCode.Should().Be("99213");
+        result.BenefitCalculation.Should().NotBeNull();
+        result.BenefitCalculation!.PlanPayment.Should().Be(60m);
     }
 }

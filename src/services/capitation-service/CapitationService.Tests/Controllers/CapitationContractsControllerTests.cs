@@ -24,6 +24,7 @@ public class CapitationContractsControllerTests
         CapitationRateConfigStatus status = CapitationRateConfigStatus.Draft) => new()
     {
         Id = id,
+        ContractId = "pc-1",
         ContractNumber = $"CAP-{npi}-2026",
         ProviderNPI = npi,
         ProviderName = "Dr. Chen",

@@ -1,0 +1,14 @@
+[run]
+source =
+    containers/x12-parser
+    src/functions/ClaimRiskScorer
+omit =
+    */tests/*
+    */__pycache__/*
+    */test_*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == ['"]__main__['"]:
+    raise NotImplementedError
