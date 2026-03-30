@@ -9,5 +9,5 @@ public static class FakeResponses
 {
     public static string EmptyArray() => "[]";
 
-    public static string JsonObject(object obj) => JsonSerializer.Serialize(obj);
+    public static string JsonObject(object? obj) => JsonSerializer.Serialize(obj);
 }
