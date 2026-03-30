@@ -353,10 +353,12 @@ jobs:
               ($JEST_COVERAGE, $JEST_TOTAL),
               ($PYTHON_COVERAGE, $PYTHON_TOTAL),
           ]
-          with_coverage = [(c, t) for c, t in suites if t > 0 and c > 0]
-          if with_coverage:
-              total_tests = sum(t for _, t in with_coverage)
-              weighted = sum(c * t for c, t in with_coverage)
+          # Include all suites with tests (t > 0), even if coverage is 0%.
+          # A coverage of 0 is a real measurement, not "unavailable". Use c >= 0.
+          with_tests = [(c, t) for c, t in suites if t > 0 and c >= 0]
+          if with_tests:
+              total_tests = sum(t for _, t in with_tests)
+              weighted = sum(c * t for c, t in with_tests)
               print(round(weighted / total_tests, 2))
           else:
               print(0)
