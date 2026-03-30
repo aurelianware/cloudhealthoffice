@@ -20,8 +20,12 @@ on:
       - 'containers/**'
   workflow_dispatch:
 
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  REGISTRY: choacrhy6h2vdulfru6.azurecr.io
+  REGISTRY: ${{ vars.ACR_LOGIN_SERVER || 'choacrhy6h2vdulfru6.azurecr.io' }}
   IMAGE_PREFIX: cloudhealthoffice
 
 jobs:
@@ -72,7 +76,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name choacrhy6h2vdulfru6
+        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
       - name: Extract metadata
         id: meta
@@ -86,7 +90,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.build_context || '.' }}
           file: ./src/services/${{ matrix.service }}/Dockerfile
@@ -94,6 +98,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+          cache-to: type=gha,mode=max
           platforms: linux/amd64
 
   build-portal:
@@ -120,7 +125,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name choacrhy6h2vdulfru6
+        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
       - name: Extract metadata
         id: meta
@@ -134,7 +139,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
@@ -169,7 +174,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name choacrhy6h2vdulfru6
+        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
       - name: Extract metadata
         id: meta
@@ -183,7 +188,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./src/site
           file: ./src/site/Dockerfile
@@ -352,7 +357,7 @@ jobs:
 
       - name: Log in to Azure Container Registry
         if: github.event_name != 'pull_request'
-        run: az acr login --name choacrhy6h2vdulfru6
+        run: az acr login --name ${{ vars.ACR_NAME || 'choacrhy6h2vdulfru6' }}
 
       - name: Extract metadata
         id: meta
@@ -377,7 +382,7 @@ jobs:
 
       - name: Build and push
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./containers/${{ matrix.container }}
           file: ./containers/${{ matrix.container }}/Dockerfile
@@ -401,7 +406,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **All images built successfully**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Images pushed to: \`choacrhy6h2vdulfru6.azurecr.io/cloudhealthoffice-*\`" >> $GITHUB_STEP_SUMMARY
+          echo "Images pushed to: \`${{ env.REGISTRY }}/cloudhealthoffice-*\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services Built:" >> $GITHUB_STEP_SUMMARY
           echo "- member-service" >> $GITHUB_STEP_SUMMARY
