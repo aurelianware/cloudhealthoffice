@@ -226,14 +226,10 @@ public class AuthorizationRepository : IAuthorizationRepository
             }
         }
 
-        // Calculate average turnaround days (separate query for reviewed auths)
-        // When SlaResumedAt is set (RFAI docs received), use it as the start date
-        // instead of SubmittedDate for turnaround calculation
+        // AverageReviewDays: raw submission-to-decision time (always from SubmittedDate)
         var reviewQueryText = $@"
             SELECT AVG(
-                DateTimeDiff('day',
-                    IS_NULL(c.slaResumedAt) ? c.submittedDate : c.slaResumedAt,
-                    c.reviewedDate)
+                DateTimeDiff('day', c.submittedDate, c.reviewedDate)
             ) as AvgDays
             FROM c
             WHERE c.tenantId = @tenantId
@@ -258,6 +254,37 @@ public class AuthorizationRepository : IAuthorizationRepository
             var response = await reviewIterator.ReadNextAsync();
             var result = response.FirstOrDefault();
             summary.AverageReviewDays = result?.AvgDays ?? 0;
+        }
+
+        // AverageTurnaroundDays: SLA-adjusted time (from SlaResumedAt when RFAI was issued)
+        var turnaroundQueryText = $@"
+            SELECT AVG(
+                DateTimeDiff('day',
+                    IIF(IS_NULL(c.slaResumedAt), c.submittedDate, c.slaResumedAt),
+                    c.reviewedDate)
+            ) as AvgDays
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
+            AND c.reviewedDate != null
+            {lobCondition}";
+
+        var turnaroundQueryDef = new QueryDefinition(turnaroundQueryText)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@from", from)
+            .WithParameter("@to", to);
+
+        if (lineOfBusiness.HasValue)
+        {
+            turnaroundQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
+        }
+
+        var turnaroundIterator = _container.GetItemQueryIterator<dynamic>(turnaroundQueryDef);
+        if (turnaroundIterator.HasMoreResults)
+        {
+            var response = await turnaroundIterator.ReadNextAsync();
+            var result = response.FirstOrDefault();
             summary.AverageTurnaroundDays = result?.AvgDays ?? 0;
         }
 

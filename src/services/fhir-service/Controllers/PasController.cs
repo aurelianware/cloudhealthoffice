@@ -71,6 +71,32 @@ public class PasController : FhirControllerBase
                 return FhirBadRequest("Request bundle must contain a Claim resource");
             }
 
+            // Validate bundle contains only expected resource types
+            var allowedResourceTypes = new HashSet<string>
+            {
+                "Claim", "Patient", "Coverage", "Practitioner",
+                "Organization", "Condition", "Observation", "ServiceRequest",
+                "DocumentReference", "QuestionnaireResponse"
+            };
+
+            var invalidResources = requestBundle.Entry
+                .Where(e => e.Resource != null && !allowedResourceTypes.Contains(e.Resource.TypeName))
+                .Select(e => e.Resource.TypeName)
+                .ToList();
+
+            if (invalidResources.Any())
+            {
+                _logger.LogWarning("PAS $submit received unexpected resource types: {Types}",
+                    string.Join(", ", invalidResources));
+            }
+
+            // Validate the claim has minimum required fields before proceeding
+            if (claim.Provider == null || claim.Patient == null || claim.Insurance == null || claim.Insurance.Count == 0)
+            {
+                return FhirBadRequest(
+                    "Claim must include provider, patient, and insurance references");
+            }
+
             _logger.LogInformation(
                 "PAS $submit received for tenant {TenantId}, claim type {ClaimType}",
                 SanitizeForLog(TenantId),
