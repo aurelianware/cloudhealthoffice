@@ -11,6 +11,8 @@ dist/
 
 # Test coverage
 coverage/
+coverage-results/
+coverage-report/
 *.lcov
 
 # Node.js
