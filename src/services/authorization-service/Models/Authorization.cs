@@ -317,6 +317,14 @@ public class Authorization
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Timestamp when SLA clock restarted after RFAI docs received.
+    /// Used for turnaround calculation: decision time measured from
+    /// max(SubmittedDate, SlaResumedAt) when RFAI was issued.
+    /// Null if no RFAI was issued for this authorization.
+    /// </summary>
+    public DateTime? SlaResumedAt { get; set; }
+
+    /// <summary>
     /// Audit: Created by user/system
     /// </summary>
     [StringLength(200)]
