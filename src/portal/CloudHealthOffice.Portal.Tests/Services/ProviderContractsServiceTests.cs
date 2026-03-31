@@ -285,4 +285,52 @@ public class ProviderContractsServiceTests
 
         result.Should().BeEmpty();
     }
+
+    // ── ProviderContractSummary – remaining properties ────────────────────────
+
+    [Fact]
+    public async Task GetContractByIdAsync_WhenApiReturns200_DeserializesAllProviderContractSummaryProperties()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "CTR-FULL", contractNumber = "CN-FULL-001",
+            providerNPI = "1234567890", providerName = "Acme Medical Group",
+            providerTin = "98-7654321",
+            providerType = "Group",
+            lineOfBusiness = "Commercial",
+            paymentMethodology = "FullCapitation",
+            networkStatus = "Participating",
+            contractOwner = "contracts@healthplan.com",
+            signatoryName = "Dr. Jane Director",
+            signedDate = "2025-01-15T00:00:00Z",
+            effectiveDate = "2025-01-01T00:00:00Z",
+            terminationDate = "2027-12-31T00:00:00Z",
+            terminationReason = (string?)null,
+            autoRenews = true,
+            renewalTermMonths = 12,
+            noticeRequiredDays = 90,
+            status = "Active",
+            createdAt = "2024-12-01T00:00:00Z",
+            lastUpdatedAt = "2025-06-01T00:00:00Z",
+            amendments = Array.Empty<object>()
+        }, JsonOpts);
+
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetContractByIdAsync("CTR-FULL");
+
+        result.Should().NotBeNull();
+        result!.ProviderTin.Should().Be("98-7654321");
+        result.ContractOwner.Should().Be("contracts@healthplan.com");
+        result.SignatoryName.Should().Be("Dr. Jane Director");
+        result.SignedDate.Should().NotBeNull();
+        result.TerminationDate.Should().NotBeNull();
+        result.TerminationReason.Should().BeNull();
+        result.AutoRenews.Should().BeTrue();
+        result.RenewalTermMonths.Should().Be(12);
+        result.NoticeRequiredDays.Should().Be(90);
+        result.CreatedAt.Should().NotBe(default);
+        result.LastUpdatedAt.Should().NotBe(default);
+    }
 }

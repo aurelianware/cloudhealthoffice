@@ -285,4 +285,61 @@ public class PaymentRunServiceTests
         text.Should().Contain("ISA");
         handler.CapturedUrls[0].Should().Contain("/paymentruns/RUN-1/835");
     }
+
+    // ── PaymentRunSummary – remaining properties ──────────────────────────────
+
+    [Fact]
+    public async Task GetPaymentRunByIdAsync_WhenApiReturns200_DeserializesAllPaymentRunSummaryProperties()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            runId = "RUN-FULL", runName = "February Medicare Batch",
+            lineOfBusiness = "Medicare", status = "Completed",
+            createdDate = "2026-02-01T08:00:00Z",
+            startedDate = "2026-02-01T09:00:00Z",
+            completedDate = "2026-02-01T11:30:00Z",
+            createdBy = "finance@healthplan.com",
+            claimCount = 850, processedCount = 850,
+            totalAmount = 425000m,
+            errorMessage = (string?)null,
+            eraFileUrl = "https://storage.example.com/era/RUN-FULL-835.txt"
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetPaymentRunByIdAsync("RUN-FULL");
+
+        result.Should().NotBeNull();
+        result!.StartedDate.Should().NotBeNull();
+        result.CompletedDate.Should().NotBeNull();
+        result.ErrorMessage.Should().BeNull();
+        result.EraFileUrl.Should().Be("https://storage.example.com/era/RUN-FULL-835.txt");
+    }
+
+    [Fact]
+    public async Task GetPaymentRunByIdAsync_WhenRunHasError_DeserializesErrorMessage()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            runId = "RUN-ERR", runName = "Failed March Run",
+            lineOfBusiness = "Commercial", status = "Failed",
+            createdDate = "2026-03-01T08:00:00Z",
+            startedDate = "2026-03-01T09:00:00Z",
+            completedDate = (string?)null,
+            createdBy = "finance@healthplan.com",
+            claimCount = 200, processedCount = 50, totalAmount = 0m,
+            errorMessage = "Database connection timeout during ERA generation",
+            eraFileUrl = (string?)null
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetPaymentRunByIdAsync("RUN-ERR");
+
+        result.Should().NotBeNull();
+        result!.StartedDate.Should().NotBeNull();
+        result.CompletedDate.Should().BeNull();
+        result.ErrorMessage.Should().Be("Database connection timeout during ERA generation");
+        result.EraFileUrl.Should().BeNull();
+    }
 }

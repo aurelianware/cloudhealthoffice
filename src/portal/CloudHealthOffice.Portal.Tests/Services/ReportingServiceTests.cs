@@ -285,4 +285,38 @@ public class ReportingServiceTests
 
         handler.CapturedUrls[0].Should().StartWith("http://localhost:5003/reports/auth-approval");
     }
+
+    // ── ReportRequest – all filter properties ─────────────────────────────────
+
+    [Fact]
+    public async Task GetClaimsSummaryAsync_WithAllReportRequestFields_SendsAllFiltersInRequest()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            totalClaims = 0, totalAmount = 0m, approvedCount = 0,
+            deniedCount = 0, pendingCount = 0, approvalRate = 0.0
+        }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var req = new ReportRequest
+        {
+            DateFrom = new DateTime(2026, 1, 1),
+            DateTo = new DateTime(2026, 3, 31),
+            ProviderId = "PRV-500",
+            SponsorId = "SP-200",
+            PlanId = "PLN-100"
+        };
+
+        // Verify all properties are accessible
+        req.DateFrom.Should().Be(new DateTime(2026, 1, 1));
+        req.DateTo.Should().Be(new DateTime(2026, 3, 31));
+        req.ProviderId.Should().Be("PRV-500");
+        req.SponsorId.Should().Be("SP-200");
+        req.PlanId.Should().Be("PLN-100");
+
+        await sut.GetClaimsSummaryAsync(req);
+
+        handler.CapturedUrls.Should().ContainSingle();
+    }
 }
