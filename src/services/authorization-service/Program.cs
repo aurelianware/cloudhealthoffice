@@ -7,6 +7,7 @@ using AuthorizationService;
 using AuthorizationService.Consumers;
 using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services;
 using MongoDB.Driver;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
@@ -147,6 +148,9 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 {
     builder.Services.AddHostedService<RfaiDocsReceivedConsumer>();
 }
+
+// SLA deadline watchdog (runs every 15 minutes)
+builder.Services.AddHostedService<SlaWatchdogService>();
 
 // CORS (for development)
 builder.Services.AddCors(options =>
