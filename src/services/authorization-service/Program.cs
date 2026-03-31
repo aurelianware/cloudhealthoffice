@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Models;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AuthorizationService;
+using AuthorizationService.Consumers;
 using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
 using MongoDB.Driver;
@@ -139,6 +140,13 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
+
+// Kafka consumer for RFAI docs received events
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"];
+if (!string.IsNullOrEmpty(kafkaBootstrap))
+{
+    builder.Services.AddHostedService<RfaiDocsReceivedConsumer>();
+}
 
 // CORS (for development)
 builder.Services.AddCors(options =>

@@ -225,15 +225,19 @@ public class AuthorizationRepository : IAuthorizationRepository
             }
         }
 
-        // Calculate average review days (separate query for reviewed auths)
+        // Calculate average turnaround days (separate query for reviewed auths)
+        // When SlaResumedAt is set (RFAI docs received), use it as the start date
+        // instead of SubmittedDate for turnaround calculation
         var reviewQueryText = $@"
             SELECT AVG(
-                DateTimeDiff('day', c.submittedDate, c.reviewedDate)
+                DateTimeDiff('day',
+                    IS_NULL(c.slaResumedAt) ? c.submittedDate : c.slaResumedAt,
+                    c.reviewedDate)
             ) as AvgDays
-            FROM c 
-            WHERE c.tenantId = @tenantId 
-            AND c.submittedDate >= @from 
-            AND c.submittedDate <= @to 
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
             AND c.reviewedDate != null
             {lobCondition}";
 
@@ -253,6 +257,7 @@ public class AuthorizationRepository : IAuthorizationRepository
             var response = await reviewIterator.ReadNextAsync();
             var result = response.FirstOrDefault();
             summary.AverageReviewDays = result?.AvgDays ?? 0;
+            summary.AverageTurnaroundDays = result?.AvgDays ?? 0;
         }
 
         return summary;

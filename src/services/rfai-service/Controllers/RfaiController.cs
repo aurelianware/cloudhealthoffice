@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using RfaiService.Models;
 using RfaiService.Repositories;
+using RfaiService.Services;
 
 namespace RfaiService.Controllers;
 
@@ -11,11 +12,16 @@ public class RfaiController : ControllerBase
 {
     private readonly IRfaiRepository _repository;
     private readonly ILogger<RfaiController> _logger;
+    private readonly IKafkaProducerService? _kafkaProducer;
 
-    public RfaiController(IRfaiRepository repository, ILogger<RfaiController> logger)
+    public RfaiController(
+        IRfaiRepository repository,
+        ILogger<RfaiController> logger,
+        IKafkaProducerService? kafkaProducer = null)
     {
         _repository = repository;
         _logger = logger;
+        _kafkaProducer = kafkaProducer;
     }
 
     private string TenantId =>
@@ -125,6 +131,30 @@ public class RfaiController : ControllerBase
         _logger.LogInformation(
             "Attachment received for RFAI case {Id} (auth {AuthNumber}), new status={Status}",
             SanitizeForLog(id), SanitizeForLog(rfaiCase.AuthNumber), rfaiCase.Status);
+
+        // Publish Kafka event when status transitions to DocsReceived
+        if (rfaiCase.Status == RfaiStatus.DocsReceived && _kafkaProducer != null)
+        {
+            var requiredCount = rfaiCase.RequestedItems.Count(i => i.Required);
+            var receivedCount = rfaiCase.ReceivedAttachments.Count;
+
+            var kafkaMessage = new
+            {
+                tenantId = rfaiCase.TenantId,
+                rfaiCaseId = rfaiCase.Id,
+                authNumber = rfaiCase.AuthNumber,
+                receivedAt = attachment.ReceivedAt,
+                attachmentIds = rfaiCase.ReceivedAttachments
+                    .Select(a => a.AttachmentControlNumber ?? string.Empty)
+                    .ToList(),
+                allRequestedItemsReceived = receivedCount >= requiredCount
+            };
+
+            await _kafkaProducer.SendAsync(
+                "rfai-docs-received",
+                rfaiCase.AuthNumber,
+                kafkaMessage);
+        }
 
         return Ok(updated);
     }

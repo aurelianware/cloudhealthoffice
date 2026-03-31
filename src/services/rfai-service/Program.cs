@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using RfaiService.Middleware;
 using RfaiService.Repositories;
+using RfaiService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,6 +53,16 @@ else
 
     builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB database provider");
+}
+
+// ── Kafka producer ───────────────────────────────────────────────────────────
+
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"];
+if (!string.IsNullOrEmpty(kafkaBootstrap))
+{
+    builder.Services.AddSingleton<KafkaProducerService>();
+    builder.Services.AddSingleton<IKafkaProducerService>(sp => sp.GetRequiredService<KafkaProducerService>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<KafkaProducerService>());
 }
 
 // ── Middleware / infra ────────────────────────────────────────────────────────
