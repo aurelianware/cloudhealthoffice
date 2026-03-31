@@ -17,6 +17,7 @@ public interface IAuthorizationRepository
         int page,
         int pageSize);
     Task<AuthorizationsSummary> GetAuthorizationsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
+    Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null);
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
@@ -261,6 +262,30 @@ public class AuthorizationRepository : IAuthorizationRepository
         }
 
         return summary;
+    }
+
+    public async Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null)
+    {
+        var effectiveTenantId = tenantId ?? GetTenantId();
+
+        var queryText = @"
+            SELECT * FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.status IN ('Submitted', 'InReview', 'Pended')";
+
+        var queryDef = new QueryDefinition(queryText)
+            .WithParameter("@tenantId", effectiveTenantId);
+
+        var iterator = _container.GetItemQueryIterator<Authorization>(queryDef);
+        var results = new List<Authorization>();
+
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
+        }
+
+        return results;
     }
 
     public async Task<Authorization> CreateAsync(Authorization authorization)

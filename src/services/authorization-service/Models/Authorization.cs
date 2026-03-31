@@ -325,6 +325,17 @@ public class Authorization
     public DateTime? SlaResumedAt { get; set; }
 
     /// <summary>
+    /// Current SLA escalation level, set by the deadline watchdog.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public SlaEscalationLevel SlaEscalation { get; set; } = SlaEscalationLevel.None;
+
+    /// <summary>
+    /// Timestamp of last SLA escalation event.
+    /// </summary>
+    public DateTime? SlaEscalatedAt { get; set; }
+
+    /// <summary>
     /// Audit: Created by user/system
     /// </summary>
     [StringLength(200)]
@@ -561,6 +572,17 @@ public enum AuthorizationStatus
     /// Cancelled (withdrawn by provider/member)
     /// </summary>
     Cancelled = 8
+}
+
+/// <summary>
+/// SLA escalation level, set by the deadline watchdog.
+/// </summary>
+public enum SlaEscalationLevel
+{
+    None,
+    Warning,
+    Critical,
+    Breach
 }
 
 /// <summary>

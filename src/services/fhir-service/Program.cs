@@ -1,5 +1,6 @@
 using FhirService.Formatters;
 using FhirService.Middleware;
+using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -42,6 +43,21 @@ builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<IPatientAccessDataProvider, MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
+
+// ── Da Vinci PAS auto-adjudication ───────────────────────────────────────────
+builder.Services.Configure<PasAutoAdjudicationConfig>(
+    builder.Configuration.GetSection("Cms0057:PasAutoAdjudication"));
+builder.Services.AddSingleton<IPasAutoAdjudicator, PasAutoAdjudicator>();
+builder.Services.AddSingleton<PasResponseBuilder>();
+
+// ── Authorization service HTTP client (used by PAS auto-adjudicator) ─────────
+builder.Services.AddHttpClient("AuthorizationService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:AuthorizationServiceUrl"]
+            ?? "http://authorization-service.cloudhealthoffice/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
 
 // ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>
