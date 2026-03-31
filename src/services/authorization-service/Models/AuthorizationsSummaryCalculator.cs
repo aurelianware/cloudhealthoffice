@@ -11,7 +11,9 @@ public static class AuthorizationsSummaryCalculator
     {
         if (auth.ReviewedDate == null) return 0;
 
-        var startDate = auth.SlaResumedAt ?? auth.SubmittedDate;
+        var startDate = auth.SlaResumedAt.HasValue && auth.SlaResumedAt.Value > auth.SubmittedDate
+            ? auth.SlaResumedAt.Value
+            : auth.SubmittedDate;
         return (auth.ReviewedDate.Value - startDate).TotalDays;
     }
 }

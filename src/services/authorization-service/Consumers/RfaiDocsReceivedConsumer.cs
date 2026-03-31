@@ -53,9 +53,9 @@ public class RfaiDocsReceivedConsumer : BackgroundService
         var consumerConfig = new ConsumerConfig
         {
             BootstrapServers = bootstrapServers,
-            GroupId = _configuration["Kafka:ClientId"] ?? "authorization-service",
+            GroupId = _configuration["Kafka:RfaiDocsReceivedGroupId"] ?? "authorization-service-rfai-consumer",
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true
+            EnableAutoCommit = false
         };
 
         var saslUsername = _configuration["Kafka:SaslUsername"];
@@ -76,13 +76,14 @@ public class RfaiDocsReceivedConsumer : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            ConsumeResult<string, string>? consumeResult = null;
             try
             {
-                var result = consumer.Consume(stoppingToken);
-                if (result?.Message?.Value == null) continue;
+                consumeResult = consumer.Consume(stoppingToken);
+                if (consumeResult?.Message?.Value == null) continue;
 
                 var message = JsonSerializer.Deserialize<RfaiDocsReceivedMessage>(
-                    result.Message.Value, JsonOptions);
+                    consumeResult.Message.Value, JsonOptions);
 
                 if (message == null) continue;
 
@@ -103,6 +104,9 @@ public class RfaiDocsReceivedConsumer : BackgroundService
                 }
 
                 await ProcessMessageAsync(message, repository);
+
+                // Commit only after successful processing
+                consumer.Commit(consumeResult);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -110,6 +114,7 @@ public class RfaiDocsReceivedConsumer : BackgroundService
             }
             catch (Exception ex)
             {
+                // Offset not committed — message will be redelivered
                 _logger.LogError(ex, "Error processing RFAI docs received message");
             }
         }

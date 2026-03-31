@@ -13,14 +13,17 @@ public class RfaiController : ControllerBase
     private readonly IRfaiRepository _repository;
     private readonly ILogger<RfaiController> _logger;
     private readonly IKafkaProducerService? _kafkaProducer;
+    private readonly IConfiguration _configuration;
 
     public RfaiController(
         IRfaiRepository repository,
         ILogger<RfaiController> logger,
+        IConfiguration configuration,
         IKafkaProducerService? kafkaProducer = null)
     {
         _repository = repository;
         _logger = logger;
+        _configuration = configuration;
         _kafkaProducer = kafkaProducer;
     }
 
@@ -123,6 +126,8 @@ public class RfaiController : ControllerBase
 
         rfaiCase.ReceivedAttachments.Add(attachment);
 
+        var previousStatus = rfaiCase.Status;
+
         if (rfaiCase.Status == RfaiStatus.Open)
             rfaiCase.Status = RfaiStatus.DocsReceived;
 
@@ -132,8 +137,8 @@ public class RfaiController : ControllerBase
             "Attachment received for RFAI case {Id} (auth {AuthNumber}), new status={Status}",
             SanitizeForLog(id), SanitizeForLog(rfaiCase.AuthNumber), rfaiCase.Status);
 
-        // Publish Kafka event when status transitions to DocsReceived
-        if (rfaiCase.Status == RfaiStatus.DocsReceived && _kafkaProducer != null)
+        // Publish Kafka event only on actual status transition to DocsReceived
+        if (rfaiCase.Status == RfaiStatus.DocsReceived && previousStatus != RfaiStatus.DocsReceived && _kafkaProducer != null)
         {
             var requiredCount = rfaiCase.RequestedItems.Count(i => i.Required);
             var receivedCount = rfaiCase.ReceivedAttachments.Count;
@@ -150,8 +155,9 @@ public class RfaiController : ControllerBase
                 allRequestedItemsReceived = receivedCount >= requiredCount
             };
 
+            var topic = _configuration["Kafka:RfaiDocsReceivedTopic"] ?? "rfai-docs-received";
             await _kafkaProducer.SendAsync(
-                "rfai-docs-received",
+                topic,
                 rfaiCase.AuthNumber,
                 kafkaMessage);
         }
