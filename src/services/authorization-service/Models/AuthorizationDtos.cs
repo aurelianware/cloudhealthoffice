@@ -70,6 +70,25 @@ public class AuthorizationResponse
 }
 
 /// <summary>
+/// SLA status for an at-risk authorization (returned by the deadline watchdog endpoint)
+/// </summary>
+public class AuthorizationSlaStatus
+{
+    public string Id { get; set; } = string.Empty;
+    public string AuthorizationNumber { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public AuthorizationStatus Status { get; set; }
+    public string? LevelOfService { get; set; }
+    public DateTime SlaStartedAt { get; set; }
+    public DateTime SlaDeadline { get; set; }
+    public double HoursRemaining { get; set; }
+    public double HoursElapsed { get; set; }
+    public double PercentConsumed { get; set; }
+    public SlaEscalationLevel EscalationLevel { get; set; }
+}
+
+/// <summary>
 /// Authorizations summary statistics
 /// </summary>
 public class AuthorizationsSummary

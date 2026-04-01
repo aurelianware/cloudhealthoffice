@@ -53,6 +53,27 @@ public static class ChoMetrics
             unit: "{claim}",
             description: "Adjudication outcomes by result type");
 
+    /// <summary>
+    /// Histogram tracking Da Vinci PAS $submit request duration (seconds).
+    /// Target: under 15 seconds per PAS IG 2.1.0 Section 5.2.1.
+    /// Dimensions: pas.decision, pas.rule.
+    /// </summary>
+    public static readonly Histogram<double> PasSubmitDuration =
+        Meter.CreateHistogram<double>(
+            "cho.pas.submit.duration",
+            unit: "s",
+            description: "Time to process PAS $submit request");
+
+    /// <summary>
+    /// Counter tracking PAS $submit decisions by type and rule.
+    /// Dimensions: pas.decision (approved, denied, pended, error), pas.rule.
+    /// </summary>
+    public static readonly Counter<long> PasSubmitDecisions =
+        Meter.CreateCounter<long>(
+            "cho.pas.submit.decisions.total",
+            unit: "{decision}",
+            description: "PAS $submit decisions by type");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

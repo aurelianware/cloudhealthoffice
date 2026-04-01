@@ -150,6 +150,23 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         return summary;
     }
 
+    public async Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null)
+    {
+        var effectiveTenantId = tenantId ?? GetTenantId();
+        var builder = Builders<Authorization>.Filter;
+        var filter = builder.And(
+            builder.Eq(x => x.TenantId, effectiveTenantId),
+            builder.In(x => x.Status, new[]
+            {
+                AuthorizationStatus.Submitted,
+                AuthorizationStatus.InReview,
+                AuthorizationStatus.Pended
+            })
+        );
+
+        return await _collection.Find(filter).ToListAsync();
+    }
+
     public async Task<Authorization> CreateAsync(Authorization authorization)
     {
         var tenantId = GetTenantId();

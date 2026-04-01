@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services;
 
 namespace AuthorizationService.Controllers;
 
@@ -316,6 +317,28 @@ public class AuthorizationsController : ControllerBase
 
         var summary = await _authorizationRepository.GetAuthorizationsSummaryAsync(fromDate, toDate, lineOfBusiness);
         return Ok(summary);
+    }
+
+    /// <summary>
+    /// Get authorizations approaching or past their SLA deadline
+    /// </summary>
+    [HttpGet("sla/at-risk")]
+    [ProducesResponseType(typeof(IEnumerable<AuthorizationSlaStatus>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AuthorizationSlaStatus>>> GetAtRiskAuthorizations(
+        [FromQuery] SlaEscalationLevel? minLevel = SlaEscalationLevel.Warning,
+        [FromQuery] string? tenantId = null)
+    {
+        var auths = await _authorizationRepository.GetOpenAuthorizationsAsync(tenantId);
+
+        var effectiveMinLevel = minLevel ?? SlaEscalationLevel.Warning;
+
+        var atRisk = auths
+            .Select(SlaWatchdogService.ComputeSlaStatus)
+            .Where(s => s.EscalationLevel >= effectiveMinLevel)
+            .OrderBy(s => s.HoursRemaining)
+            .ToList();
+
+        return Ok(atRisk);
     }
 
     /// <summary>
