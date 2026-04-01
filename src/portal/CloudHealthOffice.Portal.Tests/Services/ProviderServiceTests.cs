@@ -302,4 +302,67 @@ public class ProviderServiceTests
         result.Should().Contain("Cardiology");
         result.Should().Contain("Pediatrics");
     }
+
+    // ── ProviderContract and ProviderPerformance via GetProviderByIdAsync ────────
+
+    [Fact]
+    public async Task GetProviderByIdAsync_WhenApiReturnsContractAndPerformance_DeserializesAllFields()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            providerId = "PRV-99", npi = "9990001111", name = "Dr. Bell",
+            practiceType = "Individual", specialty = "Family Medicine",
+            practiceName = "Bell Family Practice", city = "Austin", state = "TX",
+            networkStatus = "In-Network", credentialingStatus = "Active",
+            networkCount = 3, taxonomyCode = "207Q00000X",
+            contract = new
+            {
+                contractId = "CTR-P-001",
+                reimbursementMethod = "Fee Schedule",
+                feeScheduleTier = "Standard",
+                effectiveDate = "2024-01-01T00:00:00Z",
+                terminationDate = "2026-12-31T00:00:00Z",
+                capitationRate = (decimal?)null
+            },
+            performance = new
+            {
+                claimsLast90Days = 210,
+                totalBilledLast90Days = 105000m,
+                avgClaimAmount = 500m,
+                authorizationRequests = 55,
+                authorizationApprovalRate = 0.91m,
+                denialCount = 6,
+                denialRate = 0.029m,
+                avgProcessingTimeDays = 2.8m,
+                qualityScore = 96.5m
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetProviderByIdAsync("PRV-99");
+
+        result.Should().NotBeNull();
+
+        // ProviderContract fields
+        result!.Contract.Should().NotBeNull();
+        result.Contract!.ContractId.Should().Be("CTR-P-001");
+        result.Contract.ReimbursementMethod.Should().Be("Fee Schedule");
+        result.Contract.FeeScheduleTier.Should().Be("Standard");
+        result.Contract.EffectiveDate.Should().NotBe(default);
+        result.Contract.TerminationDate.Should().NotBeNull();
+        result.Contract.CapitationRate.Should().BeNull();
+
+        // ProviderPerformance fields
+        result.Performance.Should().NotBeNull();
+        result.Performance!.ClaimsLast90Days.Should().Be(210);
+        result.Performance.TotalBilledLast90Days.Should().Be(105000m);
+        result.Performance.AvgClaimAmount.Should().Be(500m);
+        result.Performance.AuthorizationRequests.Should().Be(55);
+        result.Performance.AuthorizationApprovalRate.Should().Be(0.91m);
+        result.Performance.DenialCount.Should().Be(6);
+        result.Performance.DenialRate.Should().Be(0.029m);
+        result.Performance.AvgProcessingTimeDays.Should().Be(2.8m);
+        result.Performance.QualityScore.Should().Be(96.5m);
+    }
 }
