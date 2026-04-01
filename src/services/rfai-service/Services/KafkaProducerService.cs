@@ -28,13 +28,13 @@ public class KafkaProducerService : IKafkaProducerService, IHostedService, IAsyn
         _configuration = configuration;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         var bootstrapServers = _configuration["Kafka:BootstrapServers"];
         if (string.IsNullOrEmpty(bootstrapServers))
         {
             _logger.LogWarning("Kafka:BootstrapServers not configured — Kafka producer disabled");
-            return;
+            return Task.CompletedTask;
         }
 
         var producerConfig = new ProducerConfig
@@ -57,8 +57,8 @@ public class KafkaProducerService : IKafkaProducerService, IHostedService, IAsyn
 
         try
         {
-            using var adminClient = new Confluent.Kafka.Admin.AdminClientBuilder(
-                new Confluent.Kafka.Admin.AdminClientConfig
+            using var adminClient = new AdminClientBuilder(
+                new AdminClientConfig
                 {
                     BootstrapServers = producerConfig.BootstrapServers,
                     SocketTimeoutMs = 10_000,
@@ -80,6 +80,8 @@ public class KafkaProducerService : IKafkaProducerService, IHostedService, IAsyn
             _producer = null;
             _available = false;
         }
+
+        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
