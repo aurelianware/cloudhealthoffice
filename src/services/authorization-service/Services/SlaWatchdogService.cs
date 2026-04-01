@@ -24,26 +24,12 @@ public class SlaWatchdogService : BackgroundService
     private readonly IAuthorizationRepository _repository;
     private readonly ILogger<SlaWatchdogService> _logger;
 
-    /// <summary>
-    /// Production constructor — receives a scoped repository via IServiceProvider.
-    /// </summary>
     public SlaWatchdogService(
         IServiceProvider serviceProvider,
         ILogger<SlaWatchdogService> logger)
     {
         var scope = serviceProvider.CreateScope();
         _repository = scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
-        _logger = logger;
-    }
-
-    /// <summary>
-    /// Test constructor — direct repository injection.
-    /// </summary>
-    public SlaWatchdogService(
-        IAuthorizationRepository repository,
-        ILogger<SlaWatchdogService> logger)
-    {
-        _repository = repository;
         _logger = logger;
     }
 
