@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -55,47 +56,13 @@ public class PasController : FhirControllerBase
 
         try
         {
-            // 1. Extract the PAS Claim from the first Bundle entry
-            if (requestBundle?.Entry == null || requestBundle.Entry.Count == 0)
+            // 1. Validate and extract the PAS Claim from the request bundle
+            var (validatedClaim, validationError) = ValidateAndExtractClaim(requestBundle);
+            if (validationError != null)
             {
-                return FhirBadRequest("Request bundle must contain at least one entry");
+                return validationError;
             }
-
-            var claim = requestBundle.Entry
-                .Select(e => e.Resource)
-                .OfType<Claim>()
-                .FirstOrDefault();
-
-            if (claim == null)
-            {
-                return FhirBadRequest("Request bundle must contain a Claim resource");
-            }
-
-            // Validate bundle contains only expected resource types
-            var allowedResourceTypes = new HashSet<string>
-            {
-                "Claim", "Patient", "Coverage", "Practitioner",
-                "Organization", "Condition", "Observation", "ServiceRequest",
-                "DocumentReference", "QuestionnaireResponse"
-            };
-
-            var invalidResources = requestBundle.Entry
-                .Where(e => e.Resource != null && !allowedResourceTypes.Contains(e.Resource.TypeName))
-                .Select(e => e.Resource.TypeName)
-                .ToList();
-
-            if (invalidResources.Any())
-            {
-                _logger.LogWarning("PAS $submit received unexpected resource types: {Types}",
-                    string.Join(", ", invalidResources));
-            }
-
-            // Validate the claim has minimum required fields before proceeding
-            if (claim.Provider == null || claim.Patient == null || claim.Insurance == null || claim.Insurance.Count == 0)
-            {
-                return FhirBadRequest(
-                    "Claim must include provider, patient, and insurance references");
-            }
+            var claim = validatedClaim!;
 
             _logger.LogInformation(
                 "PAS $submit received for tenant {TenantId}, claim type {ClaimType}",
@@ -202,5 +169,81 @@ public class PasController : FhirControllerBase
 
         ChoMetrics.PasSubmitDuration.Record(sw.Elapsed.TotalSeconds, tags);
         ChoMetrics.PasSubmitDecisions.Add(1, tags);
+    }
+
+    // ── Input validation ─────────────────────────────────────────────────────
+
+    private static readonly HashSet<string> AllowedResourceTypes = new(StringComparer.Ordinal)
+    {
+        "Claim", "Patient", "Coverage", "Practitioner",
+        "Organization", "Condition", "Observation", "ServiceRequest",
+        "DocumentReference", "QuestionnaireResponse"
+    };
+
+    private static readonly Regex RelativeReferencePattern = new(
+        @"^[A-Za-z]+/[A-Za-z0-9\-\.]+$", RegexOptions.Compiled);
+
+    private const int MaxBundleEntries = 50;
+
+    private (Claim? claim, IActionResult? error) ValidateAndExtractClaim(Bundle? requestBundle)
+    {
+        if (requestBundle?.Entry == null || requestBundle.Entry.Count == 0)
+        {
+            return (null, FhirBadRequest("Request bundle must contain at least one entry"));
+        }
+
+        if (requestBundle.Entry.Count > MaxBundleEntries)
+        {
+            return (null, FhirBadRequest(
+                $"Request bundle exceeds maximum of {MaxBundleEntries} entries"));
+        }
+
+        // Reject unexpected resource types
+        foreach (var entry in requestBundle.Entry)
+        {
+            if (entry.Resource != null && !AllowedResourceTypes.Contains(entry.Resource.TypeName))
+            {
+                _logger.LogWarning("PAS $submit rejected unexpected resource type: {Type}",
+                    SanitizeForLog(entry.Resource.TypeName));
+                return (null, FhirBadRequest(
+                    $"Bundle contains disallowed resource type: {entry.Resource.TypeName}"));
+            }
+        }
+
+        var claim = requestBundle.Entry
+            .Select(e => e.Resource)
+            .OfType<Claim>()
+            .FirstOrDefault();
+
+        if (claim == null)
+        {
+            return (null, FhirBadRequest("Request bundle must contain a Claim resource"));
+        }
+
+        if (claim.Provider == null || claim.Patient == null ||
+            claim.Insurance == null || claim.Insurance.Count == 0)
+        {
+            return (null, FhirBadRequest(
+                "Claim must include provider, patient, and insurance references"));
+        }
+
+        // Ensure references are relative (e.g. "Patient/123"), not absolute URLs,
+        // to prevent SSRF when references are forwarded to internal services.
+        if (!IsRelativeReference(claim.Patient?.Reference) ||
+            !IsRelativeReference(claim.Provider?.Reference) ||
+            !IsRelativeReference(claim.Insurer?.Reference))
+        {
+            return (null, FhirBadRequest(
+                "Claim references must be relative FHIR references (e.g. 'Patient/123')"));
+        }
+
+        return (claim, null);
+    }
+
+    private static bool IsRelativeReference(string? reference)
+    {
+        if (string.IsNullOrEmpty(reference))
+            return true; // null/empty handled by required-field checks above
+        return RelativeReferencePattern.IsMatch(reference);
     }
 }
