@@ -451,6 +451,19 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create email config secret
+        run: |
+          kubectl create secret generic email-config \
+            --from-literal=SmtpHost="${{ secrets.EMAIL_SMTP_HOST }}" \
+            --from-literal=SmtpPort="${{ secrets.EMAIL_SMTP_PORT }}" \
+            --from-literal=EnableSsl="${{ secrets.EMAIL_ENABLE_SSL }}" \
+            --from-literal=FromAddress="${{ secrets.EMAIL_FROM_ADDRESS }}" \
+            --from-literal=SalesTeamAddress="${{ secrets.EMAIL_SALES_TEAM_ADDRESS }}" \
+            --from-literal=Username="${{ secrets.EMAIL_USERNAME }}" \
+            --from-literal=Password="${{ secrets.EMAIL_PASSWORD }}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Apply core manifests
         run: |
           kubectl apply -f infrastructure/k8s/namespaces.yaml
@@ -502,6 +515,20 @@ jobs:
               "$manifest" \
               | kubectl apply -f -
           done
+
+      - name: Deploy api-docs (Swagger UI + OpenAPI specs)
+        run: |
+          kubectl apply -f infrastructure/k8s/services/api-docs.yaml
+          kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
+          kubectl rollout status deployment/api-docs -n ${{ env.NAMESPACE }} --timeout=120s
+
+          # Apply KEDA HTTP ScaledObject only if the CRD is present
+          if kubectl get crd httpscaledobjects.http.keda.sh >/dev/null 2>&1; then
+            echo "KEDA HTTP CRDs detected – applying api-docs ScaledObject..."
+            kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+          else
+            echo "KEDA HTTP CRDs not found – skipping api-docs-scaledobject.yaml apply."
+          fi
 
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
         run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
@@ -562,4 +589,6 @@ jobs:
           echo "Portal ingress IP: $PORTAL_IP"
           echo ""
           echo "DNS to configure:"
-          echo "  portal.cloudhealthoffice.com  →  A  $PORTAL_IP"
+          echo "  portal.cloudhealthoffice.com      →  A  $PORTAL_IP"
+          echo "  api.cloudhealthoffice.com          →  A  $PORTAL_IP"
+          echo "  sandbox.cloudhealthoffice.com      →  A  $PORTAL_IP"
