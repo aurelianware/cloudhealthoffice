@@ -229,6 +229,41 @@ spec:
             secretKeyRef:
               name: pricing-api-secret
               key: AdminSecret
+        - name: Email__SmtpHost
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: SmtpHost
+        - name: Email__SmtpPort
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: SmtpPort
+        - name: Email__EnableSsl
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: EnableSsl
+        - name: Email__FromAddress
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: FromAddress
+        - name: Email__SalesTeamAddress
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: SalesTeamAddress
+        - name: Email__Username
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: Username
+        - name: Email__Password
+          valueFrom:
+            secretKeyRef:
+              name: email-config
+              key: Password
         resources:
           requests:
             memory: "512Mi"
