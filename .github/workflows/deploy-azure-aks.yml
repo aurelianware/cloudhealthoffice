@@ -503,6 +503,17 @@ jobs:
               | kubectl apply -f -
           done
 
+      - name: Deploy api-docs (Swagger UI + OpenAPI specs)
+        run: |
+          ACR="${{ env.REGISTRY }}"
+          SHA="sha-${{ github.sha }}"
+          kubectl apply -f infrastructure/k8s/services/api-docs.yaml
+          kubectl set image deployment/api-docs \
+            api-docs="${ACR}/${{ env.IMAGE_PREFIX }}-api-docs:${SHA}" \
+            -n ${{ env.NAMESPACE }} 2>/dev/null || true
+          kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
+          kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
         run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
 
@@ -562,4 +573,6 @@ jobs:
           echo "Portal ingress IP: $PORTAL_IP"
           echo ""
           echo "DNS to configure:"
-          echo "  portal.cloudhealthoffice.com  →  A  $PORTAL_IP"
+          echo "  portal.cloudhealthoffice.com      →  A  $PORTAL_IP"
+          echo "  api.cloudhealthoffice.com          →  A  $PORTAL_IP"
+          echo "  sandbox.cloudhealthoffice.com      →  A  $PORTAL_IP"

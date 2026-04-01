@@ -7,6 +7,9 @@ on:
       - 'src/api-docs/**'
       - 'api/openapi/**'
       - 'containers/api-docs/**'
+      - 'infrastructure/k8s/services/api-docs.yaml'
+      - 'infrastructure/k8s/api-docs-ingress.yaml'
+      - 'infrastructure/k8s/api-docs-scaledobject.yaml'
       - '.github/workflows/deploy-api-docs.yml'
   workflow_dispatch:
 
@@ -16,13 +19,12 @@ permissions:
 
 env:
   IMAGE_NAME: api-docs
-  ACA_NAME: api-docs
-  ACA_ENV: cho-aca-env
   RESOURCE_GROUP: rg-cloudhealthoffice-prod
+  AKS_CLUSTER: cho-aks
 
 jobs:
   deploy:
-    name: Build & Deploy API Docs to Azure Container Apps
+    name: Build & Deploy API Docs to AKS
     runs-on: ubuntu-latest
 
     steps:
@@ -47,47 +49,37 @@ jobs:
           docker push "${IMAGE_TAG}"
           docker push "${IMAGE_LATEST}"
 
-      - name: Deploy to Azure Container Apps
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "${{ env.AKS_CLUSTER }}" \
+            --overwrite-existing
+
+      - name: Deploy to AKS
         run: |
           IMAGE_TAG="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          az containerapp create \
-            --name "${{ env.ACA_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --environment "${{ env.ACA_ENV }}" \
-            --image "${IMAGE_TAG}" \
-            --ingress external \
-            --target-port 80 \
-            --min-replicas 1 \
-            --max-replicas 3 \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --registry-server "${{ vars.ACR_LOGIN_SERVER }}" 2>/dev/null || \
-          az containerapp update \
-            --name "${{ env.ACA_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --image "${IMAGE_TAG}"
 
-      - name: Bind custom domains
-        run: |
-          for HOSTNAME in api.cloudhealthoffice.com sandbox.cloudhealthoffice.com; do
-            az containerapp hostname bind \
-              --name "${{ env.ACA_NAME }}" \
-              --resource-group "${{ env.RESOURCE_GROUP }}" \
-              --hostname "${HOSTNAME}" \
-              --environment "${{ env.ACA_ENV }}" \
-              --validation-method CNAME 2>&1 | grep -v "^WARNING" || true
-            echo "✅ ${HOSTNAME} bound"
-          done
+          # Apply manifests
+          kubectl apply -f infrastructure/k8s/services/api-docs.yaml
+          kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
+          kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+
+          # Update image to the new SHA-tagged version
+          kubectl set image deployment/api-docs \
+            api-docs="${IMAGE_TAG}" \
+            -n cloudhealthoffice
+
+          # Wait for rollout
+          kubectl rollout status deployment/api-docs \
+            -n cloudhealthoffice \
+            --timeout=120s
 
       - name: Verify health endpoint
         run: |
-          echo "Waiting for container app to start..."
-          sleep 30
-          FQDN=$(az containerapp show \
-            --name "${{ env.ACA_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
-          echo "Container App FQDN: ${FQDN}"
-          curl -sf "https://${FQDN}/" -o /dev/null && \
-            echo "✅ API Docs is healthy" || \
-            echo "⚠️  Health check failed — container may still be warming up"
+          echo "Verifying api-docs pod is ready..."
+          kubectl wait --for=condition=ready pod \
+            -l app=api-docs \
+            -n cloudhealthoffice \
+            --timeout=60s
+          echo "✅ API Docs pod is ready"
