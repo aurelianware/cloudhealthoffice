@@ -587,4 +587,176 @@ public class CapitationServiceTests
         result.TotalAmount.Should().Be(50000m);
         handler.CapturedUrls[0].Should().Contain("/v1/capitation/disbursements/batch");
     }
+
+    // ── CapRunSummary – remaining properties ──────────────────────────────────
+
+    [Fact]
+    public async Task GetRunsAsync_WhenApiReturns200_DeserializesAllCapRunSummaryProperties()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "RUN-100", runNumber = "CAP-2026-01", runType = "Monthly",
+                capitationPeriod = "2026-01-01T00:00:00Z",
+                status = "Completed",
+                lineOfBusiness = "Commercial",
+                description = "January commercial capitation run",
+                criteria = new
+                {
+                    lineOfBusiness = "Commercial",
+                    providerNPI = "1234567890",
+                    contractType = "Capitation",
+                    originalPeriod = "2025-12-01T00:00:00Z"
+                },
+                totalStatements = 45,
+                totalMemberMonths = 13500,
+                totalGrossCapitation = 675000m,
+                totalWithholds = 101250m,
+                totalNetPayable = 573750m,
+                totalProviders = 45,
+                createdAt = "2026-01-10T08:00:00Z",
+                createdBy = "admin@healthplan.com",
+                executionStartedAt = "2026-01-11T06:00:00Z",
+                executionCompletedAt = "2026-01-11T06:15:30Z",
+                executionDurationSeconds = 930.0
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetRunsAsync();
+
+        result.Should().ContainSingle();
+        var run = result[0];
+        run.Id.Should().Be("RUN-100");
+        run.RunType.Should().Be("Monthly");
+        run.CapitationPeriod.Should().NotBe(default);
+        run.LineOfBusiness.Should().Be("Commercial");
+        run.Description.Should().Be("January commercial capitation run");
+        run.Criteria.Should().NotBeNull();
+        run.Criteria!.LineOfBusiness.Should().Be("Commercial");
+        run.Criteria.ProviderNPI.Should().Be("1234567890");
+        run.Criteria.ContractType.Should().Be("Capitation");
+        run.Criteria.OriginalPeriod.Should().NotBeNull();
+        run.TotalProviders.Should().Be(45);
+        run.CreatedAt.Should().NotBe(default);
+        run.CreatedBy.Should().Be("admin@healthplan.com");
+        run.ExecutionStartedAt.Should().NotBeNull();
+        run.ExecutionCompletedAt.Should().NotBeNull();
+        run.ExecutionDurationSeconds.Should().Be(930.0);
+    }
+
+    // ── CapStatementSummary with CapLineItem and CapAdjustment ────────────────
+
+    [Fact]
+    public async Task GetStatementByIdAsync_WhenApiReturns200_DeserializesLineItemsAndAdjustments()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "S-200", statementNumber = "STMT-200",
+            capitationRunId = "RUN-100",
+            contractId = "CTR-1", contractNumber = "CTR-2026-001",
+            providerNPI = "1234567890", providerName = "Dr. Brown",
+            capitationPeriodStart = "2026-01-01T00:00:00Z",
+            capitationPeriodEnd = "2026-01-31T00:00:00Z",
+            status = "Approved",
+            memberMonths = 300, grossCapitation = 90000m,
+            withholdAmount = 13500m, totalAdjustments = -5000m, netPayable = 71500m,
+            paymentDate = "2026-02-15T00:00:00Z",
+            lineItems = new[]
+            {
+                new
+                {
+                    memberId = "MBR-001", memberName = "Jane Doe", planId = "PLN-001",
+                    memberAge = 35, gender = "F",
+                    basePMPM = 280m, riskScore = 1.05m, adjustedPMPM = 294m,
+                    prorationFactor = 1.0m, grossAmount = 294m, withholdAmount = 44.1m,
+                    netAmount = 249.9m, isRetroactive = false, adjustmentReason = (string?)null
+                }
+            },
+            adjustments = new[]
+            {
+                new
+                {
+                    type = "Retro", description = "Rate correction for Q4 2025",
+                    amount = -5000m, relatedMemberId = "MBR-002",
+                    adjustmentDate = "2026-01-15T00:00:00Z"
+                }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetStatementByIdAsync("S-200");
+
+        result.Should().NotBeNull();
+        result!.PaymentDate.Should().NotBeNull();
+        result.LineItems.Should().ContainSingle();
+        var li = result.LineItems[0];
+        li.MemberId.Should().Be("MBR-001");
+        li.MemberName.Should().Be("Jane Doe");
+        li.PlanId.Should().Be("PLN-001");
+        li.MemberAge.Should().Be(35);
+        li.Gender.Should().Be("F");
+        li.BasePMPM.Should().Be(280m);
+        li.RiskScore.Should().Be(1.05m);
+        li.AdjustedPMPM.Should().Be(294m);
+        li.ProrationFactor.Should().Be(1.0m);
+        li.GrossAmount.Should().Be(294m);
+        li.WithholdAmount.Should().Be(44.1m);
+        li.NetAmount.Should().Be(249.9m);
+        li.IsRetroactive.Should().BeFalse();
+        li.AdjustmentReason.Should().BeNull();
+
+        result.Adjustments.Should().ContainSingle();
+        var adj = result.Adjustments[0];
+        adj.Type.Should().Be("Retro");
+        adj.Description.Should().Be("Rate correction for Q4 2025");
+        adj.Amount.Should().Be(-5000m);
+        adj.RelatedMemberId.Should().Be("MBR-002");
+        adj.AdjustmentDate.Should().NotBe(default);
+    }
+
+    // ── CapRateTier via GetContractByIdAsync ──────────────────────────────────
+
+    [Fact]
+    public async Task GetContractByIdAsync_WhenApiReturns200_DeserializesCapRateTiers()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "CTR-200", contractNumber = "CAP-CTR-200",
+            providerNPI = "9876543210", providerName = "Community Health", status = "Active",
+            lineOfBusiness = "Commercial", paymentMethodology = "FullCapitation",
+            effectiveDate = "2025-01-01T00:00:00Z",
+            rateTiers = new[]
+            {
+                new
+                {
+                    tierName = "Adult Female", ageFrom = 18, ageTo = 64,
+                    gender = "F", ageSexCategory = "Adult 18-64 Female",
+                    basePMPM = 295.50m, serviceCategory = "Medical"
+                },
+                new
+                {
+                    tierName = "Senior Male", ageFrom = 65, ageTo = 99,
+                    gender = "M", ageSexCategory = "Senior 65+ Male",
+                    basePMPM = 520.00m, serviceCategory = (string?)null
+                }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetContractByIdAsync("CTR-200");
+
+        result.Should().NotBeNull();
+        result!.RateTiers.Should().HaveCount(2);
+        var tier1 = result.RateTiers[0];
+        tier1.TierName.Should().Be("Adult Female");
+        tier1.AgeFrom.Should().Be(18);
+        tier1.AgeTo.Should().Be(64);
+        tier1.Gender.Should().Be("F");
+        tier1.AgeSexCategory.Should().Be("Adult 18-64 Female");
+        tier1.BasePMPM.Should().Be(295.50m);
+        tier1.ServiceCategory.Should().Be("Medical");
+        result.RateTiers[1].ServiceCategory.Should().BeNull();
+    }
 }
