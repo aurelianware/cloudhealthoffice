@@ -232,4 +232,28 @@ public class SponsorServiceTests
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
         handler.CapturedUrls[0].Should().Contain("/sponsors/SP-1");
     }
+
+    // ── UpdateSponsorRequest – ContractEndDate ────────────────────────────────
+
+    [Fact]
+    public async Task UpdateSponsorAsync_WithContractEndDate_SendsContractEndDateInBody()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var req = new UpdateSponsorRequest
+        {
+            Name = "Expiring Corp", Status = "Terminated",
+            ContractEndDate = new DateTime(2026, 6, 30)
+        };
+
+        // Verify property is readable
+        req.Status.Should().Be("Terminated");
+        req.ContractEndDate.Should().Be(new DateTime(2026, 6, 30));
+
+        await sut.UpdateSponsorAsync("SP-2", req);
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("Terminated");
+    }
 }

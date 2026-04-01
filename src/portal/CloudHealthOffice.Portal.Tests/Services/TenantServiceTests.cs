@@ -318,4 +318,210 @@ public class TenantServiceTests
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => sut.UpdateTenantAsync("azure-nope", new UpdateTenantRequest { OrganizationName = "X" }));
     }
+
+    // ── GetTenantsForUserAsync – admin-email path ─────────────────────────────
+
+    [Fact]
+    public async Task GetTenantsForUserAsync_WhenUserIsAdminOnTenants_ReturnsTenantList()
+    {
+        var tenant = new TenantSubscription
+        {
+            TenantId = "tenant-1", AzureTenantId = "azure-123",
+            OrganizationName = "Acme Health",
+            AdminEmails = new List<string> { "admin@acme.com" }
+        };
+
+        // tenantsCol.Find(adminFilter).ToListAsync()
+        var tenantCursor = CreateCursor(new List<TenantSubscription> { tenant });
+        _tenantsCol
+            .Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TenantSubscription>>(),
+                It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantCursor.Object);
+
+        // tenantUsersCol.Find(tenantUserFilter).ToListAsync() → empty
+        var tenantUsersCursor = new Mock<IAsyncCursor<BsonDocument>>();
+        var firstCallDone = false;
+        tenantUsersCursor.Setup(c => c.MoveNextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                if (firstCallDone) return false;
+                firstCallDone = true;
+                return true;
+            });
+        tenantUsersCursor.Setup(c => c.Current).Returns(new List<BsonDocument>());
+        tenantUsersCursor.Setup(c => c.Dispose());
+        _tenantUsersCol
+            .Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<BsonDocument>>(),
+                It.IsAny<FindOptions<BsonDocument, BsonDocument>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantUsersCursor.Object);
+
+        var sut = CreateService();
+
+        var result = await sut.GetTenantsForUserAsync("admin@acme.com");
+
+        result.Should().ContainSingle()
+            .Which.OrganizationName.Should().Be("Acme Health");
+    }
+
+    [Fact]
+    public async Task GetTenantsForUserAsync_WhenExceptionThrown_ReturnsEmptyList()
+    {
+        _tenantsCol
+            .Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TenantSubscription>>(),
+                It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("MongoDB connection lost"));
+
+        var sut = CreateService();
+
+        var result = await sut.GetTenantsForUserAsync("user@example.com");
+
+        result.Should().BeEmpty();
+    }
+
+    // ── GetDemoTenantAsync – exception path ───────────────────────────────────
+
+    [Fact]
+    public async Task GetDemoTenantAsync_WhenMongoThrows_ReturnsDefaultDemoTenant()
+    {
+        _tenantsCol
+            .Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TenantSubscription>>(),
+                It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("MongoDB connection error"));
+
+        var sut = CreateService();
+
+        var result = await sut.GetDemoTenantAsync();
+
+        result.Should().NotBeNull();
+        result!.TenantId.Should().Be("demo-tenant");
+        result.IsDemo.Should().BeTrue();
+    }
+
+    // ── IsMemberOfTenantAsync – TenantUsers collection path ──────────────────
+
+    [Fact]
+    public async Task IsMemberOfTenantAsync_WhenUserFoundInTenantUsers_ReturnsTrue()
+    {
+        var tenant = new TenantSubscription
+        {
+            TenantId = "tenant-1",
+            AzureTenantId = "azure-123",
+            AdminEmails = new List<string>()
+        };
+
+        var tenantCursor = CreateCursor(new List<TenantSubscription> { tenant });
+        _tenantsCol.Setup(c => c.FindAsync(
+            It.IsAny<FilterDefinition<TenantSubscription>>(),
+            It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantCursor.Object);
+
+        _tenantUsersCol.Setup(c => c.CountDocumentsAsync(
+            It.IsAny<FilterDefinition<BsonDocument>>(),
+            It.IsAny<CountOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1L);
+
+        var sut = CreateService();
+
+        var result = await sut.IsMemberOfTenantAsync("azure-123", "member@acme.com");
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsMemberOfTenantAsync_WhenUserNotInAdminOrTenantUsers_ChecksMembersCollection()
+    {
+        var tenant = new TenantSubscription
+        {
+            TenantId = "tenant-1",
+            AzureTenantId = "azure-123",
+            AdminEmails = new List<string>()
+        };
+
+        var tenantCursor = CreateCursor(new List<TenantSubscription> { tenant });
+        _tenantsCol.Setup(c => c.FindAsync(
+            It.IsAny<FilterDefinition<TenantSubscription>>(),
+            It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantCursor.Object);
+
+        _tenantUsersCol.Setup(c => c.CountDocumentsAsync(
+            It.IsAny<FilterDefinition<BsonDocument>>(),
+            It.IsAny<CountOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0L);
+
+        _membersCol.Setup(c => c.CountDocumentsAsync(
+            It.IsAny<FilterDefinition<BsonDocument>>(),
+            It.IsAny<CountOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0L);
+
+        var sut = CreateService();
+
+        var result = await sut.IsMemberOfTenantAsync("azure-123", "stranger@other.com");
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IsMemberOfTenantAsync_WhenUserFoundInMembersCollection_ReturnsTrue()
+    {
+        var tenant = new TenantSubscription
+        {
+            TenantId = "tenant-1",
+            AzureTenantId = "azure-123",
+            AdminEmails = new List<string>()
+        };
+
+        var tenantCursor = CreateCursor(new List<TenantSubscription> { tenant });
+        _tenantsCol.Setup(c => c.FindAsync(
+            It.IsAny<FilterDefinition<TenantSubscription>>(),
+            It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantCursor.Object);
+
+        _tenantUsersCol.Setup(c => c.CountDocumentsAsync(
+            It.IsAny<FilterDefinition<BsonDocument>>(),
+            It.IsAny<CountOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0L);
+
+        _membersCol.Setup(c => c.CountDocumentsAsync(
+            It.IsAny<FilterDefinition<BsonDocument>>(),
+            It.IsAny<CountOptions>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1L);
+
+        var sut = CreateService();
+
+        var result = await sut.IsMemberOfTenantAsync("azure-123", "member@acme.com");
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsMemberOfTenantAsync_WhenExceptionThrown_ReturnsFalse()
+    {
+        _tenantsCol.Setup(c => c.FindAsync(
+            It.IsAny<FilterDefinition<TenantSubscription>>(),
+            It.IsAny<FindOptions<TenantSubscription, TenantSubscription>>(),
+            It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("Connection timeout"));
+
+        var sut = CreateService();
+
+        var result = await sut.IsMemberOfTenantAsync("azure-123", "user@example.com");
+
+        result.Should().BeFalse();
+    }
 }

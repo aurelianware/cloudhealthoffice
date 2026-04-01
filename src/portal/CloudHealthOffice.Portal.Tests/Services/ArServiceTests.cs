@@ -607,4 +607,66 @@ public class ArServiceTests
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
         handler.CapturedUrls[0].Should().Contain("/v1/ar/batch-rules/BR-1/test");
     }
+
+    // ── ArAdjustmentSummary – remaining properties ────────────────────────────
+
+    [Fact]
+    public async Task GetAdjustmentByIdAsync_WhenApiReturns200_DeserializesAllArAdjustmentSummaryProperties()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "ADJ-FULL", adjustmentNumber = "ADJ-2026-001",
+            adjustmentType = "ManualCorrection",
+            glAccountId = "GL-100", arBalanceId = "BAL-50",
+            period = "2026-01-01T00:00:00Z",
+            amount = 1500m, direction = "Credit",
+            reasonCode = "OVERSTATE",
+            narrative = "Correcting January premium overstatement",
+            authorizedBy = "cfo@healthplan.com",
+            authorizedAt = "2026-02-01T14:00:00Z",
+            sourceType = "Manual",
+            sourceReferenceId = "MEMO-2026-0201",
+            status = "Posted"
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetAdjustmentByIdAsync("ADJ-FULL");
+
+        result.Should().NotBeNull();
+        result!.Narrative.Should().Be("Correcting January premium overstatement");
+        result.AuthorizedBy.Should().Be("cfo@healthplan.com");
+        result.AuthorizedAt.Should().NotBeNull();
+        result.SourceType.Should().Be("Manual");
+        result.SourceReferenceId.Should().Be("MEMO-2026-0201");
+        // Verify that Period was deserialized (exercising get_Period)
+        result.Period.Should().NotBe(default);
+    }
+
+    // ── PremiumSplitSummary via GlAccountSummary ──────────────────────────────
+
+    [Fact]
+    public async Task GetAccountByIdAsync_WhenApiReturnsAccountWithPremiumSplit_DeserializesPremiumSplit()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            id = "GL-SPLIT", accountNumber = "2100", accountName = "Member Premium",
+            accountType = "Liability", status = "Active",
+            effectiveDate = "2025-01-01T00:00:00Z",
+            premiumSplit = new
+            {
+                sponsorPercentage = 80.0m,
+                memberPercentage = 20.0m,
+                isPlanSpecific = false
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetAccountByIdAsync("GL-SPLIT");
+
+        result.Should().NotBeNull();
+        result!.PremiumSplit.Should().NotBeNull();
+        result.PremiumSplit!.SponsorPercentage.Should().Be(80.0m);
+        result.PremiumSplit.MemberPercentage.Should().Be(20.0m);
+        result.PremiumSplit.IsPlanSpecific.Should().BeFalse();
+    }
 }

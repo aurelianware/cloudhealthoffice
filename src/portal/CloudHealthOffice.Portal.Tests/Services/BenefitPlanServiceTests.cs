@@ -461,4 +461,110 @@ public class BenefitPlanServiceTests
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Put);
         handler.CapturedUrls[0].Should().Contain("/v1/plans/PLN-100/accumulators");
     }
+
+    // ── PlanBenefit – remaining properties ────────────────────────────────────
+
+    [Fact]
+    public async Task GetBenefitPlanByIdAsync_WhenBenefitHasAllProperties_DeserializesCoinsuranceCoverageAnnualLimit()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            planId = "PLN-200", planName = "Silver PPO",
+            sponsorId = "SP-2", sponsorName = "MegaCorp", productType = "PPO",
+            network = "Narrow", enrolledMembers = 800, assignedBenefits = 10,
+            status = "Active", effectiveDate = "2026-01-01T00:00:00Z",
+            metalTier = "Silver", individualDeductible = 2000m, familyDeductible = 4000m,
+            individualOOPMax = 7000m, familyOOPMax = 14000m, coinsurance = 0.30m,
+            monthlyPremium = 380m, planYear = "2026",
+            benefits = new[]
+            {
+                new
+                {
+                    benefitId = "BEN-FULL", serviceType = "Physical Therapy",
+                    category = "Rehabilitative", copay = 40m,
+                    coinsurancePercent = 0.20m,
+                    coveragePercent = 0.80m,
+                    annualLimit = 60,
+                    priorAuthRequired = true
+                }
+            },
+            exclusions = Array.Empty<string>()
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetBenefitPlanByIdAsync("PLN-200");
+
+        result.Should().NotBeNull();
+        var benefit = result!.Benefits.Should().ContainSingle().Subject;
+        benefit.CoinsurancePercent.Should().Be(0.20m);
+        benefit.CoveragePercent.Should().Be(0.80m);
+        benefit.AnnualLimit.Should().Be(60);
+        benefit.PriorAuthRequired.Should().BeTrue();
+    }
+
+    // ── ServiceBenefitRule – remaining properties ─────────────────────────────
+
+    [Fact]
+    public async Task GetServiceBenefitRulesAsync_WhenRulesHaveAllProperties_DeserializesAllFields()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                ruleId = "RULE-FULL", serviceCategory = "BehavioralHealth",
+                serviceTypeCode = "MH", serviceTypeDescription = "Mental Health Outpatient",
+                networkTier = "Tier1", copay = 30m,
+                coinsurancePercent = 0.10m,
+                subjectToDeductible = true,
+                annualVisitLimit = 30,
+                annualDollarLimit = 5000m,
+                priorAuthRequired = true,
+                priorAuthThreshold = ">10 visits",
+                deductibleAccumulatorGroup = "Individual",
+                oopAccumulatorGroup = "Individual",
+                crossAccumulatesWithMedical = true,
+                isEditing = false
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetServiceBenefitRulesAsync("PLN-200");
+
+        result.Should().ContainSingle();
+        var rule = result[0];
+        rule.CoinsurancePercent.Should().Be(0.10m);
+        rule.AnnualVisitLimit.Should().Be(30);
+        rule.AnnualDollarLimit.Should().Be(5000m);
+        rule.PriorAuthThreshold.Should().Be(">10 visits");
+        rule.CrossAccumulatesWithMedical.Should().BeTrue();
+        rule.IsEditing.Should().BeFalse();
+    }
+
+    // ── UpdateBenefitPlanRequest – TerminationDate ────────────────────────────
+
+    [Fact]
+    public async Task UpdateBenefitPlanAsync_WithTerminationDate_SendsTerminationDateInBody()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var req = new UpdateBenefitPlanRequest
+        {
+            SponsorId = "SP-1", PlanName = "Gold PPO", ProductType = "PPO",
+            Network = "Broad", MetalTier = "Gold",
+            Status = "Terminated",
+            TerminationDate = new DateTime(2026, 12, 31)
+        };
+
+        // Verify TerminationDate is readable
+        req.Status.Should().Be("Terminated");
+        req.TerminationDate.Should().Be(new DateTime(2026, 12, 31));
+
+        await sut.UpdateBenefitPlanAsync("PLN-100", req);
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("Terminated");
+    }
 }

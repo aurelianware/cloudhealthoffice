@@ -431,4 +431,33 @@ public class MemberServiceTests
         result.RecentActivity[0].DeductibleApplied.Should().Be(100m);
         result.RecentActivity[0].PlanPaid.Should().Be(345m);
     }
+
+    // ── CoverageHistoryEvent – remaining properties ────────────────────────────
+
+    [Fact]
+    public async Task GetCoverageHistoryAsync_WhenEventsHaveChangedByOldValueNewValue_DeserializesAllFields()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                eventId = "EVT-FULL", eventDate = "2026-02-15T00:00:00Z",
+                eventType = "PcpChange",
+                description = "PCP reassigned due to provider termination",
+                changedBy = "ops@healthplan.com",
+                oldValue = "PRV-Old-999",
+                newValue = "PRV-New-001"
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetCoverageHistoryAsync("MBR-100");
+
+        result.Should().ContainSingle();
+        var evt = result[0];
+        evt.ChangedBy.Should().Be("ops@healthplan.com");
+        evt.OldValue.Should().Be("PRV-Old-999");
+        evt.NewValue.Should().Be("PRV-New-001");
+    }
 }
