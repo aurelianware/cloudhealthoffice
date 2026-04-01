@@ -235,7 +235,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml up -d \
             claims-service benefit-plan-service payment-service \
-            mongodb redis
+            mongo redis
           echo "Waiting for services to become healthy..."
           sleep 30
 
@@ -329,7 +329,7 @@ jobs:
       - name: Start services
         run: |
           docker compose -f docker-compose.yml up -d \
-            claims-service payment-service mongodb redis
+            claims-service payment-service mongo redis
           sleep 30
 
       - name: Run load tests
