@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: api-docs
+  IMAGE_NAME: cloudhealthoffice-api-docs
   RESOURCE_GROUP: rg-cloudhealthoffice-prod
   AKS_CLUSTER: cho-aks
 
@@ -43,7 +43,7 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          IMAGE_TAG="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_TAG="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
           IMAGE_LATEST="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest"
           docker build -f containers/api-docs/Dockerfile . -t "${IMAGE_TAG}" -t "${IMAGE_LATEST}"
           docker push "${IMAGE_TAG}"
@@ -58,12 +58,14 @@ jobs:
 
       - name: Deploy to AKS
         run: |
-          IMAGE_TAG="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_TAG="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+
+          # Ensure namespace exists
+          kubectl apply -f infrastructure/k8s/namespaces.yaml
 
           # Apply manifests
           kubectl apply -f infrastructure/k8s/services/api-docs.yaml
           kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
-          kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
 
           # Update image to the new SHA-tagged version
           kubectl set image deployment/api-docs \
@@ -74,6 +76,14 @@ jobs:
           kubectl rollout status deployment/api-docs \
             -n cloudhealthoffice \
             --timeout=120s
+
+          # Apply KEDA HTTP ScaledObject only if the CRD is present
+          if kubectl get crd httpscaledobjects.http.keda.sh >/dev/null 2>&1; then
+            echo "KEDA HTTP CRDs detected – applying api-docs ScaledObject..."
+            kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+          else
+            echo "KEDA HTTP CRDs not found – skipping api-docs-scaledobject.yaml apply."
+          fi
 
       - name: Verify health endpoint
         run: |

@@ -518,14 +518,17 @@ jobs:
 
       - name: Deploy api-docs (Swagger UI + OpenAPI specs)
         run: |
-          ACR="${{ env.REGISTRY }}"
-          SHA="sha-${{ github.sha }}"
           kubectl apply -f infrastructure/k8s/services/api-docs.yaml
-          kubectl set image deployment/api-docs \
-            api-docs="${ACR}/${{ env.IMAGE_PREFIX }}-api-docs:${SHA}" \
-            -n ${{ env.NAMESPACE }} 2>/dev/null || true
           kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
-          kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+          kubectl rollout status deployment/api-docs -n ${{ env.NAMESPACE }} --timeout=120s
+
+          # Apply KEDA HTTP ScaledObject only if the CRD is present
+          if kubectl get crd httpscaledobjects.http.keda.sh >/dev/null 2>&1; then
+            echo "KEDA HTTP CRDs detected – applying api-docs ScaledObject..."
+            kubectl apply -f infrastructure/k8s/api-docs-scaledobject.yaml
+          else
+            echo "KEDA HTTP CRDs not found – skipping api-docs-scaledobject.yaml apply."
+          fi
 
       - name: Apply portal ingress (portal.cloudhealthoffice.com)
         run: kubectl apply -f infrastructure/k8s/portal-ingress.yaml
