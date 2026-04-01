@@ -1,6 +1,7 @@
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace AuthorizationService.Tests.Services;
@@ -188,8 +189,11 @@ public class SlaWatchdogServiceTests
 
     private async Task RunWatchdog()
     {
-        var service = new SlaWatchdogService(
-            _repositoryMock.Object, _loggerMock.Object);
+        var services = new ServiceCollection();
+        services.AddSingleton(_repositoryMock.Object);
+        var sp = services.BuildServiceProvider();
+
+        var service = new SlaWatchdogService(sp, _loggerMock.Object);
         await service.EvaluateAllAuthorizationsAsync();
     }
 
