@@ -1,0 +1,118 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: sla-deadline-watchdog
+  namespace: cho-workflows
+  labels:
+    app: cloudhealthoffice
+    component: authorization-service
+    function: sla-watchdog
+  annotations:
+    description: >-
+      Polls the authorization service for at-risk SLA authorizations every 15 minutes
+      and publishes results to the sla-escalation Kafka topic.
+      Alternative to the in-process BackgroundService — deploy one or the other.
+spec:
+  schedule: "*/15 * * * *"
+  timezone: "America/Los_Angeles"
+  concurrencyPolicy: "Forbid"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  workflowSpec:
+    entrypoint: sla-watchdog-pipeline
+    ttlStrategy:
+      secondsAfterCompletion: 86400   # 24h
+      secondsAfterSuccess: 43200      # 12h
+      secondsAfterFailure: 604800     # 7d
+    arguments:
+      parameters:
+      - name: authorization-service-url
+        value: "http://authorization-service.cloudhealthoffice"
+      - name: kafka-bootstrap
+        value: "kafka.cloudhealthoffice:9092"
+      - name: kafka-topic
+        value: "sla-escalation"
+      - name: min-level
+        value: "Warning"
+
+    templates:
+    - name: sla-watchdog-pipeline
+      steps:
+      - - name: fetch-at-risk
+          template: query-at-risk
+      - - name: publish-to-kafka
+          template: kafka-publish
+
+    - name: query-at-risk
+      retryStrategy:
+        limit: 3
+        retryPolicy: "Always"
+        backoff:
+          duration: "30s"
+          factor: 2
+          maxDuration: "5m"
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            apk add --no-cache curl jq
+
+            echo "Querying at-risk authorizations (minLevel={{workflow.parameters.min-level}})..."
+
+            HTTP_CODE=$(curl -s -o /work/at-risk.json -w "%{http_code}" \
+              "{{workflow.parameters.authorization-service-url}}/api/authorizations/sla/at-risk?minLevel={{workflow.parameters.min-level}}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $(cat /var/run/secrets/azure/token 2>/dev/null || echo '')")
+
+            if [ "$HTTP_CODE" -ne 200 ]; then
+              echo "ERROR: Authorization service returned HTTP $HTTP_CODE"
+              cat /work/at-risk.json
+              exit 1
+            fi
+
+            COUNT=$(jq length /work/at-risk.json)
+            echo "Found $COUNT at-risk authorizations"
+            jq '.' /work/at-risk.json
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+
+    - name: kafka-publish
+      retryStrategy:
+        limit: 3
+        retryPolicy: "Always"
+        backoff:
+          duration: "30s"
+          factor: 2
+          maxDuration: "5m"
+      container:
+        image: ghcr.io/aurelianware/cloudhealthoffice-kafka-publisher:latest
+        command: [sh, -c]
+        args:
+          - |
+            COUNT=$(jq length /work/at-risk.json)
+
+            if [ "$COUNT" -eq 0 ]; then
+              echo "No at-risk authorizations to publish"
+              exit 0
+            fi
+
+            echo "Publishing $COUNT at-risk authorizations to {{workflow.parameters.kafka-topic}}..."
+
+            jq -c '.[]' /work/at-risk.json | while read -r record; do
+              AUTH_NUM=$(echo "$record" | jq -r '.authorizationNumber')
+              echo "$record" | kafka-producer \
+                --bootstrap-server "{{workflow.parameters.kafka-bootstrap}}" \
+                --topic "{{workflow.parameters.kafka-topic}}" \
+                --key "$AUTH_NUM"
+            done
+
+            echo "Published $COUNT records to {{workflow.parameters.kafka-topic}}"
+        volumeMounts:
+        - name: workdir
+          mountPath: /work
+
+    volumes:
+    - name: workdir
+      emptyDir: {}

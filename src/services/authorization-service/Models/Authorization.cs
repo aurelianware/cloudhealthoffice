@@ -317,6 +317,25 @@ public class Authorization
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Timestamp when SLA clock restarted after RFAI docs received.
+    /// Used for turnaround calculation: decision time measured from
+    /// max(SubmittedDate, SlaResumedAt) when RFAI was issued.
+    /// Null if no RFAI was issued for this authorization.
+    /// </summary>
+    public DateTime? SlaResumedAt { get; set; }
+
+    /// <summary>
+    /// Current SLA escalation level, set by the deadline watchdog.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public SlaEscalationLevel SlaEscalation { get; set; } = SlaEscalationLevel.None;
+
+    /// <summary>
+    /// Timestamp of last SLA escalation event.
+    /// </summary>
+    public DateTime? SlaEscalatedAt { get; set; }
+
+    /// <summary>
     /// Audit: Created by user/system
     /// </summary>
     [StringLength(200)]
@@ -553,6 +572,17 @@ public enum AuthorizationStatus
     /// Cancelled (withdrawn by provider/member)
     /// </summary>
     Cancelled = 8
+}
+
+/// <summary>
+/// SLA escalation level, set by the deadline watchdog.
+/// </summary>
+public enum SlaEscalationLevel
+{
+    None,
+    Warning,
+    Critical,
+    Breach
 }
 
 /// <summary>

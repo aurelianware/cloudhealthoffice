@@ -17,6 +17,7 @@ public interface IAuthorizationRepository
         int page,
         int pageSize);
     Task<AuthorizationsSummary> GetAuthorizationsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
+    Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null);
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
@@ -225,15 +226,15 @@ public class AuthorizationRepository : IAuthorizationRepository
             }
         }
 
-        // Calculate average review days (separate query for reviewed auths)
+        // AverageReviewDays: raw submission-to-decision time (always from SubmittedDate)
         var reviewQueryText = $@"
             SELECT AVG(
                 DateTimeDiff('day', c.submittedDate, c.reviewedDate)
             ) as AvgDays
-            FROM c 
-            WHERE c.tenantId = @tenantId 
-            AND c.submittedDate >= @from 
-            AND c.submittedDate <= @to 
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
             AND c.reviewedDate != null
             {lobCondition}";
 
@@ -255,7 +256,63 @@ public class AuthorizationRepository : IAuthorizationRepository
             summary.AverageReviewDays = result?.AvgDays ?? 0;
         }
 
+        // AverageTurnaroundDays: SLA-adjusted time (from SlaResumedAt when RFAI was issued)
+        var turnaroundQueryText = $@"
+            SELECT AVG(
+                DateTimeDiff('day',
+                    IIF(IS_NULL(c.slaResumedAt), c.submittedDate, c.slaResumedAt),
+                    c.reviewedDate)
+            ) as AvgDays
+            FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.submittedDate >= @from
+            AND c.submittedDate <= @to
+            AND c.reviewedDate != null
+            {lobCondition}";
+
+        var turnaroundQueryDef = new QueryDefinition(turnaroundQueryText)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@from", from)
+            .WithParameter("@to", to);
+
+        if (lineOfBusiness.HasValue)
+        {
+            turnaroundQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
+        }
+
+        var turnaroundIterator = _container.GetItemQueryIterator<dynamic>(turnaroundQueryDef);
+        if (turnaroundIterator.HasMoreResults)
+        {
+            var response = await turnaroundIterator.ReadNextAsync();
+            var result = response.FirstOrDefault();
+            summary.AverageTurnaroundDays = result?.AvgDays ?? 0;
+        }
+
         return summary;
+    }
+
+    public async Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null)
+    {
+        var effectiveTenantId = tenantId ?? GetTenantId();
+
+        var queryText = @"
+            SELECT * FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.status IN ('Submitted', 'InReview', 'Pended')";
+
+        var queryDef = new QueryDefinition(queryText)
+            .WithParameter("@tenantId", effectiveTenantId);
+
+        var iterator = _container.GetItemQueryIterator<Authorization>(queryDef);
+        var results = new List<Authorization>();
+
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
+        }
+
+        return results;
     }
 
     public async Task<Authorization> CreateAsync(Authorization authorization)
