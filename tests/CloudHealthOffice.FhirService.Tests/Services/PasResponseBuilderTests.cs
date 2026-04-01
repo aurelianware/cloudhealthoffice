@@ -17,7 +17,7 @@ public class PasResponseBuilderTests
             Id = "test-claim-001",
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = Use.Preauthorization,
+            Use = ClaimUseCode.Preauthorization,
             Patient = new ResourceReference("Patient/pat-001"),
             Created = DateTime.UtcNow.ToString("yyyy-MM-dd"),
             Insurer = new ResourceReference("Organization/cho-payer"),
@@ -126,7 +126,7 @@ public class PasResponseBuilderTests
             var cr = (ClaimResponse)bundle.Entry[0].Resource;
             cr.Meta.Profile.Should().Contain(
                 "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse");
-            cr.Use.Should().Be(Use.Preauthorization);
+            cr.Use.Should().Be(ClaimUseCode.Preauthorization);
             cr.Status.Should().Be(FinancialResourceStatusCodes.Active);
             cr.Patient.Should().NotBeNull();
         }

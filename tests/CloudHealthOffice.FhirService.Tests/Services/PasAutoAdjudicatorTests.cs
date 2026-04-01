@@ -185,7 +185,7 @@ public class PasAutoAdjudicatorTests
         Id = Guid.NewGuid().ToString(),
         Status = FinancialResourceStatusCodes.Active,
         Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-        Use = Use.Preauthorization,
+        Use = ClaimUseCode.Preauthorization,
         Patient = new ResourceReference("Patient/pat-001"),
         Created = DateTime.UtcNow.ToString("yyyy-MM-dd"),
         Insurer = new ResourceReference("Organization/cho-payer"),

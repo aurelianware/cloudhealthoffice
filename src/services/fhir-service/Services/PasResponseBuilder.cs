@@ -102,7 +102,7 @@ public class PasResponseBuilder
             },
             Status = FinancialResourceStatusCodes.Active,
             Type = claim.Type ?? new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = Use.Preauthorization,
+            Use = ClaimUseCode.Preauthorization,
             Patient = claim.Patient,
             Created = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             Insurer = claim.Insurer ?? new ResourceReference { Display = "CHO Payer" },

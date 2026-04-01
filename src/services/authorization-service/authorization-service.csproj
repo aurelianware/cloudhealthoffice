@@ -13,6 +13,13 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <!-- Exclude test project files when built inside Docker (Dockerfile copies entire directory) -->
+  <ItemGroup>
+    <Compile Remove="AuthorizationService.Tests/**" />
+    <Content Remove="AuthorizationService.Tests/**" />
+    <None Remove="AuthorizationService.Tests/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
   </ItemGroup>
