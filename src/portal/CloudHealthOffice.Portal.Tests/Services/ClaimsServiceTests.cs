@@ -384,4 +384,297 @@ public class ClaimsServiceTests
         result.BenefitCalculation.Should().NotBeNull();
         result.BenefitCalculation!.PlanPayment.Should().Be(60m);
     }
+
+    // ── ClaimDetails – remaining properties (RenderingProvider, Facility, notes, audit) ──
+
+    [Fact]
+    public async Task GetClaimByIdAsync_WhenApiReturns200_DeserializesAllExtendedClaimDetailProperties()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            claimId = "CLM-200", claimNumber = "2026-00200", memberName = "Bob Lee",
+            memberId = "MBR-20", providerName = "Dr. Patel", providerId = "PRV-20",
+            claimType = "Institutional", totalChargeAmount = 4200m, allowedAmount = 3500m,
+            paidAmount = 2800m, status = "Denied", serviceDateFrom = "2026-02-01",
+            serviceDateTo = "2026-02-03", submittedDate = "2026-02-04", lineCount = 3,
+            subscriberId = "SUB-20", subscriberName = "Bob Parent",
+            billingProviderName = "City Hospital", billingProviderNPI = "9876543210",
+            placeOfService = "21",
+            renderingProviderName = "Dr. Singh",
+            renderingProviderNPI = "1122334455",
+            facilityName = "Regional Medical Center",
+            facilityNPI = "5544332211",
+            claimNotes = "Requires medical records",
+            referralNumber = "REF-2026-001",
+            receivedDate = "2026-02-04T09:00:00Z",
+            paidDate = (string?)null,
+            checkNumber = (string?)null,
+            denialReason = "Not medically necessary",
+            canApprove = false,
+            canDeny = false,
+            canReverse = true,
+            isEditable = false,
+            adjustmentInfo = new
+            {
+                adjustmentType = "Reversal",
+                originalClaimId = "CLM-100",
+                relatedClaimId = "CLM-101",
+                adjustmentAmount = -2800m,
+                reason = "Duplicate claim",
+                adjustmentDate = "2026-02-20T00:00:00Z",
+                adjustedBy = "system@healthplan.com"
+            },
+            auditTrail = new[]
+            {
+                new
+                {
+                    timestamp = "2026-02-04T09:00:00Z",
+                    action = "Received",
+                    changedBy = "intake@healthplan.com",
+                    oldValue = (string?)null,
+                    newValue = "Received",
+                    notes = "Auto-acknowledged on receipt"
+                }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("CLM-200");
+
+        result.Should().NotBeNull();
+        result!.RenderingProviderName.Should().Be("Dr. Singh");
+        result.RenderingProviderNPI.Should().Be("1122334455");
+        result.FacilityName.Should().Be("Regional Medical Center");
+        result.FacilityNPI.Should().Be("5544332211");
+        result.ClaimNotes.Should().Be("Requires medical records");
+        result.ReferralNumber.Should().Be("REF-2026-001");
+        result.ReceivedDate.Should().NotBe(default);
+        result.PaidDate.Should().BeNull();
+        result.CheckNumber.Should().BeNull();
+        result.DenialReason.Should().Be("Not medically necessary");
+        result.CanApprove.Should().BeFalse();
+        result.CanDeny.Should().BeFalse();
+        result.CanReverse.Should().BeTrue();
+        result.AdjustmentInfo.Should().NotBeNull();
+        result.AdjustmentInfo!.AdjustmentType.Should().Be("Reversal");
+        result.AdjustmentInfo.OriginalClaimId.Should().Be("CLM-100");
+        result.AdjustmentInfo.RelatedClaimId.Should().Be("CLM-101");
+        result.AdjustmentInfo.AdjustmentAmount.Should().Be(-2800m);
+        result.AdjustmentInfo.Reason.Should().Be("Duplicate claim");
+        result.AdjustmentInfo.AdjustmentDate.Should().NotBeNull();
+        result.AdjustmentInfo.AdjustedBy.Should().Be("system@healthplan.com");
+        result.AuditTrail.Should().ContainSingle();
+        result.AuditTrail[0].Action.Should().Be("Received");
+        result.AuditTrail[0].ChangedBy.Should().Be("intake@healthplan.com");
+        result.AuditTrail[0].OldValue.Should().BeNull();
+        result.AuditTrail[0].NewValue.Should().Be("Received");
+        result.AuditTrail[0].Notes.Should().Be("Auto-acknowledged on receipt");
+    }
+
+    // ── ClaimServiceLine with ClaimLineAdjustment ────────────────────────────
+
+    [Fact]
+    public async Task GetClaimByIdAsync_WhenServiceLineHasAdjustments_DeserializesLineAdjustments()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            claimId = "CLM-300", claimNumber = "2026-00300", memberName = "Sue Chen",
+            memberId = "MBR-30", providerName = "Dr. Kim", providerId = "PRV-30",
+            claimType = "Professional", totalChargeAmount = 400m, allowedAmount = 320m,
+            paidAmount = 256m, status = "Paid", serviceDateFrom = "2026-03-01",
+            serviceDateTo = "2026-03-01", submittedDate = "2026-03-02", lineCount = 1,
+            subscriberId = "SUB-30", subscriberName = "Sue Parent",
+            billingProviderName = "Kim Clinic", billingProviderNPI = "2233445566",
+            placeOfService = "11", receivedDate = "2026-03-02T00:00:00Z",
+            serviceLines = new[]
+            {
+                new
+                {
+                    lineNumber = 1, procedureCode = "99215",
+                    procedureDescription = "Office visit established",
+                    units = 1m, chargeAmount = 400m, allowedAmount = 320m,
+                    paidAmount = 256m, patientResponsibility = 64m,
+                    serviceDateFrom = "2026-03-01", serviceDateTo = "2026-03-01",
+                    adjustments = new[]
+                    {
+                        new { groupCode = "CO", reasonCode = "45", amount = 80m,
+                              description = "Charge exceeds fee schedule" }
+                    }
+                }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetClaimByIdAsync("CLM-300");
+
+        result.Should().NotBeNull();
+        var line = result!.ServiceLines.Should().ContainSingle().Subject;
+        line.Adjustments.Should().ContainSingle();
+        line.Adjustments[0].GroupCode.Should().Be("CO");
+        line.Adjustments[0].ReasonCode.Should().Be("45");
+        line.Adjustments[0].Amount.Should().Be(80m);
+        line.Adjustments[0].Description.Should().Be("Charge exceeds fee schedule");
+    }
+
+    // ── ClaimSearchRequest – remaining search fields ─────────────────────────
+
+    [Fact]
+    public async Task SearchClaimsAsync_WithAllSearchFields_SendsAllFieldsInBody()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            JsonSerializer.Serialize(new
+            {
+                claims = Array.Empty<object>(), totalCount = 0, pageNumber = 1, pageSize = 25
+            }, JsonOpts));
+        var sut = CreateService(new HttpClient(handler));
+
+        var req = new ClaimSearchRequest
+        {
+            ClaimNumber = "2026-00500",
+            MemberId = "MBR-99",
+            MemberName = "Alice Wonder",
+            ProviderId = "PRV-88",
+            ProviderName = "Wonder Clinic",
+            ClaimType = "Institutional",
+            ServiceDateFrom = new DateTime(2026, 1, 1),
+            ServiceDateTo = new DateTime(2026, 3, 31),
+            Status = "Denied",
+            AuthorizationNumber = "AUTH-2026-001"
+        };
+
+        // Verify all fields are set and readable
+        req.ClaimNumber.Should().Be("2026-00500");
+        req.MemberId.Should().Be("MBR-99");
+        req.MemberName.Should().Be("Alice Wonder");
+        req.ProviderId.Should().Be("PRV-88");
+        req.ProviderName.Should().Be("Wonder Clinic");
+        req.ClaimType.Should().Be("Institutional");
+        req.ServiceDateFrom.Should().Be(new DateTime(2026, 1, 1));
+        req.ServiceDateTo.Should().Be(new DateTime(2026, 3, 31));
+        req.AuthorizationNumber.Should().Be("AUTH-2026-001");
+
+        await sut.SearchClaimsAsync(req);
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("2026-00500");
+        body.Should().Contain("MBR-99");
+        body.Should().Contain("Wonder Clinic");
+    }
+
+    // ── NcciEditResult – all properties ─────────────────────────────────────
+
+    [Fact]
+    public async Task GetAdjudicationDataAsync_WhenNcciResultHasFailed_DeserializesAllNcciFields()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            steps = Array.Empty<object>(),
+            ncciResults = new[]
+            {
+                new
+                {
+                    editCode = "NCCI-99213-99214", editType = "NCCI-PTP",
+                    description = "Column 1/Column 2 edit",
+                    passed = false,
+                    failureReason = "Procedures cannot be billed together",
+                    affectedProcedureCode = "99214",
+                    affectedModifier = "25",
+                    resolutionApplied = "Modifier 25 applied"
+                }
+            },
+            feeScheduleResults = Array.Empty<object>()
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAdjudicationDataAsync("CLM-NCCI-1");
+
+        result.Should().NotBeNull();
+        result!.NcciResults.Should().ContainSingle();
+        var ncci = result.NcciResults[0];
+        ncci.Passed.Should().BeFalse();
+        ncci.FailureReason.Should().Be("Procedures cannot be billed together");
+        ncci.AffectedProcedureCode.Should().Be("99214");
+        ncci.AffectedModifier.Should().Be("25");
+        ncci.ResolutionApplied.Should().Be("Modifier 25 applied");
+    }
+
+    // ── AdjudicationStep – all properties ────────────────────────────────────
+
+    [Fact]
+    public async Task GetAdjudicationDataAsync_WhenStepHasAllFields_DeserializesTimestampSummaryError()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            steps = new[]
+            {
+                new
+                {
+                    stepName = "Medical-Policy",
+                    stepNumber = 4,
+                    status = "Failed",
+                    timestamp = "2026-03-10T12:05:30Z",
+                    durationMs = 88,
+                    summary = "Policy check: prior auth required",
+                    errorDetail = "Authorization not found for service type 99215"
+                }
+            },
+            ncciResults = Array.Empty<object>(),
+            feeScheduleResults = Array.Empty<object>()
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAdjudicationDataAsync("CLM-STEP-1");
+
+        result.Should().NotBeNull();
+        result!.Steps.Should().ContainSingle();
+        var step = result.Steps[0];
+        step.Timestamp.Should().NotBeNull();
+        step.Summary.Should().Be("Policy check: prior auth required");
+        step.ErrorDetail.Should().Be("Authorization not found for service type 99215");
+    }
+
+    // ── AccumulatorUpdate via BenefitCalculation ──────────────────────────────
+
+    [Fact]
+    public async Task GetAdjudicationDataAsync_WhenBenefitCalcHasAccumulators_DeserializesAccumulatorUpdates()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            steps = Array.Empty<object>(),
+            ncciResults = Array.Empty<object>(),
+            feeScheduleResults = Array.Empty<object>(),
+            benefitCalculation = new
+            {
+                serviceType = "Specialty", benefitRuleApplied = "PPO-Specialty",
+                networkTier = "In-Network", allowedAmount = 350m, deductibleApplied = 350m,
+                deductibleRemaining = 650m, copayAmount = 0m, coinsuranceAmount = 0m,
+                planPayment = 0m, memberResponsibility = 350m,
+                deductibleMet = false, oopMaxMet = false,
+                individualDeductibleBalance = 1000m, individualDeductibleLimit = 1500m,
+                individualOopBalance = 1000m, individualOopLimit = 5000m,
+                accumulatorUpdates = new[]
+                {
+                    new { accumulatorType = "IndividualDeductible", amountApplied = 350m,
+                          newBalance = 1000m, limit = 1500m }
+                }
+            }
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.GetAdjudicationDataAsync("CLM-ACC-1");
+
+        result.Should().NotBeNull();
+        result!.BenefitCalculation.Should().NotBeNull();
+        result.BenefitCalculation!.AccumulatorUpdates.Should().ContainSingle();
+        var acc = result.BenefitCalculation.AccumulatorUpdates[0];
+        acc.AccumulatorType.Should().Be("IndividualDeductible");
+        acc.AmountApplied.Should().Be(350m);
+        acc.NewBalance.Should().Be(1000m);
+        acc.Limit.Should().Be(1500m);
+    }
 }
