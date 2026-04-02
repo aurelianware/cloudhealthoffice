@@ -517,6 +517,7 @@ jobs:
           done
 
       - name: Deploy api-docs (Swagger UI + OpenAPI specs)
+        continue-on-error: true
         run: |
           kubectl apply -f infrastructure/k8s/services/api-docs.yaml
           kubectl apply -f infrastructure/k8s/api-docs-ingress.yaml
