@@ -56,6 +56,14 @@ spec:
                 name: fhir-service-config
             - secretRef:
                 name: fhir-service-secrets
+          env:
+            - name: MongoDb__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: connectionString
+            - name: MongoDb__DatabaseName
+              value: "cloudhealthoffice"
           resources:
             requests:
               memory: "256Mi"

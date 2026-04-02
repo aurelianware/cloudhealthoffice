@@ -35,6 +35,13 @@ spec:
               value: "cho_terminology"
             - name: ASPNETCORE_ENVIRONMENT
               value: "Production"
+            - name: MongoDb__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: connectionString
+            - name: MongoDb__DatabaseName
+              value: "cloudhealthoffice"
           resources:
             requests:
               memory: "256Mi"
