@@ -72,6 +72,13 @@ spec:
             configMapKeyRef:
               name: appeals-service-config
               key: ClaimsService__BaseUrl
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          value: "cloudhealthoffice"
         resources:
           requests:
             cpu: 100m
