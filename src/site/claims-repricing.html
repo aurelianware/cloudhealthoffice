@@ -586,7 +586,7 @@
       const resultDiv = document.getElementById('lookupResult');
       resultDiv.classList.remove('visible');
 
-      let url = `https://api.cloudhealthoffice.com/api/v1/lookup/${encodeURIComponent(code)}?feeScheduleId=${encodeURIComponent(fs)}&facility=${facility}`;
+      let url = `https://api.cloudhealthoffice.com/pricing/api/v1/lookup/${encodeURIComponent(code)}?feeScheduleId=${encodeURIComponent(fs)}&facility=${facility}`;
       if (locality) url += `&locality=${encodeURIComponent(locality)}`;
 
       try {
