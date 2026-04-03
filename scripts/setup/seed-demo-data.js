@@ -112,7 +112,7 @@ function makeNpi(idx) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const COLLECTIONS = [
-  "Members", "Claims", "Providers", "BenefitPlans", "Sponsors",
+  "Members", "Coverage", "Claims", "Providers", "BenefitPlans", "Sponsors",
   "Authorizations", "WorkQueueItems", "Payments", "Accumulators",
   "Appeals", "Correspondence", "EnrollmentFiles"
 ];
@@ -512,6 +512,51 @@ sponsorsData.forEach(function (s) {
 
 choDb.Members.insertMany(members);
 print("✓ " + members.length + " Members");
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4b. COVERAGE (one record per member — required for 270/271 eligibility)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const coverageLevels = { "18": "EMP", "01": "ESP", "19": "ECH" }; // self→EMP, spouse→ESP, child→ECH
+
+const coverageRecords = members.map(function (m) {
+  var isTerminated = m.status === "Terminated";
+  var isCobra = m.status === "COBRA";
+  var coverageStatus = isTerminated ? 3 : (isCobra ? 5 : (m.status === "Pending" ? 2 : 1)); // Active=1, Pending=2, Terminated=3, COBRA=5
+  return {
+    _id: m.memberId.replace("mbr", "cov"),
+    tenantId: TENANT_ID,
+    memberId: m.memberId,
+    groupNumber: m.groupNumber,
+    planId: m.benefitPlanId,
+    coverageLevel: coverageLevels[m.relationshipCode] || "EMP",
+    insuranceLineCode: "HLT",
+    effectiveDate: m.effectiveDate,
+    terminationDate: m.terminationDate,
+    status: coverageStatus,
+    lineOfBusiness: m.lineOfBusiness === "Medicaid" ? 3 : 1, // Commercial=1, Medicaid=3
+    isCOBRA: isCobra,
+    cobraEffectiveDate: isCobra ? m.effectiveDate : null,
+    medicareCoverage: null,
+    otherInsurance: null,
+    monthlyPremium: m.lineOfBusiness === "Medicaid" ? 0 : (m.isSubscriber ? 450.00 : 225.00),
+    employerContribution: m.lineOfBusiness === "Medicaid" ? 0 : (m.isSubscriber ? 350.00 : 175.00),
+    maintenanceTypeCode: "021",
+    maintenanceReasonCode: null,
+    pcpNpi: m.pcpProviderId ? makeNpi(parseInt(m.pcpProviderId.split("-").pop())) : null,
+    pcpName: m.pcpProviderName,
+    pcpAssignmentDate: m.pcpAssignedDate,
+    pcpAssignmentMethod: m.pcpProviderId ? 1 : null, // AutoAssigned=1
+    previousPcpNpi: null,
+    createdDate: now,
+    lastUpdatedDate: now,
+    createdBy: "seed-script",
+    lastUpdatedBy: "seed-script"
+  };
+});
+
+choDb.Coverage.insertMany(coverageRecords);
+print("✓ " + coverageRecords.length + " Coverage records");
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 5. CLAIMS (200)
