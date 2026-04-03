@@ -1,0 +1,33 @@
+---
+# KEDA HTTP ScaledObject for provider-verification-service
+# Scales to zero after 5 minutes of no HTTP traffic.
+# Requires: KEDA HTTP add-on installed on the cluster.
+# Install: helm install http-add-on kedacore/keda-add-ons-http --namespace keda
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: provider-verification-service
+  namespace: cloudhealthoffice
+  labels:
+    app: provider-verification-service
+    component: verification
+spec:
+  hosts:
+  - api.cloudhealthoffice.com
+  pathPrefixes:
+  - /api/v1/providers
+  scaleTargetRef:
+    name: provider-verification-service
+    kind: Deployment
+    apiVersion: apps/v1
+    service: provider-verification-service
+    port: 80
+  replicas:
+    min: 0
+    max: 3
+  scalingMetric:
+    requestRate:
+      targetValue: 100
+      granularity: 1s
+      window: 1m
+  scaledownPeriod: 300

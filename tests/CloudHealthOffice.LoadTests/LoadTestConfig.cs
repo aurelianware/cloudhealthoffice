@@ -23,6 +23,9 @@ public static class LoadTestConfig
     public static string AuthorizationServiceUrl =>
         Environment.GetEnvironmentVariable("LOAD_TEST_AUTHORIZATION_URL") ?? "http://localhost:5005";
 
+    public static string ProviderVerificationServiceUrl =>
+        Environment.GetEnvironmentVariable("LOAD_TEST_PROVIDER_VERIFICATION_URL") ?? "http://localhost:5010";
+
     // ── Tenant isolation ───────────────────────────────────────────────
     public static string TenantId => "load-test-tenant";
 

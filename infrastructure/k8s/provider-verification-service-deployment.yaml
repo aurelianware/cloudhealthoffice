@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provider-verification-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ProviderVerification__NppesApiBaseUrl: "https://npiregistry.cms.hhs.gov/api/"
+  ProviderVerification__DefaultTier: "Standard"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: provider-verification-service-secrets
+  namespace: cloudhealthoffice
+type: Opaque
+stringData:
+  ProviderVerification__SamGovApiKey: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider-verification-service
+  namespace: cloudhealthoffice
+  labels:
+    app: provider-verification-service
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: provider-verification-service
+  template:
+    metadata:
+      labels:
+        app: provider-verification-service
+        version: v1
+    spec:
+      containers:
+      - name: provider-verification-service
+        image: ghcr.io/aurelianware/cloudhealthoffice-provider-verification-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ProviderVerification__NppesApiBaseUrl
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ProviderVerification__NppesApiBaseUrl
+        - name: ProviderVerification__DefaultTier
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ProviderVerification__DefaultTier
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ProviderVerification__SamGovApiKey
+          valueFrom:
+            secretKeyRef:
+              name: provider-verification-service-secrets
+              key: ProviderVerification__SamGovApiKey
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provider-verification-service
+  namespace: cloudhealthoffice
+  labels:
+    app: provider-verification-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: provider-verification-service
