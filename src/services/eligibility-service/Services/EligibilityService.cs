@@ -192,7 +192,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
             
@@ -308,7 +308,7 @@ public class EligibilityServiceImpl : IEligibilityService
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
             var response = await _httpClient.GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
             
