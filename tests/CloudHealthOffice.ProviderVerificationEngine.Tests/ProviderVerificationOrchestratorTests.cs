@@ -23,7 +23,8 @@ public class ProviderVerificationOrchestratorTests
     public ProviderVerificationOrchestratorTests()
     {
         var scoringWeights = Options.Create(new ScoringWeights());
-        var calculator = new IntegrityScoreCalculator(scoringWeights);
+        var verificationOptions = Options.Create(new VerificationOptions());
+        var calculator = new IntegrityScoreCalculator(scoringWeights, verificationOptions);
         var options = Options.Create(new VerificationOptions());
 
         _fsmb.IsConfigured.Returns(false);

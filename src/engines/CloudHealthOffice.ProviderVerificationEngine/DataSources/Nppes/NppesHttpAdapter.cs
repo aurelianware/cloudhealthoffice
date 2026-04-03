@@ -58,8 +58,17 @@ public class NppesHttpAdapter : INppesAdapter
         var response = await _http.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
 
-        var nppesResponse = await response.Content
-            .ReadFromJsonAsync<NppesApiResponse>(JsonOptions, ct);
+        NppesApiResponse? nppesResponse;
+        try
+        {
+            nppesResponse = await response.Content
+                .ReadFromJsonAsync<NppesApiResponse>(JsonOptions, ct);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogDebug(ex, "NPPES returned non-JSON response for NPI lookup");
+            return null;
+        }
 
         if (nppesResponse?.ResultCount is null or 0 || nppesResponse.Results is null)
         {
@@ -90,7 +99,7 @@ public class NppesHttpAdapter : INppesAdapter
         if (!string.IsNullOrWhiteSpace(criteria.PostalCode))
             queryParams.Add($"postal_code={Uri.EscapeDataString(criteria.PostalCode)}");
 
-        queryParams.Add($"limit={Math.Min(criteria.Limit, 200)}");
+        queryParams.Add($"limit={Math.Clamp(criteria.Limit, 1, 200)}");
 
         var url = $"?{string.Join("&", queryParams)}";
         _logger.LogDebug("NPPES search: {Url}", url);
@@ -98,8 +107,17 @@ public class NppesHttpAdapter : INppesAdapter
         var response = await _http.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
 
-        var nppesResponse = await response.Content
-            .ReadFromJsonAsync<NppesApiResponse>(JsonOptions, ct);
+        NppesApiResponse? nppesResponse;
+        try
+        {
+            nppesResponse = await response.Content
+                .ReadFromJsonAsync<NppesApiResponse>(JsonOptions, ct);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogDebug(ex, "NPPES returned non-JSON response for search");
+            return [];
+        }
 
         if (nppesResponse?.Results is null)
             return [];
@@ -150,16 +168,11 @@ public class NppesHttpAdapter : INppesAdapter
             if (DateTimeOffset.TryParse(result.Basic.LastUpdated, out var lastUpdated))
                 data.LastUpdated = lastUpdated;
             if (DateTimeOffset.TryParse(result.Basic.DeactivationDate, out var deactDate))
-            {
                 data.DeactivationDate = deactDate;
-                data.NpiStatus = NppesNpiStatus.Deactivated;
-            }
             if (DateTimeOffset.TryParse(result.Basic.ReactivationDate, out var reactDate))
-            {
                 data.ReactivationDate = reactDate;
-                data.NpiStatus = NppesNpiStatus.Active;
-            }
 
+            // Status field is authoritative — use it over date-based inference
             data.NpiStatus = string.IsNullOrEmpty(result.Basic.Status)
                 ? NppesNpiStatus.Active
                 : result.Basic.Status.Equals("A", StringComparison.OrdinalIgnoreCase)

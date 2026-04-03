@@ -19,7 +19,8 @@ public class IntegrityScoreCalculatorTests
             LicenseVerification = 15,
             ConflictOfInterest = 10
         });
-        _calculator = new IntegrityScoreCalculator(weights);
+        var options = Options.Create(new VerificationOptions());
+        _calculator = new IntegrityScoreCalculator(weights, options);
     }
 
     [Fact]
@@ -55,12 +56,10 @@ public class IntegrityScoreCalculatorTests
     [Fact]
     public void ActiveNpi_NoPecosNoFsmb_ReturnsAdvisoryRating()
     {
-        // Active NPI with clear exclusion screening but no PECOS or FSMB data.
-        // Only NPI (30w) and Exclusion (30w) dimensions are evaluated.
-        // Both score 100, so composite = 100 -> Clear? No, the point is
-        // that without PECOS/FSMB those dimensions are NOT evaluated,
-        // so only NPI + Exclusion contribute. With both at 100, composite = 100 -> Clear.
-        // But the test name says Advisory — let's make NPI have deductions to land in Advisory range.
+        // Active NPI with possible exclusion match and no PECOS or FSMB data.
+        // NPI: 100 - 10 (no taxonomy) - 10 (no location) = 80, weight 30
+        // Exclusion: 40 (possible match), weight 30
+        // Composite = (80*30 + 40*30) / 60 = 3600/60 = 60 -> Advisory
         var record = new ProviderVerificationRecord
         {
             Npi = "1234567893",
@@ -74,24 +73,22 @@ public class IntegrityScoreCalculatorTests
             ExclusionScreening = new ExclusionScreeningResult
             {
                 IsExcluded = false,
-                Source = ExclusionScreeningSource.OigLeie
+                Source = ExclusionScreeningSource.OigLeie,
+                Matches =
+                [
+                    new ExclusionMatch { MatchConfidence = 0.75f, Source = ExclusionScreeningSource.OigLeie }
+                ]
             },
-            // PecosStatus = null  -> not evaluated
-            // FsmbVerification = null -> not evaluated
         };
 
         var score = _calculator.Calculate(record);
 
-        // NPI: 100 - 10 (no primary taxonomy) - 10 (no location) = 80, weight 30
-        // Exclusion: 100, weight 30
-        // Composite = (80*30 + 100*30) / 60 = 5400/60 = 90 -> Clear
-        // Hmm, that's Clear not Advisory. Let me adjust the test to match the
-        // scenario where we also have a possible exclusion match to get Advisory.
-        // Actually, re-reading the test name: "ActiveNpi_NoPecosNoFsmb_ReturnsAdvisoryRating"
-        // For Advisory (60-79), we need a lower score. Let's add a possible exclusion match.
-        Assert.True(score.CompositeScore >= 60);
+        Assert.Equal(IntegrityRating.Advisory, score.Rating);
+        Assert.True(score.CompositeScore >= 60 && score.CompositeScore <= 79,
+            $"Expected Advisory range (60-79), got {score.CompositeScore}");
         Assert.Contains(score.Flags, f => f.Code == "NO_PRIMARY_TAXONOMY");
         Assert.Contains(score.Flags, f => f.Code == "NO_PRACTICE_LOCATION");
+        Assert.Contains(score.Flags, f => f.Code == "POSSIBLE_EXCLUSION_MATCH");
     }
 
     [Fact]

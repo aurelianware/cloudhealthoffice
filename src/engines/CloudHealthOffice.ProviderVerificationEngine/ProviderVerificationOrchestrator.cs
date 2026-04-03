@@ -94,35 +94,30 @@ public class ProviderVerificationOrchestrator
         }
 
         // ── Await all and assemble ───────────────────────────────
-        try
+        // Each task is awaited independently so a failure in one source
+        // does not leave other tasks unobserved.
+        record.NppesData = await AwaitSafeAsync(nppesTask, "NPPES", npi);
+
+        // Enrich taxonomy codes with Medicare crosswalk
+        if (record.NppesData?.Taxonomies is { Count: > 0 })
         {
-            record.NppesData = await nppesTask;
-
-            // Enrich taxonomy codes with Medicare crosswalk
-            if (record.NppesData?.Taxonomies is { Count: > 0 })
-            {
-                await EnrichTaxonomiesAsync(record.NppesData.Taxonomies, ct);
-            }
-
-            if (exclusionTask != null)
-                record.ExclusionScreening = await exclusionTask;
-
-            if (pecosTask != null)
-                record.PecosStatus = await pecosTask;
-
-            if (openPaymentsTask != null)
-                record.OpenPaymentsSummary = await openPaymentsTask;
-
-            if (utilizationTask != null)
-                record.UtilizationProfile = await utilizationTask;
-
-            if (fsmbTask != null)
-                record.FsmbVerification = await fsmbTask;
+            await EnrichTaxonomiesAsync(record.NppesData.Taxonomies, ct);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            _logger.LogWarning(ex, "One or more data sources failed for NPI {Npi}; partial result returned", npi);
-        }
+
+        if (exclusionTask != null)
+            record.ExclusionScreening = await AwaitSafeAsync(exclusionTask, "LEIE/SAM", npi);
+
+        if (pecosTask != null)
+            record.PecosStatus = await AwaitSafeAsync(pecosTask, "PECOS", npi);
+
+        if (openPaymentsTask != null)
+            record.OpenPaymentsSummary = await AwaitSafeAsync(openPaymentsTask, "OpenPayments", npi);
+
+        if (utilizationTask != null)
+            record.UtilizationProfile = await AwaitSafeAsync(utilizationTask, "Utilization", npi);
+
+        if (fsmbTask != null)
+            record.FsmbVerification = await AwaitSafeAsync(fsmbTask, "FSMB", npi);
 
         // ── Calculate composite integrity score ──────────────────
         record.IntegrityScore = _scoreCalculator.Calculate(record);
@@ -169,6 +164,19 @@ public class ProviderVerificationOrchestrator
     }
 
     // ── Private helpers ──────────────────────────────────────────
+
+    private async Task<T?> AwaitSafeAsync<T>(Task<T> task, string source, string npi)
+    {
+        try
+        {
+            return await task;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "{Source} data source failed for NPI {Npi}; continuing with partial result", source, npi);
+            return default;
+        }
+    }
 
     private async Task<NppesProviderData?> VerifyNppesAsync(string npi, CancellationToken ct)
     {
