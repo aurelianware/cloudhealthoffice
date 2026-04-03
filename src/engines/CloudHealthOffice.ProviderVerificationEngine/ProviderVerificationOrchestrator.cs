@@ -65,7 +65,8 @@ public class ProviderVerificationOrchestrator
         CancellationToken ct = default)
     {
         // NPI is public data published in the NPPES registry — intentionally logged for audit trail.
-        _logger.LogInformation("Starting {Tier} verification for NPI {Npi}", tier, npi);
+        var safeNpi = SanitizeForLog(npi);
+        _logger.LogInformation("Starting {Tier} verification for NPI {Npi}", tier, safeNpi);
 
         var record = new ProviderVerificationRecord { Npi = npi };
 
@@ -128,7 +129,7 @@ public class ProviderVerificationOrchestrator
         // NPI is public data published in the NPPES registry — intentionally logged for audit trail.
         _logger.LogInformation(
             "Verification complete for NPI {Npi}: Score={Score}, Rating={Rating}, Status={Status}",
-            npi, record.IntegrityScore.CompositeScore, record.IntegrityScore.Rating, record.Status);
+            safeNpi, record.IntegrityScore.CompositeScore, record.IntegrityScore.Rating, record.Status);
 
         return record;
     }
@@ -173,7 +174,7 @@ public class ProviderVerificationOrchestrator
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogWarning(ex, "{Source} data source failed for NPI {Npi}; continuing with partial result", source, npi);
+            _logger.LogWarning(ex, "{Source} data source failed for NPI {Npi}; continuing with partial result", source, SanitizeForLog(npi));
             return default;
         }
     }
@@ -183,9 +184,16 @@ public class ProviderVerificationOrchestrator
         var data = await _nppes.LookupByNpiAsync(npi, ct);
         if (data is null)
         {
-            _logger.LogWarning("NPI {Npi} not found in NPPES registry", npi);
+            _logger.LogWarning("NPI {Npi} not found in NPPES registry", SanitizeForLog(npi));
         }
         return data;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private async Task EnrichTaxonomiesAsync(List<NppesTaxonomy> taxonomies, CancellationToken ct)
