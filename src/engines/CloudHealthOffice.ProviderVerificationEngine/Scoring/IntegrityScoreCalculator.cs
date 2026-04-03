@@ -16,10 +16,12 @@ using Microsoft.Extensions.Options;
 public class IntegrityScoreCalculator
 {
     private readonly ScoringWeights _weights;
+    private readonly VerificationOptions _options;
 
-    public IntegrityScoreCalculator(IOptions<ScoringWeights> weights)
+    public IntegrityScoreCalculator(IOptions<ScoringWeights> weights, IOptions<VerificationOptions> options)
     {
         _weights = weights.Value;
+        _options = options.Value;
     }
 
     public ProviderIntegrityScore Calculate(ProviderVerificationRecord record)
@@ -184,6 +186,7 @@ public class IntegrityScoreCalculator
         else if (record.ExclusionScreening.Matches.Any(m => m.MatchConfidence >= 0.7f))
         {
             dim.Score = 40;
+            dim.Detail = "Possible exclusion match found — manual review recommended";
             flags.Add(new IntegrityFlag
             {
                 Severity = IntegrityFlagSeverity.Warning,
@@ -357,6 +360,9 @@ public class IntegrityScoreCalculator
         var totalPayments = record.OpenPaymentsSummary.TotalGeneralPayments +
                             record.OpenPaymentsSummary.TotalResearchPayments;
 
+        var highThreshold = _options.OpenPaymentsConflictThreshold * 4; // 100k default
+        var moderateThreshold = _options.OpenPaymentsConflictThreshold;  // 25k default
+
         if (record.OpenPaymentsSummary.HasOwnershipInterest)
         {
             dim.Score = 40;
@@ -368,7 +374,7 @@ public class IntegrityScoreCalculator
                 Message = "Provider has ownership/investment interest with a reporting entity"
             });
         }
-        else if (totalPayments > 100_000m)
+        else if (totalPayments > highThreshold)
         {
             dim.Score = 50;
             flags.Add(new IntegrityFlag
@@ -379,7 +385,7 @@ public class IntegrityScoreCalculator
                 Message = $"Total industry payments: {totalPayments:C0} in PY{record.OpenPaymentsSummary.ProgramYear}"
             });
         }
-        else if (totalPayments > 25_000m)
+        else if (totalPayments > moderateThreshold)
         {
             dim.Score = 75;
             flags.Add(new IntegrityFlag
