@@ -51,6 +51,8 @@ jobs:
                    }
 
           # Safe patterns that are NOT PHI - allowed in console logs
+          # NPI (National Provider Identifier) is public data available via NPPES
+          # registry at https://npiregistry.cms.hhs.gov — it is NOT PHI per HIPAA.
           $safePatterns = @(
             'Path|Dir|Directory|File',
             'Template',
@@ -71,7 +73,10 @@ jobs:
             'field|suggestion',
             'companyName|contactEmail',
             'skipFhir|skipPa',
-            ',\s*(err|error|e)\)'
+            ',\s*(err|error|e)\)',
+            '[Nn][Pp][Ii]|npi|providerNpi|billingNpi',
+            'taxonomyCode|taxonomy|hcpcsCode',
+            'integrityScore|integrityRating|verificationStatus'
           )
           $safePatternRegex = $safePatterns -join '|'
 
@@ -103,6 +108,63 @@ jobs:
             exit 1
           } else {
             Write-Host "✅ No PHI logging violations detected" -ForegroundColor Green
+          }
+
+      - name: Scan C# files for unredacted PHI logging
+        shell: pwsh
+        run: |
+          $violations = @()
+
+          Write-Host "🔍 Scanning C# files for potential PHI in log statements..."
+
+          # PHI field names that should NEVER appear in log interpolation.
+          # Uses word boundaries (\b) to prevent false positives from substring
+          # matches (e.g., "TIN" matching "Posting", "DOB" matching "AdobeReader").
+          # Only matches actual log invocation lines (_logger.Log*), not field
+          # declarations, constructor params, or comments.
+          $phiPatterns = @(
+            '\bSSN\b|\bSocialSecurityNumber\b',
+            '\bDateOfBirth\b|\bdateOfBirth\b',
+            '\bMemberName\b|\bmemberName\b|\bPatientName\b|\bpatientName\b',
+            '\bStreetAddress\b|\bHomeAddress\b|\bPatientAddress\b',
+            '\bPhoneNumber\b|\bphoneNumber\b|\bTelephoneNumber\b',
+            '\bRoutingNumber\b|\broutingNumber\b',
+            '\bBankAccountNumber\b|\bbankAccountNumber\b'
+          )
+          $phiRegex = $phiPatterns -join '|'
+
+          $files = Get-ChildItem -Path ./src -Recurse -File -Include *.cs |
+                   Where-Object {
+                     $_.FullName -notmatch 'obj|bin|TestResults' -and
+                     $_.Name -notlike '*Tests.cs' -and
+                     $_.Name -notlike '*Test.cs'
+                   }
+
+          foreach ($file in $files) {
+            $lines = Get-Content $file.FullName
+
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              $line = $lines[$i]
+
+              # Only match actual log invocation lines, not field declarations or constructors
+              if ($line -match '_logger\.Log(Information|Warning|Error|Debug|Critical|Trace)\(' -and
+                  $line -match $phiRegex -and
+                  $line -notmatch 'SanitizeForLog|Redact|REDACTED|\*\*\*' -and
+                  $line -notmatch '^\s*//') {
+                $violations += "❌ $($file.FullName):$($i+1) - Potential PHI in log: $($line.Trim())"
+              }
+            }
+          }
+
+          if ($violations.Count -gt 0) {
+            Write-Host "⚠️  Found $($violations.Count) potential PHI logging violations in C#:" -ForegroundColor Yellow
+            $violations | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            Write-Host "`n💡 Use SanitizeForLog() or redact PHI before logging." -ForegroundColor Cyan
+            Write-Host "NPI, MemberId, SubscriberId, AccountNumber, and Email are operational" -ForegroundColor Cyan
+            Write-Host "identifiers — not PHI in isolation. Only flag actual sensitive data." -ForegroundColor Cyan
+            exit 1
+          } else {
+            Write-Host "✅ No PHI logging violations detected in C# files" -ForegroundColor Green
           }
 
       - name: Check for hardcoded PHI patterns

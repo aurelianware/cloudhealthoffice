@@ -245,6 +245,16 @@ public class Provider
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
+    /// Cached integrity score from the ProviderVerificationService.
+    /// Updated on verification and cached for claims-time lookup.
+    /// </summary>
+    public int? IntegrityScore { get; set; }
+    [StringLength(50)]
+    public string? IntegrityRating { get; set; }
+    public DateTimeOffset? LastVerifiedAt { get; set; }
+    public DateTimeOffset? NextVerificationDue { get; set; }
+
+    /// <summary>
     /// Full name helper property
     /// </summary>
     public string FullName => ProviderType == ProviderType.Individual

@@ -1,0 +1,37 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /repo
+
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj src/services/provider-verification-service/
+COPY src/engines/CloudHealthOffice.ProviderVerificationEngine/CloudHealthOffice.ProviderVerificationEngine.csproj src/engines/CloudHealthOffice.ProviderVerificationEngine/
+RUN dotnet restore src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj
+
+# Copy source code and build
+COPY src/services/provider-verification-service/ src/services/provider-verification-service/
+COPY src/engines/CloudHealthOffice.ProviderVerificationEngine/ src/engines/CloudHealthOffice.ProviderVerificationEngine/
+RUN dotnet build src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj -c Release --no-restore
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/provider-verification-service/CloudHealthOffice.ProviderVerificationService.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=publish /app/publish .
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
+
+ENTRYPOINT ["dotnet", "CloudHealthOffice.ProviderVerificationService.dll"]
