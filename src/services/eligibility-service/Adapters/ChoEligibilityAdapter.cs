@@ -72,7 +72,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
     private async Task<ChoCoverageDto?> GetActiveCoverageAsync(string tenantId, string subscriberId, DateTime serviceDate)
     {
-        var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
+        var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
         var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
             $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
 
@@ -150,7 +150,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     {
         try
         {
-            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api";
+            var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
             var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
 
