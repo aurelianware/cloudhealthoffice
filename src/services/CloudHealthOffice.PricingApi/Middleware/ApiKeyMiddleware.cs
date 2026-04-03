@@ -15,6 +15,7 @@ public class ApiKeyMiddleware
         "/health",
         "/swagger",
         "/api/v1/fee-schedules",  // Allow browsing available schedules without auth
+        "/api/v1/lookup",         // Public single-code lookup (web demo, no signup required)
         "/api/v1/admin",          // Admin endpoints use X-Admin-Secret instead of API key
         "/api/v1/signup"          // Public self-service signup
     ];
@@ -29,8 +30,9 @@ public class ApiKeyMiddleware
     {
         var path = context.Request.Path.Value ?? "";
 
-        // Skip auth for exempt paths
-        if (ExemptPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        // Skip auth for exempt paths (segment-aware to avoid matching e.g. /api/v1/lookup2)
+        var requestPath = context.Request.Path;
+        if (ExemptPaths.Any(p => requestPath.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);
             return;
