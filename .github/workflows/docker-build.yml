@@ -55,7 +55,11 @@ jobs:
           - tenant-service
           - benefit-plan-service
           - payment-service
+          - provider-verification-service
         include:
+          # provider-verification-service references engine project outside src/services/
+          - service: provider-verification-service
+            build_context: '.'
           # claims-scrubbing-service is now .NET — needs repo root for shared lib
           - service: claims-scrubbing-service
             build_context: '.'
@@ -421,6 +425,7 @@ jobs:
           echo "- claims-scrubbing-service" >> $GITHUB_STEP_SUMMARY
           echo "- tenant-service" >> $GITHUB_STEP_SUMMARY
           echo "- enrollment-import-service" >> $GITHUB_STEP_SUMMARY
+          echo "- provider-verification-service" >> $GITHUB_STEP_SUMMARY
           echo "- portal (Blazor)" >> $GITHUB_STEP_SUMMARY
           echo "- site (Static)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
