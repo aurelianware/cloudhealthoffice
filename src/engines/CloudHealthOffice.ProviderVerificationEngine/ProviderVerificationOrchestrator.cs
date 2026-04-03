@@ -64,6 +64,7 @@ public class ProviderVerificationOrchestrator
         VerificationTier tier = VerificationTier.Standard,
         CancellationToken ct = default)
     {
+        // NPI is public data published in the NPPES registry — intentionally logged for audit trail.
         _logger.LogInformation("Starting {Tier} verification for NPI {Npi}", tier, npi);
 
         var record = new ProviderVerificationRecord { Npi = npi };
@@ -129,6 +130,7 @@ public class ProviderVerificationOrchestrator
         record.LastVerifiedAt = DateTimeOffset.UtcNow;
         record.NextScheduledVerification = DateTimeOffset.UtcNow.Add(_options.ReverificationInterval);
 
+        // NPI is public data published in the NPPES registry — intentionally logged for audit trail.
         _logger.LogInformation(
             "Verification complete for NPI {Npi}: Score={Score}, Rating={Rating}, Status={Status}",
             npi, record.IntegrityScore.CompositeScore, record.IntegrityScore.Rating, record.Status);

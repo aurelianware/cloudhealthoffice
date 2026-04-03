@@ -5,7 +5,9 @@ using CloudHealthOffice.ProviderVerificationEngine.DataSources;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources.Nppes;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
 using CloudHealthOffice.ProviderVerificationEngine.Scoring;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 public class Program
 {
@@ -67,10 +69,16 @@ public class Program
         // TODO: builder.Services.AddHostedService<PecosSyncWorker>();
 
         // ── Health checks ────────────────────────────────────────
-        builder.Services.AddHealthChecks()
-            .AddUrlGroup(new Uri("https://npiregistry.cms.hhs.gov/api/?version=2.1&number=1234567893"),
+        var healthChecks = builder.Services.AddHealthChecks();
+
+        if (builder.Configuration.GetValue("HealthChecks:EnableExternalNppesCheck", true))
+        {
+            healthChecks.AddUrlGroup(
+                new Uri("https://npiregistry.cms.hhs.gov/api/?version=2.1&number=1234567893"),
                 name: "nppes-api",
+                tags: ["readiness"],
                 timeout: TimeSpan.FromSeconds(10));
+        }
 
         // ── OpenAPI / Swagger ────────────────────────────────────
         builder.Services.AddEndpointsApiExplorer();
@@ -78,7 +86,7 @@ public class Program
         {
             c.SwaggerDoc("v1", new()
             {
-                Title = "CHO Provider Verification API",
+                Title = "Cloud Health Office Provider Verification API",
                 Version = "v1",
                 Description = "Multi-source provider verification and integrity scoring. " +
                               "Aggregates NPPES, OIG/LEIE, PECOS, Open Payments, and FSMB data.",
@@ -88,9 +96,29 @@ public class Program
 
         var app = builder.Build();
 
-        app.UseSwagger();
-        app.UseSwaggerUI();
-        app.MapHealthChecks("/health");
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
+        // Liveness: no external dependencies — pod is alive if the process responds
+        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        {
+            Predicate = _ => false // no checks — just confirms the app is running
+        });
+
+        // Readiness: includes external dependency checks (NPPES when enabled)
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("readiness")
+        });
+
+        // Backward compat alias — maps to liveness
+        app.MapHealthChecks("/health", new HealthCheckOptions
+        {
+            Predicate = _ => false
+        });
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // API Endpoints
@@ -103,12 +131,13 @@ public class Program
         api.MapGet("/{npi}/verify", async (
             string npi,
             [FromQuery] VerificationTier? tier,
+            IOptions<VerificationOptions> verificationOptions,
             ProviderVerificationOrchestrator orchestrator,
             CancellationToken ct) =>
         {
             var result = await orchestrator.VerifyProviderAsync(
                 npi,
-                tier ?? VerificationTier.Standard,
+                tier ?? verificationOptions.Value.DefaultTier,
                 ct);
 
             return result.Status == VerificationStatus.Failed
@@ -157,12 +186,13 @@ public class Program
         api.MapGet("/{npi}/integrity-score", async (
             string npi,
             [FromQuery] VerificationTier? tier,
+            IOptions<VerificationOptions> verificationOptions,
             ProviderVerificationOrchestrator orchestrator,
             CancellationToken ct) =>
         {
             var result = await orchestrator.VerifyProviderAsync(
                 npi,
-                tier ?? VerificationTier.Standard,
+                tier ?? verificationOptions.Value.DefaultTier,
                 ct);
 
             return Results.Ok(new
@@ -180,10 +210,25 @@ public class Program
 
         // ── Batch verification (POST) ────────────────────────────
         api.MapPost("/verify/batch", async (
-            [FromBody] BatchVerificationRequest request,
+            [FromBody] BatchVerificationRequest? request,
             ProviderVerificationOrchestrator orchestrator,
             CancellationToken ct) =>
         {
+            if (request is null || request.Npis is null || request.Npis.Count == 0)
+                return Results.BadRequest(new { error = "Request body must include a non-empty 'npis' array." });
+
+            if (request.Npis.Count > 100)
+                return Results.BadRequest(new { error = "Batch size exceeds the 100-NPI limit.", count = request.Npis.Count });
+
+            var invalidNpis = request.Npis
+                .Select((npi, i) => new { npi, index = i })
+                .Where(x => string.IsNullOrWhiteSpace(x.npi))
+                .Select(x => x.index)
+                .ToList();
+
+            if (invalidNpis.Count > 0)
+                return Results.BadRequest(new { error = "One or more NPIs are null or empty.", invalidIndices = invalidNpis });
+
             var results = new List<ProviderVerificationRecord>();
             await foreach (var record in orchestrator.BatchVerifyAsync(
                 request.Npis, request.Tier ?? VerificationTier.Standard, ct))

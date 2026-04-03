@@ -249,6 +249,7 @@ public class Provider
     /// Updated on verification and cached for claims-time lookup.
     /// </summary>
     public int? IntegrityScore { get; set; }
+    [StringLength(50)]
     public string? IntegrityRating { get; set; }
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public DateTimeOffset? NextVerificationDue { get; set; }

@@ -134,7 +134,7 @@ src/
 - [ ] Network adequacy reporting
   (aggregate integrity scores across contracted network)
 
-## Integration with Existing CHO Services
+## Integration with Existing Cloud Health Office Services
 
 ### ProviderContract (PRs #557-566)
 The ProviderVerificationRecord links to the existing ProviderContract

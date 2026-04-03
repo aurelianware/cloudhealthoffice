@@ -2,7 +2,7 @@ namespace CloudHealthOffice.ProviderVerificationEngine.Models;
 
 /// <summary>
 /// Composite provider verification result aggregating all public data sources.
-/// Stored as the canonical verified-provider record in CHO.
+/// Stored as the canonical verified-provider record in Cloud Health Office.
 /// </summary>
 public class ProviderVerificationRecord
 {

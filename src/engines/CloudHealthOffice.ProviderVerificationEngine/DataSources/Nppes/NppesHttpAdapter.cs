@@ -41,14 +41,14 @@ public class NppesHttpAdapter : INppesAdapter
     {
         if (string.IsNullOrWhiteSpace(npi) || npi.Length != 10 || !npi.All(char.IsDigit))
         {
-            _logger.LogWarning("Invalid NPI format: {Npi}", npi);
+            _logger.LogDebug("Invalid NPI format: {Npi}", npi);
             return null;
         }
 
         // Luhn check (NPI uses Luhn with prefix 80840)
         if (!PassesLuhnCheck(npi))
         {
-            _logger.LogWarning("NPI {Npi} fails Luhn validation", npi);
+            _logger.LogDebug("NPI {Npi} fails Luhn validation", npi);
             return null;
         }
 
