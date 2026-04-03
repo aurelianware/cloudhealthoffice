@@ -41,19 +41,19 @@ public class NppesHttpAdapter : INppesAdapter
     {
         if (string.IsNullOrWhiteSpace(npi) || npi.Length != 10 || !npi.All(char.IsDigit))
         {
-            _logger.LogDebug("Invalid NPI format: {Npi}", npi);
+            _logger.LogDebug("Invalid NPI format: {Npi}", SanitizeForLog(npi));
             return null;
         }
 
         // Luhn check (NPI uses Luhn with prefix 80840)
         if (!PassesLuhnCheck(npi))
         {
-            _logger.LogDebug("NPI {Npi} fails Luhn validation", npi);
+            _logger.LogDebug("NPI {Npi} fails Luhn validation", SanitizeForLog(npi));
             return null;
         }
 
         var url = $"?version=2.1&number={npi}";
-        _logger.LogDebug("NPPES lookup: {Url}", url);
+        _logger.LogDebug("NPPES lookup: {Url}", SanitizeForLog(url));
 
         var response = await _http.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
@@ -102,7 +102,7 @@ public class NppesHttpAdapter : INppesAdapter
         queryParams.Add($"limit={Math.Clamp(criteria.Limit, 1, 200)}");
 
         var url = $"?{string.Join("&", queryParams)}";
-        _logger.LogDebug("NPPES search: {Url}", url);
+        _logger.LogDebug("NPPES search: {Url}", SanitizeForLog(url));
 
         var response = await _http.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
@@ -236,6 +236,13 @@ public class NppesHttpAdapter : INppesAdapter
         }
 
         return data;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     /// <summary>
