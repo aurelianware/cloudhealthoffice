@@ -196,6 +196,17 @@ public class ProviderContract
     /// </summary>
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }
+
+    // ── Provider Verification ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Cached integrity score from the ProviderVerificationService.
+    /// Updated on verification and cached for claims-time lookup.
+    /// </summary>
+    public int? IntegrityScore { get; set; }
+    public string? IntegrityRating { get; set; }
+    public DateTimeOffset? LastVerifiedAt { get; set; }
+    public DateTimeOffset? NextVerificationDue { get; set; }
 }
 
 // ── Supporting Types ──────────────────────────────────────────────────────

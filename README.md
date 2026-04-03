@@ -37,8 +37,8 @@ Start with compliance. Expand into claims. Move at your own pace.
 
 |Component           |Count    |Details                                                                                                    |
 |---------------------|---------|-----------------------------------------------------------------------------------------------------------|
-|Microservices        |28       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
-|Calculation Engines  |9        |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store        |
+|Microservices        |29       |C# / .NET 8, multi-tenant, Cosmos + MongoDB dual-repo                                                      |
+|Calculation Engines  |10       |Benefit, Fee Schedule, NCCI, COB, Risk Adj, Encounter, Claims Scrub, Operating Mode, Document Store, Provider Verification|
 |X12 Parsers          |5        |275, 276, 277, 278 (Python), 834 (Node.js)                                                                 |
 |FHIR APIs            |5        |Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory                            |
 |Argo Workflows       |17       |Claims adjudication, EDI ingest, enrollment import, RFAI                                                    |
@@ -81,6 +81,7 @@ Start with compliance. Expand into claims. Move at your own pace.
 |ar-service               |GL accounts, AR balances, cash posting, adjustments|—          |
 |terminology-service      |SNOMED↔ICD-10/CPT/HCPCS terminology crosswalk (FHIR $translate)|278  |
 |provider-contracts-service|Provider contract master management          |—               |
+|provider-verification-service|Multi-source provider verification & integrity scoring|—         |
 |ffs-service              |Fee-for-service rate configuration            |—               |
 
 ### Calculation Engines
