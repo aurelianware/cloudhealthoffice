@@ -309,7 +309,7 @@ public class EndpointContractTests
         await sut.GetQueueSummaryAsync();
 
         handler.RecordedPaths.Should().ContainSingle()
-            .Which.Should().Be("/api/work-queue/summary");
+            .Which.Should().Be("/api/Claims/work-queue/summary");
     }
 
     [Fact]
@@ -324,7 +324,7 @@ public class EndpointContractTests
         await sut.GetQueueItemsAsync(limit: 50);
 
         handler.RecordedPaths.Should().ContainSingle()
-            .Which.Should().StartWith("/api/work-queue/items")
+            .Which.Should().StartWith("/api/Claims/work-queue/items")
             .And.Subject.Should().Contain("limit=50");
     }
 }
