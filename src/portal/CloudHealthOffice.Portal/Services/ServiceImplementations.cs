@@ -2251,7 +2251,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var summary = await _httpClient.GetFromJsonAsync<WorkQueueSummary>($"{baseUrl}/work-queue/summary");
+            var summary = await _httpClient.GetFromJsonAsync<WorkQueueSummary>($"{baseUrl}/Claims/work-queue/summary");
             return summary ?? new WorkQueueSummary();
         }
         catch (HttpRequestException ex)
@@ -2267,7 +2267,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var url = $"{baseUrl}/work-queue/items?limit={limit}";
+            var url = $"{baseUrl}/Claims/work-queue/items?limit={limit}";
             if (!string.IsNullOrEmpty(queueType)) url += $"&queueType={Uri.EscapeDataString(queueType)}";
             if (!string.IsNullOrEmpty(assignedTo)) url += $"&assignedTo={Uri.EscapeDataString(assignedTo)}";
             var items = await _httpClient.GetFromJsonAsync<List<WorkQueueItem>>(url);
@@ -2285,7 +2285,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/assign",
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/assign",
                 new { AssignTo = assignTo });
             response.EnsureSuccessStatusCode();
         }
@@ -2301,7 +2301,7 @@ public class WorkQueueService : IWorkQueueService
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/work-queue/{Uri.EscapeDataString(claimId)}/override",
+            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/override",
                 new { Reason = overrideReason });
             response.EnsureSuccessStatusCode();
         }
