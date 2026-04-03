@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Provider Verification Guide — Cloud Health Office</title>
+  <meta name="description" content="Multi-source provider verification and composite integrity scoring. Aggregates NPPES, OIG/LEIE, PECOS, CMS Open Payments, Medicare Utilization, and FSMB data to produce a 0-100 integrity score for every provider in your network." />
+  <meta name="keywords" content="provider verification, NPI validation, NPPES lookup, OIG exclusion screening, LEIE, PECOS enrollment, CMS Open Payments, provider integrity score, healthcare provider credentialing, network adequacy" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/provider-verification-guide" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/provider-verification-guide" />
+  <meta property="og:title" content="Provider Verification Guide — Cloud Health Office" />
+  <meta property="og:description" content="Multi-source provider verification and composite integrity scoring for healthcare payer organizations." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Provider Verification Guide — Cloud Health Office",
+    "description": "Complete guide to multi-source provider verification and composite integrity scoring: NPPES, OIG/LEIE exclusion screening, PECOS enrollment, CMS Open Payments, and FSMB license verification.",
+    "url": "https://cloudhealthoffice.com/docs/provider-verification-guide",
+    "author": { "@type": "Organization", "name": "Aurelianware, Inc." },
+    "publisher": { "@type": "Organization", "name": "Cloud Health Office", "url": "https://cloudhealthoffice.com" },
+    "datePublished": "2026-04-03",
+    "proficiencyLevel": "Intermediate",
+    "about": [
+      "Provider verification",
+      "NPI validation",
+      "OIG LEIE exclusion screening",
+      "PECOS Medicare enrollment",
+      "CMS Open Payments",
+      "Provider integrity scoring"
+    ],
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://cloudhealthoffice.com" },
+        { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://cloudhealthoffice.com/docs" },
+        { "@type": "ListItem", "position": 3, "name": "Provider Verification Guide", "item": "https://cloudhealthoffice.com/docs/provider-verification-guide" }
+      ]
+    }
+  }
+  </script>
+
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-text">Cloud Health Office</span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/solutions-payers">Solutions</a></li>
+          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/platform">Platform</a></li>
+          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
+          <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer" style="color:#00ff88;">Demo Portal</a></li>
+          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li><a href="/login" style="color:#00ffff; font-weight:bold;">Sign In</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+
+      <!-- Sidebar -->
+      <aside class="docs-sidebar" id="docsSidebar">
+        <div class="docs-sidebar-inner">
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Getting Started</div>
+            <ul>
+              <li><a href="/docs">Docs Home</a></li>
+              <li><a href="/docs/quickstart">Quick Start</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Guides</div>
+            <ul>
+              <li><a href="/docs/compliance">CMS-0057-F Compliance</a></li>
+              <li><a href="/docs/architecture">Architecture</a></li>
+              <li><a href="/docs/api">API Reference</a></li>
+              <li><a href="/docs/deployment">Deployment</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">User Guides</div>
+            <ul>
+              <li><a href="/docs/finance-guide">Finance Modules</a></li>
+              <li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li>
+              <li><a href="/docs/provider-verification-guide" class="active">Provider Verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">On This Page</div>
+            <ul class="toc-sub">
+              <li><a href="#overview">Overview</a></li>
+              <li><a href="#data-sources">Data Sources</a></li>
+              <li><a href="#integrity-scoring">Integrity Scoring</a></li>
+              <li><a href="#verification-tiers">Verification Tiers</a></li>
+              <li><a href="#api-reference">API Reference</a></li>
+              <li><a href="#portal-integration">Portal Integration</a></li>
+              <li><a href="#claims-integration">Claims Integration</a></li>
+              <li><a href="#batch-reverification">Batch Re-verification</a></li>
+            </ul>
+          </div>
+          <div class="docs-sidebar-section">
+            <div class="docs-sidebar-section-title">Resources</div>
+            <ul>
+              <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub Repo</a></li>
+              <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+              <li><a href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" target="_blank" rel="noopener noreferrer">API Sandbox</a></li>
+              <li><a href="/release-notes">Release Notes</a></li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="docs-content">
+        <div class="docs-breadcrumb">
+          <a href="/">Home</a>
+          <span class="sep">&#x25B8;</span>
+          <a href="/docs">Docs</a>
+          <span class="sep">&#x25B8;</span>
+          <span class="current">Provider Verification Guide</span>
+        </div>
+
+        <h1>Provider Verification Guide</h1>
+        <p class="docs-subtitle">
+          Multi-source provider verification and composite integrity scoring. The Provider Verification Service aggregates six federal data sources into a single 0&ndash;100 integrity score for every provider in your network &mdash; surfaced in the portal, cached on the provider record, and available as a real-time claims adjudication pre-check.
+        </p>
+
+        <!-- ============================================================ -->
+        <!-- 1. Overview -->
+        <!-- ============================================================ -->
+        <h2 id="overview">1. Overview</h2>
+
+        <p>
+          Health plans are required to verify that providers are eligible to participate in federal healthcare programs before paying claims. An excluded provider payment triggers False Claims Act liability. A deactivated NPI means the provider cannot legally bill. An expired license means the provider cannot legally practice.
+        </p>
+        <p>
+          The CHO Provider Verification Service automates this process. It queries up to six public and licensed data sources in parallel, normalizes the results, and produces a composite integrity score with per-dimension breakdowns and machine-readable flags. The score is cached on the <code>Provider</code> and <code>ProviderContract</code> entities for sub-millisecond lookup at claims adjudication time.
+        </p>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Why this matters</div>
+          <p>OIG recovers over $3 billion annually from providers excluded from federal healthcare programs. A single excluded-provider claim paid in error can trigger treble damages under the False Claims Act. Automated, continuous verification replaces manual quarterly spreadsheet checks with real-time, auditable screening.</p>
+        </div>
+
+        <div class="docs-hub-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top: 20px;">
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F50D;</span>
+            <h3>6 Data Sources</h3>
+            <p>NPPES, OIG/LEIE, PECOS, CMS Open Payments, Medicare Utilization, and FSMB license data &mdash; queried in parallel.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x1F4CA;</span>
+            <h3>0&ndash;100 Score</h3>
+            <p>Weighted composite score across five dimensions with configurable weights per deployment. Clear, Advisory, Caution, Alert, or Blocked rating.</p>
+          </div>
+          <div class="docs-hub-card" style="cursor:default;">
+            <span class="docs-hub-card-icon">&#x26A1;</span>
+            <h3>Claims Pre-check</h3>
+            <p>Cached integrity score on the provider record enables sub-millisecond claims adjudication gating without a network round-trip.</p>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 2. Data Sources -->
+        <!-- ============================================================ -->
+        <h2 id="data-sources">2. Data Sources</h2>
+
+        <p>Each data source is implemented as an independent adapter behind a clean interface. Adapters handle their own HTTP clients, retry policies, response normalization, and caching. The orchestrator fans out to all configured adapters in parallel and assembles the results.</p>
+
+        <table>
+          <thead>
+            <tr><th>Source</th><th>What It Provides</th><th>Auth</th><th>Update Frequency</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>NPPES Registry</strong></td>
+              <td>NPI validation, provider demographics, taxonomy codes, practice addresses, enumeration status</td>
+              <td>None (free)</td>
+              <td>Real-time API + weekly bulk</td>
+            </tr>
+            <tr>
+              <td><strong>OIG/LEIE</strong></td>
+              <td>Federal exclusion screening &mdash; providers barred from Medicare/Medicaid</td>
+              <td>None (bulk download)</td>
+              <td>Monthly</td>
+            </tr>
+            <tr>
+              <td><strong>PECOS</strong></td>
+              <td>Medicare FFS enrollment status, provider type, specialty, reassignment relationships</td>
+              <td>None (bulk CSV)</td>
+              <td>Monthly</td>
+            </tr>
+            <tr>
+              <td><strong>CMS Open Payments</strong></td>
+              <td>Industry payments to providers &mdash; conflict of interest screening</td>
+              <td>None (SODA API)</td>
+              <td>Annual (June release)</td>
+            </tr>
+            <tr>
+              <td><strong>Medicare Utilization</strong></td>
+              <td>Service volumes, top HCPCS codes, Part D prescribing patterns, opioid indicators</td>
+              <td>None (SODA API)</td>
+              <td>Annual</td>
+            </tr>
+            <tr>
+              <td><strong>FSMB (Premium)</strong></td>
+              <td>State license verification, disciplinary actions, DEA registration, board certifications</td>
+              <td>Paid API contract</td>
+              <td>Real-time</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-success">
+          <div class="callout-title">NLM Taxonomy Crosswalk</div>
+          <p>NPPES taxonomy codes are automatically enriched with Medicare provider type and specialty codes via the NLM Clinical Tables API. This bridges the gap between NUCC taxonomy codes used in NPPES and Medicare specialty codes used in claims adjudication.</p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 3. Integrity Scoring -->
+        <!-- ============================================================ -->
+        <h2 id="integrity-scoring">3. Integrity Scoring</h2>
+
+        <p>
+          The composite integrity score is a weighted average of five independently-scored dimensions. Each dimension produces a 0&ndash;100 score. Dimensions that were not evaluated (e.g., FSMB when not configured) are excluded from the weighted average rather than counted as zero.
+        </p>
+
+        <h3>Scoring dimensions</h3>
+
+        <table>
+          <thead>
+            <tr><th>Dimension</th><th>Default Weight</th><th>What It Measures</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>NPI Validation</strong></td><td>30</td><td>Active NPI, primary taxonomy present, practice location on file</td></tr>
+            <tr><td><strong>Exclusion Screening</strong></td><td>30</td><td>OIG/LEIE/SAM exclusion status &mdash; <strong>hard stop if excluded (score = 0)</strong></td></tr>
+            <tr><td><strong>Medicare Enrollment</strong></td><td>15</td><td>PECOS enrollment status, provider type, reassignment relationships</td></tr>
+            <tr><td><strong>License Verification</strong></td><td>15</td><td>Active state licenses, disciplinary actions, DEA status (FSMB tier)</td></tr>
+            <tr><td><strong>Conflict of Interest</strong></td><td>10</td><td>CMS Open Payments total &mdash; ownership interests and high-value transfers</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Rating bands</h3>
+
+        <table>
+          <thead>
+            <tr><th>Score Range</th><th>Rating</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>80&ndash;100</td><td><strong>Clear</strong></td><td>All checks passed. No action required.</td></tr>
+            <tr><td>60&ndash;79</td><td><strong>Advisory</strong></td><td>Minor warnings (e.g., address mismatch, no primary taxonomy). Informational only.</td></tr>
+            <tr><td>40&ndash;59</td><td><strong>Caution</strong></td><td>Significant concerns (e.g., expired license, moderate industry payments). Review recommended.</td></tr>
+            <tr><td>20&ndash;39</td><td><strong>Alert</strong></td><td>Critical issues (e.g., possible exclusion match pending review). Adjudication hold recommended.</td></tr>
+            <tr><td>0&ndash;19</td><td><strong>Blocked</strong></td><td>Hard stop. Confirmed LEIE exclusion or deactivated NPI. Claims must not be paid.</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">Hard stops override scoring</div>
+          <p>If a provider is confirmed excluded (OIG/LEIE), the composite score is immediately set to <strong>0</strong> and the rating to <strong>Blocked</strong> regardless of all other dimensions. This is not a weighted calculation &mdash; it is an absolute override.</p>
+        </div>
+
+        <h3>Configurable weights</h3>
+
+        <p>Scoring weights are configurable per deployment via <code>appsettings.json</code> or environment variables. This allows health plans to tune the composite score based on their risk tolerance and regulatory requirements.</p>
+
+<pre><code><span class="code-comment"># Override scoring weights via environment variables</span>
+ProviderVerification__ScoringWeights__NpiValidation=30
+ProviderVerification__ScoringWeights__ExclusionScreening=30
+ProviderVerification__ScoringWeights__MedicareEnrollment=15
+ProviderVerification__ScoringWeights__LicenseVerification=15
+ProviderVerification__ScoringWeights__ConflictOfInterest=10</code></pre>
+
+        <!-- ============================================================ -->
+        <!-- 4. Verification Tiers -->
+        <!-- ============================================================ -->
+        <h2 id="verification-tiers">4. Verification Tiers</h2>
+
+        <p>The service supports three verification tiers that control which data sources are queried. Higher tiers include all sources from lower tiers.</p>
+
+        <table>
+          <thead>
+            <tr><th>Tier</th><th>Sources</th><th>Cost</th><th>Use Case</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Basic</strong></td>
+              <td>NPPES + NLM Crosswalk</td>
+              <td>Free, instant</td>
+              <td>Quick NPI validation during data entry or enrollment</td>
+            </tr>
+            <tr>
+              <td><strong>Standard</strong> (default)</td>
+              <td>+ LEIE/SAM + PECOS + Open Payments + Utilization</td>
+              <td>Free, may use cached bulk data</td>
+              <td>Network onboarding, monthly re-verification, credentialing</td>
+            </tr>
+            <tr>
+              <td><strong>Premium</strong></td>
+              <td>+ FSMB license verification</td>
+              <td>Requires paid FSMB contract</td>
+              <td>Full credentialing, delegated credentialing, high-risk providers</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- ============================================================ -->
+        <!-- 5. API Reference -->
+        <!-- ============================================================ -->
+        <h2 id="api-reference">5. API Reference</h2>
+
+        <p>All endpoints are available at <code>/api/v1/providers</code>. The service exposes Swagger UI at <code>/swagger</code> for interactive testing.</p>
+
+        <h3>Verify a single provider</h3>
+
+<pre><code><span class="code-comment"># Full multi-source verification (Standard tier)</span>
+curl -s http://localhost:8080/api/v1/providers/1497758544/verify | jq .
+
+<span class="code-comment"># Premium tier — includes FSMB license verification</span>
+curl -s "http://localhost:8080/api/v1/providers/1497758544/verify?tier=Premium" | jq .</code></pre>
+
+        <p>Returns the full <code>ProviderVerificationRecord</code> including NPPES data, exclusion screening, PECOS status, Open Payments summary, and the composite integrity score with per-dimension breakdowns.</p>
+
+        <h3>NPPES lookup (lightweight)</h3>
+
+<pre><code><span class="code-comment"># Direct NPPES NPI lookup — no exclusion screening or scoring</span>
+curl -s http://localhost:8080/api/v1/providers/1497758544/nppes | jq .
+
+<span class="code-comment"># Search by name and state</span>
+curl -s "http://localhost:8080/api/v1/providers/search/nppes?\
+lastName=Smith&amp;state=TX&amp;limit=20" | jq .</code></pre>
+
+        <h3>Integrity score only (claims pre-check)</h3>
+
+<pre><code><span class="code-comment"># Lightweight endpoint for claims adjudication gating</span>
+curl -s http://localhost:8080/api/v1/providers/1497758544/integrity-score | jq .
+
+<span class="code-comment"># Response</span>
+{
+  "npi": "1497758544",
+  "compositeScore": 92,
+  "rating": "Clear",
+  "status": "Verified",
+  "flags": [],
+  "verifiedAt": "2026-04-03T12:00:00Z"
+}</code></pre>
+
+        <h3>Batch verification</h3>
+
+<pre><code><span class="code-comment"># Verify up to 100 providers in a single request</span>
+curl -s -X POST http://localhost:8080/api/v1/providers/verify/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "npis": ["1497758544", "1234567893", "1003000126"],
+    "tier": "Standard"
+  }' | jq .
+
+<span class="code-comment"># Response includes per-provider results and aggregate summary</span>
+{
+  "count": 3,
+  "summary": {
+    "verified": 2,
+    "warnings": 1,
+    "excluded": 0,
+    "failed": 0,
+    "manualReview": 0
+  },
+  "results": [ ... ]
+}</code></pre>
+
+        <!-- ============================================================ -->
+        <!-- 6. Portal Integration -->
+        <!-- ============================================================ -->
+        <h2 id="portal-integration">6. Portal Integration</h2>
+
+        <p>
+          The Provider Verification page is accessible in the Blazor portal under <strong>Members &amp; Providers &rarr; Provider Verification</strong>. The integrity score will surface on the provider profile card as a color-coded badge:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Rating</th><th>Badge Color</th><th>Portal Behavior</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Clear (80&ndash;100)</td><td>Green</td><td>No action required. Normal claims processing.</td></tr>
+            <tr><td>Advisory (60&ndash;79)</td><td>Cyan</td><td>Informational flags displayed. No claims impact.</td></tr>
+            <tr><td>Caution (40&ndash;59)</td><td>Yellow</td><td>Warning banner on provider profile. Review recommended.</td></tr>
+            <tr><td>Alert (20&ndash;39)</td><td>Orange</td><td>Claims held for manual review. Notification sent to compliance.</td></tr>
+            <tr><td>Blocked (0&ndash;19)</td><td>Red</td><td>Claims auto-denied. Provider flagged for immediate review.</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ============================================================ -->
+        <!-- 7. Claims Integration -->
+        <!-- ============================================================ -->
+        <h2 id="claims-integration">7. Claims Integration</h2>
+
+        <p>
+          The integrity score is cached on the <code>Provider</code> and <code>ProviderContract</code> entities as four fields:
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>IntegrityScore</code></td><td><code>int?</code></td><td>Composite 0&ndash;100 score</td></tr>
+            <tr><td><code>IntegrityRating</code></td><td><code>string?</code></td><td>Clear, Advisory, Caution, Alert, or Blocked</td></tr>
+            <tr><td><code>LastVerifiedAt</code></td><td><code>DateTimeOffset?</code></td><td>Timestamp of last verification</td></tr>
+            <tr><td><code>NextVerificationDue</code></td><td><code>DateTimeOffset?</code></td><td>When re-verification is scheduled (default: 30 days)</td></tr>
+          </tbody>
+        </table>
+
+        <p>During claims adjudication, the Claims Engine reads the cached <code>IntegrityRating</code> from the provider record. If the rating is <strong>Blocked</strong>, the claim is denied with CARC 96 (non-covered charge) and RARC N56 (provider not eligible). If the rating is <strong>Alert</strong>, the claim is pended to the compliance work queue. No network call to the verification service is needed at adjudication time.</p>
+
+        <!-- ============================================================ -->
+        <!-- 8. Batch Re-verification -->
+        <!-- ============================================================ -->
+        <h2 id="batch-reverification">8. Batch Re-verification</h2>
+
+        <p>
+          The service supports scheduled full-network re-verification as a background job. The default re-verification interval is 30 days, configurable via <code>ProviderVerification:ReverificationInterval</code>.
+        </p>
+
+<pre><code><span class="code-comment"># Configuration for re-verification scheduling</span>
+ProviderVerification__ReverificationInterval=30.00:00:00
+ProviderVerification__MaxConcurrentVerifications=10</code></pre>
+
+        <p>The batch endpoint uses a semaphore to throttle concurrent verifications, preventing rate-limit issues with upstream APIs. For full-network re-verification of thousands of providers, the recommended approach is to use the batch background worker rather than the HTTP batch endpoint.</p>
+
+        <h3>Rollout roadmap</h3>
+
+        <table>
+          <thead>
+            <tr><th>Phase</th><th>Sources</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Phase 1</td><td>NPPES Registry API (real-time + NLM crosswalk)</td><td><span class="badge badge-production">Implemented</span></td></tr>
+            <tr><td>Phase 2</td><td>OIG/LEIE + SAM.gov exclusion screening</td><td><span class="badge">Planned</span></td></tr>
+            <tr><td>Phase 3</td><td>PECOS enrollment + CMS Open Payments</td><td><span class="badge">Planned</span></td></tr>
+            <tr><td>Phase 4</td><td>Medicare Utilization + Part D prescribing</td><td><span class="badge">Planned</span></td></tr>
+            <tr><td>Phase 5</td><td>FSMB license verification (paid tier)</td><td><span class="badge">Planned</span></td></tr>
+          </tbody>
+        </table>
+
+        <!-- Pager -->
+        <div class="docs-pager">
+          <a href="/docs/terminology-guide">
+            <div class="pager-label">&larr; Previous</div>
+            <div class="pager-title">Terminology Crosswalk Guide</div>
+          </a>
+          <a href="/docs/api" class="next">
+            <div class="pager-label">Next &rarr;</div>
+            <div class="pager-title">API Reference</div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>The modern integration layer for health plan core administration systems. CMS-0057-F compliant, multi-clearinghouse EDI, FHIR R4 APIs.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; v4.2.0 Production</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/pricing-api">Repricing API</a></li>
+            <li><a href="/release-notes">Release Notes</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/docs/api">API Reference</a></li>
+            <li><a href="/docs/deployment">Deployment</a></li>
+            <li><a href="https://portal.cloudhealthoffice.com" target="_blank" rel="noopener noreferrer">Demo Portal</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Contact</h5>
+          <ul>
+            <li><a href="https://portal.cloudhealthoffice.com/contact-sales">Contact Sales</a></li>
+            <li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li>
+            <li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li>
+            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('docsMobileToggle');
+    const sidebar = document.getElementById('docsSidebar');
+    const overlay = document.getElementById('docsSidebarOverlay');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); });
+      overlay.addEventListener('click', () => { sidebar.classList.remove('open'); overlay.classList.remove('open'); });
+    }
+  </script>
+</body>
+</html>

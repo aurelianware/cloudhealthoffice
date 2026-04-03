@@ -99,6 +99,24 @@ Start with compliance. Expand into claims. Move at your own pace.
 |ClaimsScrubEngine   |Pre-adjudication validation: 20+ rules across 6 categories (data completeness, code validation, date logic, amount logic, provider validation, modifier validation)|
 |OperatingMode       |Per-engine, per-tenant Augment/Replace mode toggle with AugmentResult&lt;T&gt; for parallel-run comparison against legacy CAPS|
 |DocumentStore       |IDocumentStore abstraction with Azure Blob Storage + InMemory providers for attachment and document management|
+|ProviderVerificationEngine|Multi-source provider verification: NPPES, OIG/LEIE, PECOS, Open Payments, Medicare Utilization, FSMB. Composite 0–100 integrity scoring with configurable dimension weights|
+
+### Provider Verification
+
+The Provider Verification Service (service #29) aggregates six federal and licensed data sources to produce a composite integrity score for every provider in your network. The score is cached on the `Provider` and `ProviderContract` entities for sub-millisecond claims adjudication gating.
+
+|Data Source         |Purpose                                                                                                     |
+|--------------------|------------------------------------------------------------------------------------------------------------|
+|NPPES Registry      |NPI validation, provider demographics, taxonomy codes, practice addresses, enumeration status               |
+|OIG/LEIE            |Federal exclusion screening — providers barred from Medicare/Medicaid participation                          |
+|PECOS               |Medicare FFS enrollment status, provider type, specialty, reassignment relationships                        |
+|CMS Open Payments   |Industry payments to providers — conflict of interest screening                                              |
+|Medicare Utilization|Service volumes, top HCPCS codes, Part D prescribing patterns                                               |
+|FSMB (Premium)      |State license verification, disciplinary actions, DEA registration, board certifications                    |
+
+The composite score uses five weighted dimensions (NPI 30%, Exclusion 30%, Medicare 15%, License 15%, COI 10%) and maps to a rating: **Clear** (80–100), **Advisory** (60–79), **Caution** (40–59), **Alert** (20–39), or **Blocked** (0–19). Excluded providers trigger an immediate hard stop (score = 0, Blocked) regardless of other dimensions.
+
+API endpoints: `GET /api/v1/providers/{npi}/verify`, `GET /api/v1/providers/{npi}/nppes`, `GET /api/v1/providers/{npi}/integrity-score`, `GET /api/v1/providers/search/nppes`, `POST /api/v1/providers/verify/batch`. Full documentation at [docs/provider-verification-guide](https://cloudhealthoffice.com/docs/provider-verification-guide).
 
 ### Claims Adjudication Pipeline
 
@@ -270,6 +288,7 @@ Built by a solo founder with 25+ years of payer IT experience and AI-assisted de
 |[Attachment Architecture](docs/features/AUTHORIZATION-ATTACHMENTS-ARCHITECTURE.md)|275/277/RFAI/824 attachment workflows         |
 |[EDI Workflows](docs/features/EDI-WORKFLOWS-COMPLETE.md)                          |All X12 transaction processing flows          |
 |[ADR Index](docs/adr/)                                                            |Architecture Decision Records                 |
+|[Provider Verification](docs/provider-verification/ARCHITECTURE.md)               |Multi-source verification architecture        |
 
 ## Who This Is For
 
