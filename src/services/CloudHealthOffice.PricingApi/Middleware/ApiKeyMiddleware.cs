@@ -30,8 +30,9 @@ public class ApiKeyMiddleware
     {
         var path = context.Request.Path.Value ?? "";
 
-        // Skip auth for exempt paths
-        if (ExemptPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        // Skip auth for exempt paths (segment-aware to avoid matching e.g. /api/v1/lookup2)
+        var requestPath = context.Request.Path;
+        if (ExemptPaths.Any(p => requestPath.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);
             return;
