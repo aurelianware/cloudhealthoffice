@@ -302,7 +302,7 @@ public class CoverageService : ICoverageService
         var baseUrl = _configuration["Services:CoverageService"];
         try
         {
-            var coverage = await _httpClient.GetFromJsonAsync<List<Coverage>>($"{baseUrl}/v1/coverage/member/{memberId}");
+            var coverage = await _httpClient.GetFromJsonAsync<List<Coverage>>($"{baseUrl}/v1/coverage/member/{memberId}/history");
             return coverage ?? new List<Coverage>();
         }
         catch (HttpRequestException ex)
