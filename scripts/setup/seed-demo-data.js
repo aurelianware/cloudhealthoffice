@@ -635,7 +635,7 @@ function pickClaimCpt(claimIdx) {
 // Track per-member accumulations for consistency
 const memberAccumData = {};
 members.forEach(function (m) {
-  memberAccumData[m.memberId] = { deductible: 0, copay: 0, coinsurance: 0, planPaid: 0, ptVisits: 0, mhVisits: 0 };
+  memberAccumData[m.MemberId] = { deductible: 0, copay: 0, coinsurance: 0, planPaid: 0, ptVisits: 0, mhVisits: 0 };
 });
 
 const claims = [];
