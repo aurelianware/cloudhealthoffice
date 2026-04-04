@@ -118,7 +118,7 @@ const COLLECTIONS = [
 ];
 
 COLLECTIONS.forEach(function (col) {
-  const r = choDb[col].deleteMany({ tenantId: TENANT_ID });
+  const r = choDb[col].deleteMany({ TenantId: TENANT_ID });
   if (r.deletedCount > 0) print("  Cleared " + r.deletedCount + " from " + col);
 });
 
@@ -128,18 +128,18 @@ COLLECTIONS.forEach(function (col) {
 
 function makePlanBenefits(copayPCP, copaySpec, coinsIn, coinsOut, erCopay, deductAppliesPCP) {
   return [
-    { id: "svc-pcp",     serviceCategory: "PrimaryCare",    description: "Primary care office visit",         cptCodes: ["99213","99214","99215"],   inNetworkCopay: copayPCP, outNetworkCopay: copayPCP*2, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: deductAppliesPCP, priorAuthRequired: false },
-    { id: "svc-spec",    serviceCategory: "Specialist",     description: "Specialist office visit",           cptCodes: ["99243","99244","99245"],   inNetworkCopay: copaySpec, outNetworkCopay: copaySpec*2, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: false },
-    { id: "svc-er",      serviceCategory: "Emergency",      description: "Emergency room visit",              cptCodes: ["99283","99284","99285"],   inNetworkCopay: erCopay, outNetworkCopay: erCopay, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsIn, deductibleApplies: true, priorAuthRequired: false },
-    { id: "svc-inpt",    serviceCategory: "Inpatient",      description: "Inpatient hospital stay",           cptCodes: ["99221","99222","99223"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: true },
-    { id: "svc-outpt",   serviceCategory: "OutpatientSurg", description: "Outpatient surgery",                cptCodes: ["27447","29881","49505"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: true },
-    { id: "svc-img",     serviceCategory: "Imaging",        description: "Advanced imaging (MRI/CT/PET)",     cptCodes: ["70553","71260","73721"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: true },
-    { id: "svc-lab",     serviceCategory: "Laboratory",     description: "Laboratory / pathology services",   cptCodes: ["80053","85025","88305"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: false },
-    { id: "svc-pt",      serviceCategory: "PhysicalTherapy",description: "Physical therapy",                  cptCodes: ["97110","97140","97530"],   inNetworkCopay: copayPCP, outNetworkCopay: copayPCP*2, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: true },
-    { id: "svc-mh",      serviceCategory: "MentalHealth",   description: "Outpatient mental health",          cptCodes: ["90834","90837","90847"],   inNetworkCopay: copayPCP, outNetworkCopay: copayPCP*2, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: false, priorAuthRequired: false },
-    { id: "svc-prev",    serviceCategory: "Preventive",     description: "Preventive care / wellness visit",  cptCodes: ["99385","99395","99396"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: 0, outNetworkCoinsurance: 0, deductibleApplies: false, priorAuthRequired: false },
-    { id: "svc-rx-gen",  serviceCategory: "PharmacyGeneric", description: "Generic drugs (Tier 1)",           cptCodes: [],                          inNetworkCopay: 10, outNetworkCopay: 20, inNetworkCoinsurance: 0, outNetworkCoinsurance: 0, deductibleApplies: false, priorAuthRequired: false },
-    { id: "svc-dme",     serviceCategory: "DME",            description: "Durable medical equipment",         cptCodes: ["E0601","E0260","L3670"],   inNetworkCopay: 0, outNetworkCopay: 0, inNetworkCoinsurance: coinsIn, outNetworkCoinsurance: coinsOut, deductibleApplies: true, priorAuthRequired: true },
+    { Id: "svc-pcp",     ServiceCategory: "PrimaryCare",    Description: "Primary care office visit",         CptCodes: ["99213","99214","99215"],   InNetworkCopay: copayPCP, OutNetworkCopay: copayPCP*2, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: deductAppliesPCP, PriorAuthRequired: false },
+    { Id: "svc-spec",    ServiceCategory: "Specialist",     Description: "Specialist office visit",           CptCodes: ["99243","99244","99245"],   InNetworkCopay: copaySpec, OutNetworkCopay: copaySpec*2, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: false },
+    { Id: "svc-er",      ServiceCategory: "Emergency",      Description: "Emergency room visit",              CptCodes: ["99283","99284","99285"],   InNetworkCopay: erCopay, OutNetworkCopay: erCopay, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsIn, DeductibleApplies: true, PriorAuthRequired: false },
+    { Id: "svc-inpt",    ServiceCategory: "Inpatient",      Description: "Inpatient hospital stay",           CptCodes: ["99221","99222","99223"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: true },
+    { Id: "svc-outpt",   ServiceCategory: "OutpatientSurg", Description: "Outpatient surgery",                CptCodes: ["27447","29881","49505"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: true },
+    { Id: "svc-img",     ServiceCategory: "Imaging",        Description: "Advanced imaging (MRI/CT/PET)",     CptCodes: ["70553","71260","73721"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: true },
+    { Id: "svc-lab",     ServiceCategory: "Laboratory",     Description: "Laboratory / pathology services",   CptCodes: ["80053","85025","88305"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: false },
+    { Id: "svc-pt",      ServiceCategory: "PhysicalTherapy",Description: "Physical therapy",                  CptCodes: ["97110","97140","97530"],   InNetworkCopay: copayPCP, OutNetworkCopay: copayPCP*2, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: true },
+    { Id: "svc-mh",      ServiceCategory: "MentalHealth",   Description: "Outpatient mental health",          CptCodes: ["90834","90837","90847"],   InNetworkCopay: copayPCP, OutNetworkCopay: copayPCP*2, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: false, PriorAuthRequired: false },
+    { Id: "svc-prev",    ServiceCategory: "Preventive",     Description: "Preventive care / wellness visit",  CptCodes: ["99385","99395","99396"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: 0, OutNetworkCoinsurance: 0, DeductibleApplies: false, PriorAuthRequired: false },
+    { Id: "svc-rx-gen",  ServiceCategory: "PharmacyGeneric", Description: "Generic drugs (Tier 1)",           CptCodes: [],                          InNetworkCopay: 10, OutNetworkCopay: 20, InNetworkCoinsurance: 0, OutNetworkCoinsurance: 0, DeductibleApplies: false, PriorAuthRequired: false },
+    { Id: "svc-dme",     ServiceCategory: "DME",            Description: "Durable medical equipment",         CptCodes: ["E0601","E0260","L3670"],   InNetworkCopay: 0, OutNetworkCopay: 0, InNetworkCoinsurance: coinsIn, OutNetworkCoinsurance: coinsOut, DeductibleApplies: true, PriorAuthRequired: true },
   ];
 }
 
@@ -154,31 +154,31 @@ const benefitPlansData = [
 const benefitPlans = benefitPlansData.map(function (p) {
   return {
     _id: makeId("plan", p.idx),
-    tenantId: TENANT_ID,
-    planId: makeId("plan", p.idx),
-    planName: p.name,
-    payer: "CloudHealthOffice Demo Payer",
-    effectiveDate: new Date("2025-01-01"),
-    terminationDate: null,
-    planType: p.type,
-    metalLevel: p.metal,
-    lineOfBusiness: p.lob,
-    costSharing: {
-      individualDeductible: p.indDed,
-      familyDeductible: p.famDed,
-      individualOutOfPocketMax: p.indOop,
-      familyOutOfPocketMax: p.famOop,
-      inNetworkDeductible: p.indDed,
-      outOfNetworkDeductible: p.indDed * 2,
-      inNetworkOutOfPocketMax: p.indOop,
-      outOfNetworkOutOfPocketMax: p.indOop * 2
+    TenantId: TENANT_ID,
+    PlanId: makeId("plan", p.idx),
+    PlanName: p.name,
+    Payer: "CloudHealthOffice Demo Payer",
+    EffectiveDate: new Date("2025-01-01"),
+    TerminationDate: null,
+    PlanType: p.type,
+    MetalLevel: p.metal,
+    LineOfBusiness: p.lob,
+    CostSharing: {
+      IndividualDeductible: p.indDed,
+      FamilyDeductible: p.famDed,
+      IndividualOutOfPocketMax: p.indOop,
+      FamilyOutOfPocketMax: p.famOop,
+      InNetworkDeductible: p.indDed,
+      OutOfNetworkDeductible: p.indDed * 2,
+      InNetworkOutOfPocketMax: p.indOop,
+      OutOfNetworkOutOfPocketMax: p.indOop * 2
     },
-    benefits: makePlanBenefits(p.copayPCP, p.copaySpec, p.coinsIn, p.coinsOut, p.erCopay, p.dedPCP),
-    networkTiers: ["Tier1", "Tier2"],
-    isActive: true,
-    createdDate: now,
-    modifiedDate: now,
-    createdBy: "seed-script"
+    Benefits: makePlanBenefits(p.copayPCP, p.copaySpec, p.coinsIn, p.coinsOut, p.erCopay, p.dedPCP),
+    NetworkTiers: ["Tier1", "Tier2"],
+    IsActive: true,
+    CreatedDate: now,
+    ModifiedDate: now,
+    CreatedBy: "seed-script"
   };
 });
 choDb.BenefitPlans.insertMany(benefitPlans);
@@ -205,37 +205,37 @@ const sponsorsData = [
 const sponsors = sponsorsData.map(function (s) {
   return {
     _id: makeId("spon", s.idx),
-    tenantId: TENANT_ID,
-    groupNumber: s.grp,
-    employerName: s.name,
-    taxId: "74-" + String(3200000 + s.idx * 111111).substring(0, 7),
-    address: (s.idx * 200) + " " + pick(["Congress Ave","Main St","Commerce St","Lamar Blvd","Guadalupe St"]) + ", Suite " + (s.idx * 100),
-    city: s.city,
-    state: s.state,
-    zipCode: s.zip,
-    contactName: pick(["Patricia","Robert","Linda","James","Maria"]) + " " + pick(["Garza","Tran","Davis","Park","Rivera"]),
-    contactPhone: "512" + String(2000000 + s.idx * 111111),
-    contactEmail: "benefits@sponsor-" + s.idx + ".test",
-    effectiveDate: new Date("2025-01-01"),
-    terminationDate: null,
-    status: "Active",
-    lineOfBusiness: s.idx === 5 ? "Medicaid" : "Commercial",
-    groupSizeTier: s.tier,
-    billingInfo: {
-      premiumAmount: s.premium,
-      frequency: "Monthly",
-      billingDay: s.idx <= 2 ? 1 : 15,
-      billingAccountNumber: s.grp + "-BA-001",
-      paymentMethod: s.idx === 5 ? "Wire" : "ACH",
-      gracePeriodDays: 30
+    TenantId: TENANT_ID,
+    GroupNumber: s.grp,
+    EmployerName: s.name,
+    TaxId: "74-" + String(3200000 + s.idx * 111111).substring(0, 7),
+    Address: (s.idx * 200) + " " + pick(["Congress Ave","Main St","Commerce St","Lamar Blvd","Guadalupe St"]) + ", Suite " + (s.idx * 100),
+    City: s.city,
+    State: s.state,
+    ZipCode: s.zip,
+    ContactName: pick(["Patricia","Robert","Linda","James","Maria"]) + " " + pick(["Garza","Tran","Davis","Park","Rivera"]),
+    ContactPhone: "512" + String(2000000 + s.idx * 111111),
+    ContactEmail: "benefits@sponsor-" + s.idx + ".test",
+    EffectiveDate: new Date("2025-01-01"),
+    TerminationDate: null,
+    Status: "Active",
+    LineOfBusiness: s.idx === 5 ? "Medicaid" : "Commercial",
+    GroupSizeTier: s.tier,
+    BillingInfo: {
+      PremiumAmount: s.premium,
+      Frequency: "Monthly",
+      BillingDay: s.idx <= 2 ? 1 : 15,
+      BillingAccountNumber: s.grp + "-BA-001",
+      PaymentMethod: s.idx === 5 ? "Wire" : "ACH",
+      GracePeriodDays: 30
     },
-    benefitPlanIds: s.plans.map(function (p) { return makeId("plan", p); }),
-    totalMembers: 0,
-    totalDependents: 0,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    BenefitPlanIds: s.plans.map(function (p) { return makeId("plan", p); }),
+    TotalMembers: 0,
+    TotalDependents: 0,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   };
 });
 choDb.Sponsors.insertMany(sponsors);
@@ -286,47 +286,47 @@ individualProviders.forEach(function (p) {
   const isOon = p.idx > 20; // all individual are in-network
   providers.push({
     _id: makeId("prov", p.idx),
-    tenantId: TENANT_ID,
-    npi: npi,
-    providerType: "Individual",
-    firstName: p.first,
-    lastName: p.last,
-    middleName: String.fromCharCode(65 + (p.idx % 26)),
-    credentials: p.cred,
-    organizationName: null,
-    primarySpecialty: p.spec,
-    taxonomyCode: p.tax,
-    secondarySpecialties: [],
-    address: (1000 + p.idx * 111) + " " + streets[p.idx % streets.length] + ", Suite " + (100 + p.idx * 10),
-    city: cities[p.idx % cities.length],
-    state: "TX",
-    zipCode: "78" + String(700 + p.idx).substring(0, 3),
-    phone: "512" + String(9870000 + p.idx * 1111),
-    fax: "512" + String(9870001 + p.idx * 1111),
-    email: "provider-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
-    networkParticipations: [{
-      planId: makeId("plan", 1),
-      lineOfBusiness: "Commercial",
-      networkTier: "Tier1",
-      effectiveDate: new Date("2025-01-01"),
-      terminationDate: null,
-      acceptingNewPatients: true
+    TenantId: TENANT_ID,
+    NPI: npi,
+    ProviderType: "Individual",
+    FirstName: p.first,
+    LastName: p.last,
+    MiddleName: String.fromCharCode(65 + (p.idx % 26)),
+    Credentials: p.cred,
+    OrganizationName: null,
+    PrimarySpecialty: p.spec,
+    TaxonomyCode: p.tax,
+    SecondarySpecialties: [],
+    Address: (1000 + p.idx * 111) + " " + streets[p.idx % streets.length] + ", Suite " + (100 + p.idx * 10),
+    City: cities[p.idx % cities.length],
+    State: "TX",
+    ZipCode: "78" + String(700 + p.idx).substring(0, 3),
+    Phone: "512" + String(9870000 + p.idx * 1111),
+    Fax: "512" + String(9870001 + p.idx * 1111),
+    Email: "provider-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
+    NetworkParticipations: [{
+      PlanId: makeId("plan", 1),
+      LineOfBusiness: "Commercial",
+      NetworkTier: "Tier1",
+      EffectiveDate: new Date("2025-01-01"),
+      TerminationDate: null,
+      AcceptingNewPatients: true
     }],
-    credentialingStatus: "Approved",
-    credentialingDate: daysAgo(randInt(180, 730)),
-    recredentialingDueDate: daysFromNow(randInt(365, 1095)),
-    boardCertifications: p.cred === "MD" || p.cred === "DO" ? [{ boardName: "AB" + p.spec.substring(0, 4).toUpperCase(), certificationDate: daysAgo(randInt(365, 3650)), expirationDate: daysFromNow(randInt(365, 3650)) }] : [],
-    hospitalAffiliations: p.idx <= 7 ? [{ hospitalName: "St. David's Medical Center", npi: makeNpi(16), privilegeStatus: "Active" }] : [],
-    acceptingNewPatients: true,
-    handicapAccessible: true,
-    languagesSpoken: p.langs,
-    contractedRate: { feeScheduleTier: "Tier1", reimbursementMethod: p.idx <= 2 ? "Capitation" : "FeeSchedule", capitationRate: p.idx <= 2 ? 42.50 : null },
-    status: "Active",
-    terminationDate: null,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    CredentialingStatus: "Approved",
+    CredentialingDate: daysAgo(randInt(180, 730)),
+    RecredentialingDueDate: daysFromNow(randInt(365, 1095)),
+    BoardCertifications: p.cred === "MD" || p.cred === "DO" ? [{ BoardName: "AB" + p.spec.substring(0, 4).toUpperCase(), CertificationDate: daysAgo(randInt(365, 3650)), ExpirationDate: daysFromNow(randInt(365, 3650)) }] : [],
+    HospitalAffiliations: p.idx <= 7 ? [{ HospitalName: "St. David's Medical Center", NPI: makeNpi(16), PrivilegeStatus: "Active" }] : [],
+    AcceptingNewPatients: true,
+    HandicapAccessible: true,
+    LanguagesSpoken: p.langs,
+    ContractedRate: { FeeScheduleTier: "Tier1", ReimbursementMethod: p.idx <= 2 ? "Capitation" : "FeeSchedule", CapitationRate: p.idx <= 2 ? 42.50 : null },
+    Status: "Active",
+    TerminationDate: null,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   });
 });
 
@@ -335,48 +335,48 @@ orgProviders.forEach(function (p) {
   const isOon = p.idx >= 21 && p.idx <= 25; // last 5 orgs are OON
   providers.push({
     _id: makeId("prov", p.idx),
-    tenantId: TENANT_ID,
-    npi: npi,
-    providerType: "Organization",
-    firstName: null,
-    lastName: null,
-    middleName: null,
-    credentials: null,
-    organizationName: p.name,
-    dbaName: p.dba,
-    primarySpecialty: p.spec,
-    taxonomyCode: p.tax,
-    secondarySpecialties: [],
-    address: (2000 + p.idx * 100) + " " + streets[p.idx % streets.length],
-    city: cities[p.idx % cities.length],
-    state: "TX",
-    zipCode: "78" + String(700 + p.idx).substring(0, 3),
-    phone: "512" + String(5550000 + p.idx * 1111),
-    fax: "512" + String(5550001 + p.idx * 1111),
-    email: "facility-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
-    networkParticipations: isOon ? [] : [{
-      planId: makeId("plan", 1),
-      lineOfBusiness: "Commercial",
-      networkTier: "Tier1",
-      effectiveDate: new Date("2025-01-01"),
-      terminationDate: null,
-      acceptingNewPatients: true
+    TenantId: TENANT_ID,
+    NPI: npi,
+    ProviderType: "Organization",
+    FirstName: null,
+    LastName: null,
+    MiddleName: null,
+    Credentials: null,
+    OrganizationName: p.name,
+    DBAName: p.dba,
+    PrimarySpecialty: p.spec,
+    TaxonomyCode: p.tax,
+    SecondarySpecialties: [],
+    Address: (2000 + p.idx * 100) + " " + streets[p.idx % streets.length],
+    City: cities[p.idx % cities.length],
+    State: "TX",
+    ZipCode: "78" + String(700 + p.idx).substring(0, 3),
+    Phone: "512" + String(5550000 + p.idx * 1111),
+    Fax: "512" + String(5550001 + p.idx * 1111),
+    Email: "facility-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
+    NetworkParticipations: isOon ? [] : [{
+      PlanId: makeId("plan", 1),
+      LineOfBusiness: "Commercial",
+      NetworkTier: "Tier1",
+      EffectiveDate: new Date("2025-01-01"),
+      TerminationDate: null,
+      AcceptingNewPatients: true
     }],
-    credentialingStatus: isOon ? "Pending" : "Approved",
-    credentialingDate: isOon ? null : daysAgo(randInt(180, 730)),
-    recredentialingDueDate: isOon ? null : daysFromNow(randInt(365, 1095)),
-    boardCertifications: [],
-    hospitalAffiliations: [],
-    acceptingNewPatients: !isOon,
-    handicapAccessible: true,
-    languagesSpoken: ["English", "Spanish"],
-    contractedRate: isOon ? null : { feeScheduleTier: p.spec === "Hospital" ? "Tier1-Facility" : "Tier2", reimbursementMethod: "FeeSchedule" },
-    status: "Active",
-    terminationDate: null,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    CredentialingStatus: isOon ? "Pending" : "Approved",
+    CredentialingDate: isOon ? null : daysAgo(randInt(180, 730)),
+    RecredentialingDueDate: isOon ? null : daysFromNow(randInt(365, 1095)),
+    BoardCertifications: [],
+    HospitalAffiliations: [],
+    AcceptingNewPatients: !isOon,
+    HandicapAccessible: true,
+    LanguagesSpoken: ["English", "Spanish"],
+    ContractedRate: isOon ? null : { FeeScheduleTier: p.spec === "Hospital" ? "Tier1-Facility" : "Tier2", ReimbursementMethod: "FeeSchedule" },
+    Status: "Active",
+    TerminationDate: null,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   });
 });
 
@@ -386,10 +386,10 @@ print("✓ " + providers.length + " Providers");
 const providerNameByIdx = {};
 providers.forEach(function (p, i) {
   const idx = i + 1;
-  providerNameByIdx[idx] = p.organizationName ? p.organizationName : (p.firstName + " " + p.lastName + ", " + p.credentials);
+  providerNameByIdx[idx] = p.OrganizationName ? p.OrganizationName : (p.FirstName + " " + p.LastName + ", " + p.Credentials);
 });
 const providerNpiByIdx = {};
-providers.forEach(function (p, i) { providerNpiByIdx[i + 1] = p.npi; });
+providers.forEach(function (p, i) { providerNpiByIdx[i + 1] = p.NPI; });
 
 // In-network individual provider indices (for claims)
 const inNetworkIndProviders = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
@@ -466,47 +466,47 @@ for (let i = 1; i <= 50; i++) {
 
   members.push({
     _id: memberId,
-    tenantId: TENANT_ID,
-    memberId: memberId,
-    subscriberId: subscriberId,
-    ssn: "***-**-" + String(1000 + i),
-    groupNumber: sponsorData.grp,
-    isSubscriber: isSub,
-    subscriberMemberId: isSub ? null : makeId("mbr", subIdx),
-    relationshipCode: relCode,
-    firstName: first,
-    lastName: last,
-    middleName: null,
-    dateOfBirth: dateOfBirth(age),
-    gender: gender === "M" ? "M" : "F",
-    address: (1000 + i * 37) + " " + pick(["Barton Springs Rd","Oak Lawn Ave","Westheimer Rd","Alamo Plaza","Commerce St","S Congress Ave","Montana Ave","Legacy Dr","Jollyville Rd","Randol Mill Rd"]),
-    city: pick(["Austin","Austin","Austin","Round Rock","Cedar Park","Houston","San Antonio","Dallas","Pflugerville","Georgetown"]),
-    state: "TX",
-    zipCode: "78" + String(700 + (i % 100)).substring(0, 3),
-    phone: "512" + String(2000000 + i * 1111),
-    email: (first.toLowerCase() + "." + last.toLowerCase().replace(/'/g, "") + "@example.com"),
-    effectiveDate: new Date("2025-01-01"),
-    terminationDate: status === "Terminated" ? daysAgo(randInt(10, 60)) : null,
-    status: status,
-    lineOfBusiness: planIdx === 5 ? "Medicaid" : "Commercial",
-    benefitPlanId: makeId("plan", planIdx),
-    sponsorId: makeId("spon", sponsorIdx),
-    employmentStatus: status === "Terminated" ? "Terminated" : (status === "COBRA" ? "Terminated" : "FullTime"),
-    tobaccoUser: seededRandom() < 0.12,
-    isStudent: age >= 18 && age <= 25 && seededRandom() < 0.3,
-    pcpProviderId: hasPcp ? makeId("prov", pcpProviders[i % pcpProviders.length]) : null,
-    pcpProviderName: hasPcp ? providerNameByIdx[pcpProviders[i % pcpProviders.length]] : null,
-    pcpAssignedDate: hasPcp ? daysAgo(randInt(30, 365)) : null,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    TenantId: TENANT_ID,
+    MemberId: memberId,
+    SubscriberId: subscriberId,
+    SSN: "***-**-" + String(1000 + i),
+    GroupNumber: sponsorData.grp,
+    IsSubscriber: isSub,
+    SubscriberMemberId: isSub ? null : makeId("mbr", subIdx),
+    RelationshipCode: relCode,
+    FirstName: first,
+    LastName: last,
+    MiddleName: null,
+    DateOfBirth: dateOfBirth(age),
+    Gender: gender === "M" ? "M" : "F",
+    Address: (1000 + i * 37) + " " + pick(["Barton Springs Rd","Oak Lawn Ave","Westheimer Rd","Alamo Plaza","Commerce St","S Congress Ave","Montana Ave","Legacy Dr","Jollyville Rd","Randol Mill Rd"]),
+    City: pick(["Austin","Austin","Austin","Round Rock","Cedar Park","Houston","San Antonio","Dallas","Pflugerville","Georgetown"]),
+    State: "TX",
+    ZipCode: "78" + String(700 + (i % 100)).substring(0, 3),
+    Phone: "512" + String(2000000 + i * 1111),
+    Email: (first.toLowerCase() + "." + last.toLowerCase().replace(/'/g, "") + "@example.com"),
+    EffectiveDate: new Date("2025-01-01"),
+    TerminationDate: status === "Terminated" ? daysAgo(randInt(10, 60)) : null,
+    Status: status,
+    LineOfBusiness: planIdx === 5 ? "Medicaid" : "Commercial",
+    BenefitPlanId: makeId("plan", planIdx),
+    SponsorId: makeId("spon", sponsorIdx),
+    EmploymentStatus: status === "Terminated" ? "Terminated" : (status === "COBRA" ? "Terminated" : "FullTime"),
+    TobaccoUser: seededRandom() < 0.12,
+    IsStudent: age >= 18 && age <= 25 && seededRandom() < 0.3,
+    PcpProviderId: hasPcp ? makeId("prov", pcpProviders[i % pcpProviders.length]) : null,
+    PcpProviderName: hasPcp ? providerNameByIdx[pcpProviders[i % pcpProviders.length]] : null,
+    PcpAssignedDate: hasPcp ? daysAgo(randInt(30, 365)) : null,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   });
 }
 
 // Update sponsor member counts
 sponsorsData.forEach(function (s) {
-  const count = members.filter(function (m) { return m.sponsorId === makeId("spon", s.idx); }).length;
+  const count = members.filter(function (m) { return m.SponsorId === makeId("spon", s.idx); }).length;
   s.members = count;
 });
 
@@ -520,38 +520,38 @@ print("✓ " + members.length + " Members");
 const coverageLevels = { "18": "EMP", "01": "ESP", "19": "ECH" }; // self→EMP, spouse→ESP, child→ECH
 
 const coverageRecords = members.map(function (m) {
-  var isTerminated = m.status === "Terminated";
-  var isCobra = m.status === "COBRA";
-  var coverageStatus = isTerminated ? 3 : (isCobra ? 5 : (m.status === "Pending" ? 2 : 1)); // Active=1, Pending=2, Terminated=3, COBRA=5
+  var isTerminated = m.Status === "Terminated";
+  var isCobra = m.Status === "COBRA";
+  var coverageStatus = isTerminated ? 3 : (isCobra ? 5 : (m.Status === "Pending" ? 2 : 1)); // Active=1, Pending=2, Terminated=3, COBRA=5
   return {
-    _id: m.memberId.replace("mbr", "cov"),
-    tenantId: TENANT_ID,
-    memberId: m.memberId,
-    groupNumber: m.groupNumber,
-    planId: m.benefitPlanId,
-    coverageLevel: coverageLevels[m.relationshipCode] || "EMP",
-    insuranceLineCode: "HLT",
-    effectiveDate: m.effectiveDate,
-    terminationDate: m.terminationDate,
-    status: coverageStatus,
-    lineOfBusiness: m.lineOfBusiness === "Medicaid" ? 3 : 1, // Commercial=1, Medicaid=3
-    isCOBRA: isCobra,
-    cobraEffectiveDate: isCobra ? m.effectiveDate : null,
-    medicareCoverage: null,
-    otherInsurance: null,
-    monthlyPremium: m.lineOfBusiness === "Medicaid" ? 0 : (m.isSubscriber ? 450.00 : 225.00),
-    employerContribution: m.lineOfBusiness === "Medicaid" ? 0 : (m.isSubscriber ? 350.00 : 175.00),
-    maintenanceTypeCode: "021",
-    maintenanceReasonCode: null,
-    pcpNpi: m.pcpProviderId ? makeNpi(parseInt(m.pcpProviderId.split("-").pop())) : null,
-    pcpName: m.pcpProviderName,
-    pcpAssignmentDate: m.pcpAssignedDate,
-    pcpAssignmentMethod: m.pcpProviderId ? 1 : null, // AutoAssigned=1
-    previousPcpNpi: null,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    _id: m.MemberId.replace("mbr", "cov"),
+    TenantId: TENANT_ID,
+    MemberId: m.MemberId,
+    GroupNumber: m.GroupNumber,
+    PlanId: m.BenefitPlanId,
+    CoverageLevel: coverageLevels[m.RelationshipCode] || "EMP",
+    InsuranceLineCode: "HLT",
+    EffectiveDate: m.EffectiveDate,
+    TerminationDate: m.TerminationDate,
+    Status: coverageStatus,
+    LineOfBusiness: m.LineOfBusiness === "Medicaid" ? 3 : 1, // Commercial=1, Medicaid=3
+    IsCOBRA: isCobra,
+    COBRAEffectiveDate: isCobra ? m.EffectiveDate : null,
+    MedicareCoverage: null,
+    OtherInsurance: null,
+    MonthlyPremium: m.LineOfBusiness === "Medicaid" ? 0 : (m.IsSubscriber ? 450.00 : 225.00),
+    EmployerContribution: m.LineOfBusiness === "Medicaid" ? 0 : (m.IsSubscriber ? 350.00 : 175.00),
+    MaintenanceTypeCode: "021",
+    MaintenanceReasonCode: null,
+    PcpNpi: m.PcpProviderId ? makeNpi(parseInt(m.PcpProviderId.split("-").pop())) : null,
+    PcpName: m.PcpProviderName,
+    PcpAssignmentDate: m.PcpAssignedDate,
+    PcpAssignmentMethod: m.PcpProviderId ? 1 : null, // AutoAssigned=1
+    PreviousPcpNpi: null,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   };
 });
 
@@ -671,65 +671,65 @@ for (let c = 1; c <= 200; c++) {
   const lineItems = selectedCpts.map(function (cpt, li) {
     const chargedAmount = roundMoney(cpt.charge[0] + seededRandom() * (cpt.charge[1] - cpt.charge[0]));
     return {
-      lineNumber: li + 1,
-      procedureCode: cpt.code,
-      procedureDescription: cpt.desc,
-      modifiers: [],
-      chargedAmount: chargedAmount,
-      units: cpt.cat === "PhysicalTherapy" ? randInt(1, 4) : 1,
-      placeOfServiceCode: posMap[cpt.cat] || "11",
-      serviceDateFrom: serviceDate,
-      serviceDateTo: serviceDate,
-      diagnosisCodePointers: [1, 2]
+      LineNumber: li + 1,
+      ProcedureCode: cpt.code,
+      ProcedureDescription: cpt.desc,
+      Modifiers: [],
+      ChargeAmount: chargedAmount,
+      Units: cpt.cat === "PhysicalTherapy" ? randInt(1, 4) : 1,
+      PlaceOfServiceCode: posMap[cpt.cat] || "11",
+      ServiceDateFrom: serviceDate,
+      ServiceDateTo: serviceDate,
+      DiagnosisPointers: [1, 2]
     };
   });
 
-  const totalCharged = roundMoney(lineItems.reduce(function (s, l) { return s + l.chargedAmount; }, 0));
+  const totalCharged = roundMoney(lineItems.reduce(function (s, l) { return s + l.ChargeAmount; }, 0));
 
   const claim = {
     _id: claimId,
-    tenantId: TENANT_ID,
-    claimNumber: "CLM-2026-" + String(c).padStart(5, "0"),
-    memberId: member.memberId,
-    subscriberId: member.subscriberId,
-    benefitPlanId: member.benefitPlanId,
-    coverageId: null,
-    subscriberFirstName: member.firstName,
-    subscriberLastName: member.lastName,
-    patientFirstName: member.firstName,
-    patientLastName: member.lastName,
-    patientRelationship: member.relationshipCode,
-    lineOfBusiness: member.lineOfBusiness,
-    billingProviderNPI: provNpi,
-    billingProviderName: provName,
-    renderingProviderNPI: provNpi,
-    renderingProviderName: provName,
-    facilityNPI: claimType === "Institutional" ? providerNpiByIdx[facilityIdx] : null,
-    facilityName: claimType === "Institutional" ? providerNameByIdx[facilityIdx] : null,
-    placeOfServiceCode: pos,
-    serviceDateFrom: serviceDate,
-    serviceDateTo: serviceDate,
-    receivedDate: receivedDate,
-    status: statusSlot === "Adjudicated" ? "Paid" : (statusSlot === "WorkQueue" ? "Pended" : statusSlot),
-    claimType: claimType,
-    totalChargedAmount: totalCharged,
-    diagnosisCodes: [
-      { code: primaryDiag.code, codeQualifier: "BK", description: primaryDiag.desc },
-      { code: secondaryDiag.code, codeQualifier: "BF", description: secondaryDiag.desc },
+    TenantId: TENANT_ID,
+    ClaimNumber: "CLM-2026-" + String(c).padStart(5, "0"),
+    MemberId: member.MemberId,
+    SubscriberId: member.SubscriberId,
+    BenefitPlanId: member.BenefitPlanId,
+    CoverageId: null,
+    SubscriberFirstName: member.FirstName,
+    SubscriberLastName: member.LastName,
+    PatientFirstName: member.FirstName,
+    PatientLastName: member.LastName,
+    PatientRelationship: member.RelationshipCode,
+    LineOfBusiness: member.LineOfBusiness,
+    BillingProviderNPI: provNpi,
+    BillingProviderName: provName,
+    RenderingProviderNPI: provNpi,
+    RenderingProviderName: provName,
+    FacilityNPI: claimType === "Institutional" ? providerNpiByIdx[facilityIdx] : null,
+    FacilityName: claimType === "Institutional" ? providerNameByIdx[facilityIdx] : null,
+    PlaceOfServiceCode: pos,
+    ServiceDateFrom: serviceDate,
+    ServiceDateTo: serviceDate,
+    ReceivedDate: receivedDate,
+    Status: statusSlot === "Adjudicated" ? "Paid" : (statusSlot === "WorkQueue" ? "Pended" : statusSlot),
+    ClaimType: claimType,
+    TotalChargeAmount: totalCharged,
+    DiagnosisCodes: [
+      { Code: primaryDiag.code, CodeQualifier: "BK", Description: primaryDiag.desc },
+      { Code: secondaryDiag.code, CodeQualifier: "BF", Description: secondaryDiag.desc },
     ],
-    lineItems: lineItems,
-    adjudication: null,
-    denialReasonCode: null,
-    denialReason: null,
-    createdDate: now,
-    lastUpdatedDate: now,
-    createdBy: "seed-script",
-    lastUpdatedBy: "seed-script"
+    ClaimLines: lineItems,
+    AdjudicationResult: null,
+    DenialReasonCode: null,
+    DenialReason: null,
+    CreatedDate: now,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script",
+    LastUpdatedBy: "seed-script"
   };
 
   // Adjudicate paid claims
   if (statusSlot === "Adjudicated") {
-    const plan = planCostSharing[member.benefitPlanId];
+    const plan = planCostSharing[member.BenefitPlanId];
     const allowedAmount = roundMoney(totalCharged * (0.7 + seededRandom() * 0.15));
     const deductibleAmount = plan ? roundMoney(Math.min(allowedAmount * 0.1, plan.indDed * 0.05)) : 0;
     const copayAmount = plan ? plan.copayPCP : 30;
@@ -737,22 +737,22 @@ for (let c = 1; c <= 200; c++) {
     const memberResp = roundMoney(deductibleAmount + copayAmount + coinsuranceAmount);
     const planPaid = roundMoney(Math.max(0, allowedAmount - memberResp));
 
-    claim.adjudication = {
-      adjudicatedDate: new Date(serviceDate.getTime() + randInt(3, 14) * 86400000),
-      allowedAmount: allowedAmount,
-      planPaid: planPaid,
-      memberResponsibility: memberResp,
-      copayAmount: copayAmount,
-      coinsuranceAmount: Math.max(0, coinsuranceAmount),
-      deductibleAmount: deductibleAmount,
-      adjustmentReasonCode: "CO-45",
-      adjustmentAmount: roundMoney(totalCharged - allowedAmount),
-      checkNumber: "EFT-" + String(900000 + c),
-      paidDate: new Date(serviceDate.getTime() + randInt(14, 30) * 86400000)
+    claim.AdjudicationResult = {
+      AdjudicatedDate: new Date(serviceDate.getTime() + randInt(3, 14) * 86400000),
+      AllowedAmount: allowedAmount,
+      PlanPaid: planPaid,
+      PatientResponsibility: memberResp,
+      CopayAmount: copayAmount,
+      CoinsuranceAmount: Math.max(0, coinsuranceAmount),
+      DeductibleAmount: deductibleAmount,
+      AdjustmentReasonCode: "CO-45",
+      AdjustmentAmount: roundMoney(totalCharged - allowedAmount),
+      CheckNumber: "EFT-" + String(900000 + c),
+      PaidDate: new Date(serviceDate.getTime() + randInt(14, 30) * 86400000)
     };
 
     // Track accumulators
-    const acc = memberAccumData[member.memberId];
+    const acc = memberAccumData[member.MemberId];
     acc.deductible += deductibleAmount;
     acc.copay += copayAmount;
     acc.coinsurance += coinsuranceAmount;
@@ -765,8 +765,8 @@ for (let c = 1; c <= 200; c++) {
 
   if (statusSlot === "Denied") {
     const denial = denialReasons[c % denialReasons.length];
-    claim.denialReasonCode = denial.code;
-    claim.denialReason = denial.reason;
+    claim.DenialReasonCode = denial.code;
+    claim.DenialReason = denial.reason;
     deniedClaimIds.push(claimId);
   }
 
@@ -818,53 +818,53 @@ authServiceTypes.forEach(function (svc) {
 
     const auth = {
       _id: makeId("auth", authIdx),
-      tenantId: TENANT_ID,
-      authorizationNumber: "AUTH-2026-" + String(authIdx).padStart(5, "0"),
-      memberId: member.memberId,
-      coverageId: null,
-      patientFirstName: member.firstName,
-      patientLastName: member.lastName,
-      patientDateOfBirth: member.dateOfBirth,
-      lineOfBusiness: member.lineOfBusiness,
-      requestingProviderNPI: providerNpiByIdx[provIdx],
-      requestingProviderName: providerNameByIdx[provIdx],
-      servicingProviderNPI: providerNpiByIdx[provIdx],
-      servicingProviderName: providerNameByIdx[provIdx],
-      facilityNPI: svc.type === "Inpatient" ? providerNpiByIdx[16] : null,
-      facilityName: svc.type === "Inpatient" ? providerNameByIdx[16] : null,
-      authorizationType: svc.type === "Specialist Referral" ? "Referral" : "PreAuthorization",
-      certificationTypeCode: svc.type === "Inpatient" ? "I" : "S",
-      serviceTypeCode: "02",
-      levelOfService: "U",
-      requestedServiceDateFrom: new Date(submitDate.getTime() + 7 * 86400000),
-      requestedServiceDateTo: new Date(submitDate.getTime() + (svc.type === "Physical Therapy" ? 90 : 30) * 86400000),
-      diagnosisCodes: [{ code: diag.code, codeQualifier: "BK", description: diag.desc }],
-      requestedServices: [{
-        procedureCode: pick(svc.codes),
-        procedureDescription: svc.type,
-        modifiers: [],
-        requestedUnits: reqUnits,
-        approvedUnits: appUnits,
-        unitType: svc.type === "Inpatient" ? "Day" : "Visit",
-        placeOfServiceCode: svc.type === "Inpatient" ? "21" : "11",
-        serviceStatus: status === "InReview" ? "Pending" : status
+      TenantId: TENANT_ID,
+      AuthorizationNumber: "AUTH-2026-" + String(authIdx).padStart(5, "0"),
+      MemberId: member.MemberId,
+      CoverageId: null,
+      PatientFirstName: member.FirstName,
+      PatientLastName: member.LastName,
+      PatientDateOfBirth: member.DateOfBirth,
+      LineOfBusiness: member.LineOfBusiness,
+      RequestingProviderNPI: providerNpiByIdx[provIdx],
+      RequestingProviderName: providerNameByIdx[provIdx],
+      ServicingProviderNPI: providerNpiByIdx[provIdx],
+      ServicingProviderName: providerNameByIdx[provIdx],
+      FacilityNPI: svc.type === "Inpatient" ? providerNpiByIdx[16] : null,
+      FacilityName: svc.type === "Inpatient" ? providerNameByIdx[16] : null,
+      AuthorizationType: svc.type === "Specialist Referral" ? "Referral" : "PreAuthorization",
+      CertificationTypeCode: svc.type === "Inpatient" ? "I" : "S",
+      ServiceTypeCode: "02",
+      LevelOfService: "U",
+      RequestedServiceDateFrom: new Date(submitDate.getTime() + 7 * 86400000),
+      RequestedServiceDateTo: new Date(submitDate.getTime() + (svc.type === "Physical Therapy" ? 90 : 30) * 86400000),
+      DiagnosisCodes: [{ Code: diag.code, CodeQualifier: "BK", Description: diag.desc }],
+      RequestedServices: [{
+        ProcedureCode: pick(svc.codes),
+        ProcedureDescription: svc.type,
+        Modifiers: [],
+        RequestedUnits: reqUnits,
+        ApprovedUnits: appUnits,
+        UnitType: svc.type === "Inpatient" ? "Day" : "Visit",
+        PlaceOfServiceCode: svc.type === "Inpatient" ? "21" : "11",
+        ServiceStatus: status === "InReview" ? "Pending" : status
       }],
-      status: status,
-      reviewDecision: status === "Approved" ? "A1" : (status === "Denied" ? "A4" : (status === "Modified" ? "A2" : null)),
-      approvedUnits: appUnits,
-      approvedServiceDateFrom: status === "Approved" || status === "Modified" ? new Date(submitDate.getTime() + 7 * 86400000) : null,
-      approvedServiceDateTo: status === "Approved" || status === "Modified" ? new Date(submitDate.getTime() + 90 * 86400000) : null,
-      denialReasonCode: status === "Denied" ? "NOT_MEDICALLY_NECESSARY" : null,
-      denialReason: status === "Denied" ? "Clinical documentation does not support medical necessity for requested service." : null,
-      reviewerName: status !== "InReview" ? pick(["Dr. Sarah Williams", "Dr. Mark Torres", "Dr. Lisa Chen"]) : null,
-      submittedDate: submitDate,
-      reviewedDate: status !== "InReview" ? new Date(submitDate.getTime() + randInt(1, 5) * 86400000) : null,
-      expirationDate: status === "Expired" ? daysAgo(randInt(1, 15)) : (status === "Approved" ? daysFromNow(randInt(30, 90)) : null),
-      notes: "",
-      createdDate: now,
-      lastUpdatedDate: now,
-      createdBy: "seed-script",
-      lastUpdatedBy: "seed-script"
+      Status: status,
+      ReviewDecision: status === "Approved" ? "A1" : (status === "Denied" ? "A4" : (status === "Modified" ? "A2" : null)),
+      ApprovedUnits: appUnits,
+      ApprovedServiceDateFrom: status === "Approved" || status === "Modified" ? new Date(submitDate.getTime() + 7 * 86400000) : null,
+      ApprovedServiceDateTo: status === "Approved" || status === "Modified" ? new Date(submitDate.getTime() + 90 * 86400000) : null,
+      DenialReasonCode: status === "Denied" ? "NOT_MEDICALLY_NECESSARY" : null,
+      DenialReason: status === "Denied" ? "Clinical documentation does not support medical necessity for requested service." : null,
+      ReviewerName: status !== "InReview" ? pick(["Dr. Sarah Williams", "Dr. Mark Torres", "Dr. Lisa Chen"]) : null,
+      SubmittedDate: submitDate,
+      ReviewedDate: status !== "InReview" ? new Date(submitDate.getTime() + randInt(1, 5) * 86400000) : null,
+      ExpirationDate: status === "Expired" ? daysAgo(randInt(1, 15)) : (status === "Approved" ? daysFromNow(randInt(30, 90)) : null),
+      Notes: "",
+      CreatedDate: now,
+      LastUpdatedDate: now,
+      CreatedBy: "seed-script",
+      LastUpdatedBy: "seed-script"
     };
 
     if (status === "Denied") deniedAuthIds.push(auth._id);
@@ -901,23 +901,23 @@ wqReasons.forEach(function (wq) {
 
     workQueueItems.push({
       _id: makeId("wq", wqIdx),
-      tenantId: TENANT_ID,
-      claimId: claimRef,
-      claimNumber: refClaim ? refClaim.claimNumber : "CLM-2026-" + String(wqIdx).padStart(5, "0"),
-      memberName: refClaim ? (refClaim.patientFirstName + " " + refClaim.patientLastName) : "Unknown",
-      memberId: refClaim ? refClaim.memberId : makeId("mbr", 1),
-      providerName: refClaim ? refClaim.billingProviderName : "Unknown Provider",
-      serviceDate: refClaim ? refClaim.serviceDateFrom : daysAgo(randInt(1, 14)),
-      queueReason: wq.reason,
-      queueReasonCode: wq.code,
-      daysInQueue: randInt(0, 14),
-      priority: priorities[wqIdx % priorities.length],
-      assignedTo: examiners[wqIdx % examiners.length],
-      totalCharged: refClaim ? refClaim.totalChargedAmount : 1000,
-      procedureCodes: refClaim ? refClaim.lineItems.map(function (l) { return l.procedureCode; }) : ["99213"],
-      createdDate: daysAgo(randInt(0, 14)),
-      lastUpdatedDate: now,
-      createdBy: "seed-script"
+      TenantId: TENANT_ID,
+      ClaimId: claimRef,
+      ClaimNumber: refClaim ? refClaim.ClaimNumber : "CLM-2026-" + String(wqIdx).padStart(5, "0"),
+      MemberName: refClaim ? (refClaim.PatientFirstName + " " + refClaim.PatientLastName) : "Unknown",
+      MemberId: refClaim ? refClaim.MemberId : makeId("mbr", 1),
+      ProviderName: refClaim ? refClaim.BillingProviderName : "Unknown Provider",
+      ServiceDate: refClaim ? refClaim.ServiceDateFrom : daysAgo(randInt(1, 14)),
+      QueueReason: wq.reason,
+      QueueReasonCode: wq.code,
+      DaysInQueue: randInt(0, 14),
+      Priority: priorities[wqIdx % priorities.length],
+      AssignedTo: examiners[wqIdx % examiners.length],
+      TotalCharged: refClaim ? refClaim.TotalChargeAmount : 1000,
+      ProcedureCodes: refClaim ? refClaim.ClaimLines.map(function (l) { return l.ProcedureCode; }) : ["99213"],
+      CreatedDate: daysAgo(randInt(0, 14)),
+      LastUpdatedDate: now,
+      CreatedBy: "seed-script"
     });
   }
 });
@@ -939,7 +939,7 @@ const paymentRuns = [
 ];
 
 const payments = [];
-const payableClaims = claims.filter(function (cl) { return cl.adjudication && cl.adjudication.planPaid > 0; });
+const payableClaims = claims.filter(function (cl) { return cl.AdjudicationResult && cl.AdjudicationResult.PlanPaid > 0; });
 const claimsToUse = payableClaims.slice(0, 80);
 
 claimsToUse.forEach(function (cl, i) {
@@ -947,26 +947,26 @@ claimsToUse.forEach(function (cl, i) {
   const run = paymentRuns[i % paymentRuns.length];
   payments.push({
     _id: makeId("pmt", payIdx),
-    tenantId: TENANT_ID,
-    paymentId: makeId("pmt", payIdx),
-    paymentRunId: "PMTRUN-2026-" + String(run.runIdx).padStart(4, "0"),
-    paymentRunName: run.name,
-    claimId: cl._id,
-    claimNumber: cl.claimNumber,
-    memberId: cl.memberId,
-    memberName: cl.patientFirstName + " " + cl.patientLastName,
-    providerNpi: cl.billingProviderNPI,
-    providerName: cl.billingProviderName,
-    paymentMethod: i % 5 === 0 ? "Check" : "EFT",
-    checkEftNumber: (i % 5 === 0 ? "CHK-" : "EFT-") + String(100000 + payIdx),
-    paymentDate: run.date,
-    chargeAmount: cl.totalChargedAmount,
-    allowedAmount: cl.adjudication.allowedAmount,
-    paidAmount: cl.adjudication.planPaid,
-    memberResponsibility: cl.adjudication.memberResponsibility,
-    status: "Completed",
-    createdDate: now,
-    createdBy: "seed-script"
+    TenantId: TENANT_ID,
+    PaymentId: makeId("pmt", payIdx),
+    PaymentRunId: "PMTRUN-2026-" + String(run.runIdx).padStart(4, "0"),
+    PaymentRunName: run.name,
+    ClaimId: cl._id,
+    ClaimNumber: cl.ClaimNumber,
+    MemberId: cl.MemberId,
+    MemberName: cl.PatientFirstName + " " + cl.PatientLastName,
+    ProviderNpi: cl.BillingProviderNPI,
+    ProviderName: cl.BillingProviderName,
+    PaymentMethod: i % 5 === 0 ? "Check" : "EFT",
+    CheckEftNumber: (i % 5 === 0 ? "CHK-" : "EFT-") + String(100000 + payIdx),
+    PaymentDate: run.date,
+    ChargeAmount: cl.TotalChargeAmount,
+    AllowedAmount: cl.AdjudicationResult.AllowedAmount,
+    PaidAmount: cl.AdjudicationResult.PlanPaid,
+    MemberResponsibility: cl.AdjudicationResult.PatientResponsibility,
+    Status: "Completed",
+    CreatedDate: now,
+    CreatedBy: "seed-script"
   });
 });
 
@@ -978,8 +978,8 @@ print("✓ " + payments.length + " Payments");
 // ═══════════════════════════════════════════════════════════════════════════
 
 const accumulators = members.map(function (m) {
-  const acc = memberAccumData[m.memberId];
-  const plan = planCostSharing[m.benefitPlanId];
+  const acc = memberAccumData[m.MemberId];
+  const plan = planCostSharing[m.BenefitPlanId];
   const indDedLimit = plan ? plan.indDed : 1500;
   const famDedLimit = plan ? plan.famDed : 3000;
   const indOopLimit = plan ? plan.indOop : 5000;
@@ -987,26 +987,22 @@ const accumulators = members.map(function (m) {
 
   return {
     _id: makeId("acc", members.indexOf(m) + 1),
-    tenantId: TENANT_ID,
-    memberId: m.memberId,
-    memberName: m.firstName + " " + m.lastName,
-    benefitPlanId: m.benefitPlanId,
-    planYear: "2026",
-    individualDeductibleUsed: roundMoney(acc.deductible),
-    individualDeductibleLimit: indDedLimit,
-    familyDeductibleUsed: roundMoney(acc.deductible * 1.5),
-    familyDeductibleLimit: famDedLimit,
-    individualOopUsed: roundMoney(acc.deductible + acc.copay + acc.coinsurance),
-    individualOopLimit: indOopLimit,
-    familyOopUsed: roundMoney((acc.deductible + acc.copay + acc.coinsurance) * 1.5),
-    familyOopLimit: famOopLimit,
-    serviceAccumulators: [
-      { serviceType: "Physical Therapy", used: acc.ptVisits, limit: 20, unitType: "visits" },
-      { serviceType: "Mental Health Outpatient", used: acc.mhVisits, limit: 30, unitType: "visits" },
-      { serviceType: "Skilled Nursing", used: 0, limit: 60, unitType: "days" },
+    TenantId: TENANT_ID,
+    OwnerId: m.MemberId,
+    Scope: "Individual",
+    BenefitPlanId: m.BenefitPlanId,
+    PlanYear: "2026",
+    Version: 1,
+    LastUpdated: now,
+    Balances: [
+      { Type: "IndividualDeductible", NetworkTier: "InNetwork", LimitAmount: indDedLimit, AccumulatedAmount: roundMoney(acc.deductible) },
+      { Type: "FamilyDeductible", NetworkTier: "InNetwork", LimitAmount: famDedLimit, AccumulatedAmount: roundMoney(acc.deductible * 1.5) },
+      { Type: "IndividualOOP", NetworkTier: "InNetwork", LimitAmount: indOopLimit, AccumulatedAmount: roundMoney(acc.deductible + acc.copay + acc.coinsurance) },
+      { Type: "FamilyOOP", NetworkTier: "InNetwork", LimitAmount: famOopLimit, AccumulatedAmount: roundMoney((acc.deductible + acc.copay + acc.coinsurance) * 1.5) },
     ],
-    lastUpdatedDate: now,
-    createdBy: "seed-script"
+    Transactions: [],
+    CreatedDate: now,
+    CreatedBy: "seed-script"
   };
 });
 
@@ -1039,26 +1035,26 @@ for (let i = 1; i <= 12; i++) {
 
   appeals.push({
     _id: makeId("apl", i),
-    tenantId: TENANT_ID,
-    appealId: "APL-2026-" + String(i).padStart(4, "0"),
-    memberName: member.firstName + " " + member.lastName,
-    memberId: member.memberId,
-    appealType: type,
-    originalDecisionId: origId,
-    originalDecision: "Denied",
-    originalDenialReason: pick(denialReasons).reason,
-    status: status,
-    isExpedited: i <= 2,
-    filedDate: filedDate,
-    dueDate: dueDate,
-    daysRemaining: Math.round((dueDate - TODAY) / 86400000),
-    assignedReviewer: status !== "Open" ? pick(["Dr. Mark Torres", "Dr. Sarah Williams", "Medical Director"]) : "",
-    complianceStatus: status === "Escalated" ? "At Risk" : "On Track",
-    finalDecision: status === "Decision Made" ? (i % 2 === 0 ? "Overturned" : "Upheld") : null,
-    decisionDate: status === "Decision Made" ? daysAgo(randInt(1, 5)) : null,
-    createdDate: filedDate,
-    lastUpdatedDate: now,
-    createdBy: "seed-script"
+    TenantId: TENANT_ID,
+    AppealNumber: "APL-2026-" + String(i).padStart(4, "0"),
+    PatientName: member.FirstName + " " + member.LastName,
+    MemberId: member.MemberId,
+    AppealType: type,
+    OriginalDecisionId: origId,
+    OriginalDecision: "Denied",
+    DenialReason: pick(denialReasons).reason,
+    Status: status,
+    IsUrgent: i <= 2,
+    SubmittedDate: filedDate,
+    TargetResponseDate: dueDate,
+    DaysRemaining: Math.round((dueDate - TODAY) / 86400000),
+    AssignedReviewer: status !== "Open" ? pick(["Dr. Mark Torres", "Dr. Sarah Williams", "Medical Director"]) : "",
+    ComplianceStatus: status === "Escalated" ? "At Risk" : "On Track",
+    Decision: status === "Decision Made" ? { DecisionType: (i % 2 === 0 ? "Overturned" : "Upheld"), DecisionDate: daysAgo(randInt(1, 5)) } : null,
+    DecisionDate: status === "Decision Made" ? daysAgo(randInt(1, 5)) : null,
+    CreatedDate: filedDate,
+    LastUpdatedDate: now,
+    CreatedBy: "seed-script"
   });
 }
 
@@ -1089,17 +1085,17 @@ for (let i = 1; i <= 20; i++) {
 
   correspondence.push({
     _id: makeId("ltr", i),
-    tenantId: TENANT_ID,
-    letterId: "LTR-2026-" + String(5000 + i).padStart(5, "0"),
-    letterType: type,
-    recipientName: type === "RFAI" ? providerNameByIdx[pick(inNetworkIndProviders)] : (member.firstName + " " + member.lastName),
-    recipientType: type === "RFAI" ? "Provider" : "Member",
-    relatedId: relatedId,
-    generatedDate: status === "Queued" ? null : daysAgo(randInt(0, 7)),
-    status: status,
-    deliveryMethod: pick(["Mail", "Fax", "Email", "Portal"]),
-    createdDate: now,
-    createdBy: "seed-script"
+    TenantId: TENANT_ID,
+    LetterId: "LTR-2026-" + String(5000 + i).padStart(5, "0"),
+    LetterType: type,
+    RecipientName: type === "RFAI" ? providerNameByIdx[pick(inNetworkIndProviders)] : (member.FirstName + " " + member.LastName),
+    RecipientType: type === "RFAI" ? "Provider" : "Member",
+    RelatedId: relatedId,
+    GeneratedDate: status === "Queued" ? null : daysAgo(randInt(0, 7)),
+    Status: status,
+    DeliveryMethod: pick(["Mail", "Fax", "Email", "Portal"]),
+    CreatedDate: now,
+    CreatedBy: "seed-script"
   });
 }
 
@@ -1122,27 +1118,27 @@ for (let i = 1; i <= 8; i++) {
 
   enrollmentFiles.push({
     _id: makeId("834f", i),
-    tenantId: TENANT_ID,
-    fileId: "834-" + receivedTime.toISOString().substring(0, 10).replace(/-/g, "") + "-" + String(i).padStart(3, "0"),
-    fileName: sponsorData.name.substring(0, 3).toUpperCase() + "_834_" + receivedTime.toISOString().substring(0, 10).replace(/-/g, "") + "_0" + i + "00.edi",
-    receivedTime: receivedTime,
-    sponsorName: sponsorData.name,
-    sponsorId: makeId("spon", (i - 1) % sponsorsData.length + 1),
-    groupNumber: sponsorData.grp,
-    transactionCount: totalRecords,
-    addedCount: randInt(3, Math.floor(totalRecords * 0.2)),
-    termedCount: randInt(1, Math.floor(totalRecords * 0.1)),
-    changedCount: totalRecords - rejectedCount - randInt(5, 20),
-    rejectedCount: rejectedCount,
-    status: hasErrors ? "PartiallyAccepted" : (i === 8 ? "Failed" : "Completed"),
-    rejections: hasErrors ? [
-      { memberId: "MBR-ERR-001", memberName: "Garcia, Roberto", errorCode: "834-E003", errorDescription: "Invalid date of birth format" },
-      { memberId: "MBR-ERR-002", memberName: "Petrov, Natasha", errorCode: "834-E007", errorDescription: "Subscriber not found in active roster" },
-      { memberId: "MBR-ERR-003", memberName: "Chen, Mei-Lin",   errorCode: "834-E015", errorDescription: "Coverage date gap detected (14 days)" },
+    TenantId: TENANT_ID,
+    FileId: "834-" + receivedTime.toISOString().substring(0, 10).replace(/-/g, "") + "-" + String(i).padStart(3, "0"),
+    FileName: sponsorData.name.substring(0, 3).toUpperCase() + "_834_" + receivedTime.toISOString().substring(0, 10).replace(/-/g, "") + "_0" + i + "00.edi",
+    ReceivedTime: receivedTime,
+    SponsorName: sponsorData.name,
+    SponsorId: makeId("spon", (i - 1) % sponsorsData.length + 1),
+    GroupNumber: sponsorData.grp,
+    TransactionCount: totalRecords,
+    AddedCount: randInt(3, Math.floor(totalRecords * 0.2)),
+    TermedCount: randInt(1, Math.floor(totalRecords * 0.1)),
+    ChangedCount: totalRecords - rejectedCount - randInt(5, 20),
+    RejectedCount: rejectedCount,
+    Status: hasErrors ? "PartiallyAccepted" : (i === 8 ? "Failed" : "Completed"),
+    Rejections: hasErrors ? [
+      { MemberId: "MBR-ERR-001", MemberName: "Garcia, Roberto", ErrorCode: "834-E003", ErrorDescription: "Invalid date of birth format" },
+      { MemberId: "MBR-ERR-002", MemberName: "Petrov, Natasha", ErrorCode: "834-E007", ErrorDescription: "Subscriber not found in active roster" },
+      { MemberId: "MBR-ERR-003", MemberName: "Chen, Mei-Lin",   ErrorCode: "834-E015", ErrorDescription: "Coverage date gap detected (14 days)" },
     ] : [],
-    errorMessage: i === 8 ? "SFTP connection timeout after 30s — file transfer incomplete" : null,
-    createdDate: receivedTime,
-    createdBy: "seed-script"
+    ErrorMessage: i === 8 ? "SFTP connection timeout after 30s — file transfer incomplete" : null,
+    CreatedDate: receivedTime,
+    CreatedBy: "seed-script"
   });
 }
 
