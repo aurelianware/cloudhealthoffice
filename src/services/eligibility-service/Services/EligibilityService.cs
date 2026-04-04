@@ -193,8 +193,10 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-            var response = await _httpClient.GetAsync(
+            var request = new HttpRequestMessage(HttpMethod.Get,
                 $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -309,8 +311,10 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-            var response = await _httpClient.GetAsync(
+            var request = new HttpRequestMessage(HttpMethod.Get,
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {
