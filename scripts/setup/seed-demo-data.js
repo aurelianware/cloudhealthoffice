@@ -145,11 +145,11 @@ function makePlanBenefits(copayPCP, copaySpec, coinsIn, coinsOut, erCopay, deduc
 }
 
 const benefitPlansData = [
-  { idx: 1, name: "Gold PPO",     type: "PPO",  metal: "Gold",     lob: "Commercial", indDed: 500,  famDed: 1500, indOop: 3000, famOop: 9000,  copayPCP: 30, copaySpec: 50, coinsIn: 20, coinsOut: 40, erCopay: 250, dedPCP: false },
-  { idx: 2, name: "Silver PPO",   type: "PPO",  metal: "Silver",   lob: "Commercial", indDed: 1000, famDed: 2500, indOop: 5000, famOop: 10000, copayPCP: 40, copaySpec: 65, coinsIn: 30, coinsOut: 50, erCopay: 350, dedPCP: false },
-  { idx: 3, name: "Bronze HDHP",  type: "HDHP", metal: "Bronze",   lob: "Commercial", indDed: 3000, famDed: 6000, indOop: 7000, famOop: 14000, copayPCP: 0,  copaySpec: 0,  coinsIn: 20, coinsOut: 40, erCopay: 0,   dedPCP: true },
-  { idx: 4, name: "Platinum HMO", type: "HMO",  metal: "Platinum", lob: "Commercial", indDed: 250,  famDed: 500,  indOop: 2000, famOop: 4000,  copayPCP: 20, copaySpec: 40, coinsIn: 10, coinsOut: 50, erCopay: 150, dedPCP: false },
-  { idx: 5, name: "Medicaid MCO", type: "MCO",  metal: "N/A",      lob: "Medicaid",   indDed: 0,    famDed: 0,    indOop: 250,  famOop: 500,   copayPCP: 3,  copaySpec: 5,  coinsIn: 0,  coinsOut: 0,  erCopay: 8,   dedPCP: false },
+  { idx: 1, name: "Gold PPO",     type: 1,    metal: 2,          lob: 1,            indDed: 500,  famDed: 1500, indOop: 3000, famOop: 9000,  copayPCP: 30, copaySpec: 50, coinsIn: 20, coinsOut: 40, erCopay: 250, dedPCP: false },
+  { idx: 2, name: "Silver PPO",   type: 1,    metal: 1,          lob: 1,            indDed: 1000, famDed: 2500, indOop: 5000, famOop: 10000, copayPCP: 40, copaySpec: 65, coinsIn: 30, coinsOut: 50, erCopay: 350, dedPCP: false },
+  { idx: 3, name: "Bronze HDHP",  type: 4,    metal: 0,          lob: 1,            indDed: 3000, famDed: 6000, indOop: 7000, famOop: 14000, copayPCP: 0,  copaySpec: 0,  coinsIn: 20, coinsOut: 40, erCopay: 0,   dedPCP: true },
+  { idx: 4, name: "Platinum HMO", type: 0,    metal: 3,          lob: 1,            indDed: 250,  famDed: 500,  indOop: 2000, famOop: 4000,  copayPCP: 20, copaySpec: 40, coinsIn: 10, coinsOut: 50, erCopay: 150, dedPCP: false },
+  { idx: 5, name: "Medicaid MCO", type: 5,    metal: 0,          lob: 3,            indDed: 0,    famDed: 0,    indOop: 250,  famOop: 500,   copayPCP: 3,  copaySpec: 5,  coinsIn: 0,  coinsOut: 0,  erCopay: 8,   dedPCP: false },
 ];
 
 const benefitPlans = benefitPlansData.map(function (p) {
@@ -219,12 +219,12 @@ const sponsors = sponsorsData.map(function (s) {
     ContactEmail: "benefits@sponsor-" + s.idx + ".test",
     EffectiveDate: new Date("2025-01-01"),
     TerminationDate: null,
-    Status: "Active",
-    LineOfBusiness: s.idx === 5 ? "Medicaid" : "Commercial",
+    Status: 1,
+    LineOfBusiness: s.idx === 5 ? 3 : 1,
     GroupSizeTier: s.tier,
     BillingInfo: {
       PremiumAmount: s.premium,
-      Frequency: "Monthly",
+      Frequency: 1,
       BillingDay: s.idx <= 2 ? 1 : 15,
       BillingAccountNumber: s.grp + "-BA-001",
       PaymentMethod: s.idx === 5 ? "Wire" : "ACH",
@@ -289,7 +289,7 @@ individualProviders.forEach(function (p) {
     _id: makeId("prov", p.idx),
     TenantId: TENANT_ID,
     NPI: npi,
-    ProviderType: "Individual",
+    ProviderType: 1,
     FirstName: p.first,
     LastName: p.last,
     MiddleName: String.fromCharCode(65 + (p.idx % 26)),
@@ -307,13 +307,13 @@ individualProviders.forEach(function (p) {
     Email: "provider-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
     NetworkParticipations: [{
       PlanId: makeId("plan", 1),
-      LineOfBusiness: "Commercial",
+      LineOfBusiness: 1,
       NetworkTier: "Tier1",
       EffectiveDate: new Date("2025-01-01"),
       TerminationDate: null,
       AcceptingNewPatients: true
     }],
-    CredentialingStatus: "Approved",
+    CredentialingStatus: 2,
     CredentialingDate: daysAgo(randInt(180, 730)),
     RecredentialingDueDate: daysFromNow(randInt(365, 1095)),
     BoardCertifications: p.cred === "MD" || p.cred === "DO" ? [{ BoardName: "AB" + p.spec.substring(0, 4).toUpperCase(), CertificationDate: daysAgo(randInt(365, 3650)), ExpirationDate: daysFromNow(randInt(365, 3650)) }] : [],
@@ -322,7 +322,7 @@ individualProviders.forEach(function (p) {
     HandicapAccessible: true,
     LanguagesSpoken: p.langs,
     ContractedRate: { FeeScheduleTier: "Tier1", ReimbursementMethod: p.idx <= 2 ? "Capitation" : "FeeSchedule", CapitationRate: p.idx <= 2 ? 42.50 : null },
-    Status: "Active",
+    Status: 1,
     TerminationDate: null,
     CreatedDate: now,
     LastUpdatedDate: now,
@@ -338,7 +338,7 @@ orgProviders.forEach(function (p) {
     _id: makeId("prov", p.idx),
     TenantId: TENANT_ID,
     NPI: npi,
-    ProviderType: "Organization",
+    ProviderType: 2,
     FirstName: null,
     LastName: null,
     MiddleName: null,
@@ -357,13 +357,13 @@ orgProviders.forEach(function (p) {
     Email: "facility-" + String(p.idx).padStart(3, "0") + "@demo-clinic.test",
     NetworkParticipations: isOon ? [] : [{
       PlanId: makeId("plan", 1),
-      LineOfBusiness: "Commercial",
+      LineOfBusiness: 1,
       NetworkTier: "Tier1",
       EffectiveDate: new Date("2025-01-01"),
       TerminationDate: null,
       AcceptingNewPatients: true
     }],
-    CredentialingStatus: isOon ? "Pending" : "Approved",
+    CredentialingStatus: isOon ? 0 : 2,
     CredentialingDate: isOon ? null : daysAgo(randInt(180, 730)),
     RecredentialingDueDate: isOon ? null : daysFromNow(randInt(365, 1095)),
     BoardCertifications: [],
@@ -372,7 +372,7 @@ orgProviders.forEach(function (p) {
     HandicapAccessible: true,
     LanguagesSpoken: ["English", "Spanish"],
     ContractedRate: isOon ? null : { FeeScheduleTier: p.spec === "Hospital" ? "Tier1-Facility" : "Tier2", ReimbursementMethod: "FeeSchedule" },
-    Status: "Active",
+    Status: 1,
     TerminationDate: null,
     CreatedDate: now,
     LastUpdatedDate: now,
@@ -407,11 +407,11 @@ const firstNamesM = ["Carlos","Michael","William","Robert","David","James","Thom
 const firstNamesF = ["Angela","Priya","Thanh","Sophia","Margaret","Jennifer","Emily","Jessica","Sarah","Amanda","Samantha","Nicole","Rachel","Megan","Laura"];
 const lastNames = ["Ramirez","O'Brien","Henderson","Kim","Martinez","Johnson","Thompson","Garcia","Washington","Sharma","Le","Rodriguez","Patel","Foster","Anderson","Chen","Mitchell","Howard","Nguyen","Park","Davis","Wilson","Taylor","Brown","Moore","Jackson","White","Harris","Clark","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Hill","Green","Baker"];
 
-const memberStatuses = [];
-for (let i = 0; i < 40; i++) memberStatuses.push("Active");
-for (let i = 0; i < 5; i++) memberStatuses.push("COBRA");
-for (let i = 0; i < 3; i++) memberStatuses.push("Terminated");
-for (let i = 0; i < 2; i++) memberStatuses.push("Pending");
+const memberStatuses = []; // Active=1, Pending=2, Terminated=3, COBRA=5
+for (let i = 0; i < 40; i++) memberStatuses.push(1);
+for (let i = 0; i < 5; i++) memberStatuses.push(5);
+for (let i = 0; i < 3; i++) memberStatuses.push(3);
+for (let i = 0; i < 2; i++) memberStatuses.push(2);
 
 // Subscriber/dependent mapping: members 1-35 are subscribers, 36-50 are dependents
 const subscriberPlanAssignment = [
@@ -463,7 +463,7 @@ for (let i = 1; i <= 50; i++) {
   const subscriberId = "SUB" + String(100000 + subIdx);
   const sponsorData = sponsorsData[sponsorIdx - 1];
 
-  const hasPcp = i <= 35 && status === "Active"; // 35 subscribers with PCP
+  const hasPcp = i <= 35 && status === 1; // 35 subscribers with PCP (Active=1)
 
   members.push({
     _id: memberId,
@@ -487,12 +487,12 @@ for (let i = 1; i <= 50; i++) {
     Phone: "512" + String(2000000 + i * 1111),
     Email: (first.toLowerCase() + "." + last.toLowerCase().replace(/'/g, "") + "@example.com"),
     EffectiveDate: new Date("2025-01-01"),
-    TerminationDate: status === "Terminated" ? daysAgo(randInt(10, 60)) : null,
+    TerminationDate: status === 3 ? daysAgo(randInt(10, 60)) : null, // Terminated=3
     Status: status,
-    LineOfBusiness: planIdx === 5 ? "Medicaid" : "Commercial",
+    LineOfBusiness: planIdx === 5 ? 3 : 1, // Commercial=1, Medicaid=3
     BenefitPlanId: makeId("plan", planIdx),
     SponsorId: makeId("spon", sponsorIdx),
-    EmploymentStatus: status === "Terminated" ? "Terminated" : (status === "COBRA" ? "Terminated" : "FullTime"),
+    EmploymentStatus: status === 3 ? 5 : (status === 5 ? 5 : 1), // FullTime=1, Terminated=5; COBRA(5) members are also employment-terminated
     TobaccoUser: seededRandom() < 0.12,
     IsStudent: age >= 18 && age <= 25 && seededRandom() < 0.3,
     PcpProviderId: hasPcp ? makeId("prov", pcpProviders[i % pcpProviders.length]) : null,
@@ -521,9 +521,9 @@ print("✓ " + members.length + " Members");
 const coverageLevels = { "18": "EMP", "01": "ESP", "19": "ECH" }; // self→EMP, spouse→ESP, child→ECH
 
 const coverageRecords = members.map(function (m) {
-  var isTerminated = m.Status === "Terminated";
-  var isCobra = m.Status === "COBRA";
-  var coverageStatus = isTerminated ? 3 : (isCobra ? 5 : (m.Status === "Pending" ? 2 : 1)); // Active=1, Pending=2, Terminated=3, COBRA=5
+  var isTerminated = m.Status === 3; // Terminated=3
+  var isCobra = m.Status === 5; // COBRA=5
+  var coverageStatus = isTerminated ? 3 : (isCobra ? 5 : (m.Status === 2 ? 2 : 1)); // Active=1, Pending=2, Terminated=3, COBRA=5
   return {
     _id: m.MemberId.replace("mbr", "cov"),
     TenantId: TENANT_ID,
@@ -535,13 +535,13 @@ const coverageRecords = members.map(function (m) {
     EffectiveDate: m.EffectiveDate,
     TerminationDate: m.TerminationDate,
     Status: coverageStatus,
-    LineOfBusiness: m.LineOfBusiness === "Medicaid" ? 3 : 1, // Commercial=1, Medicaid=3
+    LineOfBusiness: m.LineOfBusiness, // Already integer: Commercial=1, Medicaid=3
     IsCOBRA: isCobra,
     COBRAEffectiveDate: isCobra ? m.EffectiveDate : null,
     MedicareCoverage: null,
     OtherInsurance: null,
-    MonthlyPremium: m.LineOfBusiness === "Medicaid" ? 0 : (m.IsSubscriber ? 450.00 : 225.00),
-    EmployerContribution: m.LineOfBusiness === "Medicaid" ? 0 : (m.IsSubscriber ? 350.00 : 175.00),
+    MonthlyPremium: m.LineOfBusiness === 3 ? 0 : (m.IsSubscriber ? 450.00 : 225.00), // Medicaid=3
+    EmployerContribution: m.LineOfBusiness === 3 ? 0 : (m.IsSubscriber ? 350.00 : 175.00), // Medicaid=3
     MaintenanceTypeCode: "021",
     MaintenanceReasonCode: null,
     PcpNpi: m.PcpProviderId ? makeNpi(parseInt(m.PcpProviderId.split("-").pop())) : null,
@@ -711,8 +711,8 @@ for (let c = 1; c <= 200; c++) {
     ServiceDateFrom: serviceDate,
     ServiceDateTo: serviceDate,
     ReceivedDate: receivedDate,
-    Status: statusSlot === "Adjudicated" ? "Paid" : (statusSlot === "WorkQueue" ? "Pended" : statusSlot),
-    ClaimType: claimType,
+    Status: statusSlot === "Adjudicated" ? 7 : (statusSlot === "WorkQueue" ? 4 : (statusSlot === "Pending" ? 4 : (statusSlot === "Denied" ? 6 : 1))), // Submitted=1, Pended=4, Denied=6, Paid=7
+    ClaimType: claimType === "Dental" ? 3 : (claimType === "Institutional" ? 2 : 1), // Professional=1, Institutional=2, Dental=3
     TotalChargeAmount: totalCharged,
     DiagnosisCodes: [
       { Code: primaryDiag.code, CodeQualifier: "BK", Description: primaryDiag.desc },
@@ -833,7 +833,7 @@ authServiceTypes.forEach(function (svc) {
       ServicingProviderName: providerNameByIdx[provIdx],
       FacilityNPI: svc.type === "Inpatient" ? providerNpiByIdx[16] : null,
       FacilityName: svc.type === "Inpatient" ? providerNameByIdx[16] : null,
-      AuthorizationType: svc.type === "Specialist Referral" ? "Referral" : "PreAuthorization",
+      AuthorizationType: svc.type === "Specialist Referral" ? 2 : 1, // PreAuthorization=1, Referral=2
       CertificationTypeCode: svc.type === "Inpatient" ? "I" : "S",
       ServiceTypeCode: "02",
       LevelOfService: "U",
@@ -848,9 +848,9 @@ authServiceTypes.forEach(function (svc) {
         ApprovedUnits: appUnits,
         UnitType: svc.type === "Inpatient" ? "Day" : "Visit",
         PlaceOfServiceCode: svc.type === "Inpatient" ? "21" : "11",
-        ServiceStatus: status === "InReview" ? "Pending" : status
+        ServiceStatus: status === "InReview" ? 3 : (status === "Approved" ? 4 : (status === "Denied" ? 6 : (status === "Modified" ? 5 : (status === "Expired" ? 7 : 1)))) // Pended=3, Approved=4, Modified=5, Denied=6, Expired=7
       }],
-      Status: status,
+      Status: status === "Approved" ? 4 : (status === "Denied" ? 6 : (status === "InReview" ? 2 : (status === "Modified" ? 5 : (status === "Expired" ? 7 : 1)))), // Submitted=1, InReview=2, Pended=3, Approved=4, Modified=5, Denied=6, Expired=7
       ReviewDecision: status === "Approved" ? "A1" : (status === "Denied" ? "A4" : (status === "Modified" ? "A2" : null)),
       ApprovedUnits: appUnits,
       ApprovedServiceDateFrom: status === "Approved" || status === "Modified" ? new Date(submitDate.getTime() + 7 * 86400000) : null,
@@ -965,7 +965,7 @@ claimsToUse.forEach(function (cl, i) {
     AllowedAmount: cl.AdjudicationResult.AllowedAmount,
     PaidAmount: cl.AdjudicationResult.PlanPaid,
     MemberResponsibility: cl.AdjudicationResult.PatientResponsibility,
-    Status: "Completed",
+    Status: 2, // Posted=2
     CreatedDate: now,
     CreatedBy: "seed-script"
   });
@@ -1040,18 +1040,18 @@ for (let i = 1; i <= 12; i++) {
     AppealNumber: "APL-2026-" + String(i).padStart(4, "0"),
     PatientName: member.FirstName + " " + member.LastName,
     MemberId: member.MemberId,
-    AppealType: type,
+    AppealType: type === "Claim" ? 0 : (type === "Authorization" ? 1 : 2), // Claim=0 (Reconsideration), Authorization=1 (PeerReview), Coverage=2 (ExternalReview)
     OriginalDecisionId: origId,
-    OriginalDecision: "Denied",
+    OriginalDecision: 1, // Denied=1
     DenialReason: pick(denialReasons).reason,
-    Status: status,
+    Status: status === "Open" ? 1 : (status === "Under Review" ? 2 : (status === "Decision Made" ? 4 : (status === "Escalated" ? 5 : 1))), // Submitted=1, InReview=2, Approved=4, Denied=5
     IsUrgent: i <= 2,
     SubmittedDate: filedDate,
     TargetResponseDate: dueDate,
     DaysRemaining: Math.round((dueDate - TODAY) / 86400000),
     AssignedReviewer: status !== "Open" ? pick(["Dr. Mark Torres", "Dr. Sarah Williams", "Medical Director"]) : "",
     ComplianceStatus: status === "Escalated" ? "At Risk" : "On Track",
-    Decision: status === "Decision Made" ? { DecisionType: (i % 2 === 0 ? "Overturned" : "Upheld"), DecisionDate: daysAgo(randInt(1, 5)) } : null,
+    Decision: status === "Decision Made" ? { DecisionType: (i % 2 === 0 ? 0 : 1), DecisionDate: daysAgo(randInt(1, 5)) } : null, // Approved/Overturned=0, Denied/Upheld=1
     DecisionDate: status === "Decision Made" ? daysAgo(randInt(1, 5)) : null,
     CreatedDate: filedDate,
     LastUpdatedDate: now,
