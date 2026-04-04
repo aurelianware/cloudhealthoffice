@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MemberService.Middleware;
 using MemberService.Models;
+using MemberService.Repositories;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -20,12 +21,11 @@ public class MembersController : ControllerBase
     // Tenant context from middleware
     private string TenantId => HttpContext.GetTenantId();
 
-    // TODO: Replace with actual repository/service injection
-    // private readonly IMemberRepository _memberRepository;
-    // public MembersController(IMemberRepository memberRepository)
-    // {
-    //     _memberRepository = memberRepository;
-    // }
+    private readonly IMemberRepository _memberRepository;
+    public MembersController(IMemberRepository memberRepository)
+    {
+        _memberRepository = memberRepository;
+    }
 
     /// <summary>
     /// Search members by various criteria
@@ -52,50 +52,27 @@ public class MembersController : ControllerBase
         [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] string? continuationToken = null)
     {
-        // TODO: Implement with Cosmos DB query
-        // Build dynamic query based on filters
-
-        // Mock response
-        var mockMembers = new List<Member>
+        // If memberId is provided, do a direct lookup
+        if (!string.IsNullOrEmpty(memberId))
         {
-            new Member
+            var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+            return Ok(new MemberListResponse
             {
-                TenantId = TenantId,
-                Id = "mem-001",
-                MemberId = "MEM123456789",
-                GroupNumber = "GRP-12345",
-                IsSubscriber = true,
-                FirstName = "John",
-                LastName = "Doe",
-                DateOfBirth = new DateTime(1980, 5, 15),
-                Gender = "M",
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = EnrollmentStatus.Active,
-                RelationshipCode = RelationshipCodes.Self
-            },
-            new Member
-            {
-                TenantId = TenantId,
-                Id = "mem-002",
-                MemberId = "MEM123456790",
-                GroupNumber = "GRP-12345",
-                IsSubscriber = false,
-                SubscriberMemberId = "MEM123456789",
-                FirstName = "Jane",
-                LastName = "Doe",
-                DateOfBirth = new DateTime(1982, 8, 22),
-                Gender = "F",
-                EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-                Status = EnrollmentStatus.Active,
-                RelationshipCode = RelationshipCodes.Spouse
-            }
-        };
+                Members = member != null ? new List<Member> { member } : new List<Member>(),
+                ContinuationToken = null,
+                TotalCount = member != null ? 1 : 0
+            });
+        }
+
+        var (items, token) = await _memberRepository.SearchAsync(
+            TenantId, groupNumber, lastName, dateOfBirth,
+            activeOnly, subscribersOnly, pageSize, continuationToken);
 
         return Ok(new MemberListResponse
         {
-            Members = mockMembers,
-            ContinuationToken = null,
-            TotalCount = 2
+            Members = items.ToList(),
+            ContinuationToken = token,
+            TotalCount = items.Count()
         });
     }
 
@@ -124,36 +101,9 @@ public class MembersController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetMember([FromRoute] string memberId)
     {
-        // TODO: Implement with Cosmos DB query
-        // var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
-
-        var member = new Member
-        {
-            TenantId = TenantId,
-            Id = "mem-001",
-            MemberId = memberId,
-            SSN = "***-**-1234",  // Masked for security
-            GroupNumber = "GRP-12345",
-            IsSubscriber = true,
-            RelationshipCode = RelationshipCodes.Self,
-            FirstName = "John",
-            MiddleName = "Michael",
-            LastName = "Doe",
-            DateOfBirth = new DateTime(1980, 5, 15),
-            Gender = "M",
-            Address = "456 Oak Street",
-            City = "Dallas",
-            State = "TX",
-            ZipCode = "75202",
-            Phone = "214-555-0200",
-            Email = "john.doe@email.com",
-            EffectiveDate = DateTime.UtcNow.AddMonths(-6),
-            Status = EnrollmentStatus.Active,
-            EmploymentStatus = Models.EmploymentStatus.FullTime,
-            TobaccoUser = false,
-            MaintenanceTypeCode = "021",  // Addition
-            MaintenanceReasonCode = "33"   // Birth/New enrollment
-        };
+        var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
+        if (member == null)
+            return NotFound();
 
         return Ok(member);
     }
@@ -280,38 +230,7 @@ public class MembersController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetDependents([FromRoute] string memberId)
     {
-        // TODO: Query dependents where SubscriberMemberId = memberId
-
-        var dependents = new List<Member>
-        {
-            new Member
-            {
-                TenantId = TenantId,
-                MemberId = "MEM123456790",
-                SubscriberMemberId = memberId,
-                IsSubscriber = false,
-                RelationshipCode = RelationshipCodes.Spouse,
-                FirstName = "Jane",
-                LastName = "Doe",
-                DateOfBirth = new DateTime(1982, 8, 22),
-                Gender = "F",
-                Status = EnrollmentStatus.Active
-            },
-            new Member
-            {
-                TenantId = TenantId,
-                MemberId = "MEM123456791",
-                SubscriberMemberId = memberId,
-                IsSubscriber = false,
-                RelationshipCode = RelationshipCodes.Child,
-                FirstName = "Emily",
-                LastName = "Doe",
-                DateOfBirth = new DateTime(2010, 3, 10),
-                Gender = "F",
-                Status = EnrollmentStatus.Active
-            }
-        };
-
+        var dependents = await _memberRepository.GetDependentsAsync(TenantId, memberId);
         return Ok(dependents);
     }
 
