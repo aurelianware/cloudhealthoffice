@@ -84,8 +84,14 @@ public class MembersController : ControllerBase
     [ProducesResponseType(typeof(List<Member>), 200)]
     public async Task<IActionResult> SearchByQuery([FromQuery] string? q = null)
     {
-        // Delegate to the main search endpoint using the query as a lastName search
-        // (in a full implementation, this would search across multiple fields)
+        if (string.IsNullOrWhiteSpace(q))
+            return await SearchMembers(pageSize: 20);
+
+        // Try memberId lookup first, then fall back to lastName search
+        var byId = await _memberRepository.GetByMemberIdAsync(TenantId, q);
+        if (byId != null)
+            return Ok(new List<Member> { byId });
+
         return await SearchMembers(
             memberId: null, groupNumber: null, subscriberId: null,
             lastName: q, dateOfBirth: null, activeOnly: false,
