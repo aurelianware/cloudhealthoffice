@@ -252,10 +252,10 @@
                                         </CardHeaderContent>
                                         <CardHeaderActions>
                                             <div class="d-flex align-center gap-2">
-                                                <MudChip T="string" Size="Size.Small" Color="@GetCoverageStatusColor(coverage.Status)">
-                                                    @coverage.Status
+                                                <MudChip T="string" Size="Size.Small" Color="@GetCoverageStatusColor(coverage.StatusText)">
+                                                    @coverage.StatusText
                                                 </MudChip>
-                                                @if (coverage.Status == "Active")
+                                                @if (coverage.StatusText == "Active")
                                                 {
                                                     <MudButton Size="Size.Small"
                                                                Variant="Variant.Outlined"
@@ -280,7 +280,7 @@
                                             </MudItem>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">STATUS</MudText>
-                                                <MudText Typo="Typo.body2">@coverage.Status</MudText>
+                                                <MudText Typo="Typo.body2">@coverage.StatusText</MudText>
                                             </MudItem>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">EFFECTIVE DATE</MudText>

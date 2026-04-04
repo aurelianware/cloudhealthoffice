@@ -383,12 +383,21 @@ public class Address
 
 public class Coverage
 {
-    public string CoverageId { get; set; } = string.Empty;
-    public string PlanName { get; set; } = string.Empty;
-    public string GroupNumber { get; set; } = string.Empty;
+    public string? Id { get; set; }
+    public string? CoverageId { get; set; }
+    public string? MemberId { get; set; }
+    public string? PlanId { get; set; }
+    public string? PlanName { get; set; }
+    public string? GroupNumber { get; set; }
+    public string? CoverageLevel { get; set; }
+    public string? InsuranceLineCode { get; set; }
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
-    public string Status { get; set; } = string.Empty;
+    public int Status { get; set; }
+    public int LineOfBusiness { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string StatusText => Status switch { 1 => "Active", 2 => "Pending", 3 => "Terminated", 4 => "Suspended", 5 => "COBRA", _ => "Unknown" };
 }
 
 public class AuthorizationSummary
