@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace MemberService.Models;
 
@@ -7,6 +8,7 @@ namespace MemberService.Models;
 /// Represents a health plan member (subscriber or dependent).
 /// Populated by X12 834 Enrollment transactions (INS/NM1/DMG segments).
 /// </summary>
+[BsonIgnoreExtraElements]
 public class Member
 {
     /// <summary>
