@@ -73,8 +73,11 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
     private async Task<ChoCoverageDto?> GetActiveCoverageAsync(string tenantId, string subscriberId, DateTime serviceDate)
     {
         var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-        var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
+        var client = _httpClientFactory.CreateClient("EligibilityDefault");
+        var request = new HttpRequestMessage(HttpMethod.Get,
             $"{coverageUrl}/coverage/member/{subscriberId}/active?serviceDate={serviceDate:yyyy-MM-dd}&tenantId={tenantId}");
+        request.Headers.Add("X-Tenant-ID", tenantId);
+        var response = await client.SendAsync(request);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -151,8 +154,11 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         try
         {
             var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-            var response = await _httpClientFactory.CreateClient("EligibilityDefault").GetAsync(
+            var client = _httpClientFactory.CreateClient("EligibilityDefault");
+            var request = new HttpRequestMessage(HttpMethod.Get,
                 $"{coverageUrl}/coverage/member/{subscriberId}/cob?tenantId={tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
             {
