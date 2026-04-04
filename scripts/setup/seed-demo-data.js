@@ -118,7 +118,8 @@ const COLLECTIONS = [
 ];
 
 COLLECTIONS.forEach(function (col) {
-  const r = choDb[col].deleteMany({ TenantId: TENANT_ID });
+  // Clear both PascalCase (C# driver) and camelCase (legacy seed) documents
+  const r = choDb[col].deleteMany({ $or: [{ TenantId: TENANT_ID }, { tenantId: TENANT_ID }] });
   if (r.deletedCount > 0) print("  Cleared " + r.deletedCount + " from " + col);
 });
 
