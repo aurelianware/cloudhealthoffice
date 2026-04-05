@@ -59,6 +59,20 @@ builder.Services.AddHttpClient("AuthorizationService", client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
+// ── Da Vinci CRD (Coverage Requirements Discovery) ──────────────────────────
+builder.Services.Configure<CrdConfig>(
+    builder.Configuration.GetSection("Cms0057:Crd"));
+builder.Services.AddSingleton<ICrdService, CrdService>();
+
+// ── Terminology Service HTTP client (used by CRD for SNOMED→CPT/ICD) ────────
+builder.Services.AddHttpClient("TerminologyService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:TerminologyServiceUrl"]
+            ?? "http://terminology-service.cloudhealthoffice:5010/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
 // ── Provider Directory: typed HttpClient for NPPES API ────────────────────────
 builder.Services.AddHttpClient("NppesApi", client =>
 {
