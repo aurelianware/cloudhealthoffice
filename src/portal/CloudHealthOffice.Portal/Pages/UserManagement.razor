@@ -30,6 +30,11 @@
         </MudButton>
     </MudStack>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -126,6 +131,7 @@
     private string _searchTerm = string.Empty;
     private string? _roleFilter;
     private string? _tenantId;
+    private string? _serviceError;
 
     private readonly List<string> _availableRoles = new()
     {
@@ -179,6 +185,11 @@
             {
                 _error = true;
             }
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _users = new();
         }
         catch (Exception ex)
         {

@@ -14,6 +14,11 @@
     <!-- Breadcrumb -->
     <MudBreadcrumbs Items="_breadcrumbItems" Class="mb-4"></MudBreadcrumbs>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <div class="d-flex justify-center pa-8">
@@ -800,6 +805,7 @@
     private AdjudicationTransparencyData? _adjudicationData;
     private List<BreadcrumbItem> _breadcrumbItems = new();
     private string _noteInput = string.Empty;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -847,6 +853,11 @@
         try
         {
             _claim = await ClaimsService.GetClaimByIdAsync(ClaimId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _claim = null;
         }
         catch (Exception ex)
         {

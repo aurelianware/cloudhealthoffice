@@ -31,6 +31,11 @@
         </MudButton>
     </MudStack>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
@@ -200,6 +205,7 @@
     private string? _statusFilter;
     private string? _tierFilter;
     private string? _currentUserTenantId;
+    private string? _serviceError;
 
     private IEnumerable<TenantSubscription> FilteredTenants => _tenants
         .Where(t => string.IsNullOrEmpty(_statusFilter) || t.SubscriptionStatus == _statusFilter)
@@ -221,6 +227,11 @@
             var userContext = await UserContextService.GetCurrentUserAsync();
             _currentUserTenantId = userContext?.TenantId;
             _tenants = await TenantService.GetAllSubscriptionsAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _tenants = new();
         }
         catch (Exception ex)
         {

@@ -27,72 +27,39 @@ public class MetricsServiceTests
         return new MetricsService(httpClient, _configuration, _logger.Object);
     }
 
-    // ── Dashboard Metrics (existing, but verify decimal fix) ──
+    // ── Service Unavailable Behavior ──
 
     [Fact]
-    public async Task GetDashboardMetricsAsync_ClaimsTrend_IsDecimalNotPercentage()
+    public async Task GetDashboardMetricsAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetDashboardMetricsAsync();
 
-        // Bug fix: ClaimsTrend should be 0.042 (decimal), not 4.2 (percentage)
-        // Dashboard multiplies by 100 for display
-        result.ClaimsTrend.Should().BeInRange(-1.0, 1.0,
-            "ClaimsTrend should be a decimal fraction (e.g. 0.042), not a percentage (e.g. 4.2)");
-        (result.ClaimsTrend * 100).Should().BeApproximately(4.2, 0.01);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetDashboardMetricsAsync());
+
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetDashboardMetricsAsync_ApprovalRate_IsDecimalNotPercentage()
+    public async Task GetOperationalAlertsAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetDashboardMetricsAsync();
 
-        // Bug fix: ApprovalRate should be 0.962 (decimal), not 96.2 (percentage)
-        result.ApprovalRate.Should().BeInRange(0, 1.0,
-            "ApprovalRate should be a decimal fraction (e.g. 0.962), not a percentage (e.g. 96.2)");
-        (result.ApprovalRate * 100).Should().BeApproximately(96.2, 0.01);
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetOperationalAlertsAsync());
+
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     [Fact]
-    public async Task GetDashboardMetricsAsync_ClaimCounts_AreConsistent()
+    public async Task GetTodayEdiVolumeAsync_WhenApiFails_ThrowsServiceUnavailableException()
     {
         var sut = CreateService();
-        var result = await sut.GetDashboardMetricsAsync();
 
-        var sum = result.ApprovedClaims + result.DeniedClaims + result.PendingClaims;
-        result.TotalClaims.Should().Be(sum,
-            "TotalClaims should equal Approved + Denied + Pending");
-    }
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetTodayEdiVolumeAsync());
 
-    // ── Operational Alerts ──
-
-    [Fact]
-    public async Task GetOperationalAlertsAsync_WhenApiFails_ReturnsMockAlerts()
-    {
-        var sut = CreateService();
-        var result = await sut.GetOperationalAlertsAsync();
-
-        result.Should().NotBeNull();
-        result.WorkQueueCount.Should().BeGreaterThan(0);
-        result.PendingRfais.Should().BeGreaterThan(0);
-        result.AppealsDueThisWeek.Should().BeGreaterThan(0);
-        result.ApproachingFilingLimit.Should().BeGreaterOrEqualTo(0);
-    }
-
-    // ── EDI Volume ──
-
-    [Fact]
-    public async Task GetTodayEdiVolumeAsync_WhenApiFails_ReturnsMockVolume()
-    {
-        var sut = CreateService();
-        var result = await sut.GetTodayEdiVolumeAsync();
-
-        result.Should().NotBeNull();
-        result.Claims837Received.Should().BeGreaterThan(0);
-        result.Era835Generated.Should().BeGreaterThan(0);
-        result.Eligibility270271.Should().BeGreaterThan(0);
-        result.PriorAuth278.Should().BeGreaterThan(0);
+        ex.ServiceName.Should().Be("Claims Service");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -104,7 +71,6 @@ public class MetricsServiceTests
     [Fact]
     public async Task GetDashboardMetricsAsync_WhenApiReturns200_CalculatesMetricsFromSummary()
     {
-        // MetricsService internally deserializes a ClaimsSummaryResponse (private class)
         var json = JsonSerializer.Serialize(new
         {
             totalClaims = 1000, approvedClaims = 900, deniedClaims = 80, pendedClaims = 20,
@@ -134,6 +100,58 @@ public class MetricsServiceTests
         var result = await sut.GetDashboardMetricsAsync();
 
         result.TotalClaims.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetDashboardMetricsAsync_ClaimsTrend_IsDecimalNotPercentage()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            totalClaims = 1000, approvedClaims = 900, deniedClaims = 80, pendedClaims = 20,
+            paidClaims = 850, totalChargeAmount = 500000m, totalAllowedAmount = 400000m,
+            totalPaidAmount = 350000m, averageProcessingDays = 3.5m, approvalRate = 0.9m
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetDashboardMetricsAsync();
+
+        result.ClaimsTrend.Should().BeInRange(-1.0, 1.0,
+            "ClaimsTrend should be a decimal fraction (e.g. 0.042), not a percentage (e.g. 4.2)");
+    }
+
+    [Fact]
+    public async Task GetDashboardMetricsAsync_ApprovalRate_IsDecimalNotPercentage()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            totalClaims = 1000, approvedClaims = 900, deniedClaims = 80, pendedClaims = 20,
+            paidClaims = 850, totalChargeAmount = 500000m, totalAllowedAmount = 400000m,
+            totalPaidAmount = 350000m, averageProcessingDays = 3.5m, approvalRate = 0.9m
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetDashboardMetricsAsync();
+
+        result.ApprovalRate.Should().BeInRange(0, 1.0,
+            "ApprovalRate should be a decimal fraction (e.g. 0.962), not a percentage (e.g. 96.2)");
+    }
+
+    [Fact]
+    public async Task GetDashboardMetricsAsync_ClaimCounts_AreConsistent()
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            totalClaims = 1000, approvedClaims = 900, deniedClaims = 80, pendedClaims = 20,
+            paidClaims = 850, totalChargeAmount = 500000m, totalAllowedAmount = 400000m,
+            totalPaidAmount = 350000m, averageProcessingDays = 3.5m, approvalRate = 0.9m
+        }, JsonOpts);
+
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+        var result = await sut.GetDashboardMetricsAsync();
+
+        var sum = result.ApprovedClaims + result.DeniedClaims + result.PendingClaims;
+        result.TotalClaims.Should().Be(sum,
+            "TotalClaims should equal Approved + Denied + Pending");
     }
 
     [Fact]

@@ -3,6 +3,11 @@
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_codeDetails == null)
         {
             <MudProgressCircular Indeterminate="true" />
@@ -204,11 +209,26 @@
 
     private MedicalCodeDetails? _codeDetails;
     private CodeUsageStats? _usageStats;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
-        _codeDetails = await ReferenceDataService.GetCodeDetailsAsync(CodeSystem, Code);
-        _usageStats = await ReferenceDataService.GetCodeUsageStatsAsync(CodeSystem, Code);
+        try
+        {
+            _codeDetails = await ReferenceDataService.GetCodeDetailsAsync(CodeSystem, Code);
+            _usageStats = await ReferenceDataService.GetCodeUsageStatsAsync(CodeSystem, Code);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _codeDetails = null;
+            _usageStats = null;
+        }
+        catch (Exception)
+        {
+            _codeDetails = null;
+            _usageStats = null;
+        }
     }
 
     private void Cancel()

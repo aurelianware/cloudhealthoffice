@@ -12,6 +12,11 @@
     Manage enrollment transactions (834), claim acknowledgments (277CA), remittance advice (835), and full EDI transaction history.
 </MudText>
 
+@if (_serviceError != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4"
          @bind-ActivePanelIndex="_activeTab">
 
@@ -594,6 +599,7 @@
     // Error queue state
     private List<EdiTransactionHistoryItem> _errorQueueItems = new();
     private HashSet<EdiTransactionHistoryItem> _selectedErrors = new();
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -613,6 +619,11 @@
             _834Batches = await EdiService.Get834BatchesAsync(_834From, _834To);
             if (!string.IsNullOrEmpty(_834StatusFilter))
                 _834Batches = _834Batches.Where(b => b.Status == _834StatusFilter).ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _834Batches = new();
         }
         catch (Exception ex)
         {
@@ -677,6 +688,11 @@
         {
             _277Acks = await EdiService.Get277CaAcknowledgmentsAsync(_277From, _277To);
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _277Acks = new();
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading 277CA acknowledgments: {ex.Message}", Severity.Error);
@@ -712,6 +728,11 @@
         try
         {
             _eras = await EdiService.GetErasAsync(_835From, _835To);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _eras = new();
         }
         catch (Exception ex)
         {
@@ -754,6 +775,12 @@
                 string.IsNullOrEmpty(_histStatusFilter) ? null : _histStatusFilter,
                 1, 100);
             _errorQueueItems = _historyItems.Where(h => h.Status is "Failed" or "Rejected").ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _historyItems = new();
+            _errorQueueItems = new();
         }
         catch (Exception ex)
         {

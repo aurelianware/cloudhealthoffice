@@ -19,6 +19,11 @@
     Manage billing cycles, premium rates, and collections across all plan sponsors
 </MudText>
 
+@if (_serviceError != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
+
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab">
 
     <!-- ═══════════════════════════════════════════════════════════ -->
@@ -369,6 +374,7 @@
     // Shared
     private List<SponsorSummary> _sponsors = new();
     private List<BenefitPlanListItem> _plans = new();
+    private string? _serviceError;
 
     private IEnumerable<BillingCycle> FilteredCycles => _cycles.Where(c =>
         (string.IsNullOrEmpty(_cyclesSponsorFilter) || c.SponsorId == _cyclesSponsorFilter) &&
@@ -394,6 +400,11 @@
         {
             _cycles = await BillingService.GetBillingCyclesAsync(_cyclesSponsorFilter, _cyclesStatusFilter);
         }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _cycles = new();
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading billing cycles: {ex.Message}", Severity.Error);
@@ -410,6 +421,11 @@
         try
         {
             _rates = await BillingService.GetPremiumRatesAsync(_ratesPlanFilter);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _rates = new();
         }
         catch (Exception ex)
         {

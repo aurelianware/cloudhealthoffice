@@ -18,6 +18,11 @@
         Contact form submissions from cloudhealthoffice.com
     </MudText>
 
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
     <!-- Summary cards -->
     @if (!_loading)
     {
@@ -170,6 +175,7 @@
     private List<SalesInquiry> _inquiries = new();
     private bool _loading = true;
     private string _statusFilter = "All";
+    private string? _serviceError;
 
     private IEnumerable<SalesInquiry> _filteredInquiries =>
         _statusFilter == "All"
@@ -187,6 +193,11 @@
         try
         {
             _inquiries = await SalesInquiryService.GetInquiriesAsync(limit: 200);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _inquiries = new();
         }
         catch (Exception ex)
         {

@@ -7,6 +7,11 @@
 
 <MudDialog Style="min-width: 800px; max-width: 1100px;">
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_loading)
         {
             <div class="d-flex justify-center pa-8">
@@ -558,6 +563,7 @@
     private bool _loading834 = false;
     private bool _loadingAccumulators = false;
     private int _activeTab = 0;
+    private string? _serviceError;
 
     private MudTabPanel? _pcpTab;
     private MudTable<Enrollment834Record>? _834Table;
@@ -584,6 +590,12 @@
             await Task.WhenAll(memberTask, coverageTask);
             _member = await memberTask;
             _coverages = await coverageTask;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _member = null;
+            _coverages = new();
         }
         catch (Exception ex)
         {

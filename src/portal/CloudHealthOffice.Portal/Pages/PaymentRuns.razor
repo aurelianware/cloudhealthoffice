@@ -3,6 +3,7 @@
 @using CloudHealthOffice.Portal.Services
 @using Microsoft.AspNetCore.SignalR.Client
 @inject IPaymentRunService PaymentRunService
+@inject ILogger<PaymentRuns> Logger
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -19,6 +20,11 @@
 <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
     FFS payment runs — grouped by line of business
 </MudText>
+
+@if (_serviceError != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+}
 
 <!-- KPI Chips -->
 <MudGrid Spacing="3" Class="mb-4">
@@ -228,6 +234,7 @@
     private bool _loading = true;
     private bool _hubConnected = false;
     private HubConnection? _hubConnection;
+    private string? _serviceError;
 
     private IEnumerable<PaymentRunSummary> FilteredRuns => string.IsNullOrEmpty(_lobFilter)
         ? _runs
@@ -248,6 +255,11 @@
         try
         {
             _runs = await PaymentRunService.GetPaymentRunsAsync(100);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _runs = new();
         }
         catch (Exception ex)
         {

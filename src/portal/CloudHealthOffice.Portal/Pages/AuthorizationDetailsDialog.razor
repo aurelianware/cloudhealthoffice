@@ -1,7 +1,13 @@
+@using CloudHealthOffice.Portal.Services
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 
 <MudDialog>
     <DialogContent>
+        @if (_serviceError != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+        }
+
         @if (_loading)
         {
             <div class="d-flex justify-center pa-8">
@@ -262,6 +268,7 @@
 
     private AuthorizationDetails? _authorization;
     private bool _loading = true;
+    private string? _serviceError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -275,6 +282,11 @@
         try
         {
             _authorization = await AuthorizationService.GetAuthorizationByIdAsync(AuthorizationId);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _authorization = null;
         }
         catch (Exception ex)
         {

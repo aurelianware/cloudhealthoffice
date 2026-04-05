@@ -15,7 +15,7 @@ data:
   Services__PaymentService: "http://payment-service.cloudhealthoffice/api"
   Services__TenantService: "http://tenant-service.cloudhealthoffice/api"
   Services__BillingService: "http://billing-service.cloudhealthoffice/api"
-  Services__RfaiService: "http://claims-service.cloudhealthoffice/api"
+  Services__RfaiService: "http://rfai-service.cloudhealthoffice/api"
   Services__PricingApi: "http://pricing-api.cloudhealthoffice"
   Services__AppealsService: "http://appeals-service.cloudhealthoffice/api"
   Services__CapitationService: "http://capitation-service.cloudhealthoffice/api"
