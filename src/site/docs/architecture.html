@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Architecture — Cloud Health Office Documentation</title>
-  <meta name="description" content="Cloud Health Office platform architecture. Multi-tenant SaaS, Kubernetes-native with Argo Workflows, 10 microservices, 9 calculation engines, configuration-driven deployment for healthcare payers." />
+  <meta name="description" content="Cloud Health Office platform architecture. Multi-tenant SaaS, Kubernetes-native with Argo Workflows, 29 microservices, 9 calculation engines, configuration-driven deployment for healthcare payers." />
   <meta name="keywords" content="healthcare payer platform architecture, Kubernetes healthcare, multi-tenant claims processing, Argo Workflows EDI, FHIR R4 architecture, healthcare microservices, claims adjudication pipeline" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/architecture" />
   <meta property="og:type" content="article" />
@@ -31,6 +31,7 @@
       <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture" class="active">Architecture</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Modules</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#overview">Overview</a></li><li><a href="#platform">Platform Components</a></li><li><a href="#adjudication">Claims Adjudication</a></li><li><a href="#multi-tenant">Multi-Tenant Design</a></li><li><a href="#infrastructure">Infrastructure</a></li><li><a href="#security">HIPAA Security</a></li></ul></div>
       </div></aside>
 
@@ -41,8 +42,8 @@
         <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for unlimited health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
 
         <figure class="docs-diagram">
-          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 23 microservices, 9 calculation engines, 5 FHIR R4 APIs, and multi-cloud deployment" />
-          <figcaption>Platform overview — 23 microservices, 9 engines, 5 parsers, 5 FHIR APIs, 17 Argo Workflows</figcaption>
+          <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 29 microservices, 9 calculation engines, 7 FHIR R4 APIs, and multi-cloud deployment" />
+          <figcaption>Platform overview — 29 microservices, 9 engines, 6 parsers, 7 FHIR APIs, 17 Argo Workflows</figcaption>
         </figure>
 
         <h2 id="overview">Overview</h2>
@@ -63,7 +64,7 @@
         <h2 id="platform">Platform Components</h2>
 
         <h3>Microservices (29)</h3>
-        <p>Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, and Claims Scrubbing. Each service owns its domain data and communicates via Azure Service Bus messaging.</p>
+        <p>Member, Coverage, Claims, Eligibility, Authorization, Provider, Benefit Plan, Reference Data, Sponsor, Claims Scrubbing, Capitation, Payment, Pricing API, Terminology Service, Provider Verification, and more. Each service owns its domain data and communicates via Azure Service Bus messaging. The Terminology Service provides FHIR <code>ConceptMap/$translate</code> for SNOMED CT &harr; CPT/ICD-10-CM crosswalk — required for Da Vinci CRD, DTR, and PAS workflows. The Provider Verification Service aggregates NPPES, OIG/LEIE, PECOS, CMS Open Payments, and FSMB data into a composite integrity score per NPI.</p>
 
         <h3>Calculation Engines (9)</h3>
         <p>Benefit Engine (HDHP/HSA, aggregate family accumulators, DRG inpatient), Fee Schedule Engine (DRG lookup, Medicaid cross-schedule, multiple procedure ranking), NCCI Engine, COB Engine, Risk Adjustment Engine, Encounter Engine, Claims Scrub Engine, Capitation Engine, and Operating Mode Engine.</p>
