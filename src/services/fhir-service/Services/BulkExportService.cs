@@ -84,7 +84,7 @@ public class BulkExportService : IBulkExportService
             return Task.FromResult(false);
 
         job.Status = BulkExportStatus.Cancelled;
-        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", jobId, Sanitize(tenantId));
+        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", Sanitize(jobId), Sanitize(tenantId));
         return Task.FromResult(true);
     }
 

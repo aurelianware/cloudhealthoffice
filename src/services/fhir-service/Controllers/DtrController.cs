@@ -81,7 +81,7 @@ public class DtrController : FhirControllerBase
         _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}",
             SanitizeForLog(created.Id), SanitizeForLog(TenantId));
 
-        Response.Headers["Location"] = $"{FhirBaseUrl}/Questionnaire/{Uri.EscapeDataString(created.Id)}";
+        SetLocationHeader("Questionnaire", created.Id);
         return StatusCode(201, created);
     }
 
@@ -175,7 +175,7 @@ public class DtrController : FhirControllerBase
         _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}",
             SanitizeForLog(submitted.Id), SanitizeForLog(TenantId));
 
-        Response.Headers["Location"] = $"{FhirBaseUrl}/QuestionnaireResponse/{Uri.EscapeDataString(submitted.Id)}";
+        SetLocationHeader("QuestionnaireResponse", submitted.Id);
         return StatusCode(201, submitted);
     }
 
@@ -234,5 +234,14 @@ public class DtrController : FhirControllerBase
             }
         }
         return null;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex SafeIdPattern = new(
+        @"^[A-Za-z0-9\-\.]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private void SetLocationHeader(string resourceType, string id)
+    {
+        if (!SafeIdPattern.IsMatch(id)) return;
+        Response.Headers["Location"] = $"{FhirBaseUrl}/{resourceType}/{id}";
     }
 }
